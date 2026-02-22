@@ -101,6 +101,8 @@ private struct StatCard: View {
 private struct SettingsDetailView: View {
     @Bindable var appState: AppState
     @State private var pendingAPIKey = ""
+    @State private var pendingSystemPrompt = ""
+    @State private var pendingKeywordsRaw = ""
 
     var body: some View {
         let modelActionTitle = appState.isModelInstalled ? "Re-download Model" : "Download Model"
@@ -233,7 +235,7 @@ private struct SettingsDetailView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("System prompt")
                                 .font(.system(size: 12, weight: .semibold))
-                            TextEditor(text: $appState.llmSystemPrompt)
+                            TextEditor(text: $pendingSystemPrompt)
                                 .font(.system(size: 12))
                                 .frame(minHeight: 88)
                                 .overlay(
@@ -245,13 +247,27 @@ private struct SettingsDetailView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Common keywords (comma or newline separated)")
                                 .font(.system(size: 12, weight: .semibold))
-                            TextEditor(text: $appState.llmKeywordsRaw)
+                            TextEditor(text: $pendingKeywordsRaw)
                                 .font(.system(size: 12))
                                 .frame(minHeight: 68)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
                                         .stroke(Color.gray.opacity(0.2), lineWidth: 1)
                                 )
+                        }
+
+                        HStack(spacing: 10) {
+                            Button("Save Prompt & Keywords") {
+                                appState.llmSystemPrompt = pendingSystemPrompt
+                                appState.llmKeywordsRaw = pendingKeywordsRaw
+                                AppLogger.shared.log(.info, "llm text settings saved")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!hasUnsavedLLMTextChanges)
+
+                            Text(hasUnsavedLLMTextChanges ? "Unsaved changes" : "Saved")
+                                .font(.system(size: 12))
+                                .foregroundStyle(hasUnsavedLLMTextChanges ? Color.orange : Color.secondary)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -260,9 +276,15 @@ private struct SettingsDetailView: View {
             .padding(24)
         }
         .onAppear {
+            pendingSystemPrompt = appState.llmSystemPrompt
+            pendingKeywordsRaw = appState.llmKeywordsRaw
             AppLogger.shared.log(.info, "settings view appeared model_installed=\(appState.isModelInstalled)")
             AppLogger.shared.log(.info, "settings llm controls rendered model=\(appState.llmSelectedModelIdPreview)")
         }
+    }
+
+    private var hasUnsavedLLMTextChanges: Bool {
+        pendingSystemPrompt != appState.llmSystemPrompt || pendingKeywordsRaw != appState.llmKeywordsRaw
     }
 }
 
