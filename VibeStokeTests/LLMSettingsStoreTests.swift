@@ -32,11 +32,19 @@ final class LLMSettingsStoreTests: XCTestCase {
         settings.baseSystemPrompt = "base"
         settings.systemPrompt = "custom"
         settings.keywordsRaw = "swift, xcode"
+        settings.timeoutSeconds = 7.5
+        settings.maxTokens = 256
 
         store.save(settings)
 
         let loaded = store.load()
         XCTAssertEqual(loaded, settings)
+    }
+
+    func testTimeoutAndTokenClamping() {
+        let settings = LLMSettings(timeoutSeconds: 99, maxTokens: 2)
+        XCTAssertEqual(settings.timeoutSeconds, LLMDefaults.maxTimeoutSeconds)
+        XCTAssertEqual(settings.maxTokens, LLMDefaults.minMaxTokens)
     }
 
     func testComposedPromptUsesBaseAndUserSections() {

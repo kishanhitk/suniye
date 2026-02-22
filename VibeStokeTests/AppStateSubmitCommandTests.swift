@@ -25,4 +25,12 @@ final class AppStateSubmitCommandTests: XCTestCase {
         XCTAssertEqual(parsed.text, "please send me the notes")
         XCTAssertFalse(parsed.shouldSubmit)
     }
+
+    func testDidLLMPolishReturnsFalseWhenOnlySubmitParsingChangedText() {
+        XCTAssertFalse(AppState.didLLMPolish(input: "hello world send", output: "hello world send"))
+    }
+
+    func testDidLLMPolishReturnsTrueWhenLLMOutputDiffers() {
+        XCTAssertTrue(AppState.didLLMPolish(input: "hello world", output: "Hello world."))
+    }
 }
