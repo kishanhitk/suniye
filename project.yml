@@ -1,0 +1,38 @@
+name: VibeStoke
+options:
+  createIntermediateGroups: true
+settings:
+  base:
+    MACOSX_DEPLOYMENT_TARGET: 14.0
+targets:
+  VibeStoke:
+    type: application
+    platform: macOS
+    sources:
+      - VibeStoke
+    info:
+      path: VibeStoke/Info.plist
+      properties:
+        LSUIElement: true
+        NSMicrophoneUsageDescription: VibeStoke needs microphone access to capture dictation.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.vibestroke.app
+        SWIFT_OBJC_BRIDGING_HEADER: VibeStoke/VibeStoke-Bridging-Header.h
+        OTHER_LDFLAGS:
+          - -ObjC
+        LD_RUNPATH_SEARCH_PATHS:
+          - $(inherited)
+          - "@executable_path/../Frameworks"
+    dependencies: []
+  VibeStokeTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - VibeStokeTests
+    dependencies:
+      - target: VibeStoke
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.vibestroke.app.tests
+        GENERATE_INFOPLIST_FILE: YES
