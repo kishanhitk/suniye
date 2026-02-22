@@ -30,3 +30,12 @@ If blocked:
 Grant permissions when prompted:
 - Microphone
 - Accessibility (for text insertion)
+
+## 6) Update flow (manual install)
+On each app launch, VibeStoke checks GitHub Releases in the background.
+
+If a newer version is found:
+1. Open the menu bar menu.
+2. Click `Download Update...`.
+3. The app downloads and verifies the archive checksum against `SHA256SUMS.txt`.
+4. The installer/archive is opened; replace the app in `~/Applications` manually.

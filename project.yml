@@ -13,6 +13,8 @@ schemes:
 settings:
   base:
     MACOSX_DEPLOYMENT_TARGET: 14.0
+    MARKETING_VERSION: 0.0.2
+    CURRENT_PROJECT_VERSION: 2
 targets:
   VibeStoke:
     type: application
@@ -24,6 +26,9 @@ targets:
       properties:
         LSUIElement: true
         NSMicrophoneUsageDescription: VibeStoke needs microphone access to capture dictation.
+        VSUpdateRepoOwner: kishanhitk
+        VSUpdateRepoName: vibestroke
+        VSUpdatePreferredAssetName: VibeStoke.dmg
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.vibestroke.app

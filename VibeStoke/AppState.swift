@@ -59,6 +59,15 @@ final class AppState {
         case error
     }
 
+    enum UpdateStatus: String {
+        case idle
+        case checking
+        case upToDate
+        case available
+        case downloading
+        case error
+    }
+
     var phase: Phase = .loading {
         didSet {
             if oldValue != phase {
@@ -75,6 +84,36 @@ final class AppState {
         }
     }
     var lastError: String?
+
+    var updateStatus: UpdateStatus = .idle {
+        didSet {
+            if oldValue != updateStatus {
+                onStateChange?()
+                AppLogger.shared.log(.info, "update status changed: \(oldValue.rawValue) -> \(updateStatus.rawValue)")
+            }
+        }
+    }
+    var availableUpdateVersion: String? {
+        didSet {
+            if oldValue != availableUpdateVersion {
+                onStateChange?()
+            }
+        }
+    }
+    var updateStatusText = "No update check yet." {
+        didSet {
+            if oldValue != updateStatusText {
+                onStateChange?()
+            }
+        }
+    }
+    var updateDownloadProgress: Double = 0 {
+        didSet {
+            if oldValue != updateDownloadProgress {
+                onStateChange?()
+            }
+        }
+    }
 
     var downloadProgress: Double = 0
     var wordsTranscribed = 0
@@ -233,11 +272,15 @@ final class AppState {
     private let llmPostProcessor: LLMPostProcessor
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let keychainService: KeychainServiceProtocol
+    private let updateService: UpdateServiceProtocol
+    private let currentAppVersionProvider: () -> AppVersion?
+    private let fileOpener: (URL) -> Bool
 
     private var recordingStart: Date?
     private var pendingProcessingIndicatorTask: Task<Void, Never>?
     private var isHydratingLLMSettings = false
     private let llmE2EMode: LLME2EMode
+    private var availableUpdateRelease: UpdateRelease?
 
     init(
         modelManager: ModelManager = ModelManager(),
@@ -248,6 +291,9 @@ final class AppState {
         llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
         llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
         keychainService: KeychainServiceProtocol = KeychainService(),
+        updateService: UpdateServiceProtocol = GitHubUpdateService(),
+        currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
+        fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
     ) {
@@ -259,6 +305,9 @@ final class AppState {
         self.llmPostProcessor = llmPostProcessor
         self.llmSettingsStore = llmSettingsStore
         self.keychainService = keychainService
+        self.updateService = updateService
+        self.currentAppVersionProvider = currentAppVersionProvider
+        self.fileOpener = fileOpener
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
 
         AppLogger.shared.log(.info, "app state init")
@@ -429,6 +478,104 @@ final class AppState {
         Task {
             await stopRecordingAndTranscribe()
         }
+    }
+
+    func checkForUpdatesOnLaunch() async {
+        await checkForUpdates(background: true)
+    }
+
+    func checkForUpdates(background: Bool) async {
+        guard updateStatus != .checking, updateStatus != .downloading else {
+            return
+        }
+
+        updateStatus = .checking
+        if !background {
+            updateStatusText = "Checking for updates..."
+        }
+
+        guard let currentVersion = currentAppVersionProvider() else {
+            AppLogger.shared.log(.error, "update check failed: local app version missing")
+            if background {
+                updateStatus = .idle
+            } else {
+                updateStatus = .error
+                updateStatusText = "Unable to read local app version."
+            }
+            return
+        }
+
+        do {
+            let result = try await updateService.checkForUpdate(currentVersion: currentVersion)
+            switch result {
+            case .upToDate:
+                availableUpdateRelease = nil
+                availableUpdateVersion = nil
+                if background {
+                    updateStatus = .idle
+                } else {
+                    updateStatus = .upToDate
+                    updateStatusText = "You're up to date."
+                }
+                AppLogger.shared.log(.info, "update check complete: up-to-date")
+            case let .updateAvailable(release):
+                availableUpdateRelease = release
+                availableUpdateVersion = release.versionTag
+                updateStatus = .available
+                updateStatusText = "Update available: \(release.versionTag)"
+                AppLogger.shared.log(.info, "update available: \(release.versionTag)")
+            }
+        } catch {
+            AppLogger.shared.log(.warning, "update check failed: \(error.localizedDescription)")
+            if background {
+                updateStatus = .idle
+            } else {
+                updateStatus = .error
+                updateStatusText = error.localizedDescription
+            }
+        }
+    }
+
+    func downloadAndOpenUpdate() async {
+        guard updateStatus != .downloading else {
+            return
+        }
+        guard let release = availableUpdateRelease else {
+            updateStatus = .error
+            updateStatusText = "No update is currently available."
+            return
+        }
+
+        updateStatus = .downloading
+        updateStatusText = "Downloading update..."
+        updateDownloadProgress = 0
+
+        do {
+            let archiveURL = try await updateService.downloadAndVerify(release: release)
+            guard fileOpener(archiveURL) else {
+                updateStatus = .error
+                updateDownloadProgress = 0
+                updateStatusText = "Update downloaded, but failed to open installer."
+                AppLogger.shared.log(.error, "update download complete but open failed: \(archiveURL.path)")
+                return
+            }
+            updateDownloadProgress = 1
+            updateStatus = .available
+            updateStatusText = "Update downloaded. Installer opened."
+            AppLogger.shared.log(.info, "update download complete and opened: \(archiveURL.path)")
+        } catch {
+            updateStatus = .error
+            updateStatusText = error.localizedDescription
+            updateDownloadProgress = 0
+            AppLogger.shared.log(.error, "update download failed: \(error.localizedDescription)")
+        }
+    }
+
+    func openReleaseNotes() {
+        guard let release = availableUpdateRelease else {
+            return
+        }
+        NSWorkspace.shared.open(release.htmlURL)
     }
 
     func postProcessTextIfEnabled(_ rawText: String) async -> String {
