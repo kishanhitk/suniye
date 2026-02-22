@@ -1,9 +1,13 @@
 import SwiftUI
 
 enum MainWindowSection: String, CaseIterable, Hashable {
-    case stats
-    case settings
-    case about
+    case dashboard
+    case history
+    case hotkey
+    case model
+    case vocabulary
+    case llmPolish
+    case general
 }
 
 struct SidebarView: View {
@@ -14,22 +18,29 @@ struct SidebarView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Navigate")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(AppTypography.ui(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
 
-                SidebarNavButton(title: "Stats", icon: "chart.bar", section: .stats, selection: $selection)
-                SidebarNavButton(title: "Settings", icon: "gearshape", section: .settings, selection: $selection)
-                SidebarNavButton(title: "About", icon: "info.circle", section: .about, selection: $selection)
+                SidebarNavButton(title: "Dashboard", icon: "rectangle.grid.2x2", section: .dashboard, selection: $selection)
+                SidebarNavButton(title: "History", icon: "clock.arrow.circlepath", section: .history, selection: $selection)
+                SidebarNavButton(title: "Hotkey", icon: "keyboard", section: .hotkey, selection: $selection)
+                SidebarNavButton(title: "Model", icon: "cpu", section: .model, selection: $selection)
+                SidebarNavButton(title: "Vocabulary", icon: "text.book.closed", section: .vocabulary, selection: $selection)
+                SidebarNavButton(title: "LLM Polish", icon: "wand.and.stars", section: .llmPolish, selection: $selection)
+                SidebarNavButton(title: "General", icon: "gearshape", section: .general, selection: $selection)
 
                 Divider()
 
                 Text("Status")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(AppTypography.ui(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
 
                 Label("Phase: \(appState.phase.rawValue.capitalized)", systemImage: "waveform")
+                    .font(AppTypography.ui(size: 12))
                 Label(appState.hasMicPermission ? "Mic Granted" : "Mic Missing", systemImage: "mic")
+                    .font(AppTypography.ui(size: 12))
                 Label(appState.hasAccessibilityPermission ? "Accessibility Granted" : "Accessibility Missing", systemImage: "accessibility")
+                    .font(AppTypography.ui(size: 12))
             }
         }
         .padding(14)
@@ -49,11 +60,12 @@ private struct SidebarNavButton: View {
         } label: {
             HStack {
                 Label(title, systemImage: icon)
+                    .font(AppTypography.ui(size: 12, weight: .medium))
                 Spacer()
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(selection == section ? Color.gray.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+            .background(selection == section ? AppTheme.cardBackground : Color.clear, in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.borderless)
     }

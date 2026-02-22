@@ -11,6 +11,19 @@ This project is in alpha (`v0.0.1`). Breaking changes, bugs, and rough edges are
 - Inserts text into the active app
 - Provides a menu bar UX with onboarding and status
 
+## Main window pages
+- Dashboard: key stats, quick actions, recent activity
+- History: searchable local history (copy, delete, clear all)
+- Hotkey: arbitrary shortcut capture with hold-to-talk behavior
+- Model: install status, required files, disk usage, model actions
+- Vocabulary: LLM glossary terms management
+- LLM Polish: API key, model, and prompt configuration
+- General: about, input device selection, launch-at-login, permissions
+
+## UI typography
+- Prefers `Google Sans` when installed on the machine
+- Falls back automatically to system fonts when `Google Sans` is unavailable
+
 ## Privacy model
 VibeStoke is designed to run transcription locally on your machine.
 Model downloads come from upstream release artifacts, but audio processing is local.

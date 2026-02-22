@@ -1,4 +1,5 @@
 import AVFoundation
+import AudioToolbox
 import Foundation
 
 struct CapturedAudio {
@@ -14,13 +15,22 @@ final class AudioCaptureService {
     private var captureSampleRate: Int = 16_000
     private var samples: [Float] = []
     private let lock = NSLock()
+    private let audioDeviceService: AudioDeviceServiceProtocol
 
-    func startCapture() throws {
+    init(audioDeviceService: AudioDeviceServiceProtocol = AudioDeviceService()) {
+        self.audioDeviceService = audioDeviceService
+    }
+
+    func startCapture(selectedInputDeviceUID: String? = nil) throws {
         lock.lock()
         samples.removeAll(keepingCapacity: true)
         lock.unlock()
 
         let inputNode = engine.inputNode
+        if let selectedInputDeviceUID {
+            try setInputDevice(uid: selectedInputDeviceUID, inputNode: inputNode)
+        }
+
         let hardwareFormat = inputNode.outputFormat(forBus: 0)
         let sampleRate = max(8_000, Int(hardwareFormat.sampleRate.rounded()))
         captureSampleRate = sampleRate
@@ -168,5 +178,41 @@ final class AudioCaptureService {
             sum += v * v
         }
         return Float((sum / Double(values.count)).squareRoot())
+    }
+
+    private func setInputDevice(uid: String, inputNode: AVAudioInputNode) throws {
+        guard let deviceID = audioDeviceService.coreAudioDeviceID(forUID: uid) else {
+            throw NSError(
+                domain: "VibeStoke.AudioCapture",
+                code: 1001,
+                userInfo: [NSLocalizedDescriptionKey: "Selected input device not found"]
+            )
+        }
+
+        guard let audioUnit = inputNode.audioUnit else {
+            throw NSError(
+                domain: "VibeStoke.AudioCapture",
+                code: 1002,
+                userInfo: [NSLocalizedDescriptionKey: "Unable to access audio input unit"]
+            )
+        }
+
+        var mutableDeviceID = deviceID
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &mutableDeviceID,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+
+        guard status == noErr else {
+            throw NSError(
+                domain: "VibeStoke.AudioCapture",
+                code: Int(status),
+                userInfo: [NSLocalizedDescriptionKey: "Failed to switch audio input device (OSStatus \(status))"]
+            )
+        }
     }
 }

@@ -52,10 +52,16 @@ final class AppState {
     var lastError: String?
 
     var downloadProgress: Double = 0
-    var wordsTranscribed = 0
+
     var sessionCount = 0
+    var wordsTranscribed = 0
     var totalDictationSeconds: TimeInterval = 0
-    var recentResults: [String] = []
+    var historyEntries: [HistoryEntry] = []
+    var historyActionMessage: String?
+
+    var recentResults: [String] {
+        Array(historyEntries.prefix(12).map(\.text))
+    }
 
     var showOnboarding = false
 
@@ -90,6 +96,50 @@ final class AppState {
     }
     var llmKeyOperationError: String?
 
+    var hotkeyShortcut: HotkeyShortcut = .defaultHoldToTalk {
+        didSet {
+            guard !isHydratingPreferences else {
+                return
+            }
+            if hotkeyShortcut.isEmpty {
+                hotkeyShortcut = .defaultHoldToTalk
+                hotkeyValidationError = "Shortcut cannot be empty."
+                return
+            }
+            hotkeyValidationError = nil
+            persistAppPreferences()
+            hotkeyService.updateShortcut(hotkeyShortcut)
+            onStateChange?()
+        }
+    }
+    var hotkeyValidationError: String?
+
+    var availableInputDevices: [AudioInputDevice] = []
+    var selectedInputDeviceUID: String? {
+        didSet {
+            guard !isHydratingPreferences else {
+                return
+            }
+            persistAppPreferences()
+            onStateChange?()
+        }
+    }
+    var inputDeviceStatusMessage: String?
+
+    var launchAtLoginEnabled = false {
+        didSet {
+            guard !isHydratingPreferences else {
+                return
+            }
+            persistAppPreferences()
+            onStateChange?()
+        }
+    }
+    var launchAtLoginError: String?
+
+    var modelDiagnostics: ModelDiagnostics?
+    var modelDiagnosticsError: String?
+
     var isModelInstalled: Bool {
         modelManager.isModelReady()
     }
@@ -109,6 +159,10 @@ final class AppState {
         currentLLMSettings().effectiveModelId
     }
 
+    var llmVocabulary: [String] {
+        LLMDefaults.parseKeywords(from: llmKeywordsRaw)
+    }
+
     var onStateChange: (() -> Void)?
 
     private let modelManager: ModelManager
@@ -120,10 +174,18 @@ final class AppState {
     private let llmPostProcessor: LLMPostProcessor
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let keychainService: KeychainServiceProtocol
+    private let historyStore: HistoryStoreProtocol
+    private let statsStore: StatsStoreProtocol
+    private let appPreferencesStore: AppPreferencesStoreProtocol
+    private let audioDeviceService: AudioDeviceServiceProtocol
+    private let launchAtLoginService: LaunchAtLoginServiceProtocol
+
+    private let historyLimit = 500
 
     private var recordingStart: Date?
     private var pendingProcessingIndicatorTask: Task<Void, Never>?
     private var isHydratingLLMSettings = false
+    private var isHydratingPreferences = false
     private let llmE2EMode: LLME2EMode
 
     init(
@@ -135,6 +197,11 @@ final class AppState {
         llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
         llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
         keychainService: KeychainServiceProtocol = KeychainService(),
+        historyStore: HistoryStoreProtocol = HistoryStore(),
+        statsStore: StatsStoreProtocol = StatsStore(),
+        appPreferencesStore: AppPreferencesStoreProtocol = AppPreferencesStore(),
+        audioDeviceService: AudioDeviceServiceProtocol = AudioDeviceService(),
+        launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
     ) {
@@ -146,11 +213,21 @@ final class AppState {
         self.llmPostProcessor = llmPostProcessor
         self.llmSettingsStore = llmSettingsStore
         self.keychainService = keychainService
+        self.historyStore = historyStore
+        self.statsStore = statsStore
+        self.appPreferencesStore = appPreferencesStore
+        self.audioDeviceService = audioDeviceService
+        self.launchAtLoginService = launchAtLoginService
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
 
         AppLogger.shared.log(.info, "app state init")
         loadLLMSettings()
+        loadHistoryAndStats()
+        loadAppPreferences()
+        refreshAudioDevices(emitFallbackNotice: false)
+        refreshLaunchAtLoginState()
         refreshLLMKeyStatus()
+        refreshModelDiagnostics()
 
         if startServices {
             wireHotkey()
@@ -177,6 +254,7 @@ final class AppState {
             showOnboarding = true
             floatingIndicatorController.hide()
         }
+        refreshModelDiagnostics()
         AppLogger.shared.log(.info, "bootstrap done")
     }
 
@@ -271,14 +349,27 @@ final class AppState {
                 phase = .ready
                 statusText = "Ready"
                 showOnboarding = false
+                refreshModelDiagnostics()
                 AppLogger.shared.log(.info, "model download complete")
             } catch {
                 phase = .error
                 lastError = error.localizedDescription
                 statusText = "Download failed"
+                refreshModelDiagnostics()
                 AppLogger.shared.log(.error, "model download failed: \(error.localizedDescription)")
             }
         }
+    }
+
+    func refreshModelDiagnostics() {
+        do {
+            modelDiagnostics = try modelManager.modelDiagnostics()
+            modelDiagnosticsError = nil
+        } catch {
+            modelDiagnostics = nil
+            modelDiagnosticsError = error.localizedDescription
+        }
+        onStateChange?()
     }
 
     func openModelFolder() {
@@ -293,6 +384,122 @@ final class AppState {
 
     func openMainWindow() {
         MainWindowController.shared.show(appState: self)
+    }
+
+    func refreshAudioDevices(emitFallbackNotice: Bool = true) {
+        let devices = audioDeviceService.availableInputDevices()
+        availableInputDevices = devices
+
+        let resolvedUID = audioDeviceService.resolveSelectedInputDeviceUID(selectedInputDeviceUID)
+        if let selectedInputDeviceUID,
+           resolvedUID != selectedInputDeviceUID,
+           emitFallbackNotice {
+            inputDeviceStatusMessage = "Selected input device is unavailable. Falling back to default input."
+        }
+        selectedInputDeviceUID = resolvedUID
+
+        if resolvedUID == nil && devices.isEmpty {
+            inputDeviceStatusMessage = "No audio input devices found."
+        }
+
+        onStateChange?()
+    }
+
+    func selectInputDevice(uid: String?) {
+        let resolved = audioDeviceService.resolveSelectedInputDeviceUID(uid)
+        selectedInputDeviceUID = resolved
+        if let uid, resolved != uid {
+            inputDeviceStatusMessage = "Selected input device is unavailable."
+        } else {
+            inputDeviceStatusMessage = nil
+        }
+        onStateChange?()
+    }
+
+    func setLaunchAtLoginEnabled(_ enabled: Bool) {
+        do {
+            try launchAtLoginService.setEnabled(enabled)
+            launchAtLoginEnabled = launchAtLoginService.isEnabled()
+            launchAtLoginError = nil
+            persistAppPreferences()
+        } catch {
+            launchAtLoginEnabled = launchAtLoginService.isEnabled()
+            launchAtLoginError = error.localizedDescription + " Install VibeStoke in /Applications and retry."
+        }
+        onStateChange?()
+    }
+
+    func refreshLaunchAtLoginState() {
+        launchAtLoginEnabled = launchAtLoginService.isEnabled()
+        onStateChange?()
+    }
+
+    func filteredHistoryEntries(searchText: String) -> [HistoryEntry] {
+        let normalized = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return historyEntries
+        }
+
+        return historyEntries.filter { entry in
+            entry.text.localizedCaseInsensitiveContains(normalized)
+        }
+    }
+
+    func copyHistoryEntryText(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        historyActionMessage = "Copied"
+        onStateChange?()
+    }
+
+    func deleteHistoryEntry(id: UUID) {
+        guard let index = historyEntries.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+
+        let removed = historyEntries.remove(at: index)
+        var stats = currentStatsSnapshot()
+        stats.applyRemovedEntry(removed)
+        applyStats(stats)
+        persistHistoryAndStats()
+        historyActionMessage = "Deleted"
+        onStateChange?()
+    }
+
+    func clearHistory() {
+        historyEntries.removeAll(keepingCapacity: false)
+        applyStats(.zero)
+        persistHistoryAndStats()
+        historyActionMessage = "History cleared"
+        onStateChange?()
+    }
+
+    func addVocabularyTerm(_ rawTerm: String) {
+        let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else {
+            return
+        }
+
+        var terms = llmVocabulary
+        if !terms.contains(where: { $0.caseInsensitiveCompare(term) == .orderedSame }) {
+            terms.append(term)
+            llmKeywordsRaw = terms.joined(separator: "\n")
+        }
+    }
+
+    func removeVocabularyTerm(_ term: String) {
+        let terms = llmVocabulary.filter { $0.caseInsensitiveCompare(term) != .orderedSame }
+        llmKeywordsRaw = terms.joined(separator: "\n")
+    }
+
+    func updateHotkeyShortcut(_ shortcut: HotkeyShortcut) {
+        if shortcut.isEmpty {
+            hotkeyValidationError = "Shortcut cannot be empty."
+            return
+        }
+        hotkeyShortcut = shortcut
+        hotkeyValidationError = nil
     }
 
     func startRecordingFromUI() {
@@ -435,8 +642,8 @@ final class AppState {
             }
         }
 
-        hotkeyService.startMonitoring()
-        AppLogger.shared.log(.info, "hotkey monitoring started")
+        hotkeyService.startMonitoring(shortcut: hotkeyShortcut)
+        AppLogger.shared.log(.info, "hotkey monitoring started shortcut=\(hotkeyShortcut.displayText)")
     }
 
     private func loadRecognizerIfPossible() async {
@@ -477,7 +684,7 @@ final class AppState {
             lastError = "Accessibility permission not granted"
             statusText = "Accessibility required"
             AppLogger.shared.log(.warning, "accessibility permission denied before recording")
-            showIndicator(.error(message: "Enable Accessibility for Fn hotkey"), autoHideAfter: 2.2)
+            showIndicator(.error(message: "Enable Accessibility for hotkey"), autoHideAfter: 2.2)
             return
         }
         startRecording()
@@ -489,7 +696,7 @@ final class AppState {
         }
 
         do {
-            try audioCaptureService.startCapture()
+            try audioCaptureService.startCapture(selectedInputDeviceUID: selectedInputDeviceUID)
             phase = .recording
             statusText = "Recording"
             recordingStart = Date()
@@ -525,7 +732,6 @@ final class AppState {
         let samples = captured.samples
         let sampleRate = captured.sampleRate
         let duration = recordingStart.map { Date().timeIntervalSince($0) } ?? 0
-        totalDictationSeconds += duration
         AppLogger.shared.log(.info, "dictation stop samples=\(samples.count) sr=\(sampleRate) duration=\(String(format: "%.2f", duration))")
 
         do {
@@ -555,12 +761,12 @@ final class AppState {
 
             if !finalText.isEmpty {
                 try textInsertionService.insertText(finalText)
-                sessionCount += 1
-                wordsTranscribed += wordCount
-                recentResults.insert(finalText, at: 0)
-                if recentResults.count > 12 {
-                    recentResults.removeLast(recentResults.count - 12)
-                }
+                addHistoryEntry(
+                    text: finalText,
+                    durationSeconds: duration,
+                    wordCount: wordCount,
+                    submitted: shouldSubmit
+                )
                 AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
             }
 
@@ -575,6 +781,7 @@ final class AppState {
             if finalText.isEmpty && !shouldSubmit {
                 AppLogger.shared.log(.warning, "transcription returned empty text samples=\(samples.count) sr=\(sampleRate)")
             }
+
             pendingProcessingIndicatorTask?.cancel()
             pendingProcessingIndicatorTask = nil
             phase = .ready
@@ -589,6 +796,85 @@ final class AppState {
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
             showIndicator(.error(message: "Transcription failed"), autoHideAfter: 1.8)
         }
+    }
+
+    func addHistoryEntry(text: String, durationSeconds: TimeInterval, wordCount: Int, submitted: Bool) {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return
+        }
+
+        let entry = HistoryEntry(
+            durationSeconds: durationSeconds,
+            wordCount: wordCount,
+            text: normalized,
+            submitted: submitted
+        )
+
+        historyEntries.insert(entry, at: 0)
+
+        var stats = currentStatsSnapshot()
+        stats.applyAddedEntry(entry)
+
+        if historyEntries.count > historyLimit {
+            let overflow = historyEntries.suffix(from: historyLimit)
+            for removed in overflow {
+                stats.applyRemovedEntry(removed)
+            }
+            historyEntries = Array(historyEntries.prefix(historyLimit))
+        }
+
+        applyStats(stats)
+        persistHistoryAndStats()
+        onStateChange?()
+    }
+
+    private func loadHistoryAndStats() {
+        historyEntries = historyStore.load()
+        let stats = statsStore.load()
+        applyStats(stats)
+    }
+
+    private func persistHistoryAndStats() {
+        historyStore.save(historyEntries)
+        statsStore.save(currentStatsSnapshot())
+    }
+
+    private func applyStats(_ snapshot: StatsSnapshot) {
+        sessionCount = snapshot.sessionCount
+        wordsTranscribed = snapshot.wordsTranscribed
+        totalDictationSeconds = snapshot.totalDictationSeconds
+    }
+
+    private func currentStatsSnapshot() -> StatsSnapshot {
+        StatsSnapshot(
+            sessionCount: sessionCount,
+            wordsTranscribed: wordsTranscribed,
+            totalDictationSeconds: totalDictationSeconds
+        )
+    }
+
+    private func loadAppPreferences() {
+        isHydratingPreferences = true
+        let preferences = appPreferencesStore.load()
+        hotkeyShortcut = preferences.hotkeyShortcut.isEmpty ? .defaultHoldToTalk : preferences.hotkeyShortcut
+        selectedInputDeviceUID = preferences.selectedInputDeviceUID
+        launchAtLoginEnabled = preferences.launchAtLoginEnabled
+        isHydratingPreferences = false
+    }
+
+    private func persistAppPreferences() {
+        guard !isHydratingPreferences else {
+            return
+        }
+
+        appPreferencesStore.save(
+            AppPreferences(
+                hotkeyShortcut: hotkeyShortcut,
+                selectedInputDeviceUID: selectedInputDeviceUID,
+                launchAtLoginEnabled: launchAtLoginEnabled
+            )
+        )
     }
 
     private func loadLLMSettings() {

@@ -56,6 +56,36 @@ final class ModelManager {
         )
     }
 
+    func modelDiagnostics() throws -> ModelDiagnostics {
+        let dir = try modelDirectoryURL()
+        let fileManager = FileManager.default
+
+        let fileStatuses = requiredFiles.map { fileName -> ModelFileStatus in
+            let fileURL = dir.appendingPathComponent(fileName, isDirectory: false)
+            let exists = fileManager.fileExists(atPath: fileURL.path)
+            let sizeBytes: Int64
+            if exists,
+               let attributes = try? fileManager.attributesOfItem(atPath: fileURL.path),
+               let value = attributes[.size] as? NSNumber {
+                sizeBytes = value.int64Value
+            } else {
+                sizeBytes = 0
+            }
+
+            return ModelFileStatus(fileName: fileName, exists: exists, sizeBytes: sizeBytes)
+        }
+
+        let totalBytes = directorySizeBytes(at: dir)
+        let isReady = fileStatuses.allSatisfy(\.exists)
+
+        return ModelDiagnostics(
+            modelDirectoryPath: dir.path,
+            requiredFiles: fileStatuses,
+            diskUsageBytes: totalBytes,
+            isReady: isReady
+        )
+    }
+
     func downloadAndExtractModel(progress: @escaping @Sendable (Double) -> Void) async throws {
         let tempArchive = FileManager.default.temporaryDirectory.appendingPathComponent("parakeet-model.tar.bz2")
         let destinationDir = try modelDirectoryURL().deletingLastPathComponent()
@@ -99,6 +129,27 @@ final class ModelManager {
             let message = String(data: data, encoding: .utf8) ?? "unknown tar error"
             throw ModelError.extractFailed(message)
         }
+    }
+
+    private func directorySizeBytes(at directoryURL: URL) -> Int64 {
+        guard let enumerator = FileManager.default.enumerator(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return 0
+        }
+
+        var total: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true,
+                  let size = values.fileSize else {
+                continue
+            }
+            total += Int64(size)
+        }
+        return total
     }
 }
 
