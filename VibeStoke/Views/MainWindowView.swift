@@ -100,6 +100,7 @@ private struct StatCard: View {
 
 private struct SettingsDetailView: View {
     @Bindable var appState: AppState
+    @State private var pendingAPIKey = ""
 
     var body: some View {
         let modelActionTitle = appState.isModelInstalled ? "Re-download Model" : "Download Model"
@@ -170,11 +171,97 @@ private struct SettingsDetailView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+
+                GroupBox("LLM Post-Processing") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle("Enable LLM polishing", isOn: $appState.llmEnabled)
+
+                        HStack(spacing: 10) {
+                            Text("Model")
+                                .font(.system(size: 12, weight: .semibold))
+                                .frame(width: 84, alignment: .leading)
+
+                            Picker("Model", selection: $appState.llmSelectedModelPreset) {
+                                ForEach(LLMModelPreset.allCases, id: \.self) { preset in
+                                    Text(preset.displayName).tag(preset)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 220)
+                        }
+
+                        if appState.llmSelectedModelPreset == .custom {
+                            TextField("openrouter/model-id", text: $appState.llmCustomModelId)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityLabel(Text("Custom OpenRouter Model ID"))
+                        }
+
+                        Text("Active model: \(appState.llmSelectedModelIdPreview)")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(appState.llmKeyStatusText)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(appState.hasOpenRouterAPIKey ? Color.primary : Color.orange)
+
+                            HStack(spacing: 10) {
+                                SecureField("OpenRouter API key", text: $pendingAPIKey)
+                                    .textFieldStyle(.roundedBorder)
+
+                                Button(appState.hasOpenRouterAPIKey ? "Replace Key" : "Save Key") {
+                                    appState.saveOpenRouterAPIKey(pendingAPIKey)
+                                    pendingAPIKey = ""
+                                }
+                                .buttonStyle(.borderedProminent)
+
+                                Button("Clear Key") {
+                                    appState.clearOpenRouterAPIKey()
+                                    pendingAPIKey = ""
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(!appState.hasOpenRouterAPIKey)
+                            }
+
+                            if let keyError = appState.llmKeyOperationError {
+                                Text(keyError)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.red)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("System prompt")
+                                .font(.system(size: 12, weight: .semibold))
+                            TextEditor(text: $appState.llmSystemPrompt)
+                                .font(.system(size: 12))
+                                .frame(minHeight: 88)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                )
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Common keywords (comma or newline separated)")
+                                .font(.system(size: 12, weight: .semibold))
+                            TextEditor(text: $appState.llmKeywordsRaw)
+                                .font(.system(size: 12))
+                                .frame(minHeight: 68)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding(24)
         }
         .onAppear {
             AppLogger.shared.log(.info, "settings view appeared model_installed=\(appState.isModelInstalled)")
+            AppLogger.shared.log(.info, "settings llm controls rendered model=\(appState.llmSelectedModelIdPreview)")
         }
     }
 }

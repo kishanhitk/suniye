@@ -11,7 +11,10 @@
 		06D5921569D828410AB362EA /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCA8859E20B68C44FB76305 /* TranscriptionService.swift */; };
 		0B40C24E47F0684B60010965 /* libsherpa-onnx-c-api.dylib in Resources */ = {isa = PBXBuildFile; fileRef = 4A141D8A88A217287757A82B /* libsherpa-onnx-c-api.dylib */; };
 		0DFCD840294706E7CC53A183 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CFB6B879A958FFBB1351500 /* AudioCaptureService.swift */; };
+		26D7F71A769A16C35A5805F4 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEFB0FC048F0ADF3F8BA0B10 /* KeychainService.swift */; };
+		33D6AA5F8A7C9EED45343D72 /* OpenRouterPostProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00225E338044BC4414BE2BCA /* OpenRouterPostProcessorTests.swift */; };
 		35E57F05B1425AA33657C7C8 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8858E8F99F6270A9BB65180 /* AppLogger.swift */; };
+		40906F17D9B32FD43E43F679 /* LLMSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E68F3FE154D8898F8564A8 /* LLMSettingsStore.swift */; };
 		4AC3C2F99CAD01DCB15A7942 /* libonnxruntime.1.23.2.dylib in Resources */ = {isa = PBXBuildFile; fileRef = A086CDEFBB5346DA7828B64B /* libonnxruntime.1.23.2.dylib */; };
 		4D9EC819747DF66A8094AF52 /* FloatingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2B8694065F21427B3012B64 /* FloatingIndicatorView.swift */; };
 		4EC239DEDDE501B76CE62BEA /* libonnxruntime.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 45C7356A2F6F90E145D6CDE1 /* libonnxruntime.dylib */; };
@@ -21,7 +24,9 @@
 		58D19733E6633554B2421352 /* ModelManagerE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF04203C51AE8E7660A931CD /* ModelManagerE2ETests.swift */; };
 		5E0697F9E811040EF7EC3E07 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E89E369BE1291B599243DCD6 /* OnboardingView.swift */; };
 		6F2A58E95FBEF9323E260EFA /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4AC64D321C4083EC692DFC0 /* MainWindowController.swift */; };
+		703DBE035FC39CDA337AE07C /* OpenRouterPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24D8EC345C9F258F009934F0 /* OpenRouterPostProcessor.swift */; };
 		76BD95DE6D2EEF6E85ED9B0E /* ListeningOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BE24DBE41CAFB5015C0E99 /* ListeningOverlay.swift */; };
+		882F0E2AE765EEE29499681E /* LLMSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11A434379D4813006653F13 /* LLMSettings.swift */; };
 		88BAD3EC93D8A06C2230D7F1 /* FloatingIndicatorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EA4A125A5922AB91BE8920C /* FloatingIndicatorController.swift */; };
 		92C040E2188DD71050E5FA07 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED0D9BD190A40C0022CE04B7 /* WelcomeView.swift */; };
 		941F99EA6F0AEC93C59813EF /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0FF6CEF5331B9E20D4F863 /* HotkeyService.swift */; };
@@ -31,12 +36,15 @@
 		B6984BB426C8EB952627A521 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB4AECEBC3B7A7D1F68A73E5 /* MenuBarView.swift */; };
 		B6F05C354DD5667B669E3217 /* SherpaOnnx.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC8A2031E0A99E08BA970133 /* SherpaOnnx.swift */; };
 		BCE4F6086A4EE6B9B3DC58BB /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74EF84F3C672AD84D29C7A2 /* MainWindowView.swift */; };
+		C081CF8C33894A86F1F3310C /* LLMSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 166C00DF6B9E3A2EE85006C7 /* LLMSettingsStoreTests.swift */; };
 		C700CDD471ABC48575EB5C2D /* libsherpa-onnx-c-api.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E1F59F1203CDEEA82D2F0CB5 /* libsherpa-onnx-c-api.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		D56B89276940122A46FF8A45 /* FloatingIndicatorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93DB6DE29EC7A214299DFFC /* FloatingIndicatorState.swift */; };
 		D6C09FA218F2A9E073DF2E21 /* libsherpa-onnx-c-api.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = E1F59F1203CDEEA82D2F0CB5 /* libsherpa-onnx-c-api.dylib */; };
 		D72D4CEC9AB6AEB6A99F4762 /* TranscriptionServiceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8677236133B00F5F093F1070 /* TranscriptionServiceE2ETests.swift */; };
+		DEA670FC11FC79C107C182EE /* LLMPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0164E21045D596FA94D41AD /* LLMPostProcessor.swift */; };
 		E57319F52272F8F792E60A39 /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88D7A8FC6B56C47D8200CB83 /* TextInsertionService.swift */; };
 		ED426F1562E4993B43376ABD /* libonnxruntime.dylib in Resources */ = {isa = PBXBuildFile; fileRef = 088C09CA19ED94F737C15687 /* libonnxruntime.dylib */; };
+		FDE46D0A93C69E13D98B2CE8 /* AppStateLLMTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F2FE3436E32338132CE424 /* AppStateLLMTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -65,17 +73,22 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		00225E338044BC4414BE2BCA /* OpenRouterPostProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterPostProcessorTests.swift; sourceTree = "<group>"; };
 		023985C9CE7684ECF7B42809 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		0767424842E98B4FFF808926 /* VibeStoke.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VibeStoke.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		088C09CA19ED94F737C15687 /* libonnxruntime.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = libonnxruntime.dylib; sourceTree = "<group>"; };
 		0CFB6B879A958FFBB1351500 /* AudioCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureService.swift; sourceTree = "<group>"; };
+		166C00DF6B9E3A2EE85006C7 /* LLMSettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettingsStoreTests.swift; sourceTree = "<group>"; };
+		16F2FE3436E32338132CE424 /* AppStateLLMTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateLLMTests.swift; sourceTree = "<group>"; };
 		188BAD6BED843EE1FEEEA65B /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
+		24D8EC345C9F258F009934F0 /* OpenRouterPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterPostProcessor.swift; sourceTree = "<group>"; };
 		45C7356A2F6F90E145D6CDE1 /* libonnxruntime.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libonnxruntime.dylib; path = VibeStoke/Frameworks/libonnxruntime.dylib; sourceTree = "<group>"; };
 		4A141D8A88A217287757A82B /* libsherpa-onnx-c-api.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "libsherpa-onnx-c-api.dylib"; sourceTree = "<group>"; };
 		55D8FE65781D9FE2EFBBED64 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
 		655D998A2AF91CF14B1CFF57 /* ModelDownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadView.swift; sourceTree = "<group>"; };
 		6EA4A125A5922AB91BE8920C /* FloatingIndicatorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorController.swift; sourceTree = "<group>"; };
 		80B119B6A616CF754D1CC65B /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		85E68F3FE154D8898F8564A8 /* LLMSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettingsStore.swift; sourceTree = "<group>"; };
 		8677236133B00F5F093F1070 /* TranscriptionServiceE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionServiceE2ETests.swift; sourceTree = "<group>"; };
 		88D7A8FC6B56C47D8200CB83 /* TextInsertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionService.swift; sourceTree = "<group>"; };
 		8B3AE3FB84F2718C4FD3A58D /* VibeStokeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeStokeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -91,6 +104,9 @@
 		C2B8694065F21427B3012B64 /* FloatingIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorView.swift; sourceTree = "<group>"; };
 		C74EF84F3C672AD84D29C7A2 /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
 		CC8A2031E0A99E08BA970133 /* SherpaOnnx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherpaOnnx.swift; sourceTree = "<group>"; };
+		CEFB0FC048F0ADF3F8BA0B10 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		E0164E21045D596FA94D41AD /* LLMPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMPostProcessor.swift; sourceTree = "<group>"; };
+		E11A434379D4813006653F13 /* LLMSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettings.swift; sourceTree = "<group>"; };
 		E1F59F1203CDEEA82D2F0CB5 /* libsherpa-onnx-c-api.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = "libsherpa-onnx-c-api.dylib"; path = "VibeStoke/Frameworks/libsherpa-onnx-c-api.dylib"; sourceTree = "<group>"; };
 		E3DDD25655BDABDB54FD073F /* c-api.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "c-api.h"; sourceTree = "<group>"; };
 		E89E369BE1291B599243DCD6 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
@@ -116,7 +132,10 @@
 		06C631C45349752443576C31 /* VibeStokeTests */ = {
 			isa = PBXGroup;
 			children = (
+				16F2FE3436E32338132CE424 /* AppStateLLMTests.swift */,
+				166C00DF6B9E3A2EE85006C7 /* LLMSettingsStoreTests.swift */,
 				BF04203C51AE8E7660A931CD /* ModelManagerE2ETests.swift */,
+				00225E338044BC4414BE2BCA /* OpenRouterPostProcessorTests.swift */,
 				8677236133B00F5F093F1070 /* TranscriptionServiceE2ETests.swift */,
 			);
 			path = VibeStokeTests;
@@ -191,7 +210,12 @@
 				A8858E8F99F6270A9BB65180 /* AppLogger.swift */,
 				0CFB6B879A958FFBB1351500 /* AudioCaptureService.swift */,
 				EF0FF6CEF5331B9E20D4F863 /* HotkeyService.swift */,
+				CEFB0FC048F0ADF3F8BA0B10 /* KeychainService.swift */,
+				E0164E21045D596FA94D41AD /* LLMPostProcessor.swift */,
+				E11A434379D4813006653F13 /* LLMSettings.swift */,
+				85E68F3FE154D8898F8564A8 /* LLMSettingsStore.swift */,
 				55D8FE65781D9FE2EFBBED64 /* ModelManager.swift */,
+				24D8EC345C9F258F009934F0 /* OpenRouterPostProcessor.swift */,
 				88D7A8FC6B56C47D8200CB83 /* TextInsertionService.swift */,
 				AFCA8859E20B68C44FB76305 /* TranscriptionService.swift */,
 			);
@@ -303,6 +327,10 @@
 				D56B89276940122A46FF8A45 /* FloatingIndicatorState.swift in Sources */,
 				4D9EC819747DF66A8094AF52 /* FloatingIndicatorView.swift in Sources */,
 				941F99EA6F0AEC93C59813EF /* HotkeyService.swift in Sources */,
+				26D7F71A769A16C35A5805F4 /* KeychainService.swift in Sources */,
+				DEA670FC11FC79C107C182EE /* LLMPostProcessor.swift in Sources */,
+				882F0E2AE765EEE29499681E /* LLMSettings.swift in Sources */,
+				40906F17D9B32FD43E43F679 /* LLMSettingsStore.swift in Sources */,
 				76BD95DE6D2EEF6E85ED9B0E /* ListeningOverlay.swift in Sources */,
 				6F2A58E95FBEF9323E260EFA /* MainWindowController.swift in Sources */,
 				BCE4F6086A4EE6B9B3DC58BB /* MainWindowView.swift in Sources */,
@@ -310,6 +338,7 @@
 				5814750EC9AF48E683CAB5F4 /* ModelDownloadView.swift in Sources */,
 				513A9644874D068148ED09CC /* ModelManager.swift in Sources */,
 				5E0697F9E811040EF7EC3E07 /* OnboardingView.swift in Sources */,
+				703DBE035FC39CDA337AE07C /* OpenRouterPostProcessor.swift in Sources */,
 				B6F05C354DD5667B669E3217 /* SherpaOnnx.swift in Sources */,
 				0187DFC2BA1FBCC57908C1C0 /* SidebarView.swift in Sources */,
 				A32934060931D35C834494FC /* StatusItemController.swift in Sources */,
@@ -324,7 +353,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FDE46D0A93C69E13D98B2CE8 /* AppStateLLMTests.swift in Sources */,
+				C081CF8C33894A86F1F3310C /* LLMSettingsStoreTests.swift in Sources */,
 				58D19733E6633554B2421352 /* ModelManagerE2ETests.swift in Sources */,
+				33D6AA5F8A7C9EED45343D72 /* OpenRouterPostProcessorTests.swift in Sources */,
 				D72D4CEC9AB6AEB6A99F4762 /* TranscriptionServiceE2ETests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

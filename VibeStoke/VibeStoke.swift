@@ -1,7 +1,7 @@
 import SwiftUI
 
 @MainActor
-let sharedAppState = AppState()
+let sharedAppState = AppState(startServices: ProcessInfo.processInfo.shouldStartRuntimeServices)
 
 @main
 struct VibeStokeApp: App {
@@ -11,5 +11,24 @@ struct VibeStokeApp: App {
         Settings {
             EmptyView()
         }
+    }
+}
+
+private extension ProcessInfo {
+    var isRunningUnderXCTest: Bool {
+        environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    var shouldStartRuntimeServices: Bool {
+        if isRunningUnderXCTest {
+            return false
+        }
+
+        let args = Set(CommandLine.arguments)
+        if args.contains("--e2e-llm-success") || args.contains("--e2e-llm-fallback") {
+            return false
+        }
+
+        return true
     }
 }

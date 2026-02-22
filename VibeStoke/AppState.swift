@@ -4,6 +4,23 @@ import Foundation
 import Observation
 import SwiftUI
 
+enum LLME2EMode {
+    case none
+    case forceSuccess
+    case forceFailure
+
+    var logValue: String {
+        switch self {
+        case .none:
+            return "none"
+        case .forceSuccess:
+            return "success"
+        case .forceFailure:
+            return "fallback"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class AppState {
@@ -45,27 +62,98 @@ final class AppState {
     var hasMicPermission = false
     var hasAccessibilityPermission = false
 
+    var llmEnabled = false {
+        didSet { persistLLMSettings() }
+    }
+    var llmSelectedModelPreset: LLMModelPreset = .gemini25Flash {
+        didSet { persistLLMSettings() }
+    }
+    var llmCustomModelId = "" {
+        didSet { persistLLMSettings() }
+    }
+    var llmSystemPrompt = LLMDefaults.defaultSystemPrompt {
+        didSet { persistLLMSettings() }
+    }
+    var llmKeywordsRaw = "" {
+        didSet { persistLLMSettings() }
+    }
+
+    var hasOpenRouterAPIKey = false {
+        didSet {
+            if oldValue != hasOpenRouterAPIKey {
+                onStateChange?()
+            }
+        }
+    }
+    var llmKeyOperationError: String?
+
     var isModelInstalled: Bool {
         modelManager.isModelReady()
     }
 
+    var llmKeyStatusText: String {
+        hasOpenRouterAPIKey ? "API key: saved" : "API key: missing"
+    }
+
+    var llmStatusHint: String? {
+        if llmEnabled && !hasOpenRouterAPIKey {
+            return "LLM enabled but API key missing"
+        }
+        return nil
+    }
+
+    var llmSelectedModelIdPreview: String {
+        currentLLMSettings().effectiveModelId
+    }
+
     var onStateChange: (() -> Void)?
 
-    private let modelManager = ModelManager()
-    private let transcriptionService = TranscriptionService()
-    private let audioCaptureService = AudioCaptureService()
-    private let textInsertionService = TextInsertionService()
-    private let hotkeyService = HotkeyService()
+    private let modelManager: ModelManager
+    private let transcriptionService: TranscriptionService
+    private let audioCaptureService: AudioCaptureService
+    private let textInsertionService: TextInsertionService
+    private let hotkeyService: HotkeyService
     private let floatingIndicatorController = FloatingIndicatorController()
+    private let llmPostProcessor: LLMPostProcessor
+    private let llmSettingsStore: LLMSettingsStoreProtocol
+    private let keychainService: KeychainServiceProtocol
 
     private var recordingStart: Date?
     private var pendingProcessingIndicatorTask: Task<Void, Never>?
+    private var isHydratingLLMSettings = false
+    private let llmE2EMode: LLME2EMode
 
-    init() {
+    init(
+        modelManager: ModelManager = ModelManager(),
+        transcriptionService: TranscriptionService = TranscriptionService(),
+        audioCaptureService: AudioCaptureService = AudioCaptureService(),
+        textInsertionService: TextInsertionService = TextInsertionService(),
+        hotkeyService: HotkeyService = HotkeyService(),
+        llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
+        llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
+        keychainService: KeychainServiceProtocol = KeychainService(),
+        startServices: Bool = true,
+        llmE2EMode: LLME2EMode? = nil
+    ) {
+        self.modelManager = modelManager
+        self.transcriptionService = transcriptionService
+        self.audioCaptureService = audioCaptureService
+        self.textInsertionService = textInsertionService
+        self.hotkeyService = hotkeyService
+        self.llmPostProcessor = llmPostProcessor
+        self.llmSettingsStore = llmSettingsStore
+        self.keychainService = keychainService
+        self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
+
         AppLogger.shared.log(.info, "app state init")
-        wireHotkey()
-        Task {
-            await bootstrap()
+        loadLLMSettings()
+        refreshLLMKeyStatus()
+
+        if startServices {
+            wireHotkey()
+            Task {
+                await bootstrap()
+            }
         }
     }
 
@@ -110,6 +198,43 @@ final class AppState {
     func requestAccessibilityPermission() {
         Task {
             await refreshPermissions(promptAccessibility: true)
+        }
+    }
+
+    func refreshLLMKeyStatus() {
+        hasOpenRouterAPIKey = keychainService.hasOpenRouterKey()
+    }
+
+    func saveOpenRouterAPIKey(_ key: String) {
+        let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            llmKeyOperationError = "API key cannot be empty"
+            onStateChange?()
+            return
+        }
+
+        do {
+            try keychainService.setOpenRouterKey(normalized)
+            llmKeyOperationError = nil
+            refreshLLMKeyStatus()
+            AppLogger.shared.log(.info, "openrouter api key saved")
+        } catch {
+            llmKeyOperationError = "Failed to save API key"
+            AppLogger.shared.log(.error, "openrouter api key save failed")
+            onStateChange?()
+        }
+    }
+
+    func clearOpenRouterAPIKey() {
+        do {
+            try keychainService.deleteOpenRouterKey()
+            llmKeyOperationError = nil
+            refreshLLMKeyStatus()
+            AppLogger.shared.log(.info, "openrouter api key cleared")
+        } catch {
+            llmKeyOperationError = "Failed to clear API key"
+            AppLogger.shared.log(.error, "openrouter api key clear failed")
+            onStateChange?()
         }
     }
 
@@ -179,6 +304,92 @@ final class AppState {
         }
         Task {
             await stopRecordingAndTranscribe()
+        }
+    }
+
+    func postProcessTextIfEnabled(_ rawText: String) async -> String {
+        let input = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !input.isEmpty else {
+            return rawText
+        }
+
+        switch llmE2EMode {
+        case .forceSuccess:
+            AppLogger.shared.log(.info, "llm e2e forced success")
+            return "\(input)."
+        case .forceFailure:
+            AppLogger.shared.log(.warning, "llm e2e forced fallback")
+            return rawText
+        case .none:
+            break
+        }
+
+        guard llmEnabled else {
+            return rawText
+        }
+
+        guard hasOpenRouterAPIKey else {
+            AppLogger.shared.log(.warning, "llm fallback raw reason=missing_key")
+            return rawText
+        }
+
+        guard let apiKey = try? keychainService.getOpenRouterKey(),
+              !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            AppLogger.shared.log(.warning, "llm fallback raw reason=keychain_read_failed")
+            refreshLLMKeyStatus()
+            return rawText
+        }
+
+        let config = makeLLMConfig(apiKey: apiKey)
+        let startTime = Date()
+        statusText = "Polishing..."
+
+        do {
+            let polished = try await llmPostProcessor.polish(text: input, config: config)
+            let normalized = polished.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else {
+                AppLogger.shared.log(.warning, "llm fallback raw reason=empty_output model=\(config.modelId)")
+                return rawText
+            }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AppLogger.shared.log(.info, "llm polish success model=\(config.modelId) latency_ms=\(latencyMs)")
+            return normalized
+        } catch {
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            if let llmError = error as? LLMPostProcessorError {
+                AppLogger.shared.log(.warning, "llm fallback raw reason=\(llmError.logValue) model=\(config.modelId) latency_ms=\(latencyMs)")
+            } else {
+                AppLogger.shared.log(.warning, "llm fallback raw reason=unknown model=\(config.modelId) latency_ms=\(latencyMs)")
+            }
+            return rawText
+        }
+    }
+
+    func runIndicatorE2ESmoke() {
+        Task { @MainActor in
+            AppLogger.shared.log(.info, "e2e indicator smoke start")
+            showIndicator(.listening)
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            showIndicator(.stopped)
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            showIndicator(.processing)
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            showIndicator(.done(words: 4), autoHideAfter: 0.35)
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            AppLogger.shared.log(.info, "e2e indicator smoke done")
+            NSApp.terminate(nil)
+        }
+    }
+
+    func runLLME2ESmoke() {
+        Task { @MainActor in
+            AppLogger.shared.log(.info, "e2e llm smoke start mode=\(llmE2EMode.logValue)")
+            llmEnabled = true
+            let input = "this is a llm smoke test"
+            let output = await postProcessTextIfEnabled(input)
+            let changed = output != input
+            AppLogger.shared.log(.info, "e2e llm smoke result mode=\(llmE2EMode.logValue) changed=\(changed)")
+            NSApp.terminate(nil)
         }
     }
 
@@ -292,26 +503,32 @@ final class AppState {
 
         do {
             let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
-            let trimmed = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-            let wordCount = trimmed.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+            let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            var finalText = rawText
 
-            if !trimmed.isEmpty {
+            if !rawText.isEmpty {
+                finalText = await postProcessTextIfEnabled(rawText)
+            }
+
+            let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+
+            if !finalText.isEmpty {
                 if !hasAccessibilityPermission {
                     await refreshPermissions(promptAccessibility: true)
                 }
                 guard hasAccessibilityPermission else {
                     throw NSError(domain: "VibeStoke", code: 1, userInfo: [NSLocalizedDescriptionKey: "Accessibility permission not granted"])
                 }
-                try textInsertionService.insertText(trimmed)
+                try textInsertionService.insertText(finalText)
                 sessionCount += 1
                 wordsTranscribed += wordCount
-                recentResults.insert(trimmed, at: 0)
+                recentResults.insert(finalText, at: 0)
                 if recentResults.count > 12 {
                     recentResults.removeLast(recentResults.count - 12)
                 }
                 AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
             }
-            if trimmed.isEmpty {
+            if finalText.isEmpty {
                 AppLogger.shared.log(.warning, "transcription returned empty text samples=\(samples.count) sr=\(sampleRate)")
             }
             pendingProcessingIndicatorTask?.cancel()
@@ -330,20 +547,47 @@ final class AppState {
         }
     }
 
-    func runIndicatorE2ESmoke() {
-        Task { @MainActor in
-            AppLogger.shared.log(.info, "e2e indicator smoke start")
-            showIndicator(.listening)
-            try? await Task.sleep(nanoseconds: 220_000_000)
-            showIndicator(.stopped)
-            try? await Task.sleep(nanoseconds: 220_000_000)
-            showIndicator(.processing)
-            try? await Task.sleep(nanoseconds: 220_000_000)
-            showIndicator(.done(words: 4), autoHideAfter: 0.35)
-            try? await Task.sleep(nanoseconds: 900_000_000)
-            AppLogger.shared.log(.info, "e2e indicator smoke done")
-            NSApp.terminate(nil)
+    private func loadLLMSettings() {
+        isHydratingLLMSettings = true
+        let settings = llmSettingsStore.load()
+        llmEnabled = settings.isEnabled
+        llmSelectedModelPreset = settings.selectedModelPreset
+        llmCustomModelId = settings.customModelId
+        llmSystemPrompt = settings.systemPrompt
+        llmKeywordsRaw = settings.keywordsRaw
+        isHydratingLLMSettings = false
+    }
+
+    private func persistLLMSettings() {
+        guard !isHydratingLLMSettings else {
+            return
         }
+        llmSettingsStore.save(currentLLMSettings())
+        onStateChange?()
+    }
+
+    private func currentLLMSettings() -> LLMSettings {
+        LLMSettings(
+            isEnabled: llmEnabled,
+            selectedModelPreset: llmSelectedModelPreset,
+            customModelId: llmCustomModelId,
+            systemPrompt: llmSystemPrompt,
+            keywordsRaw: llmKeywordsRaw,
+            timeoutSeconds: 3,
+            maxTokens: 128
+        )
+    }
+
+    private func makeLLMConfig(apiKey: String) -> LLMConfig {
+        let settings = currentLLMSettings()
+        return LLMConfig(
+            modelId: settings.effectiveModelId,
+            systemPrompt: settings.systemPrompt,
+            keywords: settings.keywords,
+            timeoutSeconds: 3,
+            maxTokens: settings.maxTokens,
+            apiKey: apiKey
+        )
     }
 
     private func showIndicator(_ state: FloatingIndicatorState, autoHideAfter: TimeInterval? = nil) {
@@ -366,6 +610,37 @@ final class AppState {
             return "Still processing previous clip"
         case .error:
             return "Resolve current error first"
+        }
+    }
+
+    private static func detectLLME2EMode(arguments: [String]) -> LLME2EMode {
+        if arguments.contains("--e2e-llm-success") {
+            return .forceSuccess
+        }
+        if arguments.contains("--e2e-llm-fallback") {
+            return .forceFailure
+        }
+        return .none
+    }
+}
+
+private extension LLMPostProcessorError {
+    var logValue: String {
+        switch self {
+        case .invalidConfiguration:
+            return "invalid_config"
+        case .timeout:
+            return "timeout"
+        case .unauthorized:
+            return "unauthorized"
+        case .provider:
+            return "provider_error"
+        case .malformedResponse:
+            return "malformed_response"
+        case .emptyOutput:
+            return "empty_output"
+        case .network:
+            return "network"
         }
     }
 }

@@ -24,13 +24,35 @@ if ! pgrep -f '/VibeStoke.app/Contents/MacOS/VibeStoke' >/dev/null; then
   exit 1
 fi
 
+window_ready=0
+for _ in {1..40}; do
+  window_count="$(osascript <<'APPLESCRIPT' 2>/dev/null || true
+tell application "System Events"
+  if not (exists process "VibeStoke") then return "NO_PROCESS"
+  tell process "VibeStoke"
+    return (count of windows) as text
+  end tell
+end tell
+APPLESCRIPT
+)"
+  if [[ "${window_count}" =~ ^[0-9]+$ ]] && [[ "${window_count}" -gt 0 ]]; then
+    window_ready=1
+    break
+  fi
+  sleep 0.25
+done
+
+if [[ "${window_ready}" != "1" ]]; then
+  echo "UI interaction failed (NO_WINDOW). Verify Accessibility permissions for Terminal/System Events if needed." >&2
+  exit 1
+fi
+
 result="$(osascript <<'APPLESCRIPT' 2>/dev/null || true
 tell application "System Events"
   if not (exists process "VibeStoke") then return "NO_PROCESS"
   tell process "VibeStoke"
     set frontmost to true
     delay 0.3
-    if (count of windows) < 1 then return "NO_WINDOW"
     set buttonCount to count of buttons of window 1
     if buttonCount < 1 then return "NO_BUTTON"
     click button 1 of window 1

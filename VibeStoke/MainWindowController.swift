@@ -62,6 +62,9 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--e2e-indicator-smoke") {
             sharedAppState.runIndicatorE2ESmoke()
         }
+        if CommandLine.arguments.contains("--e2e-llm-success") || CommandLine.arguments.contains("--e2e-llm-fallback") {
+            sharedAppState.runLLME2ESmoke()
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

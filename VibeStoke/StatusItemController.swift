@@ -7,6 +7,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
 
     private let statusTitleItem = NSMenuItem(title: "Status", action: nil, keyEquivalent: "")
+    private let llmHintItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let startItem = NSMenuItem(title: "Start Recording", action: #selector(startRecording), keyEquivalent: "r")
     private let stopItem = NSMenuItem(title: "Stop Recording", action: #selector(stopRecording), keyEquivalent: "s")
     private let openWindowItem = NSMenuItem(title: "Open VibeStoke", action: #selector(openMainWindow), keyEquivalent: "o")
@@ -33,7 +34,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.delegate = self
 
         statusTitleItem.isEnabled = false
+        llmHintItem.isEnabled = false
         menu.addItem(statusTitleItem)
+        menu.addItem(llmHintItem)
+        llmHintItem.isHidden = true
         menu.addItem(.separator())
 
         startItem.target = self
@@ -68,6 +72,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func refresh() {
         let phase = appState.phase
         statusTitleItem.title = "Status: \(phase.rawValue.capitalized)"
+        if let hint = appState.llmStatusHint {
+            llmHintItem.title = "LLM: \(hint)"
+            llmHintItem.isHidden = false
+        } else {
+            llmHintItem.isHidden = true
+        }
         startItem.isEnabled = phase == .ready
         stopItem.isEnabled = phase == .recording
         downloadItem.isEnabled = phase == .needsModel || phase == .downloadingModel || phase == .error
