@@ -481,9 +481,7 @@
 				OTHER_LDFLAGS = (
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.vibestroke.app.uirefresh;
-				PRODUCT_MODULE_NAME = VibeStoke;
-				PRODUCT_NAME = "VibeStoke UI Refresh";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.vibestroke.app;
 				SDKROOT = macosx;
 				SWIFT_OBJC_BRIDGING_HEADER = "VibeStoke/VibeStoke-Bridging-Header.h";
 			};
@@ -502,7 +500,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.vibestroke.app.tests;
 				SDKROOT = macosx;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VibeStoke UI Refresh.app/Contents/MacOS/VibeStoke UI Refresh";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VibeStoke.app/Contents/MacOS/VibeStoke";
 			};
 			name = Release;
 		};
@@ -527,9 +525,7 @@
 				OTHER_LDFLAGS = (
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = dev.vibestroke.app.uirefresh;
-				PRODUCT_MODULE_NAME = VibeStoke;
-				PRODUCT_NAME = "VibeStoke UI Refresh";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.vibestroke.app;
 				SDKROOT = macosx;
 				SWIFT_OBJC_BRIDGING_HEADER = "VibeStoke/VibeStoke-Bridging-Header.h";
 			};
@@ -548,7 +544,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.vibestroke.app.tests;
 				SDKROOT = macosx;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VibeStoke UI Refresh.app/Contents/MacOS/VibeStoke UI Refresh";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VibeStoke.app/Contents/MacOS/VibeStoke";
 			};
 			name = Debug;
 		};

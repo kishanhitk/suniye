@@ -26,9 +26,7 @@ targets:
         NSMicrophoneUsageDescription: VibeStoke needs microphone access to capture dictation.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.vibestroke.app.uirefresh
-        PRODUCT_NAME: VibeStoke UI Refresh
-        PRODUCT_MODULE_NAME: VibeStoke
+        PRODUCT_BUNDLE_IDENTIFIER: dev.vibestroke.app
         SWIFT_OBJC_BRIDGING_HEADER: VibeStoke/VibeStoke-Bridging-Header.h
         OTHER_LDFLAGS:
           - -ObjC
@@ -52,5 +50,5 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.vibestroke.app.tests
         GENERATE_INFOPLIST_FILE: YES
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VibeStoke UI Refresh.app/Contents/MacOS/VibeStoke UI Refresh"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VibeStoke.app/Contents/MacOS/VibeStoke"
         BUNDLE_LOADER: "$(TEST_HOST)"
