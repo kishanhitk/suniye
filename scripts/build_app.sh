@@ -7,6 +7,8 @@ PROJECT_FILE="${PROJECT_DIR}/VibeStoke.xcodeproj"
 CONFIGURATION="Release"
 INSTALL_TARGET=""
 SHOULD_OPEN="0"
+DERIVED_DATA_PATH="${PROJECT_DIR}/.derivedData"
+OUTPUT_DIR=""
 
 usage() {
   cat <<'USAGE'
@@ -15,20 +17,30 @@ Usage: scripts/build_app.sh [Debug|Release] [--install-user] [--install-system] 
 Options:
   --install-user    Copy app to ~/Applications/VibeStoke.app
   --install-system  Copy app to /Applications/VibeStoke.app
+  --derived-data-path <path>  Override derived data path
+  --output-dir <dir>          Copy built app to a deterministic output directory
   --open            Open the resulting app after build/install
 USAGE
 }
 
-for arg in "$@"; do
-  case "${arg}" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     Debug|Release)
-      CONFIGURATION="${arg}"
+      CONFIGURATION="$1"
       ;;
     --install-user)
       INSTALL_TARGET="${HOME}/Applications"
       ;;
     --install-system)
       INSTALL_TARGET="/Applications"
+      ;;
+    --derived-data-path)
+      DERIVED_DATA_PATH="$2"
+      shift
+      ;;
+    --output-dir)
+      OUTPUT_DIR="$2"
+      shift
       ;;
     --open)
       SHOULD_OPEN="1"
@@ -38,11 +50,12 @@ for arg in "$@"; do
       exit 0
       ;;
     *)
-      echo "Unknown argument: ${arg}" >&2
+      echo "Unknown argument: $1" >&2
       usage >&2
       exit 1
       ;;
   esac
+  shift
 done
 
 if ! command -v xcodegen >/dev/null 2>&1; then
@@ -66,10 +79,10 @@ xcodebuild \
   -project "${PROJECT_FILE}" \
   -scheme "VibeStoke" \
   -configuration "${CONFIGURATION}" \
-  -derivedDataPath "${PROJECT_DIR}/.derivedData" \
+  -derivedDataPath "${DERIVED_DATA_PATH}" \
   build
 
-APP_PATH="${PROJECT_DIR}/.derivedData/Build/Products/${CONFIGURATION}/VibeStoke.app"
+APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/VibeStoke.app"
 FINAL_APP_PATH="${APP_PATH}"
 
 if [[ -n "${INSTALL_TARGET}" ]]; then
@@ -79,6 +92,15 @@ if [[ -n "${INSTALL_TARGET}" ]]; then
   ditto "${APP_PATH}" "${DEST_APP_PATH}"
   FINAL_APP_PATH="${DEST_APP_PATH}"
   echo "Installed app to: ${DEST_APP_PATH}"
+fi
+
+if [[ -n "${OUTPUT_DIR}" ]]; then
+  mkdir -p "${OUTPUT_DIR}"
+  OUTPUT_APP_PATH="${OUTPUT_DIR}/VibeStoke.app"
+  rm -rf "${OUTPUT_APP_PATH}"
+  ditto "${APP_PATH}" "${OUTPUT_APP_PATH}"
+  FINAL_APP_PATH="${OUTPUT_APP_PATH}"
+  echo "Copied app to output directory: ${OUTPUT_APP_PATH}"
 fi
 
 if [[ "${SHOULD_OPEN}" == "1" ]]; then

@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: macos-14
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Preflight
+        run: ./scripts/e2e_preflight.sh
+
+      - name: Setup model
+        run: ./scripts/setup_model.sh
+
+      - name: Smoke checks
+        run: ./scripts/e2e_smoke.sh
+
+      - name: Unit tests
+        run: |
+          xcodegen generate --spec project.yml
+          xcodebuild \
+            -project VibeStoke.xcodeproj \
+            -scheme VibeStoke \
+            -destination 'platform=macOS' \
+            -derivedDataPath .derivedData \
+            test
+
+      - name: Package release artifacts
+        run: ./scripts/package_release.sh --version "${GITHUB_REF_NAME}" --dist-dir dist
+
+      - name: Verify release artifacts
+        run: ./scripts/verify_release.sh --version "${GITHUB_REF_NAME}" --dist-dir dist
+
+      - name: Extract changelog notes
+        run: |
+          awk '
+            BEGIN { capture = 0 }
+            $0 ~ "^## \\[" substr(ENVIRON["GITHUB_REF_NAME"],2) "\\]" { capture = 1; next }
+            capture && $0 ~ "^## \\[" { exit }
+            capture { print }
+          ' CHANGELOG.md > release_notes.txt
+          if [[ ! -s release_notes.txt ]]; then
+            echo "No changelog entry found for ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/VibeStoke.dmg
+            dist/VibeStoke.app.zip
+            dist/SHA256SUMS.txt
+          body_path: release_notes.txt
