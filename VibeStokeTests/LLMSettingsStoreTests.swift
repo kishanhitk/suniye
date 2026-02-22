@@ -29,6 +29,7 @@ final class LLMSettingsStoreTests: XCTestCase {
         settings.isEnabled = true
         settings.selectedModelPreset = .custom
         settings.customModelId = "openai/gpt-oss-20b"
+        settings.baseSystemPrompt = "base"
         settings.systemPrompt = "custom"
         settings.keywordsRaw = "swift, xcode"
 
@@ -36,5 +37,15 @@ final class LLMSettingsStoreTests: XCTestCase {
 
         let loaded = store.load()
         XCTAssertEqual(loaded, settings)
+    }
+
+    func testComposedPromptUsesBaseAndUserSections() {
+        var settings = LLMSettings()
+        settings.baseSystemPrompt = "BASE"
+        settings.systemPrompt = "USER"
+        XCTAssertEqual(settings.composedSystemPrompt, "BASE\n\nUser customization:\nUSER")
+
+        settings.systemPrompt = "   "
+        XCTAssertEqual(settings.composedSystemPrompt, "BASE")
     }
 }

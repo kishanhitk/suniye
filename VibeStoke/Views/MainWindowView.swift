@@ -101,7 +101,8 @@ private struct StatCard: View {
 private struct SettingsDetailView: View {
     @Bindable var appState: AppState
     @State private var pendingAPIKey = ""
-    @State private var pendingSystemPrompt = ""
+    @State private var pendingBaseSystemPrompt = ""
+    @State private var pendingUserSystemPrompt = ""
     @State private var pendingKeywordsRaw = ""
 
     var body: some View {
@@ -233,9 +234,21 @@ private struct SettingsDetailView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("System prompt")
+                            Text("Base prompt (always included)")
                                 .font(.system(size: 12, weight: .semibold))
-                            TextEditor(text: $pendingSystemPrompt)
+                            TextEditor(text: $pendingBaseSystemPrompt)
+                                .font(.system(size: 12))
+                                .frame(minHeight: 88)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                )
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("User prompt (your use case)")
+                                .font(.system(size: 12, weight: .semibold))
+                            TextEditor(text: $pendingUserSystemPrompt)
                                 .font(.system(size: 12))
                                 .frame(minHeight: 88)
                                 .overlay(
@@ -257,13 +270,20 @@ private struct SettingsDetailView: View {
                         }
 
                         HStack(spacing: 10) {
-                            Button("Save Prompt & Keywords") {
-                                appState.llmSystemPrompt = pendingSystemPrompt
+                            Button("Save Prompt Layers") {
+                                appState.llmBaseSystemPrompt = pendingBaseSystemPrompt
+                                appState.llmSystemPrompt = pendingUserSystemPrompt
                                 appState.llmKeywordsRaw = pendingKeywordsRaw
-                                AppLogger.shared.log(.info, "llm text settings saved")
+                                AppLogger.shared.log(.info, "llm prompt layers saved")
                             }
                             .buttonStyle(.borderedProminent)
                             .disabled(!hasUnsavedLLMTextChanges)
+
+                            Button("Reset Base Prompt") {
+                                pendingBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(pendingBaseSystemPrompt == LLMDefaults.defaultBaseSystemPrompt)
 
                             Text(hasUnsavedLLMTextChanges ? "Unsaved changes" : "Saved")
                                 .font(.system(size: 12))
@@ -276,7 +296,8 @@ private struct SettingsDetailView: View {
             .padding(24)
         }
         .onAppear {
-            pendingSystemPrompt = appState.llmSystemPrompt
+            pendingBaseSystemPrompt = appState.llmBaseSystemPrompt
+            pendingUserSystemPrompt = appState.llmSystemPrompt
             pendingKeywordsRaw = appState.llmKeywordsRaw
             AppLogger.shared.log(.info, "settings view appeared model_installed=\(appState.isModelInstalled)")
             AppLogger.shared.log(.info, "settings llm controls rendered model=\(appState.llmSelectedModelIdPreview)")
@@ -284,7 +305,9 @@ private struct SettingsDetailView: View {
     }
 
     private var hasUnsavedLLMTextChanges: Bool {
-        pendingSystemPrompt != appState.llmSystemPrompt || pendingKeywordsRaw != appState.llmKeywordsRaw
+        pendingBaseSystemPrompt != appState.llmBaseSystemPrompt ||
+            pendingUserSystemPrompt != appState.llmSystemPrompt ||
+            pendingKeywordsRaw != appState.llmKeywordsRaw
     }
 }
 

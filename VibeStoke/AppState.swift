@@ -71,7 +71,10 @@ final class AppState {
     var llmCustomModelId = "" {
         didSet { persistLLMSettings() }
     }
-    var llmSystemPrompt = LLMDefaults.defaultSystemPrompt {
+    var llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt {
+        didSet { persistLLMSettings() }
+    }
+    var llmSystemPrompt = "" {
         didSet { persistLLMSettings() }
     }
     var llmKeywordsRaw = "" {
@@ -553,6 +556,7 @@ final class AppState {
         llmEnabled = settings.isEnabled
         llmSelectedModelPreset = settings.selectedModelPreset
         llmCustomModelId = settings.customModelId
+        llmBaseSystemPrompt = settings.baseSystemPrompt
         llmSystemPrompt = settings.systemPrompt
         llmKeywordsRaw = settings.keywordsRaw
         isHydratingLLMSettings = false
@@ -571,6 +575,7 @@ final class AppState {
             isEnabled: llmEnabled,
             selectedModelPreset: llmSelectedModelPreset,
             customModelId: llmCustomModelId,
+            baseSystemPrompt: llmBaseSystemPrompt,
             systemPrompt: llmSystemPrompt,
             keywordsRaw: llmKeywordsRaw,
             timeoutSeconds: 3,
@@ -582,7 +587,7 @@ final class AppState {
         let settings = currentLLMSettings()
         return LLMConfig(
             modelId: settings.effectiveModelId,
-            systemPrompt: settings.systemPrompt,
+            systemPrompt: settings.composedSystemPrompt,
             keywords: settings.keywords,
             timeoutSeconds: 3,
             maxTokens: settings.maxTokens,

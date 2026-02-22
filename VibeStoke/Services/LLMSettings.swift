@@ -32,13 +32,85 @@ struct LLMSettings: Codable, Equatable {
     var isEnabled: Bool = false
     var selectedModelPreset: LLMModelPreset = .gemini25Flash
     var customModelId: String = ""
-    var systemPrompt: String = LLMDefaults.defaultSystemPrompt
+    var baseSystemPrompt: String = LLMDefaults.defaultBaseSystemPrompt
+    var systemPrompt: String = ""
     var keywordsRaw: String = ""
     var timeoutSeconds: Double = 3
     var maxTokens: Int = 128
 
+    enum CodingKeys: String, CodingKey {
+        case isEnabled
+        case selectedModelPreset
+        case customModelId
+        case baseSystemPrompt
+        case systemPrompt
+        case keywordsRaw
+        case timeoutSeconds
+        case maxTokens
+    }
+
+    init() {}
+
+    init(
+        isEnabled: Bool = false,
+        selectedModelPreset: LLMModelPreset = .gemini25Flash,
+        customModelId: String = "",
+        baseSystemPrompt: String = LLMDefaults.defaultBaseSystemPrompt,
+        systemPrompt: String = "",
+        keywordsRaw: String = "",
+        timeoutSeconds: Double = 3,
+        maxTokens: Int = 128
+    ) {
+        self.isEnabled = isEnabled
+        self.selectedModelPreset = selectedModelPreset
+        self.customModelId = customModelId
+        self.baseSystemPrompt = baseSystemPrompt
+        self.systemPrompt = systemPrompt
+        self.keywordsRaw = keywordsRaw
+        self.timeoutSeconds = timeoutSeconds
+        self.maxTokens = maxTokens
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? false
+        selectedModelPreset = try container.decodeIfPresent(LLMModelPreset.self, forKey: .selectedModelPreset) ?? .gemini25Flash
+        customModelId = try container.decodeIfPresent(String.self, forKey: .customModelId) ?? ""
+        baseSystemPrompt = try container.decodeIfPresent(String.self, forKey: .baseSystemPrompt) ?? LLMDefaults.defaultBaseSystemPrompt
+        systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
+        keywordsRaw = try container.decodeIfPresent(String.self, forKey: .keywordsRaw) ?? ""
+        timeoutSeconds = try container.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? 3
+        maxTokens = try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? 128
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encode(selectedModelPreset, forKey: .selectedModelPreset)
+        try container.encode(customModelId, forKey: .customModelId)
+        try container.encode(baseSystemPrompt, forKey: .baseSystemPrompt)
+        try container.encode(systemPrompt, forKey: .systemPrompt)
+        try container.encode(keywordsRaw, forKey: .keywordsRaw)
+        try container.encode(timeoutSeconds, forKey: .timeoutSeconds)
+        try container.encode(maxTokens, forKey: .maxTokens)
+    }
+
     var keywords: [String] {
         LLMDefaults.parseKeywords(from: keywordsRaw)
+    }
+
+    var composedSystemPrompt: String {
+        let normalizedBase = baseSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedUser = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var sections: [String] = []
+        sections.append(normalizedBase.isEmpty ? LLMDefaults.defaultBaseSystemPrompt : normalizedBase)
+
+        if !normalizedUser.isEmpty {
+            sections.append("User customization:\n\(normalizedUser)")
+        }
+
+        return sections.joined(separator: "\n\n")
     }
 
     var effectiveModelId: String {
@@ -56,11 +128,13 @@ struct LLMSettings: Codable, Equatable {
 }
 
 enum LLMDefaults {
-    static let defaultSystemPrompt = """
-You are a conservative text-polishing assistant for speech-to-text output.
-Fix punctuation, capitalization, and obvious grammar issues while preserving original wording and intent.
-Do not add new facts.
-Return only the final polished plain text.
+    static let defaultBaseSystemPrompt = """
+You are a context-aware dictation repair assistant for a software engineer.
+Infer intended meaning when transcription is fragmented or incorrect.
+Fix punctuation, capitalization, and grammar while preserving intent and brevity.
+Remove filler words and disfluencies when they do not add meaning.
+Preserve technical tokens exactly when possible.
+Return plain text only.
 """
 
     static func parseKeywords(from raw: String) -> [String] {

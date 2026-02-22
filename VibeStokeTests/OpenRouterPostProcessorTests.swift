@@ -26,6 +26,10 @@ final class OpenRouterPostProcessorTests: XCTestCase {
             let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
             XCTAssertEqual(json["model"] as? String, "google/gemini-2.5-flash")
             XCTAssertEqual(json["max_tokens"] as? Int, 128)
+            let messages = try XCTUnwrap(json["messages"] as? [[String: String]])
+            let system = try XCTUnwrap(messages.first(where: { $0["role"] == "system" })?["content"])
+            XCTAssertTrue(system.contains("prompt"))
+            XCTAssertTrue(system.contains("Keyword hints: swift"))
 
             let responseJSON: [String: Any] = [
                 "choices": [
