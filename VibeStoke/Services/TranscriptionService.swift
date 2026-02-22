@@ -81,7 +81,7 @@ actor TranscriptionService {
         loadedConfig = config
     }
 
-    func transcribe(samples: [Float]) async throws -> String {
+    func transcribe(samples: [Float], sampleRate: Int = 16_000) async throws -> String {
         guard let recognizer else {
             throw ServiceError.recognizerNotLoaded
         }
@@ -89,6 +89,18 @@ actor TranscriptionService {
         guard !samples.isEmpty else {
             throw ServiceError.emptyAudio
         }
+
+        let effectiveSampleRate = max(8_000, sampleRate)
+        let inputDuration = Double(samples.count) / Double(effectiveSampleRate)
+        AppLogger.shared.log(
+            .info,
+            String(
+                format: "transcribe start samples=%d sr=%d duration=%.2fs",
+                samples.count,
+                effectiveSampleRate,
+                inputDuration
+            )
+        )
 
         guard let stream = SherpaOnnxCreateOfflineStream(recognizer) else {
             throw ServiceError.streamCreationFailed
@@ -101,7 +113,7 @@ actor TranscriptionService {
             guard let baseAddress = buffer.baseAddress, !buffer.isEmpty else {
                 return
             }
-            SherpaOnnxAcceptWaveformOffline(stream, 16_000, baseAddress, Int32(buffer.count))
+            SherpaOnnxAcceptWaveformOffline(stream, Int32(effectiveSampleRate), baseAddress, Int32(buffer.count))
         }
 
         SherpaOnnxDecodeOfflineStream(recognizer, stream)
@@ -114,9 +126,12 @@ actor TranscriptionService {
         }
 
         guard let cText = result.pointee.text else {
+            AppLogger.shared.log(.warning, "transcribe result text pointer was nil")
             return ""
         }
-        return String(cString: cText).trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = String(cString: cText).trimmingCharacters(in: .whitespacesAndNewlines)
+        AppLogger.shared.log(.info, "transcribe done chars=\(text.count)")
+        return text
     }
 
     private func validateModelPaths(_ config: RecognizerConfig) throws {

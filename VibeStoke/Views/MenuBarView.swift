@@ -54,10 +54,6 @@ struct MenuBarView: View {
             .keyboardShortcut("q", modifiers: .command)
         }
         .padding(14)
-        .sheet(isPresented: $appState.showOnboarding) {
-            OnboardingView(appState: appState)
-                .frame(minWidth: 640, minHeight: 420)
-        }
     }
 
     private var statusTitle: String {

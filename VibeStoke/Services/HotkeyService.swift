@@ -8,8 +8,6 @@ final class HotkeyService {
     private var localMonitor: Any?
     private var isHeld = false
 
-    private let fnKeyCode: UInt16 = 179
-
     func startMonitoring() {
         stopMonitoring()
 
@@ -40,18 +38,16 @@ final class HotkeyService {
             return
         }
 
-        let isFnEvent = event.keyCode == fnKeyCode
-        guard isFnEvent else {
-            return
-        }
-
-        let fnDown = event.modifierFlags.contains(.function)
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let fnDown = flags.contains(.function)
 
         if fnDown && !isHeld {
             isHeld = true
+            AppLogger.shared.log(.debug, "hotkey fn down keyCode=\(event.keyCode)")
             onHotkeyDown?()
         } else if !fnDown && isHeld {
             isHeld = false
+            AppLogger.shared.log(.debug, "hotkey fn up keyCode=\(event.keyCode)")
             onHotkeyUp?()
         }
     }
