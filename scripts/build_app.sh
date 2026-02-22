@@ -9,6 +9,8 @@ INSTALL_TARGET=""
 SHOULD_OPEN="0"
 DERIVED_DATA_PATH="${PROJECT_DIR}/.derivedData"
 OUTPUT_DIR=""
+BUILD_DESTINATION=""
+BUILD_ARCH=""
 
 usage() {
   cat <<'USAGE'
@@ -58,6 +60,22 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+if [[ -z "${BUILD_DESTINATION}" ]]; then
+  case "$(uname -m)" in
+    arm64)
+      BUILD_DESTINATION="platform=macOS,arch=arm64"
+      BUILD_ARCH="arm64"
+      ;;
+    x86_64)
+      BUILD_DESTINATION="platform=macOS,arch=x86_64"
+      BUILD_ARCH="x86_64"
+      ;;
+    *)
+      BUILD_DESTINATION="platform=macOS"
+      ;;
+  esac
+fi
+
 if ! command -v xcodegen >/dev/null 2>&1; then
   echo "xcodegen is required. Install with: brew install xcodegen" >&2
   exit 1
@@ -75,12 +93,20 @@ fi
 
 xcodegen generate --spec "${PROJECT_DIR}/project.yml"
 
-xcodebuild \
-  -project "${PROJECT_FILE}" \
-  -scheme "VibeStoke" \
-  -configuration "${CONFIGURATION}" \
-  -derivedDataPath "${DERIVED_DATA_PATH}" \
+xcodebuild_args=(
+  -project "${PROJECT_FILE}"
+  -scheme "VibeStoke"
+  -configuration "${CONFIGURATION}"
+  -derivedDataPath "${DERIVED_DATA_PATH}"
+  -destination "${BUILD_DESTINATION}"
   build
+)
+
+if [[ -n "${BUILD_ARCH}" ]]; then
+  xcodebuild_args+=(ARCHS="${BUILD_ARCH}" ONLY_ACTIVE_ARCH=YES)
+fi
+
+xcodebuild "${xcodebuild_args[@]}"
 
 APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/VibeStoke.app"
 FINAL_APP_PATH="${APP_PATH}"

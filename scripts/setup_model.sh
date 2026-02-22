@@ -15,8 +15,36 @@ if [[ -f "${MODEL_DIR}/encoder.int8.onnx" && -f "${MODEL_DIR}/decoder.int8.onnx"
   exit 0
 fi
 
-echo "Downloading model archive..."
-curl -L "${MODEL_URL}" -o "${ARCHIVE_PATH}"
+download_archive() {
+  local attempt=1
+  local max_attempts=5
+  while [[ "${attempt}" -le "${max_attempts}" ]]; do
+    echo "Downloading model archive (attempt ${attempt}/${max_attempts})..."
+    rm -f "${ARCHIVE_PATH}"
+
+    if curl -fL --retry 3 --retry-all-errors --retry-delay 2 --connect-timeout 30 "${MODEL_URL}" -o "${ARCHIVE_PATH}"; then
+      if /usr/bin/tar -tjf "${ARCHIVE_PATH}" >/dev/null 2>&1; then
+        return 0
+      fi
+
+      local archive_size
+      archive_size="$(wc -c < "${ARCHIVE_PATH}" | tr -d ' ')"
+      echo "Downloaded file is not a valid tar.bz2 archive (size=${archive_size} bytes)." >&2
+    else
+      echo "Download failed on attempt ${attempt}." >&2
+    fi
+
+    sleep $((attempt * 2))
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
+if ! download_archive; then
+  echo "Failed to download a valid model archive from ${MODEL_URL}" >&2
+  exit 1
+fi
 
 echo "Extracting model..."
 /usr/bin/tar -xjf "${ARCHIVE_PATH}" -C "${MODEL_BASE_DIR}"

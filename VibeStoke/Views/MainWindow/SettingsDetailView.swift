@@ -1,104 +1,6 @@
 import SwiftUI
 
-struct MainWindowView: View {
-    @Bindable var appState: AppState
-    @State private var selection: MainWindowSection = CommandLine.arguments.contains("--open-settings") ? .settings : .stats
-
-    var body: some View {
-        NavigationSplitView {
-            SidebarView(appState: appState, selection: $selection)
-        } detail: {
-            VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    topNavButton(title: "Stats", section: .stats)
-                    topNavButton(title: "Settings", section: .settings)
-                    topNavButton(title: "About", section: .about)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-
-                Divider()
-
-                switch selection {
-                case .stats:
-                    statsView
-                case .settings:
-                    SettingsDetailView(appState: appState)
-                case .about:
-                    AboutDetailView()
-                }
-            }
-        }
-    }
-
-    private func topNavButton(title: String, section: MainWindowSection) -> some View {
-        Button(title) {
-            selection = section
-        }
-        .buttonStyle(.bordered)
-        .tint(selection == section ? .gray : nil)
-        .accessibilityLabel(Text(title))
-    }
-
-    private var statsView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("VibeStoke")
-                    .font(.system(size: 36, weight: .bold))
-
-                if appState.showOnboarding {
-                    OnboardingView(appState: appState)
-                        .frame(minHeight: 380)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-
-                HStack(spacing: 16) {
-                    StatCard(title: "Sessions", value: "\(appState.sessionCount)")
-                    StatCard(title: "Words", value: "\(appState.wordsTranscribed)")
-                    StatCard(title: "Minutes", value: String(format: "%.1f", appState.totalDictationSeconds / 60))
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Recent Activity")
-                        .font(.system(size: 18, weight: .semibold))
-                    if appState.recentResults.isEmpty {
-                        Text("No transcription sessions yet")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(Array(appState.recentResults.enumerated()), id: \.offset) { _, item in
-                            Text(item)
-                                .padding(10)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.gray.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-                        }
-                    }
-                }
-            }
-            .padding(24)
-        }
-    }
-}
-
-private struct StatCard: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.system(size: 28, weight: .bold, design: .monospaced))
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
-    }
-}
-
-private struct SettingsDetailView: View {
+struct SettingsDetailView: View {
     @Bindable var appState: AppState
     @State private var pendingAPIKey = ""
     @State private var pendingBaseSystemPrompt = ""
@@ -110,9 +12,6 @@ private struct SettingsDetailView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Settings")
-                    .font(.system(size: 32, weight: .bold))
-
                 GroupBox("Model") {
                     VStack(alignment: .leading, spacing: 10) {
                         Label(appState.isModelInstalled ? "Model installed" : "Model missing", systemImage: appState.isModelInstalled ? "checkmark.seal" : "exclamationmark.triangle")
@@ -202,6 +101,43 @@ private struct SettingsDetailView: View {
                         Text("Active model: \(appState.llmSelectedModelIdPreview)")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("Timeout")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Spacer()
+                                Text("\(appState.llmTimeoutSeconds, specifier: "%.1f")s")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            HStack(spacing: 10) {
+                                Slider(
+                                    value: $appState.llmTimeoutSeconds,
+                                    in: LLMDefaults.minTimeoutSeconds ... LLMDefaults.maxTimeoutSeconds,
+                                    step: 0.5
+                                )
+
+                                Stepper(
+                                    value: $appState.llmTimeoutSeconds,
+                                    in: LLMDefaults.minTimeoutSeconds ... LLMDefaults.maxTimeoutSeconds,
+                                    step: 0.5
+                                ) {
+                                    EmptyView()
+                                }
+                                .labelsHidden()
+                            }
+                        }
+
+                        Stepper(
+                            value: $appState.llmMaxTokens,
+                            in: LLMDefaults.minMaxTokens ... LLMDefaults.maxMaxTokens,
+                            step: 16
+                        ) {
+                            Text("Max tokens: \(appState.llmMaxTokens)")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
 
                         VStack(alignment: .leading, spacing: 8) {
                             Text(appState.llmKeyStatusText)
@@ -308,19 +244,5 @@ private struct SettingsDetailView: View {
         pendingBaseSystemPrompt != appState.llmBaseSystemPrompt ||
             pendingUserSystemPrompt != appState.llmSystemPrompt ||
             pendingKeywordsRaw != appState.llmKeywordsRaw
-    }
-}
-
-private struct AboutDetailView: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("About")
-                .font(.system(size: 32, weight: .bold))
-            Label("Parakeet TDT 0.6B INT8", systemImage: "cpu")
-            Label("sherpa-onnx C API", systemImage: "link")
-            Spacer()
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }

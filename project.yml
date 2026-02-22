@@ -1,6 +1,15 @@
 name: VibeStoke
 options:
   createIntermediateGroups: true
+schemes:
+  VibeStoke:
+    build:
+      targets:
+        VibeStoke: all
+    test:
+      gatherCoverageData: false
+      targets:
+        - name: VibeStokeTests
 settings:
   base:
     MACOSX_DEPLOYMENT_TARGET: 14.0
@@ -41,3 +50,5 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.vibestroke.app.tests
         GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VibeStoke.app/Contents/MacOS/VibeStoke"
+        BUNDLE_LOADER: "$(TEST_HOST)"
