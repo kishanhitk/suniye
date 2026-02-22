@@ -39,9 +39,6 @@ final class HotkeyService {
         guard event.type == .flagsChanged else {
             return
         }
-        guard !event.isARepeat else {
-            return
-        }
 
         let isFnEvent = event.keyCode == fnKeyCode
         guard isFnEvent else {
