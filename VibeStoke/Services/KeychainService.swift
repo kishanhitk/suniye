@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 protocol KeychainServiceProtocol {
     func setOpenRouterKey(_ key: String) throws
@@ -10,25 +9,41 @@ protocol KeychainServiceProtocol {
 
 enum KeychainServiceError: LocalizedError {
     case invalidData
-    case osStatus(OSStatus)
+    case writeFailed
+    case readFailed
+    case deleteFailed
 
     var errorDescription: String? {
         switch self {
         case .invalidData:
-            return "Invalid keychain data"
-        case let .osStatus(code):
-            return "Keychain error: \(code)"
+            return "Invalid API key data"
+        case .writeFailed:
+            return "Failed to save API key"
+        case .readFailed:
+            return "Failed to read API key"
+        case .deleteFailed:
+            return "Failed to clear API key"
         }
     }
 }
 
 final class KeychainService: KeychainServiceProtocol {
-    private let service: String
-    private let account: String
+    private let fileManager: FileManager
+    private let keyFileURL: URL
 
-    init(service: String = "dev.vibestroke.app.openrouter", account: String = "api-key") {
-        self.service = service
-        self.account = account
+    init(baseDirectoryURL: URL? = nil, filename: String = "openrouter_api_key.txt", fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+        if let baseDirectoryURL {
+            self.keyFileURL = baseDirectoryURL.appendingPathComponent(filename, isDirectory: false)
+            return
+        }
+
+        let defaultBaseDirectory = fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+            .appendingPathComponent("VibeStoke", isDirectory: true)
+            .appendingPathComponent("config", isDirectory: true)
+        self.keyFileURL = defaultBaseDirectory.appendingPathComponent(filename, isDirectory: false)
     }
 
     func setOpenRouterKey(_ key: String) throws {
@@ -37,25 +52,13 @@ final class KeychainService: KeychainServiceProtocol {
             throw KeychainServiceError.invalidData
         }
 
-        let data = Data(normalized.utf8)
-        let query = baseQuery()
-
-        let updateStatus = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        if updateStatus == errSecSuccess {
-            return
+        do {
+            try ensureDirectoryExists()
+            try Data(normalized.utf8).write(to: keyFileURL, options: .atomic)
+            try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: keyFileURL.path)
+        } catch {
+            throw KeychainServiceError.writeFailed
         }
-
-        if updateStatus == errSecItemNotFound {
-            var addQuery = query
-            addQuery[kSecValueData as String] = data
-            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-            guard addStatus == errSecSuccess else {
-                throw KeychainServiceError.osStatus(addStatus)
-            }
-            return
-        }
-
-        throw KeychainServiceError.osStatus(updateStatus)
     }
 
     func hasOpenRouterKey() -> Bool {
@@ -70,40 +73,38 @@ final class KeychainService: KeychainServiceProtocol {
     }
 
     func getOpenRouterKey() throws -> String? {
-        var query = baseQuery()
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        if status == errSecItemNotFound {
+        guard fileManager.fileExists(atPath: keyFileURL.path) else {
             return nil
         }
-        guard status == errSecSuccess else {
-            throw KeychainServiceError.osStatus(status)
-        }
 
-        guard let data = result as? Data,
-              let key = String(data: data, encoding: .utf8) else {
-            throw KeychainServiceError.invalidData
+        do {
+            let data = try Data(contentsOf: keyFileURL)
+            guard let key = String(data: data, encoding: .utf8) else {
+                throw KeychainServiceError.invalidData
+            }
+            let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized.isEmpty ? nil : normalized
+        } catch let error as KeychainServiceError {
+            throw error
+        } catch {
+            throw KeychainServiceError.readFailed
         }
-        return key
     }
 
     func deleteOpenRouterKey() throws {
-        let status = SecItemDelete(baseQuery() as CFDictionary)
-        if status == errSecSuccess || status == errSecItemNotFound {
+        guard fileManager.fileExists(atPath: keyFileURL.path) else {
             return
         }
-        throw KeychainServiceError.osStatus(status)
+
+        do {
+            try fileManager.removeItem(at: keyFileURL)
+        } catch {
+            throw KeychainServiceError.deleteFailed
+        }
     }
 
-    private func baseQuery() -> [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
+    private func ensureDirectoryExists() throws {
+        let directoryURL = keyFileURL.deletingLastPathComponent()
+        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
     }
 }

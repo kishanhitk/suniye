@@ -38,6 +38,7 @@
 		B6F05C354DD5667B669E3217 /* SherpaOnnx.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC8A2031E0A99E08BA970133 /* SherpaOnnx.swift */; };
 		BCE4F6086A4EE6B9B3DC58BB /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74EF84F3C672AD84D29C7A2 /* MainWindowView.swift */; };
 		C081CF8C33894A86F1F3310C /* LLMSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 166C00DF6B9E3A2EE85006C7 /* LLMSettingsStoreTests.swift */; };
+		C34D731B090E63588C2696DB /* KeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B23B60C237D4F8379248A14 /* KeychainServiceTests.swift */; };
 		C700CDD471ABC48575EB5C2D /* libsherpa-onnx-c-api.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E1F59F1203CDEEA82D2F0CB5 /* libsherpa-onnx-c-api.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		D56B89276940122A46FF8A45 /* FloatingIndicatorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93DB6DE29EC7A214299DFFC /* FloatingIndicatorState.swift */; };
 		D6C09FA218F2A9E073DF2E21 /* libsherpa-onnx-c-api.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = E1F59F1203CDEEA82D2F0CB5 /* libsherpa-onnx-c-api.dylib */; };
@@ -85,6 +86,7 @@
 		24D8EC345C9F258F009934F0 /* OpenRouterPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterPostProcessor.swift; sourceTree = "<group>"; };
 		45C7356A2F6F90E145D6CDE1 /* libonnxruntime.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libonnxruntime.dylib; path = VibeStoke/Frameworks/libonnxruntime.dylib; sourceTree = "<group>"; };
 		4A141D8A88A217287757A82B /* libsherpa-onnx-c-api.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "libsherpa-onnx-c-api.dylib"; sourceTree = "<group>"; };
+		4B23B60C237D4F8379248A14 /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
 		55D8FE65781D9FE2EFBBED64 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
 		655D998A2AF91CF14B1CFF57 /* ModelDownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadView.swift; sourceTree = "<group>"; };
 		6EA4A125A5922AB91BE8920C /* FloatingIndicatorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorController.swift; sourceTree = "<group>"; };
@@ -136,6 +138,7 @@
 			children = (
 				16F2FE3436E32338132CE424 /* AppStateLLMTests.swift */,
 				88BC9D593B8B62E66B3A03E3 /* AppStateSubmitCommandTests.swift */,
+				4B23B60C237D4F8379248A14 /* KeychainServiceTests.swift */,
 				166C00DF6B9E3A2EE85006C7 /* LLMSettingsStoreTests.swift */,
 				BF04203C51AE8E7660A931CD /* ModelManagerE2ETests.swift */,
 				00225E338044BC4414BE2BCA /* OpenRouterPostProcessorTests.swift */,
@@ -358,6 +361,7 @@
 			files = (
 				FDE46D0A93C69E13D98B2CE8 /* AppStateLLMTests.swift in Sources */,
 				90AAC01178E6EEF5F0CE5534 /* AppStateSubmitCommandTests.swift in Sources */,
+				C34D731B090E63588C2696DB /* KeychainServiceTests.swift in Sources */,
 				C081CF8C33894A86F1F3310C /* LLMSettingsStoreTests.swift in Sources */,
 				58D19733E6633554B2421352 /* ModelManagerE2ETests.swift in Sources */,
 				33D6AA5F8A7C9EED45343D72 /* OpenRouterPostProcessorTests.swift in Sources */,

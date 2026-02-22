@@ -338,7 +338,7 @@ final class AppState {
 
         guard let apiKey = try? keychainService.getOpenRouterKey(),
               !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            AppLogger.shared.log(.warning, "llm fallback raw reason=keychain_read_failed")
+            AppLogger.shared.log(.warning, "llm fallback raw reason=key_read_failed")
             refreshLLMKeyStatus()
             return rawText
         }
