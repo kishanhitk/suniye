@@ -274,6 +274,7 @@ final class AppState {
     private let keychainService: KeychainServiceProtocol
     private let updateService: UpdateServiceProtocol
     private let currentAppVersionProvider: () -> AppVersion?
+    private let fileOpener: (URL) -> Bool
 
     private var recordingStart: Date?
     private var pendingProcessingIndicatorTask: Task<Void, Never>?
@@ -292,6 +293,7 @@ final class AppState {
         keychainService: KeychainServiceProtocol = KeychainService(),
         updateService: UpdateServiceProtocol = GitHubUpdateService(),
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
+        fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
     ) {
@@ -305,6 +307,7 @@ final class AppState {
         self.keychainService = keychainService
         self.updateService = updateService
         self.currentAppVersionProvider = currentAppVersionProvider
+        self.fileOpener = fileOpener
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
 
         AppLogger.shared.log(.info, "app state init")
@@ -549,10 +552,16 @@ final class AppState {
 
         do {
             let archiveURL = try await updateService.downloadAndVerify(release: release)
+            guard fileOpener(archiveURL) else {
+                updateStatus = .error
+                updateDownloadProgress = 0
+                updateStatusText = "Update downloaded, but failed to open installer."
+                AppLogger.shared.log(.error, "update download complete but open failed: \(archiveURL.path)")
+                return
+            }
             updateDownloadProgress = 1
             updateStatus = .available
             updateStatusText = "Update downloaded. Installer opened."
-            NSWorkspace.shared.open(archiveURL)
             AppLogger.shared.log(.info, "update download complete and opened: \(archiveURL.path)")
         } catch {
             updateStatus = .error

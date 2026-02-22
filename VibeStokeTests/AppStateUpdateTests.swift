@@ -71,12 +71,58 @@ final class AppStateUpdateTests: XCTestCase {
         XCTAssertEqual(appState.updateStatusText, "No update is currently available.")
     }
 
-    private func makeAppState(updateService: StubUpdateService) -> AppState {
+    func testDownloadAndOpenUpdateSetsErrorWhenOpenFails() async {
+        let updateRelease = UpdateRelease(
+            versionTag: "v0.0.2",
+            publishedAt: nil,
+            notes: "notes",
+            htmlURL: URL(string: "https://example.test/release")!,
+            assets: []
+        )
+        let tempArchiveURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let updateService = StubUpdateService(checkResult: .success(.updateAvailable(updateRelease)))
+        updateService.downloadResult = .success(tempArchiveURL)
+        let appState = makeAppState(updateService: updateService, fileOpener: { _ in false })
+
+        await appState.checkForUpdates(background: false)
+        await appState.downloadAndOpenUpdate()
+
+        XCTAssertEqual(appState.updateStatus, .error)
+        XCTAssertEqual(appState.updateStatusText, "Update downloaded, but failed to open installer.")
+        XCTAssertEqual(appState.updateDownloadProgress, 0)
+    }
+
+    func testDownloadAndOpenUpdateMarksSuccessWhenOpenSucceeds() async {
+        let updateRelease = UpdateRelease(
+            versionTag: "v0.0.2",
+            publishedAt: nil,
+            notes: "notes",
+            htmlURL: URL(string: "https://example.test/release")!,
+            assets: []
+        )
+        let tempArchiveURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let updateService = StubUpdateService(checkResult: .success(.updateAvailable(updateRelease)))
+        updateService.downloadResult = .success(tempArchiveURL)
+        let appState = makeAppState(updateService: updateService, fileOpener: { _ in true })
+
+        await appState.checkForUpdates(background: false)
+        await appState.downloadAndOpenUpdate()
+
+        XCTAssertEqual(appState.updateStatus, .available)
+        XCTAssertEqual(appState.updateStatusText, "Update downloaded. Installer opened.")
+        XCTAssertEqual(appState.updateDownloadProgress, 1)
+    }
+
+    private func makeAppState(
+        updateService: StubUpdateService,
+        fileOpener: @escaping (URL) -> Bool = { _ in true }
+    ) -> AppState {
         AppState(
             llmSettingsStore: InMemorySettingsStore(),
             keychainService: InMemoryKeychainService(value: nil),
             updateService: updateService,
             currentAppVersionProvider: { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
+            fileOpener: fileOpener,
             startServices: false,
             llmE2EMode: .none
         )
