@@ -28,6 +28,7 @@
 		76BD95DE6D2EEF6E85ED9B0E /* ListeningOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BE24DBE41CAFB5015C0E99 /* ListeningOverlay.swift */; };
 		882F0E2AE765EEE29499681E /* LLMSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11A434379D4813006653F13 /* LLMSettings.swift */; };
 		88BAD3EC93D8A06C2230D7F1 /* FloatingIndicatorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EA4A125A5922AB91BE8920C /* FloatingIndicatorController.swift */; };
+		90AAC01178E6EEF5F0CE5534 /* AppStateSubmitCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88BC9D593B8B62E66B3A03E3 /* AppStateSubmitCommandTests.swift */; };
 		92C040E2188DD71050E5FA07 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED0D9BD190A40C0022CE04B7 /* WelcomeView.swift */; };
 		941F99EA6F0AEC93C59813EF /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0FF6CEF5331B9E20D4F863 /* HotkeyService.swift */; };
 		98C38FC480DEB237A92B6907 /* libonnxruntime.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 45C7356A2F6F90E145D6CDE1 /* libonnxruntime.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -90,6 +91,7 @@
 		80B119B6A616CF754D1CC65B /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		85E68F3FE154D8898F8564A8 /* LLMSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettingsStore.swift; sourceTree = "<group>"; };
 		8677236133B00F5F093F1070 /* TranscriptionServiceE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionServiceE2ETests.swift; sourceTree = "<group>"; };
+		88BC9D593B8B62E66B3A03E3 /* AppStateSubmitCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSubmitCommandTests.swift; sourceTree = "<group>"; };
 		88D7A8FC6B56C47D8200CB83 /* TextInsertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionService.swift; sourceTree = "<group>"; };
 		8B3AE3FB84F2718C4FD3A58D /* VibeStokeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeStokeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A086CDEFBB5346DA7828B64B /* libonnxruntime.1.23.2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = libonnxruntime.1.23.2.dylib; sourceTree = "<group>"; };
@@ -133,6 +135,7 @@
 			isa = PBXGroup;
 			children = (
 				16F2FE3436E32338132CE424 /* AppStateLLMTests.swift */,
+				88BC9D593B8B62E66B3A03E3 /* AppStateSubmitCommandTests.swift */,
 				166C00DF6B9E3A2EE85006C7 /* LLMSettingsStoreTests.swift */,
 				BF04203C51AE8E7660A931CD /* ModelManagerE2ETests.swift */,
 				00225E338044BC4414BE2BCA /* OpenRouterPostProcessorTests.swift */,
@@ -354,6 +357,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FDE46D0A93C69E13D98B2CE8 /* AppStateLLMTests.swift in Sources */,
+				90AAC01178E6EEF5F0CE5534 /* AppStateSubmitCommandTests.swift in Sources */,
 				C081CF8C33894A86F1F3310C /* LLMSettingsStoreTests.swift in Sources */,
 				58D19733E6633554B2421352 /* ModelManagerE2ETests.swift in Sources */,
 				33D6AA5F8A7C9EED45343D72 /* OpenRouterPostProcessorTests.swift in Sources */,

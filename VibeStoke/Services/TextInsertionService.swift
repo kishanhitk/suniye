@@ -8,7 +8,7 @@ final class TextInsertionService {
         var errorDescription: String? {
             switch self {
             case .cannotCreateEvent:
-                return "Unable to generate keyboard event for paste"
+                return "Unable to generate keyboard event"
             }
         }
     }
@@ -28,7 +28,7 @@ final class TextInsertionService {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        try postCommandV()
+        try postKey(9, flags: .maskCommand)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             pasteboard.clearContents()
@@ -36,14 +36,19 @@ final class TextInsertionService {
         }
     }
 
-    private func postCommandV() throws {
-        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true),
-              let up = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: false) else {
+    func submitActiveInput() throws {
+        // Return key press submits in chat UIs.
+        try postKey(36)
+    }
+
+    private func postKey(_ keyCode: CGKeyCode, flags: CGEventFlags = []) throws {
+        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else {
             throw InsertError.cannotCreateEvent
         }
 
-        down.flags = .maskCommand
-        up.flags = .maskCommand
+        down.flags = flags
+        up.flags = flags
 
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)

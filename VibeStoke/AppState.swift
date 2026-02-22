@@ -396,6 +396,30 @@ final class AppState {
         }
     }
 
+    func runSubmitCommandE2ESmoke() {
+        Task { @MainActor in
+            AppLogger.shared.log(.info, "e2e submit smoke start")
+            let cases: [(input: String, expectedText: String, expectedSubmit: Bool)] = [
+                ("hello world send", "hello world", true),
+                ("hello world, enter.", "hello world", true),
+                ("send", "", true),
+                ("please send me notes", "please send me notes", false)
+            ]
+
+            var passed = true
+            for testCase in cases {
+                let parsed = AppState.parseSubmitCommand(from: testCase.input)
+                if parsed.text != testCase.expectedText || parsed.shouldSubmit != testCase.expectedSubmit {
+                    passed = false
+                    AppLogger.shared.log(.error, "e2e submit smoke case failed")
+                }
+            }
+
+            AppLogger.shared.log(.info, "e2e submit smoke done passed=\(passed)")
+            NSApp.terminate(nil)
+        }
+    }
+
     private func wireHotkey() {
         hotkeyService.onHotkeyDown = { [weak self] in
             AppLogger.shared.log(.debug, "hotkey callback: down")
@@ -507,21 +531,29 @@ final class AppState {
         do {
             let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
             let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-            var finalText = rawText
+            let rawParse = AppState.parseSubmitCommand(from: rawText)
+            var shouldSubmit = rawParse.shouldSubmit
+            var finalText = rawParse.text
 
-            if !rawText.isEmpty {
-                finalText = await postProcessTextIfEnabled(rawText)
+            if !finalText.isEmpty {
+                finalText = await postProcessTextIfEnabled(finalText)
+                let polishedParse = AppState.parseSubmitCommand(from: finalText)
+                finalText = polishedParse.text
+                shouldSubmit = shouldSubmit || polishedParse.shouldSubmit
             }
 
             let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
 
-            if !finalText.isEmpty {
+            if !finalText.isEmpty || shouldSubmit {
                 if !hasAccessibilityPermission {
                     await refreshPermissions(promptAccessibility: true)
                 }
                 guard hasAccessibilityPermission else {
                     throw NSError(domain: "VibeStoke", code: 1, userInfo: [NSLocalizedDescriptionKey: "Accessibility permission not granted"])
                 }
+            }
+
+            if !finalText.isEmpty {
                 try textInsertionService.insertText(finalText)
                 sessionCount += 1
                 wordsTranscribed += wordCount
@@ -531,7 +563,16 @@ final class AppState {
                 }
                 AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
             }
-            if finalText.isEmpty {
+
+            if shouldSubmit {
+                if !finalText.isEmpty {
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                }
+                try textInsertionService.submitActiveInput()
+                AppLogger.shared.log(.info, "submit command executed")
+            }
+
+            if finalText.isEmpty && !shouldSubmit {
                 AppLogger.shared.log(.warning, "transcription returned empty text samples=\(samples.count) sr=\(sampleRate)")
             }
             pendingProcessingIndicatorTask?.cancel()
@@ -616,6 +657,24 @@ final class AppState {
         case .error:
             return "Resolve current error first"
         }
+    }
+
+    nonisolated static func parseSubmitCommand(from text: String) -> (text: String, shouldSubmit: Bool) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return ("", false)
+        }
+
+        let pattern = #"(?i)(?:^|\s)(send|enter)\b[\s\.\!\?,;:\)\]\"']*$"#
+        guard let commandRange = trimmed.range(of: pattern, options: .regularExpression) else {
+            return (trimmed, false)
+        }
+
+        var cleaned = String(trimmed[..<commandRange.lowerBound])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        cleaned = cleaned.replacingOccurrences(of: #"[,\s]+$"#, with: "", options: .regularExpression)
+
+        return (cleaned, true)
     }
 
     private static func detectLLME2EMode(arguments: [String]) -> LLME2EMode {
