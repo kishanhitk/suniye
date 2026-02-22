@@ -17,7 +17,12 @@ require_file "${ROOT_DIR}/VibeStoke/Frameworks/libonnxruntime.dylib"
 
 echo "[2/3] Typechecking app sources with C API bridge"
 cd "${ROOT_DIR}"
-swiftc -import-objc-header VibeStoke/VibeStoke-Bridging-Header.h -typecheck $(rg --files VibeStoke -g '*.swift')
+if command -v rg >/dev/null 2>&1; then
+  mapfile -t SWIFT_FILES < <(rg --files VibeStoke -g '*.swift')
+else
+  mapfile -t SWIFT_FILES < <(find VibeStoke -type f -name '*.swift' | sort)
+fi
+swiftc -import-objc-header VibeStoke/VibeStoke-Bridging-Header.h -typecheck "${SWIFT_FILES[@]}"
 
 echo "[3/3] Generating project spec"
 xcodegen generate --spec "${ROOT_DIR}/project.yml" >/dev/null
