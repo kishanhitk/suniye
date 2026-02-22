@@ -21,6 +21,31 @@ enum LLME2EMode {
     }
 }
 
+enum AttentionSeverity: String {
+    case error
+    case warning
+}
+
+enum AttentionRecommendedSection: String {
+    case stats
+    case settings
+}
+
+struct AttentionItem: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let detail: String
+    let severity: AttentionSeverity
+    let recommendedSection: AttentionRecommendedSection
+}
+
+struct RecentResult: Identifiable, Equatable {
+    let id: UUID
+    let text: String
+    let createdAt: Date
+    let wasLLMPolished: Bool
+}
+
 @MainActor
 @Observable
 final class AppState {
@@ -55,7 +80,7 @@ final class AppState {
     var wordsTranscribed = 0
     var sessionCount = 0
     var totalDictationSeconds: TimeInterval = 0
-    var recentResults: [String] = []
+    var recentResults: [RecentResult] = []
 
     var showOnboarding = false
 
@@ -79,6 +104,26 @@ final class AppState {
     }
     var llmKeywordsRaw = "" {
         didSet { persistLLMSettings() }
+    }
+    var llmTimeoutSeconds = 3.0 {
+        didSet {
+            let clamped = LLMDefaults.clampTimeout(llmTimeoutSeconds)
+            if llmTimeoutSeconds != clamped {
+                llmTimeoutSeconds = clamped
+                return
+            }
+            persistLLMSettings()
+        }
+    }
+    var llmMaxTokens = 128 {
+        didSet {
+            let clamped = LLMDefaults.clampMaxTokens(llmMaxTokens)
+            if llmMaxTokens != clamped {
+                llmMaxTokens = clamped
+                return
+            }
+            persistLLMSettings()
+        }
     }
 
     var hasOpenRouterAPIKey = false {
@@ -107,6 +152,74 @@ final class AppState {
 
     var llmSelectedModelIdPreview: String {
         currentLLMSettings().effectiveModelId
+    }
+
+    var attentionItems: [AttentionItem] {
+        var items: [AttentionItem] = []
+
+        if phase == .error,
+           let error = lastError?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !error.isEmpty {
+            items.append(
+                AttentionItem(
+                    id: "runtime-error",
+                    title: "Transcription unavailable",
+                    detail: error,
+                    severity: .error,
+                    recommendedSection: .settings
+                )
+            )
+        }
+
+        if !isModelInstalled {
+            items.append(
+                AttentionItem(
+                    id: "model-missing",
+                    title: "Model not installed",
+                    detail: "Download the required Parakeet model to enable dictation.",
+                    severity: .warning,
+                    recommendedSection: .settings
+                )
+            )
+        }
+
+        if !hasMicPermission {
+            items.append(
+                AttentionItem(
+                    id: "mic-permission-missing",
+                    title: "Microphone permission missing",
+                    detail: "Grant microphone access so audio can be captured.",
+                    severity: .warning,
+                    recommendedSection: .settings
+                )
+            )
+        }
+
+        if !hasAccessibilityPermission {
+            items.append(
+                AttentionItem(
+                    id: "accessibility-permission-missing",
+                    title: "Accessibility permission missing",
+                    detail: "Grant accessibility access so transcribed text can be inserted.",
+                    severity: .warning,
+                    recommendedSection: .settings
+                )
+            )
+        }
+
+        if llmEnabled && !hasOpenRouterAPIKey {
+            items.append(
+                AttentionItem(
+                    id: "llm-key-missing",
+                    title: "LLM API key missing",
+                    detail: "LLM polishing is enabled, but no OpenRouter API key is saved.",
+                    severity: .warning,
+                    recommendedSection: .settings
+                )
+            )
+        }
+
+        return items
     }
 
     var onStateChange: (() -> Void)?
@@ -167,9 +280,14 @@ final class AppState {
 
         statusText = "Checking model..."
         if modelManager.isModelReady() {
-            phase = .ready
-            statusText = "Ready"
-            await loadRecognizerIfPossible()
+            phase = .loading
+            statusText = "Loading model..."
+            let didLoadRecognizer = await loadRecognizerIfPossible()
+            if didLoadRecognizer {
+                phase = .ready
+                statusText = "Ready"
+                lastError = nil
+            }
             floatingIndicatorController.hide()
         } else {
             phase = .needsModel
@@ -267,11 +385,14 @@ final class AppState {
                     throw AppStateError.modelValidationFailed
                 }
 
-                await loadRecognizerIfPossible()
-                phase = .ready
-                statusText = "Ready"
-                showOnboarding = false
-                AppLogger.shared.log(.info, "model download complete")
+                let didLoadRecognizer = await loadRecognizerIfPossible()
+                if didLoadRecognizer {
+                    phase = .ready
+                    statusText = "Ready"
+                    lastError = nil
+                    showOnboarding = false
+                    AppLogger.shared.log(.info, "model download complete")
+                }
             } catch {
                 phase = .error
                 lastError = error.localizedDescription
@@ -439,15 +560,17 @@ final class AppState {
         AppLogger.shared.log(.info, "hotkey monitoring started")
     }
 
-    private func loadRecognizerIfPossible() async {
+    private func loadRecognizerIfPossible() async -> Bool {
         do {
             let config = try modelManager.makeRecognizerConfig()
             try await transcriptionService.loadModel(config: config)
+            return true
         } catch {
             phase = .error
             lastError = "Model load failed: \(error.localizedDescription)"
             statusText = "Load failed"
             AppLogger.shared.log(.error, "model load failed: \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -543,6 +666,7 @@ final class AppState {
             }
 
             let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+            let wasLLMPolished = !rawText.isEmpty && rawText != finalText
 
             if !finalText.isEmpty || shouldSubmit {
                 if !hasAccessibilityPermission {
@@ -557,7 +681,15 @@ final class AppState {
                 try textInsertionService.insertText(finalText)
                 sessionCount += 1
                 wordsTranscribed += wordCount
-                recentResults.insert(finalText, at: 0)
+                recentResults.insert(
+                    RecentResult(
+                        id: UUID(),
+                        text: finalText,
+                        createdAt: Date(),
+                        wasLLMPolished: wasLLMPolished
+                    ),
+                    at: 0
+                )
                 if recentResults.count > 12 {
                     recentResults.removeLast(recentResults.count - 12)
                 }
@@ -600,6 +732,8 @@ final class AppState {
         llmBaseSystemPrompt = settings.baseSystemPrompt
         llmSystemPrompt = settings.systemPrompt
         llmKeywordsRaw = settings.keywordsRaw
+        llmTimeoutSeconds = LLMDefaults.clampTimeout(settings.timeoutSeconds)
+        llmMaxTokens = LLMDefaults.clampMaxTokens(settings.maxTokens)
         isHydratingLLMSettings = false
     }
 
@@ -619,8 +753,8 @@ final class AppState {
             baseSystemPrompt: llmBaseSystemPrompt,
             systemPrompt: llmSystemPrompt,
             keywordsRaw: llmKeywordsRaw,
-            timeoutSeconds: 3,
-            maxTokens: 128
+            timeoutSeconds: llmTimeoutSeconds,
+            maxTokens: llmMaxTokens
         )
     }
 
@@ -630,7 +764,7 @@ final class AppState {
             modelId: settings.effectiveModelId,
             systemPrompt: settings.composedSystemPrompt,
             keywords: settings.keywords,
-            timeoutSeconds: 3,
+            timeoutSeconds: settings.timeoutSeconds,
             maxTokens: settings.maxTokens,
             apiKey: apiKey
         )

@@ -67,8 +67,8 @@ struct LLMSettings: Codable, Equatable {
         self.baseSystemPrompt = baseSystemPrompt
         self.systemPrompt = systemPrompt
         self.keywordsRaw = keywordsRaw
-        self.timeoutSeconds = timeoutSeconds
-        self.maxTokens = maxTokens
+        self.timeoutSeconds = LLMDefaults.clampTimeout(timeoutSeconds)
+        self.maxTokens = LLMDefaults.clampMaxTokens(maxTokens)
     }
 
     init(from decoder: Decoder) throws {
@@ -79,8 +79,8 @@ struct LLMSettings: Codable, Equatable {
         baseSystemPrompt = try container.decodeIfPresent(String.self, forKey: .baseSystemPrompt) ?? LLMDefaults.defaultBaseSystemPrompt
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         keywordsRaw = try container.decodeIfPresent(String.self, forKey: .keywordsRaw) ?? ""
-        timeoutSeconds = try container.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? 3
-        maxTokens = try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? 128
+        timeoutSeconds = LLMDefaults.clampTimeout(try container.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? 3)
+        maxTokens = LLMDefaults.clampMaxTokens(try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? 128)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -128,6 +128,11 @@ struct LLMSettings: Codable, Equatable {
 }
 
 enum LLMDefaults {
+    static let minTimeoutSeconds = 1.0
+    static let maxTimeoutSeconds = 15.0
+    static let minMaxTokens = 32
+    static let maxMaxTokens = 512
+
     static let defaultBaseSystemPrompt = """
 You are a context-aware dictation repair assistant for a software engineer.
 Infer intended meaning when transcription is fragmented or incorrect.
@@ -164,5 +169,13 @@ Return plain text only.
             return false
         }
         return trimmed.contains("/")
+    }
+
+    static func clampTimeout(_ value: Double) -> Double {
+        min(max(value, minTimeoutSeconds), maxTimeoutSeconds)
+    }
+
+    static func clampMaxTokens(_ value: Int) -> Int {
+        min(max(value, minMaxTokens), maxMaxTokens)
     }
 }

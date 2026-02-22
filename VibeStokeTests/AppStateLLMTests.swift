@@ -85,6 +85,54 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(output, "raw text")
         XCTAssertEqual(fakeLLM.callCount, 1)
     }
+
+    func testAttentionItemsIncludeMissingLLMKeyWhenEnabled() {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = InMemoryKeychainService(value: nil)
+        let store = InMemorySettingsStore()
+
+        let appState = AppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain,
+            startServices: false,
+            llmE2EMode: .none
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        XCTAssertTrue(appState.attentionItems.contains(where: { $0.id == "llm-key-missing" }))
+    }
+
+    func testLLMRuntimeSettingsClampAndPersist() {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = InMemoryKeychainService(value: "api-key")
+        let store = InMemorySettingsStore()
+
+        let appState = AppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain,
+            startServices: false,
+            llmE2EMode: .none
+        )
+
+        appState.llmTimeoutSeconds = 99
+        appState.llmMaxTokens = 900
+
+        XCTAssertEqual(appState.llmTimeoutSeconds, LLMDefaults.maxTimeoutSeconds)
+        XCTAssertEqual(appState.llmMaxTokens, LLMDefaults.maxMaxTokens)
+        XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.maxTimeoutSeconds)
+        XCTAssertEqual(store.latest.maxTokens, LLMDefaults.maxMaxTokens)
+
+        appState.llmTimeoutSeconds = 0
+        appState.llmMaxTokens = 1
+
+        XCTAssertEqual(appState.llmTimeoutSeconds, LLMDefaults.minTimeoutSeconds)
+        XCTAssertEqual(appState.llmMaxTokens, LLMDefaults.minMaxTokens)
+        XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.minTimeoutSeconds)
+        XCTAssertEqual(store.latest.maxTokens, LLMDefaults.minMaxTokens)
+    }
 }
 
 private final class FakeLLMPostProcessor: LLMPostProcessor {
@@ -103,6 +151,10 @@ private final class FakeLLMPostProcessor: LLMPostProcessor {
 
 private final class InMemorySettingsStore: LLMSettingsStoreProtocol {
     private var value = LLMSettings()
+
+    var latest: LLMSettings {
+        value
+    }
 
     func load() -> LLMSettings {
         value
