@@ -16,6 +16,11 @@ if ! command -v xcodebuild >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! xcodebuild -version >/dev/null 2>&1; then
+  echo "Full Xcode is not active. Run: sudo xcode-select --switch /Applications/Xcode.app" >&2
+  exit 1
+fi
+
 xcodegen generate --spec "${PROJECT_DIR}/project.yml"
 
 xcodebuild \
