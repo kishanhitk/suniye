@@ -4,6 +4,28 @@ enum MainWindowSection: String, CaseIterable, Hashable {
     case stats
     case settings
     case about
+
+    var title: String {
+        switch self {
+        case .stats:
+            return "Stats"
+        case .settings:
+            return "Settings"
+        case .about:
+            return "About"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .stats:
+            return "chart.bar"
+        case .settings:
+            return "gearshape"
+        case .about:
+            return "info.circle"
+        }
+    }
 }
 
 struct SidebarView: View {
@@ -11,50 +33,21 @@ struct SidebarView: View {
     @Binding var selection: MainWindowSection
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Navigate")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+        List(selection: $selection) {
+            Section("Navigate") {
+                ForEach(MainWindowSection.allCases, id: \.self) { section in
+                    Label(section.title, systemImage: section.icon)
+                        .tag(section)
+                }
+            }
 
-                SidebarNavButton(title: "Stats", icon: "chart.bar", section: .stats, selection: $selection)
-                SidebarNavButton(title: "Settings", icon: "gearshape", section: .settings, selection: $selection)
-                SidebarNavButton(title: "About", icon: "info.circle", section: .about, selection: $selection)
-
-                Divider()
-
-                Text("Status")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
+            Section("Status") {
                 Label("Phase: \(appState.phase.rawValue.capitalized)", systemImage: "waveform")
-                Label(appState.hasMicPermission ? "Mic Granted" : "Mic Missing", systemImage: "mic")
-                Label(appState.hasAccessibilityPermission ? "Accessibility Granted" : "Accessibility Missing", systemImage: "accessibility")
+                Label(appState.hasMicPermission ? "Microphone: Granted" : "Microphone: Missing", systemImage: "mic")
+                Label(appState.hasAccessibilityPermission ? "Accessibility: Granted" : "Accessibility: Missing", systemImage: "accessibility")
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-private struct SidebarNavButton: View {
-    let title: String
-    let icon: String
-    let section: MainWindowSection
-    @Binding var selection: MainWindowSection
-
-    var body: some View {
-        Button {
-            selection = section
-        } label: {
-            HStack {
-                Label(title, systemImage: icon)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(selection == section ? Color.gray.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.borderless)
+        .listStyle(.sidebar)
+        .navigationTitle("VibeStoke")
     }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct MainWindowView: View {
@@ -7,46 +8,29 @@ struct MainWindowView: View {
     var body: some View {
         NavigationSplitView {
             SidebarView(appState: appState, selection: $selection)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 240)
         } detail: {
-            VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    topNavButton(title: "Stats", section: .stats)
-                    topNavButton(title: "Settings", section: .settings)
-                    topNavButton(title: "About", section: .about)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-
-                Divider()
-
-                switch selection {
-                case .stats:
-                    statsView
-                case .settings:
-                    SettingsDetailView(appState: appState)
-                case .about:
-                    AboutDetailView()
-                }
-            }
+            detailContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .navigationTitle(selection.title)
         }
     }
 
-    private func topNavButton(title: String, section: MainWindowSection) -> some View {
-        Button(title) {
-            selection = section
+    @ViewBuilder
+    private var detailContent: some View {
+        switch selection {
+        case .stats:
+            statsView
+        case .settings:
+            SettingsDetailView(appState: appState)
+        case .about:
+            AboutDetailView(appState: appState)
         }
-        .buttonStyle(.bordered)
-        .tint(selection == section ? .gray : nil)
-        .accessibilityLabel(Text(title))
     }
 
     private var statsView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("VibeStoke")
-                    .font(.system(size: 36, weight: .bold))
-
                 if appState.showOnboarding {
                     OnboardingView(appState: appState)
                         .frame(minHeight: 380)
@@ -66,17 +50,55 @@ struct MainWindowView: View {
                         Text("No transcription sessions yet")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(Array(appState.recentResults.enumerated()), id: \.offset) { _, item in
-                            Text(item)
-                                .padding(10)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.gray.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                        ForEach(Array(appState.recentResults.enumerated()), id: \.offset) { index, item in
+                            RecentActivityRow(
+                                text: item,
+                                onCopy: {
+                                    let pasteboard = NSPasteboard.general
+                                    pasteboard.clearContents()
+                                    pasteboard.setString(item, forType: .string)
+                                },
+                                onDelete: {
+                                    appState.recentResults.remove(at: index)
+                                }
+                            )
                         }
                     }
                 }
             }
             .padding(24)
         }
+    }
+}
+
+private struct RecentActivityRow: View {
+    let text: String
+    let onCopy: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 8) {
+                Spacer()
+
+                Button("Copy") {
+                    onCopy()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button("Delete") {
+                    onDelete()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(10)
+        .background(Color.gray.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -110,9 +132,6 @@ private struct SettingsDetailView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Settings")
-                    .font(.system(size: 32, weight: .bold))
-
                 GroupBox("Model") {
                     VStack(alignment: .leading, spacing: 10) {
                         Label(appState.isModelInstalled ? "Model installed" : "Model missing", systemImage: appState.isModelInstalled ? "checkmark.seal" : "exclamationmark.triangle")
@@ -312,12 +331,54 @@ private struct SettingsDetailView: View {
 }
 
 private struct AboutDetailView: View {
+    @Bindable var appState: AppState
+
+    private var appName: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "VibeStoke"
+    }
+
+    private var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
+    }
+
+    private var build: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
+    }
+
+    private var bundleIdentifier: String {
+        Bundle.main.bundleIdentifier ?? "Unknown"
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("About")
-                .font(.system(size: 32, weight: .bold))
-            Label("Parakeet TDT 0.6B INT8", systemImage: "cpu")
-            Label("sherpa-onnx C API", systemImage: "link")
+        VStack(alignment: .leading, spacing: 18) {
+            GroupBox("Application") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(appName, systemImage: "app")
+                    Label("Version \(version) (\(build))", systemImage: "number")
+                    Label(bundleIdentifier, systemImage: "shippingbox")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            GroupBox("Engine") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Local-only offline transcription", systemImage: "lock.shield")
+                    Label("Model: sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8", systemImage: "cpu")
+                    Label("Inference: sherpa-onnx C API + ONNX Runtime", systemImage: "link")
+                    Label("Hotkey: Hold Fn/Globe to dictate", systemImage: "keyboard")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            GroupBox("Current Device Status") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(appState.isModelInstalled ? "Model installed" : "Model missing", systemImage: appState.isModelInstalled ? "checkmark.seal" : "exclamationmark.triangle")
+                    Label(appState.hasMicPermission ? "Microphone granted" : "Microphone not granted", systemImage: "mic")
+                    Label(appState.hasAccessibilityPermission ? "Accessibility granted" : "Accessibility not granted", systemImage: "accessibility")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             Spacer()
         }
         .padding(24)
