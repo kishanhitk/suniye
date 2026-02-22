@@ -9,16 +9,22 @@ Minimal local-only dictation app for macOS using SwiftUI and sherpa-onnx.
 
 ## Build
 1. Install [XcodeGen](https://github.com/yonaskolb/XcodeGen) if needed.
-2. Generate the Xcode project:
+2. Build from terminal:
    ```bash
-   xcodegen generate
+   ./scripts/build_app.sh Release
    ```
-3. Open `VibeStoke.xcodeproj` in Xcode.
-4. Add these files from sherpa-onnx build artifacts:
-   - `VibeStoke/Frameworks/libsherpa-onnx-c-api.dylib`
-   - `VibeStoke/Frameworks/libonnxruntime.dylib`
-   - Replace `VibeStoke/SherpaOnnx.swift`
-   - Replace `VibeStoke/c-api.h` and uncomment import in `VibeStoke/VibeStoke-Bridging-Header.h`
+3. Optional install targets:
+   - Install to user Applications and open:
+     ```bash
+     ./scripts/build_app.sh Release --install-user --open
+     ```
+   - Install to system Applications and open:
+     ```bash
+     ./scripts/build_app.sh Release --install-system --open
+     ```
+4. One-time setup helpers:
+   - Build sherpa dylibs: `./scripts/setup_sherpa.sh`
+   - Download model: `./scripts/setup_model.sh`
 
 ## Model storage
 `~/Library/Application Support/VibeStoke/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`
