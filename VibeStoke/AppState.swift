@@ -655,18 +655,20 @@ final class AppState {
             let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
             let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
             let rawParse = AppState.parseSubmitCommand(from: rawText)
+            let llmInputText = rawParse.text
             var shouldSubmit = rawParse.shouldSubmit
-            var finalText = rawParse.text
+            var llmOutputText = llmInputText
+            var finalText = llmInputText
 
             if !finalText.isEmpty {
-                finalText = await postProcessTextIfEnabled(finalText)
-                let polishedParse = AppState.parseSubmitCommand(from: finalText)
+                llmOutputText = await postProcessTextIfEnabled(llmInputText)
+                let polishedParse = AppState.parseSubmitCommand(from: llmOutputText)
                 finalText = polishedParse.text
                 shouldSubmit = shouldSubmit || polishedParse.shouldSubmit
             }
 
             let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
-            let wasLLMPolished = !rawText.isEmpty && rawText != finalText
+            let wasLLMPolished = AppState.didLLMPolish(input: llmInputText, output: llmOutputText)
 
             if !finalText.isEmpty || shouldSubmit {
                 if !hasAccessibilityPermission {
@@ -809,6 +811,14 @@ final class AppState {
         cleaned = cleaned.replacingOccurrences(of: #"[,\s]+$"#, with: "", options: .regularExpression)
 
         return (cleaned, true)
+    }
+
+    nonisolated static func didLLMPolish(input: String, output: String) -> Bool {
+        let normalizedInput = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedInput.isEmpty else {
+            return false
+        }
+        return normalizedInput != output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func detectLLME2EMode(arguments: [String]) -> LLME2EMode {
