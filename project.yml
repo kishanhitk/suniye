@@ -15,6 +15,9 @@ targets:
       properties:
         LSUIElement: true
         NSMicrophoneUsageDescription: VibeStoke needs microphone access to capture dictation.
+        VSUpdateRepoOwner: kishanhitk
+        VSUpdateRepoName: vibestroke
+        VSUpdatePreferredAssetName: VibeStoke.dmg
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.vibestroke.app

@@ -22,5 +22,11 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>VibeStoke needs microphone access to capture dictation.</string>
+	<key>VSUpdatePreferredAssetName</key>
+	<string>VibeStoke.dmg</string>
+	<key>VSUpdateRepoName</key>
+	<string>vibestroke</string>
+	<key>VSUpdateRepoOwner</key>
+	<string>kishanhitk</string>
 </dict>
 </plist>

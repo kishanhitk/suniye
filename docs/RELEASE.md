@@ -25,3 +25,11 @@ git push origin vX.Y.Z
 - `VibeStoke.dmg`
 - `VibeStoke.app.zip`
 - `SHA256SUMS.txt`
+
+## Update contract
+Manual updater behavior depends on release artifact names and checksums:
+- Preferred install artifact: `VibeStoke.dmg`
+- Fallback install artifact: `VibeStoke.app.zip`
+- Checksum manifest: `SHA256SUMS.txt`
+
+`SHA256SUMS.txt` must include checksum lines for published artifacts, especially `VibeStoke.dmg`.

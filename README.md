@@ -34,6 +34,12 @@ Public binaries are distributed through GitHub Releases as `VibeStoke.dmg` with 
 
 Install instructions are in `docs/INSTALL.md`.
 
+## Updates
+- App performs a background update check on every launch (silent; no popup).
+- You can manually run `Check for Updates...` from the menu bar.
+- When an update is available, use `Download Update...` from the menu bar.
+- Downloaded update archives are checksum-verified (`SHA256SUMS.txt`) before opening.
+
 ## Release trust model
 This project currently ships unsigned/ad-hoc binaries (no Apple Developer account).
 Expect Gatekeeper prompts on first launch and follow the bypass instructions in `docs/INSTALL.md`.

@@ -9,6 +9,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - Open-source governance documents
 - CI and release automation
 - Release packaging and verification scripts
+- Manual updater v1 with launch-time background checks, menu-bar update actions, and checksum-verified downloads
 
 ## [0.0.1] - 2026-02-22
 ### Added

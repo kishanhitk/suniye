@@ -59,6 +59,9 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         AppLogger.shared.log(.info, "applicationDidFinishLaunching")
         statusItemController = StatusItemController(appState: sharedAppState)
         MainWindowController.shared.show(appState: sharedAppState)
+        Task {
+            await sharedAppState.checkForUpdatesOnLaunch()
+        }
         if CommandLine.arguments.contains("--e2e-indicator-smoke") {
             sharedAppState.runIndicatorE2ESmoke()
         }

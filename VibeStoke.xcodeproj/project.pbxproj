@@ -11,7 +11,9 @@
 		06D5921569D828410AB362EA /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFCA8859E20B68C44FB76305 /* TranscriptionService.swift */; };
 		0B40C24E47F0684B60010965 /* libsherpa-onnx-c-api.dylib in Resources */ = {isa = PBXBuildFile; fileRef = 4A141D8A88A217287757A82B /* libsherpa-onnx-c-api.dylib */; };
 		0DFCD840294706E7CC53A183 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CFB6B879A958FFBB1351500 /* AudioCaptureService.swift */; };
+		1AEBE757AA831C54A04DCF99 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75019EBD6B30CD674A3C5A8 /* UpdateService.swift */; };
 		26D7F71A769A16C35A5805F4 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEFB0FC048F0ADF3F8BA0B10 /* KeychainService.swift */; };
+		2FB5AB0E317965F2D26DB2B2 /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4D2BE5BF4FA6EB00CBA1AD /* AppVersion.swift */; };
 		33D6AA5F8A7C9EED45343D72 /* OpenRouterPostProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00225E338044BC4414BE2BCA /* OpenRouterPostProcessorTests.swift */; };
 		35E57F05B1425AA33657C7C8 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8858E8F99F6270A9BB65180 /* AppLogger.swift */; };
 		40906F17D9B32FD43E43F679 /* LLMSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E68F3FE154D8898F8564A8 /* LLMSettingsStore.swift */; };
@@ -26,6 +28,8 @@
 		6F2A58E95FBEF9323E260EFA /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4AC64D321C4083EC692DFC0 /* MainWindowController.swift */; };
 		703DBE035FC39CDA337AE07C /* OpenRouterPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24D8EC345C9F258F009934F0 /* OpenRouterPostProcessor.swift */; };
 		76BD95DE6D2EEF6E85ED9B0E /* ListeningOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BE24DBE41CAFB5015C0E99 /* ListeningOverlay.swift */; };
+		7E2DCC58E0DA266747800652 /* UpdateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C1099F655B1472355F4379 /* UpdateServiceTests.swift */; };
+		811EB4CBA26B2ACD0743C31E /* AppVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 270BDFF0ACE4C37C32FE451B /* AppVersionTests.swift */; };
 		882F0E2AE765EEE29499681E /* LLMSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11A434379D4813006653F13 /* LLMSettings.swift */; };
 		88BAD3EC93D8A06C2230D7F1 /* FloatingIndicatorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EA4A125A5922AB91BE8920C /* FloatingIndicatorController.swift */; };
 		90AAC01178E6EEF5F0CE5534 /* AppStateSubmitCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88BC9D593B8B62E66B3A03E3 /* AppStateSubmitCommandTests.swift */; };
@@ -45,6 +49,7 @@
 		D72D4CEC9AB6AEB6A99F4762 /* TranscriptionServiceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8677236133B00F5F093F1070 /* TranscriptionServiceE2ETests.swift */; };
 		DEA670FC11FC79C107C182EE /* LLMPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0164E21045D596FA94D41AD /* LLMPostProcessor.swift */; };
 		E57319F52272F8F792E60A39 /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88D7A8FC6B56C47D8200CB83 /* TextInsertionService.swift */; };
+		E72481F0F520F37E3AC6C81C /* AppStateUpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D7696EAE38B0FD5BEBE7491 /* AppStateUpdateTests.swift */; };
 		ED426F1562E4993B43376ABD /* libonnxruntime.dylib in Resources */ = {isa = PBXBuildFile; fileRef = 088C09CA19ED94F737C15687 /* libonnxruntime.dylib */; };
 		FDE46D0A93C69E13D98B2CE8 /* AppStateLLMTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16F2FE3436E32338132CE424 /* AppStateLLMTests.swift */; };
 /* End PBXBuildFile section */
@@ -84,7 +89,10 @@
 		16F2FE3436E32338132CE424 /* AppStateLLMTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateLLMTests.swift; sourceTree = "<group>"; };
 		188BAD6BED843EE1FEEEA65B /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
 		24D8EC345C9F258F009934F0 /* OpenRouterPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterPostProcessor.swift; sourceTree = "<group>"; };
+		270BDFF0ACE4C37C32FE451B /* AppVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersionTests.swift; sourceTree = "<group>"; };
+		3A4D2BE5BF4FA6EB00CBA1AD /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
 		45C7356A2F6F90E145D6CDE1 /* libonnxruntime.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libonnxruntime.dylib; path = VibeStoke/Frameworks/libonnxruntime.dylib; sourceTree = "<group>"; };
+		48C1099F655B1472355F4379 /* UpdateServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateServiceTests.swift; sourceTree = "<group>"; };
 		4A141D8A88A217287757A82B /* libsherpa-onnx-c-api.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "libsherpa-onnx-c-api.dylib"; sourceTree = "<group>"; };
 		4B23B60C237D4F8379248A14 /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
 		55D8FE65781D9FE2EFBBED64 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
@@ -96,6 +104,7 @@
 		88BC9D593B8B62E66B3A03E3 /* AppStateSubmitCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSubmitCommandTests.swift; sourceTree = "<group>"; };
 		88D7A8FC6B56C47D8200CB83 /* TextInsertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionService.swift; sourceTree = "<group>"; };
 		8B3AE3FB84F2718C4FD3A58D /* VibeStokeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VibeStokeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8D7696EAE38B0FD5BEBE7491 /* AppStateUpdateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateUpdateTests.swift; sourceTree = "<group>"; };
 		A086CDEFBB5346DA7828B64B /* libonnxruntime.1.23.2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = libonnxruntime.1.23.2.dylib; sourceTree = "<group>"; };
 		A4AC64D321C4083EC692DFC0 /* MainWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowController.swift; sourceTree = "<group>"; };
 		A8858E8F99F6270A9BB65180 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
@@ -113,6 +122,7 @@
 		E11A434379D4813006653F13 /* LLMSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettings.swift; sourceTree = "<group>"; };
 		E1F59F1203CDEEA82D2F0CB5 /* libsherpa-onnx-c-api.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = "libsherpa-onnx-c-api.dylib"; path = "VibeStoke/Frameworks/libsherpa-onnx-c-api.dylib"; sourceTree = "<group>"; };
 		E3DDD25655BDABDB54FD073F /* c-api.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "c-api.h"; sourceTree = "<group>"; };
+		E75019EBD6B30CD674A3C5A8 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		E89E369BE1291B599243DCD6 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		EB4AECEBC3B7A7D1F68A73E5 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		ED0D9BD190A40C0022CE04B7 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
@@ -138,11 +148,14 @@
 			children = (
 				16F2FE3436E32338132CE424 /* AppStateLLMTests.swift */,
 				88BC9D593B8B62E66B3A03E3 /* AppStateSubmitCommandTests.swift */,
+				8D7696EAE38B0FD5BEBE7491 /* AppStateUpdateTests.swift */,
+				270BDFF0ACE4C37C32FE451B /* AppVersionTests.swift */,
 				4B23B60C237D4F8379248A14 /* KeychainServiceTests.swift */,
 				166C00DF6B9E3A2EE85006C7 /* LLMSettingsStoreTests.swift */,
 				BF04203C51AE8E7660A931CD /* ModelManagerE2ETests.swift */,
 				00225E338044BC4414BE2BCA /* OpenRouterPostProcessorTests.swift */,
 				8677236133B00F5F093F1070 /* TranscriptionServiceE2ETests.swift */,
+				48C1099F655B1472355F4379 /* UpdateServiceTests.swift */,
 			);
 			path = VibeStokeTests;
 			sourceTree = "<group>";
@@ -214,6 +227,7 @@
 			isa = PBXGroup;
 			children = (
 				A8858E8F99F6270A9BB65180 /* AppLogger.swift */,
+				3A4D2BE5BF4FA6EB00CBA1AD /* AppVersion.swift */,
 				0CFB6B879A958FFBB1351500 /* AudioCaptureService.swift */,
 				EF0FF6CEF5331B9E20D4F863 /* HotkeyService.swift */,
 				CEFB0FC048F0ADF3F8BA0B10 /* KeychainService.swift */,
@@ -224,6 +238,7 @@
 				24D8EC345C9F258F009934F0 /* OpenRouterPostProcessor.swift */,
 				88D7A8FC6B56C47D8200CB83 /* TextInsertionService.swift */,
 				AFCA8859E20B68C44FB76305 /* TranscriptionService.swift */,
+				E75019EBD6B30CD674A3C5A8 /* UpdateService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -328,6 +343,7 @@
 			files = (
 				35E57F05B1425AA33657C7C8 /* AppLogger.swift in Sources */,
 				9E2509F1B4D24555A7445215 /* AppState.swift in Sources */,
+				2FB5AB0E317965F2D26DB2B2 /* AppVersion.swift in Sources */,
 				0DFCD840294706E7CC53A183 /* AudioCaptureService.swift in Sources */,
 				88BAD3EC93D8A06C2230D7F1 /* FloatingIndicatorController.swift in Sources */,
 				D56B89276940122A46FF8A45 /* FloatingIndicatorState.swift in Sources */,
@@ -350,6 +366,7 @@
 				A32934060931D35C834494FC /* StatusItemController.swift in Sources */,
 				E57319F52272F8F792E60A39 /* TextInsertionService.swift in Sources */,
 				06D5921569D828410AB362EA /* TranscriptionService.swift in Sources */,
+				1AEBE757AA831C54A04DCF99 /* UpdateService.swift in Sources */,
 				4EEB038BE82B172FC16ED4CF /* VibeStoke.swift in Sources */,
 				92C040E2188DD71050E5FA07 /* WelcomeView.swift in Sources */,
 			);
@@ -361,11 +378,14 @@
 			files = (
 				FDE46D0A93C69E13D98B2CE8 /* AppStateLLMTests.swift in Sources */,
 				90AAC01178E6EEF5F0CE5534 /* AppStateSubmitCommandTests.swift in Sources */,
+				E72481F0F520F37E3AC6C81C /* AppStateUpdateTests.swift in Sources */,
+				811EB4CBA26B2ACD0743C31E /* AppVersionTests.swift in Sources */,
 				C34D731B090E63588C2696DB /* KeychainServiceTests.swift in Sources */,
 				C081CF8C33894A86F1F3310C /* LLMSettingsStoreTests.swift in Sources */,
 				58D19733E6633554B2421352 /* ModelManagerE2ETests.swift in Sources */,
 				33D6AA5F8A7C9EED45343D72 /* OpenRouterPostProcessorTests.swift in Sources */,
 				D72D4CEC9AB6AEB6A99F4762 /* TranscriptionServiceE2ETests.swift in Sources */,
+				7E2DCC58E0DA266747800652 /* UpdateServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
