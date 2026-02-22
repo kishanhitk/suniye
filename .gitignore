@@ -1,5 +1,6 @@
 .DS_Store
 .derivedData/
 third_party/
+.e2e/
 VibeStoke.xcodeproj/project.xcworkspace/xcuserdata/
 VibeStoke.xcodeproj/xcuserdata/

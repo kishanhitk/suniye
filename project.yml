@@ -24,7 +24,9 @@ targets:
         LD_RUNPATH_SEARCH_PATHS:
           - $(inherited)
           - "@executable_path/../Frameworks"
-    dependencies: []
+    dependencies:
+      - framework: VibeStoke/Frameworks/libsherpa-onnx-c-api.dylib
+      - framework: VibeStoke/Frameworks/libonnxruntime.dylib
   VibeStokeTests:
     type: bundle.unit-test
     platform: macOS
