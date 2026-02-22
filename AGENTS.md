@@ -80,6 +80,9 @@ xcodebuild \
 - Keep dependency-injected seams used by tests (`LLMPostProcessor`, settings store, keychain service).
 - When behavior changes, update tests and relevant docs (`README.md`, `CHANGELOG.md`, `docs/*`).
 
+## Commit messages
+- Commit messages should follow commit lint conventions.
+
 ## Release notes
 - Follow `docs/RELEASE.md`.
 - Release artifacts and verification are script-driven:
