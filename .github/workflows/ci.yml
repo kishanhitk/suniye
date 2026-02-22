@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Preflight
+        run: ./scripts/e2e_preflight.sh
+
+      - name: Download model for smoke checks
+        run: ./scripts/setup_model.sh
+
+      - name: Build Debug
+        run: ./scripts/build_app.sh Debug --derived-data-path .derivedData --output-dir dist
+
+      - name: Build Release
+        run: ./scripts/build_app.sh Release --derived-data-path .derivedData --output-dir dist
+
+      - name: Smoke checks
+        run: ./scripts/e2e_smoke.sh
+
+      - name: Unit tests
+        run: |
+          xcodegen generate --spec project.yml
+          xcodebuild \
+            -project VibeStoke.xcodeproj \
+            -scheme VibeStoke \
+            -destination 'platform=macOS' \
+            -derivedDataPath .derivedData \
+            test
+
+      - name: Upload logs/artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-debug-artifacts
+          path: |
+            .derivedData
+            .e2e
+            dist
