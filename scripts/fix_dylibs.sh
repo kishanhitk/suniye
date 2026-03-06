@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FRAMEWORKS_DIR="${ROOT_DIR}/VibeStoke/Frameworks"
+FRAMEWORKS_DIR="${ROOT_DIR}/Suniye/Frameworks"
 
 cd "${FRAMEWORKS_DIR}"
 

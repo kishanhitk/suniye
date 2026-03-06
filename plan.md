@@ -1,15 +1,15 @@
-# VibeStoke — Native macOS Dictation App
+# Suniye — Native macOS Dictation App
 
 ## Context
 Build a minimal, local-only speech-to-text dictation app for macOS (like WisprFlow/SuperWhisper). Uses NVIDIA Parakeet TDT 0.6B v3 via sherpa-onnx C API for transcription. User confirmed Parakeet works well for Indian English accent on M1 MacBook Air 16GB. No Electron — pure Swift/SwiftUI.
 
-**Project directory**: `/Users/kishan/dev/vibestroke`
+**Project directory**: `/Users/kishan/dev/suniye`
 
 ## Architecture
 
 ```
-VibeStoke/
-├── VibeStoke.swift                 -- @main, MenuBarExtra
+Suniye/
+├── Suniye.swift                 -- @main, MenuBarExtra
 ├── AppState.swift                  -- Central state machine (@Observable)
 ├── Views/
 │   ├── MenuBarView.swift           -- Menu bar popover (status, quick actions)
@@ -26,7 +26,7 @@ VibeStoke/
 │   ├── TextInsertionService.swift  -- Clipboard save → Cmd+V → restore
 │   └── ModelManager.swift          -- Download, extract, validate model
 ├── SherpaOnnx.swift                -- Official Swift wrapper (copied from sherpa-onnx repo)
-├── VibeStoke-Bridging-Header.h     -- #import "c-api.h"
+├── Suniye-Bridging-Header.h     -- #import "c-api.h"
 ├── c-api.h                         -- Copied from sherpa-onnx
 └── Frameworks/
     ├── libsherpa-onnx-c-api.dylib
@@ -96,13 +96,13 @@ Release fn/globe key → Samples fed to sherpa-onnx offline recognizer
 - State machine: `needsModel → downloadingModel → loading → ready ↔ recording → transcribing → ready`
 - Wire hotkey callbacks → audio start/stop → transcribe on background thread → insert text on main thread
 - Show `ListeningOverlay` with subtle wave/ripple animation during recording
-- Main window access from menu bar (⌘+Click or "Open VibeStoke" button)
+- Main window access from menu bar (⌘+Click or "Open Suniye" button)
 
 ### Phase 8: Onboarding + ModelManager
 - **WelcomeView**: App intro, "Get Started" button
 - **ModelDownloadView**: Download tar.bz2 via URLSession with progress delegate
   - Extract with `/usr/bin/tar -xjf`
-  - Store in `~/Library/Application Support/VibeStoke/models/`
+  - Store in `~/Library/Application Support/Suniye/models/`
   - Validate required files: encoder.int8.onnx, decoder.int8.onnx, joiner.int8.onnx, tokens.txt
   - Progress bar + status text + "Done" button
 - Two-page navigation: Welcome → Download → Main app

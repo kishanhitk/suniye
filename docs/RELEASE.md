@@ -22,14 +22,14 @@ git push origin vX.Y.Z
 3. GitHub Actions `release.yml` builds artifacts and creates release.
 
 ## Artifacts
-- `VibeStoke.dmg`
-- `VibeStoke.app.zip`
+- `Suniye.dmg`
+- `Suniye.app.zip`
 - `SHA256SUMS.txt`
 
 ## Update contract
 Manual updater behavior depends on release artifact names and checksums:
-- Preferred install artifact: `VibeStoke.dmg`
-- Fallback install artifact: `VibeStoke.app.zip`
+- Preferred install artifact: `Suniye.dmg`
+- Fallback install artifact: `Suniye.app.zip`
 - Checksum manifest: `SHA256SUMS.txt`
 
-`SHA256SUMS.txt` must include checksum lines for published artifacts, especially `VibeStoke.dmg`.
+`SHA256SUMS.txt` must include checksum lines for published artifacts, especially `Suniye.dmg`.

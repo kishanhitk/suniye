@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_DIR="${ROOT_DIR}"
-PROJECT_FILE="${PROJECT_DIR}/VibeStoke.xcodeproj"
+PROJECT_FILE="${PROJECT_DIR}/Suniye.xcodeproj"
 CONFIGURATION="Release"
 INSTALL_TARGET=""
 SHOULD_OPEN="0"
@@ -17,8 +17,8 @@ usage() {
 Usage: scripts/build_app.sh [Debug|Release] [--install-user] [--install-system] [--open]
 
 Options:
-  --install-user    Copy app to ~/Applications/VibeStoke.app
-  --install-system  Copy app to /Applications/VibeStoke.app
+  --install-user    Copy app to ~/Applications/Suniye.app
+  --install-system  Copy app to /Applications/Suniye.app
   --derived-data-path <path>  Override derived data path
   --output-dir <dir>          Copy built app to a deterministic output directory
   --open            Open the resulting app after build/install
@@ -95,7 +95,7 @@ xcodegen generate --spec "${PROJECT_DIR}/project.yml"
 
 xcodebuild_args=(
   -project "${PROJECT_FILE}"
-  -scheme "VibeStoke"
+  -scheme "Suniye"
   -configuration "${CONFIGURATION}"
   -derivedDataPath "${DERIVED_DATA_PATH}"
   -destination "${BUILD_DESTINATION}"
@@ -108,12 +108,12 @@ fi
 
 xcodebuild "${xcodebuild_args[@]}"
 
-APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/VibeStoke.app"
+APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/Suniye.app"
 FINAL_APP_PATH="${APP_PATH}"
 
 if [[ -n "${INSTALL_TARGET}" ]]; then
   mkdir -p "${INSTALL_TARGET}"
-  DEST_APP_PATH="${INSTALL_TARGET}/VibeStoke.app"
+  DEST_APP_PATH="${INSTALL_TARGET}/Suniye.app"
   rm -rf "${DEST_APP_PATH}"
   ditto "${APP_PATH}" "${DEST_APP_PATH}"
   FINAL_APP_PATH="${DEST_APP_PATH}"
@@ -122,7 +122,7 @@ fi
 
 if [[ -n "${OUTPUT_DIR}" ]]; then
   mkdir -p "${OUTPUT_DIR}"
-  OUTPUT_APP_PATH="${OUTPUT_DIR}/VibeStoke.app"
+  OUTPUT_APP_PATH="${OUTPUT_DIR}/Suniye.app"
   rm -rf "${OUTPUT_APP_PATH}"
   ditto "${APP_PATH}" "${OUTPUT_APP_PATH}"
   FINAL_APP_PATH="${OUTPUT_APP_PATH}"

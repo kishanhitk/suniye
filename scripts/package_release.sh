@@ -38,9 +38,9 @@ DERIVED_DATA="${ROOT_DIR}/.derivedData-release"
 
 "${ROOT_DIR}/scripts/build_app.sh" Release --derived-data-path "${DERIVED_DATA}" --output-dir "${DIST_DIR}"
 
-APP_PATH="${DIST_DIR}/VibeStoke.app"
-ZIP_PATH="${DIST_DIR}/VibeStoke.app.zip"
-DMG_PATH="${DIST_DIR}/VibeStoke.dmg"
+APP_PATH="${DIST_DIR}/Suniye.app"
+ZIP_PATH="${DIST_DIR}/Suniye.app.zip"
+DMG_PATH="${DIST_DIR}/Suniye.dmg"
 CHECKSUMS_PATH="${DIST_DIR}/SHA256SUMS.txt"
 
 if [[ ! -d "${APP_PATH}" ]]; then
@@ -57,15 +57,15 @@ rm -f "${ZIP_PATH}" "${DMG_PATH}" "${CHECKSUMS_PATH}"
 DMG_STAGING="${ROOT_DIR}/.dmg-staging"
 rm -rf "${DMG_STAGING}"
 mkdir -p "${DMG_STAGING}"
-cp -R "${APP_PATH}" "${DMG_STAGING}/VibeStoke.app"
+cp -R "${APP_PATH}" "${DMG_STAGING}/Suniye.app"
 ln -s /Applications "${DMG_STAGING}/Applications"
 
-/usr/bin/hdiutil create -volname "VibeStoke" -srcfolder "${DMG_STAGING}" -ov -format UDZO "${DMG_PATH}" >/dev/null
+/usr/bin/hdiutil create -volname "Suniye" -srcfolder "${DMG_STAGING}" -ov -format UDZO "${DMG_PATH}" >/dev/null
 rm -rf "${DMG_STAGING}"
 
 (
   cd "${DIST_DIR}"
-  shasum -a 256 "VibeStoke.dmg" "VibeStoke.app.zip" > "SHA256SUMS.txt"
+  shasum -a 256 "Suniye.dmg" "Suniye.app.zip" > "SHA256SUMS.txt"
 )
 
 if [[ -n "${VERSION}" ]]; then
@@ -73,4 +73,4 @@ if [[ -n "${VERSION}" ]]; then
 fi
 
 echo "Artifacts created in: ${DIST_DIR}"
-ls -lh "${DIST_DIR}/VibeStoke.dmg" "${DIST_DIR}/VibeStoke.app.zip" "${DIST_DIR}/SHA256SUMS.txt"
+ls -lh "${DIST_DIR}/Suniye.dmg" "${DIST_DIR}/Suniye.app.zip" "${DIST_DIR}/SHA256SUMS.txt"

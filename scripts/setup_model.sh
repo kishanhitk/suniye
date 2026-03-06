@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODEL_NAME="sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
 MODEL_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/${MODEL_NAME}.tar.bz2"
-MODEL_BASE_DIR="${HOME}/Library/Application Support/VibeStoke/models"
+MODEL_BASE_DIR="${HOME}/Library/Application Support/Suniye/models"
 MODEL_DIR="${MODEL_BASE_DIR}/${MODEL_NAME}"
 ARCHIVE_PATH="${TMPDIR:-/tmp}/${MODEL_NAME}.tar.bz2"
 

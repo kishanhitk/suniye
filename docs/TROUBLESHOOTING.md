@@ -7,13 +7,13 @@ Use `System Settings` > `Privacy & Security` > `Open Anyway` after first blocked
 ## Quarantine issues
 If needed, remove quarantine from the installed app:
 ```bash
-xattr -dr com.apple.quarantine ~/Applications/VibeStoke.app
+xattr -dr com.apple.quarantine ~/Applications/Suniye.app
 ```
 
 ## Model download fails
 - Run `./scripts/setup_model.sh` manually.
 - Check network access to GitHub Releases.
-- Ensure enough disk space in `~/Library/Application Support/VibeStoke/models`.
+- Ensure enough disk space in `~/Library/Application Support/Suniye/models`.
 
 ## Missing dylibs
 Rebuild and copy runtime libs:

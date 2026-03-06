@@ -1,34 +1,34 @@
 # AGENTS.md
 
 ## Scope
-This repo builds VibeStoke: a local-first macOS dictation app.
+This repo builds Suniye: a local-first macOS dictation app.
 Core flow: hold hotkey -> capture audio -> transcribe with sherpa-onnx -> paste into focused app.
 
 ## Tech stack
 - Swift + SwiftUI + Observation
 - macOS 14+
 - XcodeGen project generation (`project.yml` is source of truth)
-- sherpa-onnx C API via bundled dylibs in `VibeStoke/Frameworks`
+- sherpa-onnx C API via bundled dylibs in `Suniye/Frameworks`
 
 ## Architecture map
-- `VibeStoke/AppState.swift`
+- `Suniye/AppState.swift`
   - Main state machine and orchestration (`@MainActor`).
   - Coordinates permissions, recording lifecycle, transcription, insertion, LLM post-processing.
-- `VibeStoke/Services/AudioCaptureService.swift`
+- `Suniye/Services/AudioCaptureService.swift`
   - AVAudioEngine capture and sample buffering.
-- `VibeStoke/Services/TranscriptionService.swift`
+- `Suniye/Services/TranscriptionService.swift`
   - `actor` wrapping sherpa recognizer lifecycle and decode path.
-- `VibeStoke/Services/TextInsertionService.swift`
+- `Suniye/Services/TextInsertionService.swift`
   - Clipboard-preserving paste + submit-key event posting.
-- `VibeStoke/Services/ModelManager.swift`
+- `Suniye/Services/ModelManager.swift`
   - Model download/extract/validation and recognizer config paths.
-- `VibeStoke/Views/*`
+- `Suniye/Views/*`
   - SwiftUI UI only; keep business logic in state/services.
 
 ## Hard constraints
 - Keep audio/transcription local. Do not add remote audio processing.
 - Keep model path contract stable unless intentionally migrating storage:
-  - `~/Library/Application Support/VibeStoke/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`
+  - `~/Library/Application Support/Suniye/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`
 - Required model files must remain:
   - `encoder.int8.onnx`, `decoder.int8.onnx`, `joiner.int8.onnx`, `tokens.txt`
 - Text insertion depends on accessibility + unsandboxed CGEvent posting.
@@ -54,8 +54,8 @@ Run from repo root.
 # Unit tests (matches CI)
 xcodegen generate --spec project.yml
 xcodebuild \
-  -project VibeStoke.xcodeproj \
-  -scheme VibeStoke \
+  -project Suniye.xcodeproj \
+  -scheme Suniye \
   -destination 'platform=macOS' \
   -derivedDataPath .derivedData \
   test
@@ -65,11 +65,11 @@ xcodebuild \
 - LLM forced success/fallback and submit-command smoke tests run via launch args:
   - `--e2e-llm-success`, `--e2e-llm-fallback`, `--e2e-submit-command`
 - Scripts under `scripts/e2e_*.sh` expect app installed at:
-  - `~/Applications/VibeStoke.app`
+  - `~/Applications/Suniye.app`
 
 ## Logging and diagnostics
 - App log file:
-  - `~/Library/Application Support/VibeStoke/logs/app.log`
+  - `~/Library/Application Support/Suniye/logs/app.log`
 - For live debugging:
   - `./scripts/run_debug_live.sh`
 

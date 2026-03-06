@@ -1,6 +1,6 @@
-# VibeStoke
+# Suniye
 
-VibeStoke is a local-first macOS dictation app built with SwiftUI and sherpa-onnx.
+Suniye is a local-first macOS dictation app built with SwiftUI and sherpa-onnx.
 
 ## Alpha warning
 This project is in alpha (`v0.0.1`). Breaking changes, bugs, and rough edges are expected.
@@ -12,7 +12,7 @@ This project is in alpha (`v0.0.1`). Breaking changes, bugs, and rough edges are
 - Provides a menu bar UX with onboarding and status
 
 ## Privacy model
-VibeStoke is designed to run transcription locally on your machine.
+Suniye is designed to run transcription locally on your machine.
 Model downloads come from upstream release artifacts, but audio processing is local.
 
 ## Requirements
@@ -26,11 +26,11 @@ Model downloads come from upstream release artifacts, but audio processing is lo
 ./scripts/setup_model.sh
 ./scripts/doctor.sh
 ./scripts/build_app.sh Release --output-dir ./dist
-open ./dist/VibeStoke.app
+open ./dist/Suniye.app
 ```
 
 ## Releases
-Public binaries are distributed through GitHub Releases as `VibeStoke.dmg` with `SHA256SUMS.txt`.
+Public binaries are distributed through GitHub Releases as `Suniye.dmg` with `SHA256SUMS.txt`.
 
 Install instructions are in `docs/INSTALL.md`.
 
@@ -51,4 +51,4 @@ Expect Gatekeeper prompts on first launch and follow the bypass instructions in 
 ```
 
 ## Model storage
-`~/Library/Application Support/VibeStoke/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`
+`~/Library/Application Support/Suniye/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`

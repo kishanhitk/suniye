@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MODEL_DIR="${HOME}/Library/Application Support/VibeStoke/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
+MODEL_DIR="${HOME}/Library/Application Support/Suniye/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
 
 need_cmd() {
   local cmd="$1"
@@ -24,8 +24,8 @@ echo "[2/5] Checking active Xcode"
 xcodebuild -version >/dev/null
 
 echo "[3/5] Checking runtime dylibs"
-[[ -f "${ROOT_DIR}/VibeStoke/Frameworks/libsherpa-onnx-c-api.dylib" ]]
-[[ -f "${ROOT_DIR}/VibeStoke/Frameworks/libonnxruntime.dylib" ]]
+[[ -f "${ROOT_DIR}/Suniye/Frameworks/libsherpa-onnx-c-api.dylib" ]]
+[[ -f "${ROOT_DIR}/Suniye/Frameworks/libonnxruntime.dylib" ]]
 
 echo "[4/5] Checking ASR model files"
 for f in encoder.int8.onnx decoder.int8.onnx joiner.int8.onnx tokens.txt; do
