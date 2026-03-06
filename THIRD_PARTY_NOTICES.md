@@ -1,16 +1,16 @@
 # Third-Party Notices
 
-VibeStoke depends on third-party software and model artifacts.
+Suniye depends on third-party software and model artifacts.
 
 ## Runtime dependencies
 - sherpa-onnx
   - Source: https://github.com/k2-fsa/sherpa-onnx
   - Used for: speech recognition C API runtime
-  - Local files: `VibeStoke/Frameworks/libsherpa-onnx-c-api.dylib`, `VibeStoke/c-api.h`
+  - Local files: `Suniye/Frameworks/libsherpa-onnx-c-api.dylib`, `Suniye/c-api.h`
 - ONNX Runtime (via sherpa-onnx build/install)
   - Source: https://github.com/microsoft/onnxruntime
   - Used for: model inference runtime
-  - Local file: `VibeStoke/Frameworks/libonnxruntime.dylib`
+  - Local file: `Suniye/Frameworks/libonnxruntime.dylib`
 
 ## Model artifacts
 - Model: `sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8`

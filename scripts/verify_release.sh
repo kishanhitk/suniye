@@ -33,8 +33,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-DMG_PATH="${DIST_DIR}/VibeStoke.dmg"
-ZIP_PATH="${DIST_DIR}/VibeStoke.app.zip"
+DMG_PATH="${DIST_DIR}/Suniye.dmg"
+ZIP_PATH="${DIST_DIR}/Suniye.app.zip"
 CHECKSUMS_PATH="${DIST_DIR}/SHA256SUMS.txt"
 
 for f in "${DMG_PATH}" "${ZIP_PATH}" "${CHECKSUMS_PATH}"; do
@@ -46,11 +46,11 @@ done
   shasum -a 256 -c SHA256SUMS.txt
 )
 
-MOUNT_POINT="$(mktemp -d /tmp/vibestroke-dmg-XXXXXX)"
+MOUNT_POINT="$(mktemp -d /tmp/suniye-dmg-XXXXXX)"
 /usr/bin/hdiutil attach "${DMG_PATH}" -mountpoint "${MOUNT_POINT}" -nobrowse -readonly >/dev/null
 trap '/usr/bin/hdiutil detach "${MOUNT_POINT}" -quiet >/dev/null 2>&1 || true; rm -rf "${MOUNT_POINT}"' EXIT
 
-[[ -d "${MOUNT_POINT}/VibeStoke.app" ]] || { echo "DMG missing VibeStoke.app" >&2; exit 1; }
+[[ -d "${MOUNT_POINT}/Suniye.app" ]] || { echo "DMG missing Suniye.app" >&2; exit 1; }
 [[ -L "${MOUNT_POINT}/Applications" ]] || { echo "DMG missing Applications symlink" >&2; exit 1; }
 
 /usr/bin/hdiutil detach "${MOUNT_POINT}" -quiet >/dev/null

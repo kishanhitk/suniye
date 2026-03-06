@@ -13,7 +13,7 @@ if [[ ! -f "${WAV_PATH}" ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MODEL_DIR="${HOME}/Library/Application Support/VibeStoke/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
+MODEL_DIR="${HOME}/Library/Application Support/Suniye/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
 RUN_DIR="${ROOT_DIR}/.e2e"
 BIN_PATH="${RUN_DIR}/decode_e2e"
 SRC_PATH="${RUN_DIR}/main.swift"
@@ -147,11 +147,11 @@ SWIFT
 
 swiftc \
   -emit-executable \
-  -import-objc-header "${ROOT_DIR}/VibeStoke/VibeStoke-Bridging-Header.h" \
-  "${ROOT_DIR}/VibeStoke/SherpaOnnx.swift" \
+  -import-objc-header "${ROOT_DIR}/Suniye/Suniye-Bridging-Header.h" \
+  "${ROOT_DIR}/Suniye/SherpaOnnx.swift" \
   "${SRC_PATH}" \
-  -L "${ROOT_DIR}/VibeStoke/Frameworks" \
+  -L "${ROOT_DIR}/Suniye/Frameworks" \
   -lsherpa-onnx-c-api \
   -o "${BIN_PATH}"
 
-DYLD_LIBRARY_PATH="${ROOT_DIR}/VibeStoke/Frameworks:${DYLD_LIBRARY_PATH:-}" "${BIN_PATH}" "${WAV_PATH}" "${MODEL_DIR}"
+DYLD_LIBRARY_PATH="${ROOT_DIR}/Suniye/Frameworks:${DYLD_LIBRARY_PATH:-}" "${BIN_PATH}" "${WAV_PATH}" "${MODEL_DIR}"

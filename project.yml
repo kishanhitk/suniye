@@ -1,24 +1,24 @@
-name: VibeStoke
+name: Suniye
 options:
   createIntermediateGroups: true
 settings:
   base:
     MACOSX_DEPLOYMENT_TARGET: 14.0
 targets:
-  VibeStoke:
+  Suniye:
     type: application
     platform: macOS
     sources:
-      - VibeStoke
+      - Suniye
     info:
-      path: VibeStoke/Info.plist
+      path: Suniye/Info.plist
       properties:
         LSUIElement: true
-        NSMicrophoneUsageDescription: VibeStoke needs microphone access to capture dictation.
+        NSMicrophoneUsageDescription: Suniye needs microphone access to capture dictation.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.vibestroke.app
-        SWIFT_OBJC_BRIDGING_HEADER: VibeStoke/VibeStoke-Bridging-Header.h
+        PRODUCT_BUNDLE_IDENTIFIER: dev.suniye.app
+        SWIFT_OBJC_BRIDGING_HEADER: Suniye/Suniye-Bridging-Header.h
         OTHER_LDFLAGS:
           - -ObjC
         LD_RUNPATH_SEARCH_PATHS:
@@ -26,18 +26,18 @@ targets:
           - "@executable_path/../Frameworks"
         LIBRARY_SEARCH_PATHS:
           - $(inherited)
-          - $(PROJECT_DIR)/VibeStoke/Frameworks
+          - $(PROJECT_DIR)/Suniye/Frameworks
     dependencies:
-      - framework: VibeStoke/Frameworks/libsherpa-onnx-c-api.dylib
-      - framework: VibeStoke/Frameworks/libonnxruntime.dylib
-  VibeStokeTests:
+      - framework: Suniye/Frameworks/libsherpa-onnx-c-api.dylib
+      - framework: Suniye/Frameworks/libonnxruntime.dylib
+  SuniyeTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - VibeStokeTests
+      - SuniyeTests
     dependencies:
-      - target: VibeStoke
+      - target: Suniye
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.vibestroke.app.tests
+        PRODUCT_BUNDLE_IDENTIFIER: dev.suniye.app.tests
         GENERATE_INFOPLIST_FILE: YES

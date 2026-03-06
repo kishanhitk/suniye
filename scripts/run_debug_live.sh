@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_PATH="${HOME}/Applications/VibeStoke.app"
-LOG_DIR="${HOME}/Library/Application Support/VibeStoke/logs"
+APP_PATH="${HOME}/Applications/Suniye.app"
+LOG_DIR="${HOME}/Library/Application Support/Suniye/logs"
 LOG_FILE="${LOG_DIR}/app.log"
 
 mkdir -p "${LOG_DIR}"
@@ -13,7 +13,7 @@ echo "[1/4] Building and installing Debug app"
 "${ROOT_DIR}/scripts/build_app.sh" Debug --install-user
 
 echo "[2/4] Restarting app"
-pkill -f '/VibeStoke.app/Contents/MacOS/VibeStoke' || true
+pkill -f '/Suniye.app/Contents/MacOS/Suniye' || true
 sleep 1
 open "${APP_PATH}"
 

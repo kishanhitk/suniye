@@ -1,4 +1,4 @@
-# Contributing to VibeStoke
+# Contributing to Suniye
 
 Thanks for your interest in contributing.
 

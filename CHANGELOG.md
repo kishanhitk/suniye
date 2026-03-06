@@ -5,17 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
 ## [Unreleased]
+### Changed
+- Renamed the app from VibeStoke to Suniye across the project, module, bundle identifiers, app support paths, scripts, release artifacts, and docs
+
 ### Added
-- Open-source governance documents
-- CI and release automation
-- Release packaging and verification scripts
-- Main window expanded to 7 pages: Dashboard, History, Hotkey, Model, Vocabulary, LLM Polish, General
-- Local persisted history and stats stores with bounded retention (500 entries)
-- App preferences store for hotkey, input device, and launch-at-login state
-- Configurable hold-to-talk hotkeys with arbitrary key combos
-- Input device picker and launch-at-login settings in General page
-- Model diagnostics (required files and disk usage) in dedicated Model page
-- New unit tests for history/stats/preferences stores, hotkey state machine, and AppState settings flows
+- New Flow-like UI system with neutral shell, serif hero cards, dark CTAs, and bordered row cards
+- Main window IA rewrite to 5 top-level areas: Home, Dictionary, Style, Notes, Settings
+- New Settings hub with General/System/Vibe coding sections covering hotkey, microphone, model, permissions, and advanced LLM controls
+- New IA tests for section order, labels, and settings section defaults
+- Dashboard visuals rewritten as Home-style experience with metrics + hero callout + grouped recent notes rows
+- Vocabulary visuals rewritten as Dictionary with chips, add flow, and table-like term rows
+- History visuals rewritten as Notes with grouped date rows and row actions
+- LLM Polish visuals rewritten as Style page with quick controls and advanced configuration blocks
+- Onboarding, listening overlay, and floating indicator visuals aligned to the new design language
+- Menu bar NSMenu wording/grouping updated to match revised product vocabulary
 
 ## [0.0.1] - 2026-02-22
 ### Added

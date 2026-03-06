@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MODEL_DIR="${HOME}/Library/Application Support/VibeStoke/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
+MODEL_DIR="${HOME}/Library/Application Support/Suniye/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
 
 require_file() {
   local path="$1"
@@ -13,8 +13,8 @@ require_file() {
 }
 
 echo "[1/4] Checking sherpa dylibs"
-require_file "${ROOT_DIR}/VibeStoke/Frameworks/libsherpa-onnx-c-api.dylib"
-require_file "${ROOT_DIR}/VibeStoke/Frameworks/libonnxruntime.dylib"
+require_file "${ROOT_DIR}/Suniye/Frameworks/libsherpa-onnx-c-api.dylib"
+require_file "${ROOT_DIR}/Suniye/Frameworks/libonnxruntime.dylib"
 
 echo "[2/4] Checking model files"
 require_file "${MODEL_DIR}/encoder.int8.onnx"

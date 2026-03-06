@@ -36,8 +36,8 @@ jobs:
         run: |
           xcodegen generate --spec project.yml
           xcodebuild \
-            -project VibeStoke.xcodeproj \
-            -scheme VibeStoke \
+            -project Suniye.xcodeproj \
+            -scheme Suniye \
             -destination 'platform=macOS' \
             -derivedDataPath .derivedData \
             test
@@ -65,7 +65,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/VibeStoke.dmg
-            dist/VibeStoke.app.zip
+            dist/Suniye.dmg
+            dist/Suniye.app.zip
             dist/SHA256SUMS.txt
           body_path: release_notes.txt

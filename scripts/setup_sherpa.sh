@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 THIRD_PARTY_DIR="${ROOT_DIR}/third_party"
 SHERPA_DIR="${THIRD_PARTY_DIR}/sherpa-onnx"
-FRAMEWORKS_DIR="${ROOT_DIR}/VibeStoke/Frameworks"
-BUILD_DIR="${SHERPA_DIR}/build-vibestroke-macos"
+FRAMEWORKS_DIR="${ROOT_DIR}/Suniye/Frameworks"
+BUILD_DIR="${SHERPA_DIR}/build-suniye-macos"
 INSTALL_DIR="${BUILD_DIR}/install"
 
 mkdir -p "${THIRD_PARTY_DIR}" "${FRAMEWORKS_DIR}"
@@ -41,7 +41,7 @@ cmake --install "${BUILD_DIR}" --config Release
 
 popd >/dev/null
 
-cp "${SHERPA_DIR}/sherpa-onnx/c-api/c-api.h" "${ROOT_DIR}/VibeStoke/c-api.h"
+cp "${SHERPA_DIR}/sherpa-onnx/c-api/c-api.h" "${ROOT_DIR}/Suniye/c-api.h"
 
 cp "${INSTALL_DIR}/lib/libsherpa-onnx-c-api.dylib" "${FRAMEWORKS_DIR}/libsherpa-onnx-c-api.dylib"
 cp "${INSTALL_DIR}/lib/libonnxruntime.dylib" "${FRAMEWORKS_DIR}/libonnxruntime.dylib"

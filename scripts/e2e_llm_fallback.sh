@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_PATH="${HOME}/Applications/VibeStoke.app"
-BIN_PATH="${APP_PATH}/Contents/MacOS/VibeStoke"
-LOG_FILE="${HOME}/Library/Application Support/VibeStoke/logs/app.log"
+APP_PATH="${HOME}/Applications/Suniye.app"
+BIN_PATH="${APP_PATH}/Contents/MacOS/Suniye"
+LOG_FILE="${HOME}/Library/Application Support/Suniye/logs/app.log"
 
 if [[ ! -x "${BIN_PATH}" ]]; then
   echo "App executable not found at ${BIN_PATH}. Run ./scripts/build_app.sh Release --install-user first." >&2
@@ -16,7 +16,7 @@ touch "${LOG_FILE}"
 start_marker="E2E_LLM_FALLBACK_START_$(date +%s)"
 echo "${start_marker}" >> "${LOG_FILE}"
 
-pkill -f '/VibeStoke.app/Contents/MacOS/VibeStoke' || true
+pkill -f '/Suniye.app/Contents/MacOS/Suniye' || true
 sleep 1
 
 "${BIN_PATH}" --e2e-llm-fallback >/dev/null 2>&1 &

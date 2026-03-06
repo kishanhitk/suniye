@@ -22,6 +22,6 @@ git push origin vX.Y.Z
 3. GitHub Actions `release.yml` builds artifacts and creates release.
 
 ## Artifacts
-- `VibeStoke.dmg`
-- `VibeStoke.app.zip`
+- `Suniye.dmg`
+- `Suniye.app.zip`
 - `SHA256SUMS.txt`
