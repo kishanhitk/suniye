@@ -8,7 +8,13 @@ struct RecognizerConfig {
     let numThreads: Int
 }
 
-actor TranscriptionService {
+protocol TranscriptionServiceProtocol {
+    func loadModel(config: RecognizerConfig) async throws
+    func transcribe(samples: [Float], sampleRate: Int) async throws -> String
+    func unloadModel() async
+}
+
+actor TranscriptionService: TranscriptionServiceProtocol {
     enum ServiceError: LocalizedError {
         case recognizerNotLoaded
         case emptyAudio
@@ -132,6 +138,14 @@ actor TranscriptionService {
         let text = String(cString: cText).trimmingCharacters(in: .whitespacesAndNewlines)
         AppLogger.shared.log(.info, "transcribe done chars=\(text.count)")
         return text
+    }
+
+    func unloadModel() async {
+        if let recognizer {
+            SherpaOnnxDestroyOfflineRecognizer(recognizer)
+        }
+        recognizer = nil
+        loadedConfig = nil
     }
 
     private func validateModelPaths(_ config: RecognizerConfig) throws {

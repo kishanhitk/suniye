@@ -10,6 +10,16 @@ This project is in alpha (`v0.0.1`). Breaking changes, bugs, and rough edges are
 - Runs local transcription with sherpa-onnx
 - Inserts text into the active app
 - Provides a menu bar UX with onboarding and status
+- Includes a main window with `Dashboard`, `History`, `Hotkey`, `Model`, `Vocabulary`, `LLM`, and `General`
+
+## Main window
+- `Dashboard`: session totals, today count, words, total dictation time, and recent activity
+- `History`: persisted transcript log with relative time, duration, copy, and delete
+- `Hotkey`: configurable hold-to-talk shortcut, including Fn/Globe and standard key combos
+- `Model`: offline ASR model status, disk usage, and delete/re-download controls
+- `Vocabulary`: domain-term list used to bias LLM cleanup toward your terminology
+- `LLM`: toggle, model selection, API key, system prompt, and advanced runtime controls
+- `General`: preferred microphone, auto-submit after paste, launch-at-login, and runtime diagnostics
 
 ## Privacy model
 Suniye is designed to run transcription locally on your machine.
@@ -39,6 +49,7 @@ Install instructions are in `docs/INSTALL.md`.
 - You can manually run `Check for Updates...` from the menu bar.
 - When an update is available, use `Download Update...` from the menu bar.
 - Downloaded update archives are checksum-verified (`SHA256SUMS.txt`) before opening.
+- Launch at login is best-effort and may require approval in macOS `Login Items`; unsigned/ad-hoc builds may not support it.
 
 ## Release trust model
 This project currently ships unsigned/ad-hoc binaries (no Apple Developer account).

@@ -3,15 +3,17 @@ import OSLog
 import SwiftUI
 
 @MainActor
-final class MainWindowController {
+final class MainWindowController: NSObject, NSWindowDelegate {
     static let shared = MainWindowController()
     private let logger = Logger(subsystem: "dev.suniye.app", category: "window")
 
     private var window: NSWindow?
+    private weak var appState: AppState?
 
-    private init() {}
+    private override init() {}
 
     func show(appState: AppState) {
+        self.appState = appState
         NSApp.setActivationPolicy(.regular)
 
         if let window {
@@ -26,20 +28,22 @@ final class MainWindowController {
         AppLogger.shared.log(.info, "create main window")
 
         let content = MainWindowView(appState: appState)
-            .frame(minWidth: 780, minHeight: 520)
+            .frame(minWidth: 980, minHeight: 640)
 
         let host = NSHostingView(rootView: content)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 920, height: 620),
+            contentRect: NSRect(x: 0, y: 0, width: 1120, height: 720),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Suniye"
+        window.backgroundColor = MainWindowPalette.windowBackgroundNSColor
         window.center()
         window.isReleasedWhenClosed = false
         window.isMovableByWindowBackground = false
+        window.delegate = self
         window.contentView = host
 
         self.window = window
@@ -47,6 +51,11 @@ final class MainWindowController {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        AppLogger.shared.log(.info, "main window became key; refreshing permission status")
+        appState?.refreshPermissionStatus()
     }
 }
 
@@ -78,5 +87,10 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         AppLogger.shared.log(.info, "applicationShouldHandleReopen")
         MainWindowController.shared.show(appState: sharedAppState)
         return true
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        AppLogger.shared.log(.info, "applicationDidBecomeActive; refreshing permission status")
+        sharedAppState.refreshPermissionStatus()
     }
 }

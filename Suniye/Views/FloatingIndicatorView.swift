@@ -6,33 +6,33 @@ struct FloatingIndicatorView: View {
     @State private var pulse = false
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             indicator
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(AppTypography.bodyMedium)
                     .foregroundStyle(.white)
                 Text(subtitle)
-                    .font(.system(size: 13))
+                    .font(AppTypography.caption)
                     .foregroundStyle(Color.white.opacity(0.8))
                     .lineLimit(2)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.black.opacity(0.88))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Color.white.opacity(0.16), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.35), radius: 18, x: 0, y: 12)
+        .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: 6)
         .onAppear {
             updatePulse()
         }
@@ -46,7 +46,7 @@ struct FloatingIndicatorView: View {
         ZStack {
             Circle()
                 .fill(indicatorColor.opacity(0.22))
-                .frame(width: 42, height: 42)
+                .frame(width: 34, height: 34)
 
             if case .processing = state {
                 ProgressView()
@@ -54,14 +54,14 @@ struct FloatingIndicatorView: View {
                     .tint(.white)
             } else {
                 Image(systemName: symbol)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.headline.weight(.bold))
                     .foregroundStyle(.white)
             }
 
             if case .listening = state {
                 Circle()
-                    .stroke(indicatorColor.opacity(0.9), lineWidth: 2)
-                    .frame(width: 42, height: 42)
+                    .stroke(indicatorColor.opacity(0.9), lineWidth: 1.5)
+                    .frame(width: 34, height: 34)
                     .scaleEffect(pulse ? 1.35 : 0.95)
                     .opacity(pulse ? 0 : 1)
                     .animation(.easeOut(duration: 0.95).repeatForever(autoreverses: false), value: pulse)

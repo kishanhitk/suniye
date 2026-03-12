@@ -1,6 +1,16 @@
 import Foundation
 
-final class ModelManager {
+protocol ModelManagerProtocol {
+    var expectedDownloadSizeBytes: Int64 { get }
+    func modelDirectoryURL() throws -> URL
+    func isModelReady() -> Bool
+    func makeRecognizerConfig() throws -> RecognizerConfig
+    func downloadAndExtractModel(progress: @escaping @Sendable (Double) -> Void) async throws
+    func installedByteCount() -> Int64
+    func deleteModel() throws
+}
+
+final class ModelManager: ModelManagerProtocol {
     enum ModelError: LocalizedError {
         case appSupportUnavailable
         case invalidResponse
@@ -20,6 +30,7 @@ final class ModelManager {
 
     private let modelDownloadURL = URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2")!
     private let requiredFiles = ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"]
+    let expectedDownloadSizeBytes: Int64 = 680_000_000
 
     func modelDirectoryURL() throws -> URL {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
@@ -81,6 +92,29 @@ final class ModelManager {
         }
 
         progress(1)
+    }
+
+    func installedByteCount() -> Int64 {
+        guard let directoryURL = try? modelDirectoryURL(),
+              let enumerator = FileManager.default.enumerator(at: directoryURL, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey], options: [.skipsHiddenFiles]) else {
+            return 0
+        }
+
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            let values = try? url.resourceValues(forKeys: Set([.isRegularFileKey, .fileSizeKey]))
+            if values?.isRegularFile == true {
+                total += Int64(values?.fileSize ?? 0)
+            }
+        }
+        return total
+    }
+
+    func deleteModel() throws {
+        let modelDirectory = try modelDirectoryURL()
+        if FileManager.default.fileExists(atPath: modelDirectory.path) {
+            try FileManager.default.removeItem(at: modelDirectory)
+        }
     }
 
     private func extract(archive: URL, into destination: URL) throws {

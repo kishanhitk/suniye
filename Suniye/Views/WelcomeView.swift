@@ -4,20 +4,20 @@ struct WelcomeView: View {
     let onContinue: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Welcome to Suniye")
-                .font(.system(size: 34, weight: .bold, design: .default))
+                .font(AppTypography.pageTitle)
 
             Text("Local, low-latency dictation for macOS using Parakeet TDT with sherpa-onnx.")
-                .font(.system(size: 16))
+                .font(AppTypography.body)
                 .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Label("No cloud transcription in MVP", systemImage: "lock.shield")
                 Label("Hold fn/globe to dictate", systemImage: "keyboard")
                 Label("Clipboard is preserved after paste", systemImage: "doc.on.clipboard")
             }
-            .font(.system(size: 14))
+            .font(AppTypography.subheadline)
 
             Spacer()
 
@@ -26,6 +26,6 @@ struct WelcomeView: View {
             }
             .buttonStyle(.borderedProminent)
         }
-        .padding(28)
+        .padding(20)
     }
 }

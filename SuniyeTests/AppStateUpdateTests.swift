@@ -117,69 +117,14 @@ final class AppStateUpdateTests: XCTestCase {
         updateService: StubUpdateService,
         fileOpener: @escaping (URL) -> Bool = { _ in true }
     ) -> AppState {
-        AppState(
-            llmSettingsStore: InMemorySettingsStore(),
-            keychainService: InMemoryKeychainService(value: nil),
+        makeTestAppState(
+            llmSettingsStore: TestLLMSettingsStore(),
+            generalSettingsStore: TestGeneralSettingsStore(),
+            historyStore: TestHistoryStore(),
+            keychainService: TestKeychainService(value: nil),
             updateService: updateService,
-            currentAppVersionProvider: { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
-            fileOpener: fileOpener,
-            startServices: false,
-            llmE2EMode: .none
+            launchAtLoginService: StubLaunchAtLoginService(),
+            fileOpener: fileOpener
         )
-    }
-}
-
-private final class StubUpdateService: UpdateServiceProtocol {
-    private(set) var checkCallCount = 0
-    private let checkResult: Result<UpdateCheckResult, Error>
-    var downloadResult: Result<URL, Error> = .failure(UpdateError.network("not configured"))
-
-    init(checkResult: Result<UpdateCheckResult, Error>) {
-        self.checkResult = checkResult
-    }
-
-    func checkForUpdate(currentVersion: AppVersion) async throws -> UpdateCheckResult {
-        checkCallCount += 1
-        return try checkResult.get()
-    }
-
-    func downloadAndVerify(release: UpdateRelease) async throws -> URL {
-        try downloadResult.get()
-    }
-}
-
-private final class InMemorySettingsStore: LLMSettingsStoreProtocol {
-    private var value = LLMSettings()
-
-    func load() -> LLMSettings {
-        value
-    }
-
-    func save(_ settings: LLMSettings) {
-        value = settings
-    }
-}
-
-private final class InMemoryKeychainService: KeychainServiceProtocol {
-    private var stored: String?
-
-    init(value: String?) {
-        stored = value
-    }
-
-    func setOpenRouterKey(_ key: String) throws {
-        stored = key
-    }
-
-    func hasOpenRouterKey() -> Bool {
-        stored?.isEmpty == false
-    }
-
-    func getOpenRouterKey() throws -> String? {
-        stored
-    }
-
-    func deleteOpenRouterKey() throws {
-        stored = nil
     }
 }

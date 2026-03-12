@@ -1,0 +1,612 @@
+import Carbon
+import SwiftUI
+
+struct DashboardPage: View {
+    @Bindable var appState: AppState
+    let onNavigate: (MainWindowSection) -> Void
+
+    var body: some View {
+        DetailScrollContainer {
+            DetailPageTitle(title: "Dashboard")
+
+            if !appState.attentionItems.isEmpty {
+                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                    ForEach(appState.attentionItems) { item in
+                        AttentionTile(item: item) {
+                            onNavigate(item.recommendedSection)
+                        }
+                    }
+                }
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                DashboardMetricCard(icon: "waveform", iconTint: .blue, value: "\(appState.sessionCount)", label: "Sessions")
+                DashboardMetricCard(icon: "calendar", iconTint: .orange, value: "\(appState.todaySessionCount)", label: "Today")
+                DashboardMetricCard(icon: "quote.opening", iconTint: .purple, value: appState.wordsTranscribed.abbreviatedString, label: "Words")
+                DashboardMetricCard(icon: "clock", iconTint: .green, value: appState.totalDictationSeconds.compactDurationString, label: "Time")
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Recent")
+
+                if appState.recentResultsPreview.isEmpty {
+                    SurfaceCard {
+                        Text("No transcription sessions yet.")
+                            .font(AppTypography.body)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(appState.recentResultsPreview) { result in
+                            TranscriptSummaryRow(result: result)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct HistoryPage: View {
+    @Bindable var appState: AppState
+
+    var body: some View {
+        DetailScrollContainer {
+            DetailPageTitle(title: "History")
+
+            if appState.recentResults.isEmpty {
+                EmptyStateCard(
+                    icon: "clock.arrow.circlepath",
+                    title: "No History Yet",
+                    detail: "Completed dictation sessions will appear here with relative time, duration, copy, and delete actions."
+                )
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(appState.recentResults) { result in
+                        TranscriptHistoryRow(
+                            result: result,
+                            onCopy: { appState.copyRecentResult(result) },
+                            onDelete: { appState.deleteRecentResult(result) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct HotkeyPage: View {
+    @Bindable var appState: AppState
+
+    var body: some View {
+        DetailScrollContainer {
+            SectionHeading(title: "Global Hotkey")
+
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                    HStack(spacing: 12) {
+                        Text("Hold to Dictate")
+                            .font(AppTypography.body)
+                        Spacer(minLength: 12)
+                        HotkeyRecorderButton(configuration: $appState.hotkeyConfiguration)
+                    }
+                    CardDivider()
+                    Text("Works from any app. Hold the shortcut to record, release to transcribe.")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Examples")
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("` (backtick) — single key, no modifiers")
+                        Text("Option + Space")
+                        Text("Globe — Fn/Globe key (macOS dictation key)")
+                    }
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                }
+            }
+        }
+    }
+}
+
+struct ModelPage: View {
+    @Bindable var appState: AppState
+
+    var body: some View {
+        DetailScrollContainer {
+            SectionHeading(title: "ASR Model")
+
+            SurfaceCard {
+                VStack(spacing: 12) {
+                    InfoRow(title: "Name", value: "Parakeet TDT 0.6B v3")
+                    CardDivider()
+                    InfoRow(title: "Quantization", value: "INT8 (CPU-optimized)")
+                    CardDivider()
+                    InfoRow(title: "Disk size", value: appState.modelExpectedSizeText)
+                    CardDivider()
+                    InfoRow(
+                        title: "Status",
+                        value: appState.isModelInstalled ? "Ready" : "Missing",
+                        valueColor: appState.isModelInstalled ? .green : .orange,
+                        trailingIcon: appState.isModelInstalled ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+                        trailingIconColor: appState.isModelInstalled ? .green : .orange
+                    )
+                    CardDivider()
+                    InfoRow(title: "On disk", value: appState.modelInstalledSizeText)
+                }
+            }
+
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                    Button(appState.isModelInstalled ? "Delete Model" : "Download Model") {
+                        if appState.isModelInstalled {
+                            appState.deleteModel()
+                        } else {
+                            appState.startModelDownload()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(appState.isModelInstalled ? .red : .accentColor)
+
+                    CardDivider()
+
+                    Text(
+                        appState.isModelInstalled
+                            ? "Transcriptions will stop working until the model is re-downloaded."
+                            : "Download the required offline model to enable local transcription."
+                    )
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                }
+            }
+
+            SecondaryDisclosureCard(title: "Info") {
+                Button("Open Model Folder") {
+                    appState.openModelFolder()
+                }
+                .buttonStyle(.bordered)
+
+                if appState.phase == .downloadingModel {
+                    ProgressView(value: appState.downloadProgress)
+                    Text("\(Int(appState.downloadProgress * 100))% downloaded")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                }
+
+                if let error = appState.lastError, appState.phase == .error {
+                    Text(error)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+}
+
+struct VocabularyPage: View {
+    @Bindable var appState: AppState
+    @Binding var draft: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: AppMetrics.detailSpacing) {
+                    if appState.vocabularyTerms.isEmpty {
+                        EmptyStateCard(
+                            icon: "book.closed",
+                            title: "No Domain Terms",
+                            detail: "Add terms you frequently use — the LLM will correct misrecognitions toward them."
+                        )
+                    } else {
+                        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                            SectionHeading(title: "Domain Terms")
+
+                            SurfaceCard {
+                                VStack(spacing: 0) {
+                                    ForEach(appState.vocabularyTerms, id: \.self) { term in
+                                        HStack(spacing: 12) {
+                                            Text(term)
+                                                .font(AppTypography.body)
+                                            Spacer(minLength: 0)
+                                            ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
+                                                appState.removeVocabularyTerm(term)
+                                            }
+                                        }
+                                        .padding(.vertical, AppMetrics.listRowVerticalPadding)
+
+                                        if term != appState.vocabularyTerms.last {
+                                            CardDivider()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, AppMetrics.detailPaddingHorizontal)
+                .padding(.top, AppMetrics.detailPaddingTop)
+                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+
+            Rectangle()
+                .fill(MainWindowPalette.divider)
+                .frame(height: 1)
+
+            HStack(spacing: 12) {
+                TextField("e.g. Kubernetes, PostgreSQL, gRPC", text: $draft)
+                    .textFieldStyle(.roundedBorder)
+                    .font(AppTypography.body)
+                    .onSubmit(addTerm)
+
+                Button("Add", action: addTerm)
+                    .buttonStyle(.bordered)
+                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(MainWindowPalette.windowBackground)
+        }
+    }
+
+    private func addTerm() {
+        appState.addVocabularyTerm(draft)
+        draft = ""
+    }
+}
+
+struct LLMPage: View {
+    @Bindable var appState: AppState
+    @State private var apiKeyDraft = ""
+
+    var body: some View {
+        DetailScrollContainer {
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "LLM Polish")
+
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            Text("Enable LLM post-processing")
+                                .font(AppTypography.body)
+                            Spacer(minLength: 12)
+                            Toggle("", isOn: $appState.llmEnabled)
+                                .labelsHidden()
+                        }
+
+                        CardDivider()
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("OpenRouter API Key")
+                                    .font(AppTypography.body)
+                                Spacer(minLength: 12)
+                                Text(appState.hasOpenRouterAPIKey ? "•••" : "Missing")
+                                    .font(AppTypography.codeCalloutSemibold)
+                                    .foregroundStyle(appState.hasOpenRouterAPIKey ? Color.primary : .orange)
+                            }
+
+                            HStack(spacing: 8) {
+                                SecureField("Paste API key", text: $apiKeyDraft)
+                                    .textFieldStyle(.roundedBorder)
+
+                                Button(appState.hasOpenRouterAPIKey ? "Replace" : "Save") {
+                                    appState.saveOpenRouterAPIKey(apiKeyDraft)
+                                    apiKeyDraft = ""
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button("Clear") {
+                                    appState.clearOpenRouterAPIKey()
+                                    apiKeyDraft = ""
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(!appState.hasOpenRouterAPIKey)
+                            }
+
+                            if let error = appState.llmKeyOperationError {
+                                Text(error)
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Model")
+
+                SurfaceCard {
+                    VStack(spacing: 0) {
+                        ForEach(LLMModelPreset.allCases, id: \.self) { preset in
+                            Button {
+                                appState.llmSelectedModelPreset = preset
+                            } label: {
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(preset == .custom ? "Custom model ID" : preset.modelId)
+                                            .font(AppTypography.codeBodyMedium)
+                                            .foregroundStyle(Color.primary)
+                                        Text(preset.subtitle)
+                                            .font(AppTypography.subheadline)
+                                            .foregroundStyle(MainWindowPalette.secondaryText)
+                                    }
+                                    Spacer(minLength: 12)
+                                    if appState.llmSelectedModelPreset == preset {
+                                        Image(systemName: "checkmark")
+                                            .font(.headline.weight(.semibold))
+                                            .foregroundStyle(.blue)
+                                    }
+                                }
+                                .padding(.vertical, 10)
+                            }
+                            .buttonStyle(.plain)
+
+                            if preset != LLMModelPreset.allCases.last {
+                                CardDivider()
+                            }
+                        }
+
+                        CardDivider()
+                            .padding(.vertical, 10)
+
+                        HStack(spacing: 12) {
+                            Text("Custom model ID")
+                                .font(AppTypography.codeBodyMedium)
+                            Spacer(minLength: 12)
+                            TextField("openrouter/model-id", text: $appState.llmCustomModelId)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 300)
+                        }
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "System Prompt")
+
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        TextEditor(text: $appState.llmBaseSystemPrompt)
+                            .font(AppTypography.body)
+                            .frame(minHeight: 120)
+                            .padding(8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(MainWindowPalette.editorBackground)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
+                            )
+
+                        HStack {
+                            Spacer(minLength: 0)
+                            Button("Reset to Default") {
+                                appState.llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                }
+            }
+
+            SecondaryDisclosureCard(title: "Advanced") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Additional user prompt")
+                        .font(AppTypography.subheadlineSemibold)
+                    TextEditor(text: $appState.llmSystemPrompt)
+                        .font(AppTypography.subheadline)
+                        .frame(minHeight: 64)
+                        .padding(6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(MainWindowPalette.editorBackground)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
+                        )
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Timeout: \(appState.llmTimeoutSeconds, specifier: "%.1f")s")
+                        .font(AppTypography.subheadlineSemibold)
+                    Slider(value: $appState.llmTimeoutSeconds, in: LLMDefaults.minTimeoutSeconds ... LLMDefaults.maxTimeoutSeconds, step: 0.5)
+                }
+
+                Stepper("Max tokens: \(appState.llmMaxTokens)", value: $appState.llmMaxTokens, in: LLMDefaults.minMaxTokens ... LLMDefaults.maxMaxTokens, step: 16)
+            }
+        }
+    }
+}
+
+struct GeneralPage: View {
+    @Bindable var appState: AppState
+
+    var body: some View {
+        DetailScrollContainer {
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Permissions")
+
+                SurfaceCard {
+                    VStack(spacing: 0) {
+                        PermissionActionRow(
+                            title: "Microphone",
+                            detail: appState.hasMicPermission
+                                ? "Audio capture is authorized."
+                                : "Required to capture dictation audio.",
+                            isGranted: appState.hasMicPermission,
+                            primaryTitle: appState.hasMicPermission ? "Refresh Status" : "Request Access",
+                            primaryAction: {
+                                if appState.hasMicPermission {
+                                    appState.refreshPermissionStatus()
+                                } else {
+                                    appState.requestMicrophonePermission()
+                                }
+                            },
+                            secondaryTitle: "Open Settings",
+                            secondaryAction: {
+                                appState.openMicrophonePrivacySettings()
+                            }
+                        )
+
+                        CardDivider()
+                            .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
+
+                        PermissionActionRow(
+                            title: "Accessibility",
+                            detail: appState.hasAccessibilityPermission
+                                ? "Text insertion is authorized."
+                                : "Required to paste transcribed text into other apps.",
+                            isGranted: appState.hasAccessibilityPermission,
+                            primaryTitle: appState.hasAccessibilityPermission ? "Refresh Status" : "Request Access",
+                            primaryAction: {
+                                if appState.hasAccessibilityPermission {
+                                    appState.refreshPermissionStatus()
+                                } else {
+                                    appState.requestAccessibilityPermission()
+                                }
+                            },
+                            secondaryTitle: "Open Settings",
+                            secondaryAction: {
+                                appState.openAccessibilityPrivacySettings()
+                            }
+                        )
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Microphone")
+
+                SurfaceCard {
+                    HStack(spacing: 12) {
+                        Text("Input Device")
+                            .font(AppTypography.body)
+                        Spacer(minLength: 12)
+                        Picker("Input Device", selection: $appState.selectedInputDeviceID) {
+                            Text("System Default").tag(String?.none)
+                            ForEach(appState.availableInputDevices) { device in
+                                Text(device.isDefault ? "\(device.name) (Default)" : device.name).tag(Optional(device.id))
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 300)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "After Paste")
+
+                SurfaceCard {
+                    SettingsToggleRow(
+                        title: "Auto-press Enter after paste",
+                        detail: "Automatically press Enter/Return after pasting transcribed text. You can also still say \"send\" or \"enter\" at the end of a dictation to trigger this per-message.",
+                        isOn: $appState.autoSubmitEnabled
+                    )
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Startup")
+
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                        SettingsToggleRow(
+                            title: "Launch at Login",
+                            detail: appState.launchAtLoginDetailText,
+                            isOn: Binding(
+                                get: { appState.launchAtLoginEnabledForUI },
+                                set: { appState.setLaunchAtLoginEnabled($0) }
+                            )
+                        )
+
+                        if let error = appState.launchAtLoginError {
+                            Text(error)
+                                .font(AppTypography.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+            }
+
+            SecondaryDisclosureCard(title: "Info") {
+                Text("Update status: \(appState.updateStatusText)")
+            }
+        }
+    }
+}
+
+private struct HotkeyRecorderButton: View {
+    @Binding var configuration: HotkeyConfiguration
+    @State private var isCapturing = false
+    @State private var localMonitor: Any?
+
+    var body: some View {
+        Button {
+            toggleCapture()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isCapturing ? "record.circle" : "globe")
+                    .font(.headline.weight(.medium))
+                Text(isCapturing ? "Press shortcut" : configuration.displayString)
+                    .font(AppTypography.codeBodyMedium)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 34)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(MainWindowPalette.cardBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isCapturing ? Color.accentColor.opacity(0.5) : MainWindowPalette.cardStroke, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .onDisappear {
+            stopCapturing()
+        }
+    }
+
+    private func toggleCapture() {
+        if isCapturing {
+            stopCapturing()
+        } else {
+            startCapturing()
+        }
+    }
+
+    private func startCapturing() {
+        isCapturing = true
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+            if event.keyCode == UInt16(kVK_Escape) {
+                stopCapturing()
+                return nil
+            }
+
+            if let captured = HotkeyConfiguration.from(event: event) {
+                configuration = captured
+                stopCapturing()
+                return nil
+            }
+
+            return event
+        }
+    }
+
+    private func stopCapturing() {
+        if let localMonitor {
+            NSEvent.removeMonitor(localMonitor)
+            self.localMonitor = nil
+        }
+        isCapturing = false
+    }
+}

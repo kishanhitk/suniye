@@ -5,15 +5,13 @@ import XCTest
 final class AppStateLLMTests: XCTestCase {
     func testToggleOffSkipsLLM() async {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
-        let keychain = InMemoryKeychainService(value: "api-key")
-        let store = InMemorySettingsStore()
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
 
-        let appState = AppState(
+        let appState = makeTestAppState(
             llmPostProcessor: fakeLLM,
             llmSettingsStore: store,
-            keychainService: keychain,
-            startServices: false,
-            llmE2EMode: .none
+            keychainService: keychain
         )
         appState.llmEnabled = false
 
@@ -25,15 +23,13 @@ final class AppStateLLMTests: XCTestCase {
 
     func testToggleOnWithMissingKeyFallsBackToRaw() async {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
-        let keychain = InMemoryKeychainService(value: nil)
-        let store = InMemorySettingsStore()
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
 
-        let appState = AppState(
+        let appState = makeTestAppState(
             llmPostProcessor: fakeLLM,
             llmSettingsStore: store,
-            keychainService: keychain,
-            startServices: false,
-            llmE2EMode: .none
+            keychainService: keychain
         )
         appState.llmEnabled = true
         appState.refreshLLMKeyStatus()
@@ -46,15 +42,13 @@ final class AppStateLLMTests: XCTestCase {
 
     func testToggleOnSuccessUsesPolishedText() async {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished text"))
-        let keychain = InMemoryKeychainService(value: "api-key")
-        let store = InMemorySettingsStore()
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
 
-        let appState = AppState(
+        let appState = makeTestAppState(
             llmPostProcessor: fakeLLM,
             llmSettingsStore: store,
-            keychainService: keychain,
-            startServices: false,
-            llmE2EMode: .none
+            keychainService: keychain
         )
         appState.llmEnabled = true
         appState.refreshLLMKeyStatus()
@@ -67,15 +61,13 @@ final class AppStateLLMTests: XCTestCase {
 
     func testToggleOnFailureFallsBackToRaw() async {
         let fakeLLM = FakeLLMPostProcessor(result: .failure(LLMPostProcessorError.timeout))
-        let keychain = InMemoryKeychainService(value: "api-key")
-        let store = InMemorySettingsStore()
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
 
-        let appState = AppState(
+        let appState = makeTestAppState(
             llmPostProcessor: fakeLLM,
             llmSettingsStore: store,
-            keychainService: keychain,
-            startServices: false,
-            llmE2EMode: .none
+            keychainService: keychain
         )
         appState.llmEnabled = true
         appState.refreshLLMKeyStatus()
@@ -88,15 +80,13 @@ final class AppStateLLMTests: XCTestCase {
 
     func testAttentionItemsIncludeMissingLLMKeyWhenEnabled() {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
-        let keychain = InMemoryKeychainService(value: nil)
-        let store = InMemorySettingsStore()
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
 
-        let appState = AppState(
+        let appState = makeTestAppState(
             llmPostProcessor: fakeLLM,
             llmSettingsStore: store,
-            keychainService: keychain,
-            startServices: false,
-            llmE2EMode: .none
+            keychainService: keychain
         )
         appState.llmEnabled = true
         appState.refreshLLMKeyStatus()
@@ -106,15 +96,13 @@ final class AppStateLLMTests: XCTestCase {
 
     func testLLMRuntimeSettingsClampAndPersist() {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
-        let keychain = InMemoryKeychainService(value: "api-key")
-        let store = InMemorySettingsStore()
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
 
-        let appState = AppState(
+        let appState = makeTestAppState(
             llmPostProcessor: fakeLLM,
             llmSettingsStore: store,
-            keychainService: keychain,
-            startServices: false,
-            llmE2EMode: .none
+            keychainService: keychain
         )
 
         appState.llmTimeoutSeconds = 99
@@ -146,45 +134,5 @@ private final class FakeLLMPostProcessor: LLMPostProcessor {
     func polish(text: String, config: LLMConfig) async throws -> String {
         callCount += 1
         return try result.get()
-    }
-}
-
-private final class InMemorySettingsStore: LLMSettingsStoreProtocol {
-    private var value = LLMSettings()
-
-    var latest: LLMSettings {
-        value
-    }
-
-    func load() -> LLMSettings {
-        value
-    }
-
-    func save(_ settings: LLMSettings) {
-        value = settings
-    }
-}
-
-private final class InMemoryKeychainService: KeychainServiceProtocol {
-    private var stored: String?
-
-    init(value: String?) {
-        stored = value
-    }
-
-    func setOpenRouterKey(_ key: String) throws {
-        stored = key
-    }
-
-    func hasOpenRouterKey() -> Bool {
-        stored?.isEmpty == false
-    }
-
-    func getOpenRouterKey() throws -> String? {
-        stored
-    }
-
-    func deleteOpenRouterKey() throws {
-        stored = nil
     }
 }

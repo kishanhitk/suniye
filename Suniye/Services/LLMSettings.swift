@@ -2,17 +2,28 @@ import Foundation
 
 enum LLMModelPreset: String, CaseIterable, Codable {
     case gemini25Flash
-    case gptOss20b
+    case gpt41Mini
     case custom
 
     var displayName: String {
         switch self {
         case .gemini25Flash:
-            return "Gemini 2.5 Flash"
-        case .gptOss20b:
-            return "GPT-OSS 20B"
+            return "google/gemini-2.5-flash"
+        case .gpt41Mini:
+            return "openai/gpt-4.1-mini"
         case .custom:
             return "Custom"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .gemini25Flash:
+            return "Fast, cheap, good quality"
+        case .gpt41Mini:
+            return "OpenAI, balanced"
+        case .custom:
+            return "Use any OpenRouter model ID"
         }
     }
 
@@ -20,8 +31,8 @@ enum LLMModelPreset: String, CaseIterable, Codable {
         switch self {
         case .gemini25Flash:
             return "google/gemini-2.5-flash"
-        case .gptOss20b:
-            return "openai/gpt-oss-20b"
+        case .gpt41Mini:
+            return "openai/gpt-4.1-mini"
         case .custom:
             return ""
         }
@@ -121,7 +132,7 @@ struct LLMSettings: Codable, Equatable {
                 return custom
             }
             return LLMModelPreset.gemini25Flash.modelId
-        case .gemini25Flash, .gptOss20b:
+        case .gemini25Flash, .gpt41Mini:
             return selectedModelPreset.modelId
         }
     }
@@ -134,12 +145,7 @@ enum LLMDefaults {
     static let maxMaxTokens = 512
 
     static let defaultBaseSystemPrompt = """
-You are a context-aware dictation repair assistant for a software engineer.
-Infer intended meaning when transcription is fragmented or incorrect.
-Fix punctuation, capitalization, and grammar while preserving intent and brevity.
-Remove filler words and disfluencies when they do not add meaning.
-Preserve technical tokens exactly when possible.
-Return plain text only.
+Fix transcription errors, misspellings, and misheard words. Preserve the original meaning and tone. Return only the corrected text, nothing else.
 """
 
     static func parseKeywords(from raw: String) -> [String] {

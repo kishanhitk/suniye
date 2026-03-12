@@ -4,23 +4,23 @@ struct MenuBarView: View {
     @Bindable var appState: AppState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label(statusTitle, systemImage: statusIcon)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(AppTypography.subheadlineSemibold)
                 Spacer()
                 Text(appState.phase.rawValue.capitalized)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(Font.system(.caption, design: .monospaced).weight(.medium))
                     .foregroundStyle(.secondary)
             }
 
             if let error = appState.lastError {
                 Text(error)
-                    .font(.system(size: 12))
+                    .font(AppTypography.caption)
                     .foregroundStyle(.red)
             } else {
                 Text(appState.statusText)
-                    .font(.system(size: 12))
+                    .font(AppTypography.caption)
                     .foregroundStyle(.secondary)
             }
 
@@ -30,7 +30,7 @@ struct MenuBarView: View {
 
             Divider()
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Button("Start") { appState.startRecordingFromUI() }
                     .buttonStyle(.borderedProminent)
                     .disabled(appState.phase != .ready)
@@ -53,7 +53,7 @@ struct MenuBarView: View {
             }
             .keyboardShortcut("q", modifiers: .command)
         }
-        .padding(14)
+        .padding(12)
     }
 
     private var statusTitle: String {

@@ -19,7 +19,7 @@ echo "${start_marker}" >> "${LOG_FILE}"
 pkill -f '/Suniye.app/Contents/MacOS/Suniye' || true
 sleep 1
 
-"${BIN_PATH}" --open-settings >/dev/null 2>&1 &
+"${BIN_PATH}" --open-llm >/dev/null 2>&1 &
 app_pid=$!
 
 cleanup() {
@@ -35,7 +35,7 @@ for _ in {1..40}; do
 done
 
 if ! ps -p "${app_pid}" >/dev/null 2>&1; then
-  echo "App process did not start in settings mode" >&2
+  echo "App process did not start in LLM mode" >&2
   exit 1
 fi
 
@@ -44,7 +44,7 @@ for _ in {1..80}; do
   if awk -v marker="${start_marker}" '
       seen { print }
       $0 ~ marker { seen=1 }
-    ' "${LOG_FILE}" | rg -q "settings llm controls rendered model="; then
+    ' "${LOG_FILE}" | rg -q "main window section rendered section=llm"; then
     found=1
     break
   fi
@@ -52,7 +52,7 @@ for _ in {1..80}; do
 done
 
 if [[ "${found}" != "1" ]]; then
-  echo "LLM settings marker not found. Last logs:" >&2
+  echo "LLM section marker not found. Last logs:" >&2
   tail -n 80 "${LOG_FILE}" >&2
   exit 1
 fi

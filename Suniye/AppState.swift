@@ -26,24 +26,12 @@ enum AttentionSeverity: String {
     case warning
 }
 
-enum AttentionRecommendedSection: String {
-    case stats
-    case settings
-}
-
 struct AttentionItem: Identifiable, Equatable {
     let id: String
     let title: String
     let detail: String
     let severity: AttentionSeverity
-    let recommendedSection: AttentionRecommendedSection
-}
-
-struct RecentResult: Identifiable, Equatable {
-    let id: UUID
-    let text: String
-    let createdAt: Date
-    let wasLLMPolished: Bool
+    let recommendedSection: MainWindowSection
 }
 
 @MainActor
@@ -115,11 +103,57 @@ final class AppState {
         }
     }
 
-    var downloadProgress: Double = 0
+    var downloadProgress: Double = 0 {
+        didSet {
+            if oldValue != downloadProgress {
+                onStateChange?()
+            }
+        }
+    }
     var wordsTranscribed = 0
     var sessionCount = 0
     var totalDictationSeconds: TimeInterval = 0
-    var recentResults: [RecentResult] = []
+    var recentResults: [RecentResult] = [] {
+        didSet {
+            guard !isHydratingHistory else {
+                return
+            }
+            persistHistory()
+            recomputeHistoryStats()
+        }
+    }
+
+    var availableInputDevices: [AudioInputDevice] = []
+    var selectedInputDeviceID: String? {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
+    var autoSubmitEnabled = false {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
+    var hotkeyConfiguration: HotkeyConfiguration = .globe {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            persistGeneralSettings()
+            if runtimeServicesEnabled {
+                wireHotkey()
+            }
+            onStateChange?()
+        }
+    }
 
     var showOnboarding = false
 
@@ -174,6 +208,9 @@ final class AppState {
     }
     var llmKeyOperationError: String?
 
+    var launchAtLoginStatus: LaunchAtLoginStatus = .disabled
+    var launchAtLoginError: String?
+
     var isModelInstalled: Bool {
         modelManager.isModelReady()
     }
@@ -193,6 +230,43 @@ final class AppState {
         currentLLMSettings().effectiveModelId
     }
 
+    var vocabularyTerms: [String] {
+        currentLLMSettings().keywords
+    }
+
+    var recentResultsPreview: [RecentResult] {
+        Array(recentResults.prefix(12))
+    }
+
+    var todaySessionCount: Int {
+        let calendar = Calendar.current
+        return recentResults.filter { calendar.isDateInToday($0.createdAt) }.count
+    }
+
+    var modelInstalledSizeText: String {
+        ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(), countStyle: .file)
+    }
+
+    var modelExpectedSizeText: String {
+        "~" + ByteCountFormatter.string(fromByteCount: modelManager.expectedDownloadSizeBytes, countStyle: .file)
+    }
+
+    var launchAtLoginDetailText: String {
+        launchAtLoginStatus.detailText
+    }
+
+    var launchAtLoginEnabledForUI: Bool {
+        launchAtLoginStatus.isEnabledForUI
+    }
+
+    var selectedInputDeviceName: String {
+        if let selectedInputDeviceID,
+           let selected = availableInputDevices.first(where: { $0.id == selectedInputDeviceID }) {
+            return selected.name
+        }
+        return availableInputDevices.first(where: \.isDefault)?.name ?? "System Default"
+    }
+
     var attentionItems: [AttentionItem] {
         var items: [AttentionItem] = []
 
@@ -205,7 +279,7 @@ final class AppState {
                     title: "Transcription unavailable",
                     detail: error,
                     severity: .error,
-                    recommendedSection: .settings
+                    recommendedSection: .general
                 )
             )
         }
@@ -217,7 +291,7 @@ final class AppState {
                     title: "Model not installed",
                     detail: "Download the required Parakeet model to enable dictation.",
                     severity: .warning,
-                    recommendedSection: .settings
+                    recommendedSection: .model
                 )
             )
         }
@@ -229,7 +303,7 @@ final class AppState {
                     title: "Microphone permission missing",
                     detail: "Grant microphone access so audio can be captured.",
                     severity: .warning,
-                    recommendedSection: .settings
+                    recommendedSection: .general
                 )
             )
         }
@@ -241,7 +315,7 @@ final class AppState {
                     title: "Accessibility permission missing",
                     detail: "Grant accessibility access so transcribed text can be inserted.",
                     severity: .warning,
-                    recommendedSection: .settings
+                    recommendedSection: .general
                 )
             )
         }
@@ -253,7 +327,7 @@ final class AppState {
                     title: "LLM API key missing",
                     detail: "LLM polishing is enabled, but no OpenRouter API key is saved.",
                     severity: .warning,
-                    recommendedSection: .settings
+                    recommendedSection: .llm
                 )
             )
         }
@@ -263,35 +337,44 @@ final class AppState {
 
     var onStateChange: (() -> Void)?
 
-    private let modelManager: ModelManager
-    private let transcriptionService: TranscriptionService
-    private let audioCaptureService: AudioCaptureService
+    private let modelManager: ModelManagerProtocol
+    private let transcriptionService: TranscriptionServiceProtocol
+    private let audioCaptureService: AudioCaptureServiceProtocol
     private let textInsertionService: TextInsertionService
-    private let hotkeyService: HotkeyService
+    private let hotkeyService: HotkeyServiceProtocol
     private let floatingIndicatorController = FloatingIndicatorController()
     private let llmPostProcessor: LLMPostProcessor
     private let llmSettingsStore: LLMSettingsStoreProtocol
+    private let generalSettingsStore: GeneralSettingsStoreProtocol
+    private let historyStore: HistoryStoreProtocol
     private let keychainService: KeychainServiceProtocol
     private let updateService: UpdateServiceProtocol
+    private let launchAtLoginService: LaunchAtLoginServiceProtocol
     private let currentAppVersionProvider: () -> AppVersion?
     private let fileOpener: (URL) -> Bool
+    private let runtimeServicesEnabled: Bool
 
     private var recordingStart: Date?
     private var pendingProcessingIndicatorTask: Task<Void, Never>?
     private var isHydratingLLMSettings = false
+    private var isHydratingGeneralSettings = false
+    private var isHydratingHistory = false
     private let llmE2EMode: LLME2EMode
     private var availableUpdateRelease: UpdateRelease?
 
     init(
-        modelManager: ModelManager = ModelManager(),
-        transcriptionService: TranscriptionService = TranscriptionService(),
-        audioCaptureService: AudioCaptureService = AudioCaptureService(),
+        modelManager: ModelManagerProtocol = ModelManager(),
+        transcriptionService: TranscriptionServiceProtocol = TranscriptionService(),
+        audioCaptureService: AudioCaptureServiceProtocol = AudioCaptureService(),
         textInsertionService: TextInsertionService = TextInsertionService(),
-        hotkeyService: HotkeyService = HotkeyService(),
+        hotkeyService: HotkeyServiceProtocol = HotkeyService(),
         llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
         llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
+        generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
+        historyStore: HistoryStoreProtocol = HistoryStore(),
         keychainService: KeychainServiceProtocol = KeychainService(),
         updateService: UpdateServiceProtocol = GitHubUpdateService(),
+        launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         startServices: Bool = true,
@@ -304,14 +387,22 @@ final class AppState {
         self.hotkeyService = hotkeyService
         self.llmPostProcessor = llmPostProcessor
         self.llmSettingsStore = llmSettingsStore
+        self.generalSettingsStore = generalSettingsStore
+        self.historyStore = historyStore
         self.keychainService = keychainService
         self.updateService = updateService
+        self.launchAtLoginService = launchAtLoginService
         self.currentAppVersionProvider = currentAppVersionProvider
         self.fileOpener = fileOpener
+        self.runtimeServicesEnabled = startServices
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
 
         AppLogger.shared.log(.info, "app state init")
+        loadHistory()
+        loadGeneralSettings()
         loadLLMSettings()
+        refreshInputDevices()
+        refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
 
         if startServices {
@@ -371,6 +462,59 @@ final class AppState {
         }
     }
 
+    func requestMicrophonePermission() {
+        Task {
+            await refreshPermissions(requestMicrophone: true)
+        }
+    }
+
+    func refreshPermissionStatus() {
+        Task {
+            await refreshPermissions()
+        }
+    }
+
+    func openMicrophonePrivacySettings() {
+        openSystemSettings(urlCandidates: [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+        ])
+    }
+
+    func openAccessibilityPrivacySettings() {
+        openSystemSettings(urlCandidates: [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+        ])
+    }
+
+    func refreshInputDevices() {
+        let devices = audioCaptureService.availableInputDevices()
+        availableInputDevices = devices
+
+        if let selectedInputDeviceID,
+           !devices.contains(where: { $0.id == selectedInputDeviceID }) {
+            self.selectedInputDeviceID = nil
+        }
+    }
+
+    func refreshLaunchAtLoginStatus() {
+        launchAtLoginStatus = launchAtLoginService.currentStatus()
+        launchAtLoginError = nil
+    }
+
+    func setLaunchAtLoginEnabled(_ enabled: Bool) {
+        do {
+            launchAtLoginStatus = try launchAtLoginService.setEnabled(enabled)
+            launchAtLoginError = nil
+        } catch {
+            launchAtLoginStatus = launchAtLoginService.currentStatus()
+            launchAtLoginError = error.localizedDescription
+            AppLogger.shared.log(.error, "launch at login update failed: \(error.localizedDescription)")
+        }
+        onStateChange?()
+    }
+
     func refreshLLMKeyStatus() {
         hasOpenRouterAPIKey = keychainService.hasOpenRouterKey()
     }
@@ -406,6 +550,30 @@ final class AppState {
             AppLogger.shared.log(.error, "openrouter api key clear failed")
             onStateChange?()
         }
+    }
+
+    func addVocabularyTerm(_ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+        let combined = vocabularyTerms + [trimmed]
+        llmKeywordsRaw = LLMDefaults.parseKeywords(from: combined.joined(separator: "\n")).joined(separator: "\n")
+    }
+
+    func removeVocabularyTerm(_ value: String) {
+        let filtered = vocabularyTerms.filter { $0.caseInsensitiveCompare(value) != .orderedSame }
+        llmKeywordsRaw = filtered.joined(separator: "\n")
+    }
+
+    func copyRecentResult(_ result: RecentResult) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(result.text, forType: .string)
+    }
+
+    func deleteRecentResult(_ result: RecentResult) {
+        recentResults.removeAll { $0.id == result.id }
     }
 
     func startModelDownload() {
@@ -447,6 +615,29 @@ final class AppState {
                 lastError = error.localizedDescription
                 statusText = "Download failed"
                 AppLogger.shared.log(.error, "model download failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func deleteModel() {
+        guard phase != .recording && phase != .transcribing && phase != .downloadingModel else {
+            return
+        }
+
+        Task {
+            do {
+                try modelManager.deleteModel()
+                await transcriptionService.unloadModel()
+                phase = .needsModel
+                statusText = "Model required"
+                lastError = nil
+                showOnboarding = true
+                AppLogger.shared.log(.info, "model deleted")
+            } catch {
+                phase = .error
+                statusText = "Model delete failed"
+                lastError = error.localizedDescription
+                AppLogger.shared.log(.error, "model delete failed: \(error.localizedDescription)")
             }
         }
     }
@@ -703,8 +894,8 @@ final class AppState {
             }
         }
 
-        hotkeyService.startMonitoring()
-        AppLogger.shared.log(.info, "hotkey monitoring started")
+        hotkeyService.startMonitoring(configuration: hotkeyConfiguration)
+        AppLogger.shared.log(.info, "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString)")
     }
 
     private func loadRecognizerIfPossible() async -> Bool {
@@ -747,7 +938,7 @@ final class AppState {
             lastError = "Accessibility permission not granted"
             statusText = "Accessibility required"
             AppLogger.shared.log(.warning, "accessibility permission denied before recording")
-            showIndicator(.error(message: "Enable Accessibility for Fn hotkey"), autoHideAfter: 2.2)
+            showIndicator(.error(message: "Enable Accessibility for dictation"), autoHideAfter: 2.2)
             return
         }
         startRecording()
@@ -759,14 +950,14 @@ final class AppState {
         }
 
         do {
-            try audioCaptureService.startCapture()
+            try audioCaptureService.startCapture(preferredInputDeviceID: selectedInputDeviceID)
             phase = .recording
             statusText = "Recording"
             recordingStart = Date()
             pendingProcessingIndicatorTask?.cancel()
             pendingProcessingIndicatorTask = nil
             showIndicator(.listening)
-            AppLogger.shared.log(.info, "recording started")
+            AppLogger.shared.log(.info, "recording started input=\(selectedInputDeviceID ?? "default")")
         } catch {
             phase = .error
             lastError = "Audio start failed: \(error.localizedDescription)"
@@ -795,7 +986,6 @@ final class AppState {
         let samples = captured.samples
         let sampleRate = captured.sampleRate
         let duration = recordingStart.map { Date().timeIntervalSince($0) } ?? 0
-        totalDictationSeconds += duration
         AppLogger.shared.log(.info, "dictation stop samples=\(samples.count) sr=\(sampleRate) duration=\(String(format: "%.2f", duration))")
 
         do {
@@ -814,6 +1004,10 @@ final class AppState {
                 shouldSubmit = shouldSubmit || polishedParse.shouldSubmit
             }
 
+            if autoSubmitEnabled && !finalText.isEmpty {
+                shouldSubmit = true
+            }
+
             let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
             let wasLLMPolished = AppState.didLLMPolish(input: llmInputText, output: llmOutputText)
 
@@ -828,20 +1022,16 @@ final class AppState {
 
             if !finalText.isEmpty {
                 try textInsertionService.insertText(finalText)
-                sessionCount += 1
-                wordsTranscribed += wordCount
                 recentResults.insert(
                     RecentResult(
                         id: UUID(),
                         text: finalText,
                         createdAt: Date(),
+                        durationSeconds: duration,
                         wasLLMPolished: wasLLMPolished
                     ),
                     at: 0
                 )
-                if recentResults.count > 12 {
-                    recentResults.removeLast(recentResults.count - 12)
-                }
                 AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
             }
 
@@ -870,6 +1060,45 @@ final class AppState {
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
             showIndicator(.error(message: "Transcription failed"), autoHideAfter: 1.8)
         }
+    }
+
+    private func loadHistory() {
+        isHydratingHistory = true
+        recentResults = historyStore.load()
+        isHydratingHistory = false
+        recomputeHistoryStats()
+    }
+
+    private func persistHistory() {
+        historyStore.save(recentResults)
+        onStateChange?()
+    }
+
+    private func recomputeHistoryStats() {
+        sessionCount = recentResults.count
+        wordsTranscribed = recentResults.reduce(0) { $0 + $1.wordCount }
+        totalDictationSeconds = recentResults.reduce(0) { $0 + $1.durationSeconds }
+    }
+
+    private func loadGeneralSettings() {
+        isHydratingGeneralSettings = true
+        let settings = generalSettingsStore.load()
+        selectedInputDeviceID = settings.preferredInputDeviceID
+        autoSubmitEnabled = settings.autoSubmitEnabled
+        hotkeyConfiguration = settings.hotkeyConfiguration
+        isHydratingGeneralSettings = false
+    }
+
+    private func persistGeneralSettings() {
+        generalSettingsStore.save(currentGeneralSettings())
+    }
+
+    private func currentGeneralSettings() -> GeneralSettings {
+        GeneralSettings(
+            preferredInputDeviceID: selectedInputDeviceID,
+            autoSubmitEnabled: autoSubmitEnabled,
+            hotkeyConfiguration: hotkeyConfiguration
+        )
     }
 
     private func loadLLMSettings() {
@@ -905,6 +1134,22 @@ final class AppState {
             timeoutSeconds: llmTimeoutSeconds,
             maxTokens: llmMaxTokens
         )
+    }
+
+    private func openSystemSettings(urlCandidates: [String]) {
+        for candidate in urlCandidates {
+            guard let url = URL(string: candidate) else {
+                continue
+            }
+            if fileOpener(url) {
+                AppLogger.shared.log(.info, "opened system settings url: \(candidate)")
+                return
+            }
+        }
+
+        lastError = "Unable to open System Settings."
+        AppLogger.shared.log(.error, "failed to open system settings")
+        onStateChange?()
     }
 
     private func makeLLMConfig(apiKey: String) -> LLMConfig {

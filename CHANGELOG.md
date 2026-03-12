@@ -10,6 +10,9 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 - CI and release automation
 - Release packaging and verification scripts
 - Manual updater v1 with launch-time background checks, menu-bar update actions, and checksum-verified downloads
+- Pixel-faithful main window rebuild with dedicated `Dashboard`, `History`, `Hotkey`, `Model`, `Vocabulary`, `LLM`, and `General` pages
+- Persisted history store with session duration tracking shared by Dashboard and History
+- Configurable global hold-to-talk shortcuts, preferred microphone selection, vocabulary management, and launch-at-login controls
 
 ## [0.0.2] - 2026-02-22
 ### Added

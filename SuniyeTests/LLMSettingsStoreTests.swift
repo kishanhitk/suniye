@@ -16,8 +16,8 @@ final class LLMSettingsStoreTests: XCTestCase {
 
         XCTAssertEqual(settings.effectiveModelId, "google/gemini-2.5-flash")
 
-        settings.customModelId = "openai/gpt-oss-20b"
-        XCTAssertEqual(settings.effectiveModelId, "openai/gpt-oss-20b")
+        settings.customModelId = "openai/gpt-4.1-mini"
+        XCTAssertEqual(settings.effectiveModelId, "openai/gpt-4.1-mini")
     }
 
     func testStoreRoundTrip() {
@@ -28,7 +28,7 @@ final class LLMSettingsStoreTests: XCTestCase {
         var settings = LLMSettings()
         settings.isEnabled = true
         settings.selectedModelPreset = .custom
-        settings.customModelId = "openai/gpt-oss-20b"
+        settings.customModelId = "openai/gpt-4.1-mini"
         settings.baseSystemPrompt = "base"
         settings.systemPrompt = "custom"
         settings.keywordsRaw = "swift, xcode"
@@ -55,5 +55,11 @@ final class LLMSettingsStoreTests: XCTestCase {
 
         settings.systemPrompt = "   "
         XCTAssertEqual(settings.composedSystemPrompt, "BASE")
+    }
+
+    func testPresetMetadataMatchesMainWindowModelList() {
+        XCTAssertEqual(LLMModelPreset.gemini25Flash.displayName, "google/gemini-2.5-flash")
+        XCTAssertEqual(LLMModelPreset.gpt41Mini.displayName, "openai/gpt-4.1-mini")
+        XCTAssertEqual(LLMModelPreset.gpt41Mini.subtitle, "OpenAI, balanced")
     }
 }
