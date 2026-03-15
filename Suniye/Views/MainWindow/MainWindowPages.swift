@@ -486,18 +486,29 @@ struct GeneralPage: View {
                 SectionHeading(title: "Microphone")
 
                 SurfaceCard {
-                    HStack(spacing: 12) {
-                        Text("Input Device")
-                            .font(AppTypography.body)
-                        Spacer(minLength: 12)
-                        Picker("Input Device", selection: $appState.selectedInputDeviceID) {
-                            Text("System Default").tag(String?.none)
-                            ForEach(appState.availableInputDevices) { device in
-                                Text(device.isDefault ? "\(device.name) (Default)" : device.name).tag(Optional(device.id))
+                    VStack(spacing: 0) {
+                        HStack(spacing: 12) {
+                            Text("Input Device")
+                                .font(AppTypography.body)
+                            Spacer(minLength: 12)
+                            Picker("Input Device", selection: $appState.selectedInputDeviceID) {
+                                Text("System Default").tag(String?.none)
+                                ForEach(appState.availableInputDevices) { device in
+                                    Text(device.isDefault ? "\(device.name) (Default)" : device.name).tag(Optional(device.id))
+                                }
                             }
+                            .labelsHidden()
+                            .frame(maxWidth: 300)
                         }
-                        .labelsHidden()
-                        .frame(maxWidth: 300)
+
+                        CardDivider()
+                            .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
+
+                        SettingsToggleRow(
+                            title: "Echo Cancellation",
+                            detail: "Filters out system audio (music, video, TTS) from the microphone during dictation. Uses Apple's Voice Processing.",
+                            isOn: $appState.echoCancellationEnabled
+                        )
                     }
                 }
             }
