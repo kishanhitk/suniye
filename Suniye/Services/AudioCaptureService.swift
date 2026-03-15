@@ -9,7 +9,7 @@ struct CapturedAudio {
 }
 
 protocol AudioCaptureServiceProtocol {
-    func startCapture(preferredInputDeviceID: String?) throws
+    func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws
     func stopCapture() -> CapturedAudio
     func availableInputDevices() -> [AudioInputDevice]
 }
@@ -23,7 +23,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
     private var samples: [Float] = []
     private let lock = NSLock()
 
-    func startCapture(preferredInputDeviceID: String?) throws {
+    func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws {
         lock.lock()
         samples.removeAll(keepingCapacity: true)
         lock.unlock()
@@ -32,6 +32,28 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         inputNode.removeTap(onBus: 0)
         engine.stop()
 
+        // VP must be toggled before reading format or setting device — it replaces the audio unit.
+        if inputNode.isVoiceProcessingEnabled != echoCancellationEnabled {
+            try inputNode.setVoiceProcessingEnabled(echoCancellationEnabled)
+        }
+
+        if echoCancellationEnabled {
+            // Disable ducking so system audio volume isn't reduced during recording.
+            // Layer 1: AU property 2012 — minimizes the initial volume dip.
+            if let au = inputNode.audioUnit {
+                var duck: UInt32 = 0
+                AudioUnitSetProperty(au, 2012, kAudioUnitScope_Global, 0,
+                                     &duck, UInt32(MemoryLayout<UInt32>.size))
+            }
+            // Layer 2: high-level lifecycle control (macOS 14+).
+            if #available(macOS 14.0, *) {
+                inputNode.voiceProcessingOtherAudioDuckingConfiguration =
+                    AVAudioVoiceProcessingOtherAudioDuckingConfiguration(
+                        enableAdvancedDucking: false, duckingLevel: .min)
+            }
+        }
+
+        // Set input device — must be after VP toggle since VP replaces the audio unit.
         if let preferredInputDeviceID,
            let audioUnit = inputNode.audioUnit,
            let deviceID = Self.audioDeviceID(forUID: preferredInputDeviceID) {
@@ -49,31 +71,43 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
             }
         }
 
-        let hardwareFormat = inputNode.outputFormat(forBus: 0)
-        let sampleRate = max(8_000, Int(hardwareFormat.sampleRate.rounded()))
+        // Read format after VP enable — VP changes the node to a multi-channel aggregate.
+        let nativeFormat = inputNode.outputFormat(forBus: 0)
+        let sampleRate = max(8_000, Int(nativeFormat.sampleRate.rounded()))
         captureSampleRate = sampleRate
 
-        inputFormat = hardwareFormat
+        // VP on Apple Silicon reports 5ch (3-mic array + 2-ch speaker ref).
+        // AVAudioConverter can't downmix VP multi-channel correctly (produces zeros).
+        // The VP unit handles channel extraction internally — just tap mono.
+        let tapFormat: AVAudioFormat
+        if nativeFormat.channelCount > 1 {
+            tapFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                     sampleRate: nativeFormat.sampleRate,
+                                     channels: 1, interleaved: false)!
+        } else {
+            tapFormat = nativeFormat
+        }
+
+        inputFormat = tapFormat
         targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
-            sampleRate: hardwareFormat.sampleRate,
+            sampleRate: nativeFormat.sampleRate,
             channels: 1,
             interleaved: false
         )
         if let targetFormat {
-            converter = AVAudioConverter(from: hardwareFormat, to: targetFormat)
+            converter = AVAudioConverter(from: tapFormat, to: targetFormat)
         } else {
             converter = nil
         }
         AppLogger.shared.log(
             .info,
-            "audio capture start sr=\(sampleRate) channels=\(hardwareFormat.channelCount) format=\(hardwareFormat.commonFormat.rawValue)"
+            "audio capture start sr=\(sampleRate) channels=\(nativeFormat.channelCount) tapChannels=1 aec=\(echoCancellationEnabled)"
         )
-        inputNode.installTap(onBus: 0, bufferSize: 2048, format: hardwareFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
             self?.consume(buffer: buffer)
         }
 
-        engine.prepare()
         try engine.start()
     }
 

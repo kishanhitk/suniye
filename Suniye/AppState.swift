@@ -142,6 +142,15 @@ final class AppState {
             onStateChange?()
         }
     }
+    var echoCancellationEnabled = false {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
     var hotkeyConfiguration: HotkeyConfiguration = .globe {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -950,7 +959,7 @@ final class AppState {
         }
 
         do {
-            try audioCaptureService.startCapture(preferredInputDeviceID: selectedInputDeviceID)
+            try audioCaptureService.startCapture(preferredInputDeviceID: selectedInputDeviceID, echoCancellationEnabled: echoCancellationEnabled)
             phase = .recording
             statusText = "Recording"
             recordingStart = Date()
@@ -1086,6 +1095,7 @@ final class AppState {
         selectedInputDeviceID = settings.preferredInputDeviceID
         autoSubmitEnabled = settings.autoSubmitEnabled
         hotkeyConfiguration = settings.hotkeyConfiguration
+        echoCancellationEnabled = settings.echoCancellationEnabled
         isHydratingGeneralSettings = false
     }
 
@@ -1097,7 +1107,8 @@ final class AppState {
         GeneralSettings(
             preferredInputDeviceID: selectedInputDeviceID,
             autoSubmitEnabled: autoSubmitEnabled,
-            hotkeyConfiguration: hotkeyConfiguration
+            hotkeyConfiguration: hotkeyConfiguration,
+            echoCancellationEnabled: echoCancellationEnabled
         )
     }
 

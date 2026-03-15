@@ -233,4 +233,5 @@ struct GeneralSettings: Codable, Equatable {
     var preferredInputDeviceID: String?
     var autoSubmitEnabled: Bool = false
     var hotkeyConfiguration: HotkeyConfiguration = .globe
+    var echoCancellationEnabled: Bool = false
 }

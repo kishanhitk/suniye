@@ -151,7 +151,7 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
     var availableDevices: [AudioInputDevice] = []
     var startCaptureError: Error?
 
-    func startCapture(preferredInputDeviceID: String?) throws {
+    func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws {
         startCaptureCallCount += 1
         lastPreferredInputDeviceID = preferredInputDeviceID
         if let startCaptureError {
