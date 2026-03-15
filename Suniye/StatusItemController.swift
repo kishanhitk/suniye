@@ -45,8 +45,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(quitItem)
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "mic", accessibilityDescription: "Suniye")
-            button.image?.isTemplate = true
+            button.image = statusItemImage(for: appState.phase)
             button.toolTip = "Suniye"
         }
         statusItem.menu = menu
@@ -65,9 +64,20 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         downloadItem.isHidden = !(phase == .needsModel || phase == .downloadingModel || phase == .error)
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: phase == .recording ? "mic.fill" : "mic", accessibilityDescription: "Suniye")
-            button.image?.isTemplate = true
+            button.image = statusItemImage(for: phase)
         }
+    }
+
+    private func statusItemImage(for phase: AppState.Phase) -> NSImage? {
+        if let image = NSImage(named: "StatusBarIcon") {
+            image.isTemplate = true
+            return image
+        }
+
+        let symbolName = phase == .recording ? "mic.fill" : "mic"
+        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Suniye")
+        image?.isTemplate = true
+        return image
     }
 
     @objc

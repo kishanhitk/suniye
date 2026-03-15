@@ -32,6 +32,7 @@
 		5281C912B2528C33773C008C /* MainWindowComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E769F836704229B962F80C /* MainWindowComponents.swift */; };
 		538CCC22F273225E882F7463 /* HistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */; };
 		58BD775AF83F95F70DC21BF5 /* libonnxruntime.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 1215194BCE451924E1C06FDD /* libonnxruntime.dylib */; };
+		5CEBE7C5B635C70620A16FF3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0D96966D22AF827757DB24D /* Assets.xcassets */; };
 		5E5EF53C95B7F9CB9C00B459 /* ModelDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B090C348C7D6E3317FC06B66 /* ModelDownloadView.swift */; };
 		633FB6F05F2C6507FF021D1F /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF32A97362B13A4984C14FA6 /* AppVersion.swift */; };
 		67C62EE8BA2F2B763D8477D6 /* Suniye.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F3C3D023876B9EE8256C00 /* Suniye.swift */; };
@@ -139,6 +140,7 @@
 		C5E4B536164381A9A3E3C653 /* AudioCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureService.swift; sourceTree = "<group>"; };
 		C7F3C3D023876B9EE8256C00 /* Suniye.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Suniye.swift; sourceTree = "<group>"; };
 		CF483C4F8F43B591D1E13ABA /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		D0D96966D22AF827757DB24D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D1FAF2B003307FDF0EBA9BA0 /* ListeningOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningOverlay.swift; sourceTree = "<group>"; };
 		D3161CA1497B7EEA0FB2CE36 /* GeneralSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsStore.swift; sourceTree = "<group>"; };
 		D8AAE91358FFD9EDBEFA9ACC /* Suniye.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Suniye.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -178,6 +180,7 @@
 			isa = PBXGroup;
 			children = (
 				CF483C4F8F43B591D1E13ABA /* AppState.swift */,
+				D0D96966D22AF827757DB24D /* Assets.xcassets */,
 				547A58E2F28180249AF7E769 /* c-api.h */,
 				1BFAD0B3FD93106BF02E29E5 /* FloatingIndicatorController.swift */,
 				BAD363F5B6346BBC43B06E2E /* FloatingIndicatorState.swift */,
@@ -369,6 +372,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5CEBE7C5B635C70620A16FF3 /* Assets.xcassets in Resources */,
 				8A316AF1F2E3CA91B1F0FAC2 /* libonnxruntime.1.23.2.dylib in Resources */,
 				08572C9D373070F699B86BAC /* libonnxruntime.dylib in Resources */,
 				FD68A66D8807B4E102B0E8C7 /* libsherpa-onnx-c-api.dylib in Resources */,
