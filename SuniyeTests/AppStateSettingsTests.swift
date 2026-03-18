@@ -93,6 +93,44 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertTrue(appState.showOnboarding)
     }
 
+    func testModelDownloadDerivedUIStateWhileDownloading() {
+        let modelManager = StubModelManager()
+        modelManager.isReady = false
+        let appState = makeTestAppState(modelManager: modelManager)
+        appState.phase = .downloadingModel
+        appState.downloadProgress = 0.25
+
+        XCTAssertEqual(appState.modelStatusValue, "Downloading 25%")
+        XCTAssertEqual(appState.modelStatusIcon, "arrow.down.circle.fill")
+        XCTAssertEqual(appState.modelPrimaryActionTitle, "Downloading…")
+        XCTAssertEqual(appState.modelDownloadProgressLabel, "25% downloaded • 170 MB of ~680 MB")
+    }
+
+    func testModelDownloadDerivedUIStateAfterFailure() {
+        let modelManager = StubModelManager()
+        modelManager.isReady = false
+        let appState = makeTestAppState(modelManager: modelManager)
+        appState.phase = .error
+        appState.lastError = "network timeout"
+
+        XCTAssertEqual(appState.modelStatusValue, "Download failed")
+        XCTAssertEqual(appState.modelStatusIcon, "xmark.octagon.fill")
+        XCTAssertEqual(
+            appState.modelPrimaryActionDetail,
+            "Last attempt failed. Retry the offline model download to enable local transcription."
+        )
+    }
+
+    func testModelOperationStateDuringValidationAfterDownload() {
+        let modelManager = StubModelManager()
+        modelManager.isReady = false
+        let appState = makeTestAppState(modelManager: modelManager)
+        appState.phase = .loading
+
+        XCTAssertTrue(appState.isModelOperationInProgress)
+        XCTAssertEqual(appState.modelOperationStatusText, "Extracting and validating model…")
+    }
+
     func testLaunchAtLoginToggleTracksServiceStatus() {
         let launchService = StubLaunchAtLoginService()
         let appState = makeTestAppState(launchAtLoginService: launchService)

@@ -260,6 +260,100 @@ final class AppState {
         "~" + ByteCountFormatter.string(fromByteCount: modelManager.expectedDownloadSizeBytes, countStyle: .file)
     }
 
+    var modelDownloadProgressLabel: String {
+        guard phase == .downloadingModel else {
+            return ""
+        }
+
+        let percentage = Int(downloadProgress * 100)
+        let downloadedBytes = Int64(Double(modelManager.expectedDownloadSizeBytes) * downloadProgress)
+        let downloadedSize = ByteCountFormatter.string(fromByteCount: downloadedBytes, countStyle: .file)
+        return "\(percentage)% downloaded • \(downloadedSize) of \(modelExpectedSizeText)"
+    }
+
+    var isModelOperationInProgress: Bool {
+        phase == .downloadingModel || (phase == .loading && !isModelInstalled)
+    }
+
+    var modelOperationStatusText: String {
+        switch phase {
+        case .downloadingModel:
+            return "Downloading model…"
+        case .loading where !isModelInstalled:
+            return "Extracting and validating model…"
+        default:
+            return ""
+        }
+    }
+
+    var modelStatusValue: String {
+        switch phase {
+        case .downloadingModel:
+            return "Downloading \(Int(downloadProgress * 100))%"
+        case .loading:
+            return isModelInstalled ? "Loading" : "Validating"
+        case .ready, .recording, .transcribing:
+            return isModelInstalled ? "Ready" : "Missing"
+        case .error:
+            return isModelInstalled ? "Ready" : "Download failed"
+        case .needsModel:
+            return "Missing"
+        }
+    }
+
+    var modelStatusColor: Color {
+        switch phase {
+        case .ready, .recording, .transcribing:
+            return isModelInstalled ? .green : .orange
+        case .downloadingModel, .loading:
+            return .accentColor
+        case .error:
+            return isModelInstalled ? .green : .red
+        case .needsModel:
+            return .orange
+        }
+    }
+
+    var modelStatusIcon: String {
+        switch phase {
+        case .ready, .recording, .transcribing:
+            return isModelInstalled ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+        case .downloadingModel, .loading:
+            return "arrow.down.circle.fill"
+        case .error:
+            return isModelInstalled ? "checkmark.circle.fill" : "xmark.octagon.fill"
+        case .needsModel:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    var modelPrimaryActionTitle: String {
+        if isModelInstalled {
+            return "Delete Model"
+        }
+        if phase == .downloadingModel {
+            return "Downloading…"
+        }
+        return "Download Model"
+    }
+
+    var modelPrimaryActionDetail: String {
+        if isModelInstalled {
+            return "Stored locally for offline transcription. Delete to reclaim disk space."
+        }
+        if phase == .downloadingModel {
+            return "Keep Suniye open until the archive is downloaded, extracted, and validated."
+        }
+        if phase == .error, let lastError, !lastError.isEmpty {
+            return "Last attempt failed. Retry the offline model download to enable local transcription."
+        }
+        return "Download the required offline model to enable local transcription."
+    }
+
+    var modelLocationText: String {
+        (try? modelManager.modelDirectoryURL().path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) ?? "~/Library/Application Support/Suniye/models"
+    }
+
     var launchAtLoginDetailText: String {
         launchAtLoginStatus.detailText
     }
