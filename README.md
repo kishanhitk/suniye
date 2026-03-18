@@ -16,7 +16,7 @@ This project is in alpha (`v0.0.1`). Breaking changes, bugs, and rough edges are
 - `Dashboard`: session totals, today count, words, total dictation time, and recent activity
 - `History`: persisted transcript log with relative time, duration, copy, and delete
 - `Hotkey`: configurable hold-to-talk shortcut, including Fn/Globe and standard key combos
-- `Model`: offline ASR model status, disk usage, and delete/re-download controls
+- `Model`: offline ASR model status, install location, live download progress, and delete/re-download controls
 - `Vocabulary`: domain-term list used to bias LLM cleanup toward your terminology
 - `LLM`: toggle, model selection, API key, system prompt, and advanced runtime controls
 - `General`: preferred microphone, auto-submit after paste, launch-at-login, and runtime diagnostics

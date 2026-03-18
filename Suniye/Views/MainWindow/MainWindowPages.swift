@@ -130,10 +130,10 @@ struct ModelPage: View {
                     CardDivider()
                     InfoRow(
                         title: "Status",
-                        value: appState.isModelInstalled ? "Ready" : "Missing",
-                        valueColor: appState.isModelInstalled ? .green : .orange,
-                        trailingIcon: appState.isModelInstalled ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
-                        trailingIconColor: appState.isModelInstalled ? .green : .orange
+                        value: appState.modelStatusValue,
+                        valueColor: appState.modelStatusColor,
+                        trailingIcon: appState.modelStatusIcon,
+                        trailingIconColor: appState.modelStatusColor
                     )
                     CardDivider()
                     InfoRow(title: "On disk", value: appState.modelInstalledSizeText)
@@ -142,45 +142,113 @@ struct ModelPage: View {
 
             SurfaceCard {
                 VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                    Button(appState.isModelInstalled ? "Delete Model" : "Download Model") {
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(appState.isModelInstalled ? "Model Installed" : "Offline Model Required")
+                                .font(AppTypography.bodyMedium)
+
+                            Text(appState.modelPrimaryActionDetail)
+                                .font(AppTypography.subheadline)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 12)
+
                         if appState.isModelInstalled {
-                            appState.deleteModel()
+                            HStack(spacing: 8) {
+                                Button(appState.modelPrimaryActionTitle) {
+                                    appState.deleteModel()
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.red)
+                                .disabled(appState.phase == .downloadingModel)
+                            }
                         } else {
-                            appState.startModelDownload()
+                            HStack(spacing: 8) {
+                                Button(appState.modelPrimaryActionTitle) {
+                                    appState.startModelDownload()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(appState.phase == .downloadingModel)
+                            }
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .tint(appState.isModelInstalled ? .red : .accentColor)
+
+                    if appState.isModelOperationInProgress {
+                        CardDivider()
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(appState.modelOperationStatusText)
+                                .font(AppTypography.subheadlineSemibold)
+
+                            if appState.phase == .downloadingModel {
+                                ProgressView(value: appState.downloadProgress)
+                                    .progressViewStyle(.linear)
+                                Text(appState.modelDownloadProgressLabel)
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                            } else {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Download complete. Finishing local setup before the model becomes available.")
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+
+                    if appState.phase == .loading, appState.isModelInstalled {
+                        CardDivider()
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Loading model…")
+                                .font(AppTypography.subheadlineSemibold)
+
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Preparing the local recognizer.")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    if let error = appState.lastError, appState.phase == .error {
+                        CardDivider()
+
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(AppTypography.caption)
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     CardDivider()
 
-                    Text(
-                        appState.isModelInstalled
-                            ? "Transcriptions will stop working until the model is re-downloaded."
-                            : "Download the required offline model to enable local transcription."
-                    )
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-                }
-            }
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Stored in")
+                                .font(AppTypography.subheadlineSemibold)
+                            Text(appState.modelLocationText)
+                                .font(AppTypography.codeBody)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
 
-            SecondaryDisclosureCard(title: "Info") {
-                Button("Open Model Folder") {
-                    appState.openModelFolder()
-                }
-                .buttonStyle(.bordered)
+                            Text("Runs fully on-device. Audio stays local during capture and transcription.")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
 
-                if appState.phase == .downloadingModel {
-                    ProgressView(value: appState.downloadProgress)
-                    Text("\(Int(appState.downloadProgress * 100))% downloaded")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
-                }
+                        Spacer(minLength: 12)
 
-                if let error = appState.lastError, appState.phase == .error {
-                    Text(error)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(.red)
+                        Button("Open Folder") {
+                            appState.openModelFolder()
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
             }
         }
