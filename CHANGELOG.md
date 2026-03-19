@@ -6,6 +6,9 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+### Fixed
+- Improved the Model settings UX so download state, retry errors, local install details, and folder access are surfaced in one place.
+
 ## [0.0.3] - 2026-03-15
 ### Added
 - Custom status bar icon and app icon assets with SF Symbol fallback
