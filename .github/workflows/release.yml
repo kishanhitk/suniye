@@ -48,19 +48,6 @@ jobs:
       - name: Verify release artifacts
         run: ./scripts/verify_release.sh --version "${GITHUB_REF_NAME}" --dist-dir dist
 
-      - name: Extract changelog notes
-        run: |
-          awk '
-            BEGIN { capture = 0 }
-            $0 ~ "^## \\[" substr(ENVIRON["GITHUB_REF_NAME"],2) "\\]" { capture = 1; next }
-            capture && $0 ~ "^## \\[" { exit }
-            capture { print }
-          ' CHANGELOG.md > release_notes.txt
-          if [[ ! -s release_notes.txt ]]; then
-            echo "No changelog entry found for ${GITHUB_REF_NAME}" >&2
-            exit 1
-          fi
-
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -68,4 +55,4 @@ jobs:
             dist/Suniye.dmg
             dist/Suniye.app.zip
             dist/SHA256SUMS.txt
-          body_path: release_notes.txt
+          generate_release_notes: true
