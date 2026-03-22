@@ -11,6 +11,7 @@ DERIVED_DATA_PATH="${PROJECT_DIR}/.derivedData"
 OUTPUT_DIR=""
 BUILD_DESTINATION=""
 BUILD_ARCH=""
+VERSION=""
 
 usage() {
   cat <<'USAGE'
@@ -21,6 +22,7 @@ Options:
   --install-system  Copy app to /Applications/Suniye.app
   --derived-data-path <path>  Override derived data path
   --output-dir <dir>          Copy built app to a deterministic output directory
+  --version <vX.Y.Z>          Override MARKETING_VERSION in the build
   --open            Open the resulting app after build/install
 USAGE
 }
@@ -42,6 +44,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --output-dir)
       OUTPUT_DIR="$2"
+      shift
+      ;;
+    --version)
+      VERSION="$2"
       shift
       ;;
     --open)
@@ -104,6 +110,12 @@ xcodebuild_args=(
 
 if [[ -n "${BUILD_ARCH}" ]]; then
   xcodebuild_args+=(ARCHS="${BUILD_ARCH}" ONLY_ACTIVE_ARCH=YES)
+fi
+
+if [[ -n "${VERSION}" ]]; then
+  # Strip leading 'v' prefix (v0.0.5 -> 0.0.5)
+  MARKETING="${VERSION#v}"
+  xcodebuild_args+=(MARKETING_VERSION="${MARKETING}")
 fi
 
 xcodebuild "${xcodebuild_args[@]}"

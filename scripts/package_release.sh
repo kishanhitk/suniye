@@ -36,7 +36,11 @@ done
 mkdir -p "${DIST_DIR}"
 DERIVED_DATA="${ROOT_DIR}/.derivedData-release"
 
-"${ROOT_DIR}/scripts/build_app.sh" Release --derived-data-path "${DERIVED_DATA}" --output-dir "${DIST_DIR}"
+BUILD_ARGS=(Release --derived-data-path "${DERIVED_DATA}" --output-dir "${DIST_DIR}")
+if [[ -n "${VERSION}" ]]; then
+  BUILD_ARGS+=(--version "${VERSION}")
+fi
+"${ROOT_DIR}/scripts/build_app.sh" "${BUILD_ARGS[@]}"
 
 APP_PATH="${DIST_DIR}/Suniye.app"
 ZIP_PATH="${DIST_DIR}/Suniye.app.zip"
