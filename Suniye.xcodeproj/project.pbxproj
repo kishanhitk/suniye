@@ -19,6 +19,7 @@
 		2FD2254875BF111D3522E161 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2ECDB4CFB11C5B9831460F /* HistoryStore.swift */; };
 		305CB2DFC0FA4FD60803A30D /* libsherpa-onnx-c-api.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 75E6194F3E61C3D677F93DA9 /* libsherpa-onnx-c-api.dylib */; };
 		33659F330869ED86EC4C95FD /* AppStateSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDBA8DA30905F29C03B8A36D /* AppStateSettingsTests.swift */; };
+		34A83F20C1CEA0EA82E71CAC /* SuniyeNativeBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = DA6D9C9D8CF9BF854941CE7C /* SuniyeNativeBridge.mm */; };
 		39D58BF7075E15C1DAF90E27 /* UpdateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 646966307E922580E6302A6F /* UpdateServiceTests.swift */; };
 		3A346E97AE82272F134A4D00 /* MainWindowPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3985E6550A900F3B6818F86C /* MainWindowPages.swift */; };
 		3C278A2864DB75569C991E3C /* libonnxruntime.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 1215194BCE451924E1C06FDD /* libonnxruntime.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -124,6 +125,7 @@
 		7F2C36902B68E9D5934114DD /* libonnxruntime.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = libonnxruntime.dylib; sourceTree = "<group>"; };
 		85BCA4A71724B17FDD57DFAD /* Suniye-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Suniye-Bridging-Header.h"; sourceTree = "<group>"; };
 		865C597BBA404F5F6A049278 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
+		9D1534750806E24BA6EAEBB6 /* SuniyeNativeBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SuniyeNativeBridge.h; sourceTree = "<group>"; };
 		9D89C1656C10C1E6D3921D81 /* AppStateLLMTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateLLMTests.swift; sourceTree = "<group>"; };
 		9E2ECDB4CFB11C5B9831460F /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
 		A2C954DD9B2466B271CC6A1D /* LLMSettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettingsStoreTests.swift; sourceTree = "<group>"; };
@@ -145,6 +147,7 @@
 		D3161CA1497B7EEA0FB2CE36 /* GeneralSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsStore.swift; sourceTree = "<group>"; };
 		D8AAE91358FFD9EDBEFA9ACC /* Suniye.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Suniye.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA3686A213810FF9BE79E3CC /* FloatingIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorView.swift; sourceTree = "<group>"; };
+		DA6D9C9D8CF9BF854941CE7C /* SuniyeNativeBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SuniyeNativeBridge.mm; sourceTree = "<group>"; };
 		DDBA8DA30905F29C03B8A36D /* AppStateSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSettingsTests.swift; sourceTree = "<group>"; };
 		E3471ED7BC0D817AF7D5C516 /* SherpaOnnx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherpaOnnx.swift; sourceTree = "<group>"; };
 		E62E23E5D4CD3C127DD7F39C /* AppVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersionTests.swift; sourceTree = "<group>"; };
@@ -192,6 +195,8 @@
 				2B2D87825E1C649DC7A33115 /* StatusItemController.swift */,
 				85BCA4A71724B17FDD57DFAD /* Suniye-Bridging-Header.h */,
 				C7F3C3D023876B9EE8256C00 /* Suniye.swift */,
+				9D1534750806E24BA6EAEBB6 /* SuniyeNativeBridge.h */,
+				DA6D9C9D8CF9BF854941CE7C /* SuniyeNativeBridge.mm */,
 				F524B702F3306B43AF23557A /* Frameworks */,
 				9C4DE280446657D266991A07 /* Services */,
 				ACABD336294DBFA58C26FE31 /* Views */,
@@ -416,6 +421,7 @@
 				DC8532A515E87705B0F4BFC5 /* SherpaOnnx.swift in Sources */,
 				9CEC29D27FCC952C4C618C70 /* StatusItemController.swift in Sources */,
 				67C62EE8BA2F2B763D8477D6 /* Suniye.swift in Sources */,
+				34A83F20C1CEA0EA82E71CAC /* SuniyeNativeBridge.mm in Sources */,
 				90783B5C1E7D43413D251BBC /* TextInsertionService.swift in Sources */,
 				B251595E3A3080BF2437F31F /* TranscriptionService.swift in Sources */,
 				087B92BAEB91B2A23153DA41 /* UpdateService.swift in Sources */,

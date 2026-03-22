@@ -8,6 +8,7 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ### Fixed
 - Improved the Model settings UX so download state, retry errors, local install details, and folder access are surfaced in one place.
+- Prevented sherpa/ONNX native recognizer construction failures from aborting the app process; model load errors now surface in-app.
 
 ## [0.0.3] - 2026-03-15
 ### Added
