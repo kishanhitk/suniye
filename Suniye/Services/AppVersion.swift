@@ -45,6 +45,14 @@ struct AppVersion {
     let marketing: SemVer
     let build: Int?
 
+    var displayString: String {
+        let version = "\(marketing.major).\(marketing.minor).\(marketing.patch)"
+        if let build {
+            return "v\(version) (\(build))"
+        }
+        return "v\(version)"
+    }
+
     static func fromBundle(_ bundle: Bundle = .main) -> AppVersion? {
         guard
             let marketingRaw = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
