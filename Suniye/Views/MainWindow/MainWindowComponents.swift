@@ -290,35 +290,45 @@ struct AttentionTile: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: item.severity == .error ? "exclamationmark.triangle.fill" : "exclamationmark.circle")
-                    .font(AppTypography.body)
-                    .foregroundStyle(item.severity == .error ? Color.red : Color.orange)
-                    .padding(.top, AppMetrics.attentionIconTopPadding)
+        HStack(alignment: .center, spacing: 12) {
+            Button(action: action) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: item.severity == .error ? "exclamationmark.triangle.fill" : "exclamationmark.circle")
+                        .font(AppTypography.body)
+                        .foregroundStyle(item.severity == .error ? Color.red : Color.orange)
+                        .padding(.top, AppMetrics.attentionIconTopPadding)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.title)
-                        .font(AppTypography.subheadlineSemibold)
-                        .foregroundStyle(Color.primary)
-                    Text(item.detail)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.title)
+                            .font(AppTypography.subheadlineSemibold)
+                            .foregroundStyle(Color.primary)
+                        Text(item.detail)
+                            .font(AppTypography.caption)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
             }
-            .padding(AppMetrics.attentionPadding)
-            .background(
-                RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
-                    .fill(MainWindowPalette.cardBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
-                    .stroke(item.severity == .error ? Color.red.opacity(0.16) : Color.orange.opacity(0.16), lineWidth: 1)
-            )
+            .buttonStyle(.plain)
+
+            if let fixTitle = item.fixTitle, let fixAction = item.fixAction {
+                Button(fixTitle) {
+                    fixAction()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(AppMetrics.attentionPadding)
+        .background(
+            RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
+                .fill(MainWindowPalette.cardBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
+                .stroke(item.severity == .error ? Color.red.opacity(0.16) : Color.orange.opacity(0.16), lineWidth: 1)
+        )
     }
 }
 
