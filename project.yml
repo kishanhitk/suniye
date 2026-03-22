@@ -24,6 +24,9 @@ targets:
     info:
       path: Suniye/Info.plist
       properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ATSApplicationFontsPath: "."
         LSUIElement: true
         NSMicrophoneUsageDescription: Suniye needs microphone access to capture dictation.
         VSUpdateRepoOwner: kishanhitk
