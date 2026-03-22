@@ -109,31 +109,38 @@ struct ModelPage: View {
                             Text(appState.isModelInstalled ? "Model Installed" : "Offline Model Required")
                                 .font(AppTypography.bodyMedium)
 
-                            Text(appState.modelPrimaryActionDetail)
-                                .font(AppTypography.subheadline)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
+                            if appState.isModelInstalled {
+                                Text(appState.modelLocationText)
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                                    .textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                Text(appState.modelPrimaryActionDetail)
+                                    .font(AppTypography.subheadline)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
 
                         Spacer(minLength: 12)
 
                         if appState.isModelInstalled {
-                            HStack(spacing: 8) {
-                                Button(appState.modelPrimaryActionTitle) {
+                            HStack(spacing: 12) {
+                                ActionIconButton(systemName: "folder", tint: MainWindowPalette.secondaryText) {
+                                    appState.openModelFolder()
+                                }
+                                ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
                                     appState.deleteModel()
                                 }
-                                .buttonStyle(.bordered)
-                                .tint(.red)
                                 .disabled(appState.phase == .downloadingModel)
                             }
                         } else {
-                            HStack(spacing: 8) {
-                                Button(appState.modelPrimaryActionTitle) {
-                                    appState.startModelDownload()
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(appState.phase == .downloadingModel)
+                            Button(appState.modelPrimaryActionTitle) {
+                                appState.startModelDownload()
                             }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(appState.phase == .downloadingModel)
                         }
                     }
 
@@ -184,32 +191,6 @@ struct ModelPage: View {
                             .font(AppTypography.caption)
                             .foregroundStyle(.red)
                             .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    CardDivider()
-
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Stored in")
-                                .font(AppTypography.subheadlineSemibold)
-                            Text(appState.modelLocationText)
-                                .font(AppTypography.codeBody)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            Text("Runs fully on-device. Audio stays local during capture and transcription.")
-                                .font(AppTypography.caption)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Spacer(minLength: 12)
-
-                        Button("Open Folder") {
-                            appState.openModelFolder()
-                        }
-                        .buttonStyle(.bordered)
                     }
                 }
             }
@@ -461,53 +442,49 @@ struct GeneralPage: View {
 
     var body: some View {
         DetailScrollContainer {
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Permissions")
+            if !appState.hasMicPermission || !appState.hasAccessibilityPermission {
+                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                    SectionHeading(title: "Permissions")
 
-                SurfaceCard {
-                    VStack(spacing: 0) {
-                        PermissionActionRow(
-                            title: "Microphone",
-                            detail: appState.hasMicPermission
-                                ? "Audio capture is authorized."
-                                : "Required to capture dictation audio.",
-                            isGranted: appState.hasMicPermission,
-                            primaryTitle: appState.hasMicPermission ? "Refresh Status" : "Request Access",
-                            primaryAction: {
-                                if appState.hasMicPermission {
-                                    appState.refreshPermissionStatus()
-                                } else {
-                                    appState.requestMicrophonePermission()
-                                }
-                            },
-                            secondaryTitle: "Open Settings",
-                            secondaryAction: {
-                                appState.openMicrophonePrivacySettings()
+                    SurfaceCard {
+                        VStack(spacing: 0) {
+                            if !appState.hasMicPermission {
+                                PermissionActionRow(
+                                    title: "Microphone",
+                                    detail: "Required to capture dictation audio.",
+                                    isGranted: false,
+                                    primaryTitle: "Request Access",
+                                    primaryAction: {
+                                        appState.requestMicrophonePermission()
+                                    },
+                                    secondaryTitle: "Open Settings",
+                                    secondaryAction: {
+                                        appState.openMicrophonePrivacySettings()
+                                    }
+                                )
                             }
-                        )
 
-                        CardDivider()
-                            .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
-
-                        PermissionActionRow(
-                            title: "Accessibility",
-                            detail: appState.hasAccessibilityPermission
-                                ? "Text insertion is authorized."
-                                : "Required to paste transcribed text into other apps.",
-                            isGranted: appState.hasAccessibilityPermission,
-                            primaryTitle: appState.hasAccessibilityPermission ? "Refresh Status" : "Request Access",
-                            primaryAction: {
-                                if appState.hasAccessibilityPermission {
-                                    appState.refreshPermissionStatus()
-                                } else {
-                                    appState.requestAccessibilityPermission()
-                                }
-                            },
-                            secondaryTitle: "Open Settings",
-                            secondaryAction: {
-                                appState.openAccessibilityPrivacySettings()
+                            if !appState.hasMicPermission && !appState.hasAccessibilityPermission {
+                                CardDivider()
+                                    .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
                             }
-                        )
+
+                            if !appState.hasAccessibilityPermission {
+                                PermissionActionRow(
+                                    title: "Accessibility",
+                                    detail: "Required to paste transcribed text into other apps.",
+                                    isGranted: false,
+                                    primaryTitle: "Request Access",
+                                    primaryAction: {
+                                        appState.requestAccessibilityPermission()
+                                    },
+                                    secondaryTitle: "Open Settings",
+                                    secondaryAction: {
+                                        appState.openAccessibilityPrivacySettings()
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
