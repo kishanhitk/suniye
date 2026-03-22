@@ -3,8 +3,6 @@ import SwiftUI
 struct MainWindowView: View {
     @Bindable var appState: AppState
     @State private var selection: MainWindowSection = MainWindowSection.initialSelection(arguments: CommandLine.arguments)
-    @State private var vocabularyDraft = ""
-
     var body: some View {
         HStack(spacing: 0) {
             sidebar
@@ -64,10 +62,8 @@ struct MainWindowView: View {
                 HistoryPage(appState: appState)
             case .model:
                 ModelPage(appState: appState)
-            case .vocabulary:
-                VocabularyPage(appState: appState, draft: $vocabularyDraft)
-            case .llm:
-                LLMPage(appState: appState)
+            case .style:
+                StylePage(appState: appState)
             case .general:
                 GeneralPage(appState: appState)
             }

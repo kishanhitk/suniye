@@ -198,80 +198,9 @@ struct ModelPage: View {
     }
 }
 
-struct VocabularyPage: View {
+struct StylePage: View {
     @Bindable var appState: AppState
-    @Binding var draft: String
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: AppMetrics.detailSpacing) {
-                    if appState.vocabularyTerms.isEmpty {
-                        EmptyStateCard(
-                            icon: "book.closed",
-                            title: "No Domain Terms",
-                            detail: "Add terms you frequently use — the LLM will correct misrecognitions toward them."
-                        )
-                    } else {
-                        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                            SectionHeading(title: "Domain Terms")
-
-                            SurfaceCard {
-                                VStack(spacing: 0) {
-                                    ForEach(appState.vocabularyTerms, id: \.self) { term in
-                                        HStack(spacing: 12) {
-                                            Text(term)
-                                                .font(AppTypography.body)
-                                            Spacer(minLength: 0)
-                                            ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
-                                                appState.removeVocabularyTerm(term)
-                                            }
-                                        }
-                                        .padding(.vertical, AppMetrics.listRowVerticalPadding)
-
-                                        if term != appState.vocabularyTerms.last {
-                                            CardDivider()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, AppMetrics.detailPaddingHorizontal)
-                .padding(.top, AppMetrics.detailPaddingTop)
-                .padding(.bottom, 20)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-
-            Rectangle()
-                .fill(MainWindowPalette.divider)
-                .frame(height: 1)
-
-            HStack(spacing: 12) {
-                TextField("e.g. Kubernetes, PostgreSQL, gRPC", text: $draft)
-                    .textFieldStyle(.roundedBorder)
-                    .font(AppTypography.body)
-                    .onSubmit(addTerm)
-
-                Button("Add", action: addTerm)
-                    .buttonStyle(.bordered)
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(MainWindowPalette.windowBackground)
-        }
-    }
-
-    private func addTerm() {
-        appState.addVocabularyTerm(draft)
-        draft = ""
-    }
-}
-
-struct LLMPage: View {
-    @Bindable var appState: AppState
+    @State private var vocabularyDraft = ""
     @State private var apiKeyDraft = ""
 
     var body: some View {
@@ -330,7 +259,43 @@ struct LLMPage: View {
             }
 
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Model")
+                SectionHeading(title: "Domain Terms")
+
+                SurfaceCard {
+                    VStack(spacing: 0) {
+                        if !appState.vocabularyTerms.isEmpty {
+                            ForEach(appState.vocabularyTerms, id: \.self) { term in
+                                HStack(spacing: 12) {
+                                    Text(term)
+                                        .font(AppTypography.body)
+                                    Spacer(minLength: 0)
+                                    ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
+                                        appState.removeVocabularyTerm(term)
+                                    }
+                                }
+                                .padding(.vertical, AppMetrics.listRowVerticalPadding)
+
+                                CardDivider()
+                            }
+                        }
+
+                        HStack(spacing: 8) {
+                            TextField("e.g. Kubernetes, PostgreSQL, gRPC", text: $vocabularyDraft)
+                                .textFieldStyle(.roundedBorder)
+                                .font(AppTypography.body)
+                                .onSubmit(addTerm)
+
+                            Button("Add", action: addTerm)
+                                .buttonStyle(.bordered)
+                                .disabled(vocabularyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                        .padding(.vertical, AppMetrics.listRowVerticalPadding)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "LLM Model")
 
                 SurfaceCard {
                     VStack(spacing: 0) {
@@ -434,6 +399,11 @@ struct LLMPage: View {
                 Stepper("Max tokens: \(appState.llmMaxTokens)", value: $appState.llmMaxTokens, in: LLMDefaults.minMaxTokens ... LLMDefaults.maxMaxTokens, step: 16)
             }
         }
+    }
+
+    private func addTerm() {
+        appState.addVocabularyTerm(vocabularyDraft)
+        vocabularyDraft = ""
     }
 }
 

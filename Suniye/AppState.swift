@@ -454,7 +454,7 @@ final class AppState {
                     title: "LLM API key missing",
                     detail: "LLM polishing is enabled, but no OpenRouter API key is saved.",
                     severity: .warning,
-                    recommendedSection: .llm
+                    recommendedSection: .style
                 )
             )
         }
