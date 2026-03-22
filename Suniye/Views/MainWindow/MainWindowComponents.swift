@@ -53,23 +53,33 @@ enum MainWindowPalette {
 }
 
 enum AppTypography {
-    static let appTitle = Font.title2.weight(.semibold)
-    static let sidebarIcon = Font.body.weight(.medium)
-    static let sidebarLabel = Font.body
-    static let sidebarLabelSelected = Font.body.weight(.semibold)
-    static let pageTitle = Font.title2.weight(.semibold)
-    static let sectionHeading = Font.headline.weight(.semibold)
-    static let body = Font.body
-    static let bodyMedium = Font.body.weight(.medium)
-    static let subheadline = Font.subheadline
-    static let subheadlineSemibold = Font.subheadline.weight(.semibold)
-    static let caption = Font.caption
-    static let callout = Font.callout
-    static let calloutMedium = Font.callout.weight(.medium)
-    static let codeBody = Font.system(.body, design: .monospaced)
-    static let codeBodyMedium = Font.system(.body, design: .monospaced).weight(.medium)
-    static let codeCalloutSemibold = Font.system(.callout, design: .monospaced).weight(.semibold)
-    static let metricValue = Font.system(size: 34, weight: .medium, design: .rounded)
+    private static func googleSans(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        Font.custom("Google Sans", fixedSize: size).weight(weight)
+    }
+
+    private static func fragmentMono(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        Font.custom("Fragment Mono", fixedSize: size).weight(weight)
+    }
+
+    // Sizes derived from macOS system font defaults:
+    // title2 ≈ 17, headline ≈ 13 bold, body ≈ 13, subheadline ≈ 11, caption ≈ 10, callout ≈ 12
+    static let appTitle = googleSans(size: 17, weight: .semibold)
+    static let sidebarIcon = googleSans(size: 13, weight: .medium)
+    static let sidebarLabel = googleSans(size: 13)
+    static let sidebarLabelSelected = googleSans(size: 13, weight: .semibold)
+    static let pageTitle = googleSans(size: 17, weight: .semibold)
+    static let sectionHeading = googleSans(size: 13, weight: .semibold)
+    static let body = googleSans(size: 13)
+    static let bodyMedium = googleSans(size: 13, weight: .medium)
+    static let subheadline = googleSans(size: 11)
+    static let subheadlineSemibold = googleSans(size: 11, weight: .semibold)
+    static let caption = googleSans(size: 10)
+    static let callout = googleSans(size: 12)
+    static let calloutMedium = googleSans(size: 12, weight: .medium)
+    static let codeBody = fragmentMono(size: 13)
+    static let codeBodyMedium = fragmentMono(size: 13, weight: .medium)
+    static let codeCalloutSemibold = fragmentMono(size: 12, weight: .semibold)
+    static let metricValue = fragmentMono(size: 34, weight: .medium)
     static let emptyIcon = Font.system(size: 34, weight: .light)
 }
 
@@ -384,7 +394,7 @@ struct EmptyStateCard: View {
                 .font(AppTypography.emptyIcon)
                 .foregroundStyle(Color.secondary.opacity(0.72))
             Text(title)
-                .font(.title2.weight(.semibold))
+                .font(AppTypography.pageTitle)
             Text(detail)
                 .font(AppTypography.body)
                 .foregroundStyle(MainWindowPalette.secondaryText)
