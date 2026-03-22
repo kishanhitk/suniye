@@ -41,7 +41,7 @@ enum MainWindowPalette {
     static let windowBackgroundNSColor = MainWindowNSPalette.baseSurface
     static let windowBackground = Color(nsColor: MainWindowNSPalette.baseSurface)
     static let sidebarBackground = Color(nsColor: MainWindowNSPalette.baseSurface)
-    static let sidebarTitle = Color.primary.opacity(0.24)
+    static let sidebarTitle = Color.primary.opacity(0.85)
     static let divider = Color(nsColor: MainWindowNSPalette.divider)
     static let cardBackground = Color(nsColor: MainWindowNSPalette.elevatedSurface)
     static let editorBackground = Color(nsColor: MainWindowNSPalette.elevatedSurface)

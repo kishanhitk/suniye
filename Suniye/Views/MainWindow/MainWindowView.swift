@@ -24,12 +24,17 @@ struct MainWindowView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Suniye")
-                .font(AppTypography.appTitle)
-                .foregroundStyle(MainWindowPalette.sidebarTitle)
-                .padding(.top, AppMetrics.sidebarBrandTop)
-                .padding(.horizontal, AppMetrics.sidebarBrandHorizontal)
-                .padding(.bottom, AppMetrics.sidebarBrandBottom)
+            HStack(spacing: 8) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 24, height: 24)
+                Text("Suniye")
+                    .font(AppTypography.appTitle)
+                    .foregroundStyle(MainWindowPalette.sidebarTitle)
+            }
+            .padding(.top, AppMetrics.sidebarBrandTop)
+            .padding(.horizontal, AppMetrics.sidebarBrandHorizontal)
+            .padding(.bottom, AppMetrics.sidebarBrandBottom)
 
             VStack(alignment: .leading, spacing: AppMetrics.sidebarRowSpacing) {
                 ForEach(MainWindowSection.allCases, id: \.self) { section in
