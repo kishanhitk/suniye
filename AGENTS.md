@@ -78,7 +78,7 @@ xcodebuild \
 - Preserve actor/MainActor boundaries; do not introduce UI-thread blocking work.
 - Keep service boundaries intact (do not collapse logic into views).
 - Keep dependency-injected seams used by tests (`LLMPostProcessor`, settings store, keychain service).
-- When behavior changes, update tests and relevant docs (`README.md`, `CHANGELOG.md`, `docs/*`).
+- When behavior changes, update tests and relevant docs (`README.md`, `docs/*`).
 
 ## Commit messages
 - Commit messages should follow commit lint conventions.
