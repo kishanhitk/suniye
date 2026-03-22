@@ -3,7 +3,6 @@ import Foundation
 enum MainWindowSection: String, CaseIterable, Hashable, Codable {
     case dashboard
     case history
-    case hotkey
     case model
     case vocabulary
     case llm
@@ -15,8 +14,6 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
             return "Dashboard"
         case .history:
             return "History"
-        case .hotkey:
-            return "Hotkey"
         case .model:
             return "Model"
         case .vocabulary:
@@ -34,8 +31,6 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
             return "square.grid.2x2"
         case .history:
             return "clock"
-        case .hotkey:
-            return "keyboard"
         case .model:
             return "cpu"
         case .vocabulary:

@@ -62,8 +62,6 @@ struct MainWindowView: View {
                 DashboardPage(appState: appState) { selection = $0 }
             case .history:
                 HistoryPage(appState: appState)
-            case .hotkey:
-                HotkeyPage(appState: appState)
             case .model:
                 ModelPage(appState: appState)
             case .vocabulary:

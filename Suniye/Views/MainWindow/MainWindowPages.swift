@@ -75,44 +75,6 @@ struct HistoryPage: View {
     }
 }
 
-struct HotkeyPage: View {
-    @Bindable var appState: AppState
-
-    var body: some View {
-        DetailScrollContainer {
-            SectionHeading(title: "Global Hotkey")
-
-            SurfaceCard {
-                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                    HStack(spacing: 12) {
-                        Text("Hold to Dictate")
-                            .font(AppTypography.body)
-                        Spacer(minLength: 12)
-                        HotkeyRecorderButton(configuration: $appState.hotkeyConfiguration)
-                    }
-                    CardDivider()
-                    Text("Works from any app. Hold the shortcut to record, release to transcribe.")
-                        .font(AppTypography.subheadline)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Examples")
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("` (backtick) — single key, no modifiers")
-                        Text("Option + Space")
-                        Text("Globe — Fn/Globe key (macOS dictation key)")
-                    }
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-                }
-            }
-        }
-    }
-}
-
 struct ModelPage: View {
     @Bindable var appState: AppState
 
@@ -577,6 +539,25 @@ struct GeneralPage: View {
                             detail: "Filters out system audio (music, video, TTS) from the microphone during dictation. Uses Apple's Voice Processing.",
                             isOn: $appState.echoCancellationEnabled
                         )
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Hotkey")
+
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                        HStack(spacing: 12) {
+                            Text("Hold to Dictate")
+                                .font(AppTypography.body)
+                            Spacer(minLength: 12)
+                            HotkeyRecorderButton(configuration: $appState.hotkeyConfiguration)
+                        }
+                        CardDivider()
+                        Text("Works from any app. Hold the shortcut to record, release to transcribe.")
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
                     }
                 }
             }
