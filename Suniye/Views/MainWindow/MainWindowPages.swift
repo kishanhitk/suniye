@@ -75,44 +75,6 @@ struct HistoryPage: View {
     }
 }
 
-struct HotkeyPage: View {
-    @Bindable var appState: AppState
-
-    var body: some View {
-        DetailScrollContainer {
-            SectionHeading(title: "Global Hotkey")
-
-            SurfaceCard {
-                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                    HStack(spacing: 12) {
-                        Text("Hold to Dictate")
-                            .font(AppTypography.body)
-                        Spacer(minLength: 12)
-                        HotkeyRecorderButton(configuration: $appState.hotkeyConfiguration)
-                    }
-                    CardDivider()
-                    Text("Works from any app. Hold the shortcut to record, release to transcribe.")
-                        .font(AppTypography.subheadline)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Examples")
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("` (backtick) — single key, no modifiers")
-                        Text("Option + Space")
-                        Text("Globe — Fn/Globe key (macOS dictation key)")
-                    }
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-                }
-            }
-        }
-    }
-}
-
 struct ModelPage: View {
     @Bindable var appState: AppState
 
@@ -147,31 +109,38 @@ struct ModelPage: View {
                             Text(appState.isModelInstalled ? "Model Installed" : "Offline Model Required")
                                 .font(AppTypography.bodyMedium)
 
-                            Text(appState.modelPrimaryActionDetail)
-                                .font(AppTypography.subheadline)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
+                            if appState.isModelInstalled {
+                                Text(appState.modelLocationText)
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                                    .textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                Text(appState.modelPrimaryActionDetail)
+                                    .font(AppTypography.subheadline)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
 
                         Spacer(minLength: 12)
 
                         if appState.isModelInstalled {
-                            HStack(spacing: 8) {
-                                Button(appState.modelPrimaryActionTitle) {
+                            HStack(spacing: 12) {
+                                ActionIconButton(systemName: "folder", tint: MainWindowPalette.secondaryText) {
+                                    appState.openModelFolder()
+                                }
+                                ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
                                     appState.deleteModel()
                                 }
-                                .buttonStyle(.bordered)
-                                .tint(.red)
                                 .disabled(appState.phase == .downloadingModel)
                             }
                         } else {
-                            HStack(spacing: 8) {
-                                Button(appState.modelPrimaryActionTitle) {
-                                    appState.startModelDownload()
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(appState.phase == .downloadingModel)
+                            Button(appState.modelPrimaryActionTitle) {
+                                appState.startModelDownload()
                             }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(appState.phase == .downloadingModel)
                         }
                     }
 
@@ -223,112 +192,15 @@ struct ModelPage: View {
                             .foregroundStyle(.red)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-
-                    CardDivider()
-
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Stored in")
-                                .font(AppTypography.subheadlineSemibold)
-                            Text(appState.modelLocationText)
-                                .font(AppTypography.codeBody)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            Text("Runs fully on-device. Audio stays local during capture and transcription.")
-                                .font(AppTypography.caption)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Spacer(minLength: 12)
-
-                        Button("Open Folder") {
-                            appState.openModelFolder()
-                        }
-                        .buttonStyle(.bordered)
-                    }
                 }
             }
         }
     }
 }
 
-struct VocabularyPage: View {
+struct StylePage: View {
     @Bindable var appState: AppState
-    @Binding var draft: String
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: AppMetrics.detailSpacing) {
-                    if appState.vocabularyTerms.isEmpty {
-                        EmptyStateCard(
-                            icon: "book.closed",
-                            title: "No Domain Terms",
-                            detail: "Add terms you frequently use — the LLM will correct misrecognitions toward them."
-                        )
-                    } else {
-                        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                            SectionHeading(title: "Domain Terms")
-
-                            SurfaceCard {
-                                VStack(spacing: 0) {
-                                    ForEach(appState.vocabularyTerms, id: \.self) { term in
-                                        HStack(spacing: 12) {
-                                            Text(term)
-                                                .font(AppTypography.body)
-                                            Spacer(minLength: 0)
-                                            ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
-                                                appState.removeVocabularyTerm(term)
-                                            }
-                                        }
-                                        .padding(.vertical, AppMetrics.listRowVerticalPadding)
-
-                                        if term != appState.vocabularyTerms.last {
-                                            CardDivider()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, AppMetrics.detailPaddingHorizontal)
-                .padding(.top, AppMetrics.detailPaddingTop)
-                .padding(.bottom, 20)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-
-            Rectangle()
-                .fill(MainWindowPalette.divider)
-                .frame(height: 1)
-
-            HStack(spacing: 12) {
-                TextField("e.g. Kubernetes, PostgreSQL, gRPC", text: $draft)
-                    .textFieldStyle(.roundedBorder)
-                    .font(AppTypography.body)
-                    .onSubmit(addTerm)
-
-                Button("Add", action: addTerm)
-                    .buttonStyle(.bordered)
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(MainWindowPalette.windowBackground)
-        }
-    }
-
-    private func addTerm() {
-        appState.addVocabularyTerm(draft)
-        draft = ""
-    }
-}
-
-struct LLMPage: View {
-    @Bindable var appState: AppState
+    @State private var vocabularyDraft = ""
     @State private var apiKeyDraft = ""
 
     var body: some View {
@@ -387,7 +259,43 @@ struct LLMPage: View {
             }
 
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Model")
+                SectionHeading(title: "Domain Terms")
+
+                SurfaceCard {
+                    VStack(spacing: 0) {
+                        if !appState.vocabularyTerms.isEmpty {
+                            ForEach(appState.vocabularyTerms, id: \.self) { term in
+                                HStack(spacing: 12) {
+                                    Text(term)
+                                        .font(AppTypography.body)
+                                    Spacer(minLength: 0)
+                                    ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
+                                        appState.removeVocabularyTerm(term)
+                                    }
+                                }
+                                .padding(.vertical, AppMetrics.listRowVerticalPadding)
+
+                                CardDivider()
+                            }
+                        }
+
+                        HStack(spacing: 8) {
+                            TextField("e.g. Kubernetes, PostgreSQL, gRPC", text: $vocabularyDraft)
+                                .textFieldStyle(.roundedBorder)
+                                .font(AppTypography.body)
+                                .onSubmit(addTerm)
+
+                            Button("Add", action: addTerm)
+                                .buttonStyle(.bordered)
+                                .disabled(vocabularyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                        .padding(.vertical, AppMetrics.listRowVerticalPadding)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "LLM Model")
 
                 SurfaceCard {
                     VStack(spacing: 0) {
@@ -492,6 +400,11 @@ struct LLMPage: View {
             }
         }
     }
+
+    private func addTerm() {
+        appState.addVocabularyTerm(vocabularyDraft)
+        vocabularyDraft = ""
+    }
 }
 
 struct GeneralPage: View {
@@ -499,53 +412,49 @@ struct GeneralPage: View {
 
     var body: some View {
         DetailScrollContainer {
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Permissions")
+            if !appState.hasMicPermission || !appState.hasAccessibilityPermission {
+                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                    SectionHeading(title: "Permissions")
 
-                SurfaceCard {
-                    VStack(spacing: 0) {
-                        PermissionActionRow(
-                            title: "Microphone",
-                            detail: appState.hasMicPermission
-                                ? "Audio capture is authorized."
-                                : "Required to capture dictation audio.",
-                            isGranted: appState.hasMicPermission,
-                            primaryTitle: appState.hasMicPermission ? "Refresh Status" : "Request Access",
-                            primaryAction: {
-                                if appState.hasMicPermission {
-                                    appState.refreshPermissionStatus()
-                                } else {
-                                    appState.requestMicrophonePermission()
-                                }
-                            },
-                            secondaryTitle: "Open Settings",
-                            secondaryAction: {
-                                appState.openMicrophonePrivacySettings()
+                    SurfaceCard {
+                        VStack(spacing: 0) {
+                            if !appState.hasMicPermission {
+                                PermissionActionRow(
+                                    title: "Microphone",
+                                    detail: "Required to capture dictation audio.",
+                                    isGranted: false,
+                                    primaryTitle: "Request Access",
+                                    primaryAction: {
+                                        appState.requestMicrophonePermission()
+                                    },
+                                    secondaryTitle: "Open Settings",
+                                    secondaryAction: {
+                                        appState.openMicrophonePrivacySettings()
+                                    }
+                                )
                             }
-                        )
 
-                        CardDivider()
-                            .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
-
-                        PermissionActionRow(
-                            title: "Accessibility",
-                            detail: appState.hasAccessibilityPermission
-                                ? "Text insertion is authorized."
-                                : "Required to paste transcribed text into other apps.",
-                            isGranted: appState.hasAccessibilityPermission,
-                            primaryTitle: appState.hasAccessibilityPermission ? "Refresh Status" : "Request Access",
-                            primaryAction: {
-                                if appState.hasAccessibilityPermission {
-                                    appState.refreshPermissionStatus()
-                                } else {
-                                    appState.requestAccessibilityPermission()
-                                }
-                            },
-                            secondaryTitle: "Open Settings",
-                            secondaryAction: {
-                                appState.openAccessibilityPrivacySettings()
+                            if !appState.hasMicPermission && !appState.hasAccessibilityPermission {
+                                CardDivider()
+                                    .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
                             }
-                        )
+
+                            if !appState.hasAccessibilityPermission {
+                                PermissionActionRow(
+                                    title: "Accessibility",
+                                    detail: "Required to paste transcribed text into other apps.",
+                                    isGranted: false,
+                                    primaryTitle: "Request Access",
+                                    primaryAction: {
+                                        appState.requestAccessibilityPermission()
+                                    },
+                                    secondaryTitle: "Open Settings",
+                                    secondaryAction: {
+                                        appState.openAccessibilityPrivacySettings()
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -577,6 +486,25 @@ struct GeneralPage: View {
                             detail: "Filters out system audio (music, video, TTS) from the microphone during dictation. Uses Apple's Voice Processing.",
                             isOn: $appState.echoCancellationEnabled
                         )
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Hotkey")
+
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                        HStack(spacing: 12) {
+                            Text("Hold to Dictate")
+                                .font(AppTypography.body)
+                            Spacer(minLength: 12)
+                            HotkeyRecorderButton(configuration: $appState.hotkeyConfiguration)
+                        }
+                        CardDivider()
+                        Text("Works from any app. Hold the shortcut to record, release to transcribe.")
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
                     }
                 }
             }

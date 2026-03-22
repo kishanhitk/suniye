@@ -10,7 +10,7 @@ struct MenuBarView: View {
                     .font(AppTypography.subheadlineSemibold)
                 Spacer()
                 Text(appState.phase.rawValue.capitalized)
-                    .font(Font.system(.caption, design: .monospaced).weight(.medium))
+                    .font(AppTypography.codeBodyMedium)
                     .foregroundStyle(.secondary)
             }
 

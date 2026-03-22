@@ -32,6 +32,22 @@ struct AttentionItem: Identifiable, Equatable {
     let detail: String
     let severity: AttentionSeverity
     let recommendedSection: MainWindowSection
+    let fixTitle: String?
+    let fixAction: (@MainActor () -> Void)?
+
+    init(id: String, title: String, detail: String, severity: AttentionSeverity, recommendedSection: MainWindowSection, fixTitle: String? = nil, fixAction: (@MainActor () -> Void)? = nil) {
+        self.id = id
+        self.title = title
+        self.detail = detail
+        self.severity = severity
+        self.recommendedSection = recommendedSection
+        self.fixTitle = fixTitle
+        self.fixAction = fixAction
+    }
+
+    static func == (lhs: AttentionItem, rhs: AttentionItem) -> Bool {
+        lhs.id == rhs.id && lhs.title == rhs.title && lhs.detail == rhs.detail && lhs.severity == rhs.severity && lhs.recommendedSection == rhs.recommendedSection && lhs.fixTitle == rhs.fixTitle
+    }
 }
 
 @MainActor
@@ -410,7 +426,9 @@ final class AppState {
                     title: "Microphone permission missing",
                     detail: "Grant microphone access so audio can be captured.",
                     severity: .warning,
-                    recommendedSection: .general
+                    recommendedSection: .general,
+                    fixTitle: "Grant Access",
+                    fixAction: { [weak self] in self?.requestMicrophonePermission() }
                 )
             )
         }
@@ -422,7 +440,9 @@ final class AppState {
                     title: "Accessibility permission missing",
                     detail: "Grant accessibility access so transcribed text can be inserted.",
                     severity: .warning,
-                    recommendedSection: .general
+                    recommendedSection: .general,
+                    fixTitle: "Grant Access",
+                    fixAction: { [weak self] in self?.requestAccessibilityPermission() }
                 )
             )
         }
@@ -434,7 +454,7 @@ final class AppState {
                     title: "LLM API key missing",
                     detail: "LLM polishing is enabled, but no OpenRouter API key is saved.",
                     severity: .warning,
-                    recommendedSection: .llm
+                    recommendedSection: .style
                 )
             )
         }

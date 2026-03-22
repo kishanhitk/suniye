@@ -3,10 +3,8 @@ import Foundation
 enum MainWindowSection: String, CaseIterable, Hashable, Codable {
     case dashboard
     case history
-    case hotkey
     case model
-    case vocabulary
-    case llm
+    case style
     case general
 
     var title: String {
@@ -15,14 +13,10 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
             return "Dashboard"
         case .history:
             return "History"
-        case .hotkey:
-            return "Hotkey"
         case .model:
             return "Model"
-        case .vocabulary:
-            return "Vocabulary"
-        case .llm:
-            return "LLM"
+        case .style:
+            return "Style"
         case .general:
             return "General"
         }
@@ -34,13 +28,9 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
             return "square.grid.2x2"
         case .history:
             return "clock"
-        case .hotkey:
-            return "keyboard"
         case .model:
             return "cpu"
-        case .vocabulary:
-            return "book.closed"
-        case .llm:
+        case .style:
             return "sparkles"
         case .general:
             return "gearshape"
@@ -62,6 +52,10 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
 
         if arguments.contains("--open-settings") {
             return .model
+        }
+
+        if arguments.contains("--open-vocabulary") || arguments.contains("--open-llm") {
+            return .style
         }
 
         return .dashboard
