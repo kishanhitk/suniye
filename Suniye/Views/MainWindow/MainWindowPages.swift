@@ -616,8 +616,62 @@ struct GeneralPage: View {
                 }
             }
 
-            SecondaryDisclosureCard(title: "Info") {
-                Text("Update status: \(appState.updateStatusText)")
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "About")
+
+                SurfaceCard {
+                    VStack(spacing: 12) {
+                        HStack(spacing: 12) {
+                            Text("Suniye")
+                                .font(AppTypography.bodyMedium)
+                            Spacer(minLength: 0)
+                            Text(appState.appVersionText)
+                                .font(AppTypography.codeBodyMedium)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                        }
+
+                        CardDivider()
+
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(appState.updateStatusText)
+                                    .font(AppTypography.subheadline)
+                                    .foregroundStyle(appState.updateStatus == .error ? .red : MainWindowPalette.secondaryText)
+
+                                if appState.updateStatus == .downloading {
+                                    ProgressView(value: appState.updateDownloadProgress)
+                                        .progressViewStyle(.linear)
+                                }
+                            }
+
+                            Spacer(minLength: 12)
+
+                            if appState.updateStatus == .available {
+                                HStack(spacing: 8) {
+                                    Button("Release Notes") {
+                                        appState.openReleaseNotes()
+                                    }
+                                    .buttonStyle(.bordered)
+
+                                    Button("Download") {
+                                        Task {
+                                            await appState.downloadAndOpenUpdate()
+                                        }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                }
+                            } else {
+                                Button(appState.updateStatus == .checking ? "Checking..." : "Check for Updates") {
+                                    Task {
+                                        await appState.checkForUpdates(background: false)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(appState.updateStatus == .checking || appState.updateStatus == .downloading)
+                            }
+                        }
+                    }
+                }
             }
         }
     }

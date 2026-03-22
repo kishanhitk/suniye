@@ -95,6 +95,10 @@ final class AppState {
             }
         }
     }
+    var appVersionText: String {
+        currentAppVersionProvider()?.displayString ?? "Unknown"
+    }
+
     var updateDownloadProgress: Double = 0 {
         didSet {
             if oldValue != updateDownloadProgress {
