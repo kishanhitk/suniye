@@ -19,6 +19,7 @@
 		2FD2254875BF111D3522E161 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2ECDB4CFB11C5B9831460F /* HistoryStore.swift */; };
 		305CB2DFC0FA4FD60803A30D /* libsherpa-onnx-c-api.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 75E6194F3E61C3D677F93DA9 /* libsherpa-onnx-c-api.dylib */; };
 		33659F330869ED86EC4C95FD /* AppStateSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDBA8DA30905F29C03B8A36D /* AppStateSettingsTests.swift */; };
+		34A83F20C1CEA0EA82E71CAC /* SuniyeNativeBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = DA6D9C9D8CF9BF854941CE7C /* SuniyeNativeBridge.mm */; };
 		39D58BF7075E15C1DAF90E27 /* UpdateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 646966307E922580E6302A6F /* UpdateServiceTests.swift */; };
 		3A346E97AE82272F134A4D00 /* MainWindowPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3985E6550A900F3B6818F86C /* MainWindowPages.swift */; };
 		3C278A2864DB75569C991E3C /* libonnxruntime.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 1215194BCE451924E1C06FDD /* libonnxruntime.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -39,6 +40,7 @@
 		6BADE038613593570D9E1F5F /* AppStateLLMTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D89C1656C10C1E6D3921D81 /* AppStateLLMTests.swift */; };
 		70911BA331D12E52A95C209F /* AppVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62E23E5D4CD3C127DD7F39C /* AppVersionTests.swift */; };
 		7EB9B5550B0A955CDFC3FC17 /* LLMSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2C954DD9B2466B271CC6A1D /* LLMSettingsStoreTests.swift */; };
+		81F6D8FCAFCBE596A30B1381 /* FragmentMono-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = D4416B992248F8B51B0E9DE1 /* FragmentMono-Italic.ttf */; };
 		84CB629AA94E239EEC0911F6 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4213B4B666CF5B60F3371019 /* AppLogger.swift */; };
 		86AC38418D4F76638222975C /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F2DDA03B5269D9475CA06C9 /* OnboardingView.swift */; };
 		898E0CC20B6C61DE45A0BC0B /* GeneralSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 730EF6DDF61D565A9D49DFCA /* GeneralSettingsStoreTests.swift */; };
@@ -47,6 +49,7 @@
 		96D47C5DFE84C5C9C49BBAD6 /* OpenRouterPostProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386B9D8DFD2BB94A83C15741 /* OpenRouterPostProcessorTests.swift */; };
 		9CEC29D27FCC952C4C618C70 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2D87825E1C649DC7A33115 /* StatusItemController.swift */; };
 		9F822914FE40C1F233C1E055 /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F51B3DBFA1B6B9385FA63197 /* MainWindowController.swift */; };
+		AA7DAE1D8BC31737F5640A1B /* FragmentMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 82E6C7AA7DADED73D5C382DA /* FragmentMono-Regular.ttf */; };
 		B251595E3A3080BF2437F31F /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 633F09E2901A308614E595B1 /* TranscriptionService.swift */; };
 		B4C54A8C12A3F949CD83553C /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 865C597BBA404F5F6A049278 /* ModelManager.swift */; };
 		B6E82EB100F0460A6BBF520D /* KeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD66CF413C1ACA8DB2719C4 /* KeychainServiceTests.swift */; };
@@ -61,6 +64,7 @@
 		E435A53080A9CFFB863EB188 /* TranscriptionServiceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 626CB9CE980C310ED49F770F /* TranscriptionServiceE2ETests.swift */; };
 		E59D820122464E89DAF21073 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A3F45C96538887F8FF79E57 /* MainWindowView.swift */; };
 		E9210190CDD60F212008A02A /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045F7AACA142A791AFFA7C43 /* SettingsModels.swift */; };
+		F047041193A8264676FEC71A /* GoogleSans-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = D483D635E7A8E177A09D311E /* GoogleSans-Variable.ttf */; };
 		F75A72DF1CAEBAD284065DE4 /* ModelManagerE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E5CEF1B4FEEFC12719CB94A /* ModelManagerE2ETests.swift */; };
 		F9F0D01CE511EF8AE268DC8A /* FloatingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3686A213810FF9BE79E3CC /* FloatingIndicatorView.swift */; };
 		FD68A66D8807B4E102B0E8C7 /* libsherpa-onnx-c-api.dylib in Resources */ = {isa = PBXBuildFile; fileRef = BAF213F3DEF59821572510F4 /* libsherpa-onnx-c-api.dylib */; };
@@ -122,8 +126,10 @@
 		7C803DEDF9EAE9D4E8C14C7E /* LLMPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMPostProcessor.swift; sourceTree = "<group>"; };
 		7EEDE3A134D7940680E98B65 /* LaunchAtLoginService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginService.swift; sourceTree = "<group>"; };
 		7F2C36902B68E9D5934114DD /* libonnxruntime.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = libonnxruntime.dylib; sourceTree = "<group>"; };
+		82E6C7AA7DADED73D5C382DA /* FragmentMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "FragmentMono-Regular.ttf"; sourceTree = "<group>"; };
 		85BCA4A71724B17FDD57DFAD /* Suniye-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Suniye-Bridging-Header.h"; sourceTree = "<group>"; };
 		865C597BBA404F5F6A049278 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
+		9D1534750806E24BA6EAEBB6 /* SuniyeNativeBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SuniyeNativeBridge.h; sourceTree = "<group>"; };
 		9D89C1656C10C1E6D3921D81 /* AppStateLLMTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateLLMTests.swift; sourceTree = "<group>"; };
 		9E2ECDB4CFB11C5B9831460F /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
 		A2C954DD9B2466B271CC6A1D /* LLMSettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettingsStoreTests.swift; sourceTree = "<group>"; };
@@ -143,8 +149,11 @@
 		D0D96966D22AF827757DB24D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D1FAF2B003307FDF0EBA9BA0 /* ListeningOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningOverlay.swift; sourceTree = "<group>"; };
 		D3161CA1497B7EEA0FB2CE36 /* GeneralSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsStore.swift; sourceTree = "<group>"; };
+		D4416B992248F8B51B0E9DE1 /* FragmentMono-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "FragmentMono-Italic.ttf"; sourceTree = "<group>"; };
+		D483D635E7A8E177A09D311E /* GoogleSans-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "GoogleSans-Variable.ttf"; sourceTree = "<group>"; };
 		D8AAE91358FFD9EDBEFA9ACC /* Suniye.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Suniye.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA3686A213810FF9BE79E3CC /* FloatingIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorView.swift; sourceTree = "<group>"; };
+		DA6D9C9D8CF9BF854941CE7C /* SuniyeNativeBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SuniyeNativeBridge.mm; sourceTree = "<group>"; };
 		DDBA8DA30905F29C03B8A36D /* AppStateSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSettingsTests.swift; sourceTree = "<group>"; };
 		E3471ED7BC0D817AF7D5C516 /* SherpaOnnx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherpaOnnx.swift; sourceTree = "<group>"; };
 		E62E23E5D4CD3C127DD7F39C /* AppVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersionTests.swift; sourceTree = "<group>"; };
@@ -192,6 +201,9 @@
 				2B2D87825E1C649DC7A33115 /* StatusItemController.swift */,
 				85BCA4A71724B17FDD57DFAD /* Suniye-Bridging-Header.h */,
 				C7F3C3D023876B9EE8256C00 /* Suniye.swift */,
+				9D1534750806E24BA6EAEBB6 /* SuniyeNativeBridge.h */,
+				DA6D9C9D8CF9BF854941CE7C /* SuniyeNativeBridge.mm */,
+				3B0062F685A6185CFE33BE63 /* Fonts */,
 				F524B702F3306B43AF23557A /* Frameworks */,
 				9C4DE280446657D266991A07 /* Services */,
 				ACABD336294DBFA58C26FE31 /* Views */,
@@ -229,6 +241,16 @@
 				6A3F45C96538887F8FF79E57 /* MainWindowView.swift */,
 			);
 			path = MainWindow;
+			sourceTree = "<group>";
+		};
+		3B0062F685A6185CFE33BE63 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				D4416B992248F8B51B0E9DE1 /* FragmentMono-Italic.ttf */,
+				82E6C7AA7DADED73D5C382DA /* FragmentMono-Regular.ttf */,
+				D483D635E7A8E177A09D311E /* GoogleSans-Variable.ttf */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 		3DEDB5B99BE7B42D556BDC1D /* Frameworks */ = {
@@ -373,6 +395,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				5CEBE7C5B635C70620A16FF3 /* Assets.xcassets in Resources */,
+				81F6D8FCAFCBE596A30B1381 /* FragmentMono-Italic.ttf in Resources */,
+				AA7DAE1D8BC31737F5640A1B /* FragmentMono-Regular.ttf in Resources */,
+				F047041193A8264676FEC71A /* GoogleSans-Variable.ttf in Resources */,
 				8A316AF1F2E3CA91B1F0FAC2 /* libonnxruntime.1.23.2.dylib in Resources */,
 				08572C9D373070F699B86BAC /* libonnxruntime.dylib in Resources */,
 				FD68A66D8807B4E102B0E8C7 /* libsherpa-onnx-c-api.dylib in Resources */,
@@ -416,6 +441,7 @@
 				DC8532A515E87705B0F4BFC5 /* SherpaOnnx.swift in Sources */,
 				9CEC29D27FCC952C4C618C70 /* StatusItemController.swift in Sources */,
 				67C62EE8BA2F2B763D8477D6 /* Suniye.swift in Sources */,
+				34A83F20C1CEA0EA82E71CAC /* SuniyeNativeBridge.mm in Sources */,
 				90783B5C1E7D43413D251BBC /* TextInsertionService.swift in Sources */,
 				B251595E3A3080BF2437F31F /* TranscriptionService.swift in Sources */,
 				087B92BAEB91B2A23153DA41 /* UpdateService.swift in Sources */,

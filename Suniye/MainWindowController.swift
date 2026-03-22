@@ -28,17 +28,19 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         AppLogger.shared.log(.info, "create main window")
 
         let content = MainWindowView(appState: appState)
-            .frame(minWidth: 980, minHeight: 640)
+            .frame(minWidth: 680, minHeight: 560)
 
         let host = NSHostingView(rootView: content)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1120, height: 720),
+            contentRect: NSRect(x: 0, y: 0, width: 780, height: 680),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Suniye"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
         window.backgroundColor = MainWindowPalette.windowBackgroundNSColor
         window.center()
         window.isReleasedWhenClosed = false

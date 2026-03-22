@@ -3,8 +3,6 @@ import SwiftUI
 struct MainWindowView: View {
     @Bindable var appState: AppState
     @State private var selection: MainWindowSection = MainWindowSection.initialSelection(arguments: CommandLine.arguments)
-    @State private var vocabularyDraft = ""
-
     var body: some View {
         HStack(spacing: 0) {
             sidebar
@@ -24,12 +22,17 @@ struct MainWindowView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Suniye")
-                .font(AppTypography.appTitle)
-                .foregroundStyle(MainWindowPalette.sidebarTitle)
-                .padding(.top, AppMetrics.sidebarBrandTop)
-                .padding(.horizontal, AppMetrics.sidebarBrandHorizontal)
-                .padding(.bottom, AppMetrics.sidebarBrandBottom)
+            HStack(spacing: 8) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 24, height: 24)
+                Text("Suniye")
+                    .font(AppTypography.appTitle)
+                    .foregroundStyle(MainWindowPalette.sidebarTitle)
+            }
+            .padding(.top, AppMetrics.sidebarBrandTop)
+            .padding(.horizontal, AppMetrics.sidebarBrandHorizontal)
+            .padding(.bottom, AppMetrics.sidebarBrandBottom)
 
             VStack(alignment: .leading, spacing: AppMetrics.sidebarRowSpacing) {
                 ForEach(MainWindowSection.allCases, id: \.self) { section in
@@ -57,14 +60,10 @@ struct MainWindowView: View {
                 DashboardPage(appState: appState) { selection = $0 }
             case .history:
                 HistoryPage(appState: appState)
-            case .hotkey:
-                HotkeyPage(appState: appState)
             case .model:
                 ModelPage(appState: appState)
-            case .vocabulary:
-                VocabularyPage(appState: appState, draft: $vocabularyDraft)
-            case .llm:
-                LLMPage(appState: appState)
+            case .style:
+                StylePage(appState: appState)
             case .general:
                 GeneralPage(appState: appState)
             }

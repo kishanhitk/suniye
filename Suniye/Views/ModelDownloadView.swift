@@ -15,7 +15,7 @@ struct ModelDownloadView: View {
             if appState.phase == .downloadingModel {
                 ProgressView(value: appState.downloadProgress)
                 Text("\(Int(appState.downloadProgress * 100))%")
-                    .font(Font.system(.caption, design: .monospaced))
+                    .font(AppTypography.codeBody)
                     .foregroundStyle(.secondary)
             }
 
