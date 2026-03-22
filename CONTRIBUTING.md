@@ -16,7 +16,7 @@ Thanks for your interest in contributing.
 3. Run checks locally before opening PR:
    - `./scripts/e2e_preflight.sh`
    - `./scripts/e2e_smoke.sh`
-4. Update docs/changelog when behavior changes.
+4. Update relevant docs when behavior changes.
 
 ## Pull request expectations
 - Explain the problem and solution.

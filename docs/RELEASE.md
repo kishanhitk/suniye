@@ -4,7 +4,7 @@
 Use semantic tags: `vMAJOR.MINOR.PATCH`.
 
 ## Pre-release checklist
-1. `CHANGELOG.md` updated.
+1. PR description and commits reflect the release changes accurately.
 2. `./scripts/doctor.sh` passes.
 3. `./scripts/e2e_preflight.sh` passes.
 4. `./scripts/e2e_smoke.sh` passes.

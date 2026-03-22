@@ -19,7 +19,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         case recognizerNotLoaded
         case emptyAudio
         case missingModelFile(String)
-        case recognizerCreationFailed
+        case recognizerCreationFailed(String?)
         case streamCreationFailed
         case decodeResultUnavailable
 
@@ -31,7 +31,10 @@ actor TranscriptionService: TranscriptionServiceProtocol {
                 return "No audio captured"
             case let .missingModelFile(path):
                 return "Required model file is missing: \(path)"
-            case .recognizerCreationFailed:
+            case let .recognizerCreationFailed(message):
+                if let message, !message.isEmpty {
+                    return "Failed to create sherpa-onnx offline recognizer: \(message)"
+                }
                 return "Failed to create sherpa-onnx offline recognizer"
             case .streamCreationFailed:
                 return "Failed to create sherpa-onnx offline stream"
@@ -75,9 +78,15 @@ actor TranscriptionService: TranscriptionServiceProtocol {
             maxActivePaths: 4
         )
         var configCopy = recognizerConfig
+        var nativeError: UnsafeMutablePointer<CChar>?
 
-        guard let created = SherpaOnnxCreateOfflineRecognizer(&configCopy) else {
-            throw ServiceError.recognizerCreationFailed
+        guard let created = SuniyeCreateOfflineRecognizerSafe(&configCopy, &nativeError) else {
+            let message = nativeError.map { pointer in
+                let value = String(cString: pointer)
+                SuniyeFreeCString(pointer)
+                return value
+            }
+            throw ServiceError.recognizerCreationFailed(message)
         }
 
         if let recognizer {
