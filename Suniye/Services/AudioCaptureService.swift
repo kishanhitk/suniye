@@ -542,7 +542,9 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
     }
 
     private static let halInputCallback: AURenderCallback = { inRefCon, ioActionFlags, inTimeStamp, _, inNumberFrames, _ in
-        guard let inRefCon else {
+        guard let inRefCon,
+              let ioActionFlags,
+              let inTimeStamp else {
             return noErr
         }
         let service = Unmanaged<AudioCaptureService>.fromOpaque(inRefCon).takeUnretainedValue()
