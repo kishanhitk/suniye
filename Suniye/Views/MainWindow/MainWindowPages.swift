@@ -483,7 +483,7 @@ struct GeneralPage: View {
 
                         SettingsToggleRow(
                             title: "Echo Cancellation",
-                            detail: "Filters out system audio (music, video, TTS) from the microphone during dictation. Uses Apple's Voice Processing.",
+                            detail: "Filters out system audio (music, video, TTS) from the microphone during dictation. Uses Apple's Voice Processing. Leave off to preserve full-quality Bluetooth headphone playback.",
                             isOn: $appState.echoCancellationEnabled
                         )
                     }

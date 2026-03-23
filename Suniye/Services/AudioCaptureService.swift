@@ -14,43 +14,143 @@ protocol AudioCaptureServiceProtocol {
     func availableInputDevices() -> [AudioInputDevice]
 }
 
+private func audioCaptureHALInputCallback(
+    inRefCon: UnsafeMutableRawPointer,
+    ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+    inTimeStamp: UnsafePointer<AudioTimeStamp>,
+    inBusNumber: UInt32,
+    inNumberFrames: UInt32,
+    ioData: UnsafeMutablePointer<AudioBufferList>?
+) -> OSStatus {
+    let service = Unmanaged<AudioCaptureService>.fromOpaque(inRefCon).takeUnretainedValue()
+    return service.handleHALInput(
+        ioActionFlags: ioActionFlags,
+        inTimeStamp: inTimeStamp,
+        inNumberFrames: inNumberFrames,
+        inBusNumber: inBusNumber
+    )
+}
+
 final class AudioCaptureService: AudioCaptureServiceProtocol {
+    private enum CaptureBackend {
+        case halInput
+        case voiceProcessingEngine
+    }
+
     private let engine = AVAudioEngine()
+    private var halInputUnit: AudioUnit?
     private var converter: AVAudioConverter?
     private var inputFormat: AVAudioFormat?
     private var targetFormat: AVAudioFormat?
     private var captureSampleRate: Int = 16_000
     private var samples: [Float] = []
     private let lock = NSLock()
+    private var activeBackend: CaptureBackend?
+
+    deinit {
+        stopActiveCapture()
+    }
 
     func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws {
         lock.lock()
         samples.removeAll(keepingCapacity: true)
         lock.unlock()
 
+        stopActiveCapture()
+
+        let backend = Self.captureBackendValue(echoCancellationEnabled: echoCancellationEnabled)
+
+        switch backend {
+        case .halInput:
+            try startHALCapture(preferredInputDeviceID: preferredInputDeviceID)
+        case .voiceProcessingEngine:
+            try startVoiceProcessingCapture(preferredInputDeviceID: preferredInputDeviceID)
+        }
+        activeBackend = backend
+    }
+
+    func availableInputDevices() -> [AudioInputDevice] {
+        let defaultInputDeviceID = Self.defaultInputDeviceID()
+        return Self.allDeviceIDs()
+            .filter { Self.inputChannelCount(for: $0) > 0 }
+            .compactMap { deviceID in
+                guard let uid = Self.deviceUID(for: deviceID),
+                      let name = Self.deviceName(for: deviceID) else {
+                    return nil
+                }
+                return AudioInputDevice(
+                    id: uid,
+                    name: name,
+                    isDefault: defaultInputDeviceID == deviceID
+                )
+            }
+            .sorted {
+                if $0.isDefault != $1.isDefault {
+                    return $0.isDefault
+                }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+    }
+
+    func stopCapture() -> CapturedAudio {
+        stopActiveCapture()
+
+        lock.lock()
+        let out = samples
+        samples.removeAll(keepingCapacity: false)
+        lock.unlock()
+        let rms = Self.rms(of: out)
+        let peak = out.reduce(0) { max($0, abs($1)) }
+        let seconds = out.isEmpty ? 0 : Double(out.count) / Double(captureSampleRate)
+        AppLogger.shared.log(
+            .info,
+            String(
+                format: "audio capture stop samples=%d sr=%d duration=%.2fs rms=%.5f peak=%.5f",
+                out.count,
+                captureSampleRate,
+                seconds,
+                rms,
+                peak
+            )
+        )
+        return CapturedAudio(samples: out, sampleRate: captureSampleRate)
+    }
+
+    static func captureBackend(echoCancellationEnabled: Bool) -> String {
+        switch captureBackendValue(echoCancellationEnabled: echoCancellationEnabled) {
+        case .halInput:
+            return "halInput"
+        case .voiceProcessingEngine:
+            return "voiceProcessingEngine"
+        }
+    }
+
+    private static func captureBackendValue(echoCancellationEnabled: Bool) -> CaptureBackend {
+        echoCancellationEnabled ? .voiceProcessingEngine : .halInput
+    }
+
+    private func startVoiceProcessingCapture(preferredInputDeviceID: String?) throws {
         let inputNode = engine.inputNode
         inputNode.removeTap(onBus: 0)
         engine.stop()
 
         // VP must be toggled before reading format or setting device — it replaces the audio unit.
-        if inputNode.isVoiceProcessingEnabled != echoCancellationEnabled {
-            try inputNode.setVoiceProcessingEnabled(echoCancellationEnabled)
+        if !inputNode.isVoiceProcessingEnabled {
+            try inputNode.setVoiceProcessingEnabled(true)
         }
 
-        if echoCancellationEnabled {
-            // Disable ducking so system audio volume isn't reduced during recording.
-            // Layer 1: AU property 2012 — minimizes the initial volume dip.
-            if let au = inputNode.audioUnit {
-                var duck: UInt32 = 0
-                AudioUnitSetProperty(au, 2012, kAudioUnitScope_Global, 0,
-                                     &duck, UInt32(MemoryLayout<UInt32>.size))
-            }
-            // Layer 2: high-level lifecycle control (macOS 14+).
-            if #available(macOS 14.0, *) {
-                inputNode.voiceProcessingOtherAudioDuckingConfiguration =
-                    AVAudioVoiceProcessingOtherAudioDuckingConfiguration(
-                        enableAdvancedDucking: false, duckingLevel: .min)
-            }
+        // Disable ducking so system audio volume isn't reduced during recording.
+        // Layer 1: AU property 2012 — minimizes the initial volume dip.
+        if let au = inputNode.audioUnit {
+            var duck: UInt32 = 0
+            AudioUnitSetProperty(au, 2012, kAudioUnitScope_Global, 0,
+                                 &duck, UInt32(MemoryLayout<UInt32>.size))
+        }
+        // Layer 2: high-level lifecycle control (macOS 14+).
+        if #available(macOS 14.0, *) {
+            inputNode.voiceProcessingOtherAudioDuckingConfiguration =
+                AVAudioVoiceProcessingOtherAudioDuckingConfiguration(
+                    enableAdvancedDucking: false, duckingLevel: .min)
         }
 
         // Set input device — must be after VP toggle since VP replaces the audio unit.
@@ -102,7 +202,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         }
         AppLogger.shared.log(
             .info,
-            "audio capture start sr=\(sampleRate) channels=\(nativeFormat.channelCount) tapChannels=1 aec=\(echoCancellationEnabled)"
+            "audio capture start backend=voiceProcessingEngine sr=\(sampleRate) channels=\(nativeFormat.channelCount) tapChannels=1 aec=true"
         )
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
             self?.consume(buffer: buffer)
@@ -111,52 +211,161 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         try engine.start()
     }
 
-    func availableInputDevices() -> [AudioInputDevice] {
-        let defaultInputDeviceID = Self.defaultInputDeviceID()
-        return Self.allDeviceIDs()
-            .filter { Self.inputChannelCount(for: $0) > 0 }
-            .compactMap { deviceID in
-                guard let uid = Self.deviceUID(for: deviceID),
-                      let name = Self.deviceName(for: deviceID) else {
-                    return nil
-                }
-                return AudioInputDevice(
-                    id: uid,
-                    name: name,
-                    isDefault: defaultInputDeviceID == deviceID
-                )
-            }
-            .sorted {
-                if $0.isDefault != $1.isDefault {
-                    return $0.isDefault
-                }
-                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
+    private func startHALCapture(preferredInputDeviceID: String?) throws {
+        guard let inputDeviceID = Self.inputDeviceID(forUID: preferredInputDeviceID) else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(kAudio_ParamError))
+        }
+
+        var componentDescription = AudioComponentDescription(
+            componentType: kAudioUnitType_Output,
+            componentSubType: kAudioUnitSubType_HALOutput,
+            componentManufacturer: kAudioUnitManufacturer_Apple,
+            componentFlags: 0,
+            componentFlagsMask: 0
+        )
+        guard let component = AudioComponentFindNext(nil, &componentDescription) else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(kAudio_ParamError))
+        }
+
+        var maybeUnit: AudioUnit?
+        try Self.checkStatus(
+            AudioComponentInstanceNew(component, &maybeUnit),
+            operation: "create HAL input unit"
+        )
+        guard let unit = maybeUnit else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(kAudio_ParamError))
+        }
+
+        do {
+            var enableIO: UInt32 = 1
+            try Self.checkStatus(
+                AudioUnitSetProperty(
+                    unit,
+                    kAudioOutputUnitProperty_EnableIO,
+                    kAudioUnitScope_Input,
+                    1,
+                    &enableIO,
+                    UInt32(MemoryLayout<UInt32>.size)
+                ),
+                operation: "enable HAL input"
+            )
+
+            var disableOutput: UInt32 = 0
+            try Self.checkStatus(
+                AudioUnitSetProperty(
+                    unit,
+                    kAudioOutputUnitProperty_EnableIO,
+                    kAudioUnitScope_Output,
+                    0,
+                    &disableOutput,
+                    UInt32(MemoryLayout<UInt32>.size)
+                ),
+                operation: "disable HAL output"
+            )
+
+            var currentDevice = inputDeviceID
+            try Self.checkStatus(
+                AudioUnitSetProperty(
+                    unit,
+                    kAudioOutputUnitProperty_CurrentDevice,
+                    kAudioUnitScope_Global,
+                    0,
+                    &currentDevice,
+                    UInt32(MemoryLayout<AudioObjectID>.size)
+                ),
+                operation: "select HAL input device"
+            )
+
+            var deviceFormat = AudioStreamBasicDescription()
+            var deviceFormatSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+            try Self.checkStatus(
+                AudioUnitGetProperty(
+                    unit,
+                    kAudioUnitProperty_StreamFormat,
+                    kAudioUnitScope_Output,
+                    1,
+                    &deviceFormat,
+                    &deviceFormatSize
+                ),
+                operation: "read HAL device format"
+            )
+
+            var clientFormat = AudioStreamBasicDescription(
+                mSampleRate: deviceFormat.mSampleRate,
+                mFormatID: kAudioFormatLinearPCM,
+                mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,
+                mBytesPerPacket: UInt32(MemoryLayout<Float>.size),
+                mFramesPerPacket: 1,
+                mBytesPerFrame: UInt32(MemoryLayout<Float>.size),
+                mChannelsPerFrame: 1,
+                mBitsPerChannel: UInt32(MemoryLayout<Float>.size * 8),
+                mReserved: 0
+            )
+            try Self.checkStatus(
+                AudioUnitSetProperty(
+                    unit,
+                    kAudioUnitProperty_StreamFormat,
+                    kAudioUnitScope_Output,
+                    1,
+                    &clientFormat,
+                    UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+                ),
+                operation: "set HAL client format"
+            )
+
+            var callback = AURenderCallbackStruct(
+                inputProc: audioCaptureHALInputCallback,
+                inputProcRefCon: Unmanaged.passUnretained(self).toOpaque()
+            )
+            try Self.checkStatus(
+                AudioUnitSetProperty(
+                    unit,
+                    kAudioOutputUnitProperty_SetInputCallback,
+                    kAudioUnitScope_Global,
+                    0,
+                    &callback,
+                    UInt32(MemoryLayout<AURenderCallbackStruct>.size)
+                ),
+                operation: "install HAL input callback"
+            )
+
+            halInputUnit = unit
+            try Self.checkStatus(AudioUnitInitialize(unit), operation: "initialize HAL input")
+            try Self.checkStatus(AudioOutputUnitStart(unit), operation: "start HAL input")
+            captureSampleRate = max(8_000, Int(deviceFormat.mSampleRate.rounded()))
+            inputFormat = nil
+            targetFormat = nil
+            converter = nil
+            AppLogger.shared.log(
+                .info,
+                "audio capture start backend=halInput sr=\(captureSampleRate) channels=1 tapChannels=1 aec=false"
+            )
+        } catch {
+            halInputUnit = nil
+            AudioComponentInstanceDispose(unit)
+            throw error
+        }
     }
 
-    func stopCapture() -> CapturedAudio {
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
-
-        lock.lock()
-        let out = samples
-        samples.removeAll(keepingCapacity: false)
-        lock.unlock()
-        let rms = Self.rms(of: out)
-        let peak = out.reduce(0) { max($0, abs($1)) }
-        let seconds = out.isEmpty ? 0 : Double(out.count) / Double(captureSampleRate)
-        AppLogger.shared.log(
-            .info,
-            String(
-                format: "audio capture stop samples=%d sr=%d duration=%.2fs rms=%.5f peak=%.5f",
-                out.count,
-                captureSampleRate,
-                seconds,
-                rms,
-                peak
-            )
-        )
-        return CapturedAudio(samples: out, sampleRate: captureSampleRate)
+    private func stopActiveCapture() {
+        switch activeBackend {
+        case .voiceProcessingEngine:
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            if engine.inputNode.isVoiceProcessingEnabled {
+                try? engine.inputNode.setVoiceProcessingEnabled(false)
+            }
+        case .halInput:
+            if let halInputUnit {
+                AudioOutputUnitStop(halInputUnit)
+                AudioUnitUninitialize(halInputUnit)
+                AudioComponentInstanceDispose(halInputUnit)
+                self.halInputUnit = nil
+            }
+        case nil:
+            break
+        }
+        activeBackend = nil
     }
 
     private func consume(buffer: AVAudioPCMBuffer) {
@@ -344,5 +553,59 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
         let buffers = UnsafeMutableAudioBufferListPointer(bufferListPointer)
         return buffers.reduce(0) { $0 + Int($1.mNumberChannels) }
+    }
+
+    private static func inputDeviceID(forUID uid: String?) -> AudioObjectID? {
+        if let uid, let device = audioDeviceID(forUID: uid) {
+            return device
+        }
+        return defaultInputDeviceID()
+    }
+
+    fileprivate func handleHALInput(
+        ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+        inTimeStamp: UnsafePointer<AudioTimeStamp>,
+        inNumberFrames: UInt32,
+        inBusNumber: UInt32
+    ) -> OSStatus {
+        guard let halInputUnit else {
+            return noErr
+        }
+
+        let byteCount = Int(inNumberFrames) * MemoryLayout<Float>.size
+        let data = UnsafeMutableRawPointer.allocate(byteCount: byteCount, alignment: MemoryLayout<Float>.alignment)
+        defer { data.deallocate() }
+
+        var buffer = AudioBuffer(
+            mNumberChannels: 1,
+            mDataByteSize: UInt32(byteCount),
+            mData: data
+        )
+        var bufferList = AudioBufferList(mNumberBuffers: 1, mBuffers: buffer)
+        let status = AudioUnitRender(
+            halInputUnit,
+            ioActionFlags,
+            inTimeStamp,
+            inBusNumber,
+            inNumberFrames,
+            &bufferList
+        )
+        guard status == noErr else {
+            return status
+        }
+
+        let floatPointer = data.bindMemory(to: Float.self, capacity: Int(inNumberFrames))
+        let chunk = Array(UnsafeBufferPointer(start: floatPointer, count: Int(inNumberFrames)))
+        lock.lock()
+        samples.append(contentsOf: chunk)
+        lock.unlock()
+        return noErr
+    }
+
+    private static func checkStatus(_ status: OSStatus, operation: String) throws {
+        guard status == noErr else {
+            AppLogger.shared.log(.error, "\(operation) failed status=\(status)")
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+        }
     }
 }
