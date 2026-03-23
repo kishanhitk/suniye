@@ -14,6 +14,29 @@ protocol AudioCaptureServiceProtocol {
     func availableInputDevices() -> [AudioInputDevice]
 }
 
+private func audioCaptureHALInputCallback(
+    inRefCon: UnsafeMutableRawPointer?,
+    ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>?,
+    inTimeStamp: UnsafePointer<AudioTimeStamp>?,
+    inBusNumber: UInt32,
+    inNumberFrames: UInt32,
+    ioData: UnsafeMutablePointer<AudioBufferList>?
+) -> OSStatus {
+    guard let inRefCon,
+          let ioActionFlags,
+          let inTimeStamp else {
+        return noErr
+    }
+
+    let service = Unmanaged<AudioCaptureService>.fromOpaque(inRefCon).takeUnretainedValue()
+    return service.handleHALInput(
+        ioActionFlags: ioActionFlags,
+        inTimeStamp: inTimeStamp,
+        inNumberFrames: inNumberFrames,
+        inBusNumber: inBusNumber
+    )
+}
+
 final class AudioCaptureService: AudioCaptureServiceProtocol {
     private enum CaptureBackend {
         case halInput
@@ -192,7 +215,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
     private func startHALCapture(preferredInputDeviceID: String?) throws {
         guard let inputDeviceID = Self.inputDeviceID(forUID: preferredInputDeviceID) else {
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(kAudioHardwareBadDeviceError))
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(kAudio_ParamError))
         }
 
         var componentDescription = AudioComponentDescription(
@@ -272,7 +295,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
             var clientFormat = AudioStreamBasicDescription(
                 mSampleRate: deviceFormat.mSampleRate,
                 mFormatID: kAudioFormatLinearPCM,
-                mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagsNativeEndian | kAudioFormatFlagIsNonInterleaved,
+                mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,
                 mBytesPerPacket: UInt32(MemoryLayout<Float>.size),
                 mFramesPerPacket: 1,
                 mBytesPerFrame: UInt32(MemoryLayout<Float>.size),
@@ -293,8 +316,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
             )
 
             var callback = AURenderCallbackStruct(
-                inputProc: Self.halInputCallback,
-                inputProcRefCon: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
+                inputProc: audioCaptureHALInputCallback,
+                inputProcRefCon: Unmanaged.passUnretained(self).toOpaque()
             )
             try Self.checkStatus(
                 AudioUnitSetProperty(
@@ -541,20 +564,11 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         return defaultInputDeviceID()
     }
 
-    private static let halInputCallback: AURenderCallback = { inRefCon, ioActionFlags, inTimeStamp, _, inNumberFrames, _ in
-        guard let inRefCon,
-              let ioActionFlags,
-              let inTimeStamp else {
-            return noErr
-        }
-        let service = Unmanaged<AudioCaptureService>.fromOpaque(inRefCon).takeUnretainedValue()
-        return service.handleHALInput(ioActionFlags: ioActionFlags, inTimeStamp: inTimeStamp, inNumberFrames: inNumberFrames)
-    }
-
-    private func handleHALInput(
+    fileprivate func handleHALInput(
         ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
         inTimeStamp: UnsafePointer<AudioTimeStamp>,
-        inNumberFrames: UInt32
+        inNumberFrames: UInt32,
+        inBusNumber: UInt32
     ) -> OSStatus {
         guard let halInputUnit else {
             return noErr
@@ -574,7 +588,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
             halInputUnit,
             ioActionFlags,
             inTimeStamp,
-            1,
+            inBusNumber,
             inNumberFrames,
             &bufferList
         )
