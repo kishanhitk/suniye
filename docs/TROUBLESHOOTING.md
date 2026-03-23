@@ -26,3 +26,7 @@ Rebuild and copy runtime libs:
 Grant and re-check:
 - Microphone access
 - Accessibility permissions
+
+## Bluetooth audio drops to call quality while dictating
+- Leave **Echo Cancellation** off unless you need speaker/audio playback removal from the mic signal.
+- When Echo Cancellation is off, Suniye now captures from the selected microphone via an input-only Core Audio path so Bluetooth headphone playback can stay on the high-quality output profile.
