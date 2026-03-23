@@ -15,19 +15,13 @@ protocol AudioCaptureServiceProtocol {
 }
 
 private func audioCaptureHALInputCallback(
-    inRefCon: UnsafeMutableRawPointer?,
-    ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>?,
-    inTimeStamp: UnsafePointer<AudioTimeStamp>?,
+    inRefCon: UnsafeMutableRawPointer,
+    ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+    inTimeStamp: UnsafePointer<AudioTimeStamp>,
     inBusNumber: UInt32,
     inNumberFrames: UInt32,
     ioData: UnsafeMutablePointer<AudioBufferList>?
 ) -> OSStatus {
-    guard let inRefCon,
-          let ioActionFlags,
-          let inTimeStamp else {
-        return noErr
-    }
-
     let service = Unmanaged<AudioCaptureService>.fromOpaque(inRefCon).takeUnretainedValue()
     return service.handleHALInput(
         ioActionFlags: ioActionFlags,
