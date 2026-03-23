@@ -47,6 +47,10 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
     private let lock = NSLock()
     private var activeBackend: CaptureBackend?
 
+    deinit {
+        stopActiveCapture()
+    }
+
     func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws {
         lock.lock()
         samples.removeAll(keepingCapacity: true)
@@ -552,8 +556,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
     }
 
     private static func inputDeviceID(forUID uid: String?) -> AudioObjectID? {
-        if let uid {
-            return audioDeviceID(forUID: uid)
+        if let uid, let device = audioDeviceID(forUID: uid) {
+            return device
         }
         return defaultInputDeviceID()
     }
