@@ -73,6 +73,14 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertNil(settings.validatedEndpointURL)
         XCTAssertFalse(settings.isEndpointValid)
         XCTAssertEqual(settings.endpointValidationError, "Enter a valid http(s) endpoint URL.")
+
+        settings.endpointURLString = "https://"
+        XCTAssertNil(settings.validatedEndpointURL)
+        XCTAssertFalse(settings.isEndpointValid)
+
+        settings.endpointURLString = "http:///path"
+        XCTAssertNil(settings.validatedEndpointURL)
+        XCTAssertFalse(settings.isEndpointValid)
     }
 
     func testPresetMetadataMatchesMainWindowModelList() {

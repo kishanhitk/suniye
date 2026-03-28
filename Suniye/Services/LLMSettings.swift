@@ -211,8 +211,11 @@ Fix transcription errors, misspellings, and misheard words. Preserve the origina
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let parsed = URL(string: trimmed),
-              let scheme = parsed.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else {
+              var components = URLComponents(url: parsed, resolvingAgainstBaseURL: false),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = components.host?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !host.isEmpty else {
             return nil
         }
 
@@ -222,8 +225,7 @@ Fix transcription errors, misspellings, and misheard words. Preserve the origina
         }
 
         let normalizedPath = path.isEmpty ? "chat/completions" : "\(path)/chat/completions"
-        var components = URLComponents(url: parsed, resolvingAgainstBaseURL: false)
-        components?.path = "/" + normalizedPath
-        return components?.url
+        components.path = "/" + normalizedPath
+        return components.url
     }
 }
