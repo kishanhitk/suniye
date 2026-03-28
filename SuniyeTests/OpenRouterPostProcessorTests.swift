@@ -47,6 +47,7 @@ final class OpenRouterPostProcessorTests: XCTestCase {
 
         let config = LLMConfig(
             modelId: "google/gemini-2.5-flash",
+            endpointURL: URL(string: "https://openrouter.ai/api/v1/chat/completions")!,
             systemPrompt: "prompt",
             keywords: ["swift"],
             timeoutSeconds: 3,
@@ -56,6 +57,34 @@ final class OpenRouterPostProcessorTests: XCTestCase {
 
         let output = try await processor.polish(text: "hello world", config: config)
         XCTAssertEqual(output, "hello world.")
+    }
+
+    func testPolishUsesConfiguredEndpoint() async throws {
+        let session = makeSession()
+        let processor = OpenRouterPostProcessor(session: session)
+
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://example.com/v1/chat/completions")
+            let responseJSON: [String: Any] = [
+                "choices": [["message": ["content": "hello"]]],
+            ]
+            let data = try JSONSerialization.data(withJSONObject: responseJSON)
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, data)
+        }
+
+        let config = LLMConfig(
+            modelId: "google/gemini-2.5-flash",
+            endpointURL: URL(string: "https://example.com/v1/chat/completions")!,
+            systemPrompt: "prompt",
+            keywords: [],
+            timeoutSeconds: 3,
+            maxTokens: 128,
+            apiKey: "test-key"
+        )
+
+        let output = try await processor.polish(text: "hello", config: config)
+        XCTAssertEqual(output, "hello")
     }
 
     func testPolishThrowsMalformedForInvalidResponse() async {
@@ -70,6 +99,7 @@ final class OpenRouterPostProcessorTests: XCTestCase {
 
         let config = LLMConfig(
             modelId: "google/gemini-2.5-flash",
+            endpointURL: URL(string: "https://openrouter.ai/api/v1/chat/completions")!,
             systemPrompt: "prompt",
             keywords: [],
             timeoutSeconds: 3,
@@ -137,7 +167,7 @@ private final class MockURLProtocol: URLProtocol {
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.absoluteString == "https://openrouter.ai/api/v1/chat/completions"
+        request.url?.path.hasSuffix("/chat/completions") == true
     }
 
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {

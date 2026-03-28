@@ -198,6 +198,9 @@ final class AppState {
     var llmCustomModelId = "" {
         didSet { persistLLMSettings() }
     }
+    var llmEndpointURLString = LLMDefaults.defaultEndpointURLString {
+        didSet { persistLLMSettings() }
+    }
     var llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt {
         didSet { persistLLMSettings() }
     }
@@ -228,9 +231,9 @@ final class AppState {
         }
     }
 
-    var hasOpenRouterAPIKey = false {
+    var hasLLMAPIKey = false {
         didSet {
-            if oldValue != hasOpenRouterAPIKey {
+            if oldValue != hasLLMAPIKey {
                 onStateChange?()
             }
         }
@@ -245,18 +248,36 @@ final class AppState {
     }
 
     var llmKeyStatusText: String {
-        hasOpenRouterAPIKey ? "API key: saved" : "API key: missing"
+        hasLLMAPIKey ? "API key: saved" : "API key: missing"
+    }
+
+    var llmEndpointValidationError: String? {
+        currentLLMSettings().endpointValidationError
+    }
+
+    var llmModelValidationError: String? {
+        currentLLMSettings().modelValidationError
     }
 
     var llmStatusHint: String? {
-        if llmEnabled && !hasOpenRouterAPIKey {
+        if llmEnabled, llmEndpointValidationError != nil {
+            return "LLM enabled but endpoint URL invalid"
+        }
+        if llmEnabled, llmModelValidationError != nil {
+            return "LLM enabled but custom model ID invalid"
+        }
+        if llmEnabled && !hasLLMAPIKey {
             return "LLM enabled but API key missing"
         }
         return nil
     }
 
     var llmSelectedModelIdPreview: String {
-        currentLLMSettings().effectiveModelId
+        currentLLMSettings().validatedModelId ?? ""
+    }
+
+    func llmDisplayModelId(for preset: LLMModelPreset) -> String {
+        currentLLMSettings().displayModelId(for: preset)
     }
 
     var vocabularyTerms: [String] {
@@ -447,12 +468,36 @@ final class AppState {
             )
         }
 
-        if llmEnabled && !hasOpenRouterAPIKey {
+        if llmEnabled, let endpointValidationError = llmEndpointValidationError {
+            items.append(
+                AttentionItem(
+                    id: "llm-endpoint-invalid",
+                    title: "LLM endpoint URL invalid",
+                    detail: endpointValidationError,
+                    severity: .warning,
+                    recommendedSection: .style
+                )
+            )
+        }
+
+        if llmEnabled, let modelValidationError = llmModelValidationError {
+            items.append(
+                AttentionItem(
+                    id: "llm-model-invalid",
+                    title: "LLM model ID invalid",
+                    detail: modelValidationError,
+                    severity: .warning,
+                    recommendedSection: .style
+                )
+            )
+        }
+
+        if llmEnabled && !hasLLMAPIKey {
             items.append(
                 AttentionItem(
                     id: "llm-key-missing",
                     title: "LLM API key missing",
-                    detail: "LLM polishing is enabled, but no OpenRouter API key is saved.",
+                    detail: "LLM polishing is enabled, but no LLM API key is saved.",
                     severity: .warning,
                     recommendedSection: .style
                 )
@@ -643,10 +688,10 @@ final class AppState {
     }
 
     func refreshLLMKeyStatus() {
-        hasOpenRouterAPIKey = keychainService.hasOpenRouterKey()
+        hasLLMAPIKey = keychainService.hasLLMKey()
     }
 
-    func saveOpenRouterAPIKey(_ key: String) {
+    func saveLLMAPIKey(_ key: String) {
         let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else {
             llmKeyOperationError = "API key cannot be empty"
@@ -655,26 +700,26 @@ final class AppState {
         }
 
         do {
-            try keychainService.setOpenRouterKey(normalized)
+            try keychainService.setLLMKey(normalized)
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
-            AppLogger.shared.log(.info, "openrouter api key saved")
+            AppLogger.shared.log(.info, "llm api key saved")
         } catch {
             llmKeyOperationError = "Failed to save API key"
-            AppLogger.shared.log(.error, "openrouter api key save failed")
+            AppLogger.shared.log(.error, "llm api key save failed")
             onStateChange?()
         }
     }
 
-    func clearOpenRouterAPIKey() {
+    func clearLLMAPIKey() {
         do {
-            try keychainService.deleteOpenRouterKey()
+            try keychainService.deleteLLMKey()
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
-            AppLogger.shared.log(.info, "openrouter api key cleared")
+            AppLogger.shared.log(.info, "llm api key cleared")
         } catch {
             llmKeyOperationError = "Failed to clear API key"
-            AppLogger.shared.log(.error, "openrouter api key clear failed")
+            AppLogger.shared.log(.error, "llm api key clear failed")
             onStateChange?()
         }
     }
@@ -917,19 +962,31 @@ final class AppState {
             return rawText
         }
 
-        guard hasOpenRouterAPIKey else {
+        guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
+            AppLogger.shared.log(.warning, "llm fallback raw reason=invalid_endpoint")
+            return rawText
+        }
+
+        guard let modelId = currentLLMSettings().validatedModelId else {
+            AppLogger.shared.log(.warning, "llm fallback raw reason=invalid_model")
+            return rawText
+        }
+
+        // TODO: Generic OpenAI-compatible backends can be keyless, but the current
+        // LLM settings flow still treats a missing API key as a hard stop.
+        guard hasLLMAPIKey else {
             AppLogger.shared.log(.warning, "llm fallback raw reason=missing_key")
             return rawText
         }
 
-        guard let apiKey = try? keychainService.getOpenRouterKey(),
+        guard let apiKey = try? keychainService.getLLMKey(),
               !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             AppLogger.shared.log(.warning, "llm fallback raw reason=key_read_failed")
             refreshLLMKeyStatus()
             return rawText
         }
 
-        let config = makeLLMConfig(apiKey: apiKey)
+        let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
         let startTime = Date()
         statusText = "Polishing..."
 
@@ -1040,6 +1097,10 @@ final class AppState {
     }
 
     private func beginRecordingFlow() async {
+        if phase == .error, canRetryRecordingAfterError {
+            clearRetryableRecordingError()
+        }
+
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "start recording ignored in phase=\(phase.rawValue)")
             showIndicator(.error(message: startBlockedMessage(for: phase)), autoHideAfter: 1.2)
@@ -1236,6 +1297,7 @@ final class AppState {
         llmEnabled = settings.isEnabled
         llmSelectedModelPreset = settings.selectedModelPreset
         llmCustomModelId = settings.customModelId
+        llmEndpointURLString = settings.endpointURLString
         llmBaseSystemPrompt = settings.baseSystemPrompt
         llmSystemPrompt = settings.systemPrompt
         llmKeywordsRaw = settings.keywordsRaw
@@ -1257,6 +1319,7 @@ final class AppState {
             isEnabled: llmEnabled,
             selectedModelPreset: llmSelectedModelPreset,
             customModelId: llmCustomModelId,
+            endpointURLString: llmEndpointURLString,
             baseSystemPrompt: llmBaseSystemPrompt,
             systemPrompt: llmSystemPrompt,
             keywordsRaw: llmKeywordsRaw,
@@ -1281,10 +1344,11 @@ final class AppState {
         onStateChange?()
     }
 
-    private func makeLLMConfig(apiKey: String) -> LLMConfig {
+    private func makeLLMConfig(apiKey: String, endpointURL: URL, modelId: String) -> LLMConfig {
         let settings = currentLLMSettings()
         return LLMConfig(
-            modelId: settings.effectiveModelId,
+            modelId: modelId,
+            endpointURL: endpointURL,
             systemPrompt: settings.composedSystemPrompt,
             keywords: settings.keywords,
             timeoutSeconds: settings.timeoutSeconds,
@@ -1314,6 +1378,22 @@ final class AppState {
         case .error:
             return "Resolve current error first"
         }
+    }
+
+    private var canRetryRecordingAfterError: Bool {
+        switch statusText {
+        case "Transcription error", "Audio error", "Permission required", "Accessibility required":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func clearRetryableRecordingError() {
+        lastError = nil
+        statusText = "Ready"
+        phase = .ready
+        AppLogger.shared.log(.info, "cleared retryable error state before recording")
     }
 
     nonisolated static func parseSubmitCommand(from text: String) -> (text: String, shouldSubmit: Bool) {

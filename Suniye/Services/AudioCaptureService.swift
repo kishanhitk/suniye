@@ -33,6 +33,7 @@ private func audioCaptureHALInputCallback(
 
 final class AudioCaptureService: AudioCaptureServiceProtocol {
     private enum CaptureBackend {
+        case standardEngine
         case halInput
         case voiceProcessingEngine
     }
@@ -58,13 +59,21 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
         stopActiveCapture()
 
-        let backend = Self.captureBackendValue(echoCancellationEnabled: echoCancellationEnabled)
+        var backend = Self.captureBackendValue(echoCancellationEnabled: echoCancellationEnabled)
 
         switch backend {
+        case .standardEngine:
+            try startStandardCapture(preferredInputDeviceID: preferredInputDeviceID)
         case .halInput:
             try startHALCapture(preferredInputDeviceID: preferredInputDeviceID)
         case .voiceProcessingEngine:
-            try startVoiceProcessingCapture(preferredInputDeviceID: preferredInputDeviceID)
+            do {
+                try startVoiceProcessingCapture(preferredInputDeviceID: preferredInputDeviceID)
+            } catch {
+                AppLogger.shared.log(.warning, "voice processing capture unavailable; falling back to standard engine")
+                try startStandardCapture(preferredInputDeviceID: preferredInputDeviceID)
+                backend = .standardEngine
+            }
         }
         activeBackend = backend
     }
@@ -118,6 +127,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
     static func captureBackend(echoCancellationEnabled: Bool) -> String {
         switch captureBackendValue(echoCancellationEnabled: echoCancellationEnabled) {
+        case .standardEngine:
+            return "standardEngine"
         case .halInput:
             return "halInput"
         case .voiceProcessingEngine:
@@ -126,7 +137,73 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
     }
 
     private static func captureBackendValue(echoCancellationEnabled: Bool) -> CaptureBackend {
-        echoCancellationEnabled ? .voiceProcessingEngine : .halInput
+        echoCancellationEnabled ? .voiceProcessingEngine : .standardEngine
+    }
+
+    private func startStandardCapture(preferredInputDeviceID: String?) throws {
+        let inputNode = engine.inputNode
+        inputNode.removeTap(onBus: 0)
+        engine.stop()
+
+        if inputNode.isVoiceProcessingEnabled {
+            try inputNode.setVoiceProcessingEnabled(false)
+        }
+
+        if let preferredInputDeviceID,
+           let audioUnit = inputNode.audioUnit,
+           let deviceID = Self.audioDeviceID(forUID: preferredInputDeviceID) {
+            var currentDevice = deviceID
+            let status = AudioUnitSetProperty(
+                audioUnit,
+                kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global,
+                0,
+                &currentDevice,
+                UInt32(MemoryLayout<AudioObjectID>.size)
+            )
+            if status != noErr {
+                AppLogger.shared.log(.warning, "audio input device selection failed status=\(status)")
+            }
+        }
+
+        let nativeFormat = inputNode.outputFormat(forBus: 0)
+        let sampleRate = max(8_000, Int(nativeFormat.sampleRate.rounded()))
+        captureSampleRate = sampleRate
+
+        let tapFormat: AVAudioFormat
+        if nativeFormat.channelCount > 1 {
+            tapFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: nativeFormat.sampleRate,
+                channels: 1,
+                interleaved: false
+            )!
+        } else {
+            tapFormat = nativeFormat
+        }
+
+        inputFormat = tapFormat
+        targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: nativeFormat.sampleRate,
+            channels: 1,
+            interleaved: false
+        )
+        if let targetFormat {
+            converter = AVAudioConverter(from: tapFormat, to: targetFormat)
+        } else {
+            converter = nil
+        }
+
+        AppLogger.shared.log(
+            .info,
+            "audio capture start backend=standardEngine sr=\(sampleRate) channels=\(nativeFormat.channelCount) tapChannels=1 aec=false"
+        )
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
+            self?.consume(buffer: buffer)
+        }
+
+        try engine.start()
     }
 
     private func startVoiceProcessingCapture(preferredInputDeviceID: String?) throws {
@@ -349,7 +426,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
     private func stopActiveCapture() {
         switch activeBackend {
-        case .voiceProcessingEngine:
+        case .standardEngine, .voiceProcessingEngine:
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
             if engine.inputNode.isVoiceProcessingEnabled {
