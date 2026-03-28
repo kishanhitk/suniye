@@ -9,15 +9,28 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(parsed, ["foo", "Bar", "qux"])
     }
 
-    func testCustomModelFallsBackWhenInvalid() {
+    func testCustomModelAcceptsNativeAndProviderPrefixedIDs() {
         var settings = LLMSettings()
         settings.selectedModelPreset = .custom
-        settings.customModelId = "not-valid"
+        settings.customModelId = "gpt-4.1-mini"
 
-        XCTAssertEqual(settings.effectiveModelId, "google/gemini-2.5-flash")
+        XCTAssertEqual(settings.validatedModelId, "gpt-4.1-mini")
 
         settings.customModelId = "openai/gpt-4.1-mini"
-        XCTAssertEqual(settings.effectiveModelId, "openai/gpt-4.1-mini")
+        XCTAssertEqual(settings.validatedModelId, "openai/gpt-4.1-mini")
+    }
+
+    func testCustomModelRequiresNonEmptySingleLineID() {
+        var settings = LLMSettings()
+        settings.selectedModelPreset = .custom
+        settings.customModelId = "   "
+
+        XCTAssertNil(settings.validatedModelId)
+        XCTAssertEqual(settings.modelValidationError, "Enter a valid model ID.")
+
+        settings.customModelId = "gpt-4.1-mini\nbeta"
+        XCTAssertNil(settings.validatedModelId)
+        XCTAssertEqual(settings.modelValidationError, "Enter a valid model ID.")
     }
 
     func testStoreRoundTrip() {
@@ -66,6 +79,17 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.validatedEndpointURL?.absoluteString, "https://example.com/proxy/chat/completions")
     }
 
+    func testPresetModelIdsAdaptToEndpointProvider() {
+        var settings = LLMSettings()
+        settings.selectedModelPreset = .gpt41Mini
+        settings.endpointURLString = LLMDefaults.defaultEndpointURLString
+        XCTAssertEqual(settings.validatedModelId, "openai/gpt-4.1-mini")
+
+        settings.endpointURLString = "https://api.openai.com/v1/chat/completions"
+        XCTAssertEqual(settings.validatedModelId, "gpt-4.1-mini")
+        XCTAssertEqual(settings.displayModelId(for: .gpt41Mini), "gpt-4.1-mini")
+    }
+
     func testInvalidEndpointDoesNotFallBackToDefaultProvider() {
         var settings = LLMSettings()
         settings.endpointURLString = "not a url"
@@ -84,8 +108,8 @@ final class LLMSettingsStoreTests: XCTestCase {
     }
 
     func testPresetMetadataMatchesMainWindowModelList() {
-        XCTAssertEqual(LLMModelPreset.gemini25Flash.displayName, "google/gemini-2.5-flash")
-        XCTAssertEqual(LLMModelPreset.gpt41Mini.displayName, "openai/gpt-4.1-mini")
+        XCTAssertEqual(LLMModelPreset.gemini25Flash.displayName, "Gemini 2.5 Flash")
+        XCTAssertEqual(LLMModelPreset.gpt41Mini.displayName, "GPT-4.1 Mini")
         XCTAssertEqual(LLMModelPreset.gpt41Mini.subtitle, "OpenAI, balanced")
     }
 }

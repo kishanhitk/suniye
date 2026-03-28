@@ -8,9 +8,9 @@ enum LLMModelPreset: String, CaseIterable, Codable {
     var displayName: String {
         switch self {
         case .gemini25Flash:
-            return "google/gemini-2.5-flash"
+            return "Gemini 2.5 Flash"
         case .gpt41Mini:
-            return "openai/gpt-4.1-mini"
+            return "GPT-4.1 Mini"
         case .custom:
             return "Custom"
         }
@@ -28,15 +28,34 @@ enum LLMModelPreset: String, CaseIterable, Codable {
     }
 
     var modelId: String {
+        modelId(for: .openRouter)
+    }
+
+    func modelId(for endpointProvider: LLMEndpointProvider) -> String {
         switch self {
         case .gemini25Flash:
-            return "google/gemini-2.5-flash"
+            switch endpointProvider {
+            case .openRouter:
+                return "google/gemini-2.5-flash"
+            case .generic:
+                return "gemini-2.5-flash"
+            }
         case .gpt41Mini:
-            return "openai/gpt-4.1-mini"
+            switch endpointProvider {
+            case .openRouter:
+                return "openai/gpt-4.1-mini"
+            case .generic:
+                return "gpt-4.1-mini"
+            }
         case .custom:
             return ""
         }
     }
+}
+
+enum LLMEndpointProvider {
+    case openRouter
+    case generic
 }
 
 struct LLMSettings: Codable, Equatable {
@@ -130,16 +149,16 @@ struct LLMSettings: Codable, Equatable {
         return sections.joined(separator: "\n\n")
     }
 
-    var effectiveModelId: String {
+    var endpointProvider: LLMEndpointProvider {
+        LLMDefaults.endpointProvider(for: validatedEndpointURL)
+    }
+
+    var validatedModelId: String? {
         switch selectedModelPreset {
         case .custom:
-            let custom = customModelId.trimmingCharacters(in: .whitespacesAndNewlines)
-            if LLMDefaults.isValidModelId(custom) {
-                return custom
-            }
-            return LLMModelPreset.gemini25Flash.modelId
+            return LLMDefaults.normalizedModelId(customModelId)
         case .gemini25Flash, .gpt41Mini:
-            return selectedModelPreset.modelId
+            return selectedModelPreset.modelId(for: endpointProvider)
         }
     }
 
@@ -156,6 +175,22 @@ struct LLMSettings: Codable, Equatable {
             return nil
         }
         return "Enter a valid http(s) endpoint URL."
+    }
+
+    var modelValidationError: String? {
+        guard selectedModelPreset == .custom, validatedModelId == nil else {
+            return nil
+        }
+        return "Enter a valid model ID."
+    }
+
+    func displayModelId(for preset: LLMModelPreset) -> String {
+        switch preset {
+        case .custom:
+            return "Custom model ID"
+        case .gemini25Flash, .gpt41Mini:
+            return preset.modelId(for: endpointProvider)
+        }
     }
 }
 
@@ -193,10 +228,18 @@ Fix transcription errors, misspellings, and misheard words. Preserve the origina
         guard !trimmed.isEmpty else {
             return false
         }
-        if trimmed.contains("\n") || trimmed.contains("\t") {
+        if trimmed.contains("\n") || trimmed.contains("\r") || trimmed.contains("\t") {
             return false
         }
-        return trimmed.contains("/")
+        return true
+    }
+
+    static func normalizedModelId(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidModelId(trimmed) else {
+            return nil
+        }
+        return trimmed
     }
 
     static func clampTimeout(_ value: Double) -> Double {
@@ -227,5 +270,15 @@ Fix transcription errors, misspellings, and misheard words. Preserve the origina
         let normalizedPath = path.isEmpty ? "chat/completions" : "\(path)/chat/completions"
         components.path = "/" + normalizedPath
         return components.url
+    }
+
+    static func endpointProvider(for endpointURL: URL?) -> LLMEndpointProvider {
+        guard let host = endpointURL?.host?.lowercased() else {
+            return .openRouter
+        }
+        if host == "openrouter.ai" || host.hasSuffix(".openrouter.ai") {
+            return .openRouter
+        }
+        return .generic
     }
 }

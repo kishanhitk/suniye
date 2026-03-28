@@ -255,9 +255,16 @@ final class AppState {
         currentLLMSettings().endpointValidationError
     }
 
+    var llmModelValidationError: String? {
+        currentLLMSettings().modelValidationError
+    }
+
     var llmStatusHint: String? {
         if llmEnabled, llmEndpointValidationError != nil {
             return "LLM enabled but endpoint URL invalid"
+        }
+        if llmEnabled, llmModelValidationError != nil {
+            return "LLM enabled but custom model ID invalid"
         }
         if llmEnabled && !hasLLMAPIKey {
             return "LLM enabled but API key missing"
@@ -266,7 +273,11 @@ final class AppState {
     }
 
     var llmSelectedModelIdPreview: String {
-        currentLLMSettings().effectiveModelId
+        currentLLMSettings().validatedModelId ?? ""
+    }
+
+    func llmDisplayModelId(for preset: LLMModelPreset) -> String {
+        currentLLMSettings().displayModelId(for: preset)
     }
 
     var vocabularyTerms: [String] {
@@ -463,6 +474,18 @@ final class AppState {
                     id: "llm-endpoint-invalid",
                     title: "LLM endpoint URL invalid",
                     detail: endpointValidationError,
+                    severity: .warning,
+                    recommendedSection: .style
+                )
+            )
+        }
+
+        if llmEnabled, let modelValidationError = llmModelValidationError {
+            items.append(
+                AttentionItem(
+                    id: "llm-model-invalid",
+                    title: "LLM model ID invalid",
+                    detail: modelValidationError,
                     severity: .warning,
                     recommendedSection: .style
                 )
@@ -944,6 +967,11 @@ final class AppState {
             return rawText
         }
 
+        guard let modelId = currentLLMSettings().validatedModelId else {
+            AppLogger.shared.log(.warning, "llm fallback raw reason=invalid_model")
+            return rawText
+        }
+
         // TODO: Generic OpenAI-compatible backends can be keyless, but the current
         // LLM settings flow still treats a missing API key as a hard stop.
         guard hasLLMAPIKey else {
@@ -958,7 +986,7 @@ final class AppState {
             return rawText
         }
 
-        let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL)
+        let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
         let startTime = Date()
         statusText = "Polishing..."
 
@@ -1316,10 +1344,10 @@ final class AppState {
         onStateChange?()
     }
 
-    private func makeLLMConfig(apiKey: String, endpointURL: URL) -> LLMConfig {
+    private func makeLLMConfig(apiKey: String, endpointURL: URL, modelId: String) -> LLMConfig {
         let settings = currentLLMSettings()
         return LLMConfig(
-            modelId: settings.effectiveModelId,
+            modelId: modelId,
             endpointURL: endpointURL,
             systemPrompt: settings.composedSystemPrompt,
             keywords: settings.keywords,

@@ -329,7 +329,7 @@ struct StylePage: View {
                             } label: {
                                 HStack(spacing: 12) {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(preset == .custom ? "Custom model ID" : preset.modelId)
+                                        Text(appState.llmDisplayModelId(for: preset))
                                             .font(preset == .custom ? AppTypography.body : AppTypography.codeBodyMedium)
                                             .foregroundStyle(Color.primary)
                                         Text(preset.subtitle)
@@ -359,9 +359,15 @@ struct StylePage: View {
                             Text("Custom model ID")
                                 .font(AppTypography.body)
                             Spacer(minLength: 12)
-                            TextField("provider/model-id", text: $appState.llmCustomModelId)
+                            TextField("gpt-4.1-mini or provider/model-id", text: $appState.llmCustomModelId)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 300)
+                        }
+
+                        if let modelValidationError = appState.llmModelValidationError {
+                            Text(modelValidationError)
+                                .font(AppTypography.caption)
+                                .foregroundStyle(.red)
                         }
                     }
                 }
