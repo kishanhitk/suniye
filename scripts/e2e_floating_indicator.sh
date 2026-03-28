@@ -63,11 +63,11 @@ require_log() {
   fi
 }
 
-require_log "floating indicator show state=listening"
-require_log "floating indicator show state=stopped"
-require_log "floating indicator show state=processing"
-require_log "floating indicator show state=done"
-require_log "floating indicator hide"
+require_log "floating indicator update state=idle"
+require_log "floating indicator update state=hover"
+require_log "floating indicator update state=listening"
+require_log "floating indicator update state=processing"
+require_log "floating indicator update state=error"
 require_log "e2e indicator smoke done"
 
 echo "E2E floating indicator passed."

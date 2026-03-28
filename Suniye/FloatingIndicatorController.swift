@@ -1,53 +1,69 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 @MainActor
 final class FloatingIndicatorController {
+    var onAction: (() -> Void)?
+
     private var panel: NSPanel?
     private var hostingView: NSHostingView<FloatingIndicatorView>?
-    private var hideTask: Task<Void, Never>?
-    private let panelSize = NSSize(width: 320, height: 116)
+    private var pointerTrackingTimer: Timer?
+    private var baseState: FloatingIndicatorState = .idle
+    private var isHovered = false
+    private var anchoredScreenID: CGDirectDisplayID?
+    private let bottomMargin: CGFloat = 28
+    private let animationDuration: TimeInterval = 0.18
 
     deinit {
-        hideTask?.cancel()
+        pointerTrackingTimer?.invalidate()
     }
 
-    func show(_ state: FloatingIndicatorState, autoHideAfter: TimeInterval? = nil) {
+    func start() {
         ensurePanel()
-        hideTask?.cancel()
-        hideTask = nil
-
-        hostingView?.rootView = FloatingIndicatorView(state: state)
-        positionPanel()
+        startPointerTracking()
+        render()
 
         guard let panel else { return }
         panel.alphaValue = 1
         panel.orderFrontRegardless()
-        AppLogger.shared.log(.info, "floating indicator show state=\(state.logValue)")
-
-        if let autoHideAfter {
-            let delayNanos = UInt64(max(autoHideAfter, 0) * 1_000_000_000)
-            hideTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: delayNanos)
-                guard !Task.isCancelled else { return }
-                self?.hide()
-            }
-        }
+        AppLogger.shared.log(.info, "floating indicator started")
     }
 
-    func hide() {
-        hideTask?.cancel()
-        hideTask = nil
+    func stop() {
+        pointerTrackingTimer?.invalidate()
+        pointerTrackingTimer = nil
         guard let panel, panel.isVisible else { return }
         panel.orderOut(nil)
-        AppLogger.shared.log(.info, "floating indicator hide")
+        AppLogger.shared.log(.info, "floating indicator stopped")
+    }
+
+    func update(_ state: FloatingIndicatorState) {
+        baseState = state
+        if state.tracksPointerScreen {
+            anchoredScreenID = currentMouseScreen()?.displayID
+        } else if anchoredScreenID == nil {
+            anchoredScreenID = currentMouseScreen()?.displayID
+        }
+        if !state.tracksPointerScreen {
+            isHovered = false
+        }
+        render()
+    }
+
+    private var effectiveState: FloatingIndicatorState {
+        if case .idle = baseState, isHovered {
+            return .hover
+        }
+        return baseState
     }
 
     private func ensurePanel() {
         guard panel == nil else { return }
 
+        let initialSize = size(for: .idle)
         let panel = NSPanel(
-            contentRect: NSRect(origin: .zero, size: panelSize),
+            contentRect: NSRect(origin: .zero, size: initialSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -57,38 +73,128 @@ final class FloatingIndicatorController {
         panel.level = .statusBar
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
-        panel.hasShadow = true
-        panel.ignoresMouseEvents = true
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.animationBehavior = .none
 
-        let host = NSHostingView(rootView: FloatingIndicatorView(state: .processing))
-        host.translatesAutoresizingMaskIntoConstraints = false
-
-        let container = NSView(frame: NSRect(origin: .zero, size: panelSize))
-        container.addSubview(host)
-        NSLayoutConstraint.activate([
-            host.topAnchor.constraint(equalTo: container.topAnchor),
-            host.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            host.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            host.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-        ])
-
-        panel.contentView = container
+        let host = NSHostingView(
+            rootView: FloatingIndicatorView(
+                state: .idle,
+                onHoverChanged: { [weak self] isHovered in
+                    self?.setHovered(isHovered)
+                },
+                onAction: { [weak self] in
+                    self?.onAction?()
+                }
+            )
+        )
+        host.frame = NSRect(origin: .zero, size: initialSize)
+        panel.contentView = host
         panel.orderOut(nil)
 
         self.panel = panel
         hostingView = host
     }
 
-    private func positionPanel() {
+    private func setHovered(_ hovered: Bool) {
+        guard baseState.tracksPointerScreen else { return }
+        guard isHovered != hovered else { return }
+        isHovered = hovered
+        render()
+    }
+
+    private func render() {
+        ensurePanel()
+
+        guard let panel, let hostingView else { return }
+        let state = effectiveState
+        let size = size(for: state)
+
+        hostingView.rootView = FloatingIndicatorView(
+            state: state,
+            onHoverChanged: { [weak self] isHovered in
+                self?.setHovered(isHovered)
+            },
+            onAction: { [weak self] in
+                self?.onAction?()
+            }
+        )
+        hostingView.frame = NSRect(origin: .zero, size: size)
+
+        positionPanel(size: size, animated: true)
+        panel.orderFrontRegardless()
+        AppLogger.shared.log(.info, "floating indicator update state=\(state.logValue)")
+    }
+
+    private func startPointerTracking() {
+        guard pointerTrackingTimer == nil else { return }
+        pointerTrackingTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.tickPointerTracking()
+            }
+        }
+    }
+
+    private func tickPointerTracking() {
+        guard effectiveState.tracksPointerScreen else { return }
+        guard let screen = currentMouseScreen() else { return }
+
+        if anchoredScreenID != screen.displayID {
+            anchoredScreenID = screen.displayID
+            positionPanel(size: size(for: effectiveState), animated: true)
+        }
+    }
+
+    private func positionPanel(size: NSSize, animated: Bool) {
         guard let panel else { return }
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main ?? NSScreen.screens.first
+        let screen = resolvedScreen() ?? currentMouseScreen() ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
 
+        anchoredScreenID = screen.displayID
         let frame = screen.visibleFrame
-        let x = frame.midX - panelSize.width / 2
-        let y = frame.maxY - panelSize.height - 44
-        panel.setFrame(NSRect(x: x, y: y, width: panelSize.width, height: panelSize.height), display: false)
+        let x = frame.midX - size.width / 2
+        let y = frame.minY + bottomMargin
+        let targetFrame = NSRect(x: x, y: y, width: size.width, height: size.height)
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = animationDuration
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(targetFrame, display: true)
+            }
+        } else {
+            panel.setFrame(targetFrame, display: true)
+        }
+    }
+
+    private func resolvedScreen() -> NSScreen? {
+        guard let anchoredScreenID else { return nil }
+        return NSScreen.screens.first(where: { $0.displayID == anchoredScreenID })
+    }
+
+    private func currentMouseScreen() -> NSScreen? {
+        NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main ?? NSScreen.screens.first
+    }
+
+    private func size(for state: FloatingIndicatorState) -> NSSize {
+        switch state {
+        case .idle:
+            return NSSize(width: 88, height: 24)
+        case .hover:
+            return NSSize(width: 300, height: 84)
+        case .listening:
+            return NSSize(width: 116, height: 40)
+        case .processing:
+            return NSSize(width: 128, height: 40)
+        case let .error(message):
+            let width = min(max(CGFloat(message.count) * 6.2, 170), 240) + 32
+            return NSSize(width: width, height: 52)
+        }
+    }
+}
+
+private extension NSScreen {
+    var displayID: CGDirectDisplayID? {
+        deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
     }
 }
