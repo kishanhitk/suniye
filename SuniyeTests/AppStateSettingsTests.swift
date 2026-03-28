@@ -145,6 +145,19 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.floatingIndicatorState, .idle)
     }
 
+    func testBlockedIndicatorToggleDuringTranscribingRestoresProcessingState() async {
+        let appState = makeTestAppState()
+        appState.phase = .transcribing
+        appState.floatingIndicatorState = .processing
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Still processing previous clip"))
+        try? await Task.sleep(nanoseconds: 1_300_000_000)
+        XCTAssertEqual(appState.floatingIndicatorState, .processing)
+    }
+
     func testAudioLevelCallbackUpdatesListeningIndicator() async {
         let audioCapture = StubAudioCaptureService()
         let appState = makeTestAppState(audioCaptureService: audioCapture)

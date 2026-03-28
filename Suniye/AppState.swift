@@ -855,7 +855,7 @@ final class AppState {
             case .recording where activeRecordingSource == .manual:
                 await stopRecordingAndTranscribe(trigger: .manual)
             default:
-                showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: .idle, duration: 1.2)
+                showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             }
         }
     }
@@ -1137,7 +1137,7 @@ final class AppState {
         }
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "start recording ignored in phase=\(phase.rawValue)")
-            showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: .idle, duration: 1.2)
+            showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             return
         }
         if !hasMicPermission {
@@ -1410,6 +1410,23 @@ final class AppState {
             }
             self.setFloatingIndicatorState(restoreState)
             self.overlayErrorResetTask = nil
+        }
+    }
+
+    private func blockedStartRestoreIndicatorState() -> FloatingIndicatorState {
+        switch phase {
+        case .recording:
+            if case let .listening(levels, source) = floatingIndicatorState {
+                return .listening(levels: levels, source: source)
+            }
+            return .listening(
+                levels: Self.defaultIndicatorLevels(level: 0.72),
+                source: activeRecordingSource ?? .manual
+            )
+        case .transcribing:
+            return .processing
+        case .needsModel, .downloadingModel, .loading, .ready, .error:
+            return .idle
         }
     }
 

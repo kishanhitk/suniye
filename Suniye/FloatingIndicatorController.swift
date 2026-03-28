@@ -13,12 +13,14 @@ final class FloatingIndicatorController {
     private var baseState: FloatingIndicatorState = .idle
     private var isHovered = false
     private var anchoredScreenID: CGDirectDisplayID?
+    private var lastLoggedStateValue: String?
     private let bottomMargin: CGFloat = 28
     private let animationDuration: TimeInterval = 0.11
 
     deinit {
         pointerTrackingTimer?.invalidate()
         hoverExitTask?.cancel()
+        lastLoggedStateValue = nil
     }
 
     func start() {
@@ -162,7 +164,10 @@ final class FloatingIndicatorController {
         panel.ignoresMouseEvents = !panelShouldCaptureMouseEvents
         positionPanel(size: size, animated: true)
         panel.orderFrontRegardless()
-        AppLogger.shared.log(.info, "floating indicator update state=\(state.logValue)")
+        if lastLoggedStateValue != state.logValue {
+            lastLoggedStateValue = state.logValue
+            AppLogger.shared.log(.info, "floating indicator update state=\(state.logValue)")
+        }
     }
 
     private func startPointerTracking() {
