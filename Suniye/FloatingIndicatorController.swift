@@ -64,6 +64,17 @@ final class FloatingIndicatorController {
         return baseState
     }
 
+    private var panelShouldCaptureMouseEvents: Bool {
+        switch effectiveState {
+        case .idle, .hover:
+            return true
+        case .listening(_, let source):
+            return source == .manual
+        case .processing, .error:
+            return false
+        }
+    }
+
     private func ensurePanel() {
         guard panel == nil else { return }
 
@@ -148,6 +159,7 @@ final class FloatingIndicatorController {
             }
         )
 
+        panel.ignoresMouseEvents = !panelShouldCaptureMouseEvents
         positionPanel(size: size, animated: true)
         panel.orderFrontRegardless()
         AppLogger.shared.log(.info, "floating indicator update state=\(state.logValue)")

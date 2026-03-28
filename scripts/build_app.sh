@@ -139,6 +139,7 @@ xcodebuild "${xcodebuild_args[@]}"
 
 APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/Suniye.app"
 FINAL_APP_PATH="${APP_PATH}"
+SHOULD_CLEAN_DERIVED_APP="0"
 
 if [[ -n "${INSTALL_TARGET}" ]]; then
   mkdir -p "${INSTALL_TARGET}"
@@ -150,9 +151,7 @@ if [[ -n "${INSTALL_TARGET}" ]]; then
     "${LSREGISTER}" -u "${APP_PATH}" >/dev/null 2>&1 || true
     "${LSREGISTER}" -f -R -trusted "${DEST_APP_PATH}" >/dev/null 2>&1 || true
   fi
-  rm -rf \
-    "${DERIVED_DATA_PATH}/Build/Products/Debug/Suniye.app" \
-    "${DERIVED_DATA_PATH}/Build/Products/Release/Suniye.app"
+  SHOULD_CLEAN_DERIVED_APP="1"
   FINAL_APP_PATH="${DEST_APP_PATH}"
   echo "Installed app to: ${DEST_APP_PATH}"
 fi
@@ -164,6 +163,12 @@ if [[ -n "${OUTPUT_DIR}" ]]; then
   ditto "${APP_PATH}" "${OUTPUT_APP_PATH}"
   FINAL_APP_PATH="${OUTPUT_APP_PATH}"
   echo "Copied app to output directory: ${OUTPUT_APP_PATH}"
+fi
+
+if [[ "${SHOULD_CLEAN_DERIVED_APP}" == "1" ]]; then
+  rm -rf \
+    "${DERIVED_DATA_PATH}/Build/Products/Debug/Suniye.app" \
+    "${DERIVED_DATA_PATH}/Build/Products/Release/Suniye.app"
 fi
 
 if [[ "${SHOULD_OPEN}" == "1" ]]; then

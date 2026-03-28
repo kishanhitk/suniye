@@ -855,7 +855,7 @@ final class AppState {
             case .recording where activeRecordingSource == .manual:
                 await stopRecordingAndTranscribe(trigger: .manual)
             default:
-                showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: floatingIndicatorState, duration: 1.2)
+                showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: .idle, duration: 1.2)
             }
         }
     }
@@ -1137,7 +1137,7 @@ final class AppState {
         }
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "start recording ignored in phase=\(phase.rawValue)")
-            showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: floatingIndicatorState, duration: 1.2)
+            showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: .idle, duration: 1.2)
             return
         }
         if !hasMicPermission {
