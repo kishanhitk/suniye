@@ -143,8 +143,19 @@ struct LLMSettings: Codable, Equatable {
         }
     }
 
-    var effectiveEndpointURL: URL {
-        LLMDefaults.endpointURL(from: endpointURLString) ?? URL(string: LLMDefaults.defaultEndpointURLString)!
+    var validatedEndpointURL: URL? {
+        LLMDefaults.endpointURL(from: endpointURLString)
+    }
+
+    var isEndpointValid: Bool {
+        validatedEndpointURL != nil
+    }
+
+    var endpointValidationError: String? {
+        guard !isEndpointValid else {
+            return nil
+        }
+        return "Enter a valid http(s) endpoint URL."
     }
 }
 

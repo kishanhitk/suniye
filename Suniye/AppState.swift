@@ -251,7 +251,14 @@ final class AppState {
         hasLLMAPIKey ? "API key: saved" : "API key: missing"
     }
 
+    var llmEndpointValidationError: String? {
+        currentLLMSettings().endpointValidationError
+    }
+
     var llmStatusHint: String? {
+        if llmEnabled, llmEndpointValidationError != nil {
+            return "LLM enabled but endpoint URL invalid"
+        }
         if llmEnabled && !hasLLMAPIKey {
             return "LLM enabled but API key missing"
         }
@@ -446,6 +453,18 @@ final class AppState {
                     recommendedSection: .general,
                     fixTitle: "Grant Access",
                     fixAction: { [weak self] in self?.requestAccessibilityPermission() }
+                )
+            )
+        }
+
+        if llmEnabled, let endpointValidationError = llmEndpointValidationError {
+            items.append(
+                AttentionItem(
+                    id: "llm-endpoint-invalid",
+                    title: "LLM endpoint URL invalid",
+                    detail: endpointValidationError,
+                    severity: .warning,
+                    recommendedSection: .style
                 )
             )
         }
@@ -920,6 +939,13 @@ final class AppState {
             return rawText
         }
 
+        guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
+            AppLogger.shared.log(.warning, "llm fallback raw reason=invalid_endpoint")
+            return rawText
+        }
+
+        // TODO: Generic OpenAI-compatible backends can be keyless, but the current
+        // LLM settings flow still treats a missing API key as a hard stop.
         guard hasLLMAPIKey else {
             AppLogger.shared.log(.warning, "llm fallback raw reason=missing_key")
             return rawText
@@ -932,7 +958,7 @@ final class AppState {
             return rawText
         }
 
-        let config = makeLLMConfig(apiKey: apiKey)
+        let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL)
         let startTime = Date()
         statusText = "Polishing..."
 
@@ -1290,11 +1316,11 @@ final class AppState {
         onStateChange?()
     }
 
-    private func makeLLMConfig(apiKey: String) -> LLMConfig {
+    private func makeLLMConfig(apiKey: String, endpointURL: URL) -> LLMConfig {
         let settings = currentLLMSettings()
         return LLMConfig(
             modelId: settings.effectiveModelId,
-            endpointURL: settings.effectiveEndpointURL,
+            endpointURL: endpointURL,
             systemPrompt: settings.composedSystemPrompt,
             keywords: settings.keywords,
             timeoutSeconds: settings.timeoutSeconds,

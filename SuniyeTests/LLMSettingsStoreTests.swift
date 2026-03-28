@@ -60,10 +60,19 @@ final class LLMSettingsStoreTests: XCTestCase {
     func testEndpointNormalizationAcceptsBaseOrCompletionsPath() {
         var settings = LLMSettings()
         settings.endpointURLString = "https://api.openai.com/v1"
-        XCTAssertEqual(settings.effectiveEndpointURL.absoluteString, "https://api.openai.com/v1/chat/completions")
+        XCTAssertEqual(settings.validatedEndpointURL?.absoluteString, "https://api.openai.com/v1/chat/completions")
 
         settings.endpointURLString = "https://example.com/proxy/chat/completions"
-        XCTAssertEqual(settings.effectiveEndpointURL.absoluteString, "https://example.com/proxy/chat/completions")
+        XCTAssertEqual(settings.validatedEndpointURL?.absoluteString, "https://example.com/proxy/chat/completions")
+    }
+
+    func testInvalidEndpointDoesNotFallBackToDefaultProvider() {
+        var settings = LLMSettings()
+        settings.endpointURLString = "not a url"
+
+        XCTAssertNil(settings.validatedEndpointURL)
+        XCTAssertFalse(settings.isEndpointValid)
+        XCTAssertEqual(settings.endpointValidationError, "Enter a valid http(s) endpoint URL.")
     }
 
     func testPresetMetadataMatchesMainWindowModelList() {

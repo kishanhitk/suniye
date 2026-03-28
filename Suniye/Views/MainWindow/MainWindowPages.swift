@@ -271,6 +271,12 @@ struct StylePage: View {
                             TextField("https://api.openai.com/v1/chat/completions", text: $appState.llmEndpointURLString)
                                 .textFieldStyle(.roundedBorder)
                                 .font(AppTypography.codeBodyMedium)
+
+                            if let endpointValidationError = appState.llmEndpointValidationError {
+                                Text(endpointValidationError)
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(.red)
+                            }
                         }
                     }
                 }

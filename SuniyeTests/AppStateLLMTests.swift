@@ -78,6 +78,27 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(fakeLLM.callCount, 1)
     }
 
+    func testToggleOnWithInvalidEndpointFallsBackToRawWithoutCallingProvider() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmEndpointURLString = "not a url"
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(fakeLLM.callCount, 0)
+        XCTAssertEqual(appState.llmEndpointValidationError, "Enter a valid http(s) endpoint URL.")
+    }
+
     func testAttentionItemsIncludeMissingLLMKeyWhenEnabled() {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
         let keychain = TestKeychainService(value: nil)
@@ -92,6 +113,23 @@ final class AppStateLLMTests: XCTestCase {
         appState.refreshLLMKeyStatus()
 
         XCTAssertTrue(appState.attentionItems.contains(where: { $0.id == "llm-key-missing" }))
+    }
+
+    func testAttentionItemsIncludeInvalidEndpointWhenEnabled() {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmEndpointURLString = "not a url"
+        appState.refreshLLMKeyStatus()
+
+        XCTAssertTrue(appState.attentionItems.contains(where: { $0.id == "llm-endpoint-invalid" }))
     }
 
     func testLLMRuntimeSettingsClampAndPersist() {
