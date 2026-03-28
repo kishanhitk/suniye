@@ -12,6 +12,7 @@ OUTPUT_DIR=""
 BUILD_DESTINATION=""
 BUILD_ARCH=""
 VERSION=""
+BUILD_NUMBER=""
 LOCAL_CODESIGN_IDENTITY=""
 
 usage() {
@@ -24,6 +25,7 @@ Options:
   --derived-data-path <path>  Override derived data path
   --output-dir <dir>          Copy built app to a deterministic output directory
   --version <vX.Y.Z>          Override MARKETING_VERSION in the build
+  --build-number <number>     Override CURRENT_PROJECT_VERSION in the build
   --open            Open the resulting app after build/install
 USAGE
 }
@@ -49,6 +51,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --version)
       VERSION="$2"
+      shift
+      ;;
+    --build-number)
+      BUILD_NUMBER="$2"
       shift
       ;;
     --open)
@@ -98,6 +104,15 @@ if ! xcodebuild -version >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ -z "${BUILD_NUMBER}" ]]; then
+  BUILD_NUMBER="${SUNIYE_BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-}}"
+fi
+
+if [[ -n "${BUILD_NUMBER}" ]] && [[ ! "${BUILD_NUMBER}" =~ ^[0-9]+$ ]]; then
+  echo "Build number must be numeric, got: ${BUILD_NUMBER}" >&2
+  exit 1
+fi
+
 if [[ -z "${LOCAL_CODESIGN_IDENTITY}" ]]; then
   LOCAL_CODESIGN_IDENTITY="${SUNIYE_CODESIGN_IDENTITY:-}"
 fi
@@ -125,6 +140,10 @@ if [[ -n "${VERSION}" ]]; then
   # Strip leading 'v' prefix (v0.0.5 -> 0.0.5)
   MARKETING="${VERSION#v}"
   xcodebuild_args+=(MARKETING_VERSION="${MARKETING}")
+fi
+
+if [[ -n "${BUILD_NUMBER}" ]]; then
+  xcodebuild_args+=(CURRENT_PROJECT_VERSION="${BUILD_NUMBER}")
 fi
 
 if [[ -n "${LOCAL_CODESIGN_IDENTITY}" ]]; then
