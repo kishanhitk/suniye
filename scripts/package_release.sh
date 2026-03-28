@@ -4,10 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${ROOT_DIR}/dist"
 VERSION=""
+BUILD_NUMBER=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/package_release.sh [--version vX.Y.Z] [--dist-dir <dir>]
+Usage: scripts/package_release.sh [--version vX.Y.Z] [--build-number <number>] [--dist-dir <dir>]
 USAGE
 }
 
@@ -15,6 +16,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)
       VERSION="$2"
+      shift 2
+      ;;
+    --build-number)
+      BUILD_NUMBER="$2"
       shift 2
       ;;
     --dist-dir)
@@ -33,12 +38,19 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "${BUILD_NUMBER}" ]]; then
+  BUILD_NUMBER="${GITHUB_RUN_NUMBER:-}"
+fi
+
 mkdir -p "${DIST_DIR}"
 DERIVED_DATA="${ROOT_DIR}/.derivedData-release"
 
 BUILD_ARGS=(Release --derived-data-path "${DERIVED_DATA}" --output-dir "${DIST_DIR}")
 if [[ -n "${VERSION}" ]]; then
   BUILD_ARGS+=(--version "${VERSION}")
+fi
+if [[ -n "${BUILD_NUMBER}" ]]; then
+  BUILD_ARGS+=(--build-number "${BUILD_NUMBER}")
 fi
 "${ROOT_DIR}/scripts/build_app.sh" "${BUILD_ARGS[@]}"
 
