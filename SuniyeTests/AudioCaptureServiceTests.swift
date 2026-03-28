@@ -2,10 +2,10 @@ import XCTest
 @testable import Suniye
 
 final class AudioCaptureServiceTests: XCTestCase {
-    func testEchoCancellationDisabledUsesHALInputBackend() {
+    func testEchoCancellationDisabledUsesStandardEngineBackend() {
         XCTAssertEqual(
             AudioCaptureService.captureBackend(echoCancellationEnabled: false),
-            "halInput"
+            "standardEngine"
         )
     }
 

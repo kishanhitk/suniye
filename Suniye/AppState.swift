@@ -1043,6 +1043,10 @@ final class AppState {
     }
 
     private func beginRecordingFlow() async {
+        if phase == .error, canRetryRecordingAfterError {
+            clearRetryableRecordingError()
+        }
+
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "start recording ignored in phase=\(phase.rawValue)")
             showIndicator(.error(message: startBlockedMessage(for: phase)), autoHideAfter: 1.2)
@@ -1320,6 +1324,22 @@ final class AppState {
         case .error:
             return "Resolve current error first"
         }
+    }
+
+    private var canRetryRecordingAfterError: Bool {
+        switch statusText {
+        case "Transcription error", "Audio error", "Permission required", "Accessibility required":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func clearRetryableRecordingError() {
+        lastError = nil
+        statusText = "Ready"
+        phase = .ready
+        AppLogger.shared.log(.info, "cleared retryable error state before recording")
     }
 
     nonisolated static func parseSubmitCommand(from text: String) -> (text: String, shouldSubmit: Bool) {

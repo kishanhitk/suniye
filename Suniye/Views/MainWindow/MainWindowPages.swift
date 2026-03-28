@@ -324,7 +324,7 @@ struct StylePage: View {
                                 HStack(spacing: 12) {
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(preset == .custom ? "Custom model ID" : preset.modelId)
-                                            .font(AppTypography.codeBodyMedium)
+                                            .font(preset == .custom ? AppTypography.body : AppTypography.codeBodyMedium)
                                             .foregroundStyle(Color.primary)
                                         Text(preset.subtitle)
                                             .font(AppTypography.subheadline)
@@ -351,7 +351,7 @@ struct StylePage: View {
 
                         HStack(spacing: 12) {
                             Text("Custom model ID")
-                                .font(AppTypography.codeBodyMedium)
+                                .font(AppTypography.body)
                             Spacer(minLength: 12)
                             TextField("provider/model-id", text: $appState.llmCustomModelId)
                                 .textFieldStyle(.roundedBorder)

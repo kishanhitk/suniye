@@ -32,6 +32,7 @@
 		4D8662CE6850AD46ECB306BA /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF483C4F8F43B591D1E13ABA /* AppState.swift */; };
 		5281C912B2528C33773C008C /* MainWindowComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E769F836704229B962F80C /* MainWindowComponents.swift */; };
 		538CCC22F273225E882F7463 /* HistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */; };
+		56F6C83F84D44FC17F6C1AE2 /* AudioCaptureServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6F2EB76CF32A101E8454D9 /* AudioCaptureServiceTests.swift */; };
 		58BD775AF83F95F70DC21BF5 /* libonnxruntime.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 1215194BCE451924E1C06FDD /* libonnxruntime.dylib */; };
 		5CEBE7C5B635C70620A16FF3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0D96966D22AF827757DB24D /* Assets.xcassets */; };
 		5E5EF53C95B7F9CB9C00B459 /* ModelDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B090C348C7D6E3317FC06B66 /* ModelDownloadView.swift */; };
@@ -105,6 +106,7 @@
 		11558F5387C6D3FFC7B1B354 /* TestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestDoubles.swift; sourceTree = "<group>"; };
 		1215194BCE451924E1C06FDD /* libonnxruntime.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libonnxruntime.dylib; path = Suniye/Frameworks/libonnxruntime.dylib; sourceTree = "<group>"; };
 		13D4CAFD2439B222AD68BE12 /* MainWindowSectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowSectionTests.swift; sourceTree = "<group>"; };
+		1B6F2EB76CF32A101E8454D9 /* AudioCaptureServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureServiceTests.swift; sourceTree = "<group>"; };
 		1BFAD0B3FD93106BF02E29E5 /* FloatingIndicatorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorController.swift; sourceTree = "<group>"; };
 		2B2D87825E1C649DC7A33115 /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
 		34CC65DD3994740D7F4B27AB /* HotkeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyService.swift; sourceTree = "<group>"; };
@@ -219,6 +221,7 @@
 				10EFB6CFB00782DD57172E26 /* AppStateSubmitCommandTests.swift */,
 				F198C419B5376572D7185A29 /* AppStateUpdateTests.swift */,
 				E62E23E5D4CD3C127DD7F39C /* AppVersionTests.swift */,
+				1B6F2EB76CF32A101E8454D9 /* AudioCaptureServiceTests.swift */,
 				730EF6DDF61D565A9D49DFCA /* GeneralSettingsStoreTests.swift */,
 				66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */,
 				BDD66CF413C1ACA8DB2719C4 /* KeychainServiceTests.swift */,
@@ -368,9 +371,10 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
 			};
 			buildConfigurationList = 448F126C3CAD6A3E5DBEFBCC /* Build configuration list for PBXProject "Suniye" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -380,6 +384,7 @@
 			mainGroup = 80BAA1F67F5D858DF2C17254;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 01731519CF80EDB1B574D79B /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -458,6 +463,7 @@
 				4C5922B0B6EE913379AECED2 /* AppStateSubmitCommandTests.swift in Sources */,
 				17F9EC88DB57EDE0C99E7A51 /* AppStateUpdateTests.swift in Sources */,
 				70911BA331D12E52A95C209F /* AppVersionTests.swift in Sources */,
+				56F6C83F84D44FC17F6C1AE2 /* AudioCaptureServiceTests.swift in Sources */,
 				898E0CC20B6C61DE45A0BC0B /* GeneralSettingsStoreTests.swift in Sources */,
 				538CCC22F273225E882F7463 /* HistoryStoreTests.swift in Sources */,
 				B6E82EB100F0460A6BBF520D /* KeychainServiceTests.swift in Sources */,

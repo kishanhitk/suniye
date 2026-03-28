@@ -59,6 +59,42 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.phase, .recording)
     }
 
+    func testStartRecordingClearsRetryableTranscriptionError() async {
+        let audioCapture = StubAudioCaptureService()
+        let appState = makeTestAppState(audioCaptureService: audioCapture)
+        appState.phase = .error
+        appState.statusText = "Transcription error"
+        appState.lastError = "Transcription failed: No audio captured"
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
+        XCTAssertEqual(appState.phase, .recording)
+        XCTAssertEqual(appState.statusText, "Recording")
+        XCTAssertNil(appState.lastError)
+    }
+
+    func testStartRecordingDoesNotClearNonRetryableLoadError() async {
+        let audioCapture = StubAudioCaptureService()
+        let appState = makeTestAppState(audioCaptureService: audioCapture)
+        appState.phase = .error
+        appState.statusText = "Load failed"
+        appState.lastError = "Model load failed: broken recognizer"
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
+        XCTAssertEqual(appState.phase, .error)
+        XCTAssertEqual(appState.statusText, "Load failed")
+        XCTAssertEqual(appState.lastError, "Model load failed: broken recognizer")
+    }
+
     func testChangingHotkeyRewiresMonitoringWhenRuntimeServicesEnabled() {
         let hotkeyService = StubHotkeyService()
         let modelManager = StubModelManager()
