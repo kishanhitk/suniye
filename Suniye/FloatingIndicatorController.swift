@@ -9,14 +9,16 @@ final class FloatingIndicatorController {
     private var panel: NSPanel?
     private var hostingView: NSHostingView<FloatingIndicatorView>?
     private var pointerTrackingTimer: Timer?
+    private var hoverExitTask: Task<Void, Never>?
     private var baseState: FloatingIndicatorState = .idle
     private var isHovered = false
     private var anchoredScreenID: CGDirectDisplayID?
     private let bottomMargin: CGFloat = 28
-    private let animationDuration: TimeInterval = 0.18
+    private let animationDuration: TimeInterval = 0.11
 
     deinit {
         pointerTrackingTimer?.invalidate()
+        hoverExitTask?.cancel()
     }
 
     func start() {
@@ -33,6 +35,8 @@ final class FloatingIndicatorController {
     func stop() {
         pointerTrackingTimer?.invalidate()
         pointerTrackingTimer = nil
+        hoverExitTask?.cancel()
+        hoverExitTask = nil
         guard let panel, panel.isVisible else { return }
         panel.orderOut(nil)
         AppLogger.shared.log(.info, "floating indicator stopped")
@@ -46,6 +50,8 @@ final class FloatingIndicatorController {
             anchoredScreenID = currentMouseScreen()?.displayID
         }
         if !state.tracksPointerScreen {
+            hoverExitTask?.cancel()
+            hoverExitTask = nil
             isHovered = false
         }
         render()
@@ -90,6 +96,7 @@ final class FloatingIndicatorController {
             )
         )
         host.frame = NSRect(origin: .zero, size: initialSize)
+        host.autoresizingMask = [.width, .height]
         panel.contentView = host
         panel.orderOut(nil)
 
@@ -99,9 +106,29 @@ final class FloatingIndicatorController {
 
     private func setHovered(_ hovered: Bool) {
         guard baseState.tracksPointerScreen else { return }
-        guard isHovered != hovered else { return }
-        isHovered = hovered
-        render()
+        if hovered {
+            hoverExitTask?.cancel()
+            hoverExitTask = nil
+            guard !isHovered else { return }
+            isHovered = true
+            render()
+            return
+        }
+
+        guard isHovered else { return }
+        hoverExitTask?.cancel()
+        hoverExitTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 140_000_000)
+            guard let self, !Task.isCancelled else { return }
+            defer { self.hoverExitTask = nil }
+
+            if let panel = self.panel, panel.frame.contains(NSEvent.mouseLocation) {
+                return
+            }
+
+            self.isHovered = false
+            self.render()
+        }
     }
 
     private func render() {
@@ -120,7 +147,6 @@ final class FloatingIndicatorController {
                 self?.onAction?()
             }
         )
-        hostingView.frame = NSRect(origin: .zero, size: size)
 
         positionPanel(size: size, animated: true)
         panel.orderFrontRegardless()
@@ -179,9 +205,9 @@ final class FloatingIndicatorController {
     private func size(for state: FloatingIndicatorState) -> NSSize {
         switch state {
         case .idle:
-            return NSSize(width: 88, height: 24)
+            return NSSize(width: 74, height: 7)
         case .hover:
-            return NSSize(width: 300, height: 84)
+            return NSSize(width: 272, height: 84)
         case .listening:
             return NSSize(width: 116, height: 40)
         case .processing:

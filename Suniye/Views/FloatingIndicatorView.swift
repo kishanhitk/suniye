@@ -16,7 +16,7 @@ struct FloatingIndicatorView: View {
                     .background(capsuleFill)
                     .overlay(
                         Capsule()
-                            .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                            .stroke(capsuleStroke, lineWidth: capsuleBorderWidth)
                     )
                     .clipShape(Capsule())
                     .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
@@ -40,7 +40,7 @@ struct FloatingIndicatorView: View {
         .background(capsuleFill)
         .overlay(
             Capsule()
-                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                .stroke(capsuleStroke, lineWidth: capsuleBorderWidth)
         )
         .clipShape(Capsule())
         .contentShape(Capsule())
@@ -109,13 +109,36 @@ struct FloatingIndicatorView: View {
     }
 
     private var capsuleFill: Color {
-        Color.black.opacity(0.96)
+        switch state {
+        case .idle:
+            return Color.black.opacity(0.58)
+        default:
+            return Color.black.opacity(0.96)
+        }
+    }
+
+    private var capsuleStroke: Color {
+        switch state {
+        case .idle:
+            return Color.white.opacity(0.34)
+        default:
+            return Color.white.opacity(0.14)
+        }
+    }
+
+    private var capsuleBorderWidth: CGFloat {
+        switch state {
+        case .idle:
+            return 0.8
+        default:
+            return 1
+        }
     }
 
     private var pillWidth: CGFloat {
         switch state {
         case .idle:
-            return 88
+            return 74
         case .hover:
             return 152
         case .listening:
@@ -130,7 +153,7 @@ struct FloatingIndicatorView: View {
     private var pillHeight: CGFloat {
         switch state {
         case .idle:
-            return 24
+            return 7
         case .hover:
             return 32
         case .listening, .processing:

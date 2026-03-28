@@ -12,6 +12,7 @@ OUTPUT_DIR=""
 BUILD_DESTINATION=""
 BUILD_ARCH=""
 VERSION=""
+LOCAL_CODESIGN_IDENTITY=""
 
 usage() {
   cat <<'USAGE'
@@ -97,6 +98,14 @@ if ! xcodebuild -version >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ -z "${LOCAL_CODESIGN_IDENTITY}" ]]; then
+  LOCAL_CODESIGN_IDENTITY="${SUNIYE_CODESIGN_IDENTITY:-}"
+fi
+
+if [[ -z "${LOCAL_CODESIGN_IDENTITY}" ]] && command -v security >/dev/null 2>&1; then
+  LOCAL_CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/"Suniye Local Dev"/ { print $2; exit }')"
+fi
+
 xcodegen generate --spec "${PROJECT_DIR}/project.yml"
 
 xcodebuild_args=(
@@ -118,6 +127,14 @@ if [[ -n "${VERSION}" ]]; then
   xcodebuild_args+=(MARKETING_VERSION="${MARKETING}")
 fi
 
+if [[ -n "${LOCAL_CODESIGN_IDENTITY}" ]]; then
+  echo "Using local signing identity: ${LOCAL_CODESIGN_IDENTITY}"
+  xcodebuild_args+=(
+    CODE_SIGN_STYLE=Manual
+    CODE_SIGN_IDENTITY="${LOCAL_CODESIGN_IDENTITY}"
+  )
+fi
+
 xcodebuild "${xcodebuild_args[@]}"
 
 APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/Suniye.app"
@@ -128,6 +145,14 @@ if [[ -n "${INSTALL_TARGET}" ]]; then
   DEST_APP_PATH="${INSTALL_TARGET}/Suniye.app"
   rm -rf "${DEST_APP_PATH}"
   ditto "${APP_PATH}" "${DEST_APP_PATH}"
+  LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
+  if [[ -x "${LSREGISTER}" ]]; then
+    "${LSREGISTER}" -u "${APP_PATH}" >/dev/null 2>&1 || true
+    "${LSREGISTER}" -f -R -trusted "${DEST_APP_PATH}" >/dev/null 2>&1 || true
+  fi
+  rm -rf \
+    "${DERIVED_DATA_PATH}/Build/Products/Debug/Suniye.app" \
+    "${DERIVED_DATA_PATH}/Build/Products/Release/Suniye.app"
   FINAL_APP_PATH="${DEST_APP_PATH}"
   echo "Installed app to: ${DEST_APP_PATH}"
 fi
