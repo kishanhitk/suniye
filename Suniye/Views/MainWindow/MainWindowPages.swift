@@ -222,30 +222,30 @@ struct StylePage: View {
 
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("OpenRouter API Key")
+                                Text("LLM API Key")
                                     .font(AppTypography.body)
                                 Spacer(minLength: 12)
-                                Text(appState.hasOpenRouterAPIKey ? "•••" : "Missing")
+                                Text(appState.hasLLMAPIKey ? "•••" : "Missing")
                                     .font(AppTypography.codeCalloutSemibold)
-                                    .foregroundStyle(appState.hasOpenRouterAPIKey ? Color.primary : .orange)
+                                    .foregroundStyle(appState.hasLLMAPIKey ? Color.primary : .orange)
                             }
 
                             HStack(spacing: 8) {
                                 SecureField("Paste API key", text: $apiKeyDraft)
                                     .textFieldStyle(.roundedBorder)
 
-                                Button(appState.hasOpenRouterAPIKey ? "Replace" : "Save") {
-                                    appState.saveOpenRouterAPIKey(apiKeyDraft)
+                                Button(appState.hasLLMAPIKey ? "Replace" : "Save") {
+                                    appState.saveLLMAPIKey(apiKeyDraft)
                                     apiKeyDraft = ""
                                 }
                                 .buttonStyle(.bordered)
 
                                 Button("Clear") {
-                                    appState.clearOpenRouterAPIKey()
+                                    appState.clearLLMAPIKey()
                                     apiKeyDraft = ""
                                 }
                                 .buttonStyle(.bordered)
-                                .disabled(!appState.hasOpenRouterAPIKey)
+                                .disabled(!appState.hasLLMAPIKey)
                             }
 
                             if let error = appState.llmKeyOperationError {
@@ -253,6 +253,24 @@ struct StylePage: View {
                                     .font(AppTypography.caption)
                                     .foregroundStyle(.red)
                             }
+                        }
+
+                        CardDivider()
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("OpenAI-Compatible Endpoint")
+                                    .font(AppTypography.body)
+                                Spacer(minLength: 12)
+                                Button("Reset") {
+                                    appState.llmEndpointURLString = LLMDefaults.defaultEndpointURLString
+                                }
+                                .buttonStyle(.bordered)
+                            }
+
+                            TextField("https://api.openai.com/v1/chat/completions", text: $appState.llmEndpointURLString)
+                                .textFieldStyle(.roundedBorder)
+                                .font(AppTypography.codeBodyMedium)
                         }
                     }
                 }
@@ -335,7 +353,7 @@ struct StylePage: View {
                             Text("Custom model ID")
                                 .font(AppTypography.codeBodyMedium)
                             Spacer(minLength: 12)
-                            TextField("openrouter/model-id", text: $appState.llmCustomModelId)
+                            TextField("provider/model-id", text: $appState.llmCustomModelId)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 300)
                         }

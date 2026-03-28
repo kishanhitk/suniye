@@ -23,7 +23,7 @@ enum LLMModelPreset: String, CaseIterable, Codable {
         case .gpt41Mini:
             return "OpenAI, balanced"
         case .custom:
-            return "Use any OpenRouter model ID"
+            return "Use any provider model ID"
         }
     }
 
@@ -43,6 +43,7 @@ struct LLMSettings: Codable, Equatable {
     var isEnabled: Bool = false
     var selectedModelPreset: LLMModelPreset = .gemini25Flash
     var customModelId: String = ""
+    var endpointURLString: String = LLMDefaults.defaultEndpointURLString
     var baseSystemPrompt: String = LLMDefaults.defaultBaseSystemPrompt
     var systemPrompt: String = ""
     var keywordsRaw: String = ""
@@ -53,6 +54,7 @@ struct LLMSettings: Codable, Equatable {
         case isEnabled
         case selectedModelPreset
         case customModelId
+        case endpointURLString
         case baseSystemPrompt
         case systemPrompt
         case keywordsRaw
@@ -66,6 +68,7 @@ struct LLMSettings: Codable, Equatable {
         isEnabled: Bool = false,
         selectedModelPreset: LLMModelPreset = .gemini25Flash,
         customModelId: String = "",
+        endpointURLString: String = LLMDefaults.defaultEndpointURLString,
         baseSystemPrompt: String = LLMDefaults.defaultBaseSystemPrompt,
         systemPrompt: String = "",
         keywordsRaw: String = "",
@@ -75,6 +78,7 @@ struct LLMSettings: Codable, Equatable {
         self.isEnabled = isEnabled
         self.selectedModelPreset = selectedModelPreset
         self.customModelId = customModelId
+        self.endpointURLString = endpointURLString
         self.baseSystemPrompt = baseSystemPrompt
         self.systemPrompt = systemPrompt
         self.keywordsRaw = keywordsRaw
@@ -87,6 +91,7 @@ struct LLMSettings: Codable, Equatable {
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? false
         selectedModelPreset = try container.decodeIfPresent(LLMModelPreset.self, forKey: .selectedModelPreset) ?? .gemini25Flash
         customModelId = try container.decodeIfPresent(String.self, forKey: .customModelId) ?? ""
+        endpointURLString = try container.decodeIfPresent(String.self, forKey: .endpointURLString) ?? LLMDefaults.defaultEndpointURLString
         baseSystemPrompt = try container.decodeIfPresent(String.self, forKey: .baseSystemPrompt) ?? LLMDefaults.defaultBaseSystemPrompt
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         keywordsRaw = try container.decodeIfPresent(String.self, forKey: .keywordsRaw) ?? ""
@@ -99,6 +104,7 @@ struct LLMSettings: Codable, Equatable {
         try container.encode(isEnabled, forKey: .isEnabled)
         try container.encode(selectedModelPreset, forKey: .selectedModelPreset)
         try container.encode(customModelId, forKey: .customModelId)
+        try container.encode(endpointURLString, forKey: .endpointURLString)
         try container.encode(baseSystemPrompt, forKey: .baseSystemPrompt)
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(keywordsRaw, forKey: .keywordsRaw)
@@ -136,9 +142,14 @@ struct LLMSettings: Codable, Equatable {
             return selectedModelPreset.modelId
         }
     }
+
+    var effectiveEndpointURL: URL {
+        LLMDefaults.endpointURL(from: endpointURLString) ?? URL(string: LLMDefaults.defaultEndpointURLString)!
+    }
 }
 
 enum LLMDefaults {
+    static let defaultEndpointURLString = "https://openrouter.ai/api/v1/chat/completions"
     static let minTimeoutSeconds = 1.0
     static let maxTimeoutSeconds = 15.0
     static let minMaxTokens = 32
@@ -183,5 +194,25 @@ Fix transcription errors, misspellings, and misheard words. Preserve the origina
 
     static func clampMaxTokens(_ value: Int) -> Int {
         min(max(value, minMaxTokens), maxMaxTokens)
+    }
+
+    static func endpointURL(from raw: String) -> URL? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let parsed = URL(string: trimmed),
+              let scheme = parsed.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return nil
+        }
+
+        let path = parsed.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if path.lowercased().hasSuffix("chat/completions") {
+            return parsed
+        }
+
+        let normalizedPath = path.isEmpty ? "chat/completions" : "\(path)/chat/completions"
+        var components = URLComponents(url: parsed, resolvingAgainstBaseURL: false)
+        components?.path = "/" + normalizedPath
+        return components?.url
     }
 }

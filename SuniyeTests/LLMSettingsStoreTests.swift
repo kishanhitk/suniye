@@ -57,6 +57,15 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.composedSystemPrompt, "BASE")
     }
 
+    func testEndpointNormalizationAcceptsBaseOrCompletionsPath() {
+        var settings = LLMSettings()
+        settings.endpointURLString = "https://api.openai.com/v1"
+        XCTAssertEqual(settings.effectiveEndpointURL.absoluteString, "https://api.openai.com/v1/chat/completions")
+
+        settings.endpointURLString = "https://example.com/proxy/chat/completions"
+        XCTAssertEqual(settings.effectiveEndpointURL.absoluteString, "https://example.com/proxy/chat/completions")
+    }
+
     func testPresetMetadataMatchesMainWindowModelList() {
         XCTAssertEqual(LLMModelPreset.gemini25Flash.displayName, "google/gemini-2.5-flash")
         XCTAssertEqual(LLMModelPreset.gpt41Mini.displayName, "openai/gpt-4.1-mini")

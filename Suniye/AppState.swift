@@ -198,6 +198,9 @@ final class AppState {
     var llmCustomModelId = "" {
         didSet { persistLLMSettings() }
     }
+    var llmEndpointURLString = LLMDefaults.defaultEndpointURLString {
+        didSet { persistLLMSettings() }
+    }
     var llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt {
         didSet { persistLLMSettings() }
     }
@@ -228,9 +231,9 @@ final class AppState {
         }
     }
 
-    var hasOpenRouterAPIKey = false {
+    var hasLLMAPIKey = false {
         didSet {
-            if oldValue != hasOpenRouterAPIKey {
+            if oldValue != hasLLMAPIKey {
                 onStateChange?()
             }
         }
@@ -245,11 +248,11 @@ final class AppState {
     }
 
     var llmKeyStatusText: String {
-        hasOpenRouterAPIKey ? "API key: saved" : "API key: missing"
+        hasLLMAPIKey ? "API key: saved" : "API key: missing"
     }
 
     var llmStatusHint: String? {
-        if llmEnabled && !hasOpenRouterAPIKey {
+        if llmEnabled && !hasLLMAPIKey {
             return "LLM enabled but API key missing"
         }
         return nil
@@ -447,12 +450,12 @@ final class AppState {
             )
         }
 
-        if llmEnabled && !hasOpenRouterAPIKey {
+        if llmEnabled && !hasLLMAPIKey {
             items.append(
                 AttentionItem(
                     id: "llm-key-missing",
                     title: "LLM API key missing",
-                    detail: "LLM polishing is enabled, but no OpenRouter API key is saved.",
+                    detail: "LLM polishing is enabled, but no LLM API key is saved.",
                     severity: .warning,
                     recommendedSection: .style
                 )
@@ -643,10 +646,10 @@ final class AppState {
     }
 
     func refreshLLMKeyStatus() {
-        hasOpenRouterAPIKey = keychainService.hasOpenRouterKey()
+        hasLLMAPIKey = keychainService.hasLLMKey()
     }
 
-    func saveOpenRouterAPIKey(_ key: String) {
+    func saveLLMAPIKey(_ key: String) {
         let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else {
             llmKeyOperationError = "API key cannot be empty"
@@ -655,26 +658,26 @@ final class AppState {
         }
 
         do {
-            try keychainService.setOpenRouterKey(normalized)
+            try keychainService.setLLMKey(normalized)
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
-            AppLogger.shared.log(.info, "openrouter api key saved")
+            AppLogger.shared.log(.info, "llm api key saved")
         } catch {
             llmKeyOperationError = "Failed to save API key"
-            AppLogger.shared.log(.error, "openrouter api key save failed")
+            AppLogger.shared.log(.error, "llm api key save failed")
             onStateChange?()
         }
     }
 
-    func clearOpenRouterAPIKey() {
+    func clearLLMAPIKey() {
         do {
-            try keychainService.deleteOpenRouterKey()
+            try keychainService.deleteLLMKey()
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
-            AppLogger.shared.log(.info, "openrouter api key cleared")
+            AppLogger.shared.log(.info, "llm api key cleared")
         } catch {
             llmKeyOperationError = "Failed to clear API key"
-            AppLogger.shared.log(.error, "openrouter api key clear failed")
+            AppLogger.shared.log(.error, "llm api key clear failed")
             onStateChange?()
         }
     }
@@ -917,12 +920,12 @@ final class AppState {
             return rawText
         }
 
-        guard hasOpenRouterAPIKey else {
+        guard hasLLMAPIKey else {
             AppLogger.shared.log(.warning, "llm fallback raw reason=missing_key")
             return rawText
         }
 
-        guard let apiKey = try? keychainService.getOpenRouterKey(),
+        guard let apiKey = try? keychainService.getLLMKey(),
               !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             AppLogger.shared.log(.warning, "llm fallback raw reason=key_read_failed")
             refreshLLMKeyStatus()
@@ -1236,6 +1239,7 @@ final class AppState {
         llmEnabled = settings.isEnabled
         llmSelectedModelPreset = settings.selectedModelPreset
         llmCustomModelId = settings.customModelId
+        llmEndpointURLString = settings.endpointURLString
         llmBaseSystemPrompt = settings.baseSystemPrompt
         llmSystemPrompt = settings.systemPrompt
         llmKeywordsRaw = settings.keywordsRaw
@@ -1257,6 +1261,7 @@ final class AppState {
             isEnabled: llmEnabled,
             selectedModelPreset: llmSelectedModelPreset,
             customModelId: llmCustomModelId,
+            endpointURLString: llmEndpointURLString,
             baseSystemPrompt: llmBaseSystemPrompt,
             systemPrompt: llmSystemPrompt,
             keywordsRaw: llmKeywordsRaw,
@@ -1285,6 +1290,7 @@ final class AppState {
         let settings = currentLLMSettings()
         return LLMConfig(
             modelId: settings.effectiveModelId,
+            endpointURL: settings.effectiveEndpointURL,
             systemPrompt: settings.composedSystemPrompt,
             keywords: settings.keywords,
             timeoutSeconds: settings.timeoutSeconds,

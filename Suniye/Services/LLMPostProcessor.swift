@@ -2,6 +2,7 @@ import Foundation
 
 struct LLMConfig: Equatable {
     let modelId: String
+    let endpointURL: URL
     let systemPrompt: String
     let keywords: [String]
     let timeoutSeconds: Double
@@ -29,11 +30,11 @@ enum LLMPostProcessorError: LocalizedError {
         case .timeout:
             return "LLM request timed out"
         case .unauthorized:
-            return "OpenRouter authorization failed"
+            return "LLM authorization failed"
         case let .provider(reason):
-            return "OpenRouter provider error: \(reason)"
+            return "LLM provider error: \(reason)"
         case .malformedResponse:
-            return "OpenRouter returned malformed response"
+            return "LLM provider returned malformed response"
         case .emptyOutput:
             return "LLM returned empty output"
         case let .network(reason):
