@@ -133,6 +133,29 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.floatingIndicatorState, .idle)
     }
 
+    func testSuccessfulTranscriptionClearsStaleLastError() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("Hello")
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.lastError = "Transcription failed: previous error"
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertNil(appState.lastError)
+        XCTAssertEqual(appState.phase, .ready)
+    }
+
     func testBlockedIndicatorToggleShowsInlineErrorWhenModelMissing() async {
         let appState = makeTestAppState()
         appState.phase = .needsModel

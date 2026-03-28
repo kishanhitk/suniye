@@ -1265,6 +1265,7 @@ final class AppState {
             }
             activeRecordingSource = nil
             recordingStart = nil
+            lastError = nil
             phase = .ready
             statusText = "Ready"
             setFloatingIndicatorState(.idle)

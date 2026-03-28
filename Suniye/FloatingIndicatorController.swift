@@ -150,6 +150,7 @@ final class FloatingIndicatorController {
         guard let panel, let hostingView else { return }
         let state = effectiveState
         let size = size(for: state)
+        let targetFrame = frame(for: size)
 
         hostingView.rootView = FloatingIndicatorView(
             state: state,
@@ -162,7 +163,7 @@ final class FloatingIndicatorController {
         )
 
         panel.ignoresMouseEvents = !panelShouldCaptureMouseEvents
-        positionPanel(size: size, animated: true)
+        positionPanel(targetFrame: targetFrame, animated: !panel.frame.equalTo(targetFrame))
         panel.orderFrontRegardless()
         if lastLoggedStateValue != state.logValue {
             lastLoggedStateValue = state.logValue
@@ -185,20 +186,24 @@ final class FloatingIndicatorController {
 
         if anchoredScreenID != screen.displayID {
             anchoredScreenID = screen.displayID
-            positionPanel(size: size(for: effectiveState), animated: true)
+            positionPanel(targetFrame: frame(for: size(for: effectiveState)), animated: true)
         }
     }
 
-    private func positionPanel(size: NSSize, animated: Bool) {
-        guard let panel else { return }
+    private func frame(for size: NSSize) -> NSRect {
         let screen = resolvedScreen() ?? currentMouseScreen() ?? NSScreen.main ?? NSScreen.screens.first
-        guard let screen else { return }
+        guard let screen else { return .zero }
 
         anchoredScreenID = screen.displayID
         let frame = screen.visibleFrame
         let x = frame.midX - size.width / 2
         let y = frame.minY + bottomMargin
-        let targetFrame = NSRect(x: x, y: y, width: size.width, height: size.height)
+        return NSRect(x: x, y: y, width: size.width, height: size.height)
+    }
+
+    private func positionPanel(targetFrame: NSRect, animated: Bool) {
+        guard let panel else { return }
+        guard targetFrame != .zero else { return }
         if animated {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = animationDuration
