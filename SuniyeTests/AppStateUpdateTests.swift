@@ -127,6 +127,61 @@ final class AppStateUpdateTests: XCTestCase {
         XCTAssertNil(appState.availableUpdateVersion)
     }
 
+    func testBackgroundCheckFailurePreservesAvailableState() async {
+        let updateRelease = UpdateRelease(
+            versionTag: "v0.0.2",
+            publishedAt: nil,
+            notes: "notes",
+            htmlURL: URL(string: "https://example.test/release")!,
+            assets: []
+        )
+        let updateService = StubUpdateService(checkResult: .success(.updateAvailable(updateRelease)))
+        updateService.downloadResult = .failure(UpdateError.network("seed"))
+        let appState = makeAppState(updateService: updateService)
+
+        await appState.checkForUpdates(background: false)
+
+        XCTAssertEqual(appState.updateStatus, .available)
+        XCTAssertEqual(appState.updateStatusText, "Update available: \(updateRelease.versionTag)")
+
+        updateService.checkResult = .failure(UpdateError.network("offline"))
+
+        await appState.checkForUpdates(background: true)
+
+        XCTAssertEqual(appState.updateStatus, .available)
+        XCTAssertEqual(appState.updateStatusText, "Update available: \(updateRelease.versionTag)")
+        XCTAssertEqual(appState.availableUpdateVersion, updateRelease.versionTag)
+    }
+
+    func testBackgroundCheckPreservesAvailableStateWhenLocalVersionIsMissing() async {
+        let updateRelease = UpdateRelease(
+            versionTag: "v0.0.2",
+            publishedAt: nil,
+            notes: "notes",
+            htmlURL: URL(string: "https://example.test/release")!,
+            assets: []
+        )
+        var currentVersion: AppVersion? = AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1)
+        let updateService = StubUpdateService(checkResult: .success(.updateAvailable(updateRelease)))
+        updateService.downloadResult = .failure(UpdateError.network("seed"))
+        let appState = makeAppState(
+            updateService: updateService,
+            currentAppVersionProvider: { currentVersion }
+        )
+
+        await appState.checkForUpdates(background: false)
+
+        XCTAssertEqual(appState.updateStatus, .available)
+
+        currentVersion = nil
+
+        await appState.checkForUpdates(background: true)
+
+        XCTAssertEqual(appState.updateStatus, .available)
+        XCTAssertEqual(appState.updateStatusText, "Update available: \(updateRelease.versionTag)")
+        XCTAssertEqual(updateService.checkCallCount, 1)
+    }
+
     func testManualCheckFailureShowsError() async {
         let updateService = StubUpdateService(checkResult: .failure(UpdateError.network("offline")))
         let appState = makeAppState(updateService: updateService)
@@ -213,6 +268,31 @@ final class AppStateUpdateTests: XCTestCase {
         XCTAssertEqual(appState.updateDownloadProgress, 1)
     }
 
+    func testDownloadAndOpenUpdateKeepsAvailableStateWhenFreshDownloadFails() async {
+        let updateRelease = UpdateRelease(
+            versionTag: "v0.0.2",
+            publishedAt: nil,
+            notes: "notes",
+            htmlURL: URL(string: "https://example.test/release")!,
+            assets: []
+        )
+        let updateService = StubUpdateService(checkResult: .success(.updateAvailable(updateRelease)))
+        updateService.downloadResult = .failure(UpdateError.network("offline"))
+        let appState = makeAppState(updateService: updateService)
+
+        await appState.checkForUpdates(background: false)
+
+        XCTAssertEqual(appState.updateStatus, .available)
+        XCTAssertEqual(appState.updateStatusText, "Update available: \(updateRelease.versionTag)")
+
+        await appState.downloadAndOpenUpdate()
+
+        XCTAssertEqual(appState.updateStatus, .available)
+        XCTAssertEqual(appState.updateStatusText, "offline")
+        XCTAssertEqual(appState.updateDownloadProgress, 0)
+        XCTAssertEqual(appState.availableUpdateVersion, updateRelease.versionTag)
+    }
+
     func testDownloadAndOpenUpdateMarksSuccessWhenOpenSucceeds() async {
         let updateRelease = UpdateRelease(
             versionTag: "v0.0.2",
@@ -236,6 +316,7 @@ final class AppStateUpdateTests: XCTestCase {
 
     private func makeAppState(
         updateService: StubUpdateService,
+        currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
         nowProvider: @escaping () -> Date = Date.init,
         fileOpener: @escaping (URL) -> Bool = { _ in true }
     ) -> AppState {
@@ -246,6 +327,7 @@ final class AppStateUpdateTests: XCTestCase {
             keychainService: TestKeychainService(value: nil),
             updateService: updateService,
             launchAtLoginService: StubLaunchAtLoginService(),
+            currentAppVersionProvider: currentAppVersionProvider,
             nowProvider: nowProvider,
             fileOpener: fileOpener
         )

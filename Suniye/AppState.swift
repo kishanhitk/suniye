@@ -926,6 +926,9 @@ final class AppState {
             return
         }
 
+        let previousUpdateStatus = updateStatus
+        let previousUpdateStatusText = updateStatusText
+
         updateStatus = .checking
         if !background {
             updateStatusText = "Checking for updates..."
@@ -934,7 +937,8 @@ final class AppState {
         guard let currentVersion = currentAppVersionProvider() else {
             AppLogger.shared.log(.error, "update check failed: local app version missing")
             if background {
-                updateStatus = .idle
+                updateStatus = previousUpdateStatus
+                updateStatusText = previousUpdateStatusText
             } else {
                 updateStatus = .error
                 updateStatusText = "Unable to read local app version."
@@ -967,7 +971,8 @@ final class AppState {
         } catch {
             AppLogger.shared.log(.warning, "update check failed: \(error.localizedDescription)")
             if background {
-                updateStatus = .idle
+                updateStatus = previousUpdateStatus
+                updateStatusText = previousUpdateStatusText
             } else {
                 updateStatus = .error
                 updateStatusText = error.localizedDescription
@@ -1017,7 +1022,7 @@ final class AppState {
             updateStatusText = "Update downloaded. Installer opened."
             AppLogger.shared.log(.info, "update download complete and opened: \(archiveURL.path)")
         } catch {
-            updateStatus = .error
+            updateStatus = .available
             updateStatusText = error.localizedDescription
             updateDownloadProgress = 0
             AppLogger.shared.log(.error, "update download failed: \(error.localizedDescription)")
