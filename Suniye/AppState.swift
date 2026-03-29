@@ -54,6 +54,8 @@ struct AttentionItem: Identifiable, Equatable {
 @Observable
 final class AppState {
     typealias RecordingSource = FloatingIndicatorState.Source
+    private static let automaticUpdateCheckInterval: TimeInterval = 5 * 60 * 60
+    private static let automaticUpdateTimerTolerance: TimeInterval = 5 * 60
 
     enum Phase: String {
         case needsModel
@@ -71,6 +73,7 @@ final class AppState {
         case upToDate
         case available
         case downloading
+        case downloaded
         case error
     }
 
@@ -526,6 +529,7 @@ final class AppState {
     private let updateService: UpdateServiceProtocol
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
     private let currentAppVersionProvider: () -> AppVersion?
+    private let nowProvider: () -> Date
     private let fileOpener: (URL) -> Bool
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
@@ -538,6 +542,15 @@ final class AppState {
     private var isHydratingHistory = false
     private let llmE2EMode: LLME2EMode
     private var availableUpdateRelease: UpdateRelease?
+    private var downloadedUpdateArchiveURL: URL?
+    private var automaticUpdateTimer: Timer?
+    private var lastAutomaticUpdateAttemptAt: Date?
+
+    deinit {
+        MainActor.assumeIsolated {
+            automaticUpdateTimer?.invalidate()
+        }
+    }
 
     init(
         modelManager: ModelManagerProtocol = ModelManager(),
@@ -553,6 +566,7 @@ final class AppState {
         updateService: UpdateServiceProtocol = GitHubUpdateService(),
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
+        nowProvider: @escaping () -> Date = Date.init,
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
@@ -570,6 +584,7 @@ final class AppState {
         self.updateService = updateService
         self.launchAtLoginService = launchAtLoginService
         self.currentAppVersionProvider = currentAppVersionProvider
+        self.nowProvider = nowProvider
         self.fileOpener = fileOpener
         self.runtimeServicesEnabled = startServices
         self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
@@ -876,7 +891,33 @@ final class AppState {
         }
     }
 
-    func checkForUpdatesOnLaunch() async {
+    func startAutomaticUpdateChecks() {
+        guard automaticUpdateTimer == nil else {
+            return
+        }
+
+        AppLogger.shared.log(.info, "automatic update checks started interval=\(Int(Self.automaticUpdateCheckInterval))s")
+
+        Task { @MainActor [weak self] in
+            await self?.performAutomaticUpdateCheckIfEligible()
+        }
+
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.automaticUpdateCheckInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.performAutomaticUpdateCheckIfEligible()
+            }
+        }
+        timer.tolerance = Self.automaticUpdateTimerTolerance
+        automaticUpdateTimer = timer
+    }
+
+    func performAutomaticUpdateCheckIfEligible(now: Date? = nil) async {
+        let now = now ?? nowProvider()
+        guard shouldPerformAutomaticUpdateCheck(now: now) else {
+            return
+        }
+
+        lastAutomaticUpdateAttemptAt = now
         await checkForUpdates(background: true)
     }
 
@@ -885,6 +926,15 @@ final class AppState {
             return
         }
 
+        if !background, updateStatus == .downloaded, downloadedUpdateArchiveURL != nil {
+            AppLogger.shared.log(.info, "manual update check skipped: installer already cached")
+            return
+        }
+
+        let previousUpdateStatus = updateStatus
+        let previousUpdateStatusText = updateStatusText
+        let hadCachedDownloadedUpdate = previousUpdateStatus == .downloaded && downloadedUpdateArchiveURL != nil
+
         updateStatus = .checking
         if !background {
             updateStatusText = "Checking for updates..."
@@ -892,8 +942,12 @@ final class AppState {
 
         guard let currentVersion = currentAppVersionProvider() else {
             AppLogger.shared.log(.error, "update check failed: local app version missing")
-            if background {
-                updateStatus = .idle
+            if hadCachedDownloadedUpdate {
+                updateStatus = .downloaded
+                updateStatusText = previousUpdateStatusText
+            } else if background {
+                updateStatus = previousUpdateStatus
+                updateStatusText = previousUpdateStatusText
             } else {
                 updateStatus = .error
                 updateStatusText = "Unable to read local app version."
@@ -907,6 +961,7 @@ final class AppState {
             case .upToDate:
                 availableUpdateRelease = nil
                 availableUpdateVersion = nil
+                downloadedUpdateArchiveURL = nil
                 if background {
                     updateStatus = .idle
                 } else {
@@ -920,11 +975,16 @@ final class AppState {
                 updateStatus = .available
                 updateStatusText = "Update available: \(release.versionTag)"
                 AppLogger.shared.log(.info, "update available: \(release.versionTag)")
+                await downloadLatestUpdateInBackground(release: release)
             }
         } catch {
             AppLogger.shared.log(.warning, "update check failed: \(error.localizedDescription)")
-            if background {
-                updateStatus = .idle
+            if hadCachedDownloadedUpdate {
+                updateStatus = .downloaded
+                updateStatusText = previousUpdateStatusText
+            } else if background {
+                updateStatus = previousUpdateStatus
+                updateStatusText = previousUpdateStatusText
             } else {
                 updateStatus = .error
                 updateStatusText = error.localizedDescription
@@ -942,25 +1002,39 @@ final class AppState {
             return
         }
 
+        if let downloadedUpdateArchiveURL {
+            if fileOpener(downloadedUpdateArchiveURL) {
+                updateStatus = .downloaded
+                updateStatusText = "Installer opened for \(release.versionTag)."
+                AppLogger.shared.log(.info, "opened downloaded installer: \(downloadedUpdateArchiveURL.path)")
+            } else {
+                updateStatus = .downloaded
+                updateStatusText = "Update is ready to install. Failed to open the installer. Try again."
+                AppLogger.shared.log(.error, "open downloaded installer failed: \(downloadedUpdateArchiveURL.path)")
+            }
+            return
+        }
+
         updateStatus = .downloading
         updateStatusText = "Downloading update..."
         updateDownloadProgress = 0
 
         do {
             let archiveURL = try await updateService.downloadAndVerify(release: release)
+            downloadedUpdateArchiveURL = archiveURL
             guard fileOpener(archiveURL) else {
-                updateStatus = .error
-                updateDownloadProgress = 0
-                updateStatusText = "Update downloaded, but failed to open installer."
+                updateStatus = .downloaded
+                updateDownloadProgress = 1
+                updateStatusText = "Update downloaded. Failed to open installer. Try again."
                 AppLogger.shared.log(.error, "update download complete but open failed: \(archiveURL.path)")
                 return
             }
             updateDownloadProgress = 1
-            updateStatus = .available
+            updateStatus = .downloaded
             updateStatusText = "Update downloaded. Installer opened."
             AppLogger.shared.log(.info, "update download complete and opened: \(archiveURL.path)")
         } catch {
-            updateStatus = .error
+            updateStatus = .available
             updateStatusText = error.localizedDescription
             updateDownloadProgress = 0
             AppLogger.shared.log(.error, "update download failed: \(error.localizedDescription)")
@@ -972,6 +1046,46 @@ final class AppState {
             return
         }
         NSWorkspace.shared.open(release.htmlURL)
+    }
+
+    private func downloadLatestUpdateInBackground(release: UpdateRelease) async {
+        guard updateStatus != .downloading else {
+            return
+        }
+
+        updateStatus = .downloading
+        updateStatusText = "Downloading update \(release.versionTag)..."
+        updateDownloadProgress = 0
+
+        do {
+            let archiveURL = try await updateService.downloadAndVerify(release: release)
+            downloadedUpdateArchiveURL = archiveURL
+            updateDownloadProgress = 1
+            updateStatus = .downloaded
+            updateStatusText = "Update \(release.versionTag) is ready to install."
+            AppLogger.shared.log(.info, "update predownload complete: \(archiveURL.path)")
+        } catch {
+            updateStatus = .available
+            updateStatusText = "Update available: \(release.versionTag)"
+            updateDownloadProgress = 0
+            downloadedUpdateArchiveURL = nil
+            AppLogger.shared.log(.warning, "update predownload failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func shouldPerformAutomaticUpdateCheck(now: Date) -> Bool {
+        switch updateStatus {
+        case .checking, .downloading, .downloaded:
+            return false
+        case .idle, .upToDate, .available, .error:
+            break
+        }
+
+        guard let lastAutomaticUpdateAttemptAt else {
+            return true
+        }
+
+        return now.timeIntervalSince(lastAutomaticUpdateAttemptAt) >= Self.automaticUpdateCheckInterval
     }
 
     func postProcessTextIfEnabled(_ rawText: String) async -> String {
