@@ -206,13 +206,18 @@ struct StylePage: View {
     var body: some View {
         DetailScrollContainer {
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "LLM Polish")
+                SectionHeading(title: "Text Cleanup")
 
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 12) {
-                            Text("Enable LLM post-processing")
-                                .font(AppTypography.body)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Enable cleanup")
+                                    .font(AppTypography.body)
+                                Text("Optional: improves transcript quality before insertion.")
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                            }
                             Spacer(minLength: 12)
                             Toggle("", isOn: $appState.llmEnabled)
                                 .labelsHidden()
@@ -222,10 +227,10 @@ struct StylePage: View {
 
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("LLM API Key")
+                                Text("Key")
                                     .font(AppTypography.body)
                                 Spacer(minLength: 12)
-                                Text(appState.hasLLMAPIKey ? "•••" : "Missing")
+                                Text(appState.hasLLMAPIKey ? "Saved" : "Missing")
                                     .font(AppTypography.codeCalloutSemibold)
                                     .foregroundStyle(appState.hasLLMAPIKey ? Color.primary : .orange)
                             }
@@ -239,13 +244,14 @@ struct StylePage: View {
                                     apiKeyDraft = ""
                                 }
                                 .buttonStyle(.bordered)
+                                .disabled(!appState.llmEnabled)
 
                                 Button("Clear") {
                                     appState.clearLLMAPIKey()
                                     apiKeyDraft = ""
                                 }
                                 .buttonStyle(.bordered)
-                                .disabled(!appState.hasLLMAPIKey)
+                                .disabled(!appState.hasLLMAPIKey || !appState.llmEnabled)
                             }
 
                             if let error = appState.llmKeyOperationError {
@@ -259,18 +265,20 @@ struct StylePage: View {
 
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("OpenAI-Compatible Endpoint")
+                                Text("API endpoint")
                                     .font(AppTypography.body)
                                 Spacer(minLength: 12)
                                 Button("Reset") {
                                     appState.llmEndpointURLString = LLMDefaults.defaultEndpointURLString
                                 }
                                 .buttonStyle(.bordered)
+                                .disabled(!appState.llmEnabled)
                             }
 
                             TextField("https://api.openai.com/v1/chat/completions", text: $appState.llmEndpointURLString)
                                 .textFieldStyle(.roundedBorder)
                                 .font(AppTypography.codeBodyMedium)
+                                .disabled(!appState.llmEnabled)
 
                             if let endpointValidationError = appState.llmEndpointValidationError {
                                 Text(endpointValidationError)
@@ -278,110 +286,146 @@ struct StylePage: View {
                                     .foregroundStyle(.red)
                             }
                         }
-                    }
-                }
-            }
 
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Domain Terms")
-
-                SurfaceCard {
-                    VStack(spacing: 0) {
-                        if !appState.vocabularyTerms.isEmpty {
-                            ForEach(appState.vocabularyTerms, id: \.self) { term in
-                                HStack(spacing: 12) {
-                                    Text(term)
-                                        .font(AppTypography.body)
-                                    Spacer(minLength: 0)
-                                    ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
-                                        appState.removeVocabularyTerm(term)
-                                    }
-                                }
-                                .padding(.vertical, AppMetrics.listRowVerticalPadding)
-
-                                CardDivider()
-                            }
-                        }
-
-                        HStack(spacing: 8) {
-                            TextField("e.g. Kubernetes, PostgreSQL, gRPC", text: $vocabularyDraft)
-                                .textFieldStyle(.roundedBorder)
-                                .font(AppTypography.body)
-                                .onSubmit(addTerm)
-
-                            Button("Add", action: addTerm)
-                                .buttonStyle(.bordered)
-                                .disabled(vocabularyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-                        .padding(.vertical, AppMetrics.listRowVerticalPadding)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "LLM Model")
-
-                SurfaceCard {
-                    VStack(spacing: 0) {
-                        ForEach(LLMModelPreset.allCases, id: \.self) { preset in
-                            Button {
-                                appState.llmSelectedModelPreset = preset
-                            } label: {
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(appState.llmDisplayModelId(for: preset))
-                                            .font(preset == .custom ? AppTypography.body : AppTypography.codeBodyMedium)
-                                            .foregroundStyle(Color.primary)
-                                        Text(preset.subtitle)
-                                            .font(AppTypography.subheadline)
-                                            .foregroundStyle(MainWindowPalette.secondaryText)
-                                    }
-                                    Spacer(minLength: 12)
-                                    if appState.llmSelectedModelPreset == preset {
-                                        Image(systemName: "checkmark")
-                                            .font(.headline.weight(.semibold))
-                                            .foregroundStyle(.blue)
-                                    }
-                                }
-                                .padding(.vertical, 10)
-                            }
-                            .buttonStyle(.plain)
-
-                            if preset != LLMModelPreset.allCases.last {
-                                CardDivider()
-                            }
-                        }
-
-                        CardDivider()
-                            .padding(.vertical, 10)
-
-                        HStack(spacing: 12) {
-                            Text("Custom model ID")
-                                .font(AppTypography.body)
-                            Spacer(minLength: 12)
-                            TextField("gpt-4.1-mini or provider/model-id", text: $appState.llmCustomModelId)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(maxWidth: 300)
-                        }
-
-                        if let modelValidationError = appState.llmModelValidationError {
-                            Text(modelValidationError)
+                        if let statusHint = simplifiedCleanupStatusHint {
+                            CardDivider()
+                            Label(statusHint, systemImage: "exclamationmark.triangle.fill")
                                 .font(AppTypography.caption)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
             }
 
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "System Prompt")
+            if appState.llmEnabled {
+                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                    SectionHeading(title: "Model")
 
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        TextEditor(text: $appState.llmBaseSystemPrompt)
-                            .font(AppTypography.body)
-                            .frame(minHeight: 120)
-                            .padding(8)
+                    SurfaceCard {
+                        VStack(spacing: 0) {
+                            ForEach(LLMModelPreset.allCases, id: \.self) { preset in
+                                Button {
+                                    appState.llmSelectedModelPreset = preset
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(appState.llmDisplayModelId(for: preset))
+                                                .font(preset == .custom ? AppTypography.body : AppTypography.codeBodyMedium)
+                                                .foregroundStyle(Color.primary)
+                                            Text(preset.subtitle)
+                                                .font(AppTypography.subheadline)
+                                                .foregroundStyle(MainWindowPalette.secondaryText)
+                                        }
+                                        Spacer(minLength: 12)
+                                        if appState.llmSelectedModelPreset == preset {
+                                            Image(systemName: "checkmark")
+                                                .font(.headline.weight(.semibold))
+                                                .foregroundStyle(.blue)
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+
+                                if preset != LLMModelPreset.allCases.last {
+                                    CardDivider()
+                                }
+                            }
+
+                            CardDivider()
+                                .padding(.vertical, 10)
+
+                            HStack(spacing: 12) {
+                                Text("Custom model")
+                                    .font(AppTypography.body)
+                                Spacer(minLength: 12)
+                                TextField("gpt-4.1-mini or provider/model-id", text: $appState.llmCustomModelId)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(maxWidth: 300)
+                            }
+
+                            if let modelValidationError = appState.llmModelValidationError {
+                                Text(modelValidationError)
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                    SectionHeading(title: "Terms")
+
+                    SurfaceCard {
+                        VStack(spacing: 0) {
+                            if !appState.vocabularyTerms.isEmpty {
+                                ForEach(appState.vocabularyTerms, id: \.self) { term in
+                                    HStack(spacing: 12) {
+                                        Text(term)
+                                            .font(AppTypography.body)
+                                        Spacer(minLength: 0)
+                                        ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
+                                            appState.removeVocabularyTerm(term)
+                                        }
+                                    }
+                                    .padding(.vertical, AppMetrics.listRowVerticalPadding)
+
+                                    CardDivider()
+                                }
+                            }
+
+                            HStack(spacing: 8) {
+                                TextField("e.g. Kubernetes, PostgreSQL, gRPC", text: $vocabularyDraft)
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(AppTypography.body)
+                                    .onSubmit(addTerm)
+
+                                Button("Add", action: addTerm)
+                                    .buttonStyle(.bordered)
+                                    .disabled(vocabularyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
+                            .padding(.vertical, AppMetrics.listRowVerticalPadding)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                    SectionHeading(title: "Instructions")
+
+                    SurfaceCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            TextEditor(text: $appState.llmBaseSystemPrompt)
+                                .font(AppTypography.body)
+                                .frame(minHeight: 120)
+                                .padding(8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(MainWindowPalette.editorBackground)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
+                                )
+
+                            HStack {
+                                Spacer(minLength: 0)
+                                Button("Reset to Default") {
+                                    appState.llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                    }
+                }
+
+                SecondaryDisclosureCard(title: "More Options") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Extra instructions")
+                            .font(AppTypography.subheadlineSemibold)
+                        TextEditor(text: $appState.llmSystemPrompt)
+                            .font(AppTypography.subheadline)
+                            .frame(minHeight: 64)
+                            .padding(6)
                             .background(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .fill(MainWindowPalette.editorBackground)
@@ -390,45 +434,28 @@ struct StylePage: View {
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
                             )
-
-                        HStack {
-                            Spacer(minLength: 0)
-                            Button("Reset to Default") {
-                                appState.llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt
-                            }
-                            .buttonStyle(.bordered)
-                        }
                     }
-                }
-            }
 
-            SecondaryDisclosureCard(title: "Advanced") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Additional user prompt")
-                        .font(AppTypography.subheadlineSemibold)
-                    TextEditor(text: $appState.llmSystemPrompt)
-                        .font(AppTypography.subheadline)
-                        .frame(minHeight: 64)
-                        .padding(6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(MainWindowPalette.editorBackground)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
-                        )
-                }
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Response timeout: \(appState.llmTimeoutSeconds, specifier: "%.1f")s")
+                            .font(AppTypography.subheadlineSemibold)
+                        Slider(value: $appState.llmTimeoutSeconds, in: LLMDefaults.minTimeoutSeconds ... LLMDefaults.maxTimeoutSeconds, step: 0.5)
+                    }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Timeout: \(appState.llmTimeoutSeconds, specifier: "%.1f")s")
-                        .font(AppTypography.subheadlineSemibold)
-                    Slider(value: $appState.llmTimeoutSeconds, in: LLMDefaults.minTimeoutSeconds ... LLMDefaults.maxTimeoutSeconds, step: 0.5)
+                    Stepper("Max response tokens: \(appState.llmMaxTokens)", value: $appState.llmMaxTokens, in: LLMDefaults.minMaxTokens ... LLMDefaults.maxMaxTokens, step: 16)
                 }
-
-                Stepper("Max tokens: \(appState.llmMaxTokens)", value: $appState.llmMaxTokens, in: LLMDefaults.minMaxTokens ... LLMDefaults.maxMaxTokens, step: 16)
             }
         }
+    }
+
+    private var simplifiedCleanupStatusHint: String? {
+        guard let statusHint = appState.llmStatusHint else {
+            return nil
+        }
+
+        return statusHint
+            .replacingOccurrences(of: "LLM", with: "Cleanup")
+            .replacingOccurrences(of: "llm", with: "cleanup")
     }
 
     private func addTerm() {
