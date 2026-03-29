@@ -2,12 +2,16 @@
 
 ## "App is damaged" / blocked by macOS
 This project currently publishes unsigned binaries.
-Use `System Settings` > `Privacy & Security` > `Open Anyway` after first blocked launch.
+If macOS blocks the app on first launch, remove quarantine from the installed app:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Suniye.app
+```
 
 ## Quarantine issues
 If needed, remove quarantine from the installed app:
 ```bash
-xattr -dr com.apple.quarantine ~/Applications/Suniye.app
+xattr -dr com.apple.quarantine /Applications/Suniye.app
 ```
 
 ## Model download fails

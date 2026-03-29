@@ -16,9 +16,11 @@ A local-first dictation app for macOS. Hold a key, speak, and your words appear 
 Requires **macOS 14 (Sonoma)** or later.
 
 1. Download **Suniye.dmg** from the [latest GitHub Release](../../releases/latest).
-2. Open the DMG and drag **Suniye.app** into your Applications folder.
-3. On first launch, macOS will block the app (it's unsigned).
-   Go to **System Settings > Privacy & Security**, find the blocked-app message, and click **Open Anyway**.
+2. Open the DMG and drag **Suniye.app** into `/Applications`.
+3. If macOS blocks the app on first launch, remove quarantine and try again:
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Suniye.app
+   ```
 4. Grant the permissions Suniye asks for:
    - **Microphone** — to hear you
    - **Accessibility** — to type text into other apps
