@@ -69,6 +69,7 @@ final class AppState {
         case upToDate
         case available
         case downloading
+        case downloaded
         case error
     }
 
@@ -533,6 +534,7 @@ final class AppState {
     private var isHydratingHistory = false
     private let llmE2EMode: LLME2EMode
     private var availableUpdateRelease: UpdateRelease?
+    private var downloadedUpdateArchiveURL: URL?
 
     init(
         modelManager: ModelManagerProtocol = ModelManager(),
@@ -874,6 +876,7 @@ final class AppState {
             case .upToDate:
                 availableUpdateRelease = nil
                 availableUpdateVersion = nil
+                downloadedUpdateArchiveURL = nil
                 if background {
                     updateStatus = .idle
                 } else {
@@ -887,6 +890,7 @@ final class AppState {
                 updateStatus = .available
                 updateStatusText = "Update available: \(release.versionTag)"
                 AppLogger.shared.log(.info, "update available: \(release.versionTag)")
+                await downloadLatestUpdateInBackground(release: release)
             }
         } catch {
             AppLogger.shared.log(.warning, "update check failed: \(error.localizedDescription)")
@@ -909,12 +913,25 @@ final class AppState {
             return
         }
 
+        if let downloadedUpdateArchiveURL {
+            if fileOpener(downloadedUpdateArchiveURL) {
+                updateStatusText = "Installer opened for \(release.versionTag)."
+                AppLogger.shared.log(.info, "opened downloaded installer: \(downloadedUpdateArchiveURL.path)")
+            } else {
+                updateStatus = .error
+                updateStatusText = "Update is ready, but failed to open installer."
+                AppLogger.shared.log(.error, "open downloaded installer failed: \(downloadedUpdateArchiveURL.path)")
+            }
+            return
+        }
+
         updateStatus = .downloading
         updateStatusText = "Downloading update..."
         updateDownloadProgress = 0
 
         do {
             let archiveURL = try await updateService.downloadAndVerify(release: release)
+            downloadedUpdateArchiveURL = archiveURL
             guard fileOpener(archiveURL) else {
                 updateStatus = .error
                 updateDownloadProgress = 0
@@ -923,7 +940,7 @@ final class AppState {
                 return
             }
             updateDownloadProgress = 1
-            updateStatus = .available
+            updateStatus = .downloaded
             updateStatusText = "Update downloaded. Installer opened."
             AppLogger.shared.log(.info, "update download complete and opened: \(archiveURL.path)")
         } catch {
@@ -939,6 +956,31 @@ final class AppState {
             return
         }
         NSWorkspace.shared.open(release.htmlURL)
+    }
+
+    private func downloadLatestUpdateInBackground(release: UpdateRelease) async {
+        guard updateStatus != .downloading else {
+            return
+        }
+
+        updateStatus = .downloading
+        updateStatusText = "Downloading update \(release.versionTag)..."
+        updateDownloadProgress = 0
+
+        do {
+            let archiveURL = try await updateService.downloadAndVerify(release: release)
+            downloadedUpdateArchiveURL = archiveURL
+            updateDownloadProgress = 1
+            updateStatus = .downloaded
+            updateStatusText = "Update \(release.versionTag) is ready to install."
+            AppLogger.shared.log(.info, "update predownload complete: \(archiveURL.path)")
+        } catch {
+            updateStatus = .available
+            updateStatusText = "Update available: \(release.versionTag)"
+            updateDownloadProgress = 0
+            downloadedUpdateArchiveURL = nil
+            AppLogger.shared.log(.warning, "update predownload failed: \(error.localizedDescription)")
+        }
     }
 
     func postProcessTextIfEnabled(_ rawText: String) async -> String {

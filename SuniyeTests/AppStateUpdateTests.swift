@@ -13,11 +13,13 @@ final class AppStateUpdateTests: XCTestCase {
             assets: []
         )
         let updateService = StubUpdateService(checkResult: .success(.updateAvailable(updateRelease)))
+        let tempArchiveURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        updateService.downloadResult = .success(tempArchiveURL)
         let appState = makeAppState(updateService: updateService)
 
         await appState.checkForUpdates(background: true)
 
-        XCTAssertEqual(appState.updateStatus, .available)
+        XCTAssertEqual(appState.updateStatus, .downloaded)
         XCTAssertEqual(appState.availableUpdateVersion, "v0.0.2")
     }
 
@@ -88,8 +90,8 @@ final class AppStateUpdateTests: XCTestCase {
         await appState.downloadAndOpenUpdate()
 
         XCTAssertEqual(appState.updateStatus, .error)
-        XCTAssertEqual(appState.updateStatusText, "Update downloaded, but failed to open installer.")
-        XCTAssertEqual(appState.updateDownloadProgress, 0)
+        XCTAssertEqual(appState.updateStatusText, "Update is ready, but failed to open installer.")
+        XCTAssertEqual(appState.updateDownloadProgress, 1)
     }
 
     func testDownloadAndOpenUpdateMarksSuccessWhenOpenSucceeds() async {
@@ -108,8 +110,8 @@ final class AppStateUpdateTests: XCTestCase {
         await appState.checkForUpdates(background: false)
         await appState.downloadAndOpenUpdate()
 
-        XCTAssertEqual(appState.updateStatus, .available)
-        XCTAssertEqual(appState.updateStatusText, "Update downloaded. Installer opened.")
+        XCTAssertEqual(appState.updateStatus, .downloaded)
+        XCTAssertEqual(appState.updateStatusText, "Installer opened for v0.0.2.")
         XCTAssertEqual(appState.updateDownloadProgress, 1)
     }
 

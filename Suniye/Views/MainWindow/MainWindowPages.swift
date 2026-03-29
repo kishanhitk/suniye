@@ -26,6 +26,29 @@ struct DashboardPage: View {
                 DashboardMetricCard(icon: "clock", iconTint: .green, value: appState.totalDictationSeconds.compactDurationString, label: "Time")
             }
 
+            if appState.updateStatus == .downloaded {
+                SurfaceCard {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Update ready to install")
+                                .font(AppTypography.bodyMedium)
+                            Text(appState.updateStatusText)
+                                .font(AppTypography.subheadline)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        Button("Install Update") {
+                            Task {
+                                await appState.downloadAndOpenUpdate()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            }
+
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
                 SectionHeading(title: "Recent")
 
@@ -604,14 +627,14 @@ struct GeneralPage: View {
 
                             Spacer(minLength: 12)
 
-                            if appState.updateStatus == .available {
+                            if appState.updateStatus == .available || appState.updateStatus == .downloaded {
                                 HStack(spacing: 8) {
                                     Button("Release Notes") {
                                         appState.openReleaseNotes()
                                     }
                                     .buttonStyle(.bordered)
 
-                                    Button("Download") {
+                                    Button(appState.updateStatus == .downloaded ? "Install" : "Download") {
                                         Task {
                                             await appState.downloadAndOpenUpdate()
                                         }

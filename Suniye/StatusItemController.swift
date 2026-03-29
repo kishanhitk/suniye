@@ -78,6 +78,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             checkUpdatesItem.title = "Up to Date"
         case .downloading:
             checkUpdatesItem.title = "Downloading Update..."
+        case .downloaded:
+            if let version = appState.availableUpdateVersion {
+                checkUpdatesItem.title = "Ready to Install: \(version)"
+            } else {
+                checkUpdatesItem.title = "Update Ready to Install"
+            }
         case .error:
             checkUpdatesItem.title = "Check for Updates..."
         case .idle:
@@ -85,8 +91,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         downloadUpdateItem.target = self
-        downloadUpdateItem.isHidden = updateStatus != .available
-        downloadUpdateItem.isEnabled = updateStatus == .available
+        downloadUpdateItem.title = updateStatus == .downloaded ? "Install Update" : "Download Update"
+        downloadUpdateItem.isHidden = !(updateStatus == .available || updateStatus == .downloaded)
+        downloadUpdateItem.isEnabled = updateStatus == .available || updateStatus == .downloaded
 
         downloadItem.isEnabled = phase == .needsModel || phase == .downloadingModel || phase == .error
         downloadItem.isHidden = !(phase == .needsModel || phase == .downloadingModel || phase == .error)
