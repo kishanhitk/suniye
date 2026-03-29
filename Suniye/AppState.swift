@@ -926,8 +926,14 @@ final class AppState {
             return
         }
 
+        if !background, updateStatus == .downloaded, downloadedUpdateArchiveURL != nil {
+            AppLogger.shared.log(.info, "manual update check skipped: installer already cached")
+            return
+        }
+
         let previousUpdateStatus = updateStatus
         let previousUpdateStatusText = updateStatusText
+        let hadCachedDownloadedUpdate = previousUpdateStatus == .downloaded && downloadedUpdateArchiveURL != nil
 
         updateStatus = .checking
         if !background {
@@ -936,7 +942,10 @@ final class AppState {
 
         guard let currentVersion = currentAppVersionProvider() else {
             AppLogger.shared.log(.error, "update check failed: local app version missing")
-            if background {
+            if hadCachedDownloadedUpdate {
+                updateStatus = .downloaded
+                updateStatusText = previousUpdateStatusText
+            } else if background {
                 updateStatus = previousUpdateStatus
                 updateStatusText = previousUpdateStatusText
             } else {
@@ -970,7 +979,10 @@ final class AppState {
             }
         } catch {
             AppLogger.shared.log(.warning, "update check failed: \(error.localizedDescription)")
-            if background {
+            if hadCachedDownloadedUpdate {
+                updateStatus = .downloaded
+                updateStatusText = previousUpdateStatusText
+            } else if background {
                 updateStatus = previousUpdateStatus
                 updateStatusText = previousUpdateStatusText
             } else {

@@ -202,6 +202,36 @@ final class AppStateUpdateTests: XCTestCase {
         XCTAssertEqual(appState.updateStatusText, "You're up to date.")
     }
 
+    func testManualCheckPreservesCachedDownloadedInstaller() async {
+        let updateRelease = UpdateRelease(
+            versionTag: "v0.0.2",
+            publishedAt: nil,
+            notes: "notes",
+            htmlURL: URL(string: "https://example.test/release")!,
+            assets: []
+        )
+        let tempArchiveURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let updateService = StubUpdateService(checkResult: .success(.updateAvailable(updateRelease)))
+        updateService.downloadResult = .success(tempArchiveURL)
+        let appState = makeAppState(updateService: updateService)
+
+        await appState.checkForUpdates(background: false)
+
+        XCTAssertEqual(appState.updateStatus, .downloaded)
+        XCTAssertEqual(appState.updateStatusText, "Update \(updateRelease.versionTag) is ready to install.")
+        XCTAssertEqual(updateService.checkCallCount, 1)
+
+        updateService.checkResult = .failure(UpdateError.network("offline"))
+        updateService.downloadResult = .failure(UpdateError.network("offline"))
+
+        await appState.checkForUpdates(background: false)
+
+        XCTAssertEqual(appState.updateStatus, .downloaded)
+        XCTAssertEqual(appState.updateStatusText, "Update \(updateRelease.versionTag) is ready to install.")
+        XCTAssertEqual(appState.availableUpdateVersion, updateRelease.versionTag)
+        XCTAssertEqual(updateService.checkCallCount, 1)
+    }
+
     func testCheckIsIgnoredWhileAlreadyChecking() async {
         let updateService = StubUpdateService(checkResult: .success(.upToDate))
         let appState = makeAppState(updateService: updateService)
