@@ -54,6 +54,8 @@ struct AttentionItem: Identifiable, Equatable {
 @Observable
 final class AppState {
     typealias RecordingSource = FloatingIndicatorState.Source
+    private static let automaticUpdateCheckInterval: TimeInterval = 5 * 60 * 60
+    private static let automaticUpdateTimerTolerance: TimeInterval = 5 * 60
 
     enum Phase: String {
         case needsModel
@@ -527,6 +529,7 @@ final class AppState {
     private let updateService: UpdateServiceProtocol
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
     private let currentAppVersionProvider: () -> AppVersion?
+    private let nowProvider: () -> Date
     private let fileOpener: (URL) -> Bool
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
@@ -540,6 +543,14 @@ final class AppState {
     private let llmE2EMode: LLME2EMode
     private var availableUpdateRelease: UpdateRelease?
     private var downloadedUpdateArchiveURL: URL?
+    private var automaticUpdateTimer: Timer?
+    private var lastAutomaticUpdateAttemptAt: Date?
+
+    deinit {
+        MainActor.assumeIsolated {
+            automaticUpdateTimer?.invalidate()
+        }
+    }
 
     init(
         modelManager: ModelManagerProtocol = ModelManager(),
@@ -555,6 +566,7 @@ final class AppState {
         updateService: UpdateServiceProtocol = GitHubUpdateService(),
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
+        nowProvider: @escaping () -> Date = Date.init,
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
@@ -572,6 +584,7 @@ final class AppState {
         self.updateService = updateService
         self.launchAtLoginService = launchAtLoginService
         self.currentAppVersionProvider = currentAppVersionProvider
+        self.nowProvider = nowProvider
         self.fileOpener = fileOpener
         self.runtimeServicesEnabled = startServices
         self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
@@ -878,7 +891,33 @@ final class AppState {
         }
     }
 
-    func checkForUpdatesOnLaunch() async {
+    func startAutomaticUpdateChecks() {
+        guard automaticUpdateTimer == nil else {
+            return
+        }
+
+        AppLogger.shared.log(.info, "automatic update checks started interval=\(Int(Self.automaticUpdateCheckInterval))s")
+
+        Task { @MainActor [weak self] in
+            await self?.performAutomaticUpdateCheckIfEligible()
+        }
+
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.automaticUpdateCheckInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.performAutomaticUpdateCheckIfEligible()
+            }
+        }
+        timer.tolerance = Self.automaticUpdateTimerTolerance
+        automaticUpdateTimer = timer
+    }
+
+    func performAutomaticUpdateCheckIfEligible(now: Date? = nil) async {
+        let now = now ?? nowProvider()
+        guard shouldPerformAutomaticUpdateCheck(now: now) else {
+            return
+        }
+
+        lastAutomaticUpdateAttemptAt = now
         await checkForUpdates(background: true)
     }
 
@@ -1014,6 +1053,21 @@ final class AppState {
             downloadedUpdateArchiveURL = nil
             AppLogger.shared.log(.warning, "update predownload failed: \(error.localizedDescription)")
         }
+    }
+
+    private func shouldPerformAutomaticUpdateCheck(now: Date) -> Bool {
+        switch updateStatus {
+        case .checking, .downloading, .downloaded:
+            return false
+        case .idle, .upToDate, .available, .error:
+            break
+        }
+
+        guard let lastAutomaticUpdateAttemptAt else {
+            return true
+        }
+
+        return now.timeIntervalSince(lastAutomaticUpdateAttemptAt) >= Self.automaticUpdateCheckInterval
     }
 
     func postProcessTextIfEnabled(_ rawText: String) async -> String {

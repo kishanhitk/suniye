@@ -221,6 +221,7 @@ func makeTestAppState(
     keychainService: KeychainServiceProtocol = TestKeychainService(value: nil),
     updateService: UpdateServiceProtocol = StubUpdateService(checkResult: .success(.upToDate)),
     launchAtLoginService: LaunchAtLoginServiceProtocol = StubLaunchAtLoginService(),
+    nowProvider: @escaping () -> Date = Date.init,
     fileOpener: @escaping (URL) -> Bool = { _ in true },
     startServices: Bool = false,
     llmE2EMode: LLME2EMode = .none
@@ -238,6 +239,7 @@ func makeTestAppState(
         updateService: updateService,
         launchAtLoginService: launchAtLoginService,
         currentAppVersionProvider: { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
+        nowProvider: nowProvider,
         fileOpener: fileOpener,
         startServices: startServices,
         llmE2EMode: llmE2EMode
