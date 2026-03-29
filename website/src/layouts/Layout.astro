@@ -1,0 +1,32 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = "Suniye | Private Dictation For macOS",
+  description = "Hold one key, speak naturally, and Suniye turns your voice into text across your Mac."
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#f4eee2" />
+    <link rel="icon" type="image/png" href="/suniye-icon.png" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/suniye-icon.png" />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

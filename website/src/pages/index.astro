@@ -1,0 +1,303 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const benefits = [
+  {
+    title: "Talk instead of pecking at keys",
+    text: "Answer emails, draft notes, fill forms, and capture ideas while your hands keep moving."
+  },
+  {
+    title: "Private by default",
+    text: "Your voice stays on your Mac during transcription, so everyday dictation feels personal again."
+  },
+  {
+    title: "Works where your cursor already is",
+    text: "Use Suniye in the apps you already live in instead of bouncing to a separate voice recorder."
+  },
+  {
+    title: "Polish when you want it",
+    text: "Keep the raw transcript or add optional cleanup for grammar, clarity, and your preferred writing style."
+  }
+];
+
+const moments = [
+  "Morning emails",
+  "Meeting notes",
+  "Slack replies",
+  "Application forms",
+  "Blog outlines",
+  "Late-night brain dumps"
+];
+
+const flow = [
+  {
+    step: "01",
+    title: "Hold your shortcut",
+    text: "Press and hold one key when you want to speak. No app switching. No tiny record button to find."
+  },
+  {
+    step: "02",
+    title: "Say what you mean",
+    text: "Talk naturally, pause when you need to think, then keep going like you're dictating to a patient assistant."
+  },
+  {
+    step: "03",
+    title: "Release and keep moving",
+    text: "Your words land right at the cursor so you can continue working instead of managing a transcription workflow."
+  }
+];
+
+const audiences = [
+  {
+    title: "For people who think faster than they type",
+    text: "Writers, founders, recruiters, students, operators, and anyone whose best ideas show up mid-task."
+  },
+  {
+    title: "For tired hands and busy days",
+    text: "When typing feels slow, repetitive, or distracting, speaking can get you back into flow without extra friction."
+  },
+  {
+    title: "For Mac users who care about calm tools",
+    text: "Suniye lives lightly in the menu bar and stays out of your way until you need it."
+  }
+];
+
+const faq = [
+  {
+    question: "Does it send my audio to the cloud?",
+    answer: "No. Transcription runs locally on your Mac. Optional text cleanup is separate and only used if you turn it on."
+  },
+  {
+    question: "What do I need to get started?",
+    answer: "A Mac running macOS 14 or later, microphone access, accessibility access, and a one-time model download on first launch."
+  },
+  {
+    question: "Do I need to be technical?",
+    answer: "Not at all. The core flow is simple: hold a key, speak, release, and your text appears where you're already working."
+  }
+];
+---
+
+<Layout
+  title="Suniye | Speak Naturally. Type Less."
+  description="A local-first macOS dictation app for normal people: hold one key, speak, and your words appear where your cursor already is."
+>
+  <main>
+    <section class="hero-shell">
+      <div class="ambient ambient-one"></div>
+      <div class="ambient ambient-two"></div>
+      <div class="container">
+        <header class="site-header">
+          <a class="brand" href="#top" aria-label="Suniye home">
+            <img src="/suniye-icon.png" alt="Suniye app icon" width="44" height="44" />
+            <span>Suniye</span>
+          </a>
+
+          <nav class="header-links" aria-label="Primary">
+            <a href="#benefits">Why it feels good</a>
+            <a href="#how-it-works">How it works</a>
+            <a href="#faq">FAQ</a>
+          </nav>
+
+          <a
+            class="button button-ghost"
+            href="https://github.com/kishanhitk/suniye/releases/latest"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Download
+          </a>
+        </header>
+
+        <div class="hero-grid" id="top">
+          <div class="hero-copy">
+            <p class="eyebrow">Local-first dictation for macOS</p>
+            <h1>
+              Speak naturally.
+              <span>Type less.</span>
+            </h1>
+            <p class="hero-text">
+              Suniye turns your voice into text right where your cursor already is. Hold one
+              key, talk, release, and keep moving through your day.
+            </p>
+
+            <div class="hero-actions">
+              <a
+                class="button button-primary"
+                href="https://github.com/kishanhitk/suniye/releases/latest"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Get the macOS app
+              </a>
+              <a class="button button-secondary" href="#how-it-works">See how it works</a>
+            </div>
+
+            <div class="hero-pills" aria-label="Highlights">
+              <span>Private by default</span>
+              <span>Works across your Mac</span>
+              <span>Optional writing cleanup</span>
+            </div>
+          </div>
+
+          <div class="hero-visual" aria-hidden="true">
+            <div class="orbital-ring"></div>
+
+            <div class="visual-card visual-main">
+              <div class="card-topline">
+                <span class="dot"></span>
+                <span>Live Dictation</span>
+              </div>
+
+              <div class="voice-stack">
+                <div class="voice-pill">Hold <strong>fn</strong> to talk</div>
+                <div class="waveform">
+                  <span></span><span></span><span></span><span></span><span></span><span></span>
+                  <span></span><span></span><span></span>
+                </div>
+                <p class="transcript">
+                  “Can you send the revised proposal this afternoon and add a short summary up top?”
+                </p>
+              </div>
+            </div>
+
+            <div class="visual-card visual-note">
+              <p class="mini-label">Feels instant</p>
+              <p>Speak once. Text appears where you already work.</p>
+            </div>
+
+            <div class="visual-card visual-private">
+              <p class="mini-label">Private by default</p>
+              <p>Your voice stays on your Mac during transcription.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="moment-strip">
+          {moments.map((moment) => <span>{moment}</span>)}
+        </div>
+      </div>
+    </section>
+
+    <section class="section container" id="benefits">
+      <div class="section-heading">
+        <p class="eyebrow">Made for everyday typing</p>
+        <h2>The voice tool that feels like part of your Mac, not another system to manage.</h2>
+      </div>
+
+      <div class="benefit-grid">
+        {benefits.map((benefit) => (
+          <article class="benefit-card">
+            <h3>{benefit.title}</h3>
+            <p>{benefit.text}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="section container split-section">
+      <div class="editorial-panel editorial-dark">
+        <p class="eyebrow">Why people actually use it</p>
+        <h2>Because ideas rarely arrive when your hands are free.</h2>
+        <p>
+          Suniye is built for the moments when you're walking through a thought, replying in a
+          rush, or trying to stay in flow without stopping to type every sentence.
+        </p>
+      </div>
+
+      <div class="audience-stack">
+        {audiences.map((item) => (
+          <article class="audience-card">
+            <h3>{item.title}</h3>
+            <p>{item.text}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="section container" id="how-it-works">
+      <div class="section-heading">
+        <p class="eyebrow">Simple on purpose</p>
+        <h2>Three steps. No training curve.</h2>
+      </div>
+
+      <div class="flow-grid">
+        {flow.map((item) => (
+          <article class="flow-card">
+            <p class="flow-step">{item.step}</p>
+            <h3>{item.title}</h3>
+            <p>{item.text}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="section container dual-panels">
+      <article class="editorial-panel editorial-warm">
+        <p class="eyebrow">Privacy</p>
+        <h2>Your voice is yours.</h2>
+        <p>
+          Suniye keeps transcription local, so everyday dictation can stay personal. That means
+          you can capture ideas, write messages, and think out loud with a little more ease.
+        </p>
+      </article>
+
+      <article class="editorial-panel editorial-light">
+        <p class="eyebrow">Optional polish</p>
+        <h2>Clean up the text only when you want to.</h2>
+        <p>
+          If you like, you can add post-processing for tone, clarity, or grammar. If you don't,
+          your transcript stays exactly as spoken.
+        </p>
+      </article>
+    </section>
+
+    <section class="section container faq-section" id="faq">
+      <div class="section-heading">
+        <p class="eyebrow">FAQ</p>
+        <h2>The practical stuff.</h2>
+      </div>
+
+      <div class="faq-list">
+        {faq.map((item) => (
+          <article class="faq-item">
+            <h3>{item.question}</h3>
+            <p>{item.answer}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section class="section container">
+      <div class="cta-panel">
+        <div>
+          <p class="eyebrow">Ready when you are</p>
+          <h2>Less typing. More flow.</h2>
+          <p>
+            Download Suniye for macOS 14+, grant microphone and accessibility access, and you're
+            off. First launch includes a one-time speech model download.
+          </p>
+        </div>
+
+        <div class="cta-actions">
+          <a
+            class="button button-primary"
+            href="https://github.com/kishanhitk/suniye/releases/latest"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Download latest release
+          </a>
+          <a
+            class="button button-secondary"
+            href="https://github.com/kishanhitk/suniye"
+            target="_blank"
+            rel="noreferrer"
+          >
+            View on GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+</Layout>
