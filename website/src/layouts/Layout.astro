@@ -13,20 +13,57 @@ const {
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#f4eee2" />
+    <meta name="theme-color" content="#f9f9f9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/png" href="/suniye-icon.png" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/suniye-icon.png" />
+    <script is:inline>
+      // Runs before paint — prevents flash
+      (function() {
+        var theme = localStorage.getItem('theme');
+        if (!theme) theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+      })();
+    </script>
   </head>
-  <body>
+  <body class="min-w-[320px] bg-[var(--bg)] font-sans text-[var(--ink)] antialiased transition-colors duration-300">
     <slot />
+    <script is:inline>
+      (function() {
+        var root = document.documentElement;
+        var mq = window.matchMedia('(prefers-color-scheme: dark)');
+
+        function isDark() {
+          return root.getAttribute('data-theme') === 'dark';
+        }
+
+        function apply(theme) {
+          root.setAttribute('data-theme', theme);
+          localStorage.setItem('theme', theme);
+        }
+
+        // Toggle button: flip light ↔ dark
+        var btn = document.getElementById('theme-toggle');
+        if (btn) {
+          btn.addEventListener('click', function() {
+            apply(isDark() ? 'light' : 'dark');
+          });
+        }
+
+        // OS theme change overrides user choice
+        mq.addEventListener('change', function(e) {
+          apply(e.matches ? 'dark' : 'light');
+        });
+      })();
+    </script>
   </body>
 </html>
