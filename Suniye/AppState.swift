@@ -53,6 +53,8 @@ struct AttentionItem: Identifiable, Equatable {
 @MainActor
 @Observable
 final class AppState {
+    typealias RecordingSource = FloatingIndicatorState.Source
+
     enum Phase: String {
         case needsModel
         case downloadingModel
@@ -198,6 +200,9 @@ final class AppState {
     var llmCustomModelId = "" {
         didSet { persistLLMSettings() }
     }
+    var llmEndpointURLString = LLMDefaults.defaultEndpointURLString {
+        didSet { persistLLMSettings() }
+    }
     var llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt {
         didSet { persistLLMSettings() }
     }
@@ -228,9 +233,9 @@ final class AppState {
         }
     }
 
-    var hasOpenRouterAPIKey = false {
+    var hasLLMAPIKey = false {
         didSet {
-            if oldValue != hasOpenRouterAPIKey {
+            if oldValue != hasLLMAPIKey {
                 onStateChange?()
             }
         }
@@ -245,18 +250,36 @@ final class AppState {
     }
 
     var llmKeyStatusText: String {
-        hasOpenRouterAPIKey ? "API key: saved" : "API key: missing"
+        hasLLMAPIKey ? "API key: saved" : "API key: missing"
+    }
+
+    var llmEndpointValidationError: String? {
+        currentLLMSettings().endpointValidationError
+    }
+
+    var llmModelValidationError: String? {
+        currentLLMSettings().modelValidationError
     }
 
     var llmStatusHint: String? {
-        if llmEnabled && !hasOpenRouterAPIKey {
+        if llmEnabled, llmEndpointValidationError != nil {
+            return "LLM enabled but endpoint URL invalid"
+        }
+        if llmEnabled, llmModelValidationError != nil {
+            return "LLM enabled but custom model ID invalid"
+        }
+        if llmEnabled && !hasLLMAPIKey {
             return "LLM enabled but API key missing"
         }
         return nil
     }
 
     var llmSelectedModelIdPreview: String {
-        currentLLMSettings().effectiveModelId
+        currentLLMSettings().validatedModelId ?? ""
+    }
+
+    func llmDisplayModelId(for preset: LLMModelPreset) -> String {
+        currentLLMSettings().displayModelId(for: preset)
     }
 
     var vocabularyTerms: [String] {
@@ -447,12 +470,36 @@ final class AppState {
             )
         }
 
-        if llmEnabled && !hasOpenRouterAPIKey {
+        if llmEnabled, let endpointValidationError = llmEndpointValidationError {
+            items.append(
+                AttentionItem(
+                    id: "llm-endpoint-invalid",
+                    title: "LLM endpoint URL invalid",
+                    detail: endpointValidationError,
+                    severity: .warning,
+                    recommendedSection: .style
+                )
+            )
+        }
+
+        if llmEnabled, let modelValidationError = llmModelValidationError {
+            items.append(
+                AttentionItem(
+                    id: "llm-model-invalid",
+                    title: "LLM model ID invalid",
+                    detail: modelValidationError,
+                    severity: .warning,
+                    recommendedSection: .style
+                )
+            )
+        }
+
+        if llmEnabled && !hasLLMAPIKey {
             items.append(
                 AttentionItem(
                     id: "llm-key-missing",
                     title: "LLM API key missing",
-                    detail: "LLM polishing is enabled, but no OpenRouter API key is saved.",
+                    detail: "LLM polishing is enabled, but no LLM API key is saved.",
                     severity: .warning,
                     recommendedSection: .style
                 )
@@ -463,6 +510,7 @@ final class AppState {
     }
 
     var onStateChange: (() -> Void)?
+    var floatingIndicatorState: FloatingIndicatorState = .idle
 
     private let modelManager: ModelManagerProtocol
     private let transcriptionService: TranscriptionServiceProtocol
@@ -480,9 +528,11 @@ final class AppState {
     private let currentAppVersionProvider: () -> AppVersion?
     private let fileOpener: (URL) -> Bool
     private let runtimeServicesEnabled: Bool
+    private let floatingIndicatorEnabled: Bool
 
     private var recordingStart: Date?
-    private var pendingProcessingIndicatorTask: Task<Void, Never>?
+    private var activeRecordingSource: RecordingSource?
+    private var overlayErrorResetTask: Task<Void, Never>?
     private var isHydratingLLMSettings = false
     private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
@@ -522,7 +572,13 @@ final class AppState {
         self.currentAppVersionProvider = currentAppVersionProvider
         self.fileOpener = fileOpener
         self.runtimeServicesEnabled = startServices
+        self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
+        self.audioCaptureService.onLevelsUpdate = { [weak self] levels in
+            Task { @MainActor [weak self] in
+                self?.handleAudioLevelsUpdate(levels)
+            }
+        }
 
         AppLogger.shared.log(.info, "app state init")
         loadHistory()
@@ -531,6 +587,12 @@ final class AppState {
         refreshInputDevices()
         refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
+
+        if floatingIndicatorEnabled {
+            floatingIndicatorController.onAction = { [weak self] in
+                self?.toggleFloatingIndicatorRecording()
+            }
+        }
 
         if startServices {
             wireHotkey()
@@ -542,6 +604,9 @@ final class AppState {
 
     func bootstrap() async {
         AppLogger.shared.log(.info, "bootstrap start")
+        if floatingIndicatorEnabled {
+            floatingIndicatorController.start()
+        }
         statusText = "Checking permissions..."
         await refreshPermissions()
 
@@ -555,13 +620,12 @@ final class AppState {
                 statusText = "Ready"
                 lastError = nil
             }
-            floatingIndicatorController.hide()
         } else {
             phase = .needsModel
             statusText = "Model required"
             showOnboarding = true
-            floatingIndicatorController.hide()
         }
+        setFloatingIndicatorState(.idle)
         AppLogger.shared.log(.info, "bootstrap done")
     }
 
@@ -643,10 +707,10 @@ final class AppState {
     }
 
     func refreshLLMKeyStatus() {
-        hasOpenRouterAPIKey = keychainService.hasOpenRouterKey()
+        hasLLMAPIKey = keychainService.hasLLMKey()
     }
 
-    func saveOpenRouterAPIKey(_ key: String) {
+    func saveLLMAPIKey(_ key: String) {
         let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else {
             llmKeyOperationError = "API key cannot be empty"
@@ -655,26 +719,26 @@ final class AppState {
         }
 
         do {
-            try keychainService.setOpenRouterKey(normalized)
+            try keychainService.setLLMKey(normalized)
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
-            AppLogger.shared.log(.info, "openrouter api key saved")
+            AppLogger.shared.log(.info, "llm api key saved")
         } catch {
             llmKeyOperationError = "Failed to save API key"
-            AppLogger.shared.log(.error, "openrouter api key save failed")
+            AppLogger.shared.log(.error, "llm api key save failed")
             onStateChange?()
         }
     }
 
-    func clearOpenRouterAPIKey() {
+    func clearLLMAPIKey() {
         do {
-            try keychainService.deleteOpenRouterKey()
+            try keychainService.deleteLLMKey()
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
-            AppLogger.shared.log(.info, "openrouter api key cleared")
+            AppLogger.shared.log(.info, "llm api key cleared")
         } catch {
             llmKeyOperationError = "Failed to clear API key"
-            AppLogger.shared.log(.error, "openrouter api key clear failed")
+            AppLogger.shared.log(.error, "llm api key clear failed")
             onStateChange?()
         }
     }
@@ -783,9 +847,22 @@ final class AppState {
         MainWindowController.shared.show(appState: self)
     }
 
+    func toggleFloatingIndicatorRecording() {
+        Task { @MainActor in
+            switch phase {
+            case .ready:
+                await beginRecordingFlow(trigger: .manual)
+            case .recording where activeRecordingSource == .manual:
+                await stopRecordingAndTranscribe(trigger: .manual)
+            default:
+                showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
+            }
+        }
+    }
+
     func startRecordingFromUI() {
         Task { @MainActor in
-            await beginRecordingFlow()
+            await beginRecordingFlow(trigger: .manual)
         }
     }
 
@@ -793,8 +870,9 @@ final class AppState {
         guard phase == .recording else {
             return
         }
+        let trigger = activeRecordingSource ?? .manual
         Task {
-            await stopRecordingAndTranscribe()
+            await stopRecordingAndTranscribe(trigger: trigger)
         }
     }
 
@@ -917,19 +995,31 @@ final class AppState {
             return rawText
         }
 
-        guard hasOpenRouterAPIKey else {
+        guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
+            AppLogger.shared.log(.warning, "llm fallback raw reason=invalid_endpoint")
+            return rawText
+        }
+
+        guard let modelId = currentLLMSettings().validatedModelId else {
+            AppLogger.shared.log(.warning, "llm fallback raw reason=invalid_model")
+            return rawText
+        }
+
+        // TODO: Generic OpenAI-compatible backends can be keyless, but the current
+        // LLM settings flow still treats a missing API key as a hard stop.
+        guard hasLLMAPIKey else {
             AppLogger.shared.log(.warning, "llm fallback raw reason=missing_key")
             return rawText
         }
 
-        guard let apiKey = try? keychainService.getOpenRouterKey(),
+        guard let apiKey = try? keychainService.getLLMKey(),
               !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             AppLogger.shared.log(.warning, "llm fallback raw reason=key_read_failed")
             refreshLLMKeyStatus()
             return rawText
         }
 
-        let config = makeLLMConfig(apiKey: apiKey)
+        let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
         let startTime = Date()
         statusText = "Polishing..."
 
@@ -957,13 +1047,15 @@ final class AppState {
     func runIndicatorE2ESmoke() {
         Task { @MainActor in
             AppLogger.shared.log(.info, "e2e indicator smoke start")
-            showIndicator(.listening)
+            setFloatingIndicatorState(.idle)
             try? await Task.sleep(nanoseconds: 220_000_000)
-            showIndicator(.stopped)
+            setFloatingIndicatorState(.hover)
             try? await Task.sleep(nanoseconds: 220_000_000)
-            showIndicator(.processing)
+            setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0.72), source: .manual))
             try? await Task.sleep(nanoseconds: 220_000_000)
-            showIndicator(.done(words: 4), autoHideAfter: 0.35)
+            setFloatingIndicatorState(.processing)
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            showTransientIndicatorError("Microphone permission required", restoreState: .idle, duration: 0.35)
             try? await Task.sleep(nanoseconds: 900_000_000)
             AppLogger.shared.log(.info, "e2e indicator smoke done")
             NSApp.terminate(nil)
@@ -1010,14 +1102,14 @@ final class AppState {
         hotkeyService.onHotkeyDown = { [weak self] in
             AppLogger.shared.log(.debug, "hotkey callback: down")
             Task { @MainActor in
-                await self?.beginRecordingFlow()
+                await self?.beginRecordingFlow(trigger: .hotkey)
             }
         }
 
         hotkeyService.onHotkeyUp = { [weak self] in
             AppLogger.shared.log(.debug, "hotkey callback: up")
             Task { @MainActor in
-                await self?.stopRecordingAndTranscribe()
+                await self?.stopRecordingAndTranscribe(trigger: .hotkey)
             }
         }
 
@@ -1039,21 +1131,23 @@ final class AppState {
         }
     }
 
-    private func beginRecordingFlow() async {
+    private func beginRecordingFlow(trigger: RecordingSource) async {
+        if phase == .error, canRetryRecordingAfterError {
+            clearRetryableRecordingError()
+        }
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "start recording ignored in phase=\(phase.rawValue)")
-            showIndicator(.error(message: startBlockedMessage(for: phase)), autoHideAfter: 1.2)
+            showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             return
         }
         if !hasMicPermission {
             await refreshPermissions(requestMicrophone: true)
         }
         guard hasMicPermission else {
-            phase = .error
             lastError = "Microphone permission not granted"
             statusText = "Permission required"
             AppLogger.shared.log(.warning, "microphone permission denied")
-            showIndicator(.error(message: "Microphone permission required"), autoHideAfter: 1.8)
+            showTransientIndicatorError("Microphone permission required")
             return
         }
 
@@ -1061,17 +1155,16 @@ final class AppState {
             await refreshPermissions(promptAccessibility: true)
         }
         guard hasAccessibilityPermission else {
-            phase = .error
             lastError = "Accessibility permission not granted"
             statusText = "Accessibility required"
             AppLogger.shared.log(.warning, "accessibility permission denied before recording")
-            showIndicator(.error(message: "Enable Accessibility for dictation"), autoHideAfter: 2.2)
+            showTransientIndicatorError("Enable Accessibility for dictation")
             return
         }
-        startRecording()
+        startRecording(trigger: trigger)
     }
 
-    private func startRecording() {
+    private func startRecording(trigger: RecordingSource) {
         guard phase == .ready else {
             return
         }
@@ -1081,33 +1174,30 @@ final class AppState {
             phase = .recording
             statusText = "Recording"
             recordingStart = Date()
-            pendingProcessingIndicatorTask?.cancel()
-            pendingProcessingIndicatorTask = nil
-            showIndicator(.listening)
+            activeRecordingSource = trigger
+            overlayErrorResetTask?.cancel()
+            overlayErrorResetTask = nil
+            setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0), source: trigger))
             AppLogger.shared.log(.info, "recording started input=\(selectedInputDeviceID ?? "default")")
         } catch {
-            phase = .error
             lastError = "Audio start failed: \(error.localizedDescription)"
-            statusText = "Audio error"
+            statusText = "Ready"
             AppLogger.shared.log(.error, "audio start failed: \(error.localizedDescription)")
-            showIndicator(.error(message: "Failed to start audio capture"), autoHideAfter: 1.8)
+            showTransientIndicatorError("Failed to start audio capture")
         }
     }
 
-    private func stopRecordingAndTranscribe() async {
+    private func stopRecordingAndTranscribe(trigger: RecordingSource) async {
         guard phase == .recording else {
             return
         }
+        guard activeRecordingSource == nil || activeRecordingSource == trigger else {
+            return
+        }
 
-        showIndicator(.stopped)
         phase = .transcribing
         statusText = "Transcribing..."
-        pendingProcessingIndicatorTask?.cancel()
-        pendingProcessingIndicatorTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            guard let self, self.phase == .transcribing else { return }
-            self.showIndicator(.processing)
-        }
+        setFloatingIndicatorState(.processing)
 
         let captured = audioCaptureService.stopCapture()
         let samples = captured.samples
@@ -1173,19 +1263,20 @@ final class AppState {
             if finalText.isEmpty && !shouldSubmit {
                 AppLogger.shared.log(.warning, "transcription returned empty text samples=\(samples.count) sr=\(sampleRate)")
             }
-            pendingProcessingIndicatorTask?.cancel()
-            pendingProcessingIndicatorTask = nil
+            activeRecordingSource = nil
+            recordingStart = nil
+            lastError = nil
             phase = .ready
             statusText = "Ready"
-            showIndicator(.done(words: wordCount), autoHideAfter: 1.2)
+            setFloatingIndicatorState(.idle)
         } catch {
-            pendingProcessingIndicatorTask?.cancel()
-            pendingProcessingIndicatorTask = nil
-            phase = .error
+            activeRecordingSource = nil
+            recordingStart = nil
             lastError = "Transcription failed: \(error.localizedDescription)"
-            statusText = "Transcription error"
+            phase = .ready
+            statusText = "Ready"
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
-            showIndicator(.error(message: "Transcription failed"), autoHideAfter: 1.8)
+            showTransientIndicatorError("Transcription failed")
         }
     }
 
@@ -1236,6 +1327,7 @@ final class AppState {
         llmEnabled = settings.isEnabled
         llmSelectedModelPreset = settings.selectedModelPreset
         llmCustomModelId = settings.customModelId
+        llmEndpointURLString = settings.endpointURLString
         llmBaseSystemPrompt = settings.baseSystemPrompt
         llmSystemPrompt = settings.systemPrompt
         llmKeywordsRaw = settings.keywordsRaw
@@ -1257,6 +1349,7 @@ final class AppState {
             isEnabled: llmEnabled,
             selectedModelPreset: llmSelectedModelPreset,
             customModelId: llmCustomModelId,
+            endpointURLString: llmEndpointURLString,
             baseSystemPrompt: llmBaseSystemPrompt,
             systemPrompt: llmSystemPrompt,
             keywordsRaw: llmKeywordsRaw,
@@ -1281,10 +1374,11 @@ final class AppState {
         onStateChange?()
     }
 
-    private func makeLLMConfig(apiKey: String) -> LLMConfig {
+    private func makeLLMConfig(apiKey: String, endpointURL: URL, modelId: String) -> LLMConfig {
         let settings = currentLLMSettings()
         return LLMConfig(
-            modelId: settings.effectiveModelId,
+            modelId: modelId,
+            endpointURL: endpointURL,
             systemPrompt: settings.composedSystemPrompt,
             keywords: settings.keywords,
             timeoutSeconds: settings.timeoutSeconds,
@@ -1293,8 +1387,59 @@ final class AppState {
         )
     }
 
-    private func showIndicator(_ state: FloatingIndicatorState, autoHideAfter: TimeInterval? = nil) {
-        floatingIndicatorController.show(state, autoHideAfter: autoHideAfter)
+    private func setFloatingIndicatorState(_ state: FloatingIndicatorState) {
+        floatingIndicatorState = state
+        guard floatingIndicatorEnabled else { return }
+        floatingIndicatorController.update(state)
+    }
+
+    private func showTransientIndicatorError(
+        _ message: String,
+        restoreState: FloatingIndicatorState = .idle,
+        duration: TimeInterval = 1.8
+    ) {
+        overlayErrorResetTask?.cancel()
+        setFloatingIndicatorState(.error(message: message))
+
+        let delayNanos = UInt64(max(duration, 0) * 1_000_000_000)
+        overlayErrorResetTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delayNanos)
+            guard let self, !Task.isCancelled else { return }
+            guard case .error = self.floatingIndicatorState else {
+                self.overlayErrorResetTask = nil
+                return
+            }
+            self.setFloatingIndicatorState(restoreState)
+            self.overlayErrorResetTask = nil
+        }
+    }
+
+    private func blockedStartRestoreIndicatorState() -> FloatingIndicatorState {
+        switch phase {
+        case .recording:
+            if case let .listening(levels, source) = floatingIndicatorState {
+                return .listening(levels: levels, source: source)
+            }
+            return .listening(
+                levels: Self.defaultIndicatorLevels(level: 0.72),
+                source: activeRecordingSource ?? .manual
+            )
+        case .transcribing:
+            return .processing
+        case .needsModel, .downloadingModel, .loading, .ready, .error:
+            return .idle
+        }
+    }
+
+    private func handleAudioLevelsUpdate(_ levels: [Float]) {
+        guard case let .listening(_, source) = floatingIndicatorState else {
+            return
+        }
+        setFloatingIndicatorState(.listening(levels: levels, source: source))
+    }
+
+    private static func defaultIndicatorLevels(level: Float, count: Int = 12) -> [Float] {
+        Array(repeating: max(0, min(level, 1)), count: count)
     }
 
     private func startBlockedMessage(for phase: Phase) -> String {
@@ -1314,6 +1459,22 @@ final class AppState {
         case .error:
             return "Resolve current error first"
         }
+    }
+
+    private var canRetryRecordingAfterError: Bool {
+        switch statusText {
+        case "Transcription error", "Audio error", "Permission required", "Accessibility required":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func clearRetryableRecordingError() {
+        lastError = nil
+        statusText = "Ready"
+        phase = .ready
+        AppLogger.shared.log(.info, "cleared retryable error state before recording")
     }
 
     nonisolated static func parseSubmitCommand(from text: String) -> (text: String, shouldSubmit: Bool) {

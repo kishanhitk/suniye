@@ -12,6 +12,8 @@ OUTPUT_DIR=""
 BUILD_DESTINATION=""
 BUILD_ARCH=""
 VERSION=""
+BUILD_NUMBER=""
+LOCAL_CODESIGN_IDENTITY=""
 
 usage() {
   cat <<'USAGE'
@@ -23,6 +25,7 @@ Options:
   --derived-data-path <path>  Override derived data path
   --output-dir <dir>          Copy built app to a deterministic output directory
   --version <vX.Y.Z>          Override MARKETING_VERSION in the build
+  --build-number <number>     Override CURRENT_PROJECT_VERSION in the build
   --open            Open the resulting app after build/install
 USAGE
 }
@@ -48,6 +51,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --version)
       VERSION="$2"
+      shift
+      ;;
+    --build-number)
+      BUILD_NUMBER="$2"
       shift
       ;;
     --open)
@@ -97,6 +104,23 @@ if ! xcodebuild -version >/dev/null 2>&1; then
   exit 1
 fi
 
+if [[ -z "${BUILD_NUMBER}" ]]; then
+  BUILD_NUMBER="${SUNIYE_BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-}}"
+fi
+
+if [[ -n "${BUILD_NUMBER}" ]] && [[ ! "${BUILD_NUMBER}" =~ ^[0-9]+$ ]]; then
+  echo "Build number must be numeric, got: ${BUILD_NUMBER}" >&2
+  exit 1
+fi
+
+if [[ -z "${LOCAL_CODESIGN_IDENTITY}" ]]; then
+  LOCAL_CODESIGN_IDENTITY="${SUNIYE_CODESIGN_IDENTITY:-}"
+fi
+
+if [[ -z "${LOCAL_CODESIGN_IDENTITY}" ]] && command -v security >/dev/null 2>&1; then
+  LOCAL_CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/"Suniye Local Dev"/ { print $2; exit }')"
+fi
+
 xcodegen generate --spec "${PROJECT_DIR}/project.yml"
 
 xcodebuild_args=(
@@ -118,16 +142,35 @@ if [[ -n "${VERSION}" ]]; then
   xcodebuild_args+=(MARKETING_VERSION="${MARKETING}")
 fi
 
+if [[ -n "${BUILD_NUMBER}" ]]; then
+  xcodebuild_args+=(CURRENT_PROJECT_VERSION="${BUILD_NUMBER}")
+fi
+
+if [[ -n "${LOCAL_CODESIGN_IDENTITY}" ]]; then
+  echo "Using local signing identity: ${LOCAL_CODESIGN_IDENTITY}"
+  xcodebuild_args+=(
+    CODE_SIGN_STYLE=Manual
+    CODE_SIGN_IDENTITY="${LOCAL_CODESIGN_IDENTITY}"
+  )
+fi
+
 xcodebuild "${xcodebuild_args[@]}"
 
 APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/Suniye.app"
 FINAL_APP_PATH="${APP_PATH}"
+SHOULD_CLEAN_DERIVED_APP="0"
 
 if [[ -n "${INSTALL_TARGET}" ]]; then
   mkdir -p "${INSTALL_TARGET}"
   DEST_APP_PATH="${INSTALL_TARGET}/Suniye.app"
   rm -rf "${DEST_APP_PATH}"
   ditto "${APP_PATH}" "${DEST_APP_PATH}"
+  LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
+  if [[ -x "${LSREGISTER}" ]]; then
+    "${LSREGISTER}" -u "${APP_PATH}" >/dev/null 2>&1 || true
+    "${LSREGISTER}" -f -R -trusted "${DEST_APP_PATH}" >/dev/null 2>&1 || true
+  fi
+  SHOULD_CLEAN_DERIVED_APP="1"
   FINAL_APP_PATH="${DEST_APP_PATH}"
   echo "Installed app to: ${DEST_APP_PATH}"
 fi
@@ -139,6 +182,12 @@ if [[ -n "${OUTPUT_DIR}" ]]; then
   ditto "${APP_PATH}" "${OUTPUT_APP_PATH}"
   FINAL_APP_PATH="${OUTPUT_APP_PATH}"
   echo "Copied app to output directory: ${OUTPUT_APP_PATH}"
+fi
+
+if [[ "${SHOULD_CLEAN_DERIVED_APP}" == "1" ]]; then
+  rm -rf \
+    "${DERIVED_DATA_PATH}/Build/Products/Debug/Suniye.app" \
+    "${DERIVED_DATA_PATH}/Build/Products/Release/Suniye.app"
 fi
 
 if [[ "${SHOULD_OPEN}" == "1" ]]; then

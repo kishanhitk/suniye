@@ -78,6 +78,49 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(fakeLLM.callCount, 1)
     }
 
+    func testToggleOnWithInvalidEndpointFallsBackToRawWithoutCallingProvider() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmEndpointURLString = "not a url"
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(fakeLLM.callCount, 0)
+        XCTAssertEqual(appState.llmEndpointValidationError, "Enter a valid http(s) endpoint URL.")
+    }
+
+    func testToggleOnWithInvalidCustomModelFallsBackToRawWithoutCallingProvider() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmSelectedModelPreset = .custom
+        appState.llmCustomModelId = "   "
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(fakeLLM.callCount, 0)
+        XCTAssertEqual(appState.llmModelValidationError, "Enter a valid model ID.")
+    }
+
     func testAttentionItemsIncludeMissingLLMKeyWhenEnabled() {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
         let keychain = TestKeychainService(value: nil)
@@ -92,6 +135,62 @@ final class AppStateLLMTests: XCTestCase {
         appState.refreshLLMKeyStatus()
 
         XCTAssertTrue(appState.attentionItems.contains(where: { $0.id == "llm-key-missing" }))
+    }
+
+    func testAttentionItemsIncludeInvalidEndpointWhenEnabled() {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmEndpointURLString = "not a url"
+        appState.refreshLLMKeyStatus()
+
+        XCTAssertTrue(appState.attentionItems.contains(where: { $0.id == "llm-endpoint-invalid" }))
+    }
+
+    func testAttentionItemsIncludeInvalidModelWhenEnabled() {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmSelectedModelPreset = .custom
+        appState.llmCustomModelId = "   "
+        appState.refreshLLMKeyStatus()
+
+        XCTAssertTrue(appState.attentionItems.contains(where: { $0.id == "llm-model-invalid" }))
+    }
+
+    func testOpenAIEndpointUsesNativePresetModelID() async {
+        let fakeLLM = CapturingLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmSelectedModelPreset = .gpt41Mini
+        appState.llmEndpointURLString = "https://api.openai.com/v1/chat/completions"
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "polished")
+        XCTAssertEqual(fakeLLM.lastConfig?.modelId, "gpt-4.1-mini")
     }
 
     func testLLMRuntimeSettingsClampAndPersist() {
@@ -133,6 +232,20 @@ private final class FakeLLMPostProcessor: LLMPostProcessor {
 
     func polish(text: String, config: LLMConfig) async throws -> String {
         callCount += 1
+        return try result.get()
+    }
+}
+
+private final class CapturingLLMPostProcessor: LLMPostProcessor {
+    private let result: Result<String, Error>
+    private(set) var lastConfig: LLMConfig?
+
+    init(result: Result<String, Error>) {
+        self.result = result
+    }
+
+    func polish(text: String, config: LLMConfig) async throws -> String {
+        lastConfig = config
         return try result.get()
     }
 }

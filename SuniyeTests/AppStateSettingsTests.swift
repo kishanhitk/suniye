@@ -59,6 +59,146 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.phase, .recording)
     }
 
+    func testStartRecordingClearsRetryableTranscriptionError() async {
+        let audioCapture = StubAudioCaptureService()
+        let appState = makeTestAppState(audioCaptureService: audioCapture)
+        appState.phase = .error
+        appState.statusText = "Transcription error"
+        appState.lastError = "Transcription failed: No audio captured"
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
+        XCTAssertEqual(appState.phase, .recording)
+        XCTAssertEqual(appState.statusText, "Recording")
+        XCTAssertNil(appState.lastError)
+    }
+
+    func testStartRecordingDoesNotClearNonRetryableLoadError() async {
+        let audioCapture = StubAudioCaptureService()
+        let appState = makeTestAppState(audioCaptureService: audioCapture)
+        appState.phase = .error
+        appState.statusText = "Load failed"
+        appState.lastError = "Model load failed: broken recognizer"
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
+        XCTAssertEqual(appState.phase, .error)
+        XCTAssertEqual(appState.statusText, "Load failed")
+        XCTAssertEqual(appState.lastError, "Model load failed: broken recognizer")
+    }
+
+    func testManualIndicatorToggleStartsRecordingFromReady() async {
+        let appState = makeTestAppState()
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.phase, .recording)
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .listening(levels: Array(repeating: 0, count: 12), source: .manual)
+        )
+    }
+
+    func testManualIndicatorToggleStopsRecordingAndReturnsIndicatorToIdle() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("")
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertEqual(appState.floatingIndicatorState, .idle)
+    }
+
+    func testSuccessfulTranscriptionClearsStaleLastError() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("Hello")
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.lastError = "Transcription failed: previous error"
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertNil(appState.lastError)
+        XCTAssertEqual(appState.phase, .ready)
+    }
+
+    func testBlockedIndicatorToggleShowsInlineErrorWhenModelMissing() async {
+        let appState = makeTestAppState()
+        appState.phase = .needsModel
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Download model first"))
+        try? await Task.sleep(nanoseconds: 1_300_000_000)
+        XCTAssertEqual(appState.floatingIndicatorState, .idle)
+    }
+
+    func testBlockedIndicatorToggleDuringTranscribingRestoresProcessingState() async {
+        let appState = makeTestAppState()
+        appState.phase = .transcribing
+        appState.floatingIndicatorState = .processing
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Still processing previous clip"))
+        try? await Task.sleep(nanoseconds: 1_300_000_000)
+        XCTAssertEqual(appState.floatingIndicatorState, .processing)
+    }
+
+    func testAudioLevelCallbackUpdatesListeningIndicator() async {
+        let audioCapture = StubAudioCaptureService()
+        let appState = makeTestAppState(audioCaptureService: audioCapture)
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        audioCapture.onLevelsUpdate?(Array(repeating: 0.42, count: 12))
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .listening(levels: Array(repeating: 0.42, count: 12), source: .manual)
+        )
+    }
+
     func testChangingHotkeyRewiresMonitoringWhenRuntimeServicesEnabled() {
         let hotkeyService = StubHotkeyService()
         let modelManager = StubModelManager()
@@ -74,6 +214,39 @@ final class AppStateSettingsTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(hotkeyService.startMonitoringCallCount, 2)
         XCTAssertEqual(hotkeyService.lastConfiguration, .keyCombo(keyCode: UInt32(kVK_ANSI_Grave), carbonModifiers: 0))
+    }
+
+    func testHotkeyCallbacksStillDriveRecordingWhenRuntimeServicesEnabled() async {
+        let hotkeyService = StubHotkeyService()
+        let modelManager = StubModelManager()
+        modelManager.isReady = false
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("")
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.2, 0.1], sampleRate: 16_000)
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            hotkeyService: hotkeyService,
+            startServices: true
+        )
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.phase = .ready
+
+        hotkeyService.onHotkeyDown?()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .listening(levels: Array(repeating: 0, count: 12), source: .hotkey)
+        )
+
+        hotkeyService.onHotkeyUp?()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertEqual(appState.floatingIndicatorState, .idle)
     }
 
     func testDeleteModelTransitionsToNeedsModel() async {

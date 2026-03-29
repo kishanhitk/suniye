@@ -1,10 +1,10 @@
 import Foundation
 
 protocol KeychainServiceProtocol {
-    func setOpenRouterKey(_ key: String) throws
-    func hasOpenRouterKey() -> Bool
-    func getOpenRouterKey() throws -> String?
-    func deleteOpenRouterKey() throws
+    func setLLMKey(_ key: String) throws
+    func hasLLMKey() -> Bool
+    func getLLMKey() throws -> String?
+    func deleteLLMKey() throws
 }
 
 enum KeychainServiceError: LocalizedError {
@@ -30,11 +30,13 @@ enum KeychainServiceError: LocalizedError {
 final class KeychainService: KeychainServiceProtocol {
     private let fileManager: FileManager
     private let keyFileURL: URL
+    private let legacyKeyFileURL: URL
 
-    init(baseDirectoryURL: URL? = nil, filename: String = "openrouter_api_key.txt", fileManager: FileManager = .default) {
+    init(baseDirectoryURL: URL? = nil, filename: String = "llm_api_key.txt", fileManager: FileManager = .default) {
         self.fileManager = fileManager
         if let baseDirectoryURL {
             self.keyFileURL = baseDirectoryURL.appendingPathComponent(filename, isDirectory: false)
+            self.legacyKeyFileURL = baseDirectoryURL.appendingPathComponent("openrouter_api_key.txt", isDirectory: false)
             return
         }
 
@@ -44,9 +46,10 @@ final class KeychainService: KeychainServiceProtocol {
             .appendingPathComponent("Suniye", isDirectory: true)
             .appendingPathComponent("config", isDirectory: true)
         self.keyFileURL = defaultBaseDirectory.appendingPathComponent(filename, isDirectory: false)
+        self.legacyKeyFileURL = defaultBaseDirectory.appendingPathComponent("openrouter_api_key.txt", isDirectory: false)
     }
 
-    func setOpenRouterKey(_ key: String) throws {
+    func setLLMKey(_ key: String) throws {
         let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else {
             throw KeychainServiceError.invalidData
@@ -61,9 +64,9 @@ final class KeychainService: KeychainServiceProtocol {
         }
     }
 
-    func hasOpenRouterKey() -> Bool {
+    func hasLLMKey() -> Bool {
         do {
-            guard let value = try getOpenRouterKey() else {
+            guard let value = try getLLMKey() else {
                 return false
             }
             return !value.isEmpty
@@ -72,13 +75,22 @@ final class KeychainService: KeychainServiceProtocol {
         }
     }
 
-    func getOpenRouterKey() throws -> String? {
-        guard fileManager.fileExists(atPath: keyFileURL.path) else {
+    func getLLMKey() throws -> String? {
+        let sourceURL: URL?
+        if fileManager.fileExists(atPath: keyFileURL.path) {
+            sourceURL = keyFileURL
+        } else if fileManager.fileExists(atPath: legacyKeyFileURL.path) {
+            sourceURL = legacyKeyFileURL
+        } else {
+            sourceURL = nil
+        }
+
+        guard let sourceURL else {
             return nil
         }
 
         do {
-            let data = try Data(contentsOf: keyFileURL)
+            let data = try Data(contentsOf: sourceURL)
             guard let key = String(data: data, encoding: .utf8) else {
                 throw KeychainServiceError.invalidData
             }
@@ -91,13 +103,14 @@ final class KeychainService: KeychainServiceProtocol {
         }
     }
 
-    func deleteOpenRouterKey() throws {
-        guard fileManager.fileExists(atPath: keyFileURL.path) else {
-            return
-        }
-
+    func deleteLLMKey() throws {
         do {
-            try fileManager.removeItem(at: keyFileURL)
+            if fileManager.fileExists(atPath: keyFileURL.path) {
+                try fileManager.removeItem(at: keyFileURL)
+            }
+            if fileManager.fileExists(atPath: legacyKeyFileURL.path) {
+                try fileManager.removeItem(at: legacyKeyFileURL)
+            }
         } catch {
             throw KeychainServiceError.deleteFailed
         }

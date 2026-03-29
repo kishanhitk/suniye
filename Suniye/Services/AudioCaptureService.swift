@@ -2,13 +2,15 @@ import AudioToolbox
 import AVFoundation
 import CoreAudio
 import Foundation
+import QuartzCore
 
 struct CapturedAudio {
     let samples: [Float]
     let sampleRate: Int
 }
 
-protocol AudioCaptureServiceProtocol {
+protocol AudioCaptureServiceProtocol: AnyObject {
+    var onLevelsUpdate: (([Float]) -> Void)? { get set }
     func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws
     func stopCapture() -> CapturedAudio
     func availableInputDevices() -> [AudioInputDevice]
@@ -32,7 +34,10 @@ private func audioCaptureHALInputCallback(
 }
 
 final class AudioCaptureService: AudioCaptureServiceProtocol {
+    var onLevelsUpdate: (([Float]) -> Void)?
+
     private enum CaptureBackend {
+        case standardEngine
         case halInput
         case voiceProcessingEngine
     }
@@ -46,6 +51,9 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
     private var samples: [Float] = []
     private let lock = NSLock()
     private var activeBackend: CaptureBackend?
+    private let meterBarCount = 12
+    private var smoothedLevels: [Float] = Array(repeating: 0, count: 12)
+    private var lastLevelEmissionTime: CFTimeInterval = 0
 
     deinit {
         stopActiveCapture()
@@ -55,16 +63,27 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         lock.lock()
         samples.removeAll(keepingCapacity: true)
         lock.unlock()
+        smoothedLevels = Array(repeating: 0, count: meterBarCount)
+        lastLevelEmissionTime = 0
+        emitLevels(smoothedLevels)
 
         stopActiveCapture()
 
-        let backend = Self.captureBackendValue(echoCancellationEnabled: echoCancellationEnabled)
+        var backend = Self.captureBackendValue(echoCancellationEnabled: echoCancellationEnabled)
 
         switch backend {
+        case .standardEngine:
+            try startStandardCapture(preferredInputDeviceID: preferredInputDeviceID)
         case .halInput:
             try startHALCapture(preferredInputDeviceID: preferredInputDeviceID)
         case .voiceProcessingEngine:
-            try startVoiceProcessingCapture(preferredInputDeviceID: preferredInputDeviceID)
+            do {
+                try startVoiceProcessingCapture(preferredInputDeviceID: preferredInputDeviceID)
+            } catch {
+                AppLogger.shared.log(.warning, "voice processing capture unavailable; falling back to standard engine")
+                try startStandardCapture(preferredInputDeviceID: preferredInputDeviceID)
+                backend = .standardEngine
+            }
         }
         activeBackend = backend
     }
@@ -94,6 +113,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
     func stopCapture() -> CapturedAudio {
         stopActiveCapture()
+        emitLevels(Array(repeating: 0, count: meterBarCount))
+        smoothedLevels = Array(repeating: 0, count: meterBarCount)
 
         lock.lock()
         let out = samples
@@ -118,6 +139,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
     static func captureBackend(echoCancellationEnabled: Bool) -> String {
         switch captureBackendValue(echoCancellationEnabled: echoCancellationEnabled) {
+        case .standardEngine:
+            return "standardEngine"
         case .halInput:
             return "halInput"
         case .voiceProcessingEngine:
@@ -126,7 +149,73 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
     }
 
     private static func captureBackendValue(echoCancellationEnabled: Bool) -> CaptureBackend {
-        echoCancellationEnabled ? .voiceProcessingEngine : .halInput
+        echoCancellationEnabled ? .voiceProcessingEngine : .standardEngine
+    }
+
+    private func startStandardCapture(preferredInputDeviceID: String?) throws {
+        let inputNode = engine.inputNode
+        inputNode.removeTap(onBus: 0)
+        engine.stop()
+
+        if inputNode.isVoiceProcessingEnabled {
+            try inputNode.setVoiceProcessingEnabled(false)
+        }
+
+        if let preferredInputDeviceID,
+           let audioUnit = inputNode.audioUnit,
+           let deviceID = Self.audioDeviceID(forUID: preferredInputDeviceID) {
+            var currentDevice = deviceID
+            let status = AudioUnitSetProperty(
+                audioUnit,
+                kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global,
+                0,
+                &currentDevice,
+                UInt32(MemoryLayout<AudioObjectID>.size)
+            )
+            if status != noErr {
+                AppLogger.shared.log(.warning, "audio input device selection failed status=\(status)")
+            }
+        }
+
+        let nativeFormat = inputNode.outputFormat(forBus: 0)
+        let sampleRate = max(8_000, Int(nativeFormat.sampleRate.rounded()))
+        captureSampleRate = sampleRate
+
+        let tapFormat: AVAudioFormat
+        if nativeFormat.channelCount > 1 {
+            tapFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: nativeFormat.sampleRate,
+                channels: 1,
+                interleaved: false
+            )!
+        } else {
+            tapFormat = nativeFormat
+        }
+
+        inputFormat = tapFormat
+        targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: nativeFormat.sampleRate,
+            channels: 1,
+            interleaved: false
+        )
+        if let targetFormat {
+            converter = AVAudioConverter(from: tapFormat, to: targetFormat)
+        } else {
+            converter = nil
+        }
+
+        AppLogger.shared.log(
+            .info,
+            "audio capture start backend=standardEngine sr=\(sampleRate) channels=\(nativeFormat.channelCount) tapChannels=1 aec=false"
+        )
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
+            self?.consume(buffer: buffer)
+        }
+
+        try engine.start()
     }
 
     private func startVoiceProcessingCapture(preferredInputDeviceID: String?) throws {
@@ -349,7 +438,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
     private func stopActiveCapture() {
         switch activeBackend {
-        case .voiceProcessingEngine:
+        case .standardEngine, .voiceProcessingEngine:
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
             if engine.inputNode.isVoiceProcessingEnabled {
@@ -374,6 +463,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
             let frameCount = Int(converted.frameLength)
             let ptr = channelData[0]
             let chunk = Array(UnsafeBufferPointer(start: ptr, count: frameCount))
+            updateLevel(from: chunk)
 
             lock.lock()
             samples.append(contentsOf: chunk)
@@ -430,6 +520,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
         if channels == 1 {
             let chunk = Array(UnsafeBufferPointer(start: channelData[0], count: frameCount))
+            updateLevel(from: chunk)
             lock.lock()
             samples.append(contentsOf: chunk)
             lock.unlock()
@@ -447,9 +538,45 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         for i in 0 ..< frameCount {
             mixed[i] *= scale
         }
+        updateLevel(from: mixed)
         lock.lock()
         samples.append(contentsOf: mixed)
         lock.unlock()
+    }
+
+    private func updateLevel(from values: [Float]) {
+        guard !values.isEmpty else { return }
+        let chunkSize = max(1, values.count / meterBarCount)
+        var nextLevels = Array(repeating: Float(0), count: meterBarCount)
+
+        for index in 0 ..< meterBarCount {
+            let start = index * chunkSize
+            let end = index == meterBarCount - 1 ? values.count : min(values.count, start + chunkSize)
+            guard start < end else { continue }
+            let slice = Array(values[start ..< end])
+            let rms = Self.rms(of: slice)
+            let normalized = min(max(rms * 12, 0), 1)
+            nextLevels[index] = normalized
+        }
+
+        if smoothedLevels.count != meterBarCount {
+            smoothedLevels = Array(repeating: 0, count: meterBarCount)
+        }
+        for index in 0 ..< meterBarCount {
+            smoothedLevels[index] = (smoothedLevels[index] * 0.62) + (nextLevels[index] * 0.38)
+        }
+
+        let now = CACurrentMediaTime()
+        guard now - lastLevelEmissionTime >= 1.0 / 30.0 else { return }
+        lastLevelEmissionTime = now
+        emitLevels(smoothedLevels)
+    }
+
+    private func emitLevels(_ levels: [Float]) {
+        guard let onLevelsUpdate else { return }
+        DispatchQueue.main.async {
+            onLevelsUpdate(levels)
+        }
     }
 
     private static func rms(of values: [Float]) -> Float {

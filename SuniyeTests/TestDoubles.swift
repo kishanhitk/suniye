@@ -48,19 +48,19 @@ final class TestKeychainService: KeychainServiceProtocol {
         stored = value
     }
 
-    func setOpenRouterKey(_ key: String) throws {
+    func setLLMKey(_ key: String) throws {
         stored = key
     }
 
-    func hasOpenRouterKey() -> Bool {
+    func hasLLMKey() -> Bool {
         stored?.isEmpty == false
     }
 
-    func getOpenRouterKey() throws -> String? {
+    func getLLMKey() throws -> String? {
         stored
     }
 
-    func deleteOpenRouterKey() throws {
+    func deleteLLMKey() throws {
         stored = nil
     }
 }
@@ -145,6 +145,7 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
 }
 
 final class StubAudioCaptureService: AudioCaptureServiceProtocol {
+    var onLevelsUpdate: (([Float]) -> Void)?
     var startCaptureCallCount = 0
     var lastPreferredInputDeviceID: String?
     var stopCaptureResult = CapturedAudio(samples: [], sampleRate: 16_000)

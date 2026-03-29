@@ -2,11 +2,9 @@ import Foundation
 
 final class OpenRouterPostProcessor: LLMPostProcessor {
     private let session: URLSession
-    private let endpoint: URL
 
-    init(session: URLSession = .shared, endpoint: URL = URL(string: "https://openrouter.ai/api/v1/chat/completions")!) {
+    init(session: URLSession = .shared) {
         self.session = session
-        self.endpoint = endpoint
     }
 
     func polish(text: String, config: LLMConfig) async throws -> String {
@@ -23,7 +21,7 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
 
         let payload = makePayload(inputText: trimmedInput, config: config)
 
-        var request = URLRequest(url: endpoint)
+        var request = URLRequest(url: config.endpointURL)
         request.httpMethod = "POST"
         request.timeoutInterval = config.timeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

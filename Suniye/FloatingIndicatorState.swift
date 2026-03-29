@@ -1,24 +1,38 @@
 import Foundation
 
 enum FloatingIndicatorState: Equatable {
-    case listening
-    case stopped
+    enum Source: String, Equatable {
+        case hotkey
+        case manual
+    }
+
+    case idle
+    case hover
+    case listening(levels: [Float], source: Source)
     case processing
-    case done(words: Int)
     case error(message: String)
 
     var logValue: String {
         switch self {
+        case .idle:
+            return "idle"
+        case .hover:
+            return "hover"
         case .listening:
             return "listening"
-        case .stopped:
-            return "stopped"
         case .processing:
             return "processing"
-        case .done:
-            return "done"
         case .error:
             return "error"
+        }
+    }
+
+    var tracksPointerScreen: Bool {
+        switch self {
+        case .idle, .hover:
+            return true
+        case .listening, .processing, .error:
+            return false
         }
     }
 }
