@@ -1,0 +1,360 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const benefits = [
+  {
+    title: "Talk instead of typing",
+    text: "Emails, notes, forms, ideas — dictate while your hands keep moving."
+  },
+  {
+    title: "Private by default",
+    text: "Your voice stays on your Mac. Transcription never touches the cloud."
+  },
+  {
+    title: "Works where your cursor is",
+    text: "Suniye works in the apps you already use — no bouncing to a separate recorder."
+  },
+  {
+    title: "Polish when you want it",
+    text: "Keep the raw transcript, or add cleanup for grammar, clarity, and tone."
+  }
+];
+
+const moments = [
+  "Morning emails",
+  "Meeting notes",
+  "Slack replies",
+  "Application forms",
+  "Blog outlines",
+  "Late-night brain dumps"
+];
+
+const flow = [
+  {
+    step: "01",
+    title: "Hold your shortcut",
+    text: "Press and hold one key. No app switching, no tiny record button."
+  },
+  {
+    step: "02",
+    title: "Say what you mean",
+    text: "Talk naturally — pause, think, keep going."
+  },
+  {
+    step: "03",
+    title: "Release and keep moving",
+    text: "Your words land at the cursor. You're already on to the next thing."
+  }
+];
+
+const audiences = [
+  {
+    title: "For people who think faster than they type",
+    text: "Writers, founders, students — anyone whose best ideas arrive mid-task."
+  },
+  {
+    title: "For tired hands and busy days",
+    text: "When typing feels slow or painful, speaking gets you back into flow."
+  },
+  {
+    title: "For Mac users who like calm tools",
+    text: "Suniye lives in the menu bar and stays out of your way until you need it."
+  }
+];
+
+const faq = [
+  {
+    question: "Does it send my audio to the cloud?",
+    answer: "No. Transcription runs locally on your Mac. Text cleanup uses an API only if you turn it on."
+  },
+  {
+    question: "What do I need to get started?",
+    answer: "macOS 14+, microphone and accessibility access. A speech model downloads on first launch."
+  },
+  {
+    question: "Do I need to be technical?",
+    answer: "Not at all. Hold a key, speak, release — your text appears where you're working."
+  }
+];
+
+const container = "mx-auto w-[min(1160px,calc(100%-32px))]";
+const eyebrow = "font-mono text-[0.8rem] uppercase tracking-[0.1em] text-[var(--ink-tertiary)]";
+const surface = "rounded-[18px] border border-[color:var(--stroke)] bg-[var(--bg-elevated)] shadow-card backdrop-blur-xl";
+const softPill = "rounded-full border border-[color:var(--stroke)] bg-[var(--paper)] px-4 py-2.5 text-[0.92rem] leading-none text-[var(--ink-soft)] backdrop-blur";
+const sectionTitle = "text-[clamp(2rem,3.2vw,3.25rem)] font-semibold leading-[1.02] tracking-[-0.06em]";
+---
+
+<Layout
+  title="Suniye — Voice to text, right at your cursor"
+  description="Local-first dictation for macOS. Hold one key, speak, and your words appear where your cursor is."
+>
+  <main class="relative overflow-x-clip pb-8">
+    <section class="relative overflow-hidden pb-20 pt-6 md:pb-24">
+      <div class={container}>
+        <div class="pointer-events-none absolute inset-x-[-10%] top-0 -z-10 h-[34rem] bg-[radial-gradient(circle_at_top_left,rgba(10,132,255,0.16),transparent_34%),radial-gradient(circle_at_78%_18%,rgba(255,255,255,0.62),transparent_24%)] blur-3xl"></div>
+
+        <header class="flex flex-wrap items-center justify-between gap-4 py-6">
+          <a class="inline-flex items-center gap-3 font-semibold tracking-[-0.02em]" href="#top" aria-label="Suniye home">
+            <img
+              src="/suniye-icon.png"
+              alt="Suniye app icon"
+              width="44"
+              height="44"
+              class="size-11 rounded-2xl shadow-card"
+            />
+            <span>Suniye</span>
+          </a>
+
+          <nav
+            class="order-3 flex w-full items-center justify-between gap-3 overflow-x-auto rounded-full border border-[color:var(--stroke)] bg-[var(--paper)] px-5 py-3 text-sm text-[var(--ink-soft)] backdrop-blur lg:order-none lg:w-auto lg:justify-center lg:gap-6"
+            aria-label="Primary"
+          >
+            <a class="whitespace-nowrap transition-colors duration-200 hover:text-[var(--ink)]" href="#benefits">Why it's good</a>
+            <a class="whitespace-nowrap transition-colors duration-200 hover:text-[var(--ink)]" href="#how-it-works">How it works</a>
+            <a class="whitespace-nowrap transition-colors duration-200 hover:text-[var(--ink)]" href="#faq">FAQ</a>
+          </nav>
+
+          <div class="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+            <button
+              class="theme-toggle inline-flex size-11 items-center justify-center rounded-full border border-[color:var(--stroke)] bg-[var(--paper)] text-[var(--ink-soft)] backdrop-blur transition-colors duration-200 hover:bg-[var(--paper-strong)] hover:text-[var(--ink)]"
+              id="theme-toggle"
+              aria-label="Toggle dark mode"
+            >
+              <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path></svg>
+              <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            </button>
+
+            <a
+              class="inline-flex min-h-12 items-center justify-center rounded-full border border-[color:var(--stroke)] bg-[var(--paper)] px-5 text-sm font-semibold tracking-[-0.02em] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--paper-strong)]"
+              href="https://github.com/kishanhitk/suniye/releases/latest"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Download
+            </a>
+          </div>
+        </header>
+
+        <div
+          id="top"
+          class="grid items-center gap-12 pb-12 pt-10 lg:min-h-[calc(100svh-160px)] lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]"
+        >
+          <div class="relative z-10 flex flex-col gap-6">
+            <p class={eyebrow}>Local-first dictation for macOS</p>
+            <h1 class="max-w-[10ch] text-[clamp(3.25rem,7vw,5.75rem)] font-semibold leading-[0.92] tracking-[-0.06em]">
+              Speak naturally.
+              <span class="block text-[var(--accent)]">Type less.</span>
+            </h1>
+            <p class="max-w-[38rem] text-[clamp(1.05rem,2vw,1.3rem)] leading-8 text-[var(--ink-soft)]">
+              Suniye turns your voice into text right where your cursor is. Hold one key, talk,
+              release, and keep moving.
+            </p>
+
+            <div class="flex flex-col gap-3 pt-2 sm:flex-row">
+              <a
+                class="inline-flex min-h-12 items-center justify-center rounded-full bg-[var(--accent)] px-6 text-sm font-semibold tracking-[-0.02em] text-white shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--accent-hover)] hover:shadow-card-lg sm:w-auto"
+                href="https://github.com/kishanhitk/suniye/releases/latest"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Download for macOS
+              </a>
+              <a
+                class="inline-flex min-h-12 items-center justify-center rounded-full border border-[color:var(--stroke)] bg-[var(--paper)] px-6 text-sm font-semibold tracking-[-0.02em] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--paper-strong)] sm:w-auto"
+                href="#how-it-works"
+              >
+                See how it works
+              </a>
+            </div>
+
+            <div class="flex flex-wrap gap-3 pt-1">
+              <span class={softPill}>Private by default</span>
+              <span class={softPill}>Works in any app</span>
+              <span class={softPill}>Optional AI cleanup</span>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-5 lg:relative lg:min-h-[620px] lg:block" aria-hidden="true">
+            <div
+              class={`${surface} animate-float p-6 shadow-card-lg lg:absolute lg:right-2 lg:top-12 lg:w-[min(100%,520px)]`}
+            >
+              <div class="flex items-center gap-2.5 font-mono text-[0.76rem] uppercase tracking-[0.09em] text-[var(--ink-tertiary)]">
+                <span class="size-2.5 rounded-full bg-[#ff3b30] shadow-[0_0_0_4px_rgba(255,59,48,0.16)]"></span>
+                <span>Listening</span>
+              </div>
+
+              <div class="mt-5 grid gap-5">
+                <div class={`${softPill} w-fit font-mono text-[0.86rem]`}>Hold <strong>fn</strong> to talk</div>
+
+                <div class="flex min-h-[100px] items-end gap-2.5 py-2">
+                  <span class="waveform-bar"></span>
+                  <span class="waveform-bar"></span>
+                  <span class="waveform-bar"></span>
+                  <span class="waveform-bar"></span>
+                  <span class="waveform-bar"></span>
+                  <span class="waveform-bar"></span>
+                  <span class="waveform-bar"></span>
+                  <span class="waveform-bar"></span>
+                  <span class="waveform-bar"></span>
+                </div>
+
+                <p class="text-[1.04rem] leading-7 text-[var(--ink-soft)]">
+                  "Send the revised proposal this afternoon and add a short summary up top."
+                </p>
+              </div>
+            </div>
+
+            <div
+              class={`${surface} flex flex-col gap-3 p-5 lg:absolute lg:bottom-28 lg:left-0 lg:w-60 lg:-rotate-3 lg:animate-tilt-left`}
+            >
+              <p class="font-mono text-[0.76rem] uppercase tracking-[0.08em] text-[var(--ink-tertiary)]">Feels instant</p>
+              <p class="leading-7 text-[var(--ink-soft)]">Speak once. Text appears where you work.</p>
+            </div>
+
+            <div
+              class={`${surface} flex flex-col gap-3 p-5 lg:absolute lg:bottom-8 lg:right-7 lg:w-64 lg:rotate-3 lg:animate-tilt-right`}
+            >
+              <p class="font-mono text-[0.76rem] uppercase tracking-[0.08em] text-[var(--ink-tertiary)]">Private by default</p>
+              <p class="leading-7 text-[var(--ink-soft)]">Your voice never leaves your Mac.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-2 flex flex-wrap justify-center gap-3 lg:mt-6">
+          {moments.map((moment) => <span class={softPill}>{moment}</span>)}
+        </div>
+      </div>
+    </section>
+
+    <section class="pb-28 md:pb-32" id="benefits">
+      <div class={container}>
+        <div class="mb-10 grid max-w-3xl gap-4">
+          <p class={eyebrow}>Made for everyday typing</p>
+          <h2 class={sectionTitle}>A voice tool that feels like part of your Mac.</h2>
+        </div>
+
+        <div class="grid gap-6 md:grid-cols-2">
+          {benefits.map((benefit) => (
+            <article class={`${surface} flex flex-col gap-4 p-8`}>
+              <h3 class="text-[1.35rem] font-semibold leading-tight tracking-[-0.03em]">{benefit.title}</h3>
+              <p class="leading-7 text-[var(--ink-soft)]">{benefit.text}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="pb-28 md:pb-32">
+      <div class={`${container} grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]`}>
+        <div class="flex flex-col gap-5 rounded-[22px] border border-[color:var(--stroke)] bg-[var(--bg-elevated)] p-8 shadow-card backdrop-blur-xl md:p-10">
+          <p class={eyebrow}>Why people use it</p>
+          <h2 class={sectionTitle}>Because ideas rarely arrive when your hands are free.</h2>
+          <p class="max-w-[34rem] leading-7 text-[var(--ink-soft)]">
+            Built for the moments when you're mid-thought, replying in a rush, or trying to stay
+            in flow without stopping to type.
+          </p>
+        </div>
+
+        <div class="grid gap-6">
+          {audiences.map((item) => (
+            <article class={`${surface} flex flex-col gap-4 p-8`}>
+              <h3 class="text-[1.35rem] font-semibold leading-tight tracking-[-0.03em]">{item.title}</h3>
+              <p class="leading-7 text-[var(--ink-soft)]">{item.text}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="pb-28 md:pb-32" id="how-it-works">
+      <div class={container}>
+        <div class="mb-10 grid max-w-3xl gap-4">
+          <p class={eyebrow}>Simple on purpose</p>
+          <h2 class={sectionTitle}>Three steps. No learning curve.</h2>
+        </div>
+
+        <div class="grid gap-6 lg:grid-cols-3">
+          {flow.map((item) => (
+            <article class={`${surface} flex flex-col gap-4 p-8`}>
+              <p class="font-mono text-[0.84rem] uppercase tracking-[0.12em] text-[var(--accent)]">{item.step}</p>
+              <h3 class="text-[1.35rem] font-semibold leading-tight tracking-[-0.03em]">{item.title}</h3>
+              <p class="leading-7 text-[var(--ink-soft)]">{item.text}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="pb-28 md:pb-32">
+      <div class={`${container} grid gap-6 lg:grid-cols-2`}>
+        <article class="flex flex-col gap-5 rounded-[22px] bg-[var(--accent)] p-8 text-white shadow-card md:p-10">
+          <p class="font-mono text-[0.8rem] uppercase tracking-[0.1em] text-white/70">Privacy</p>
+          <h2 class={sectionTitle}>Your voice is yours.</h2>
+          <p class="max-w-[34rem] leading-7 text-white/84">
+            Transcription stays on your Mac. No cloud, no uploads, no account.
+          </p>
+        </article>
+
+        <article class={`${surface} flex flex-col gap-5 p-8 md:p-10`}>
+          <p class={eyebrow}>Optional polish</p>
+          <h2 class={sectionTitle}>Clean up text only when you want to.</h2>
+          <p class="max-w-[34rem] leading-7 text-[var(--ink-soft)]">
+            Add post-processing for grammar, clarity, or tone. Or keep the raw transcript — your
+            call.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="pb-28 md:pb-32" id="faq">
+      <div class={container}>
+        <div class="mb-10 grid max-w-3xl gap-4">
+          <p class={eyebrow}>FAQ</p>
+          <h2 class={sectionTitle}>The practical stuff.</h2>
+        </div>
+
+        <div class="grid gap-6 lg:grid-cols-3">
+          {faq.map((item) => (
+            <article class={`${surface} flex flex-col gap-4 p-8`}>
+              <h3 class="text-[1.35rem] font-semibold leading-tight tracking-[-0.03em]">{item.question}</h3>
+              <p class="leading-7 text-[var(--ink-soft)]">{item.answer}</p>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="pb-16">
+      <div class={container}>
+        <div class={`${surface} grid gap-8 p-8 md:p-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center`}>
+          <div class="flex flex-col gap-5">
+            <p class={eyebrow}>Ready when you are</p>
+            <h2 class={sectionTitle}>Less typing. More flow.</h2>
+            <p class="max-w-[34rem] leading-7 text-[var(--ink-soft)]">
+              Free and open source. Requires macOS 14+.
+            </p>
+          </div>
+
+          <div class="flex flex-col gap-3 sm:flex-row lg:justify-end">
+            <a
+              class="inline-flex min-h-12 items-center justify-center rounded-full bg-[var(--accent)] px-6 text-sm font-semibold tracking-[-0.02em] text-white shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--accent-hover)] hover:shadow-card-lg"
+              href="https://github.com/kishanhitk/suniye/releases/latest"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Download latest release
+            </a>
+            <a
+              class="inline-flex min-h-12 items-center justify-center rounded-full border border-[color:var(--stroke)] bg-[var(--paper)] px-6 text-sm font-semibold tracking-[-0.02em] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--paper-strong)]"
+              href="https://github.com/kishanhitk/suniye"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View on GitHub
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</Layout>

@@ -5,5 +5,7 @@ dist/
 .dmg-staging/
 third_party/
 .e2e/
+website/node_modules/
+website/.astro/
 Suniye.xcodeproj/project.xcworkspace/xcuserdata/
 Suniye.xcodeproj/xcuserdata/
