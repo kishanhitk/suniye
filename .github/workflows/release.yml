@@ -43,7 +43,7 @@ jobs:
             test
 
       - name: Package release artifacts
-        run: ./scripts/package_release.sh --version "${GITHUB_REF_NAME}" --dist-dir dist
+        run: ./scripts/package_release.sh --version "${GITHUB_REF_NAME}" --build-number "${GITHUB_RUN_NUMBER}" --dist-dir dist
 
       - name: Verify release artifacts
         run: ./scripts/verify_release.sh --version "${GITHUB_REF_NAME}" --dist-dir dist
