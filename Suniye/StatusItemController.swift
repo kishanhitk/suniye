@@ -74,8 +74,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             checkUpdatesItem.isEnabled = true
         case .upToDate:
             checkUpdatesItem.title = "Up to Date"
-            checkUpdatesItem.action = nil
-            checkUpdatesItem.isEnabled = false
+            checkUpdatesItem.action = #selector(checkForUpdates)
+            checkUpdatesItem.isEnabled = true
         case .downloading:
             checkUpdatesItem.title = "Downloading Update..."
             checkUpdatesItem.action = nil

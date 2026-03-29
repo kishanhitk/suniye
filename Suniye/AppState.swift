@@ -987,11 +987,12 @@ final class AppState {
 
         if let downloadedUpdateArchiveURL {
             if fileOpener(downloadedUpdateArchiveURL) {
+                updateStatus = .downloaded
                 updateStatusText = "Installer opened for \(release.versionTag)."
                 AppLogger.shared.log(.info, "opened downloaded installer: \(downloadedUpdateArchiveURL.path)")
             } else {
-                updateStatus = .error
-                updateStatusText = "Update is ready, but failed to open installer."
+                updateStatus = .downloaded
+                updateStatusText = "Update is ready to install. Failed to open the installer. Try again."
                 AppLogger.shared.log(.error, "open downloaded installer failed: \(downloadedUpdateArchiveURL.path)")
             }
             return
@@ -1005,9 +1006,9 @@ final class AppState {
             let archiveURL = try await updateService.downloadAndVerify(release: release)
             downloadedUpdateArchiveURL = archiveURL
             guard fileOpener(archiveURL) else {
-                updateStatus = .error
-                updateDownloadProgress = 0
-                updateStatusText = "Update downloaded, but failed to open installer."
+                updateStatus = .downloaded
+                updateDownloadProgress = 1
+                updateStatusText = "Update downloaded. Failed to open installer. Try again."
                 AppLogger.shared.log(.error, "update download complete but open failed: \(archiveURL.path)")
                 return
             }

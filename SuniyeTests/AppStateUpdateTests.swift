@@ -167,7 +167,7 @@ final class AppStateUpdateTests: XCTestCase {
         XCTAssertEqual(appState.updateStatusText, "No update is currently available.")
     }
 
-    func testDownloadAndOpenUpdateSetsErrorWhenOpenFails() async {
+    func testDownloadAndOpenUpdateKeepsRetryStateWhenOpenFails() async {
         let updateRelease = UpdateRelease(
             versionTag: "v0.0.2",
             publishedAt: nil,
@@ -183,8 +183,33 @@ final class AppStateUpdateTests: XCTestCase {
         await appState.checkForUpdates(background: false)
         await appState.downloadAndOpenUpdate()
 
-        XCTAssertEqual(appState.updateStatus, .error)
-        XCTAssertEqual(appState.updateStatusText, "Update is ready, but failed to open installer.")
+        XCTAssertEqual(appState.updateStatus, .downloaded)
+        XCTAssertEqual(appState.updateStatusText, "Update is ready to install. Failed to open the installer. Try again.")
+        XCTAssertEqual(appState.updateDownloadProgress, 1)
+    }
+
+    func testDownloadAndOpenUpdateKeepsRetryStateWhenFreshDownloadCannotOpenInstaller() async {
+        let updateRelease = UpdateRelease(
+            versionTag: "v0.0.2",
+            publishedAt: nil,
+            notes: "notes",
+            htmlURL: URL(string: "https://example.test/release")!,
+            assets: []
+        )
+        let tempArchiveURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let updateService = StubUpdateService(checkResult: .success(.updateAvailable(updateRelease)))
+        updateService.downloadResult = .failure(UpdateError.network("temporary"))
+        let appState = makeAppState(updateService: updateService, fileOpener: { _ in false })
+
+        await appState.checkForUpdates(background: false)
+
+        XCTAssertEqual(appState.updateStatus, .available)
+
+        updateService.downloadResult = .success(tempArchiveURL)
+        await appState.downloadAndOpenUpdate()
+
+        XCTAssertEqual(appState.updateStatus, .downloaded)
+        XCTAssertEqual(appState.updateStatusText, "Update downloaded. Failed to open installer. Try again.")
         XCTAssertEqual(appState.updateDownloadProgress, 1)
     }
 
