@@ -145,6 +145,7 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
 }
 
 final class StubAudioCaptureService: AudioCaptureServiceProtocol {
+    var onLevelsUpdate: (([Float]) -> Void)?
     var startCaptureCallCount = 0
     var lastPreferredInputDeviceID: String?
     var stopCaptureResult = CapturedAudio(samples: [], sampleRate: 16_000)

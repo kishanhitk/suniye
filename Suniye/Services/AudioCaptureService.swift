@@ -2,13 +2,15 @@ import AudioToolbox
 import AVFoundation
 import CoreAudio
 import Foundation
+import QuartzCore
 
 struct CapturedAudio {
     let samples: [Float]
     let sampleRate: Int
 }
 
-protocol AudioCaptureServiceProtocol {
+protocol AudioCaptureServiceProtocol: AnyObject {
+    var onLevelsUpdate: (([Float]) -> Void)? { get set }
     func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws
     func stopCapture() -> CapturedAudio
     func availableInputDevices() -> [AudioInputDevice]
@@ -32,6 +34,8 @@ private func audioCaptureHALInputCallback(
 }
 
 final class AudioCaptureService: AudioCaptureServiceProtocol {
+    var onLevelsUpdate: (([Float]) -> Void)?
+
     private enum CaptureBackend {
         case standardEngine
         case halInput
@@ -47,6 +51,9 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
     private var samples: [Float] = []
     private let lock = NSLock()
     private var activeBackend: CaptureBackend?
+    private let meterBarCount = 12
+    private var smoothedLevels: [Float] = Array(repeating: 0, count: 12)
+    private var lastLevelEmissionTime: CFTimeInterval = 0
 
     deinit {
         stopActiveCapture()
@@ -56,6 +63,9 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         lock.lock()
         samples.removeAll(keepingCapacity: true)
         lock.unlock()
+        smoothedLevels = Array(repeating: 0, count: meterBarCount)
+        lastLevelEmissionTime = 0
+        emitLevels(smoothedLevels)
 
         stopActiveCapture()
 
@@ -103,6 +113,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
     func stopCapture() -> CapturedAudio {
         stopActiveCapture()
+        emitLevels(Array(repeating: 0, count: meterBarCount))
+        smoothedLevels = Array(repeating: 0, count: meterBarCount)
 
         lock.lock()
         let out = samples
@@ -451,6 +463,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
             let frameCount = Int(converted.frameLength)
             let ptr = channelData[0]
             let chunk = Array(UnsafeBufferPointer(start: ptr, count: frameCount))
+            updateLevel(from: chunk)
 
             lock.lock()
             samples.append(contentsOf: chunk)
@@ -507,6 +520,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
         if channels == 1 {
             let chunk = Array(UnsafeBufferPointer(start: channelData[0], count: frameCount))
+            updateLevel(from: chunk)
             lock.lock()
             samples.append(contentsOf: chunk)
             lock.unlock()
@@ -524,9 +538,45 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         for i in 0 ..< frameCount {
             mixed[i] *= scale
         }
+        updateLevel(from: mixed)
         lock.lock()
         samples.append(contentsOf: mixed)
         lock.unlock()
+    }
+
+    private func updateLevel(from values: [Float]) {
+        guard !values.isEmpty else { return }
+        let chunkSize = max(1, values.count / meterBarCount)
+        var nextLevels = Array(repeating: Float(0), count: meterBarCount)
+
+        for index in 0 ..< meterBarCount {
+            let start = index * chunkSize
+            let end = index == meterBarCount - 1 ? values.count : min(values.count, start + chunkSize)
+            guard start < end else { continue }
+            let slice = Array(values[start ..< end])
+            let rms = Self.rms(of: slice)
+            let normalized = min(max(rms * 12, 0), 1)
+            nextLevels[index] = normalized
+        }
+
+        if smoothedLevels.count != meterBarCount {
+            smoothedLevels = Array(repeating: 0, count: meterBarCount)
+        }
+        for index in 0 ..< meterBarCount {
+            smoothedLevels[index] = (smoothedLevels[index] * 0.62) + (nextLevels[index] * 0.38)
+        }
+
+        let now = CACurrentMediaTime()
+        guard now - lastLevelEmissionTime >= 1.0 / 30.0 else { return }
+        lastLevelEmissionTime = now
+        emitLevels(smoothedLevels)
+    }
+
+    private func emitLevels(_ levels: [Float]) {
+        guard let onLevelsUpdate else { return }
+        DispatchQueue.main.async {
+            onLevelsUpdate(levels)
+        }
     }
 
     private static func rms(of values: [Float]) -> Float {
