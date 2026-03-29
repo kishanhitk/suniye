@@ -53,6 +53,10 @@ struct AttentionItem: Identifiable, Equatable {
 @MainActor
 @Observable
 final class AppState {
+    typealias RecordingSource = FloatingIndicatorState.Source
+    private static let automaticUpdateCheckInterval: TimeInterval = 5 * 60 * 60
+    private static let automaticUpdateTimerTolerance: TimeInterval = 5 * 60
+
     enum Phase: String {
         case needsModel
         case downloadingModel
@@ -69,6 +73,7 @@ final class AppState {
         case upToDate
         case available
         case downloading
+        case downloaded
         case error
     }
 
@@ -508,6 +513,7 @@ final class AppState {
     }
 
     var onStateChange: (() -> Void)?
+    var floatingIndicatorState: FloatingIndicatorState = .idle
 
     private let modelManager: ModelManagerProtocol
     private let transcriptionService: TranscriptionServiceProtocol
@@ -523,16 +529,28 @@ final class AppState {
     private let updateService: UpdateServiceProtocol
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
     private let currentAppVersionProvider: () -> AppVersion?
+    private let nowProvider: () -> Date
     private let fileOpener: (URL) -> Bool
     private let runtimeServicesEnabled: Bool
+    private let floatingIndicatorEnabled: Bool
 
     private var recordingStart: Date?
-    private var pendingProcessingIndicatorTask: Task<Void, Never>?
+    private var activeRecordingSource: RecordingSource?
+    private var overlayErrorResetTask: Task<Void, Never>?
     private var isHydratingLLMSettings = false
     private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
     private let llmE2EMode: LLME2EMode
     private var availableUpdateRelease: UpdateRelease?
+    private var downloadedUpdateArchiveURL: URL?
+    private var automaticUpdateTimer: Timer?
+    private var lastAutomaticUpdateAttemptAt: Date?
+
+    deinit {
+        MainActor.assumeIsolated {
+            automaticUpdateTimer?.invalidate()
+        }
+    }
 
     init(
         modelManager: ModelManagerProtocol = ModelManager(),
@@ -548,6 +566,7 @@ final class AppState {
         updateService: UpdateServiceProtocol = GitHubUpdateService(),
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
+        nowProvider: @escaping () -> Date = Date.init,
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
@@ -565,9 +584,16 @@ final class AppState {
         self.updateService = updateService
         self.launchAtLoginService = launchAtLoginService
         self.currentAppVersionProvider = currentAppVersionProvider
+        self.nowProvider = nowProvider
         self.fileOpener = fileOpener
         self.runtimeServicesEnabled = startServices
+        self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
+        self.audioCaptureService.onLevelsUpdate = { [weak self] levels in
+            Task { @MainActor [weak self] in
+                self?.handleAudioLevelsUpdate(levels)
+            }
+        }
 
         AppLogger.shared.log(.info, "app state init")
         loadHistory()
@@ -576,6 +602,12 @@ final class AppState {
         refreshInputDevices()
         refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
+
+        if floatingIndicatorEnabled {
+            floatingIndicatorController.onAction = { [weak self] in
+                self?.toggleFloatingIndicatorRecording()
+            }
+        }
 
         if startServices {
             wireHotkey()
@@ -587,6 +619,9 @@ final class AppState {
 
     func bootstrap() async {
         AppLogger.shared.log(.info, "bootstrap start")
+        if floatingIndicatorEnabled {
+            floatingIndicatorController.start()
+        }
         statusText = "Checking permissions..."
         await refreshPermissions()
 
@@ -600,13 +635,12 @@ final class AppState {
                 statusText = "Ready"
                 lastError = nil
             }
-            floatingIndicatorController.hide()
         } else {
             phase = .needsModel
             statusText = "Model required"
             showOnboarding = true
-            floatingIndicatorController.hide()
         }
+        setFloatingIndicatorState(.idle)
         AppLogger.shared.log(.info, "bootstrap done")
     }
 
@@ -828,9 +862,22 @@ final class AppState {
         MainWindowController.shared.show(appState: self)
     }
 
+    func toggleFloatingIndicatorRecording() {
+        Task { @MainActor in
+            switch phase {
+            case .ready:
+                await beginRecordingFlow(trigger: .manual)
+            case .recording where activeRecordingSource == .manual:
+                await stopRecordingAndTranscribe(trigger: .manual)
+            default:
+                showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
+            }
+        }
+    }
+
     func startRecordingFromUI() {
         Task { @MainActor in
-            await beginRecordingFlow()
+            await beginRecordingFlow(trigger: .manual)
         }
     }
 
@@ -838,12 +885,39 @@ final class AppState {
         guard phase == .recording else {
             return
         }
+        let trigger = activeRecordingSource ?? .manual
         Task {
-            await stopRecordingAndTranscribe()
+            await stopRecordingAndTranscribe(trigger: trigger)
         }
     }
 
-    func checkForUpdatesOnLaunch() async {
+    func startAutomaticUpdateChecks() {
+        guard automaticUpdateTimer == nil else {
+            return
+        }
+
+        AppLogger.shared.log(.info, "automatic update checks started interval=\(Int(Self.automaticUpdateCheckInterval))s")
+
+        Task { @MainActor [weak self] in
+            await self?.performAutomaticUpdateCheckIfEligible()
+        }
+
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.automaticUpdateCheckInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.performAutomaticUpdateCheckIfEligible()
+            }
+        }
+        timer.tolerance = Self.automaticUpdateTimerTolerance
+        automaticUpdateTimer = timer
+    }
+
+    func performAutomaticUpdateCheckIfEligible(now: Date? = nil) async {
+        let now = now ?? nowProvider()
+        guard shouldPerformAutomaticUpdateCheck(now: now) else {
+            return
+        }
+
+        lastAutomaticUpdateAttemptAt = now
         await checkForUpdates(background: true)
     }
 
@@ -852,6 +926,15 @@ final class AppState {
             return
         }
 
+        if !background, updateStatus == .downloaded, downloadedUpdateArchiveURL != nil {
+            AppLogger.shared.log(.info, "manual update check skipped: installer already cached")
+            return
+        }
+
+        let previousUpdateStatus = updateStatus
+        let previousUpdateStatusText = updateStatusText
+        let hadCachedDownloadedUpdate = previousUpdateStatus == .downloaded && downloadedUpdateArchiveURL != nil
+
         updateStatus = .checking
         if !background {
             updateStatusText = "Checking for updates..."
@@ -859,8 +942,12 @@ final class AppState {
 
         guard let currentVersion = currentAppVersionProvider() else {
             AppLogger.shared.log(.error, "update check failed: local app version missing")
-            if background {
-                updateStatus = .idle
+            if hadCachedDownloadedUpdate {
+                updateStatus = .downloaded
+                updateStatusText = previousUpdateStatusText
+            } else if background {
+                updateStatus = previousUpdateStatus
+                updateStatusText = previousUpdateStatusText
             } else {
                 updateStatus = .error
                 updateStatusText = "Unable to read local app version."
@@ -874,6 +961,7 @@ final class AppState {
             case .upToDate:
                 availableUpdateRelease = nil
                 availableUpdateVersion = nil
+                downloadedUpdateArchiveURL = nil
                 if background {
                     updateStatus = .idle
                 } else {
@@ -887,11 +975,16 @@ final class AppState {
                 updateStatus = .available
                 updateStatusText = "Update available: \(release.versionTag)"
                 AppLogger.shared.log(.info, "update available: \(release.versionTag)")
+                await downloadLatestUpdateInBackground(release: release)
             }
         } catch {
             AppLogger.shared.log(.warning, "update check failed: \(error.localizedDescription)")
-            if background {
-                updateStatus = .idle
+            if hadCachedDownloadedUpdate {
+                updateStatus = .downloaded
+                updateStatusText = previousUpdateStatusText
+            } else if background {
+                updateStatus = previousUpdateStatus
+                updateStatusText = previousUpdateStatusText
             } else {
                 updateStatus = .error
                 updateStatusText = error.localizedDescription
@@ -909,25 +1002,39 @@ final class AppState {
             return
         }
 
+        if let downloadedUpdateArchiveURL {
+            if fileOpener(downloadedUpdateArchiveURL) {
+                updateStatus = .downloaded
+                updateStatusText = "Installer opened for \(release.versionTag)."
+                AppLogger.shared.log(.info, "opened downloaded installer: \(downloadedUpdateArchiveURL.path)")
+            } else {
+                updateStatus = .downloaded
+                updateStatusText = "Update is ready to install. Failed to open the installer. Try again."
+                AppLogger.shared.log(.error, "open downloaded installer failed: \(downloadedUpdateArchiveURL.path)")
+            }
+            return
+        }
+
         updateStatus = .downloading
         updateStatusText = "Downloading update..."
         updateDownloadProgress = 0
 
         do {
             let archiveURL = try await updateService.downloadAndVerify(release: release)
+            downloadedUpdateArchiveURL = archiveURL
             guard fileOpener(archiveURL) else {
-                updateStatus = .error
-                updateDownloadProgress = 0
-                updateStatusText = "Update downloaded, but failed to open installer."
+                updateStatus = .downloaded
+                updateDownloadProgress = 1
+                updateStatusText = "Update downloaded. Failed to open installer. Try again."
                 AppLogger.shared.log(.error, "update download complete but open failed: \(archiveURL.path)")
                 return
             }
             updateDownloadProgress = 1
-            updateStatus = .available
+            updateStatus = .downloaded
             updateStatusText = "Update downloaded. Installer opened."
             AppLogger.shared.log(.info, "update download complete and opened: \(archiveURL.path)")
         } catch {
-            updateStatus = .error
+            updateStatus = .available
             updateStatusText = error.localizedDescription
             updateDownloadProgress = 0
             AppLogger.shared.log(.error, "update download failed: \(error.localizedDescription)")
@@ -939,6 +1046,46 @@ final class AppState {
             return
         }
         NSWorkspace.shared.open(release.htmlURL)
+    }
+
+    private func downloadLatestUpdateInBackground(release: UpdateRelease) async {
+        guard updateStatus != .downloading else {
+            return
+        }
+
+        updateStatus = .downloading
+        updateStatusText = "Downloading update \(release.versionTag)..."
+        updateDownloadProgress = 0
+
+        do {
+            let archiveURL = try await updateService.downloadAndVerify(release: release)
+            downloadedUpdateArchiveURL = archiveURL
+            updateDownloadProgress = 1
+            updateStatus = .downloaded
+            updateStatusText = "Update \(release.versionTag) is ready to install."
+            AppLogger.shared.log(.info, "update predownload complete: \(archiveURL.path)")
+        } catch {
+            updateStatus = .available
+            updateStatusText = "Update available: \(release.versionTag)"
+            updateDownloadProgress = 0
+            downloadedUpdateArchiveURL = nil
+            AppLogger.shared.log(.warning, "update predownload failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func shouldPerformAutomaticUpdateCheck(now: Date) -> Bool {
+        switch updateStatus {
+        case .checking, .downloading, .downloaded:
+            return false
+        case .idle, .upToDate, .available, .error:
+            break
+        }
+
+        guard let lastAutomaticUpdateAttemptAt else {
+            return true
+        }
+
+        return now.timeIntervalSince(lastAutomaticUpdateAttemptAt) >= Self.automaticUpdateCheckInterval
     }
 
     func postProcessTextIfEnabled(_ rawText: String) async -> String {
@@ -1014,13 +1161,15 @@ final class AppState {
     func runIndicatorE2ESmoke() {
         Task { @MainActor in
             AppLogger.shared.log(.info, "e2e indicator smoke start")
-            showIndicator(.listening)
+            setFloatingIndicatorState(.idle)
             try? await Task.sleep(nanoseconds: 220_000_000)
-            showIndicator(.stopped)
+            setFloatingIndicatorState(.hover)
             try? await Task.sleep(nanoseconds: 220_000_000)
-            showIndicator(.processing)
+            setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0.72), source: .manual))
             try? await Task.sleep(nanoseconds: 220_000_000)
-            showIndicator(.done(words: 4), autoHideAfter: 0.35)
+            setFloatingIndicatorState(.processing)
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            showTransientIndicatorError("Microphone permission required", restoreState: .idle, duration: 0.35)
             try? await Task.sleep(nanoseconds: 900_000_000)
             AppLogger.shared.log(.info, "e2e indicator smoke done")
             NSApp.terminate(nil)
@@ -1067,14 +1216,14 @@ final class AppState {
         hotkeyService.onHotkeyDown = { [weak self] in
             AppLogger.shared.log(.debug, "hotkey callback: down")
             Task { @MainActor in
-                await self?.beginRecordingFlow()
+                await self?.beginRecordingFlow(trigger: .hotkey)
             }
         }
 
         hotkeyService.onHotkeyUp = { [weak self] in
             AppLogger.shared.log(.debug, "hotkey callback: up")
             Task { @MainActor in
-                await self?.stopRecordingAndTranscribe()
+                await self?.stopRecordingAndTranscribe(trigger: .hotkey)
             }
         }
 
@@ -1096,25 +1245,23 @@ final class AppState {
         }
     }
 
-    private func beginRecordingFlow() async {
+    private func beginRecordingFlow(trigger: RecordingSource) async {
         if phase == .error, canRetryRecordingAfterError {
             clearRetryableRecordingError()
         }
-
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "start recording ignored in phase=\(phase.rawValue)")
-            showIndicator(.error(message: startBlockedMessage(for: phase)), autoHideAfter: 1.2)
+            showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             return
         }
         if !hasMicPermission {
             await refreshPermissions(requestMicrophone: true)
         }
         guard hasMicPermission else {
-            phase = .error
             lastError = "Microphone permission not granted"
             statusText = "Permission required"
             AppLogger.shared.log(.warning, "microphone permission denied")
-            showIndicator(.error(message: "Microphone permission required"), autoHideAfter: 1.8)
+            showTransientIndicatorError("Microphone permission required")
             return
         }
 
@@ -1122,17 +1269,16 @@ final class AppState {
             await refreshPermissions(promptAccessibility: true)
         }
         guard hasAccessibilityPermission else {
-            phase = .error
             lastError = "Accessibility permission not granted"
             statusText = "Accessibility required"
             AppLogger.shared.log(.warning, "accessibility permission denied before recording")
-            showIndicator(.error(message: "Enable Accessibility for dictation"), autoHideAfter: 2.2)
+            showTransientIndicatorError("Enable Accessibility for dictation")
             return
         }
-        startRecording()
+        startRecording(trigger: trigger)
     }
 
-    private func startRecording() {
+    private func startRecording(trigger: RecordingSource) {
         guard phase == .ready else {
             return
         }
@@ -1142,33 +1288,30 @@ final class AppState {
             phase = .recording
             statusText = "Recording"
             recordingStart = Date()
-            pendingProcessingIndicatorTask?.cancel()
-            pendingProcessingIndicatorTask = nil
-            showIndicator(.listening)
+            activeRecordingSource = trigger
+            overlayErrorResetTask?.cancel()
+            overlayErrorResetTask = nil
+            setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0), source: trigger))
             AppLogger.shared.log(.info, "recording started input=\(selectedInputDeviceID ?? "default")")
         } catch {
-            phase = .error
             lastError = "Audio start failed: \(error.localizedDescription)"
-            statusText = "Audio error"
+            statusText = "Ready"
             AppLogger.shared.log(.error, "audio start failed: \(error.localizedDescription)")
-            showIndicator(.error(message: "Failed to start audio capture"), autoHideAfter: 1.8)
+            showTransientIndicatorError("Failed to start audio capture")
         }
     }
 
-    private func stopRecordingAndTranscribe() async {
+    private func stopRecordingAndTranscribe(trigger: RecordingSource) async {
         guard phase == .recording else {
             return
         }
+        guard activeRecordingSource == nil || activeRecordingSource == trigger else {
+            return
+        }
 
-        showIndicator(.stopped)
         phase = .transcribing
         statusText = "Transcribing..."
-        pendingProcessingIndicatorTask?.cancel()
-        pendingProcessingIndicatorTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            guard let self, self.phase == .transcribing else { return }
-            self.showIndicator(.processing)
-        }
+        setFloatingIndicatorState(.processing)
 
         let captured = audioCaptureService.stopCapture()
         let samples = captured.samples
@@ -1234,19 +1377,20 @@ final class AppState {
             if finalText.isEmpty && !shouldSubmit {
                 AppLogger.shared.log(.warning, "transcription returned empty text samples=\(samples.count) sr=\(sampleRate)")
             }
-            pendingProcessingIndicatorTask?.cancel()
-            pendingProcessingIndicatorTask = nil
+            activeRecordingSource = nil
+            recordingStart = nil
+            lastError = nil
             phase = .ready
             statusText = "Ready"
-            showIndicator(.done(words: wordCount), autoHideAfter: 1.2)
+            setFloatingIndicatorState(.idle)
         } catch {
-            pendingProcessingIndicatorTask?.cancel()
-            pendingProcessingIndicatorTask = nil
-            phase = .error
+            activeRecordingSource = nil
+            recordingStart = nil
             lastError = "Transcription failed: \(error.localizedDescription)"
-            statusText = "Transcription error"
+            phase = .ready
+            statusText = "Ready"
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
-            showIndicator(.error(message: "Transcription failed"), autoHideAfter: 1.8)
+            showTransientIndicatorError("Transcription failed")
         }
     }
 
@@ -1357,8 +1501,59 @@ final class AppState {
         )
     }
 
-    private func showIndicator(_ state: FloatingIndicatorState, autoHideAfter: TimeInterval? = nil) {
-        floatingIndicatorController.show(state, autoHideAfter: autoHideAfter)
+    private func setFloatingIndicatorState(_ state: FloatingIndicatorState) {
+        floatingIndicatorState = state
+        guard floatingIndicatorEnabled else { return }
+        floatingIndicatorController.update(state)
+    }
+
+    private func showTransientIndicatorError(
+        _ message: String,
+        restoreState: FloatingIndicatorState = .idle,
+        duration: TimeInterval = 1.8
+    ) {
+        overlayErrorResetTask?.cancel()
+        setFloatingIndicatorState(.error(message: message))
+
+        let delayNanos = UInt64(max(duration, 0) * 1_000_000_000)
+        overlayErrorResetTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delayNanos)
+            guard let self, !Task.isCancelled else { return }
+            guard case .error = self.floatingIndicatorState else {
+                self.overlayErrorResetTask = nil
+                return
+            }
+            self.setFloatingIndicatorState(restoreState)
+            self.overlayErrorResetTask = nil
+        }
+    }
+
+    private func blockedStartRestoreIndicatorState() -> FloatingIndicatorState {
+        switch phase {
+        case .recording:
+            if case let .listening(levels, source) = floatingIndicatorState {
+                return .listening(levels: levels, source: source)
+            }
+            return .listening(
+                levels: Self.defaultIndicatorLevels(level: 0.72),
+                source: activeRecordingSource ?? .manual
+            )
+        case .transcribing:
+            return .processing
+        case .needsModel, .downloadingModel, .loading, .ready, .error:
+            return .idle
+        }
+    }
+
+    private func handleAudioLevelsUpdate(_ levels: [Float]) {
+        guard case let .listening(_, source) = floatingIndicatorState else {
+            return
+        }
+        setFloatingIndicatorState(.listening(levels: levels, source: source))
+    }
+
+    private static func defaultIndicatorLevels(level: Float, count: Int = 12) -> [Float] {
+        Array(repeating: max(0, min(level, 1)), count: count)
     }
 
     private func startBlockedMessage(for phase: Phase) -> String {

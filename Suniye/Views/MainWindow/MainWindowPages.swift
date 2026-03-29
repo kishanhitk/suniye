@@ -19,6 +19,29 @@ struct DashboardPage: View {
                 }
             }
 
+            if appState.updateStatus == .downloaded {
+                SurfaceCard {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Update ready to install")
+                                .font(AppTypography.bodyMedium)
+                            Text(appState.updateStatusText)
+                                .font(AppTypography.subheadline)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        Button("Install Update") {
+                            Task {
+                                await appState.downloadAndOpenUpdate()
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            }
+
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 DashboardMetricCard(icon: "waveform", iconTint: .blue, value: "\(appState.sessionCount)", label: "Sessions")
                 DashboardMetricCard(icon: "calendar", iconTint: .orange, value: "\(appState.todaySessionCount)", label: "Today")
@@ -631,14 +654,14 @@ struct GeneralPage: View {
 
                             Spacer(minLength: 12)
 
-                            if appState.updateStatus == .available {
+                            if appState.updateStatus == .available || appState.updateStatus == .downloaded {
                                 HStack(spacing: 8) {
                                     Button("Release Notes") {
                                         appState.openReleaseNotes()
                                     }
                                     .buttonStyle(.bordered)
 
-                                    Button("Download") {
+                                    Button(appState.updateStatus == .downloaded ? "Install" : "Download") {
                                         Task {
                                             await appState.downloadAndOpenUpdate()
                                         }

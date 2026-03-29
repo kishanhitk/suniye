@@ -67,7 +67,7 @@ final class TestKeychainService: KeychainServiceProtocol {
 
 final class StubUpdateService: UpdateServiceProtocol {
     private(set) var checkCallCount = 0
-    private let checkResult: Result<UpdateCheckResult, Error>
+    var checkResult: Result<UpdateCheckResult, Error>
     var downloadResult: Result<URL, Error> = .failure(UpdateError.network("not configured"))
 
     init(checkResult: Result<UpdateCheckResult, Error>) {
@@ -145,6 +145,7 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
 }
 
 final class StubAudioCaptureService: AudioCaptureServiceProtocol {
+    var onLevelsUpdate: (([Float]) -> Void)?
     var startCaptureCallCount = 0
     var lastPreferredInputDeviceID: String?
     var stopCaptureResult = CapturedAudio(samples: [], sampleRate: 16_000)
@@ -220,6 +221,8 @@ func makeTestAppState(
     keychainService: KeychainServiceProtocol = TestKeychainService(value: nil),
     updateService: UpdateServiceProtocol = StubUpdateService(checkResult: .success(.upToDate)),
     launchAtLoginService: LaunchAtLoginServiceProtocol = StubLaunchAtLoginService(),
+    currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
+    nowProvider: @escaping () -> Date = Date.init,
     fileOpener: @escaping (URL) -> Bool = { _ in true },
     startServices: Bool = false,
     llmE2EMode: LLME2EMode = .none
@@ -236,7 +239,8 @@ func makeTestAppState(
         keychainService: keychainService,
         updateService: updateService,
         launchAtLoginService: launchAtLoginService,
-        currentAppVersionProvider: { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
+        currentAppVersionProvider: currentAppVersionProvider,
+        nowProvider: nowProvider,
         fileOpener: fileOpener,
         startServices: startServices,
         llmE2EMode: llmE2EMode
