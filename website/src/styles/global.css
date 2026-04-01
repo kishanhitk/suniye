@@ -1,0 +1,279 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@font-face {
+  font-family: "Google Sans";
+  src: url("/fonts/GoogleSans-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fragment Mono";
+  src: url("/fonts/FragmentMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fragment Mono";
+  src: url("/fonts/FragmentMono-Italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Google Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "Fragment Mono", monospace;
+  --shadow-card: 0 16px 40px rgba(40, 62, 110, 0.08);
+  --shadow-card-lg: 0 36px 90px rgba(40, 62, 110, 0.14);
+}
+
+:root {
+  color-scheme: light;
+  --bg: #f7f8fc;
+  --hero-bg: #f3f5fb;
+  --section-tint: #f5f6fa;
+  --footer-tint: #eef1f8;
+  --privacy-bg: #0f1728;
+  --hero-ink: #101725;
+  --ink: #111827;
+  --ink-soft: rgba(17, 24, 39, 0.72);
+  --ink-muted: rgba(17, 24, 39, 0.5);
+  --accent: #135aff;
+  --accent-strong: #0c45d6;
+  --stroke: rgba(17, 24, 39, 0.08);
+  --stroke-strong: rgba(17, 24, 39, 0.12);
+  --selection: rgba(19, 90, 255, 0.14);
+}
+
+html,
+body {
+  background: var(--bg);
+}
+
+body {
+  color: var(--ink);
+}
+
+::selection {
+  background: var(--selection);
+}
+
+.waveform-bar {
+  width: 100%;
+  max-width: 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent), rgba(19, 90, 255, 0.24));
+  animation: pulse 1.35s ease-in-out infinite;
+}
+
+.waveform-bar:nth-child(1) { height: 34px; animation-delay: 0.05s; }
+.waveform-bar:nth-child(2) { height: 68px; animation-delay: 0.15s; }
+.waveform-bar:nth-child(3) { height: 46px; animation-delay: 0.25s; }
+.waveform-bar:nth-child(4) { height: 88px; animation-delay: 0.35s; }
+.waveform-bar:nth-child(5) { height: 42px; animation-delay: 0.1s; }
+.waveform-bar:nth-child(6) { height: 94px; animation-delay: 0.22s; }
+.waveform-bar:nth-child(7) { height: 54px; animation-delay: 0.3s; }
+.waveform-bar:nth-child(8) { height: 70px; animation-delay: 0.18s; }
+.waveform-bar:nth-child(9) { height: 32px; animation-delay: 0.08s; }
+
+.hero-pill {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 74px;
+  height: 7px;
+  border: 0.8px solid rgba(255, 255, 255, 0.34);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.58);
+  box-shadow: 0 8px 20px rgba(5, 10, 22, 0.1);
+  overflow: hidden;
+  will-change: width, height, background, border-color, box-shadow;
+  transition:
+    width 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 260ms ease,
+    border-color 260ms ease,
+    box-shadow 340ms ease;
+}
+
+.hero-pill-wave {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 14px;
+  box-sizing: border-box;
+  opacity: 0;
+  transform: scale(0.76);
+  transition:
+    opacity 160ms ease 70ms,
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1) 70ms;
+}
+
+.hero-demo[data-state="listening"] .hero-pill {
+  width: 116px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.96);
+  box-shadow: 0 18px 36px rgba(5, 10, 22, 0.22);
+}
+
+.hero-demo[data-state="listening"] .hero-pill-wave {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.indicator-bar {
+  width: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  animation: indicator-pulse 0.9s ease-in-out infinite;
+}
+
+.indicator-bar:nth-child(1) { height: 8px; animation-delay: 0.02s; }
+.indicator-bar:nth-child(2) { height: 10px; animation-delay: 0.08s; }
+.indicator-bar:nth-child(3) { height: 13px; animation-delay: 0.14s; }
+.indicator-bar:nth-child(4) { height: 16px; animation-delay: 0.1s; }
+.indicator-bar:nth-child(5) { height: 20px; animation-delay: 0.18s; }
+.indicator-bar:nth-child(6) { height: 23px; animation-delay: 0.05s; }
+.indicator-bar:nth-child(7) { height: 20px; animation-delay: 0.22s; }
+.indicator-bar:nth-child(8) { height: 16px; animation-delay: 0.12s; }
+.indicator-bar:nth-child(9) { height: 13px; animation-delay: 0.16s; }
+.indicator-bar:nth-child(10) { height: 10px; animation-delay: 0.09s; }
+.indicator-bar:nth-child(11) { height: 8px; animation-delay: 0.2s; }
+.indicator-bar:nth-child(12) { height: 6px; animation-delay: 0.04s; }
+
+.hero-email {
+  max-width: 35rem;
+}
+
+.hero-email-line {
+  min-height: 1lh;
+}
+
+.hero-email.prose {
+  --tw-prose-body: var(--ink-soft);
+  --tw-prose-headings: var(--ink);
+  --tw-prose-bold: var(--ink);
+  --tw-prose-bullets: rgba(17, 24, 39, 0.46);
+  --tw-prose-counters: rgba(17, 24, 39, 0.52);
+}
+
+.hero-email li.hero-email-line {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: start;
+}
+
+.hero-list-marker {
+  opacity: 0;
+  color: var(--ink-muted);
+  transition: opacity 120ms ease;
+}
+
+.hero-email-line.has-content .hero-list-marker {
+  opacity: 1;
+}
+
+.hero-email [data-type-text] {
+  position: relative;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hero-email [data-type-text].is-typing::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.08em;
+  margin-left: 2px;
+  vertical-align: -0.14em;
+  background: var(--accent);
+  animation: caret-blink 0.95s steps(1, end) infinite;
+}
+
+.reveal-up {
+  opacity: 0;
+  transform: translate3d(0, 20px, 0);
+  animation: reveal-up 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.reveal-delay-1 { animation-delay: 100ms; }
+.reveal-delay-2 { animation-delay: 180ms; }
+.reveal-delay-3 { animation-delay: 260ms; }
+.reveal-delay-4 { animation-delay: 340ms; }
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scaleY(0.88);
+    opacity: 0.72;
+  }
+  50% {
+    transform: scaleY(1.06);
+    opacity: 1;
+  }
+}
+
+@keyframes indicator-pulse {
+  0%,
+  100% {
+    transform: scaleY(0.88);
+    opacity: 0.74;
+  }
+  50% {
+    transform: scaleY(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-pill,
+  .hero-pill-wave,
+  .indicator-bar {
+    animation: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

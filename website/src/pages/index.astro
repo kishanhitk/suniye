@@ -1,0 +1,589 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const proofPoints = [
+  {
+    title: "Local on your Mac",
+    text: "Your voice stays on-device."
+  },
+  {
+    title: "Works where your cursor is",
+    text: "Mail, Notes, chat, forms, and more."
+  },
+  {
+    title: "One shortcut",
+    text: "Hold to talk. Release to paste."
+  }
+];
+
+const workflow = [
+  {
+    title: "Hold to begin",
+    text: "Press your shortcut and start talking. No extra recording flow, no window to manage.",
+    output: "Listening"
+  },
+  {
+    title: "Speak like you think",
+    text: "Talk naturally, pause when you need to, and keep the sentence moving.",
+    output: "quick follow-up for tomorrow: confirm the revised scope and send the timeline after lunch"
+  },
+  {
+    title: "Release and continue",
+    text: "Your words land in place. You keep moving.",
+    output: "Quick follow-up for tomorrow: confirm the revised scope and send the timeline after lunch."
+  }
+];
+
+const moments = [
+  {
+    label: "Morning email",
+    text: "Clear the replies you keep postponing."
+  },
+  {
+    label: "Meeting notes",
+    text: "Capture the useful parts in real time."
+  },
+  {
+    label: "Forms and admin",
+    text: "Move through repetitive text fields faster."
+  },
+  {
+    label: "Quick chat replies",
+    text: "Reply fast in the apps you already use."
+  },
+  {
+    label: "Journaling and drafts",
+    text: "Get the first version out before overthinking."
+  },
+  {
+    label: "Less typing strain",
+    text: "Give your hands a break when typing feels tiring."
+  }
+];
+
+const faq = [
+  {
+    question: "Does Suniye send my audio to the cloud?",
+    answer: "No. Transcription runs locally on your Mac."
+  },
+  {
+    question: "Where does it work?",
+    answer: "On macOS, in the app you are already using."
+  },
+  {
+    question: "Is it complicated to start?",
+    answer: "Not really. Install it, allow permissions, let the model download once, and start using the shortcut."
+  }
+];
+
+const container = "mx-auto w-[min(1180px,calc(100%-40px))]";
+const sectionLabel = "font-mono text-[0.74rem] uppercase tracking-[0.16em] text-[var(--ink-muted)]";
+const sectionTitle = "max-w-[12ch] text-[clamp(1.95rem,3.9vw,3.25rem)] font-semibold leading-[0.97] tracking-[-0.055em] text-[var(--ink)]";
+const bodyCopy = "max-w-[40rem] text-[0.98rem] leading-8 text-[var(--ink-soft)] md:text-[1.03rem]";
+const ctaPrimary =
+  "inline-flex min-h-12 items-center justify-center rounded-full bg-[var(--accent)] px-6 text-sm font-semibold tracking-[-0.02em] text-white shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:bg-[var(--accent-strong)] hover:shadow-card-lg";
+const ctaSecondary =
+  "inline-flex min-h-12 items-center justify-center rounded-full border border-[color:var(--stroke-strong)] bg-white/82 px-6 text-sm font-semibold tracking-[-0.02em] text-[var(--ink)] backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-white";
+---
+
+<Layout
+  title="Suniye — Local dictation for macOS"
+  description="Local-first dictation for macOS. Hold one key, speak naturally, and your words appear right where your cursor is."
+>
+  <main class="overflow-x-clip bg-[var(--bg)] text-[var(--ink)]">
+    <section class="relative isolate min-h-screen overflow-hidden bg-[var(--hero-bg)] text-[var(--hero-ink)]">
+      <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(123,167,255,0.24),transparent_28%),radial-gradient(circle_at_86%_20%,rgba(255,255,255,0.82),transparent_22%),linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(242,244,250,0.6)_100%)]"></div>
+      <div class="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/70"></div>
+      <div class="pointer-events-none absolute inset-x-[-12%] bottom-[-18rem] h-[30rem] rounded-full bg-[radial-gradient(circle,rgba(19,90,255,0.16),transparent_58%)] blur-3xl"></div>
+
+      <div class={`${container} relative flex min-h-screen flex-col pb-12 pt-6 md:pb-16`}>
+        <header class="reveal-up z-20 flex items-center justify-between gap-4">
+          <a class="inline-flex items-center gap-3" href="#top" aria-label="Suniye home">
+            <img
+              src="/suniye-icon.png"
+              alt="Suniye app icon"
+              width="46"
+              height="46"
+              class="size-[46px] rounded-[15px] shadow-card"
+            />
+            <span class="text-[1.05rem] font-semibold tracking-[-0.02em] text-[var(--ink)]">Suniye</span>
+          </a>
+
+          <nav class="hidden items-center gap-7 text-[0.95rem] text-[var(--ink-soft)] lg:flex">
+            <a class="transition-colors duration-200 hover:text-[var(--ink)]" href="#proof">Why it works</a>
+            <a class="transition-colors duration-200 hover:text-[var(--ink)]" href="#workflow">How it flows</a>
+            <a class="transition-colors duration-200 hover:text-[var(--ink)]" href="#privacy">Privacy</a>
+            <a class="transition-colors duration-200 hover:text-[var(--ink)]" href="#faq">FAQ</a>
+          </nav>
+
+          <a
+            class={`${ctaSecondary} px-5`}
+            href="https://github.com/kishanhitk/suniye/releases/latest"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Download
+          </a>
+        </header>
+
+        <div
+          id="top"
+          class="grid flex-1 items-center gap-10 pb-6 pt-16 md:pt-20 lg:grid-cols-[minmax(0,0.9fr)_minmax(540px,1.1fr)] lg:gap-14"
+        >
+          <div class="max-w-[30rem]">
+            <p class={`${sectionLabel} reveal-up reveal-delay-1`}>For macOS</p>
+            <div class="reveal-up reveal-delay-2 mt-4">
+              <div class="text-[clamp(2.9rem,7vw,5.1rem)] font-semibold leading-[0.9] tracking-[-0.07em] text-[var(--ink)]">
+                Suniye
+              </div>
+              <h1 class="mt-5 max-w-[11ch] text-[clamp(2.1rem,4.2vw,3.65rem)] font-semibold leading-[0.98] tracking-[-0.06em] text-[var(--ink)]">
+                Private dictation for Mac.
+              </h1>
+            </div>
+            <p class={`${bodyCopy} reveal-up reveal-delay-3 mt-6 max-w-[30rem]`}>
+              Hold a key. Speak. Your words land at the cursor.
+            </p>
+
+            <div class="reveal-up reveal-delay-4 mt-8 flex flex-col gap-3 sm:flex-row">
+              <a
+                class={ctaPrimary}
+                href="https://github.com/kishanhitk/suniye/releases/latest"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Download for macOS
+              </a>
+              <a class={ctaSecondary} href="#workflow">See it in action</a>
+            </div>
+          </div>
+
+          <div class="reveal-up reveal-delay-4 relative">
+            <div class="absolute inset-x-[8%] top-[8%] -z-10 h-[62%] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.95),rgba(255,255,255,0))] blur-3xl"></div>
+
+            <div
+              class="hero-demo overflow-hidden rounded-[34px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(244,247,253,0.88))] shadow-[0_40px_120px_rgba(36,64,116,0.16)]"
+              data-hero-demo
+              data-state="idle"
+            >
+              <div class="flex items-center justify-between border-b border-[color:var(--stroke)] px-5 py-4">
+                <div class="flex items-center gap-2.5">
+                  <span class="size-2.5 rounded-full bg-[#ff5f57]"></span>
+                  <span class="size-2.5 rounded-full bg-[#febc2e]"></span>
+                  <span class="size-2.5 rounded-full bg-[#28c840]"></span>
+                </div>
+              </div>
+
+              <div class="relative min-h-[430px] overflow-hidden bg-[linear-gradient(180deg,rgba(248,250,255,0.96),rgba(240,244,252,0.9))] p-7 md:min-h-[470px] md:p-8">
+                <div class="max-w-[30rem] space-y-4">
+                  <div class="h-px w-28 bg-[var(--stroke)]"></div>
+                  <div class="h-px w-20 bg-[var(--stroke)]/70"></div>
+                </div>
+
+                <div class="mt-10 min-h-[320px] max-w-[35rem] text-[1rem] leading-8 text-[var(--ink-soft)] md:min-h-[360px]">
+                  <div class="hero-email prose prose-sm max-w-none text-[var(--ink-soft)] prose-p:my-0 prose-p:leading-8 prose-ol:my-0 prose-ul:my-0 prose-li:my-0 prose-li:leading-8 prose-strong:font-semibold prose-strong:text-[var(--ink)] prose-headings:text-[var(--ink)] prose-headings:font-semibold marker:text-[var(--ink-muted)] md:prose-[0.97rem]">
+                    <p class="hero-email-line">
+                      <span data-type-text>Subject: Launch plan update before review</span>
+                    </p>
+
+                    <p class="hero-email-line"><span data-type-text>Hi Maya,</span></p>
+
+                    <p class="hero-email-line">
+                      <span data-type-text>
+                        Quick update before lunch on the launch timeline. I wanted to send the clean version here so the whole team is aligned before the afternoon review, and so we can close the open points before design, QA, and product get on the same call later today.
+                      </span>
+                    </p>
+
+                    <p class="hero-email-line">
+                      <span data-type-text>
+                        The broad direction is still the same, but a few details changed after yesterday's review and I would rather send one clear note than let the thread keep expanding with partial updates.
+                      </span>
+                    </p>
+
+                    <p class="hero-email-line">
+                      <span data-type-text>Key changes</span>
+                    </p>
+
+                    <ol class="ml-0 space-y-2 list-none pl-0">
+                      <li class="hero-email-line">
+                        <span class="hero-list-marker" aria-hidden="true">1.</span>
+                        <span data-type-text>Move the design handoff to Thursday after testing signoff.</span>
+                      </li>
+                      <li class="hero-email-line">
+                        <span class="hero-list-marker" aria-hidden="true">2.</span>
+                        <span data-type-text>Update the estimate to reflect the extra QA pass and the extra time for review.</span>
+                      </li>
+                      <li class="hero-email-line">
+                        <span class="hero-list-marker" aria-hidden="true">3.</span>
+                        <span data-type-text>Keep the release note shorter so support can reuse it as-is.</span>
+                      </li>
+                    </ol>
+
+                    <p class="hero-email-line">
+                      <span data-type-text>Need from you</span>
+                    </p>
+
+                    <ul class="ml-0 space-y-2 list-none pl-0">
+                      <li class="hero-email-line">
+                        <span class="hero-list-marker" aria-hidden="true">•</span>
+                        <span data-type-text>Final approval on the revised timeline.</span>
+                      </li>
+                      <li class="hero-email-line">
+                        <span class="hero-list-marker" aria-hidden="true">•</span>
+                        <span data-type-text>Signoff on the copy before I send the full update.</span>
+                      </li>
+                      <li class="hero-email-line">
+                        <span class="hero-list-marker" aria-hidden="true">•</span>
+                        <span data-type-text>One quick note on whether we keep Friday as the external target.</span>
+                      </li>
+                    </ul>
+
+                    <p class="hero-email-line pt-2">
+                      <span data-type-text>
+                        If that all looks right, I will send the final version to the wider group and lock the schedule for the afternoon review.
+                      </span>
+                    </p>
+
+                    <p class="hero-email-line pt-2"><span data-type-text>Best,</span></p>
+                    <p class="hero-email-line"><span data-type-text>XYZ</span></p>
+                  </div>
+                </div>
+
+                <div class="absolute inset-x-0 bottom-7 flex justify-center">
+                  <div class="relative h-10 w-[160px]">
+                    <div class="hero-pill" aria-hidden="true">
+                      <div class="hero-pill-wave">
+                        <span class="indicator-bar"></span>
+                        <span class="indicator-bar"></span>
+                        <span class="indicator-bar"></span>
+                        <span class="indicator-bar"></span>
+                        <span class="indicator-bar"></span>
+                        <span class="indicator-bar"></span>
+                        <span class="indicator-bar"></span>
+                        <span class="indicator-bar"></span>
+                        <span class="indicator-bar"></span>
+                        <span class="indicator-bar"></span>
+                        <span class="indicator-bar"></span>
+                        <span class="indicator-bar"></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="proof" class="border-t border-[color:var(--stroke)] bg-white">
+      <div class={`${container} grid gap-10 py-18 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:py-24`}>
+        <div class="max-w-[22rem]">
+          <p class={sectionLabel}>Why it works</p>
+          <h2 class={`mt-4 ${sectionTitle}`}>
+            Why it works.
+          </h2>
+        </div>
+
+        <div class="grid gap-0 divide-y divide-[color:var(--stroke)]">
+          {proofPoints.map((item) => (
+            <div class="grid gap-3 py-6 md:grid-cols-[minmax(0,14rem)_1fr] md:items-start md:py-7">
+              <p class="text-[1.02rem] font-semibold tracking-[-0.02em] text-[var(--ink)]">{item.title}</p>
+              <p class="max-w-[34rem] text-[1rem] leading-8 text-[var(--ink-soft)]">{item.text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section id="workflow" class="bg-[var(--section-tint)] py-22 md:py-30">
+      <div class={`${container} grid gap-12 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:items-start`}>
+        <div class="lg:sticky lg:top-20">
+          <p class={sectionLabel}>How it flows</p>
+          <h2 class={`mt-4 max-w-[11ch] ${sectionTitle}`}>
+            Hold. Speak. Release. Continue.
+          </h2>
+          <p class={`${bodyCopy} mt-6 max-w-[31rem]`}>
+            Hold the key, talk, release, keep moving.
+          </p>
+
+          <div class="mt-10 overflow-hidden rounded-[28px] border border-[color:var(--stroke)] bg-[linear-gradient(180deg,rgba(18,26,43,0.98),rgba(11,17,30,1))] p-7 text-white shadow-[0_34px_80px_rgba(13,23,44,0.24)]">
+            <div class="flex items-center justify-between">
+              <p class="font-mono text-[0.72rem] uppercase tracking-[0.14em] text-white/58">Live</p>
+              <span class="rounded-full bg-white/10 px-3 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-white/72">
+                Ready
+              </span>
+            </div>
+
+            <div class="mt-10 space-y-6">
+              <div class="flex items-center gap-3">
+                <div class="flex size-12 items-center justify-center rounded-full bg-[var(--accent)]/18">
+                  <span class="size-3 rounded-full bg-[var(--accent)]"></span>
+                </div>
+                <div>
+                  <div class="text-lg font-semibold tracking-[-0.03em]">Fn held down</div>
+                </div>
+              </div>
+
+              <div class="flex h-24 items-end gap-2">
+                <span class="waveform-bar"></span>
+                <span class="waveform-bar"></span>
+                <span class="waveform-bar"></span>
+                <span class="waveform-bar"></span>
+                <span class="waveform-bar"></span>
+                <span class="waveform-bar"></span>
+                <span class="waveform-bar"></span>
+                <span class="waveform-bar"></span>
+                <span class="waveform-bar"></span>
+              </div>
+
+              <div class="rounded-[20px] border border-white/10 bg-white/6 p-5 text-[0.98rem] leading-8 text-white/84">
+                “send the project update before lunch”
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-16">
+          {workflow.map((step, index) => (
+            <div class="grid gap-5 border-t border-[color:var(--stroke)] pt-8 md:grid-cols-[80px_minmax(0,1fr)]">
+              <div class="font-mono text-[0.74rem] uppercase tracking-[0.14em] text-[var(--ink-muted)]">
+                0{index + 1}
+              </div>
+              <div>
+                <h3 class="text-[clamp(1.45rem,2.2vw,1.95rem)] font-semibold leading-[1.06] tracking-[-0.04em] text-[var(--ink)]">
+                  {step.title}
+                </h3>
+                <p class="mt-4 max-w-[35rem] text-[1rem] leading-8 text-[var(--ink-soft)]">
+                  {step.text}
+                </p>
+                <div class="mt-6 max-w-[35rem] border-l border-[var(--accent)]/35 pl-5 text-[0.98rem] leading-8 text-[var(--ink)]">
+                  {step.output}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-white py-22 md:py-28">
+      <div class={`${container} grid gap-10 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]`}>
+        <div>
+          <p class={sectionLabel}>Where it helps</p>
+          <h2 class={`mt-4 max-w-[10ch] ${sectionTitle}`}>
+            Built for ordinary work on a busy Mac.
+          </h2>
+        </div>
+
+        <div class="grid gap-x-10 gap-y-0 divide-y divide-[color:var(--stroke)] md:grid-cols-2 md:divide-y-0 md:[&>div:nth-child(odd)]:border-r md:[&>div:nth-child(odd)]:border-[color:var(--stroke)]">
+          {moments.map((item) => (
+            <div class="py-6 md:px-8 md:py-8 md:first:pt-0 md:nth-[2]:pt-0">
+              <div class="font-mono text-[0.72rem] uppercase tracking-[0.14em] text-[var(--ink-muted)]">
+                {item.label}
+              </div>
+              <p class="mt-3 max-w-[24rem] text-[1rem] leading-8 tracking-[-0.01em] text-[var(--ink)]">
+                {item.text}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section id="privacy" class="relative overflow-hidden bg-[var(--privacy-bg)] py-22 text-white md:py-30">
+      <div class="pointer-events-none absolute inset-x-[-10%] top-[-10rem] h-[22rem] rounded-full bg-[radial-gradient(circle,rgba(66,113,255,0.22),transparent_60%)] blur-3xl"></div>
+      <div class={`${container} relative grid gap-12 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]`}>
+        <div>
+          <p class="font-mono text-[0.74rem] uppercase tracking-[0.16em] text-white/50">Privacy is the product</p>
+          <h2 class={`mt-4 max-w-[10ch] ${sectionTitle} text-white`}>
+            Your voice stays yours.
+          </h2>
+          <p class="mt-6 max-w-[30rem] text-[1.05rem] leading-8 text-white/72">
+            Suniye transcribes on your Mac, then pastes the text where you are already working.
+          </p>
+        </div>
+
+        <div class="grid gap-0 overflow-hidden rounded-[30px] border border-white/10 bg-white/6 backdrop-blur-xl">
+          <div class="grid gap-5 border-b border-white/10 p-7 md:grid-cols-[minmax(0,13rem)_1fr] md:p-8">
+            <div class="font-mono text-[0.74rem] uppercase tracking-[0.14em] text-white/48">Always local</div>
+            <div>
+              <div class="text-[1.16rem] font-semibold tracking-[-0.03em] text-white">Speech recognition runs on-device</div>
+              <p class="mt-3 max-w-[34rem] text-[1rem] leading-8 text-white/68">
+                Your microphone input is processed on your Mac.
+              </p>
+            </div>
+          </div>
+
+          <div class="grid gap-5 p-7 md:grid-cols-[minmax(0,13rem)_1fr] md:p-8">
+            <div class="font-mono text-[0.74rem] uppercase tracking-[0.14em] text-white/48">Direct insertion</div>
+            <div>
+              <div class="text-[1.16rem] font-semibold tracking-[-0.03em] text-white">Text goes back to the active app</div>
+              <p class="mt-3 max-w-[34rem] text-[1rem] leading-8 text-white/68">
+                The point is speed and flow, not another assistant UI.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="bg-white py-22 md:py-28">
+      <div class={container}>
+        <div class="grid gap-10 lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]">
+          <div>
+            <p class={sectionLabel}>FAQ</p>
+            <h2 class={`mt-4 max-w-[9ch] ${sectionTitle}`}>
+              The practical part.
+            </h2>
+          </div>
+
+          <div class="divide-y divide-[color:var(--stroke)]">
+            {faq.map((item) => (
+              <div class="grid gap-4 py-6 md:grid-cols-[minmax(0,17rem)_1fr] md:gap-8 md:py-8">
+                <h3 class="text-[1.08rem] font-semibold tracking-[-0.03em] text-[var(--ink)]">{item.question}</h3>
+                <p class="max-w-[36rem] text-[1rem] leading-8 text-[var(--ink-soft)]">{item.answer}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-[var(--footer-tint)] py-16 md:py-20">
+      <div class={container}>
+        <div class="overflow-hidden rounded-[30px] border border-[color:var(--stroke-strong)] bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(244,247,253,0.82))] p-7 shadow-card-lg md:p-10">
+          <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <div>
+              <p class={sectionLabel}>Ready when you are</p>
+              <h2 class={`mt-4 max-w-[10ch] ${sectionTitle}`}>
+                Less typing. More momentum.
+              </h2>
+              <p class="mt-5 max-w-[33rem] text-[1rem] leading-8 text-[var(--ink-soft)]">
+                macOS 14+. Microphone and accessibility access required.
+              </p>
+            </div>
+
+            <div class="flex flex-col gap-3 sm:flex-row">
+              <a
+                class={ctaPrimary}
+                href="https://github.com/kishanhitk/suniye/releases/latest"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Download latest release
+              </a>
+              <a
+                class={ctaSecondary}
+                href="https://github.com/kishanhitk/suniye"
+                target="_blank"
+                rel="noreferrer"
+              >
+                View on GitHub
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script is:inline>
+    (() => {
+      const demo = document.querySelector("[data-hero-demo]");
+      if (!demo) return;
+
+      const targets = Array.from(demo.querySelectorAll("[data-type-text]"));
+      if (!targets.length) return;
+
+      const sourceText = targets.map((target) =>
+        (target.textContent || "").replace(/\s+/g, " ").trim()
+      );
+
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+      let timer = null;
+      let targetIndex = 0;
+      let charIndex = 0;
+
+      const clearTimer = () => {
+        if (timer !== null) {
+          window.clearTimeout(timer);
+          timer = null;
+        }
+      };
+
+      const schedule = (fn, ms) => {
+        clearTimer();
+        timer = window.setTimeout(fn, ms);
+      };
+
+      const setState = (state) => {
+        demo.setAttribute("data-state", state);
+      };
+
+      const resetTargets = () => {
+        targets.forEach((target) => {
+          target.textContent = "";
+          target.classList.remove("is-typing");
+          target.closest(".hero-email-line")?.classList.remove("has-content");
+        });
+      };
+
+      const fillTargets = () => {
+        targets.forEach((target, index) => {
+          target.textContent = sourceText[index] || "";
+          target.closest(".hero-email-line")?.classList.add("has-content");
+        });
+      };
+
+      const runLoop = () => {
+        if (reduced.matches) {
+          setState("idle");
+          fillTargets();
+          return;
+        }
+
+        setState("idle");
+        resetTargets();
+        targetIndex = 0;
+        charIndex = 0;
+
+        schedule(() => {
+          setState("listening");
+
+          const typeNext = () => {
+            const current = targets[targetIndex];
+            if (!current) {
+              schedule(() => {
+                setState("idle");
+                schedule(runLoop, 1000);
+              }, 700);
+              return;
+            }
+
+            const fullText = sourceText[targetIndex] || "";
+            current.classList.add("is-typing");
+            current.closest(".hero-email-line")?.classList.add("has-content");
+            charIndex += 1;
+            current.textContent = fullText.slice(0, charIndex);
+
+            if (charIndex < fullText.length) {
+              timer = window.setTimeout(typeNext, 9);
+              return;
+            }
+
+            current.classList.remove("is-typing");
+            targetIndex += 1;
+            charIndex = 0;
+            timer = window.setTimeout(typeNext, 42);
+          };
+
+          typeNext();
+        }, 700);
+      };
+
+      reduced.addEventListener("change", runLoop);
+      runLoop();
+    })();
+  </script>
+</Layout>
