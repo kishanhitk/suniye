@@ -17,4 +17,8 @@ final class MainWindowSectionTests: XCTestCase {
     func testDefaultSelectionIsDashboard() {
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye"]), .dashboard)
     }
+
+    func testStyleSectionUsesMagicFormatTitle() {
+        XCTAssertEqual(MainWindowSection.style.title, "Magic Format")
+    }
 }

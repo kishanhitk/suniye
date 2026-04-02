@@ -27,6 +27,28 @@ enum LLMModelPreset: String, CaseIterable, Codable {
         }
     }
 
+    var magicFormatLabel: String {
+        switch self {
+        case .gemini25Flash:
+            return "Fast"
+        case .gpt41Mini:
+            return "Balanced"
+        case .custom:
+            return "Custom"
+        }
+    }
+
+    var magicFormatDescription: String {
+        switch self {
+        case .gemini25Flash:
+            return "Quick fixes with lower cost."
+        case .gpt41Mini:
+            return "Best default for most dictation."
+        case .custom:
+            return "Use the exact model ID supported by your endpoint."
+        }
+    }
+
     var modelId: String {
         modelId(for: .openRouter)
     }
@@ -66,8 +88,8 @@ struct LLMSettings: Codable, Equatable {
     var baseSystemPrompt: String = LLMDefaults.defaultBaseSystemPrompt
     var systemPrompt: String = ""
     var keywordsRaw: String = ""
-    var timeoutSeconds: Double = 3
-    var maxTokens: Int = 128
+    var timeoutSeconds: Double = LLMDefaults.defaultTimeoutSeconds
+    var maxTokens: Int = LLMDefaults.defaultMaxTokens
 
     enum CodingKeys: String, CodingKey {
         case isEnabled
@@ -91,8 +113,8 @@ struct LLMSettings: Codable, Equatable {
         baseSystemPrompt: String = LLMDefaults.defaultBaseSystemPrompt,
         systemPrompt: String = "",
         keywordsRaw: String = "",
-        timeoutSeconds: Double = 3,
-        maxTokens: Int = 128
+        timeoutSeconds: Double = LLMDefaults.defaultTimeoutSeconds,
+        maxTokens: Int = LLMDefaults.defaultMaxTokens
     ) {
         self.isEnabled = isEnabled
         self.selectedModelPreset = selectedModelPreset
@@ -114,8 +136,8 @@ struct LLMSettings: Codable, Equatable {
         baseSystemPrompt = try container.decodeIfPresent(String.self, forKey: .baseSystemPrompt) ?? LLMDefaults.defaultBaseSystemPrompt
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         keywordsRaw = try container.decodeIfPresent(String.self, forKey: .keywordsRaw) ?? ""
-        timeoutSeconds = LLMDefaults.clampTimeout(try container.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? 3)
-        maxTokens = LLMDefaults.clampMaxTokens(try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? 128)
+        timeoutSeconds = LLMDefaults.clampTimeout(try container.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? LLMDefaults.defaultTimeoutSeconds)
+        maxTokens = LLMDefaults.clampMaxTokens(try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? LLMDefaults.defaultMaxTokens)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -174,14 +196,14 @@ struct LLMSettings: Codable, Equatable {
         guard !isEndpointValid else {
             return nil
         }
-        return "Enter a valid http(s) endpoint URL."
+        return "Enter a valid service URL."
     }
 
     var modelValidationError: String? {
         guard selectedModelPreset == .custom, validatedModelId == nil else {
             return nil
         }
-        return "Enter a valid model ID."
+        return "Enter a valid custom model name."
     }
 
     func displayModelId(for preset: LLMModelPreset) -> String {
@@ -196,6 +218,8 @@ struct LLMSettings: Codable, Equatable {
 
 enum LLMDefaults {
     static let defaultEndpointURLString = "https://openrouter.ai/api/v1/chat/completions"
+    static let defaultTimeoutSeconds = 3.0
+    static let defaultMaxTokens = 128
     static let minTimeoutSeconds = 1.0
     static let maxTimeoutSeconds = 15.0
     static let minMaxTokens = 32

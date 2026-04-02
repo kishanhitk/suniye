@@ -1,6 +1,20 @@
 import Foundation
 
 final class OpenRouterPostProcessor: LLMPostProcessor {
+    private enum RequestMode {
+        case polish(String)
+        case setupTest
+
+        var inputText: String {
+            switch self {
+            case let .polish(text):
+                text
+            case .setupTest:
+                "Connection test."
+            }
+        }
+    }
+
     private let session: URLSession
 
     init(session: URLSession = .shared) {
@@ -12,6 +26,14 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
         guard !trimmedInput.isEmpty else {
             throw LLMPostProcessorError.emptyOutput
         }
+        return try await sendRequest(mode: .polish(trimmedInput), config: config)
+    }
+
+    func testSetup(config: LLMConfig) async throws {
+        _ = try await sendRequest(mode: .setupTest, config: config)
+    }
+
+    private func sendRequest(mode: RequestMode, config: LLMConfig) async throws -> String {
         guard LLMDefaults.isValidModelId(config.modelId) else {
             throw LLMPostProcessorError.invalidConfiguration("model_id")
         }
@@ -19,7 +41,7 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
             throw LLMPostProcessorError.invalidConfiguration("api_key")
         }
 
-        let payload = makePayload(inputText: trimmedInput, config: config)
+        let payload = makePayload(mode: mode, config: config)
 
         var request = URLRequest(url: config.endpointURL)
         request.httpMethod = "POST"
@@ -62,37 +84,39 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
         }
     }
 
-    private func makePayload(inputText: String, config: LLMConfig) -> [String: Any] {
-        let keywordsSection: String
-        if config.keywords.isEmpty {
-            keywordsSection = "No keyword hints provided."
-        } else {
+    private func makePayload(mode: RequestMode, config: LLMConfig) -> [String: Any] {
+        var systemSections = [config.systemPrompt]
+
+        if !config.keywords.isEmpty {
             let joined = config.keywords.joined(separator: ", ")
-            keywordsSection = "Keyword hints: \(joined)"
+            systemSections.append("Keyword hints: \(joined)")
         }
 
-        let system = """
-\(config.systemPrompt)
+        if case .setupTest = mode {
+            systemSections.append("For this setup test, reply with OK.")
+        }
 
+        systemSections.append("""
 Rules:
 - Return plain text only.
 - No markdown.
 - No explanations or prefixes.
 - Preserve meaning and intent.
-\(keywordsSection)
-"""
+""")
+
+        let system = systemSections
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n\n")
 
         let messages: [[String: String]] = [
             ["role": "system", "content": system],
-            ["role": "user", "content": inputText],
+            ["role": "user", "content": mode.inputText],
         ]
 
         return [
             "model": config.modelId,
             "messages": messages,
-            "temperature": 0.1,
-            "top_p": 0.2,
-            "max_tokens": max(1, config.maxTokens),
+            "temperature": 0,
         ]
     }
 

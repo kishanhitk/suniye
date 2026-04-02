@@ -26,11 +26,11 @@ final class LLMSettingsStoreTests: XCTestCase {
         settings.customModelId = "   "
 
         XCTAssertNil(settings.validatedModelId)
-        XCTAssertEqual(settings.modelValidationError, "Enter a valid model ID.")
+        XCTAssertEqual(settings.modelValidationError, "Enter a valid custom model name.")
 
         settings.customModelId = "gpt-4.1-mini\nbeta"
         XCTAssertNil(settings.validatedModelId)
-        XCTAssertEqual(settings.modelValidationError, "Enter a valid model ID.")
+        XCTAssertEqual(settings.modelValidationError, "Enter a valid custom model name.")
     }
 
     func testStoreRoundTrip() {
@@ -96,7 +96,7 @@ final class LLMSettingsStoreTests: XCTestCase {
 
         XCTAssertNil(settings.validatedEndpointURL)
         XCTAssertFalse(settings.isEndpointValid)
-        XCTAssertEqual(settings.endpointValidationError, "Enter a valid http(s) endpoint URL.")
+        XCTAssertEqual(settings.endpointValidationError, "Enter a valid service URL.")
 
         settings.endpointURLString = "https://"
         XCTAssertNil(settings.validatedEndpointURL)
@@ -111,5 +111,12 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(LLMModelPreset.gemini25Flash.displayName, "Gemini 2.5 Flash")
         XCTAssertEqual(LLMModelPreset.gpt41Mini.displayName, "GPT-4.1 Mini")
         XCTAssertEqual(LLMModelPreset.gpt41Mini.subtitle, "OpenAI, balanced")
+    }
+
+    func testMagicFormatPresetMetadataMatchesFriendlyEditingStyles() {
+        XCTAssertEqual(LLMModelPreset.gemini25Flash.magicFormatLabel, "Fast")
+        XCTAssertEqual(LLMModelPreset.gpt41Mini.magicFormatLabel, "Balanced")
+        XCTAssertEqual(LLMModelPreset.custom.magicFormatLabel, "Custom")
+        XCTAssertEqual(LLMModelPreset.custom.magicFormatDescription, "Use the exact model ID supported by your endpoint.")
     }
 }

@@ -251,4 +251,6 @@ private final class NoopLLMPostProcessor: LLMPostProcessor {
     func polish(text: String, config: LLMConfig) async throws -> String {
         text
     }
+
+    func testSetup(config: LLMConfig) async throws {}
 }

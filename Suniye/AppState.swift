@@ -50,6 +50,80 @@ struct AttentionItem: Identifiable, Equatable {
     }
 }
 
+enum MagicFormatSetupState: Equatable {
+    case off
+    case needsAPIKey
+    case needsServiceSetup
+    case ready
+
+    var title: String {
+        switch self {
+        case .off:
+            return "Off"
+        case .needsAPIKey:
+            return "Needs API key"
+        case .needsServiceSetup:
+            return "Needs service setup"
+        case .ready:
+            return "Ready"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .off:
+            return "Turn it on to improve dictation before text is pasted."
+        case .needsAPIKey:
+            return "Add an API key to start using Magic Format."
+        case .needsServiceSetup:
+            return "Finish the service setup above."
+        case .ready:
+            return "Magic Format is ready to improve your text before it is pasted."
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .off:
+            return "pause.circle"
+        case .needsAPIKey, .needsServiceSetup:
+            return "exclamationmark.circle"
+        case .ready:
+            return "checkmark.circle.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .off:
+            return MainWindowPalette.secondaryText
+        case .needsAPIKey, .needsServiceSetup:
+            return .orange
+        case .ready:
+            return .green
+        }
+    }
+}
+
+struct MagicFormatSetupTestResult: Equatable {
+    enum Severity: Equatable {
+        case success
+        case error
+
+        var color: Color {
+            switch self {
+            case .success:
+                .green
+            case .error:
+                .red
+            }
+        }
+    }
+
+    let message: String
+    let severity: Severity
+}
+
 @MainActor
 @Observable
 final class AppState {
@@ -215,7 +289,7 @@ final class AppState {
     var llmKeywordsRaw = "" {
         didSet { persistLLMSettings() }
     }
-    var llmTimeoutSeconds = 3.0 {
+    var llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds {
         didSet {
             let clamped = LLMDefaults.clampTimeout(llmTimeoutSeconds)
             if llmTimeoutSeconds != clamped {
@@ -225,7 +299,7 @@ final class AppState {
             persistLLMSettings()
         }
     }
-    var llmMaxTokens = 128 {
+    var llmMaxTokens = LLMDefaults.defaultMaxTokens {
         didSet {
             let clamped = LLMDefaults.clampMaxTokens(llmMaxTokens)
             if llmMaxTokens != clamped {
@@ -244,6 +318,8 @@ final class AppState {
         }
     }
     var llmKeyOperationError: String?
+    var isMagicFormatSetupTestInProgress = false
+    var magicFormatSetupTestResult: MagicFormatSetupTestResult?
 
     var launchAtLoginStatus: LaunchAtLoginStatus = .disabled
     var launchAtLoginError: String?
@@ -253,7 +329,30 @@ final class AppState {
     }
 
     var llmKeyStatusText: String {
-        hasLLMAPIKey ? "API key: saved" : "API key: missing"
+        hasLLMAPIKey ? "Connected" : "Not connected"
+    }
+
+    func canTestMagicFormatSetup(apiKeyDraft: String) -> Bool {
+        guard llmEnabled, !isMagicFormatSetupTestInProgress else {
+            return false
+        }
+        guard llmEndpointValidationError == nil, llmModelValidationError == nil else {
+            return false
+        }
+        return effectiveMagicFormatTestAPIKey(apiKeyDraft: apiKeyDraft) != nil
+    }
+
+    var magicFormatSetupState: MagicFormatSetupState {
+        guard llmEnabled else {
+            return .off
+        }
+        if llmEndpointValidationError != nil || llmModelValidationError != nil {
+            return .needsServiceSetup
+        }
+        if !hasLLMAPIKey {
+            return .needsAPIKey
+        }
+        return .ready
     }
 
     var llmEndpointValidationError: String? {
@@ -265,16 +364,7 @@ final class AppState {
     }
 
     var llmStatusHint: String? {
-        if llmEnabled, llmEndpointValidationError != nil {
-            return "LLM enabled but endpoint URL invalid"
-        }
-        if llmEnabled, llmModelValidationError != nil {
-            return "LLM enabled but custom model ID invalid"
-        }
-        if llmEnabled && !hasLLMAPIKey {
-            return "LLM enabled but API key missing"
-        }
-        return nil
+        magicFormatSetupState.detail
     }
 
     var llmSelectedModelIdPreview: String {
@@ -477,7 +567,7 @@ final class AppState {
             items.append(
                 AttentionItem(
                     id: "llm-endpoint-invalid",
-                    title: "LLM endpoint URL invalid",
+                    title: "Magic Format needs service setup",
                     detail: endpointValidationError,
                     severity: .warning,
                     recommendedSection: .style
@@ -489,7 +579,7 @@ final class AppState {
             items.append(
                 AttentionItem(
                     id: "llm-model-invalid",
-                    title: "LLM model ID invalid",
+                    title: "Magic Format needs service setup",
                     detail: modelValidationError,
                     severity: .warning,
                     recommendedSection: .style
@@ -501,8 +591,8 @@ final class AppState {
             items.append(
                 AttentionItem(
                     id: "llm-key-missing",
-                    title: "LLM API key missing",
-                    detail: "LLM polishing is enabled, but no LLM API key is saved.",
+                    title: "Magic Format needs an API key",
+                    detail: "Magic Format is on, but your API key is missing.",
                     severity: .warning,
                     recommendedSection: .style
                 )
@@ -728,7 +818,7 @@ final class AppState {
     func saveLLMAPIKey(_ key: String) {
         let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else {
-            llmKeyOperationError = "API key cannot be empty"
+            llmKeyOperationError = "API key can't be empty."
             onStateChange?()
             return
         }
@@ -737,9 +827,10 @@ final class AppState {
             try keychainService.setLLMKey(normalized)
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
+            clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key saved")
         } catch {
-            llmKeyOperationError = "Failed to save API key"
+            llmKeyOperationError = "Couldn't save the API key."
             AppLogger.shared.log(.error, "llm api key save failed")
             onStateChange?()
         }
@@ -750,11 +841,65 @@ final class AppState {
             try keychainService.deleteLLMKey()
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
+            clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key cleared")
         } catch {
-            llmKeyOperationError = "Failed to clear API key"
+            llmKeyOperationError = "Couldn't clear the API key."
             AppLogger.shared.log(.error, "llm api key clear failed")
             onStateChange?()
+        }
+    }
+
+    func clearMagicFormatSetupTestResult() {
+        magicFormatSetupTestResult = nil
+    }
+
+    func testMagicFormatSetup(apiKeyDraft: String) async {
+        clearMagicFormatSetupTestResult()
+
+        guard llmEnabled else {
+            return
+        }
+        guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
+            return
+        }
+        guard let modelId = currentLLMSettings().validatedModelId else {
+            return
+        }
+        guard let apiKey = effectiveMagicFormatTestAPIKey(apiKeyDraft: apiKeyDraft) else {
+            return
+        }
+
+        isMagicFormatSetupTestInProgress = true
+        let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
+        let startTime = Date()
+
+        defer {
+            isMagicFormatSetupTestInProgress = false
+        }
+
+        do {
+            try await llmPostProcessor.testSetup(config: config)
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: "Connection works.",
+                severity: .success
+            )
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AppLogger.shared.log(.info, "magic format setup test success model=\(config.modelId) latency_ms=\(latencyMs)")
+        } catch let error as LLMPostProcessorError {
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: magicFormatSetupTestMessage(for: error),
+                severity: .error
+            )
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AppLogger.shared.log(.warning, "magic format setup test failed reason=\(error.logValue) model=\(config.modelId) latency_ms=\(latencyMs)")
+        } catch {
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: "Couldn't reach that service URL.",
+                severity: .error
+            )
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AppLogger.shared.log(.warning, "magic format setup test failed reason=unknown model=\(config.modelId) latency_ms=\(latencyMs)")
         }
     }
 
@@ -1438,22 +1583,34 @@ final class AppState {
     private func loadLLMSettings() {
         isHydratingLLMSettings = true
         let settings = llmSettingsStore.load()
+        let mergedPrompt = Self.mergedMagicFormatPrompt(
+            basePrompt: settings.baseSystemPrompt,
+            extraPrompt: settings.systemPrompt
+        )
+        let shouldNormalizeHiddenSettings = settings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || settings.timeoutSeconds != LLMDefaults.defaultTimeoutSeconds
+            || settings.maxTokens != LLMDefaults.defaultMaxTokens
         llmEnabled = settings.isEnabled
         llmSelectedModelPreset = settings.selectedModelPreset
         llmCustomModelId = settings.customModelId
         llmEndpointURLString = settings.endpointURLString
-        llmBaseSystemPrompt = settings.baseSystemPrompt
-        llmSystemPrompt = settings.systemPrompt
+        llmBaseSystemPrompt = mergedPrompt
+        llmSystemPrompt = ""
         llmKeywordsRaw = settings.keywordsRaw
-        llmTimeoutSeconds = LLMDefaults.clampTimeout(settings.timeoutSeconds)
-        llmMaxTokens = LLMDefaults.clampMaxTokens(settings.maxTokens)
+        llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
+        llmMaxTokens = LLMDefaults.defaultMaxTokens
         isHydratingLLMSettings = false
+
+        if shouldNormalizeHiddenSettings {
+            persistLLMSettings()
+        }
     }
 
     private func persistLLMSettings() {
         guard !isHydratingLLMSettings else {
             return
         }
+        clearMagicFormatSetupTestResult()
         llmSettingsStore.save(currentLLMSettings())
         onStateChange?()
     }
@@ -1465,11 +1622,23 @@ final class AppState {
             customModelId: llmCustomModelId,
             endpointURLString: llmEndpointURLString,
             baseSystemPrompt: llmBaseSystemPrompt,
-            systemPrompt: llmSystemPrompt,
+            systemPrompt: "",
             keywordsRaw: llmKeywordsRaw,
-            timeoutSeconds: llmTimeoutSeconds,
-            maxTokens: llmMaxTokens
+            timeoutSeconds: LLMDefaults.defaultTimeoutSeconds,
+            maxTokens: LLMDefaults.defaultMaxTokens
         )
+    }
+
+    private static func mergedMagicFormatPrompt(basePrompt: String, extraPrompt: String) -> String {
+        let normalizedBase = basePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedExtra = extraPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let visiblePrompt = normalizedBase.isEmpty ? LLMDefaults.defaultBaseSystemPrompt : normalizedBase
+
+        guard !normalizedExtra.isEmpty, !visiblePrompt.contains(normalizedExtra) else {
+            return visiblePrompt
+        }
+
+        return "\(visiblePrompt)\n\n\(normalizedExtra)"
     }
 
     private func openSystemSettings(urlCandidates: [String]) {
@@ -1496,9 +1665,35 @@ final class AppState {
             systemPrompt: settings.composedSystemPrompt,
             keywords: settings.keywords,
             timeoutSeconds: settings.timeoutSeconds,
-            maxTokens: settings.maxTokens,
             apiKey: apiKey
         )
+    }
+
+    private func effectiveMagicFormatTestAPIKey(apiKeyDraft: String) -> String? {
+        let normalizedDraft = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedDraft.isEmpty {
+            return normalizedDraft
+        }
+
+        guard let savedKey = try? keychainService.getLLMKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !savedKey.isEmpty else {
+            return nil
+        }
+
+        return savedKey
+    }
+
+    private func magicFormatSetupTestMessage(for error: LLMPostProcessorError) -> String {
+        switch error {
+        case .unauthorized:
+            return "The API key was rejected."
+        case .timeout, .network:
+            return "Couldn't reach that service URL."
+        case .provider:
+            return "That model is not supported on this endpoint."
+        case .malformedResponse, .emptyOutput, .invalidConfiguration:
+            return "The service responded, but not in a compatible format."
+        }
     }
 
     private func setFloatingIndicatorState(_ state: FloatingIndicatorState) {

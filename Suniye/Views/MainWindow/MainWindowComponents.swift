@@ -84,7 +84,7 @@ enum AppTypography {
 }
 
 enum AppMetrics {
-    static let sidebarWidth: CGFloat = 228
+    static let sidebarWidth: CGFloat = 208
     static let sidebarBrandTop: CGFloat = 24
     static let sidebarBrandHorizontal: CGFloat = 24
     static let sidebarBrandBottom: CGFloat = 24
@@ -162,6 +162,57 @@ struct DetailScrollContainer<Content: View>: View {
             .padding(.top, AppMetrics.detailPaddingTop)
             .padding(.bottom, AppMetrics.detailPaddingBottom)
             .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+}
+
+struct NativePopupPicker<Item: Hashable>: NSViewRepresentable {
+    let items: [Item]
+    @Binding var selection: Item
+    let title: (Item) -> String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selection: $selection)
+    }
+
+    func makeNSView(context: Context) -> NSPopUpButton {
+        let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.selectionDidChange(_:))
+        return button
+    }
+
+    func updateNSView(_ nsView: NSPopUpButton, context: Context) {
+        context.coordinator.items = items
+
+        let titles = items.map(title)
+        let needsReload = nsView.itemTitles != titles
+
+        if needsReload {
+            nsView.removeAllItems()
+            nsView.addItems(withTitles: titles)
+        }
+
+        if let selectedIndex = items.firstIndex(of: selection), nsView.indexOfSelectedItem != selectedIndex {
+            nsView.selectItem(at: selectedIndex)
+        }
+    }
+
+    final class Coordinator: NSObject {
+        @Binding var selection: Item
+        var items: [Item] = []
+
+        init(selection: Binding<Item>) {
+            _selection = selection
+        }
+
+        @objc func selectionDidChange(_ sender: NSPopUpButton) {
+            let index = sender.indexOfSelectedItem
+            guard items.indices.contains(index) else {
+                return
+            }
+            selection = items[index]
         }
     }
 }
@@ -429,6 +480,8 @@ struct SettingsToggleRow: View {
                 Spacer(minLength: 12)
                 Toggle("", isOn: $isOn)
                     .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
                     .disabled(disabled)
             }
             if let detail {
