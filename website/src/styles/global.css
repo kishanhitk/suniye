@@ -118,6 +118,35 @@ html {
   animation: fade-in 0.8s ease 1.2s forwards;
 }
 
+/* ── Copy button icon swap ────────────────── */
+
+.copy-btn {
+  position: relative;
+}
+
+.copy-btn .copy-icon,
+.copy-btn .check-icon {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.copy-btn .check-icon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+.copy-btn.copied .copy-icon {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+.copy-btn.copied .check-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+
 /* ── Step connector line ───────────────────── */
 
 .step-line {
