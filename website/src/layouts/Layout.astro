@@ -7,8 +7,8 @@ interface Props {
 }
 
 const {
-  title = "Suniye | Private Dictation For macOS",
-  description = "Hold one key, speak naturally, and Suniye turns your voice into text across your Mac."
+  title = "Suniye — Private Dictation for macOS",
+  description = "Open-source, local-first dictation. Hold one key, speak, and your words appear as text — right where your cursor is. No audio leaves your Mac.",
 } = Astro.props;
 ---
 
@@ -19,14 +19,14 @@ const {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#f3f5fb" />
+    <meta name="theme-color" content="#faf8f5" />
     <link rel="icon" type="image/png" href="/suniye-icon.png" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/suniye-icon.png" />
   </head>
-  <body class="min-w-[320px] bg-[var(--bg)] font-sans text-[var(--ink)] antialiased">
+  <body class="min-w-[320px] bg-bg font-body text-ink antialiased">
     <slot />
   </body>
 </html>
