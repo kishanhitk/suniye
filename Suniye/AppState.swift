@@ -330,7 +330,7 @@ final class AppState {
     }
 
     var llmKeyStatusText: String {
-        if isMagicFormatSetupVerified {
+        if hasLLMAPIKey && isMagicFormatSetupVerified {
             return "Connected"
         }
         return hasLLMAPIKey ? "Saved" : "Not connected"

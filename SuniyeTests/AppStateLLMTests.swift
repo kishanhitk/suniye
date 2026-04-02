@@ -241,6 +241,28 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(try keychain.getLLMKey(), "saved-key")
     }
 
+    func testTestMagicFormatSetupWithDraftKeyDoesNotMarkUnsavedKeyAsConnected() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        await appState.testMagicFormatSetup(apiKeyDraft: "draft-key")
+
+        XCTAssertEqual(appState.llmKeyStatusText, "Not connected")
+        XCTAssertEqual(
+            appState.magicFormatSetupTestResult,
+            MagicFormatSetupTestResult(message: "Connection works.", severity: .success)
+        )
+    }
+
     func testTestMagicFormatSetupUsesSavedKeyWhenDraftIsEmpty() async {
         let fakeLLM = CapturingLLMPostProcessor(result: .success("polished"))
         let keychain = TestKeychainService(value: "saved-key")
