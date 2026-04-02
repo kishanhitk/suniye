@@ -1,0 +1,8 @@
+{
+  "name": "suniye-repo",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix website install && npm --prefix website run build && rm -rf dist && cp -R website/dist dist",
+    "dev": "npm --prefix website run dev"
+  }
+}
