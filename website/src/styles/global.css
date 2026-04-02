@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/* ── Fonts ─────────────────────────────────── */
+
+@font-face {
+  font-family: "Fragment Mono";
+  src: url("/fonts/FragmentMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fragment Mono";
+  src: url("/fonts/FragmentMono-Italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Google Sans";
+  src: url("/fonts/GoogleSans-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Theme tokens ──────────────────────────── */
+/* Change --color-accent to retheme the entire site */
+
+@theme {
+  --color-bg: #faf8f5;
+  --color-ink: #1a1a1a;
+  --color-muted: #6b635a;
+  --color-accent: #c4441a;
+  --color-accent-hover: #a33612;
+  --color-surface: #f0ede8;
+  --color-border: #e2ddd5;
+
+  --font-display: "Fragment Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-body: "Google Sans", system-ui, -apple-system, sans-serif;
+}
+
+/* ── Base ───────────────────────────────────── */
+
+html {
+  background-color: var(--color-bg);
+}
+
+::selection {
+  background-color: var(--color-accent);
+  color: #fff;
+}
+
+/* ── Hero word-reveal animation ────────────── */
+
+@keyframes word-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.hero-word {
+  opacity: 0;
+  display: inline-block;
+  margin-right: 0.275em;
+  animation: word-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* ── Waveform draw animation ───────────────── */
+
+@keyframes draw-wave {
+  from {
+    stroke-dashoffset: 500;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.waveform-path {
+  stroke-dasharray: 500;
+  stroke-dashoffset: 500;
+  animation: draw-wave 1.8s cubic-bezier(0.22, 1, 0.36, 1) 0.6s forwards;
+}
+
+/* ── Scroll-triggered reveal ───────────────── */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Subtle fade-in for lighter elements ───── */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.fade-in {
+  opacity: 0;
+  animation: fade-in 0.8s ease 1.2s forwards;
+}
+
+/* ── Step connector line ───────────────────── */
+
+.step-line {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--color-border) 0,
+    var(--color-border) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  height: 2px;
+}

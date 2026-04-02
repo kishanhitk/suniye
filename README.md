@@ -1,15 +1,18 @@
 # Suniye
 
-A local-first dictation app for macOS. Hold a key, speak, and your words appear as text — right where your cursor is. (*Suniye* is Hindi for "listen.")
+Open-source, local-first dictation for macOS. Hold a key, speak, and your words appear as text — right where your cursor is. No audio leaves your machine. (*Suniye* is Hindi for "listen.")
 
 > **Alpha** — Expect rough edges and breaking changes.
 
+**[Website](https://suniye.kishans.in)** · **[Download](https://github.com/kishanhitk/suniye/releases/latest)** · **[Report Bug](https://github.com/kishanhitk/suniye/issues)**
+
 ## Why Suniye?
 
-- **Private by default** — Speech recognition runs entirely on your Mac. No audio leaves your machine.
-- **Works everywhere** — Inserts text directly into whichever app you're using.
+- **Private by default** — A 600 MB speech model runs entirely on your Mac. No audio leaves your machine. No cloud. No training data.
+- **Works everywhere** — Inserts text directly into whichever app you're using via macOS Accessibility APIs.
+- **Instant** — No network round-trip. Your voice becomes text in milliseconds, not seconds.
 - **One shortcut** — Hold a key (configurable), talk, release. That's it.
-- **Optional LLM cleanup** — Connect an LLM to polish transcriptions, fix grammar, or apply custom vocabulary.
+- **Optional LLM cleanup** — Connect any OpenAI-compatible endpoint to polish transcriptions, fix grammar, or apply domain-specific vocabulary.
 
 ## Install
 
