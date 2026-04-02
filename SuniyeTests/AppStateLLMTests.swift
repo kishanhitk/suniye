@@ -96,7 +96,7 @@ final class AppStateLLMTests: XCTestCase {
 
         XCTAssertEqual(output, "raw text")
         XCTAssertEqual(fakeLLM.callCount, 0)
-        XCTAssertEqual(appState.llmEndpointValidationError, "Enter a valid http(s) endpoint URL.")
+        XCTAssertEqual(appState.llmEndpointValidationError, "Enter a valid service URL.")
     }
 
     func testToggleOnWithInvalidCustomModelFallsBackToRawWithoutCallingProvider() async {
@@ -118,7 +118,7 @@ final class AppStateLLMTests: XCTestCase {
 
         XCTAssertEqual(output, "raw text")
         XCTAssertEqual(fakeLLM.callCount, 0)
-        XCTAssertEqual(appState.llmModelValidationError, "Enter a valid model ID.")
+        XCTAssertEqual(appState.llmModelValidationError, "Enter a valid custom model name.")
     }
 
     func testAttentionItemsIncludeMissingLLMKeyWhenEnabled() {
@@ -193,7 +193,282 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(fakeLLM.lastConfig?.modelId, "gpt-4.1-mini")
     }
 
-    func testLLMRuntimeSettingsClampAndPersist() {
+    func testCanTestMagicFormatSetupRequiresEnabledValidConfigAndKey() {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+
+        XCTAssertFalse(appState.canTestMagicFormatSetup(apiKeyDraft: "draft-key"))
+
+        appState.llmEnabled = true
+        XCTAssertTrue(appState.canTestMagicFormatSetup(apiKeyDraft: "draft-key"))
+
+        appState.llmEndpointURLString = "not a url"
+        XCTAssertFalse(appState.canTestMagicFormatSetup(apiKeyDraft: "draft-key"))
+
+        appState.llmEndpointURLString = LLMDefaults.defaultEndpointURLString
+        appState.llmSelectedModelPreset = .custom
+        appState.llmCustomModelId = "   "
+        XCTAssertFalse(appState.canTestMagicFormatSetup(apiKeyDraft: "draft-key"))
+
+        appState.llmSelectedModelPreset = .gpt41Mini
+        appState.llmCustomModelId = ""
+        XCTAssertFalse(appState.canTestMagicFormatSetup(apiKeyDraft: ""))
+    }
+
+    func testTestMagicFormatSetupUsesDraftKeyWithoutSavingIt() async throws {
+        let fakeLLM = CapturingLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "saved-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        await appState.testMagicFormatSetup(apiKeyDraft: "draft-key")
+
+        XCTAssertEqual(fakeLLM.lastTestConfig?.apiKey, "draft-key")
+        XCTAssertEqual(try keychain.getLLMKey(), "saved-key")
+    }
+
+    func testTestMagicFormatSetupWithDraftKeyDoesNotMarkUnsavedKeyAsConnected() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        await appState.testMagicFormatSetup(apiKeyDraft: "draft-key")
+
+        XCTAssertEqual(appState.llmKeyStatusText, "Not connected")
+        XCTAssertEqual(
+            appState.magicFormatSetupTestResult,
+            MagicFormatSetupTestResult(message: "Connection works.", severity: .success)
+        )
+    }
+
+    func testTestMagicFormatSetupUsesSavedKeyWhenDraftIsEmpty() async {
+        let fakeLLM = CapturingLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "saved-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        await appState.testMagicFormatSetup(apiKeyDraft: "   ")
+
+        XCTAssertEqual(fakeLLM.lastTestConfig?.apiKey, "saved-key")
+    }
+
+    func testTestMagicFormatSetupTracksProgressAndSuccessResult() async {
+        let fakeLLM = BlockingLLMPostProcessor()
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        let task = Task {
+            await appState.testMagicFormatSetup(apiKeyDraft: "")
+        }
+
+        await fakeLLM.waitUntilStarted()
+        XCTAssertTrue(appState.isMagicFormatSetupTestInProgress)
+        XCTAssertNil(appState.magicFormatSetupTestResult)
+
+        fakeLLM.resume()
+        await task.value
+
+        XCTAssertFalse(appState.isMagicFormatSetupTestInProgress)
+        XCTAssertEqual(
+            appState.magicFormatSetupTestResult,
+            MagicFormatSetupTestResult(message: "Connection works.", severity: .success)
+        )
+        XCTAssertEqual(appState.llmKeyStatusText, "Connected")
+    }
+
+    func testTestMagicFormatSetupIgnoresStaleResultAfterSettingsChange() async {
+        let fakeLLM = BlockingLLMPostProcessor()
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        let task = Task {
+            await appState.testMagicFormatSetup(apiKeyDraft: "")
+        }
+
+        await fakeLLM.waitUntilStarted()
+        XCTAssertTrue(appState.isMagicFormatSetupTestInProgress)
+
+        appState.llmEndpointURLString = "not a url"
+
+        XCTAssertFalse(appState.isMagicFormatSetupTestInProgress)
+        XCTAssertNil(appState.magicFormatSetupTestResult)
+
+        fakeLLM.resume()
+        await task.value
+
+        XCTAssertNil(appState.magicFormatSetupTestResult)
+        XCTAssertFalse(appState.isMagicFormatSetupTestInProgress)
+    }
+
+    func testTestMagicFormatSetupMapsUnauthorizedError() async {
+        let fakeLLM = FakeLLMPostProcessor(
+            result: .success("polished"),
+            testSetupResult: .failure(LLMPostProcessorError.unauthorized)
+        )
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        await appState.testMagicFormatSetup(apiKeyDraft: "")
+
+        XCTAssertEqual(
+            appState.magicFormatSetupTestResult,
+            MagicFormatSetupTestResult(message: "The API key was rejected.", severity: .error)
+        )
+    }
+
+    func testTestMagicFormatSetupMapsNetworkError() async {
+        let fakeLLM = FakeLLMPostProcessor(
+            result: .success("polished"),
+            testSetupResult: .failure(LLMPostProcessorError.timeout)
+        )
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        await appState.testMagicFormatSetup(apiKeyDraft: "")
+
+        XCTAssertEqual(
+            appState.magicFormatSetupTestResult,
+            MagicFormatSetupTestResult(message: "Couldn't reach that service URL.", severity: .error)
+        )
+    }
+
+    func testTestMagicFormatSetupMapsProviderError() async {
+        let fakeLLM = FakeLLMPostProcessor(
+            result: .success("polished"),
+            testSetupResult: .failure(LLMPostProcessorError.provider("http_400"))
+        )
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        await appState.testMagicFormatSetup(apiKeyDraft: "")
+
+        XCTAssertEqual(
+            appState.magicFormatSetupTestResult,
+            MagicFormatSetupTestResult(
+                message: "HTTP 400: the service rejected this setup. Check the URL and model.",
+                severity: .error
+            )
+        )
+    }
+
+    func testTestMagicFormatSetupMapsProvider404ErrorToEndpointMessage() async {
+        let fakeLLM = FakeLLMPostProcessor(
+            result: .success("polished"),
+            testSetupResult: .failure(LLMPostProcessorError.provider("http_404"))
+        )
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        await appState.testMagicFormatSetup(apiKeyDraft: "")
+
+        XCTAssertEqual(
+            appState.magicFormatSetupTestResult,
+            MagicFormatSetupTestResult(message: "HTTP 404: service URL not found.", severity: .error)
+        )
+    }
+
+    func testTestMagicFormatSetupMapsMalformedResponseError() async {
+        let fakeLLM = FakeLLMPostProcessor(
+            result: .success("polished"),
+            testSetupResult: .failure(LLMPostProcessorError.malformedResponse)
+        )
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        await appState.testMagicFormatSetup(apiKeyDraft: "")
+
+        XCTAssertEqual(
+            appState.magicFormatSetupTestResult,
+            MagicFormatSetupTestResult(message: "The service responded, but not in a compatible format.", severity: .error)
+        )
+    }
+
+    func testHiddenLLMAdvancedSettingsPersistAsDefaults() {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
         let keychain = TestKeychainService(value: "api-key")
         let store = TestLLMSettingsStore()
@@ -206,39 +481,134 @@ final class AppStateLLMTests: XCTestCase {
 
         appState.llmTimeoutSeconds = 99
         appState.llmMaxTokens = 900
+        appState.llmSystemPrompt = "old hidden prompt"
 
         XCTAssertEqual(appState.llmTimeoutSeconds, LLMDefaults.maxTimeoutSeconds)
         XCTAssertEqual(appState.llmMaxTokens, LLMDefaults.maxMaxTokens)
-        XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.maxTimeoutSeconds)
-        XCTAssertEqual(store.latest.maxTokens, LLMDefaults.maxMaxTokens)
+        XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.defaultTimeoutSeconds)
+        XCTAssertEqual(store.latest.maxTokens, LLMDefaults.defaultMaxTokens)
+        XCTAssertEqual(store.latest.systemPrompt, "")
+    }
 
-        appState.llmTimeoutSeconds = 0
-        appState.llmMaxTokens = 1
+    func testLoadMergesLegacyHiddenPromptAndClearsHiddenSettings() {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+        store.save(
+            LLMSettings(
+                isEnabled: true,
+                selectedModelPreset: .gpt41Mini,
+                customModelId: "",
+                endpointURLString: LLMDefaults.defaultEndpointURLString,
+                baseSystemPrompt: "BASE",
+                systemPrompt: "USER",
+                keywordsRaw: "",
+                timeoutSeconds: 9,
+                maxTokens: 256
+            )
+        )
 
-        XCTAssertEqual(appState.llmTimeoutSeconds, LLMDefaults.minTimeoutSeconds)
-        XCTAssertEqual(appState.llmMaxTokens, LLMDefaults.minMaxTokens)
-        XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.minTimeoutSeconds)
-        XCTAssertEqual(store.latest.maxTokens, LLMDefaults.minMaxTokens)
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+
+        XCTAssertEqual(appState.llmBaseSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(appState.llmSystemPrompt, "")
+        XCTAssertEqual(store.latest.systemPrompt, "")
+        XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.defaultTimeoutSeconds)
+        XCTAssertEqual(store.latest.maxTokens, LLMDefaults.defaultMaxTokens)
+    }
+
+    func testLoadPreservesLegacyHiddenPromptWhenItMatchesOnlySubstringOfBasePrompt() {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+        store.save(
+            LLMSettings(
+                isEnabled: true,
+                selectedModelPreset: .gpt41Mini,
+                customModelId: "",
+                endpointURLString: LLMDefaults.defaultEndpointURLString,
+                baseSystemPrompt: "Preserve meaning and intent.",
+                systemPrompt: "Preserve meaning",
+                keywordsRaw: "",
+                timeoutSeconds: 9,
+                maxTokens: 256
+            )
+        )
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+
+        XCTAssertEqual(
+            appState.llmBaseSystemPrompt,
+            "Preserve meaning and intent.\n\nPreserve meaning"
+        )
+        XCTAssertEqual(appState.llmSystemPrompt, "")
+        XCTAssertEqual(store.latest.systemPrompt, "")
+    }
+
+    func testLoadDoesNotDuplicateLegacyHiddenPromptWhenAlreadyMergedIntoBasePrompt() {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+        store.save(
+            LLMSettings(
+                isEnabled: true,
+                selectedModelPreset: .gpt41Mini,
+                customModelId: "",
+                endpointURLString: LLMDefaults.defaultEndpointURLString,
+                baseSystemPrompt: "BASE\n\nUSER",
+                systemPrompt: "USER",
+                keywordsRaw: "",
+                timeoutSeconds: 9,
+                maxTokens: 256
+            )
+        )
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+
+        XCTAssertEqual(appState.llmBaseSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(appState.llmSystemPrompt, "")
+        XCTAssertEqual(store.latest.systemPrompt, "")
     }
 }
 
 private final class FakeLLMPostProcessor: LLMPostProcessor {
     private let result: Result<String, Error>
+    private let testSetupResult: Result<Void, Error>
     private(set) var callCount = 0
+    private(set) var setupTestCallCount = 0
 
-    init(result: Result<String, Error>) {
+    init(result: Result<String, Error>, testSetupResult: Result<Void, Error> = .success(())) {
         self.result = result
+        self.testSetupResult = testSetupResult
     }
 
     func polish(text: String, config: LLMConfig) async throws -> String {
         callCount += 1
         return try result.get()
     }
+
+    func testSetup(config: LLMConfig) async throws {
+        setupTestCallCount += 1
+        try testSetupResult.get()
+    }
 }
 
 private final class CapturingLLMPostProcessor: LLMPostProcessor {
     private let result: Result<String, Error>
     private(set) var lastConfig: LLMConfig?
+    private(set) var lastTestConfig: LLMConfig?
 
     init(result: Result<String, Error>) {
         self.result = result
@@ -247,5 +617,42 @@ private final class CapturingLLMPostProcessor: LLMPostProcessor {
     func polish(text: String, config: LLMConfig) async throws -> String {
         lastConfig = config
         return try result.get()
+    }
+
+    func testSetup(config: LLMConfig) async throws {
+        lastTestConfig = config
+    }
+}
+
+private final class BlockingLLMPostProcessor: LLMPostProcessor {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var startContinuation: CheckedContinuation<Void, Never>?
+    var testSetupResult: Result<Void, Error> = .success(())
+
+    func polish(text: String, config: LLMConfig) async throws -> String {
+        text
+    }
+
+    func testSetup(config: LLMConfig) async throws {
+        startContinuation?.resume()
+        startContinuation = nil
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+        try testSetupResult.get()
+    }
+
+    func waitUntilStarted() async {
+        if continuation != nil {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            startContinuation = continuation
+        }
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
     }
 }

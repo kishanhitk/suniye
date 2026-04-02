@@ -229,227 +229,214 @@ struct StylePage: View {
     var body: some View {
         DetailScrollContainer {
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "LLM Polish")
+                DetailPageTitle(title: "Magic Format")
+
+                Text("Improve dictated text before it is pasted.")
+                    .font(AppTypography.body)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
 
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(spacing: 12) {
-                            Text("Enable LLM post-processing")
-                                .font(AppTypography.body)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Improve text before pasting")
+                                    .font(AppTypography.bodyMedium)
+                                Text("Fix grammar, wording, and names after dictation.")
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                            }
                             Spacer(minLength: 12)
                             Toggle("", isOn: $appState.llmEnabled)
                                 .labelsHidden()
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
+                                .accessibilityLabel("Improve text before pasting")
                         }
 
-                        CardDivider()
+                        if appState.llmEnabled {
+                            CardDivider()
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("LLM API Key")
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Service URL")
                                     .font(AppTypography.body)
-                                Spacer(minLength: 12)
-                                Text(appState.hasLLMAPIKey ? "•••" : "Missing")
-                                    .font(AppTypography.codeCalloutSemibold)
-                                    .foregroundStyle(appState.hasLLMAPIKey ? Color.primary : .orange)
-                            }
 
-                            HStack(spacing: 8) {
-                                SecureField("Paste API key", text: $apiKeyDraft)
+                                Text("Use your OpenAI-compatible endpoint here.")
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+
+                                TextField("https://api.openai.com/v1/chat/completions", text: $appState.llmEndpointURLString)
                                     .textFieldStyle(.roundedBorder)
+                                    .font(AppTypography.codeBodyMedium)
 
-                                Button(appState.hasLLMAPIKey ? "Replace" : "Save") {
-                                    appState.saveLLMAPIKey(apiKeyDraft)
-                                    apiKeyDraft = ""
+                                if let endpointValidationError = appState.llmEndpointValidationError {
+                                    Text(endpointValidationError)
+                                        .font(AppTypography.caption)
+                                        .foregroundStyle(.red)
                                 }
-                                .buttonStyle(.bordered)
-
-                                Button("Clear") {
-                                    appState.clearLLMAPIKey()
-                                    apiKeyDraft = ""
-                                }
-                                .buttonStyle(.bordered)
-                                .disabled(!appState.hasLLMAPIKey)
                             }
 
-                            if let error = appState.llmKeyOperationError {
-                                Text(error)
+                            CardDivider()
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("API key")
+                                        .font(AppTypography.body)
+                                    Spacer(minLength: 12)
+                                    Text(appState.llmKeyStatusText)
+                                        .font(AppTypography.calloutMedium)
+                                        .foregroundStyle(appState.isMagicFormatSetupVerified ? .green : MainWindowPalette.secondaryText)
+                                }
+
+                                HStack(spacing: 8) {
+                                    SecureField("Paste API key", text: $apiKeyDraft)
+                                        .textFieldStyle(.roundedBorder)
+                                        .onChange(of: apiKeyDraft) { _, _ in
+                                            appState.clearMagicFormatSetupTestResult()
+                                        }
+
+                                    Button(appState.hasLLMAPIKey ? "Replace" : "Save") {
+                                        appState.saveLLMAPIKey(apiKeyDraft)
+                                        apiKeyDraft = ""
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                                    Button("Clear") {
+                                        appState.clearLLMAPIKey()
+                                        apiKeyDraft = ""
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(!appState.hasLLMAPIKey)
+                                }
+
+                                if let error = appState.llmKeyOperationError {
+                                    Text(error)
+                                        .font(AppTypography.caption)
+                                        .foregroundStyle(.red)
+                                }
+
+                                Text("Test Setup can use the key in this field without saving it.")
                                     .font(AppTypography.caption)
-                                    .foregroundStyle(.red)
-                            }
-                        }
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
 
-                        CardDivider()
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("OpenAI-Compatible Endpoint")
-                                    .font(AppTypography.body)
-                                Spacer(minLength: 12)
-                                Button("Reset") {
-                                    appState.llmEndpointURLString = LLMDefaults.defaultEndpointURLString
+                                Button(appState.isMagicFormatSetupTestInProgress ? "Testing..." : "Test Setup") {
+                                    Task {
+                                        await appState.testMagicFormatSetup(apiKeyDraft: apiKeyDraft)
+                                    }
                                 }
-                                .buttonStyle(.bordered)
-                            }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(!appState.canTestMagicFormatSetup(apiKeyDraft: apiKeyDraft))
 
-                            TextField("https://api.openai.com/v1/chat/completions", text: $appState.llmEndpointURLString)
-                                .textFieldStyle(.roundedBorder)
-                                .font(AppTypography.codeBodyMedium)
-
-                            if let endpointValidationError = appState.llmEndpointValidationError {
-                                Text(endpointValidationError)
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(.red)
+                                if let result = appState.magicFormatSetupTestResult {
+                                    Text(result.message)
+                                        .font(AppTypography.caption)
+                                        .foregroundStyle(result.severity.color)
+                                }
                             }
                         }
                     }
                 }
             }
 
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Domain Terms")
+            if appState.llmEnabled {
+                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                    SectionHeading(title: "How it should edit your text")
 
-                SurfaceCard {
-                    VStack(spacing: 0) {
-                        if !appState.vocabularyTerms.isEmpty {
-                            ForEach(appState.vocabularyTerms, id: \.self) { term in
-                                HStack(spacing: 12) {
-                                    Text(term)
-                                        .font(AppTypography.body)
-                                    Spacer(minLength: 0)
-                                    ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
-                                        appState.removeVocabularyTerm(term)
+                    SurfaceCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Model")
+                                    .font(AppTypography.subheadlineSemibold)
+
+                                NativePopupPicker(
+                                    items: modelPickerPresets,
+                                    selection: $appState.llmSelectedModelPreset,
+                                    title: modelPickerTitle(for:)
+                                )
+                                .frame(maxWidth: 320)
+
+                                Text(modelPickerDescription(for: appState.llmSelectedModelPreset))
+                                    .font(AppTypography.subheadline)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+
+                                if appState.llmSelectedModelPreset == .custom {
+                                    TextField("gpt-4.1-mini or provider/model-id", text: $appState.llmCustomModelId)
+                                        .textFieldStyle(.roundedBorder)
+                                        .font(AppTypography.codeBodyMedium)
+
+                                    if let modelValidationError = appState.llmModelValidationError {
+                                        Text(modelValidationError)
+                                            .font(AppTypography.caption)
+                                            .foregroundStyle(.red)
                                     }
+                                }
+                            }
+
+                            CardDivider()
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Words to keep exact")
+                                    .font(AppTypography.subheadlineSemibold)
+                                Text("Add names, products, acronyms, or jargon that should stay exactly as written.")
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                            }
+
+                            VStack(spacing: 0) {
+                                if !appState.vocabularyTerms.isEmpty {
+                                    ForEach(appState.vocabularyTerms, id: \.self) { term in
+                                        HStack(spacing: 12) {
+                                            Text(term)
+                                                .font(AppTypography.body)
+                                            Spacer(minLength: 0)
+                                            ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
+                                                appState.removeVocabularyTerm(term)
+                                            }
+                                        }
+                                        .padding(.vertical, AppMetrics.listRowVerticalPadding)
+
+                                        CardDivider()
+                                    }
+                                }
+
+                                HStack(spacing: 8) {
+                                    TextField("e.g. Suniye, PostgreSQL, gRPC", text: $vocabularyDraft)
+                                        .textFieldStyle(.roundedBorder)
+                                        .font(AppTypography.body)
+                                        .onSubmit(addTerm)
+
+                                    Button("Add", action: addTerm)
+                                        .buttonStyle(.bordered)
+                                        .disabled(vocabularyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                                 }
                                 .padding(.vertical, AppMetrics.listRowVerticalPadding)
-
-                                CardDivider()
                             }
-                        }
 
-                        HStack(spacing: 8) {
-                            TextField("e.g. Kubernetes, PostgreSQL, gRPC", text: $vocabularyDraft)
-                                .textFieldStyle(.roundedBorder)
-                                .font(AppTypography.body)
-                                .onSubmit(addTerm)
+                            CardDivider()
 
-                            Button("Add", action: addTerm)
-                                .buttonStyle(.bordered)
-                                .disabled(vocabularyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-                        .padding(.vertical, AppMetrics.listRowVerticalPadding)
-                    }
-                }
-            }
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Prompt")
+                                    .font(AppTypography.subheadlineSemibold)
+                                Text("This prompt tells Magic Format how to rewrite your dictation.")
+                                    .font(AppTypography.caption)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
 
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "LLM Model")
-
-                SurfaceCard {
-                    VStack(spacing: 0) {
-                        ForEach(LLMModelPreset.allCases, id: \.self) { preset in
-                            Button {
-                                appState.llmSelectedModelPreset = preset
-                            } label: {
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(appState.llmDisplayModelId(for: preset))
-                                            .font(preset == .custom ? AppTypography.body : AppTypography.codeBodyMedium)
-                                            .foregroundStyle(Color.primary)
-                                        Text(preset.subtitle)
-                                            .font(AppTypography.subheadline)
-                                            .foregroundStyle(MainWindowPalette.secondaryText)
-                                    }
-                                    Spacer(minLength: 12)
-                                    if appState.llmSelectedModelPreset == preset {
-                                        Image(systemName: "checkmark")
-                                            .font(.headline.weight(.semibold))
-                                            .foregroundStyle(.blue)
-                                    }
-                                }
-                                .padding(.vertical, 10)
+                                TextEditor(text: $appState.llmBaseSystemPrompt)
+                                    .font(AppTypography.body)
+                                    .frame(minHeight: 120)
+                                    .padding(8)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(MainWindowPalette.editorBackground)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
+                                    )
                             }
-                            .buttonStyle(.plain)
-
-                            if preset != LLMModelPreset.allCases.last {
-                                CardDivider()
-                            }
-                        }
-
-                        CardDivider()
-                            .padding(.vertical, 10)
-
-                        HStack(spacing: 12) {
-                            Text("Custom model ID")
-                                .font(AppTypography.body)
-                            Spacer(minLength: 12)
-                            TextField("gpt-4.1-mini or provider/model-id", text: $appState.llmCustomModelId)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(maxWidth: 300)
-                        }
-
-                        if let modelValidationError = appState.llmModelValidationError {
-                            Text(modelValidationError)
-                                .font(AppTypography.caption)
-                                .foregroundStyle(.red)
                         }
                     }
                 }
-            }
-
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "System Prompt")
-
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        TextEditor(text: $appState.llmBaseSystemPrompt)
-                            .font(AppTypography.body)
-                            .frame(minHeight: 120)
-                            .padding(8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(MainWindowPalette.editorBackground)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
-                            )
-
-                        HStack {
-                            Spacer(minLength: 0)
-                            Button("Reset to Default") {
-                                appState.llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                    }
-                }
-            }
-
-            SecondaryDisclosureCard(title: "Advanced") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Additional user prompt")
-                        .font(AppTypography.subheadlineSemibold)
-                    TextEditor(text: $appState.llmSystemPrompt)
-                        .font(AppTypography.subheadline)
-                        .frame(minHeight: 64)
-                        .padding(6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(MainWindowPalette.editorBackground)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Timeout: \(appState.llmTimeoutSeconds, specifier: "%.1f")s")
-                        .font(AppTypography.subheadlineSemibold)
-                    Slider(value: $appState.llmTimeoutSeconds, in: LLMDefaults.minTimeoutSeconds ... LLMDefaults.maxTimeoutSeconds, step: 0.5)
-                }
-
-                Stepper("Max tokens: \(appState.llmMaxTokens)", value: $appState.llmMaxTokens, in: LLMDefaults.minMaxTokens ... LLMDefaults.maxMaxTokens, step: 16)
             }
         }
     }
@@ -457,6 +444,30 @@ struct StylePage: View {
     private func addTerm() {
         appState.addVocabularyTerm(vocabularyDraft)
         vocabularyDraft = ""
+    }
+
+    private var modelPickerPresets: [LLMModelPreset] {
+        [.gpt41Mini, .gemini25Flash, .custom]
+    }
+
+    private func modelPickerTitle(for preset: LLMModelPreset) -> String {
+        switch preset {
+        case .custom:
+            return "Custom model"
+        case .gemini25Flash, .gpt41Mini:
+            return preset.displayName
+        }
+    }
+
+    private func modelPickerDescription(for preset: LLMModelPreset) -> String {
+        switch preset {
+        case .custom:
+            return "Use the exact model ID supported by your endpoint."
+        case .gemini25Flash:
+            return "Fast and affordable. Good when you want quick cleanup."
+        case .gpt41Mini:
+            return "Balanced quality and speed. A good default for most people."
+        }
     }
 }
 
@@ -521,13 +532,11 @@ struct GeneralPage: View {
                             Text("Input Device")
                                 .font(AppTypography.body)
                             Spacer(minLength: 12)
-                            Picker("Input Device", selection: $appState.selectedInputDeviceID) {
-                                Text("System Default").tag(String?.none)
-                                ForEach(appState.availableInputDevices) { device in
-                                    Text(device.isDefault ? "\(device.name) (Default)" : device.name).tag(Optional(device.id))
-                                }
-                            }
-                            .labelsHidden()
+                            NativePopupPicker(
+                                items: inputDeviceChoices,
+                                selection: inputDeviceSelection,
+                                title: \.title
+                            )
                             .frame(maxWidth: 300)
                         }
 
@@ -656,6 +665,31 @@ struct GeneralPage: View {
             }
         }
     }
+
+    private var inputDeviceChoices: [InputDeviceChoice] {
+        let devices = appState.availableInputDevices.map {
+            InputDeviceChoice(
+                id: $0.id,
+                title: $0.isDefault ? "\($0.name) (Default)" : $0.name
+            )
+        }
+        return [InputDeviceChoice(id: nil, title: "System Default")] + devices
+    }
+
+    private var inputDeviceSelection: Binding<InputDeviceChoice> {
+        Binding(
+            get: {
+                inputDeviceChoices.first(where: { $0.id == appState.selectedInputDeviceID })
+                    ?? InputDeviceChoice(id: appState.selectedInputDeviceID, title: "System Default")
+            },
+            set: { appState.selectedInputDeviceID = $0.id }
+        )
+    }
+}
+
+private struct InputDeviceChoice: Hashable {
+    let id: String?
+    let title: String
 }
 
 private struct HotkeyRecorderButton: View {

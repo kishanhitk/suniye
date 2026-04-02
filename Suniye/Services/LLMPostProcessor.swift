@@ -6,12 +6,12 @@ struct LLMConfig: Equatable {
     let systemPrompt: String
     let keywords: [String]
     let timeoutSeconds: Double
-    let maxTokens: Int
     let apiKey: String
 }
 
 protocol LLMPostProcessor {
     func polish(text: String, config: LLMConfig) async throws -> String
+    func testSetup(config: LLMConfig) async throws
 }
 
 enum LLMPostProcessorError: LocalizedError {

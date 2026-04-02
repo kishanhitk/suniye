@@ -25,7 +25,9 @@ final class OpenRouterPostProcessorTests: XCTestCase {
             let body = try XCTUnwrap(MockURLProtocol.requestBodyData(from: request))
             let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
             XCTAssertEqual(json["model"] as? String, "google/gemini-2.5-flash")
-            XCTAssertEqual(json["max_tokens"] as? Int, 128)
+            XCTAssertNil(json["max_tokens"])
+            XCTAssertEqual(json["temperature"] as? Int, 0)
+            XCTAssertNil(json["top_p"])
             let messages = try XCTUnwrap(json["messages"] as? [[String: String]])
             let system = try XCTUnwrap(messages.first(where: { $0["role"] == "system" })?["content"])
             XCTAssertTrue(system.contains("prompt"))
@@ -51,12 +53,56 @@ final class OpenRouterPostProcessorTests: XCTestCase {
             systemPrompt: "prompt",
             keywords: ["swift"],
             timeoutSeconds: 3,
-            maxTokens: 128,
             apiKey: "test-key"
         )
 
         let output = try await processor.polish(text: "hello world", config: config)
         XCTAssertEqual(output, "hello world.")
+    }
+
+    func testSetupBuildsMinimalValidationRequest() async throws {
+        let session = makeSession()
+        let processor = OpenRouterPostProcessor(session: session)
+
+        MockURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://example.com/v1/chat/completions")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-key")
+
+            let body = try XCTUnwrap(MockURLProtocol.requestBodyData(from: request))
+            let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["model"] as? String, "gpt-4.1")
+            XCTAssertEqual(json["temperature"] as? Int, 0)
+
+            let messages = try XCTUnwrap(json["messages"] as? [[String: String]])
+            XCTAssertEqual(messages.count, 2)
+            XCTAssertEqual(messages.last?["role"], "user")
+            XCTAssertEqual(messages.last?["content"], "Connection test.")
+
+            let system = try XCTUnwrap(messages.first?["content"])
+            XCTAssertTrue(system.contains("prompt"))
+            XCTAssertTrue(system.localizedCaseInsensitiveContains("reply with OK"))
+
+            let responseJSON: [String: Any] = [
+                "choices": [
+                    ["message": ["content": "OK"]],
+                ],
+            ]
+            let data = try JSONSerialization.data(withJSONObject: responseJSON)
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, data)
+        }
+
+        let config = LLMConfig(
+            modelId: "gpt-4.1",
+            endpointURL: URL(string: "https://example.com/v1/chat/completions")!,
+            systemPrompt: "prompt",
+            keywords: [],
+            timeoutSeconds: 3,
+            apiKey: "test-key"
+        )
+
+        try await processor.testSetup(config: config)
     }
 
     func testPolishUsesConfiguredEndpoint() async throws {
@@ -79,7 +125,6 @@ final class OpenRouterPostProcessorTests: XCTestCase {
             systemPrompt: "prompt",
             keywords: [],
             timeoutSeconds: 3,
-            maxTokens: 128,
             apiKey: "test-key"
         )
 
@@ -103,7 +148,6 @@ final class OpenRouterPostProcessorTests: XCTestCase {
             systemPrompt: "prompt",
             keywords: [],
             timeoutSeconds: 3,
-            maxTokens: 128,
             apiKey: "test-key"
         )
 

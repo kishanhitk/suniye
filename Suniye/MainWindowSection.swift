@@ -16,7 +16,7 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
         case .model:
             return "Model"
         case .style:
-            return "Style"
+            return "Magic Format"
         case .general:
             return "General"
         }

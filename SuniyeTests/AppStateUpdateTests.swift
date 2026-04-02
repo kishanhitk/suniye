@@ -344,6 +344,59 @@ final class AppStateUpdateTests: XCTestCase {
         XCTAssertEqual(appState.updateDownloadProgress, 1)
     }
 
+    func testMagicFormatStatusIsOffWhenDisabled() {
+        let updateService = StubUpdateService(checkResult: .success(.upToDate))
+        let appState = makeAppState(updateService: updateService)
+
+        XCTAssertEqual(appState.magicFormatSetupState, .off)
+        XCTAssertEqual(appState.llmStatusHint, "Turn it on to improve dictation before text is pasted.")
+    }
+
+    func testMagicFormatStatusNeedsAPIKeyWhenEnabledWithoutKey() {
+        let updateService = StubUpdateService(checkResult: .success(.upToDate))
+        let appState = makeAppState(updateService: updateService)
+        appState.llmEnabled = true
+
+        XCTAssertEqual(appState.magicFormatSetupState, .needsAPIKey)
+        XCTAssertTrue(appState.attentionItems.contains {
+            $0.id == "llm-key-missing"
+                && $0.title == "Magic Format needs an API key"
+                && $0.detail == "Magic Format is on, but your API key is missing."
+        })
+    }
+
+    func testMagicFormatStatusNeedsServiceSetupWhenEndpointInvalid() {
+        let updateService = StubUpdateService(checkResult: .success(.upToDate))
+        let appState = makeAppState(updateService: updateService)
+        appState.llmEnabled = true
+        appState.llmEndpointURLString = "not a url"
+
+        XCTAssertEqual(appState.magicFormatSetupState, .needsServiceSetup)
+        XCTAssertEqual(appState.llmEndpointValidationError, "Enter a valid service URL.")
+        XCTAssertTrue(appState.attentionItems.contains {
+            $0.id == "llm-endpoint-invalid"
+                && $0.title == "Magic Format needs service setup"
+                && $0.detail == "Enter a valid service URL."
+        })
+    }
+
+    func testMagicFormatStatusIsReadyWhenEnabledAndConfigured() {
+        let updateService = StubUpdateService(checkResult: .success(.upToDate))
+        let appState = makeTestAppState(
+            llmSettingsStore: TestLLMSettingsStore(),
+            generalSettingsStore: TestGeneralSettingsStore(),
+            historyStore: TestHistoryStore(),
+            keychainService: TestKeychainService(value: "test-key"),
+            updateService: updateService,
+            launchAtLoginService: StubLaunchAtLoginService()
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        XCTAssertEqual(appState.magicFormatSetupState, .ready)
+        XCTAssertEqual(appState.llmKeyStatusText, "Saved")
+    }
+
     private func makeAppState(
         updateService: StubUpdateService,
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
