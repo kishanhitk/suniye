@@ -320,6 +320,7 @@ final class AppState {
     var llmKeyOperationError: String?
     var isMagicFormatSetupTestInProgress = false
     var magicFormatSetupTestResult: MagicFormatSetupTestResult?
+    private var magicFormatSetupTestRequestID = 0
 
     var launchAtLoginStatus: LaunchAtLoginStatus = .disabled
     var launchAtLoginError: String?
@@ -851,6 +852,8 @@ final class AppState {
     }
 
     func clearMagicFormatSetupTestResult() {
+        magicFormatSetupTestRequestID += 1
+        isMagicFormatSetupTestInProgress = false
         magicFormatSetupTestResult = nil
     }
 
@@ -870,16 +873,23 @@ final class AppState {
             return
         }
 
+        let requestID = magicFormatSetupTestRequestID
         isMagicFormatSetupTestInProgress = true
         let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
         let startTime = Date()
 
         defer {
-            isMagicFormatSetupTestInProgress = false
+            if requestID == magicFormatSetupTestRequestID {
+                isMagicFormatSetupTestInProgress = false
+            }
         }
 
         do {
             try await llmPostProcessor.testSetup(config: config)
+            guard requestID == magicFormatSetupTestRequestID else {
+                AppLogger.shared.log(.info, "ignored stale magic format setup test success")
+                return
+            }
             magicFormatSetupTestResult = MagicFormatSetupTestResult(
                 message: "Connection works.",
                 severity: .success
@@ -887,6 +897,10 @@ final class AppState {
             let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
             AppLogger.shared.log(.info, "magic format setup test success model=\(config.modelId) latency_ms=\(latencyMs)")
         } catch let error as LLMPostProcessorError {
+            guard requestID == magicFormatSetupTestRequestID else {
+                AppLogger.shared.log(.info, "ignored stale magic format setup test failure reason=\(error.logValue)")
+                return
+            }
             magicFormatSetupTestResult = MagicFormatSetupTestResult(
                 message: magicFormatSetupTestMessage(for: error),
                 severity: .error
@@ -894,6 +908,10 @@ final class AppState {
             let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
             AppLogger.shared.log(.warning, "magic format setup test failed reason=\(error.logValue) model=\(config.modelId) latency_ms=\(latencyMs)")
         } catch {
+            guard requestID == magicFormatSetupTestRequestID else {
+                AppLogger.shared.log(.info, "ignored stale magic format setup test failure reason=unknown")
+                return
+            }
             magicFormatSetupTestResult = MagicFormatSetupTestResult(
                 message: "Couldn't reach that service URL.",
                 severity: .error
@@ -1693,8 +1711,17 @@ final class AppState {
             return "The API key was rejected."
         case .timeout, .network:
             return "Couldn't reach that service URL."
-        case .provider:
-            return "That model is not supported on this endpoint."
+        case let .provider(reason):
+            if reason == "http_404" {
+                return "Couldn't reach that service URL."
+            }
+            if reason == "http_429" {
+                return "The service is rate-limiting this request. Try again in a moment."
+            }
+            if reason.hasPrefix("http_5") {
+                return "The service is having trouble right now. Try again."
+            }
+            return "The service rejected this setup. Check the URL and model, then try again."
         case .malformedResponse, .emptyOutput, .invalidConfiguration:
             return "The service responded, but not in a compatible format."
         }

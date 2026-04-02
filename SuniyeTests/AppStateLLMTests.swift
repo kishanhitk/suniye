@@ -290,6 +290,38 @@ final class AppStateLLMTests: XCTestCase {
         )
     }
 
+    func testTestMagicFormatSetupIgnoresStaleResultAfterSettingsChange() async {
+        let fakeLLM = BlockingLLMPostProcessor()
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        let task = Task {
+            await appState.testMagicFormatSetup(apiKeyDraft: "")
+        }
+
+        await fakeLLM.waitUntilStarted()
+        XCTAssertTrue(appState.isMagicFormatSetupTestInProgress)
+
+        appState.llmEndpointURLString = "not a url"
+
+        XCTAssertFalse(appState.isMagicFormatSetupTestInProgress)
+        XCTAssertNil(appState.magicFormatSetupTestResult)
+
+        fakeLLM.resume()
+        await task.value
+
+        XCTAssertNil(appState.magicFormatSetupTestResult)
+        XCTAssertFalse(appState.isMagicFormatSetupTestInProgress)
+    }
+
     func testTestMagicFormatSetupMapsUnauthorizedError() async {
         let fakeLLM = FakeLLMPostProcessor(
             result: .success("polished"),
@@ -358,7 +390,34 @@ final class AppStateLLMTests: XCTestCase {
 
         XCTAssertEqual(
             appState.magicFormatSetupTestResult,
-            MagicFormatSetupTestResult(message: "That model is not supported on this endpoint.", severity: .error)
+            MagicFormatSetupTestResult(
+                message: "The service rejected this setup. Check the URL and model, then try again.",
+                severity: .error
+            )
+        )
+    }
+
+    func testTestMagicFormatSetupMapsProvider404ErrorToEndpointMessage() async {
+        let fakeLLM = FakeLLMPostProcessor(
+            result: .success("polished"),
+            testSetupResult: .failure(LLMPostProcessorError.provider("http_404"))
+        )
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.refreshLLMKeyStatus()
+
+        await appState.testMagicFormatSetup(apiKeyDraft: "")
+
+        XCTAssertEqual(
+            appState.magicFormatSetupTestResult,
+            MagicFormatSetupTestResult(message: "Couldn't reach that service URL.", severity: .error)
         )
     }
 
@@ -545,6 +604,7 @@ private final class CapturingLLMPostProcessor: LLMPostProcessor {
 private final class BlockingLLMPostProcessor: LLMPostProcessor {
     private var continuation: CheckedContinuation<Void, Never>?
     private var startContinuation: CheckedContinuation<Void, Never>?
+    var testSetupResult: Result<Void, Error> = .success(())
 
     func polish(text: String, config: LLMConfig) async throws -> String {
         text
@@ -556,6 +616,7 @@ private final class BlockingLLMPostProcessor: LLMPostProcessor {
         await withCheckedContinuation { continuation in
             self.continuation = continuation
         }
+        try testSetupResult.get()
     }
 
     func waitUntilStarted() async {
