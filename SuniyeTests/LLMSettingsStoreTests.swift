@@ -117,6 +117,8 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(LLMModelPreset.gemini25Flash.magicFormatLabel, "Fast")
         XCTAssertEqual(LLMModelPreset.gpt41Mini.magicFormatLabel, "Balanced")
         XCTAssertEqual(LLMModelPreset.custom.magicFormatLabel, "Custom")
+        XCTAssertEqual(LLMModelPreset.gemini25Flash.magicFormatDescription, "Quick fixes with lower cost.")
+        XCTAssertEqual(LLMModelPreset.gpt41Mini.magicFormatDescription, "Best default for most dictation.")
         XCTAssertEqual(LLMModelPreset.custom.magicFormatDescription, "Use the exact model ID supported by your endpoint.")
     }
 }

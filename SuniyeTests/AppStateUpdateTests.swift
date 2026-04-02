@@ -394,7 +394,7 @@ final class AppStateUpdateTests: XCTestCase {
         appState.refreshLLMKeyStatus()
 
         XCTAssertEqual(appState.magicFormatSetupState, .ready)
-        XCTAssertEqual(appState.llmKeyStatusText, "Connected")
+        XCTAssertEqual(appState.llmKeyStatusText, "Saved")
     }
 
     private func makeAppState(

@@ -250,6 +250,7 @@ struct StylePage: View {
                                 .labelsHidden()
                                 .toggleStyle(.switch)
                                 .controlSize(.small)
+                                .accessibilityLabel("Improve text before pasting")
                         }
 
                         if appState.llmEnabled {
@@ -283,7 +284,7 @@ struct StylePage: View {
                                     Spacer(minLength: 12)
                                     Text(appState.llmKeyStatusText)
                                         .font(AppTypography.calloutMedium)
-                                        .foregroundStyle(appState.hasLLMAPIKey ? .green : .orange)
+                                        .foregroundStyle(appState.isMagicFormatSetupVerified ? .green : MainWindowPalette.secondaryText)
                                 }
 
                                 HStack(spacing: 8) {

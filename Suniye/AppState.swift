@@ -330,7 +330,14 @@ final class AppState {
     }
 
     var llmKeyStatusText: String {
-        hasLLMAPIKey ? "Connected" : "Not connected"
+        if isMagicFormatSetupVerified {
+            return "Connected"
+        }
+        return hasLLMAPIKey ? "Saved" : "Not connected"
+    }
+
+    var isMagicFormatSetupVerified: Bool {
+        magicFormatSetupTestResult?.severity == .success
     }
 
     func canTestMagicFormatSetup(apiKeyDraft: String) -> Bool {
@@ -1712,14 +1719,19 @@ final class AppState {
         case .timeout, .network:
             return "Couldn't reach that service URL."
         case let .provider(reason):
-            if reason == "http_404" {
-                return "Couldn't reach that service URL."
-            }
-            if reason == "http_429" {
-                return "The service is rate-limiting this request. Try again in a moment."
-            }
-            if reason.hasPrefix("http_5") {
-                return "The service is having trouble right now. Try again."
+            if let statusText = reason.split(separator: "_").last,
+               reason.hasPrefix("http_"),
+               let status = Int(statusText) {
+                switch status {
+                case 404:
+                    return "HTTP 404: service URL not found."
+                case 429:
+                    return "HTTP 429: rate limited. Try again in a moment."
+                case 500...599:
+                    return "HTTP \(status): server error. Try again."
+                default:
+                    return "HTTP \(status): the service rejected this setup. Check the URL and model."
+                }
             }
             return "The service rejected this setup. Check the URL and model, then try again."
         case .malformedResponse, .emptyOutput, .invalidConfiguration:

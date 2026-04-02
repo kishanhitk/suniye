@@ -288,6 +288,7 @@ final class AppStateLLMTests: XCTestCase {
             appState.magicFormatSetupTestResult,
             MagicFormatSetupTestResult(message: "Connection works.", severity: .success)
         )
+        XCTAssertEqual(appState.llmKeyStatusText, "Connected")
     }
 
     func testTestMagicFormatSetupIgnoresStaleResultAfterSettingsChange() async {
@@ -391,7 +392,7 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(
             appState.magicFormatSetupTestResult,
             MagicFormatSetupTestResult(
-                message: "The service rejected this setup. Check the URL and model, then try again.",
+                message: "HTTP 400: the service rejected this setup. Check the URL and model.",
                 severity: .error
             )
         )
@@ -417,7 +418,7 @@ final class AppStateLLMTests: XCTestCase {
 
         XCTAssertEqual(
             appState.magicFormatSetupTestResult,
-            MagicFormatSetupTestResult(message: "Couldn't reach that service URL.", severity: .error)
+            MagicFormatSetupTestResult(message: "HTTP 404: service URL not found.", severity: .error)
         )
     }
 
