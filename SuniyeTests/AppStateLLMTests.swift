@@ -438,6 +438,67 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.defaultTimeoutSeconds)
         XCTAssertEqual(store.latest.maxTokens, LLMDefaults.defaultMaxTokens)
     }
+
+    func testLoadPreservesLegacyHiddenPromptWhenItMatchesOnlySubstringOfBasePrompt() {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+        store.save(
+            LLMSettings(
+                isEnabled: true,
+                selectedModelPreset: .gpt41Mini,
+                customModelId: "",
+                endpointURLString: LLMDefaults.defaultEndpointURLString,
+                baseSystemPrompt: "Preserve meaning and intent.",
+                systemPrompt: "Preserve meaning",
+                keywordsRaw: "",
+                timeoutSeconds: 9,
+                maxTokens: 256
+            )
+        )
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+
+        XCTAssertEqual(
+            appState.llmBaseSystemPrompt,
+            "Preserve meaning and intent.\n\nPreserve meaning"
+        )
+        XCTAssertEqual(appState.llmSystemPrompt, "")
+        XCTAssertEqual(store.latest.systemPrompt, "")
+    }
+
+    func testLoadDoesNotDuplicateLegacyHiddenPromptWhenAlreadyMergedIntoBasePrompt() {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+        store.save(
+            LLMSettings(
+                isEnabled: true,
+                selectedModelPreset: .gpt41Mini,
+                customModelId: "",
+                endpointURLString: LLMDefaults.defaultEndpointURLString,
+                baseSystemPrompt: "BASE\n\nUSER",
+                systemPrompt: "USER",
+                keywordsRaw: "",
+                timeoutSeconds: 9,
+                maxTokens: 256
+            )
+        )
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+
+        XCTAssertEqual(appState.llmBaseSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(appState.llmSystemPrompt, "")
+        XCTAssertEqual(store.latest.systemPrompt, "")
+    }
 }
 
 private final class FakeLLMPostProcessor: LLMPostProcessor {

@@ -1634,7 +1634,11 @@ final class AppState {
         let normalizedExtra = extraPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let visiblePrompt = normalizedBase.isEmpty ? LLMDefaults.defaultBaseSystemPrompt : normalizedBase
 
-        guard !normalizedExtra.isEmpty, !visiblePrompt.contains(normalizedExtra) else {
+        guard !normalizedExtra.isEmpty else {
+            return visiblePrompt
+        }
+
+        if visiblePrompt == normalizedExtra || visiblePrompt.hasSuffix("\n\n\(normalizedExtra)") {
             return visiblePrompt
         }
 
