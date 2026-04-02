@@ -298,6 +298,7 @@ struct StylePage: View {
                                         apiKeyDraft = ""
                                     }
                                     .buttonStyle(.bordered)
+                                    .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                                     Button("Clear") {
                                         appState.clearLLMAPIKey()
