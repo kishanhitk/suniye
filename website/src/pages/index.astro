@@ -3,7 +3,10 @@ import Layout from "../layouts/Layout.astro";
 
 const heroWords = "Your voice. Your machine. Your text.".split(" ");
 const githubUrl = "https://github.com/kishanhitk/suniye";
-const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest";
+const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/download/Suniye.dmg";
+
+
+
 
 const steps = [
   {
@@ -173,7 +176,7 @@ const features = [
           </div>
 
           <p class="fade-in mt-4 font-display text-xs tracking-wide text-muted/70">
-            macOS 14+ &middot; Alpha &middot; MIT License
+            <span id="latest-version"></span>macOS 26+ &middot; Alpha &middot; MIT License
           </p>
         </div>
       </div>
@@ -298,7 +301,7 @@ const features = [
             <tbody class="divide-y divide-border/60">
               <tr>
                 <td class="py-3 pr-8 tracking-wide text-muted">Platform</td>
-                <td class="py-3">macOS 14 (Sonoma)+</td>
+                <td class="py-3">macOS 26+</td>
               </tr>
               <tr>
                 <td class="py-3 pr-8 tracking-wide text-muted">UI</td>
@@ -368,7 +371,7 @@ const features = [
           </div>
 
           <!-- Quarantine fix note -->
-          <div class="mt-8 mx-auto max-w-md">
+          <div class="mt-8 mx-auto">
             <p class="flex items-center justify-center gap-1.5 font-display text-xs text-muted/70">
               If macOS says "App is damaged", run this command
               <span class="group relative cursor-help">
@@ -491,5 +494,16 @@ const features = [
         setTimeout(() => btn.classList.remove("copied"), 2000);
       });
     });
+
+    // Fetch latest version from GitHub
+    fetch("https://api.github.com/repos/kishanhitk/suniye/releases/latest")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.tag_name) {
+          const el = document.getElementById("latest-version");
+          if (el) el.textContent = data.tag_name + " · ";
+        }
+      })
+      .catch(() => {});
   </script>
 </Layout>
