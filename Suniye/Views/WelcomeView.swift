@@ -13,7 +13,6 @@ struct WelcomeView: View {
                 benefitRow(icon: "bolt.fill", text: "Offline — no internet required")
                 benefitRow(icon: "macwindow.on.rectangle", text: "Works in every app")
             }
-            .padding(.top, 4)
         }
     }
 
