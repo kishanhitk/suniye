@@ -40,9 +40,11 @@ struct MenuBarView: View {
                     .disabled(appState.phase != .recording)
             }
 
-            Button("Open Suniye") { appState.openMainWindow() }
+            Button(appState.activeOnboardingStep == nil ? "Open Suniye" : "Continue Setup") {
+                appState.openMainWindow()
+            }
 
-            if appState.phase == .needsModel || appState.showOnboarding {
+            if appState.activeOnboardingStep == nil && appState.phase == .needsModel {
                 Button("Download Model") { appState.startModelDownload() }
             }
 

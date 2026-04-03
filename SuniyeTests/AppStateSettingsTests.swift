@@ -38,6 +38,107 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertFalse(appState.autoSubmitEnabled)
     }
 
+    func testLegacyInstallWithModelInstalledMarksOnboardingComplete() {
+        let modelManager = StubModelManager()
+        modelManager.isReady = true
+        let generalSettingsStore = TestGeneralSettingsStore()
+
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            generalSettingsStore: generalSettingsStore
+        )
+
+        XCTAssertTrue(appState.hasSeenOnboardingWelcome)
+        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
+        XCTAssertEqual(generalSettingsStore.latest.hasSeenOnboardingWelcome, true)
+        XCTAssertEqual(generalSettingsStore.latest.hasCompletedCoreOnboarding, true)
+    }
+
+    func testFreshInstallStartsAtWelcome() {
+        let modelManager = StubModelManager()
+        modelManager.isReady = false
+        let generalSettingsStore = TestGeneralSettingsStore()
+
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            generalSettingsStore: generalSettingsStore
+        )
+        appState.startOnboardingIfNeeded()
+
+        XCTAssertFalse(appState.hasSeenOnboardingWelcome)
+        XCTAssertFalse(appState.hasCompletedCoreOnboarding)
+        XCTAssertEqual(appState.activeOnboardingStep, .welcome)
+        XCTAssertEqual(generalSettingsStore.latest.hasSeenOnboardingWelcome, false)
+        XCTAssertEqual(generalSettingsStore.latest.hasCompletedCoreOnboarding, false)
+    }
+
+    func testSeenWelcomeResumesSetup() {
+        let modelManager = StubModelManager()
+        modelManager.isReady = false
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                preferredInputDeviceID: nil,
+                hasSeenOnboardingWelcome: true,
+                hasCompletedCoreOnboarding: false
+            )
+        )
+
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            generalSettingsStore: generalSettingsStore
+        )
+        appState.startOnboardingIfNeeded()
+
+        XCTAssertEqual(appState.activeOnboardingStep, .setup)
+    }
+
+    func testSetupCompleteRoutesToPractice() {
+        let modelManager = StubModelManager()
+        modelManager.isReady = true
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                preferredInputDeviceID: nil,
+                hasSeenOnboardingWelcome: true,
+                hasCompletedCoreOnboarding: false
+            )
+        )
+
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            generalSettingsStore: generalSettingsStore
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.startOnboardingIfNeeded()
+
+        XCTAssertEqual(appState.activeOnboardingStep, .practice)
+        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
+    }
+
+    func testFinishOnboardingClearsActiveStep() {
+        let appState = makeTestAppState()
+        appState.activeOnboardingStep = .practice
+
+        appState.finishOnboarding()
+
+        XCTAssertNil(appState.activeOnboardingStep)
+    }
+
+    func testOnboardingSetupCompletesOnlyWhenPermissionsAndModelAreReady() {
+        let modelManager = StubModelManager()
+        modelManager.isReady = true
+        let appState = makeTestAppState(modelManager: modelManager)
+
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        XCTAssertFalse(appState.isOnboardingSetupComplete)
+
+        appState.hasAccessibilityPermission = true
+        XCTAssertTrue(appState.isOnboardingSetupComplete)
+    }
+
     func testPreferredInputDevicePassedToCaptureService() async {
         let audioCapture = StubAudioCaptureService()
         audioCapture.availableDevices = [
@@ -156,6 +257,53 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.phase, .ready)
     }
 
+    func testPracticeModeStoresPreviewWithoutInsertionOrHistory() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("Hello from practice")
+        let textInsertionService = SpyTextInsertionService()
+        let historyStore = TestHistoryStore()
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            textInsertionService: textInsertionService,
+            historyStore: historyStore
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.activeOnboardingStep = .practice
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.stopRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.onboardingPracticeText, "Hello from practice")
+        XCTAssertEqual(appState.onboardingPracticeResult?.severity, .success)
+        XCTAssertTrue(textInsertionService.insertedTexts.isEmpty)
+        XCTAssertEqual(textInsertionService.submitCallCount, 0)
+        XCTAssertTrue(appState.recentResults.isEmpty)
+        XCTAssertTrue(historyStore.value.isEmpty)
+    }
+
+    func testRecordingDoesNotStartWhileSetupStepIsActive() async {
+        let audioCapture = StubAudioCaptureService()
+        let appState = makeTestAppState(audioCaptureService: audioCapture)
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.activeOnboardingStep = .setup
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Finish setup first"))
+    }
+
     func testBlockedIndicatorToggleShowsInlineErrorWhenModelMissing() async {
         let appState = makeTestAppState()
         appState.phase = .needsModel
@@ -234,6 +382,9 @@ final class AppStateSettingsTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 100_000_000)
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
+        appState.hasSeenOnboardingWelcome = true
+        appState.hasCompletedCoreOnboarding = true
+        appState.activeOnboardingStep = nil
         appState.phase = .ready
 
         hotkeyService.onHotkeyDown?()
@@ -254,7 +405,8 @@ final class AppStateSettingsTests: XCTestCase {
         let transcriptionService = StubTranscriptionService()
         let appState = makeTestAppState(modelManager: modelManager, transcriptionService: transcriptionService)
         appState.phase = .ready
-        appState.showOnboarding = false
+        appState.hasSeenOnboardingWelcome = true
+        appState.hasCompletedCoreOnboarding = true
 
         appState.deleteModel()
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -263,20 +415,62 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(transcriptionService.unloadCallCount, 1)
         XCTAssertEqual(appState.phase, .needsModel)
         XCTAssertEqual(appState.statusText, "Model required")
-        XCTAssertTrue(appState.showOnboarding)
+        XCTAssertNil(appState.activeOnboardingStep)
+        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
+    }
+
+    func testModelDownloadSuccessTransitionsSetupToPractice() async {
+        let modelManager = StubModelManager()
+        modelManager.isReady = false
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                preferredInputDeviceID: nil,
+                hasSeenOnboardingWelcome: true,
+                hasCompletedCoreOnboarding: false
+            )
+        )
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            generalSettingsStore: generalSettingsStore
+        )
+        appState.activeOnboardingStep = .setup
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.startModelDownload()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertEqual(appState.activeOnboardingStep, .practice)
+        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
     }
 
     func testModelDownloadDerivedUIStateWhileDownloading() {
         let modelManager = StubModelManager()
         modelManager.isReady = false
-        let appState = makeTestAppState(modelManager: modelManager)
+        let now = Date(timeIntervalSince1970: 600)
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            nowProvider: { now }
+        )
         appState.phase = .downloadingModel
         appState.downloadProgress = 0.25
+        appState.modelDownloadStartedAt = Date(timeIntervalSince1970: 540)
 
         XCTAssertEqual(appState.modelStatusValue, "Downloading 25%")
         XCTAssertEqual(appState.modelStatusIcon, "arrow.down.circle.fill")
         XCTAssertEqual(appState.modelPrimaryActionTitle, "Downloading…")
-        XCTAssertEqual(appState.modelDownloadProgressLabel, "25% downloaded • 170 MB of ~680 MB")
+        XCTAssertEqual(appState.modelDownloadProgressLabel, "25% downloaded • 170 MB of ~680 MB\nAbout 3m left")
+    }
+
+    func testModelDownloadProgressLabelShowsEstimatingBeforeETAIsKnown() {
+        let modelManager = StubModelManager()
+        modelManager.isReady = false
+        let appState = makeTestAppState(modelManager: modelManager)
+        appState.phase = .downloadingModel
+        appState.downloadProgress = 0
+
+        XCTAssertEqual(appState.modelDownloadProgressLabel, "0% downloaded • Zero KB of ~680 MB\nEstimating time remaining")
     }
 
     func testModelDownloadDerivedUIStateAfterFailure() {

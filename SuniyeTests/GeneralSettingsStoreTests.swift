@@ -11,7 +11,9 @@ final class GeneralSettingsStoreTests: XCTestCase {
         let settings = GeneralSettings(
             preferredInputDeviceID: "usb-mic",
             autoSubmitEnabled: true,
-            hotkeyConfiguration: .keyCombo(keyCode: UInt32(kVK_Space), carbonModifiers: UInt32(optionKey))
+            hotkeyConfiguration: .keyCombo(keyCode: UInt32(kVK_Space), carbonModifiers: UInt32(optionKey)),
+            hasSeenOnboardingWelcome: true,
+            hasCompletedCoreOnboarding: true
         )
 
         store.save(settings)

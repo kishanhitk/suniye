@@ -1,31 +1,44 @@
+import AppKit
 import SwiftUI
 
 struct WelcomeView: View {
     let onContinue: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Welcome to Suniye")
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 14) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 52, height: 52)
+
+                Text("Suniye")
+                    .font(AppTypography.bodyMedium)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+            }
+
+            Text("Local-first dictation for macOS.")
                 .font(AppTypography.pageTitle)
 
-            Text("Local, low-latency dictation for macOS using Parakeet TDT with sherpa-onnx.")
+            Text("Hold the shortcut, speak, and release to paste spoken text into the app you're using.")
                 .font(AppTypography.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Label("No cloud transcription in MVP", systemImage: "lock.shield")
-                Label("Hold fn/globe to dictate", systemImage: "keyboard")
-                Label("Clipboard is preserved after paste", systemImage: "doc.on.clipboard")
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Audio stays on your Mac", systemImage: "lock.shield")
+                Label("Uses an offline speech model", systemImage: "cpu")
+                Label("Works in any app after setup", systemImage: "rectangle.on.rectangle")
             }
             .font(AppTypography.subheadline)
+            .foregroundStyle(MainWindowPalette.secondaryText)
 
             Spacer()
 
-            Button("Get Started") {
+            Button("Continue") {
                 onContinue()
             }
             .buttonStyle(.borderedProminent)
         }
-        .padding(20)
     }
 }

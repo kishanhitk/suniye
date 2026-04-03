@@ -28,6 +28,7 @@ Requires **macOS 14 (Sonoma)** or later.
    - **Microphone** — to hear you
    - **Accessibility** — to type text into other apps
 5. Suniye will download a ~600 MB speech model on first launch. This is a one-time setup.
+6. On first launch, Suniye walks you through a short onboarding flow: welcome, setup, and an optional practice dictation.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed steps.
 

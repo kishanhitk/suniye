@@ -36,7 +36,7 @@ struct ModelDownloadView: View {
 
                 if appState.phase == .ready {
                     Button("Done") {
-                        appState.showOnboarding = false
+                        appState.finishOnboarding()
                     }
                 }
             }

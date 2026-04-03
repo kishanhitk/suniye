@@ -76,6 +76,7 @@ enum AppTypography {
     static let caption = googleSans(size: 10)
     static let callout = googleSans(size: 12)
     static let calloutMedium = googleSans(size: 12, weight: .medium)
+    static let codeCaption = fragmentMono(size: 10, weight: .medium)
     static let codeBody = fragmentMono(size: 13)
     static let codeBodyMedium = fragmentMono(size: 13, weight: .medium)
     static let codeCalloutSemibold = fragmentMono(size: 12, weight: .semibold)

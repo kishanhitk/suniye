@@ -234,4 +234,6 @@ struct GeneralSettings: Codable, Equatable {
     var autoSubmitEnabled: Bool = false
     var hotkeyConfiguration: HotkeyConfiguration = .globe
     var echoCancellationEnabled: Bool = false
+    var hasSeenOnboardingWelcome: Bool? = nil
+    var hasCompletedCoreOnboarding: Bool? = nil
 }
