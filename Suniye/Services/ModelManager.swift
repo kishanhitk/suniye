@@ -1,5 +1,31 @@
 import Foundation
 
+enum ModelDownloadProgressEstimator {
+    static func estimate(
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64,
+        responseExpectedLength: Int64?,
+        fallbackExpectedSize: Int64
+    ) -> Double? {
+        let expectedBytes: Int64
+        if totalBytesExpectedToWrite > 0 {
+            expectedBytes = totalBytesExpectedToWrite
+        } else if let responseExpectedLength, responseExpectedLength > 0 {
+            expectedBytes = responseExpectedLength
+        } else if fallbackExpectedSize > 0 {
+            expectedBytes = fallbackExpectedSize
+        } else {
+            return nil
+        }
+
+        guard totalBytesWritten >= 0 else {
+            return nil
+        }
+
+        return min(max(Double(totalBytesWritten) / Double(expectedBytes), 0), 1)
+    }
+}
+
 protocol ModelManagerProtocol {
     var expectedDownloadSizeBytes: Int64 { get }
     func modelDirectoryURL() throws -> URL
@@ -68,28 +94,26 @@ final class ModelManager: ModelManagerProtocol {
     }
 
     func downloadAndExtractModel(progress: @escaping @Sendable (Double) -> Void) async throws {
-        let tempArchive = FileManager.default.temporaryDirectory.appendingPathComponent("parakeet-model.tar.bz2")
         let destinationDir = try modelDirectoryURL().deletingLastPathComponent()
 
-        let downloader = DownloadDelegate(progress: progress)
+        let downloader = DownloadDelegate(progress: progress, fallbackExpectedSizeBytes: expectedDownloadSizeBytes)
         let session = URLSession(configuration: .default, delegate: downloader, delegateQueue: nil)
+        defer {
+            session.finishTasksAndInvalidate()
+        }
 
-        let (url, response) = try await session.download(from: modelDownloadURL)
+        let (url, response) = try await downloader.download(from: modelDownloadURL, using: session)
+        defer {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
 
         guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
             throw ModelError.invalidResponse
         }
 
-        if FileManager.default.fileExists(atPath: tempArchive.path) {
-            try FileManager.default.removeItem(at: tempArchive)
-        }
-        try FileManager.default.moveItem(at: url, to: tempArchive)
-
-        try extract(archive: tempArchive, into: destinationDir)
-
-        if FileManager.default.fileExists(atPath: tempArchive.path) {
-            try? FileManager.default.removeItem(at: tempArchive)
-        }
+        try extract(archive: url, into: destinationDir)
 
         progress(1)
     }
@@ -138,9 +162,24 @@ final class ModelManager: ModelManagerProtocol {
 
 private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     private let progressBlock: @Sendable (Double) -> Void
+    private let fallbackExpectedSizeBytes: Int64
+    private let fileManager = FileManager.default
+    private var continuation: CheckedContinuation<(URL, URLResponse), Error>?
+    private var downloadedFileURL: URL?
+    private var downloadResponse: URLResponse?
+    private var hasResumed = false
 
-    init(progress: @escaping @Sendable (Double) -> Void) {
+    init(progress: @escaping @Sendable (Double) -> Void, fallbackExpectedSizeBytes: Int64) {
         self.progressBlock = progress
+        self.fallbackExpectedSizeBytes = fallbackExpectedSizeBytes
+    }
+
+    func download(from url: URL, using session: URLSession) async throws -> (URL, URLResponse) {
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            let task = session.downloadTask(with: url)
+            task.resume()
+        }
     }
 
     func urlSession(
@@ -150,10 +189,14 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
-        guard totalBytesExpectedToWrite > 0 else {
+        guard let value = ModelDownloadProgressEstimator.estimate(
+            totalBytesWritten: totalBytesWritten,
+            totalBytesExpectedToWrite: totalBytesExpectedToWrite,
+            responseExpectedLength: downloadTask.response?.expectedContentLength,
+            fallbackExpectedSize: fallbackExpectedSizeBytes
+        ) else {
             return
         }
-        let value = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
         progressBlock(value)
     }
 
@@ -162,6 +205,41 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        // No-op: async `session.download(from:)` returns the temp file URL directly.
+        do {
+            let persistedURL = fileManager.temporaryDirectory
+                .appendingPathComponent("parakeet-model-\(UUID().uuidString)", isDirectory: false)
+                .appendingPathExtension("tar.bz2")
+            if fileManager.fileExists(atPath: persistedURL.path) {
+                try fileManager.removeItem(at: persistedURL)
+            }
+            try fileManager.moveItem(at: location, to: persistedURL)
+            downloadedFileURL = persistedURL
+            downloadResponse = downloadTask.response
+        } catch {
+            resume(with: .failure(error))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            resume(with: .failure(error))
+            return
+        }
+
+        guard let downloadedFileURL, let downloadResponse else {
+            resume(with: .failure(ModelManager.ModelError.invalidResponse))
+            return
+        }
+
+        resume(with: .success((downloadedFileURL, downloadResponse)))
+    }
+
+    private func resume(with result: Result<(URL, URLResponse), Error>) {
+        guard !hasResumed else {
+            return
+        }
+        hasResumed = true
+        continuation?.resume(with: result)
+        continuation = nil
     }
 }

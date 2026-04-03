@@ -18,7 +18,15 @@ final class TestLLMSettingsStore: LLMSettingsStoreProtocol {
 }
 
 final class TestGeneralSettingsStore: GeneralSettingsStoreProtocol {
-    private var value = GeneralSettings()
+    private var value: GeneralSettings
+
+    init(value: GeneralSettings = GeneralSettings()) {
+        self.value = value
+    }
+
+    var latest: GeneralSettings {
+        value
+    }
 
     func load() -> GeneralSettings {
         value
@@ -26,6 +34,19 @@ final class TestGeneralSettingsStore: GeneralSettingsStoreProtocol {
 
     func save(_ settings: GeneralSettings) {
         value = settings
+    }
+}
+
+final class SpyTextInsertionService: TextInsertionServiceProtocol {
+    private(set) var insertedTexts: [String] = []
+    private(set) var submitCallCount = 0
+
+    func insertText(_ text: String) throws {
+        insertedTexts.append(text)
+    }
+
+    func submitActiveInput() throws {
+        submitCallCount += 1
     }
 }
 
@@ -213,6 +234,7 @@ func makeTestAppState(
     modelManager: ModelManagerProtocol = StubModelManager(),
     transcriptionService: TranscriptionServiceProtocol = StubTranscriptionService(),
     audioCaptureService: AudioCaptureServiceProtocol = StubAudioCaptureService(),
+    textInsertionService: TextInsertionServiceProtocol = SpyTextInsertionService(),
     hotkeyService: HotkeyServiceProtocol = StubHotkeyService(),
     llmPostProcessor: LLMPostProcessor = NoopLLMPostProcessor(),
     llmSettingsStore: LLMSettingsStoreProtocol = TestLLMSettingsStore(),
@@ -231,6 +253,7 @@ func makeTestAppState(
         modelManager: modelManager,
         transcriptionService: transcriptionService,
         audioCaptureService: audioCaptureService,
+        textInsertionService: textInsertionService,
         hotkeyService: hotkeyService,
         llmPostProcessor: llmPostProcessor,
         llmSettingsStore: llmSettingsStore,

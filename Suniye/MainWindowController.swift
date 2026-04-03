@@ -27,8 +27,8 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         logger.notice("create main window")
         AppLogger.shared.log(.info, "create main window")
 
-        let content = MainWindowView(appState: appState)
-            .frame(minWidth: 680, minHeight: 560)
+        let content = MainWindowRootView(appState: appState)
+            .frame(minWidth: 780, minHeight: 620)
 
         let host = NSHostingView(rootView: content)
 
@@ -58,6 +58,21 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     func windowDidBecomeKey(_ notification: Notification) {
         AppLogger.shared.log(.info, "main window became key; refreshing permission status")
         appState?.refreshPermissionStatus()
+    }
+}
+
+struct MainWindowRootView: View {
+    @Bindable var appState: AppState
+
+    var body: some View {
+        Group {
+            if appState.activeOnboardingStep != nil {
+                OnboardingView(appState: appState)
+            } else {
+                MainWindowView(appState: appState)
+            }
+        }
+        .background(MainWindowPalette.windowBackground)
     }
 }
 

@@ -1,7 +1,12 @@
 import AppKit
 import Foundation
 
-final class TextInsertionService {
+protocol TextInsertionServiceProtocol {
+    func insertText(_ text: String) throws
+    func submitActiveInput() throws
+}
+
+final class TextInsertionService: TextInsertionServiceProtocol {
     enum InsertError: LocalizedError {
         case cannotCreateEvent
 

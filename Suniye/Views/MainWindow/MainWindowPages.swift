@@ -231,215 +231,271 @@ struct StylePage: View {
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
                 DetailPageTitle(title: "Magic Format")
 
-                Text("Improve dictated text before it is pasted.")
-                    .font(AppTypography.body)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Improve text before pasting")
-                                    .font(AppTypography.bodyMedium)
-                                Text("Fix grammar, wording, and names after dictation.")
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
-                            }
-                            Spacer(minLength: 12)
-                            Toggle("", isOn: $appState.llmEnabled)
-                                .labelsHidden()
-                                .toggleStyle(.switch)
-                                .controlSize(.small)
-                                .accessibilityLabel("Improve text before pasting")
-                        }
-
-                        if appState.llmEnabled {
-                            CardDivider()
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Service URL")
-                                    .font(AppTypography.body)
-
-                                Text("Use your OpenAI-compatible endpoint here.")
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
-
-                                TextField("https://api.openai.com/v1/chat/completions", text: $appState.llmEndpointURLString)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(AppTypography.codeBodyMedium)
-
-                                if let endpointValidationError = appState.llmEndpointValidationError {
-                                    Text(endpointValidationError)
-                                        .font(AppTypography.caption)
-                                        .foregroundStyle(.red)
-                                }
-                            }
-
-                            CardDivider()
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("API key")
-                                        .font(AppTypography.body)
-                                    Spacer(minLength: 12)
-                                    Text(appState.llmKeyStatusText)
-                                        .font(AppTypography.calloutMedium)
-                                        .foregroundStyle(appState.isMagicFormatSetupVerified ? .green : MainWindowPalette.secondaryText)
-                                }
-
-                                HStack(spacing: 8) {
-                                    SecureField("Paste API key", text: $apiKeyDraft)
-                                        .textFieldStyle(.roundedBorder)
-                                        .onChange(of: apiKeyDraft) { _, _ in
-                                            appState.clearMagicFormatSetupTestResult()
-                                        }
-
-                                    Button(appState.hasLLMAPIKey ? "Replace" : "Save") {
-                                        appState.saveLLMAPIKey(apiKeyDraft)
-                                        apiKeyDraft = ""
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                                    Button("Clear") {
-                                        appState.clearLLMAPIKey()
-                                        apiKeyDraft = ""
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .disabled(!appState.hasLLMAPIKey)
-                                }
-
-                                if let error = appState.llmKeyOperationError {
-                                    Text(error)
-                                        .font(AppTypography.caption)
-                                        .foregroundStyle(.red)
-                                }
-
-                                Text("Test Setup can use the key in this field without saving it.")
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
-
-                                Button(appState.isMagicFormatSetupTestInProgress ? "Testing..." : "Test Setup") {
-                                    Task {
-                                        await appState.testMagicFormatSetup(apiKeyDraft: apiKeyDraft)
-                                    }
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(!appState.canTestMagicFormatSetup(apiKeyDraft: apiKeyDraft))
-
-                                if let result = appState.magicFormatSetupTestResult {
-                                    Text(result.message)
-                                        .font(AppTypography.caption)
-                                        .foregroundStyle(result.severity.color)
-                                }
-                            }
-                        }
-                    }
-                }
+                featureToggleCard
             }
 
             if appState.llmEnabled {
-                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                    SectionHeading(title: "How it should edit your text")
+                connectionSection
+                modelSection
+                vocabularySection
+                promptSection
+            }
+        }
+    }
 
-                    SurfaceCard {
-                        VStack(alignment: .leading, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Model")
-                                    .font(AppTypography.subheadlineSemibold)
+    // MARK: - Feature Toggle
 
-                                NativePopupPicker(
-                                    items: modelPickerPresets,
-                                    selection: $appState.llmSelectedModelPreset,
-                                    title: modelPickerTitle(for:)
-                                )
-                                .frame(maxWidth: 320)
+    private var featureToggleCard: some View {
+        SurfaceCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(.purple)
 
-                                Text(modelPickerDescription(for: appState.llmSelectedModelPreset))
-                                    .font(AppTypography.subheadline)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Improve text before pasting")
+                            .font(AppTypography.bodyMedium)
+                        Text("Fix grammar, wording, and names after dictation.")
+                            .font(AppTypography.caption)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+                    }
 
-                                if appState.llmSelectedModelPreset == .custom {
-                                    TextField("gpt-4.1-mini or provider/model-id", text: $appState.llmCustomModelId)
-                                        .textFieldStyle(.roundedBorder)
-                                        .font(AppTypography.codeBodyMedium)
+                    Spacer(minLength: 12)
 
-                                    if let modelValidationError = appState.llmModelValidationError {
-                                        Text(modelValidationError)
-                                            .font(AppTypography.caption)
-                                            .foregroundStyle(.red)
-                                    }
+                    Toggle("", isOn: $appState.llmEnabled)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .accessibilityLabel("Improve text before pasting")
+                }
+
+                if appState.llmEnabled {
+                    CardDivider()
+
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(setupStatusColor)
+                            .frame(width: 7, height: 7)
+                        Text(setupStatusText)
+                            .font(AppTypography.caption)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Connection
+
+    private var connectionSection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+            SectionHeading(title: "Connection")
+
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Endpoint")
+                            .font(AppTypography.subheadlineSemibold)
+                        Text("Any OpenAI-compatible API.")
+                            .font(AppTypography.caption)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+
+                        TextField("https://api.openai.com/v1/chat/completions", text: $appState.llmEndpointURLString)
+                            .textFieldStyle(.roundedBorder)
+                            .font(AppTypography.codeBodyMedium)
+
+                        if let error = appState.llmEndpointValidationError {
+                            Label(error, systemImage: "exclamationmark.triangle.fill")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+
+                    CardDivider()
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("API Key")
+                                .font(AppTypography.subheadlineSemibold)
+                            Spacer(minLength: 12)
+                            StylePageStatusPill(
+                                text: appState.llmKeyStatusText,
+                                isPositive: appState.isMagicFormatSetupVerified
+                            )
+                        }
+
+                        HStack(spacing: 8) {
+                            SecureField("Paste API key", text: $apiKeyDraft)
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: apiKeyDraft) { _, _ in
+                                    appState.clearMagicFormatSetupTestResult()
+                                }
+
+                            Button(appState.hasLLMAPIKey ? "Replace" : "Save") {
+                                appState.saveLLMAPIKey(apiKeyDraft)
+                                apiKeyDraft = ""
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                            Button("Clear") {
+                                appState.clearLLMAPIKey()
+                                apiKeyDraft = ""
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(!appState.hasLLMAPIKey)
+                        }
+
+                        if let error = appState.llmKeyOperationError {
+                            Label(error, systemImage: "exclamationmark.triangle.fill")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+
+                    CardDivider()
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Button(appState.isMagicFormatSetupTestInProgress ? "Testing\u{2026}" : "Test Connection") {
+                                Task {
+                                    await appState.testMagicFormatSetup(apiKeyDraft: apiKeyDraft)
                                 }
                             }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!appState.canTestMagicFormatSetup(apiKeyDraft: apiKeyDraft))
 
-                            CardDivider()
+                            if appState.isMagicFormatSetupTestInProgress {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
 
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Words to keep exact")
-                                    .font(AppTypography.subheadlineSemibold)
-                                Text("Add names, products, acronyms, or jargon that should stay exactly as written.")
+                            Spacer()
+
+                            if let result = appState.magicFormatSetupTestResult {
+                                Label(result.message, systemImage: result.severity == .success ? "checkmark.circle.fill" : "xmark.circle.fill")
                                     .font(AppTypography.caption)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                                    .foregroundStyle(result.severity.color)
                             }
+                        }
 
-                            VStack(spacing: 0) {
-                                if !appState.vocabularyTerms.isEmpty {
-                                    ForEach(appState.vocabularyTerms, id: \.self) { term in
-                                        HStack(spacing: 12) {
-                                            Text(term)
-                                                .font(AppTypography.body)
-                                            Spacer(minLength: 0)
-                                            ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
-                                                appState.removeVocabularyTerm(term)
-                                            }
-                                        }
-                                        .padding(.vertical, AppMetrics.listRowVerticalPadding)
+                        Text("Works with unsaved keys too.")
+                            .font(AppTypography.caption)
+                            .foregroundStyle(MainWindowPalette.tertiaryText)
+                    }
+                }
+            }
+        }
+    }
 
-                                        CardDivider()
-                                    }
-                                }
+    // MARK: - Model
 
-                                HStack(spacing: 8) {
-                                    TextField("e.g. Suniye, PostgreSQL, gRPC", text: $vocabularyDraft)
-                                        .textFieldStyle(.roundedBorder)
-                                        .font(AppTypography.body)
-                                        .onSubmit(addTerm)
+    private var modelSection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+            SectionHeading(title: "Model")
 
-                                    Button("Add", action: addTerm)
-                                        .buttonStyle(.bordered)
-                                        .disabled(vocabularyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                }
-                                .padding(.vertical, AppMetrics.listRowVerticalPadding)
-                            }
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    NativePopupPicker(
+                        items: modelPickerPresets,
+                        selection: $appState.llmSelectedModelPreset,
+                        title: modelPickerTitle(for:)
+                    )
+                    .frame(maxWidth: 320)
 
-                            CardDivider()
+                    Text(modelPickerDescription(for: appState.llmSelectedModelPreset))
+                        .font(AppTypography.caption)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
 
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Prompt")
-                                    .font(AppTypography.subheadlineSemibold)
-                                Text("This prompt tells Magic Format how to rewrite your dictation.")
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                    if appState.llmSelectedModelPreset == .custom {
+                        CardDivider()
+                            .padding(.vertical, 2)
 
-                                TextEditor(text: $appState.llmBaseSystemPrompt)
-                                    .font(AppTypography.body)
-                                    .frame(minHeight: 120)
-                                    .padding(8)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(MainWindowPalette.editorBackground)
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
-                                    )
-                            }
+                        TextField("gpt-4.1-mini or provider/model-id", text: $appState.llmCustomModelId)
+                            .textFieldStyle(.roundedBorder)
+                            .font(AppTypography.codeBodyMedium)
+
+                        if let error = appState.llmModelValidationError {
+                            Label(error, systemImage: "exclamationmark.triangle.fill")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(.red)
                         }
                     }
                 }
             }
         }
     }
+
+    // MARK: - Vocabulary
+
+    private var vocabularySection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+            SectionHeading(title: "Vocabulary")
+
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Words the model should never change.")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+
+                    if !appState.vocabularyTerms.isEmpty {
+                        FlowLayout(spacing: 6) {
+                            ForEach(appState.vocabularyTerms, id: \.self) { term in
+                                StylePageVocabularyTag(term: term) {
+                                    appState.removeVocabularyTerm(term)
+                                }
+                            }
+                        }
+
+                        CardDivider()
+                    }
+
+                    HStack(spacing: 8) {
+                        TextField("e.g. Suniye, PostgreSQL, gRPC", text: $vocabularyDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .font(AppTypography.body)
+                            .onSubmit(addTerm)
+
+                        Button("Add", action: addTerm)
+                            .buttonStyle(.bordered)
+                            .disabled(vocabularyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Prompt
+
+    private var promptSection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+            SectionHeading(title: "Prompt")
+
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Instructions for rewriting your text.")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+
+                    TextEditor(text: $appState.llmBaseSystemPrompt)
+                        .font(AppTypography.body)
+                        .frame(minHeight: 120)
+                        .padding(8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(MainWindowPalette.editorBackground)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
+                        )
+                }
+            }
+        }
+    }
+
+    // MARK: - Helpers
 
     private func addTerm() {
         appState.addVocabularyTerm(vocabularyDraft)
@@ -464,10 +520,83 @@ struct StylePage: View {
         case .custom:
             return "Use the exact model ID supported by your endpoint."
         case .gemini25Flash:
-            return "Fast and affordable. Good when you want quick cleanup."
+            return "Fast and cheap. Quick text cleanup."
         case .gpt41Mini:
-            return "Balanced quality and speed. A good default for most people."
+            return "Balanced quality and speed. Good default."
         }
+    }
+
+    private var setupStatusColor: Color {
+        switch appState.magicFormatSetupState {
+        case .off:
+            return .gray
+        case .needsAPIKey, .needsServiceSetup:
+            return .orange
+        case .ready:
+            return appState.isMagicFormatSetupVerified ? .green : .blue
+        }
+    }
+
+    private var setupStatusText: String {
+        if appState.isMagicFormatSetupVerified {
+            return "Connected and ready"
+        }
+        switch appState.magicFormatSetupState {
+        case .off:
+            return "Off"
+        case .needsAPIKey:
+            return "Add an API key to get started"
+        case .needsServiceSetup:
+            return "Check the connection settings below"
+        case .ready:
+            return "Run a connection test to verify"
+        }
+    }
+}
+
+private struct StylePageStatusPill: View {
+    let text: String
+    let isPositive: Bool
+
+    var body: some View {
+        Text(text)
+            .font(AppTypography.caption)
+            .foregroundStyle(isPositive ? .green : MainWindowPalette.secondaryText)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule()
+                    .fill(isPositive ? Color.green.opacity(0.1) : MainWindowPalette.selectedFill)
+            )
+    }
+}
+
+private struct StylePageVocabularyTag: View {
+    let term: String
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(term)
+                .font(AppTypography.callout)
+
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            Capsule()
+                .fill(MainWindowPalette.selectedFill)
+        )
+        .overlay(
+            Capsule()
+                .stroke(MainWindowPalette.cardStroke, lineWidth: 0.5)
+        )
     }
 }
 

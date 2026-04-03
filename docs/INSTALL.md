@@ -31,6 +31,8 @@ Grant permissions when prompted:
 - Microphone
 - Accessibility (for text insertion)
 
+After that, Suniye shows a short first-run onboarding flow that covers setup and an optional practice dictation.
+
 ## 6) Update flow (manual install)
 On each app launch, Suniye checks GitHub Releases in the background.
 

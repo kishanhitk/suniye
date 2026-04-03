@@ -124,6 +124,42 @@ struct MagicFormatSetupTestResult: Equatable {
     let severity: Severity
 }
 
+enum OnboardingStep: Int, CaseIterable {
+    case welcome
+    case setup
+    case practice
+
+    var title: String {
+        switch self {
+        case .welcome:
+            return "Welcome"
+        case .setup:
+            return "Set Up"
+        case .practice:
+            return "Try It"
+        }
+    }
+}
+
+struct OnboardingPracticeResult: Equatable {
+    enum Severity: Equatable {
+        case success
+        case error
+
+        var color: Color {
+            switch self {
+            case .success:
+                .green
+            case .error:
+                .red
+            }
+        }
+    }
+
+    let message: String
+    let severity: Severity
+}
+
 @MainActor
 @Observable
 final class AppState {
@@ -209,6 +245,7 @@ final class AppState {
             }
         }
     }
+    var modelDownloadStartedAt: Date?
     var wordsTranscribed = 0
     var sessionCount = 0
     var totalDictationSeconds: TimeInterval = 0
@@ -262,8 +299,53 @@ final class AppState {
             onStateChange?()
         }
     }
-
-    var showOnboarding = false
+    var hasSeenOnboardingWelcome = false {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            if oldValue != hasSeenOnboardingWelcome {
+                persistGeneralSettings()
+                onStateChange?()
+            }
+        }
+    }
+    var hasCompletedCoreOnboarding = false {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            if oldValue != hasCompletedCoreOnboarding {
+                persistGeneralSettings()
+                onStateChange?()
+            }
+        }
+    }
+    var activeOnboardingStep: OnboardingStep? {
+        didSet {
+            guard oldValue != activeOnboardingStep else {
+                return
+            }
+            if activeOnboardingStep != .practice {
+                onboardingPracticeResult = nil
+            }
+            onStateChange?()
+        }
+    }
+    var onboardingPracticeText = "" {
+        didSet {
+            if oldValue != onboardingPracticeText {
+                onStateChange?()
+            }
+        }
+    }
+    var onboardingPracticeResult: OnboardingPracticeResult? {
+        didSet {
+            if oldValue != onboardingPracticeResult {
+                onStateChange?()
+            }
+        }
+    }
 
     var hasMicPermission = false
     var hasAccessibilityPermission = false
@@ -400,8 +482,16 @@ final class AppState {
         ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(), countStyle: .file)
     }
 
+    var modelExpectedByteCount: Int64 {
+        modelManager.expectedDownloadSizeBytes
+    }
+
     var modelExpectedSizeText: String {
         "~" + ByteCountFormatter.string(fromByteCount: modelManager.expectedDownloadSizeBytes, countStyle: .file)
+    }
+
+    var modelDownloadETAStatusText: String {
+        modelDownloadETAText ?? "Estimating time remaining"
     }
 
     var modelDownloadProgressLabel: String {
@@ -412,7 +502,10 @@ final class AppState {
         let percentage = Int(downloadProgress * 100)
         let downloadedBytes = Int64(Double(modelManager.expectedDownloadSizeBytes) * downloadProgress)
         let downloadedSize = ByteCountFormatter.string(fromByteCount: downloadedBytes, countStyle: .file)
-        return "\(percentage)% downloaded • \(downloadedSize) of \(modelExpectedSizeText)"
+        if let etaText = modelDownloadETAText {
+            return "\(percentage)% downloaded • \(downloadedSize) of \(modelExpectedSizeText)\n\(etaText)"
+        }
+        return "\(percentage)% downloaded • \(downloadedSize) of \(modelExpectedSizeText)\nEstimating time remaining"
     }
 
     var isModelOperationInProgress: Bool {
@@ -512,6 +605,27 @@ final class AppState {
             return selected.name
         }
         return availableInputDevices.first(where: \.isDefault)?.name ?? "System Default"
+    }
+
+    var isOnboardingSetupComplete: Bool {
+        hasMicPermission && hasAccessibilityPermission && isModelInstalled && phase == .ready
+    }
+
+    var onboardingPracticeLevels: [Float] {
+        switch floatingIndicatorState {
+        case let .listening(levels, _):
+            return levels
+        default:
+            return Array(repeating: 0.08, count: 12)
+        }
+    }
+
+    var isOnboardingPracticeRecording: Bool {
+        activeOnboardingStep == .practice && phase == .recording
+    }
+
+    var isOnboardingPracticeProcessing: Bool {
+        activeOnboardingStep == .practice && phase == .transcribing
     }
 
     var attentionItems: [AttentionItem] {
@@ -616,7 +730,7 @@ final class AppState {
     private let modelManager: ModelManagerProtocol
     private let transcriptionService: TranscriptionServiceProtocol
     private let audioCaptureService: AudioCaptureServiceProtocol
-    private let textInsertionService: TextInsertionService
+    private let textInsertionService: TextInsertionServiceProtocol
     private let hotkeyService: HotkeyServiceProtocol
     private let floatingIndicatorController = FloatingIndicatorController()
     private let llmPostProcessor: LLMPostProcessor
@@ -644,6 +758,11 @@ final class AppState {
     private var automaticUpdateTimer: Timer?
     private var lastAutomaticUpdateAttemptAt: Date?
 
+    private enum DictationDestination: Equatable {
+        case systemInsertion
+        case onboardingPractice
+    }
+
     deinit {
         MainActor.assumeIsolated {
             automaticUpdateTimer?.invalidate()
@@ -654,7 +773,7 @@ final class AppState {
         modelManager: ModelManagerProtocol = ModelManager(),
         transcriptionService: TranscriptionServiceProtocol = TranscriptionService(),
         audioCaptureService: AudioCaptureServiceProtocol = AudioCaptureService(),
-        textInsertionService: TextInsertionService = TextInsertionService(),
+        textInsertionService: TextInsertionServiceProtocol = TextInsertionService(),
         hotkeyService: HotkeyServiceProtocol = HotkeyService(),
         llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
         llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
@@ -736,10 +855,65 @@ final class AppState {
         } else {
             phase = .needsModel
             statusText = "Model required"
-            showOnboarding = true
         }
+        startOnboardingIfNeeded()
         setFloatingIndicatorState(.idle)
         AppLogger.shared.log(.info, "bootstrap done")
+    }
+
+    func startOnboardingIfNeeded() {
+        guard !hasCompletedCoreOnboarding else {
+            activeOnboardingStep = nil
+            return
+        }
+
+        if isOnboardingSetupComplete {
+            completeCoreOnboarding()
+            return
+        }
+
+        activeOnboardingStep = hasSeenOnboardingWelcome ? .setup : .welcome
+    }
+
+    func advanceOnboarding() {
+        switch activeOnboardingStep {
+        case .welcome:
+            hasSeenOnboardingWelcome = true
+            if isOnboardingSetupComplete {
+                completeCoreOnboarding()
+            } else {
+                activeOnboardingStep = .setup
+            }
+        case .setup:
+            guard isOnboardingSetupComplete else {
+                return
+            }
+            completeCoreOnboarding()
+        case .practice:
+            finishOnboarding()
+        case nil:
+            startOnboardingIfNeeded()
+        }
+    }
+
+    func goBackOnboarding() {
+        guard activeOnboardingStep == .setup else {
+            return
+        }
+        activeOnboardingStep = .welcome
+    }
+
+    func completeCoreOnboarding() {
+        hasSeenOnboardingWelcome = true
+        hasCompletedCoreOnboarding = true
+        onboardingPracticeText = ""
+        onboardingPracticeResult = nil
+        activeOnboardingStep = .practice
+    }
+
+    func finishOnboarding() {
+        onboardingPracticeResult = nil
+        activeOnboardingStep = nil
     }
 
     func refreshPermissions(requestMicrophone: Bool = false, promptAccessibility: Bool = false) async {
@@ -757,6 +931,7 @@ final class AppState {
         }
 
         AppLogger.shared.log(.info, "permissions: mic=\(hasMicPermission) ax=\(hasAccessibilityPermission)")
+        refreshOnboardingProgressIfNeeded()
         onStateChange?()
     }
 
@@ -961,6 +1136,7 @@ final class AppState {
         statusText = "Downloading model..."
         lastError = nil
         downloadProgress = 0
+        modelDownloadStartedAt = nowProvider()
 
         Task {
             do {
@@ -973,6 +1149,7 @@ final class AppState {
 
                 phase = .loading
                 statusText = "Validating model..."
+                modelDownloadStartedAt = nil
 
                 guard modelManager.isModelReady() else {
                     throw AppStateError.modelValidationFailed
@@ -983,13 +1160,14 @@ final class AppState {
                     phase = .ready
                     statusText = "Ready"
                     lastError = nil
-                    showOnboarding = false
+                    refreshOnboardingProgressIfNeeded()
                     AppLogger.shared.log(.info, "model download complete")
                 }
             } catch {
                 phase = .error
                 lastError = error.localizedDescription
                 statusText = "Download failed"
+                modelDownloadStartedAt = nil
                 AppLogger.shared.log(.error, "model download failed: \(error.localizedDescription)")
             }
         }
@@ -1006,8 +1184,9 @@ final class AppState {
                 await transcriptionService.unloadModel()
                 phase = .needsModel
                 statusText = "Model required"
+                downloadProgress = 0
+                modelDownloadStartedAt = nil
                 lastError = nil
-                showOnboarding = true
                 AppLogger.shared.log(.info, "model deleted")
             } catch {
                 phase = .error
@@ -1419,6 +1598,11 @@ final class AppState {
         if phase == .error, canRetryRecordingAfterError {
             clearRetryableRecordingError()
         }
+        if isOnboardingBlockingRecordingStart {
+            AppLogger.shared.log(.debug, "start recording ignored while onboarding setup is active")
+            showTransientIndicatorError("Finish setup first", restoreState: .idle, duration: 1.2)
+            return
+        }
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "start recording ignored in phase=\(phase.rawValue)")
             showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
@@ -1461,6 +1645,10 @@ final class AppState {
             activeRecordingSource = trigger
             overlayErrorResetTask?.cancel()
             overlayErrorResetTask = nil
+            if currentDictationDestination == .onboardingPractice {
+                onboardingPracticeText = ""
+                onboardingPracticeResult = nil
+            }
             setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0), source: trigger))
             AppLogger.shared.log(.info, "recording started input=\(selectedInputDeviceID ?? "default")")
         } catch {
@@ -1487,32 +1675,37 @@ final class AppState {
         let samples = captured.samples
         let sampleRate = captured.sampleRate
         let duration = recordingStart.map { Date().timeIntervalSince($0) } ?? 0
+        let destination = currentDictationDestination
         AppLogger.shared.log(.info, "dictation stop samples=\(samples.count) sr=\(sampleRate) duration=\(String(format: "%.2f", duration))")
 
         do {
             let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
             let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
             let rawParse = AppState.parseSubmitCommand(from: rawText)
-            let llmInputText = rawParse.text
-            var shouldSubmit = rawParse.shouldSubmit
+            let llmInputText = destination == .systemInsertion ? rawParse.text : rawText
+            var shouldSubmit = destination == .systemInsertion ? rawParse.shouldSubmit : false
             var llmOutputText = llmInputText
             var finalText = llmInputText
 
             if !finalText.isEmpty {
                 llmOutputText = await postProcessTextIfEnabled(llmInputText)
-                let polishedParse = AppState.parseSubmitCommand(from: llmOutputText)
-                finalText = polishedParse.text
-                shouldSubmit = shouldSubmit || polishedParse.shouldSubmit
+                if destination == .systemInsertion {
+                    let polishedParse = AppState.parseSubmitCommand(from: llmOutputText)
+                    finalText = polishedParse.text
+                    shouldSubmit = shouldSubmit || polishedParse.shouldSubmit
+                } else {
+                    finalText = llmOutputText.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
             }
 
-            if autoSubmitEnabled && !finalText.isEmpty {
+            if destination == .systemInsertion && autoSubmitEnabled && !finalText.isEmpty {
                 shouldSubmit = true
             }
 
             let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
             let wasLLMPolished = AppState.didLLMPolish(input: llmInputText, output: llmOutputText)
 
-            if !finalText.isEmpty || shouldSubmit {
+            if destination == .systemInsertion && (!finalText.isEmpty || shouldSubmit) {
                 if !hasAccessibilityPermission {
                     await refreshPermissions(promptAccessibility: true)
                 }
@@ -1521,31 +1714,49 @@ final class AppState {
                 }
             }
 
-            if !finalText.isEmpty {
-                try textInsertionService.insertText(finalText)
-                recentResults.insert(
-                    RecentResult(
-                        id: UUID(),
-                        text: finalText,
-                        createdAt: Date(),
-                        durationSeconds: duration,
-                        wasLLMPolished: wasLLMPolished
-                    ),
-                    at: 0
-                )
-                AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
-            }
-
-            if shouldSubmit {
+            switch destination {
+            case .systemInsertion:
                 if !finalText.isEmpty {
-                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    try textInsertionService.insertText(finalText)
+                    recentResults.insert(
+                        RecentResult(
+                            id: UUID(),
+                            text: finalText,
+                            createdAt: Date(),
+                            durationSeconds: duration,
+                            wasLLMPolished: wasLLMPolished
+                        ),
+                        at: 0
+                    )
+                    AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
                 }
-                try textInsertionService.submitActiveInput()
-                AppLogger.shared.log(.info, "submit command executed")
-            }
 
-            if finalText.isEmpty && !shouldSubmit {
-                AppLogger.shared.log(.warning, "transcription returned empty text samples=\(samples.count) sr=\(sampleRate)")
+                if shouldSubmit {
+                    if !finalText.isEmpty {
+                        try? await Task.sleep(nanoseconds: 120_000_000)
+                    }
+                    try textInsertionService.submitActiveInput()
+                    AppLogger.shared.log(.info, "submit command executed")
+                }
+
+                if finalText.isEmpty && !shouldSubmit {
+                    AppLogger.shared.log(.warning, "transcription returned empty text samples=\(samples.count) sr=\(sampleRate)")
+                }
+            case .onboardingPractice:
+                onboardingPracticeText = finalText
+                if finalText.isEmpty {
+                    let message = rawText.isEmpty
+                        ? "No speech detected. Try a short phrase."
+                        : "Practice mode captured audio, but there was no text to preview."
+                    onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
+                    AppLogger.shared.log(.warning, "onboarding practice produced empty text")
+                } else {
+                    onboardingPracticeResult = OnboardingPracticeResult(
+                        message: "Captured locally. You can finish onboarding whenever you're ready.",
+                        severity: .success
+                    )
+                    AppLogger.shared.log(.info, "onboarding practice transcription complete words=\(wordCount)")
+                }
             }
             activeRecordingSource = nil
             recordingStart = nil
@@ -1557,6 +1768,13 @@ final class AppState {
             activeRecordingSource = nil
             recordingStart = nil
             lastError = "Transcription failed: \(error.localizedDescription)"
+            if destination == .onboardingPractice {
+                onboardingPracticeText = ""
+                onboardingPracticeResult = OnboardingPracticeResult(
+                    message: error.localizedDescription,
+                    severity: .error
+                )
+            }
             phase = .ready
             statusText = "Ready"
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
@@ -1589,7 +1807,10 @@ final class AppState {
         autoSubmitEnabled = settings.autoSubmitEnabled
         hotkeyConfiguration = settings.hotkeyConfiguration
         echoCancellationEnabled = settings.echoCancellationEnabled
+        hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
+        hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
         isHydratingGeneralSettings = false
+        normalizeOnboardingSettingsIfNeeded(loadedSettings: settings)
     }
 
     private func persistGeneralSettings() {
@@ -1601,8 +1822,39 @@ final class AppState {
             preferredInputDeviceID: selectedInputDeviceID,
             autoSubmitEnabled: autoSubmitEnabled,
             hotkeyConfiguration: hotkeyConfiguration,
-            echoCancellationEnabled: echoCancellationEnabled
+            echoCancellationEnabled: echoCancellationEnabled,
+            hasSeenOnboardingWelcome: hasSeenOnboardingWelcome,
+            hasCompletedCoreOnboarding: hasCompletedCoreOnboarding
         )
+    }
+
+    private func normalizeOnboardingSettingsIfNeeded(loadedSettings: GeneralSettings) {
+        let needsNormalization = loadedSettings.hasSeenOnboardingWelcome == nil
+            || loadedSettings.hasCompletedCoreOnboarding == nil
+            || (loadedSettings.hasCompletedCoreOnboarding == true && loadedSettings.hasSeenOnboardingWelcome != true)
+
+        guard needsNormalization else {
+            return
+        }
+
+        let shouldMarkComplete = shouldAutoCompleteOnboardingForLegacyUser
+        let normalizedComplete = loadedSettings.hasCompletedCoreOnboarding ?? shouldMarkComplete
+        let normalizedWelcome = loadedSettings.hasSeenOnboardingWelcome ?? (normalizedComplete || shouldMarkComplete)
+
+        hasSeenOnboardingWelcome = normalizedWelcome
+        hasCompletedCoreOnboarding = normalizedComplete
+        persistGeneralSettings()
+    }
+
+    private var shouldAutoCompleteOnboardingForLegacyUser: Bool {
+        if isModelInstalled || !recentResults.isEmpty {
+            return true
+        }
+
+        return selectedInputDeviceID != nil
+            || autoSubmitEnabled
+            || echoCancellationEnabled
+            || hotkeyConfiguration != .globe
     }
 
     private func loadLLMSettings() {
@@ -1781,6 +2033,54 @@ final class AppState {
         case .needsModel, .downloadingModel, .loading, .ready, .error:
             return .idle
         }
+    }
+
+    private var currentDictationDestination: DictationDestination {
+        activeOnboardingStep == .practice ? .onboardingPractice : .systemInsertion
+    }
+
+    private var isOnboardingBlockingRecordingStart: Bool {
+        activeOnboardingStep == .welcome || activeOnboardingStep == .setup
+    }
+
+    private var modelDownloadETAText: String? {
+        guard let startedAt = modelDownloadStartedAt,
+              downloadProgress > 0.01 else {
+            return nil
+        }
+
+        let elapsed = nowProvider().timeIntervalSince(startedAt)
+        guard elapsed >= 1 else {
+            return nil
+        }
+
+        let remaining = elapsed * (1 - downloadProgress) / downloadProgress
+        guard remaining.isFinite else {
+            return nil
+        }
+        if remaining <= 1 {
+            return "Almost done"
+        }
+
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = remaining >= 3600 ? [.hour, .minute] : [.minute, .second]
+        formatter.unitsStyle = .abbreviated
+        formatter.maximumUnitCount = 2
+
+        guard let formatted = formatter.string(from: remaining) else {
+            return nil
+        }
+
+        return "About \(formatted) left"
+    }
+
+    private func refreshOnboardingProgressIfNeeded() {
+        guard activeOnboardingStep == .setup,
+              !hasCompletedCoreOnboarding,
+              isOnboardingSetupComplete else {
+            return
+        }
+        completeCoreOnboarding()
     }
 
     private func handleAudioLevelsUpdate(_ levels: [Float]) {

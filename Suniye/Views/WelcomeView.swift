@@ -1,31 +1,41 @@
+import AppKit
 import SwiftUI
 
 struct WelcomeView: View {
-    let onContinue: () -> Void
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Welcome to Suniye")
-                .font(AppTypography.pageTitle)
+        VStack(spacing: 20) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 64, height: 64)
 
-            Text("Local, low-latency dictation for macOS using Parakeet TDT with sherpa-onnx.")
-                .font(AppTypography.body)
-                .foregroundStyle(.secondary)
+            Text("Suniye")
+                .font(AppTypography.bodyMedium)
+                .foregroundStyle(MainWindowPalette.secondaryText)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Label("No cloud transcription in MVP", systemImage: "lock.shield")
-                Label("Hold fn/globe to dictate", systemImage: "keyboard")
-                Label("Clipboard is preserved after paste", systemImage: "doc.on.clipboard")
+            Text("Voice to text,\nanywhere on your Mac")
+                .font(.custom("Google Sans", fixedSize: 22).weight(.semibold))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 14) {
+                benefitRow(icon: "lock.shield", text: "Private — audio never leaves your device")
+                benefitRow(icon: "bolt.fill", text: "Offline — no internet required")
+                benefitRow(icon: "macwindow.on.rectangle", text: "Works in every app")
             }
-            .font(AppTypography.subheadline)
-
-            Spacer()
-
-            Button("Get Started") {
-                onContinue()
-            }
-            .buttonStyle(.borderedProminent)
+            .padding(.top, 4)
         }
-        .padding(20)
+    }
+
+    private func benefitRow(icon: String, text: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(MainWindowPalette.secondaryText)
+                .frame(width: 20)
+            Text(text)
+                .font(AppTypography.body)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+        }
     }
 }
