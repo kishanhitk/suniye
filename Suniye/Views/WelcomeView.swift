@@ -1,18 +1,8 @@
-import AppKit
 import SwiftUI
 
 struct WelcomeView: View {
     var body: some View {
         VStack(spacing: 20) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 64, height: 64)
-
-            Text("Suniye")
-                .font(AppTypography.bodyMedium)
-                .foregroundStyle(MainWindowPalette.secondaryText)
-
             Text("Voice to text,\nanywhere on your Mac")
                 .font(.custom("Google Sans", fixedSize: 22).weight(.semibold))
                 .multilineTextAlignment(.center)

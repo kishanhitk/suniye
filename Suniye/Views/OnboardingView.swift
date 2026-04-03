@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct OnboardingView: View {
@@ -59,13 +60,30 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var stepContent: some View {
-        switch step {
-        case .welcome:
-            WelcomeView()
-        case .setup:
-            setupContent
-        case .practice:
-            practiceContent
+        VStack(spacing: step == .welcome ? 20 : 18) {
+            onboardingBrandHeader
+
+            switch step {
+            case .welcome:
+                WelcomeView()
+            case .setup:
+                setupContent
+            case .practice:
+                practiceContent
+            }
+        }
+    }
+
+    private var onboardingBrandHeader: some View {
+        VStack(spacing: 10) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 64, height: 64)
+
+            Text("Suniye")
+                .font(AppTypography.bodyMedium)
+                .foregroundStyle(MainWindowPalette.secondaryText)
         }
     }
 
