@@ -179,7 +179,7 @@ struct OnboardingView: View {
                         .font(AppTypography.caption)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                     }
-                } else if appState.phase == .loading, appState.isModelInstalled {
+                } else if appState.phase == .loading {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Speech Model")
                             .font(AppTypography.body)
@@ -204,22 +204,44 @@ struct OnboardingView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
 
-            if appState.phase == .error, let error = appState.lastError {
-                Text(error)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 10)
+            if appState.phase == .error {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let error = appState.lastError, !error.isEmpty {
+                        Text(error)
+                            .font(AppTypography.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    HStack(spacing: 10) {
+                        Button("Retry Download") {
+                            appState.startModelDownload()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+
+                        Button("Remove Files") {
+                            appState.deleteModel()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
             }
         }
     }
 
     @ViewBuilder
     private var modelStatusView: some View {
-        if appState.isModelInstalled {
+        if appState.phase == .ready || appState.phase == .recording || appState.phase == .transcribing {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
                 .font(.system(size: 15))
+        } else if appState.phase == .error {
+            Text("Failed")
+                .font(AppTypography.caption)
+                .foregroundStyle(.red)
         } else if appState.phase == .downloadingModel {
             Text("\(Int(appState.downloadProgress * 100))%")
                 .font(AppTypography.codeCaption)

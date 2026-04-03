@@ -1646,6 +1646,7 @@ final class AppState {
             overlayErrorResetTask?.cancel()
             overlayErrorResetTask = nil
             if currentDictationDestination == .onboardingPractice {
+                onboardingPracticeText = ""
                 onboardingPracticeResult = nil
             }
             setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0), source: trigger))
@@ -1768,6 +1769,7 @@ final class AppState {
             recordingStart = nil
             lastError = "Transcription failed: \(error.localizedDescription)"
             if destination == .onboardingPractice {
+                onboardingPracticeText = ""
                 onboardingPracticeResult = OnboardingPracticeResult(
                     message: error.localizedDescription,
                     severity: .error

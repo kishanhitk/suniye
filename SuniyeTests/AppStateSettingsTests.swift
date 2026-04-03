@@ -288,6 +288,39 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertTrue(historyStore.value.isEmpty)
     }
 
+    func testPracticeModeFailureClearsStalePreview() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .failure(FakeError(message: "decoder failed"))
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.activeOnboardingStep = .practice
+        appState.onboardingPracticeText = "Old preview"
+        appState.onboardingPracticeResult = OnboardingPracticeResult(
+            message: "Captured locally. You can finish onboarding whenever you're ready.",
+            severity: .success
+        )
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.onboardingPracticeText, "")
+        XCTAssertNil(appState.onboardingPracticeResult)
+
+        appState.stopRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.onboardingPracticeText, "")
+        XCTAssertEqual(appState.onboardingPracticeResult?.severity, .error)
+        XCTAssertEqual(appState.onboardingPracticeResult?.message, "decoder failed")
+    }
+
     func testRecordingDoesNotStartWhileSetupStepIsActive() async {
         let audioCapture = StubAudioCaptureService()
         let appState = makeTestAppState(audioCaptureService: audioCapture)

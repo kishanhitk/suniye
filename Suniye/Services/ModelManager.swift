@@ -103,16 +103,17 @@ final class ModelManager: ModelManagerProtocol {
         }
 
         let (url, response) = try await downloader.download(from: modelDownloadURL, using: session)
+        defer {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
 
         guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
             throw ModelError.invalidResponse
         }
 
         try extract(archive: url, into: destinationDir)
-
-        if FileManager.default.fileExists(atPath: url.path) {
-            try? FileManager.default.removeItem(at: url)
-        }
 
         progress(1)
     }
