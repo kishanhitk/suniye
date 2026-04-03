@@ -595,6 +595,54 @@ extension TimeInterval {
     }
 }
 
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(in: proposal.width ?? .infinity, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (index, position) in arrange(in: bounds.width, subviews: subviews).positions.enumerated() {
+            subviews[index].place(
+                at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y),
+                proposal: .unspecified
+            )
+        }
+    }
+
+    private struct ArrangeResult {
+        var size: CGSize
+        var positions: [CGPoint]
+    }
+
+    private func arrange(in maxWidth: CGFloat, subviews: Subviews) -> ArrangeResult {
+        var positions: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var maxX: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > maxWidth, x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            positions.append(CGPoint(x: x, y: y))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+            maxX = max(maxX, x - spacing)
+        }
+
+        return ArrangeResult(
+            size: CGSize(width: maxX, height: y + rowHeight),
+            positions: positions
+        )
+    }
+}
+
 extension Int {
     var abbreviatedString: String {
         switch self {
