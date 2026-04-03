@@ -87,8 +87,7 @@ struct OnboardingView: View {
                         icon: "hand.raised",
                         title: "Accessibility",
                         isGranted: appState.hasAccessibilityPermission,
-                        action: { appState.requestAccessibilityPermission() },
-                        settingsAction: { appState.openAccessibilityPrivacySettings() }
+                        action: { appState.requestAccessibilityPermission() }
                     )
 
                     CardDivider()
@@ -98,8 +97,7 @@ struct OnboardingView: View {
                         icon: "mic",
                         title: "Microphone",
                         isGranted: appState.hasMicPermission,
-                        action: { appState.requestMicrophonePermission() },
-                        settingsAction: { appState.openMicrophonePrivacySettings() }
+                        action: { appState.requestMicrophonePermission() }
                     )
 
                     CardDivider()
@@ -116,8 +114,7 @@ struct OnboardingView: View {
         icon: String,
         title: String,
         isGranted: Bool,
-        action: @escaping () -> Void,
-        settingsAction: @escaping () -> Void
+        action: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
@@ -135,20 +132,11 @@ struct OnboardingView: View {
                     .foregroundStyle(.green)
                     .font(.system(size: 15))
             } else {
-                HStack(spacing: 8) {
-                    Button("Settings") {
-                        settingsAction()
-                    }
-                    .buttonStyle(.plain)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(Color.accentColor)
-
-                    Button("Enable") {
-                        action()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                Button("Enable") {
+                    action()
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
             }
         }
         .padding(.horizontal, 14)
