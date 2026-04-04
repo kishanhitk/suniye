@@ -111,8 +111,14 @@ final class StubModelManager: ModelManagerProtocol {
     var installedModelIDs: Set<ASRModelID> = [.parakeetV3]
     var installedByteCounts: [ASRModelID: Int64] = [
         .parakeetV3: 631_000_000,
+        .parakeetV2English: 482_468_385,
         .moonshineBase: 285_000_000,
         .senseVoice: 240_000_000,
+        .whisperTinyEnglish: 118_071_777,
+        .whisperBaseEnglish: 208_576_005,
+        .whisperSmallEnglish: 635_693_775,
+        .whisperLargeV3Turbo: 563_790_207,
+        .whisperDistilLargeV3: 529_350_808,
         .whisperLargeV3: 1_700_000_000
     ]
     var deleteCallCount = 0
@@ -128,6 +134,16 @@ final class StubModelManager: ModelManagerProtocol {
             encoderPath: "/tmp/parakeet/encoder.int8.onnx",
             decoderPath: "/tmp/parakeet/decoder.int8.onnx",
             joinerPath: "/tmp/parakeet/joiner.int8.onnx",
+            modelType: "nemo_transducer"
+        ),
+        .parakeetV2English: RecognizerConfig(
+            modelID: .parakeetV2English,
+            family: .nemoTransducer,
+            tokensPath: "/tmp/parakeet-v2/tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/parakeet-v2/encoder.int8.onnx",
+            decoderPath: "/tmp/parakeet-v2/decoder.int8.onnx",
+            joinerPath: "/tmp/parakeet-v2/joiner.int8.onnx",
             modelType: "nemo_transducer"
         ),
         .moonshineBase: RecognizerConfig(
@@ -156,6 +172,46 @@ final class StubModelManager: ModelManagerProtocol {
             numThreads: 4,
             encoderPath: "/tmp/whisper/large-v3-encoder.int8.onnx",
             decoderPath: "/tmp/whisper/large-v3-decoder.int8.onnx"
+        ),
+        .whisperTinyEnglish: RecognizerConfig(
+            modelID: .whisperTinyEnglish,
+            family: .whisper,
+            tokensPath: "/tmp/whisper-tiny/tiny.en-tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/whisper-tiny/tiny.en-encoder.int8.onnx",
+            decoderPath: "/tmp/whisper-tiny/tiny.en-decoder.int8.onnx"
+        ),
+        .whisperBaseEnglish: RecognizerConfig(
+            modelID: .whisperBaseEnglish,
+            family: .whisper,
+            tokensPath: "/tmp/whisper-base/base.en-tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/whisper-base/base.en-encoder.int8.onnx",
+            decoderPath: "/tmp/whisper-base/base.en-decoder.int8.onnx"
+        ),
+        .whisperSmallEnglish: RecognizerConfig(
+            modelID: .whisperSmallEnglish,
+            family: .whisper,
+            tokensPath: "/tmp/whisper-small/small.en-tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/whisper-small/small.en-encoder.int8.onnx",
+            decoderPath: "/tmp/whisper-small/small.en-decoder.int8.onnx"
+        ),
+        .whisperLargeV3Turbo: RecognizerConfig(
+            modelID: .whisperLargeV3Turbo,
+            family: .whisper,
+            tokensPath: "/tmp/whisper-turbo/turbo-tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/whisper-turbo/turbo-encoder.int8.onnx",
+            decoderPath: "/tmp/whisper-turbo/turbo-decoder.int8.onnx"
+        ),
+        .whisperDistilLargeV3: RecognizerConfig(
+            modelID: .whisperDistilLargeV3,
+            family: .whisper,
+            tokensPath: "/tmp/whisper-distil-large-v3/distil-large-v3-tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/whisper-distil-large-v3/distil-large-v3-encoder.int8.onnx",
+            decoderPath: "/tmp/whisper-distil-large-v3/distil-large-v3-decoder.int8.onnx"
         )
     ]
 

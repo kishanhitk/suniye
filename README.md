@@ -70,7 +70,7 @@ Suniye checks for updates automatically on launch (no popups). When an update is
 |---|---|
 | **Platform** | macOS 14+ |
 | **UI** | SwiftUI |
-| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with a curated local model catalog (Parakeet, Moonshine, SenseVoice, Whisper) |
+| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with a curated local model catalog (Parakeet, Moonshine, SenseVoice, and multiple Whisper variants) |
 | **License** | [MIT](LICENSE) |
 
 ### Build from source

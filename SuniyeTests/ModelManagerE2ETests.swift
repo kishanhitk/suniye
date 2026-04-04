@@ -53,6 +53,17 @@ final class ModelManagerE2ETests: XCTestCase {
         XCTAssertEqual(config.numThreads, 4)
     }
 
+    func testParakeetV2RecognizerConfigUsesExpectedFiles() throws {
+        let manager = ModelManager()
+        let config = try manager.makeRecognizerConfig(for: .parakeetV2English)
+
+        XCTAssertEqual(config.family, .nemoTransducer)
+        XCTAssertTrue(config.encoderPath?.hasSuffix("encoder.int8.onnx") == true)
+        XCTAssertTrue(config.decoderPath?.hasSuffix("decoder.int8.onnx") == true)
+        XCTAssertTrue(config.joinerPath?.hasSuffix("joiner.int8.onnx") == true)
+        XCTAssertTrue(config.tokensPath.hasSuffix("tokens.txt"))
+    }
+
     func testMoonshineRecognizerConfigUsesExpectedFiles() throws {
         let manager = ModelManager()
         let config = try manager.makeRecognizerConfig(for: .moonshineBase)
@@ -71,5 +82,25 @@ final class ModelManagerE2ETests: XCTestCase {
         XCTAssertEqual(config.family, .senseVoice)
         XCTAssertTrue(config.modelPath?.hasSuffix("model.int8.onnx") == true)
         XCTAssertTrue(config.tokensPath.hasSuffix("tokens.txt"))
+    }
+
+    func testWhisperTurboRecognizerConfigUsesExpectedFiles() throws {
+        let manager = ModelManager()
+        let config = try manager.makeRecognizerConfig(for: .whisperLargeV3Turbo)
+
+        XCTAssertEqual(config.family, .whisper)
+        XCTAssertTrue(config.encoderPath?.hasSuffix("turbo-encoder.int8.onnx") == true)
+        XCTAssertTrue(config.decoderPath?.hasSuffix("turbo-decoder.int8.onnx") == true)
+        XCTAssertTrue(config.tokensPath.hasSuffix("turbo-tokens.txt"))
+    }
+
+    func testWhisperDistilLargeV3RecognizerConfigUsesExpectedFiles() throws {
+        let manager = ModelManager()
+        let config = try manager.makeRecognizerConfig(for: .whisperDistilLargeV3)
+
+        XCTAssertEqual(config.family, .whisper)
+        XCTAssertTrue(config.encoderPath?.hasSuffix("distil-large-v3-encoder.int8.onnx") == true)
+        XCTAssertTrue(config.decoderPath?.hasSuffix("distil-large-v3-decoder.int8.onnx") == true)
+        XCTAssertTrue(config.tokensPath.hasSuffix("distil-large-v3-tokens.txt"))
     }
 }

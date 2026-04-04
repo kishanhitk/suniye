@@ -9,8 +9,14 @@ enum ASRModelFamily: String, Codable {
 
 enum ASRModelID: String, Codable, CaseIterable, Identifiable {
     case parakeetV3
+    case parakeetV2English
     case moonshineBase
     case senseVoice
+    case whisperTinyEnglish
+    case whisperBaseEnglish
+    case whisperSmallEnglish
+    case whisperLargeV3Turbo
+    case whisperDistilLargeV3
     case whisperLargeV3
 
     var id: String {
@@ -99,9 +105,15 @@ struct ASRModelCatalogEntry: Identifiable, Equatable {
 enum ASRModelCatalog {
     static let fallbackOrder: [ASRModelID] = [
         .parakeetV3,
+        .parakeetV2English,
         .senseVoice,
         .moonshineBase,
-        .whisperLargeV3
+        .whisperLargeV3Turbo,
+        .whisperDistilLargeV3,
+        .whisperLargeV3,
+        .whisperSmallEnglish,
+        .whisperBaseEnglish,
+        .whisperTinyEnglish
     ]
 
     static let entries: [ASRModelCatalogEntry] = [
@@ -115,8 +127,31 @@ enum ASRModelCatalog {
             speedLabel: "Balanced",
             qualityLabel: "Best",
             estimatedSizeBytes: 680_000_000,
-            downloadSource: .archive(URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2")!),
+            downloadSource: .archive(archiveURL("sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2")),
             directoryName: "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8",
+            recognizerModelType: "nemo_transducer",
+            languageHint: "",
+            taskHint: "transcribe",
+            useInverseTextNormalization: false,
+            manifest: ASRModelFileManifest(
+                tokens: "tokens.txt",
+                encoder: "encoder.int8.onnx",
+                decoder: "decoder.int8.onnx",
+                joiner: "joiner.int8.onnx"
+            )
+        ),
+        ASRModelCatalogEntry(
+            id: .parakeetV2English,
+            displayName: "Parakeet TDT 0.6B v2",
+            description: "Strong English-focused dictation with a smaller footprint than v3.",
+            family: .nemoTransducer,
+            badges: [.balanced],
+            languageSummary: "English",
+            speedLabel: "Balanced",
+            qualityLabel: "Better",
+            estimatedSizeBytes: 482_468_385,
+            downloadSource: .archive(archiveURL("sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2")),
+            directoryName: "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8",
             recognizerModelType: "nemo_transducer",
             languageHint: "",
             taskHint: "transcribe",
@@ -138,7 +173,7 @@ enum ASRModelCatalog {
             speedLabel: "Fast",
             qualityLabel: "Good",
             estimatedSizeBytes: 285_000_000,
-            downloadSource: .archive(URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-moonshine-base-en-int8.tar.bz2")!),
+            downloadSource: .archive(archiveURL("sherpa-onnx-moonshine-base-en-int8.tar.bz2")),
             directoryName: "sherpa-onnx-moonshine-base-en-int8",
             recognizerModelType: "",
             languageHint: "",
@@ -162,7 +197,7 @@ enum ASRModelCatalog {
             speedLabel: "Balanced",
             qualityLabel: "Better",
             estimatedSizeBytes: 240_000_000,
-            downloadSource: .archive(URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2")!),
+            downloadSource: .archive(archiveURL("sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2")),
             directoryName: "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17",
             recognizerModelType: "",
             languageHint: "auto",
@@ -173,43 +208,83 @@ enum ASRModelCatalog {
                 model: "model.int8.onnx"
             )
         ),
-        ASRModelCatalogEntry(
+        whisperEntry(
+            id: .whisperTinyEnglish,
+            displayName: "Whisper Tiny (English)",
+            description: "The smallest Whisper option for quick local English dictation.",
+            badges: [.fast],
+            languageSummary: "English",
+            speedLabel: "Fast",
+            qualityLabel: "Basic",
+            estimatedSizeBytes: 118_071_777,
+            archiveAssetName: "sherpa-onnx-whisper-tiny.en.tar.bz2",
+            directoryName: "sherpa-onnx-whisper-tiny.en",
+            filePrefix: "tiny.en"
+        ),
+        whisperEntry(
+            id: .whisperBaseEnglish,
+            displayName: "Whisper Base (English)",
+            description: "A lightweight English Whisper model with a little more headroom than Tiny.",
+            badges: [.fast],
+            languageSummary: "English",
+            speedLabel: "Fast",
+            qualityLabel: "Good",
+            estimatedSizeBytes: 208_576_005,
+            archiveAssetName: "sherpa-onnx-whisper-base.en.tar.bz2",
+            directoryName: "sherpa-onnx-whisper-base.en",
+            filePrefix: "base.en"
+        ),
+        whisperEntry(
+            id: .whisperSmallEnglish,
+            displayName: "Whisper Small (English)",
+            description: "A more accurate English Whisper model for longer-form local dictation.",
+            badges: [.balanced],
+            languageSummary: "English",
+            speedLabel: "Balanced",
+            qualityLabel: "Better",
+            estimatedSizeBytes: 635_693_775,
+            archiveAssetName: "sherpa-onnx-whisper-small.en.tar.bz2",
+            directoryName: "sherpa-onnx-whisper-small.en",
+            filePrefix: "small.en"
+        ),
+        whisperEntry(
+            id: .whisperLargeV3Turbo,
+            displayName: "Whisper Large v3 Turbo",
+            description: "A faster large Whisper model when you want strong multilingual quality with less wait.",
+            badges: [.fast, .bestQuality],
+            languageSummary: "Multilingual",
+            speedLabel: "Fast",
+            qualityLabel: "Best",
+            estimatedSizeBytes: 563_790_207,
+            archiveAssetName: "sherpa-onnx-whisper-turbo.tar.bz2",
+            directoryName: "sherpa-onnx-whisper-turbo",
+            filePrefix: "turbo"
+        ),
+        whisperEntry(
+            id: .whisperDistilLargeV3,
+            displayName: "Whisper Distil Large v3",
+            description: "A distilled large Whisper model that stays accurate while reducing local load time.",
+            badges: [.balanced],
+            languageSummary: "Multilingual",
+            speedLabel: "Balanced",
+            qualityLabel: "Best",
+            estimatedSizeBytes: 529_350_808,
+            archiveAssetName: "sherpa-onnx-whisper-distil-large-v3.tar.bz2",
+            directoryName: "sherpa-onnx-whisper-distil-large-v3",
+            filePrefix: "distil-large-v3"
+        ),
+        whisperEntry(
             id: .whisperLargeV3,
             displayName: "Whisper Large v3",
             description: "Broad multilingual coverage when you want the highest-quality fallback.",
-            family: .whisper,
             badges: [.bestQuality],
             languageSummary: "Multilingual",
             speedLabel: "Slower",
             qualityLabel: "Best",
             estimatedSizeBytes: 1_700_000_000,
-            downloadSource: .remoteFiles([
-                ASRModelRemoteFile(
-                    remoteURL: URL(string: "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-large-v3/resolve/main/large-v3-encoder.int8.onnx?download=true")!,
-                    destinationRelativePath: "large-v3-encoder.int8.onnx",
-                    expectedSizeBytes: 732_000_000
-                ),
-                ASRModelRemoteFile(
-                    remoteURL: URL(string: "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-large-v3/resolve/main/large-v3-decoder.int8.onnx?download=true")!,
-                    destinationRelativePath: "large-v3-decoder.int8.onnx",
-                    expectedSizeBytes: 962_000_000
-                ),
-                ASRModelRemoteFile(
-                    remoteURL: URL(string: "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-large-v3/resolve/main/large-v3-tokens.txt?download=true")!,
-                    destinationRelativePath: "large-v3-tokens.txt",
-                    expectedSizeBytes: 798_000
-                )
-            ]),
+            archiveAssetName: "sherpa-onnx-whisper-large-v3.tar.bz2",
             directoryName: "sherpa-onnx-whisper-large-v3",
-            recognizerModelType: "",
-            languageHint: "",
-            taskHint: "transcribe",
-            useInverseTextNormalization: false,
-            manifest: ASRModelFileManifest(
-                tokens: "large-v3-tokens.txt",
-                encoder: "large-v3-encoder.int8.onnx",
-                decoder: "large-v3-decoder.int8.onnx"
-            )
+            filePrefix: "large-v3"
         )
     ]
 
@@ -218,5 +293,46 @@ enum ASRModelCatalog {
             preconditionFailure("Missing ASR model catalog entry for \(id.rawValue)")
         }
         return entry
+    }
+
+    private static func archiveURL(_ assetName: String) -> URL {
+        URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/\(assetName)")!
+    }
+
+    private static func whisperEntry(
+        id: ASRModelID,
+        displayName: String,
+        description: String,
+        badges: [ASRModelBadge],
+        languageSummary: String,
+        speedLabel: String,
+        qualityLabel: String,
+        estimatedSizeBytes: Int64,
+        archiveAssetName: String,
+        directoryName: String,
+        filePrefix: String
+    ) -> ASRModelCatalogEntry {
+        ASRModelCatalogEntry(
+            id: id,
+            displayName: displayName,
+            description: description,
+            family: .whisper,
+            badges: badges,
+            languageSummary: languageSummary,
+            speedLabel: speedLabel,
+            qualityLabel: qualityLabel,
+            estimatedSizeBytes: estimatedSizeBytes,
+            downloadSource: .archive(archiveURL(archiveAssetName)),
+            directoryName: directoryName,
+            recognizerModelType: "",
+            languageHint: "",
+            taskHint: "transcribe",
+            useInverseTextNormalization: false,
+            manifest: ASRModelFileManifest(
+                tokens: "\(filePrefix)-tokens.txt",
+                encoder: "\(filePrefix)-encoder.int8.onnx",
+                decoder: "\(filePrefix)-decoder.int8.onnx"
+            )
+        )
     }
 }
