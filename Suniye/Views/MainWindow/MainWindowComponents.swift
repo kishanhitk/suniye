@@ -340,6 +340,7 @@ struct DashboardMetricCard: View {
 struct AttentionTile: View {
     let item: AttentionItem
     let action: () -> Void
+    let onFixAction: (AttentionItemFixAction) -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -364,9 +365,9 @@ struct AttentionTile: View {
             }
             .buttonStyle(.plain)
 
-            if let fixTitle = item.fixTitle, let fixAction = item.fixAction {
-                Button(fixTitle) {
-                    fixAction()
+            if let fixAction = item.fixAction {
+                Button(fixAction.title) {
+                    onFixAction(fixAction)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
