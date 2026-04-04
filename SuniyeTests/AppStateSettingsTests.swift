@@ -476,6 +476,37 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(transcriptionService.loadedConfigs.last?.modelID, .senseVoice)
     }
 
+    func testBootstrapFallsBackToAnotherInstalledModelWhenPreferredLoadFails() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3, .senseVoice, .moonshineBase]
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.loadModelErrorsByModelID = [
+            .parakeetV3: FakeError(message: "selected broken"),
+            .senseVoice: FakeError(message: "fallback broken")
+        ]
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                preferredInputDeviceID: nil,
+                hasSeenOnboardingWelcome: true,
+                hasCompletedCoreOnboarding: true,
+                selectedASRModelID: .parakeetV3
+            )
+        )
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            transcriptionService: transcriptionService,
+            generalSettingsStore: generalSettingsStore
+        )
+
+        await appState.bootstrap()
+
+        XCTAssertEqual(appState.selectedASRModelID, .moonshineBase)
+        XCTAssertEqual(appState.loadedASRModelID, .moonshineBase)
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertEqual(generalSettingsStore.latest.selectedASRModelID, .moonshineBase)
+        XCTAssertEqual(transcriptionService.loadedConfigs.map(\.modelID), [.parakeetV3, .senseVoice, .moonshineBase])
+    }
+
     func testDeletingCurrentASRModelFallsBackToInstalledAlternative() async {
         let modelManager = StubModelManager()
         modelManager.installedModelIDs = [.parakeetV3, .senseVoice]
@@ -492,6 +523,41 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.selectedASRModelID, .senseVoice)
         XCTAssertEqual(appState.loadedASRModelID, .senseVoice)
         XCTAssertEqual(appState.phase, .ready)
+    }
+
+    func testDeletingCurrentASRModelSkipsBrokenFallbackAndPersistsSuccessfulAlternative() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3, .senseVoice, .moonshineBase]
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.loadModelErrorsByModelID = [
+            .senseVoice: FakeError(message: "fallback broken")
+        ]
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                preferredInputDeviceID: nil,
+                hasSeenOnboardingWelcome: true,
+                hasCompletedCoreOnboarding: true,
+                selectedASRModelID: .parakeetV3
+            )
+        )
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            transcriptionService: transcriptionService,
+            generalSettingsStore: generalSettingsStore
+        )
+        appState.phase = .ready
+        appState.selectedASRModelID = .parakeetV3
+        appState.loadedASRModelID = .parakeetV3
+
+        appState.deleteASRModel(.parakeetV3)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(modelManager.lastDeletedModelID, .parakeetV3)
+        XCTAssertEqual(appState.selectedASRModelID, .moonshineBase)
+        XCTAssertEqual(appState.loadedASRModelID, .moonshineBase)
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertEqual(generalSettingsStore.latest.selectedASRModelID, .moonshineBase)
+        XCTAssertEqual(transcriptionService.loadedConfigs.map(\.modelID), [.senseVoice, .moonshineBase])
     }
 
     func testModelDownloadSuccessTransitionsSetupToPractice() async {

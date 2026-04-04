@@ -1097,14 +1097,15 @@ final class AppState {
         await refreshPermissions()
 
         statusText = "Checking model..."
-        if let bootstrapModelID = preferredBootstrapModelID() {
-            if bootstrapModelID != selectedASRModelID {
-                selectedASRModelID = bootstrapModelID
-            }
+        let bootstrapCandidates = orderedInstalledASRModelIDs()
+        if !bootstrapCandidates.isEmpty {
             phase = .loading
             statusText = "Loading model..."
             do {
-                try await loadRecognizer(for: bootstrapModelID)
+                let bootstrapModelID = try await loadFirstAvailableASRModel(from: bootstrapCandidates)
+                if bootstrapModelID != selectedASRModelID {
+                    selectedASRModelID = bootstrapModelID
+                }
                 phase = .ready
                 statusText = "Ready"
                 lastError = nil
@@ -1113,6 +1114,7 @@ final class AppState {
                 lastError = "Model load failed: \(error.localizedDescription)"
                 statusText = "Load failed"
             }
+            activeASRModelOperationID = nil
         } else {
             phase = .needsModel
             statusText = "Model required"
@@ -1553,13 +1555,13 @@ final class AppState {
                     loadedASRModelID = nil
                 }
 
-                if isCurrentModel, let fallbackModelID = bestFallbackModelID(excluding: modelID) {
-                    selectedASRModelID = fallbackModelID
-                    activeASRModelOperationID = fallbackModelID
+                let fallbackCandidates = orderedInstalledASRModelIDs(excluding: Set([modelID]))
+                if isCurrentModel, !fallbackCandidates.isEmpty {
                     phase = .loading
                     statusText = "Loading model..."
                     do {
-                        try await loadRecognizer(for: fallbackModelID)
+                        let fallbackModelID = try await loadFirstAvailableASRModel(from: fallbackCandidates)
+                        selectedASRModelID = fallbackModelID
                         phase = .ready
                         statusText = "Ready"
                         lastError = nil
@@ -1981,23 +1983,42 @@ final class AppState {
         AppLogger.shared.log(.info, "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString)")
     }
 
-    private func preferredBootstrapModelID() -> ASRModelID? {
-        if modelManager.isInstalled(selectedASRModelID) {
-            return selectedASRModelID
+    private func orderedInstalledASRModelIDs(excluding excludedModelIDs: Set<ASRModelID> = []) -> [ASRModelID] {
+        let installedModelIDs = Set(modelManager.installedModels())
+        var orderedModelIDs: [ASRModelID] = []
+
+        if installedModelIDs.contains(selectedASRModelID), !excludedModelIDs.contains(selectedASRModelID) {
+            orderedModelIDs.append(selectedASRModelID)
         }
 
-        return bestFallbackModelID()
+        for modelID in modelManager.fallbackOrder
+        where installedModelIDs.contains(modelID)
+            && !excludedModelIDs.contains(modelID)
+            && !orderedModelIDs.contains(modelID) {
+            orderedModelIDs.append(modelID)
+        }
+
+        return orderedModelIDs
     }
 
-    private func bestFallbackModelID(excluding excludedModelID: ASRModelID? = nil) -> ASRModelID? {
-        let installedModelIDs = Set(modelManager.installedModels())
-        for modelID in modelManager.fallbackOrder where modelID != excludedModelID {
-            if installedModelIDs.contains(modelID) {
+    private func loadFirstAvailableASRModel(from candidateModelIDs: [ASRModelID]) async throws -> ASRModelID {
+        var lastError: Error?
+
+        for modelID in candidateModelIDs {
+            activeASRModelOperationID = modelID
+            do {
+                try await loadRecognizer(for: modelID)
                 return modelID
+            } catch {
+                lastError = error
+                AppLogger.shared.log(
+                    .warning,
+                    "model load fallback failed id=\(modelID.rawValue) error=\(error.localizedDescription)"
+                )
             }
         }
 
-        return nil
+        throw lastError ?? AppStateError.modelValidationFailed
     }
 
     private func handleASRModelOperationFailure(for modelID: ASRModelID, error: Error, fallbackToReadyState: Bool) {

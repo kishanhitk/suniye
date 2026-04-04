@@ -260,6 +260,7 @@ final class StubModelManager: ModelManagerProtocol {
 final class StubTranscriptionService: TranscriptionServiceProtocol {
     var transcribeResult: Result<String, Error> = .success("")
     var loadModelResult: Result<Void, Error> = .success(())
+    var loadModelErrorsByModelID: [ASRModelID: Error] = [:]
     var unloadCallCount = 0
     var loadCallCount = 0
     var loadedConfigs: [RecognizerConfig] = []
@@ -267,6 +268,9 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     func loadModel(config: RecognizerConfig) async throws {
         loadCallCount += 1
         loadedConfigs.append(config)
+        if let error = loadModelErrorsByModelID[config.modelID] {
+            throw error
+        }
         try loadModelResult.get()
     }
 
