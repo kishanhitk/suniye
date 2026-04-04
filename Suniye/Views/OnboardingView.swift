@@ -198,7 +198,7 @@ struct OnboardingView: View {
                                 fromByteCount: Int64(Double(appState.modelExpectedByteCount) * appState.downloadProgress),
                                 countStyle: .file
                             ))
-                            + Text("of ")
+                            + Text(" of ")
                                 .font(AppTypography.caption)
                             + mixedMonoNumberText(appState.modelExpectedSizeText))
 
