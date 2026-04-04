@@ -8,7 +8,7 @@ Open-source, local-first dictation for macOS. Hold a key, speak, and your words 
 
 ## Why Suniye?
 
-- **Private by default** — A 600 MB speech model runs entirely on your Mac. No audio leaves your machine. No cloud. No training data.
+- **Private by default** — Local speech models run entirely on your Mac. Audio never leaves your machine, with no cloud processing or training data retention.
 - **Works everywhere** — Inserts text directly into whichever app you're using via macOS Accessibility APIs.
 - **Instant** — No network round-trip. Your voice becomes text in milliseconds, not seconds.
 - **One shortcut** — Hold a key (configurable), talk, release. That's it.
@@ -27,7 +27,7 @@ Requires **macOS 14 (Sonoma)** or later.
 4. Grant the permissions Suniye asks for:
    - **Microphone** — to hear you
    - **Accessibility** — to type text into other apps
-5. Suniye will download a ~600 MB speech model on first launch. This is a one-time setup.
+5. Suniye will help you install a local speech model on first launch. The onboarding flow defaults to **Parakeet TDT 0.6B v3**, and you can switch to another supported offline model later from the `ASR Model` page.
 6. On first launch, Suniye walks you through a short onboarding flow: welcome, setup, and an optional practice dictation.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed steps.
@@ -45,10 +45,27 @@ See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed st
 | **Dashboard** | Session stats, today's word count, total dictation time, recent activity |
 | **History** | Searchable log of past transcriptions with copy and delete |
 | **Hotkey** | Configurable hold-to-talk shortcut (Fn/Globe, modifier combos, etc.) |
-| **Model** | Manage the offline speech model — download, update, or delete |
+| **Model** | Compare local ASR models by speed, quality, size, and language support; install supported options, switch the active model, or remove unused ones |
 | **Vocabulary** | Add domain-specific terms so the app gets your jargon right |
 | **LLM** | Optional AI cleanup — choose a model, set an API key, customize the prompt |
 | **General** | Preferred mic, auto-paste, launch at login, diagnostics |
+
+## Supported speech models
+
+Suniye ships a curated local model catalog instead of a single fixed recognizer:
+
+- **Parakeet TDT 0.6B v3** — recommended default for everyday dictation
+- **Parakeet TDT 0.6B v2** — strong English-focused Parakeet option
+- **Moonshine Base** — fastest lightweight English option
+- **SenseVoice** — multilingual option for Chinese, Japanese, Korean, English, and Cantonese
+- **Whisper Tiny (English)** — smallest Whisper download
+- **Whisper Base (English)** — lightweight Whisper English model
+- **Whisper Small (English)** — more accurate English Whisper option
+- **Whisper Large v3 Turbo** — faster large Whisper model
+- **Whisper Distil Large v3** — distilled large Whisper model
+- **Whisper Large v3** — broad multilingual fallback with the heaviest footprint
+
+All supported models run offline on your Mac and are managed from the `ASR Model` page.
 
 ## Updating
 
@@ -70,7 +87,7 @@ Suniye checks for updates automatically on launch (no popups). When an update is
 |---|---|
 | **Platform** | macOS 14+ |
 | **UI** | SwiftUI |
-| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (NVIDIA NeMo Parakeet TDT 0.6B, int8) |
+| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with a curated local model catalog (Parakeet, Moonshine, SenseVoice, and multiple Whisper variants) |
 | **License** | [MIT](LICENSE) |
 
 ### Build from source

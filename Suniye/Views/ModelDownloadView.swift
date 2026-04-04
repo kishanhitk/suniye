@@ -5,10 +5,10 @@ struct ModelDownloadView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Download Parakeet Model")
+            Text("Download Speech Model")
                 .font(AppTypography.pageTitle)
 
-            Text("Required model: sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8")
+            Text("Required model: \(appState.currentASRModelEntry.displayName)")
                 .font(AppTypography.body)
                 .foregroundStyle(.secondary)
 

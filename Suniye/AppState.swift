@@ -170,6 +170,36 @@ struct OnboardingPracticeResult: Equatable {
     let severity: Severity
 }
 
+struct ASRModelBannerState: Equatable {
+    enum Tone: Equatable {
+        case info
+        case error
+
+        var color: Color {
+            switch self {
+            case .info:
+                return .accentColor
+            case .error:
+                return .red
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .info:
+                return "arrow.triangle.2.circlepath.circle.fill"
+            case .error:
+                return "exclamationmark.triangle.fill"
+            }
+        }
+    }
+
+    let title: String
+    let detail: String
+    let tone: Tone
+    let progress: Double?
+}
+
 @MainActor
 @Observable
 final class AppState {
@@ -256,6 +286,34 @@ final class AppState {
         }
     }
     var modelDownloadStartedAt: Date?
+    var activeASRModelOperationID: ASRModelID? {
+        didSet {
+            if oldValue != activeASRModelOperationID {
+                onStateChange?()
+            }
+        }
+    }
+    var loadedASRModelID: ASRModelID? {
+        didSet {
+            if oldValue != loadedASRModelID {
+                onStateChange?()
+            }
+        }
+    }
+    var lastFailedASRModelID: ASRModelID? {
+        didSet {
+            if oldValue != lastFailedASRModelID {
+                onStateChange?()
+            }
+        }
+    }
+    var lastFailedASRModelError: String? {
+        didSet {
+            if oldValue != lastFailedASRModelError {
+                onStateChange?()
+            }
+        }
+    }
     var wordsTranscribed = 0
     var sessionCount = 0
     var totalDictationSeconds: TimeInterval = 0
@@ -306,6 +364,18 @@ final class AppState {
             if runtimeServicesEnabled {
                 wireHotkey()
             }
+            onStateChange?()
+        }
+    }
+    var selectedASRModelID: ASRModelID = .parakeetV3 {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            guard oldValue != selectedASRModelID else {
+                return
+            }
+            persistGeneralSettings()
             onStateChange?()
         }
     }
@@ -417,8 +487,24 @@ final class AppState {
     var launchAtLoginStatus: LaunchAtLoginStatus = .disabled
     var launchAtLoginError: String?
 
+    var asrModelCatalog: [ASRModelCatalogEntry] {
+        modelManager.catalog
+    }
+
+    var currentASRModelEntry: ASRModelCatalogEntry {
+        ASRModelCatalog.entry(for: selectedASRModelID)
+    }
+
+    var availableASRModelEntries: [ASRModelCatalogEntry] {
+        asrModelCatalog.filter { $0.id != selectedASRModelID }
+    }
+
+    var hasAnyInstalledModel: Bool {
+        !modelManager.installedModels().isEmpty
+    }
+
     var isModelInstalled: Bool {
-        modelManager.isModelReady()
+        modelManager.isInstalled(selectedASRModelID)
     }
 
     var llmKeyStatusText: String {
@@ -489,15 +575,15 @@ final class AppState {
     }
 
     var modelInstalledSizeText: String {
-        ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(), countStyle: .file)
+        ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(for: selectedASRModelID), countStyle: .file)
     }
 
     var modelExpectedByteCount: Int64 {
-        modelManager.expectedDownloadSizeBytes
+        modelManager.expectedDownloadSizeBytes(for: activeASRModelOperationID ?? selectedASRModelID)
     }
 
     var modelExpectedSizeText: String {
-        "~" + ByteCountFormatter.string(fromByteCount: modelManager.expectedDownloadSizeBytes, countStyle: .file)
+        "~" + ByteCountFormatter.string(fromByteCount: modelExpectedByteCount, countStyle: .file)
     }
 
     var modelDownloadETAStatusText: String {
@@ -510,7 +596,7 @@ final class AppState {
         }
 
         let percentage = Int(downloadProgress * 100)
-        let downloadedBytes = Int64(Double(modelManager.expectedDownloadSizeBytes) * downloadProgress)
+        let downloadedBytes = Int64(Double(modelExpectedByteCount) * downloadProgress)
         let downloadedSize = ByteCountFormatter.string(fromByteCount: downloadedBytes, countStyle: .file)
         if let etaText = modelDownloadETAText {
             return "\(percentage)% downloaded • \(downloadedSize) of \(modelExpectedSizeText)\n\(etaText)"
@@ -519,15 +605,18 @@ final class AppState {
     }
 
     var isModelOperationInProgress: Bool {
-        phase == .downloadingModel || (phase == .loading && !isModelInstalled)
+        activeASRModelOperationID != nil && (phase == .downloadingModel || phase == .loading)
     }
 
     var modelOperationStatusText: String {
+        let modelName = (activeASRModelOperationID.map { ASRModelCatalog.entry(for: $0).displayName }) ?? currentASRModelEntry.displayName
         switch phase {
         case .downloadingModel:
-            return "Downloading model…"
-        case .loading where !isModelInstalled:
-            return "Extracting and validating model…"
+            return "Downloading \(modelName)…"
+        case .loading where activeASRModelOperationID != nil && !isModelInstalled:
+            return "Extracting and validating \(modelName)…"
+        case .loading where activeASRModelOperationID != nil:
+            return "Loading \(modelName)…"
         default:
             return ""
         }
@@ -536,13 +625,19 @@ final class AppState {
     var modelStatusValue: String {
         switch phase {
         case .downloadingModel:
-            return "Downloading \(Int(downloadProgress * 100))%"
+            if activeASRModelOperationID == selectedASRModelID {
+                return "Downloading \(Int(downloadProgress * 100))%"
+            }
+            return loadedASRModelID == selectedASRModelID ? "Current" : (isModelInstalled ? "Installed" : "Missing")
         case .loading:
-            return isModelInstalled ? "Loading" : "Validating"
+            return activeASRModelOperationID == selectedASRModelID ? (isModelInstalled ? "Loading" : "Validating") : (loadedASRModelID == selectedASRModelID ? "Current" : "Missing")
         case .ready, .recording, .transcribing:
-            return isModelInstalled ? "Ready" : "Missing"
+            return loadedASRModelID == selectedASRModelID ? "Current" : (isModelInstalled ? "Installed" : "Missing")
         case .error:
-            return isModelInstalled ? "Ready" : "Download failed"
+            if lastFailedASRModelID == selectedASRModelID {
+                return "Download failed"
+            }
+            return loadedASRModelID == selectedASRModelID ? "Current" : (isModelInstalled ? "Installed" : "Missing")
         case .needsModel:
             return "Missing"
         }
@@ -551,11 +646,14 @@ final class AppState {
     var modelStatusColor: Color {
         switch phase {
         case .ready, .recording, .transcribing:
-            return isModelInstalled ? .green : .orange
+            return loadedASRModelID == selectedASRModelID ? .green : .orange
         case .downloadingModel, .loading:
-            return .accentColor
+            if activeASRModelOperationID == selectedASRModelID {
+                return .accentColor
+            }
+            return loadedASRModelID == selectedASRModelID ? .green : .orange
         case .error:
-            return isModelInstalled ? .green : .red
+            return lastFailedASRModelID == selectedASRModelID ? .red : (loadedASRModelID == selectedASRModelID ? .green : .orange)
         case .needsModel:
             return .orange
         }
@@ -564,41 +662,189 @@ final class AppState {
     var modelStatusIcon: String {
         switch phase {
         case .ready, .recording, .transcribing:
-            return isModelInstalled ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+            return loadedASRModelID == selectedASRModelID ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
         case .downloadingModel, .loading:
-            return "arrow.down.circle.fill"
+            if activeASRModelOperationID == selectedASRModelID {
+                return "arrow.down.circle.fill"
+            }
+            return loadedASRModelID == selectedASRModelID ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
         case .error:
-            return isModelInstalled ? "checkmark.circle.fill" : "xmark.octagon.fill"
+            return lastFailedASRModelID == selectedASRModelID ? "xmark.octagon.fill" : "checkmark.circle.fill"
         case .needsModel:
             return "exclamationmark.triangle.fill"
         }
     }
 
     var modelPrimaryActionTitle: String {
-        if isModelInstalled {
-            return "Delete Model"
+        if activeASRModelOperationID == selectedASRModelID {
+            return phase == .loading ? "Loading…" : "Downloading…"
         }
-        if phase == .downloadingModel {
-            return "Downloading…"
+        if loadedASRModelID == selectedASRModelID {
+            return "Current"
+        }
+        if isModelInstalled {
+            return "Use Model"
         }
         return "Download Model"
     }
 
     var modelPrimaryActionDetail: String {
-        if isModelInstalled {
-            return "Stored locally for offline transcription. Delete to reclaim disk space."
+        if loadedASRModelID == selectedASRModelID {
+            return "Stored locally for offline dictation. Delete it if you want to reclaim disk space."
         }
-        if phase == .downloadingModel {
-            return "Keep Suniye open until the archive is downloaded, extracted, and validated."
+        if activeASRModelOperationID == selectedASRModelID {
+            return "Keep Suniye open while \(currentASRModelEntry.displayName) is downloaded, validated, and loaded."
         }
-        if phase == .error, let lastError, !lastError.isEmpty {
-            return "Last attempt failed. Retry the offline model download to enable local transcription."
+        if lastFailedASRModelID == selectedASRModelID, let lastFailedASRModelError, !lastFailedASRModelError.isEmpty {
+            return "Last attempt failed. Retry setup for \(currentASRModelEntry.displayName) to use it for dictation."
         }
-        return "Download the required offline model to enable local transcription."
+        return "Download \(currentASRModelEntry.displayName) to keep speech recognition fully local."
     }
 
     var modelLocationText: String {
-        (try? modelManager.modelDirectoryURL().path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) ?? "~/Library/Application Support/Suniye/models"
+        (try? modelManager.modelDirectoryURL(for: selectedASRModelID).path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) ?? "~/Library/Application Support/Suniye/models"
+    }
+
+    var asrModelBanner: ASRModelBannerState? {
+        if let activeASRModelOperationID {
+            let entry = ASRModelCatalog.entry(for: activeASRModelOperationID)
+            switch phase {
+            case .downloadingModel:
+                return ASRModelBannerState(
+                    title: "Downloading Model",
+                    detail: "Installing \(entry.displayName) locally. Keep Suniye open until the files finish validating.",
+                    tone: .info,
+                    progress: downloadProgress
+                )
+            case .loading:
+                return ASRModelBannerState(
+                    title: "Loading Model",
+                    detail: "Loading \(entry.displayName) into memory. The first load can take a moment.",
+                    tone: .info,
+                    progress: nil
+                )
+            default:
+                break
+            }
+        }
+
+        if let lastFailedASRModelID, let lastFailedASRModelError, !lastFailedASRModelError.isEmpty {
+            return ASRModelBannerState(
+                title: "Model Action Failed",
+                detail: "\(ASRModelCatalog.entry(for: lastFailedASRModelID).displayName): \(lastFailedASRModelError)",
+                tone: .error,
+                progress: nil
+            )
+        }
+
+        if phase == .error, let lastError, !lastError.isEmpty {
+            return ASRModelBannerState(
+                title: "Model Unavailable",
+                detail: lastError,
+                tone: .error,
+                progress: nil
+            )
+        }
+
+        return nil
+    }
+
+    func asrModelStatusText(for modelID: ASRModelID) -> String {
+        if activeASRModelOperationID == modelID {
+            switch phase {
+            case .downloadingModel:
+                return "Downloading"
+            case .loading:
+                return "Loading"
+            default:
+                break
+            }
+        }
+
+        if loadedASRModelID == modelID && selectedASRModelID == modelID {
+            return "Current"
+        }
+
+        if lastFailedASRModelID == modelID {
+            return "Failed"
+        }
+
+        if modelManager.isInstalled(modelID) {
+            return "Installed"
+        }
+
+        return "Missing"
+    }
+
+    func asrModelStatusColor(for modelID: ASRModelID) -> Color {
+        if activeASRModelOperationID == modelID {
+            return .accentColor
+        }
+
+        if loadedASRModelID == modelID && selectedASRModelID == modelID {
+            return .green
+        }
+
+        if lastFailedASRModelID == modelID {
+            return .red
+        }
+
+        if modelManager.isInstalled(modelID) {
+            return MainWindowPalette.secondaryText
+        }
+
+        return .orange
+    }
+
+    func asrModelPrimaryActionTitle(for modelID: ASRModelID) -> String {
+        if activeASRModelOperationID == modelID {
+            return phase == .loading ? "Loading…" : "Downloading…"
+        }
+
+        if loadedASRModelID == modelID && selectedASRModelID == modelID {
+            return "Current"
+        }
+
+        return modelManager.isInstalled(modelID) ? "Use Model" : "Download Model"
+    }
+
+    func asrModelCanPerformPrimaryAction(for modelID: ASRModelID) -> Bool {
+        guard activeASRModelOperationID == nil else {
+            return false
+        }
+
+        guard phase != .recording && phase != .transcribing else {
+            return false
+        }
+
+        return !(loadedASRModelID == modelID && selectedASRModelID == modelID)
+    }
+
+    func asrModelSecondaryActionsEnabled(for modelID: ASRModelID) -> Bool {
+        modelManager.isInstalled(modelID) && activeASRModelOperationID == nil && phase != .recording && phase != .transcribing
+    }
+
+    func asrModelProgressLabel(for modelID: ASRModelID) -> String? {
+        guard activeASRModelOperationID == modelID else {
+            return nil
+        }
+
+        switch phase {
+        case .downloadingModel:
+            return modelDownloadProgressLabel
+        case .loading:
+            return "Preparing the local recognizer."
+        default:
+            return nil
+        }
+    }
+
+    func asrModelInstalledSizeText(for modelID: ASRModelID) -> String {
+        ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(for: modelID), countStyle: .file)
+    }
+
+    func asrModelLocationText(for modelID: ASRModelID) -> String {
+        (try? modelManager.modelDirectoryURL(for: modelID).path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) ?? "~/Library/Application Support/Suniye/models"
     }
 
     var launchAtLoginDetailText: String {
@@ -660,7 +906,7 @@ final class AppState {
                 AttentionItem(
                     id: "model-missing",
                     title: "Model not installed",
-                    detail: "Download the required Parakeet model to enable dictation.",
+                    detail: "Download \(currentASRModelEntry.displayName) to enable dictation.",
                     severity: .warning,
                     recommendedSection: .model
                 )
@@ -851,15 +1097,24 @@ final class AppState {
         await refreshPermissions()
 
         statusText = "Checking model..."
-        if modelManager.isModelReady() {
+        let bootstrapCandidates = orderedInstalledASRModelIDs()
+        if !bootstrapCandidates.isEmpty {
             phase = .loading
             statusText = "Loading model..."
-            let didLoadRecognizer = await loadRecognizerIfPossible()
-            if didLoadRecognizer {
+            do {
+                let bootstrapModelID = try await loadFirstAvailableASRModel(from: bootstrapCandidates)
+                if bootstrapModelID != selectedASRModelID {
+                    selectedASRModelID = bootstrapModelID
+                }
                 phase = .ready
                 statusText = "Ready"
                 lastError = nil
+            } catch {
+                phase = .error
+                lastError = "Model load failed: \(error.localizedDescription)"
+                statusText = "Load failed"
             }
+            activeASRModelOperationID = nil
         } else {
             phase = .needsModel
             statusText = "Model required"
@@ -1145,20 +1400,48 @@ final class AppState {
     }
 
     func startModelDownload() {
-        guard phase != .recording && phase != .transcribing else {
+        downloadASRModel(selectedASRModelID, autoSelect: true)
+    }
+
+    func deleteModel() {
+        deleteASRModel(selectedASRModelID)
+    }
+
+    func openModelFolder() {
+        openModelFolder(for: selectedASRModelID)
+    }
+
+    func performPrimaryASRAction(for modelID: ASRModelID) {
+        guard asrModelCanPerformPrimaryAction(for: modelID) else {
             return
         }
 
+        if modelManager.isInstalled(modelID) {
+            selectASRModel(modelID)
+        } else {
+            downloadASRModel(modelID, autoSelect: true)
+        }
+    }
+
+    func downloadASRModel(_ modelID: ASRModelID, autoSelect: Bool) {
+        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+            return
+        }
+
+        let hadLoadedModel = loadedASRModelID != nil
+        activeASRModelOperationID = modelID
         phase = .downloadingModel
         statusText = "Downloading model..."
         lastError = nil
+        lastFailedASRModelID = nil
+        lastFailedASRModelError = nil
         downloadProgress = 0
         modelDownloadStartedAt = nowProvider()
 
         Task {
             do {
-                AppLogger.shared.log(.info, "model download started")
-                try await modelManager.downloadAndExtractModel { [weak self] progress in
+                AppLogger.shared.log(.info, "model download started id=\(modelID.rawValue)")
+                try await modelManager.downloadAndExtractModel(modelID) { [weak self] progress in
                     Task { @MainActor in
                         self?.downloadProgress = progress
                     }
@@ -1168,55 +1451,160 @@ final class AppState {
                 statusText = "Validating model..."
                 modelDownloadStartedAt = nil
 
-                guard modelManager.isModelReady() else {
+                guard modelManager.isInstalled(modelID) else {
                     throw AppStateError.modelValidationFailed
                 }
 
-                let didLoadRecognizer = await loadRecognizerIfPossible()
-                if didLoadRecognizer {
-                    phase = .ready
-                    statusText = "Ready"
-                    lastError = nil
-                    refreshOnboardingProgressIfNeeded()
-                    AppLogger.shared.log(.info, "model download complete")
+                if autoSelect {
+                    do {
+                        try await loadRecognizer(for: modelID)
+                        selectedASRModelID = modelID
+                        phase = .ready
+                        statusText = "Ready"
+                        lastError = nil
+                        lastFailedASRModelID = nil
+                        lastFailedASRModelError = nil
+                        refreshOnboardingProgressIfNeeded()
+                        AppLogger.shared.log(.info, "model download complete id=\(modelID.rawValue)")
+                    } catch {
+                        handleASRModelOperationFailure(
+                            for: modelID,
+                            error: error,
+                            fallbackToReadyState: hadLoadedModel
+                        )
+                    }
+                } else {
+                    if hadLoadedModel {
+                        phase = .ready
+                        statusText = "Ready"
+                    } else {
+                        phase = .needsModel
+                        statusText = "Model required"
+                    }
+                    lastFailedASRModelID = nil
+                    lastFailedASRModelError = nil
                 }
             } catch {
-                phase = .error
-                lastError = error.localizedDescription
-                statusText = "Download failed"
-                modelDownloadStartedAt = nil
-                AppLogger.shared.log(.error, "model download failed: \(error.localizedDescription)")
+                handleASRModelOperationFailure(
+                    for: modelID,
+                    error: error,
+                    fallbackToReadyState: hadLoadedModel
+                )
+                AppLogger.shared.log(.error, "model download failed id=\(modelID.rawValue) error=\(error.localizedDescription)")
             }
+
+            activeASRModelOperationID = nil
+            modelDownloadStartedAt = nil
         }
     }
 
-    func deleteModel() {
-        guard phase != .recording && phase != .transcribing && phase != .downloadingModel else {
+    func selectASRModel(_ modelID: ASRModelID) {
+        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+            return
+        }
+        guard loadedASRModelID != modelID else {
             return
         }
 
+        if !modelManager.isInstalled(modelID) {
+            downloadASRModel(modelID, autoSelect: true)
+            return
+        }
+
+        let hadLoadedModel = loadedASRModelID != nil
+        activeASRModelOperationID = modelID
+        phase = .loading
+        statusText = "Loading model..."
+        lastError = nil
+        lastFailedASRModelID = nil
+        lastFailedASRModelError = nil
+
         Task {
             do {
-                try modelManager.deleteModel()
-                await transcriptionService.unloadModel()
-                phase = .needsModel
-                statusText = "Model required"
+                try await loadRecognizer(for: modelID)
+                selectedASRModelID = modelID
+                phase = .ready
+                statusText = "Ready"
+                lastError = nil
+                lastFailedASRModelID = nil
+                lastFailedASRModelError = nil
+                AppLogger.shared.log(.info, "model switch complete id=\(modelID.rawValue)")
+            } catch {
+                handleASRModelOperationFailure(
+                    for: modelID,
+                    error: error,
+                    fallbackToReadyState: hadLoadedModel
+                )
+            }
+            activeASRModelOperationID = nil
+        }
+    }
+
+    func deleteASRModel(_ modelID: ASRModelID) {
+        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+            return
+        }
+
+        let isCurrentModel = selectedASRModelID == modelID || loadedASRModelID == modelID
+        activeASRModelOperationID = modelID
+
+        Task {
+            do {
+                try modelManager.deleteModel(modelID)
+                if isCurrentModel {
+                    await transcriptionService.unloadModel()
+                    loadedASRModelID = nil
+                }
+
+                let fallbackCandidates = orderedInstalledASRModelIDs(excluding: Set([modelID]))
+                if isCurrentModel, !fallbackCandidates.isEmpty {
+                    phase = .loading
+                    statusText = "Loading model..."
+                    do {
+                        let fallbackModelID = try await loadFirstAvailableASRModel(from: fallbackCandidates)
+                        selectedASRModelID = fallbackModelID
+                        phase = .ready
+                        statusText = "Ready"
+                        lastError = nil
+                    } catch {
+                        phase = .error
+                        statusText = "Load failed"
+                        lastError = "Model load failed: \(error.localizedDescription)"
+                    }
+                    activeASRModelOperationID = nil
+                    if phase == .ready {
+                        lastFailedASRModelID = nil
+                        lastFailedASRModelError = nil
+                    }
+                } else if isCurrentModel {
+                    selectedASRModelID = .parakeetV3
+                    phase = .needsModel
+                    statusText = "Model required"
+                }
+
                 downloadProgress = 0
                 modelDownloadStartedAt = nil
-                lastError = nil
-                AppLogger.shared.log(.info, "model deleted")
+                lastFailedASRModelID = nil
+                lastFailedASRModelError = nil
+                if !isCurrentModel {
+                    lastError = nil
+                }
+                AppLogger.shared.log(.info, "model deleted id=\(modelID.rawValue)")
             } catch {
                 phase = .error
                 statusText = "Model delete failed"
                 lastError = error.localizedDescription
-                AppLogger.shared.log(.error, "model delete failed: \(error.localizedDescription)")
+                lastFailedASRModelID = modelID
+                lastFailedASRModelError = error.localizedDescription
+                AppLogger.shared.log(.error, "model delete failed id=\(modelID.rawValue) error=\(error.localizedDescription)")
             }
+            activeASRModelOperationID = nil
         }
     }
 
-    func openModelFolder() {
+    func openModelFolder(for modelID: ASRModelID) {
         do {
-            let folder = try modelManager.modelDirectoryURL().deletingLastPathComponent()
+            let folder = try modelManager.modelDirectoryURL(for: modelID)
             NSWorkspace.shared.open(folder)
             AppLogger.shared.log(.info, "open model folder: \(folder.path)")
         } catch {
@@ -1597,18 +1985,69 @@ final class AppState {
         AppLogger.shared.log(.info, "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString)")
     }
 
-    private func loadRecognizerIfPossible() async -> Bool {
-        do {
-            let config = try modelManager.makeRecognizerConfig()
-            try await transcriptionService.loadModel(config: config)
-            return true
-        } catch {
-            phase = .error
-            lastError = "Model load failed: \(error.localizedDescription)"
-            statusText = "Load failed"
-            AppLogger.shared.log(.error, "model load failed: \(error.localizedDescription)")
-            return false
+    private func orderedInstalledASRModelIDs(excluding excludedModelIDs: Set<ASRModelID> = []) -> [ASRModelID] {
+        let installedModelIDs = Set(modelManager.installedModels())
+        var orderedModelIDs: [ASRModelID] = []
+
+        if installedModelIDs.contains(selectedASRModelID), !excludedModelIDs.contains(selectedASRModelID) {
+            orderedModelIDs.append(selectedASRModelID)
         }
+
+        for modelID in modelManager.fallbackOrder
+        where installedModelIDs.contains(modelID)
+            && !excludedModelIDs.contains(modelID)
+            && !orderedModelIDs.contains(modelID) {
+            orderedModelIDs.append(modelID)
+        }
+
+        return orderedModelIDs
+    }
+
+    private func loadFirstAvailableASRModel(from candidateModelIDs: [ASRModelID]) async throws -> ASRModelID {
+        guard !candidateModelIDs.isEmpty else {
+            throw AppStateError.modelValidationFailed
+        }
+
+        var lastError: Error?
+
+        for modelID in candidateModelIDs {
+            activeASRModelOperationID = modelID
+            do {
+                try await loadRecognizer(for: modelID)
+                return modelID
+            } catch {
+                lastError = error
+                AppLogger.shared.log(
+                    .warning,
+                    "model load fallback failed id=\(modelID.rawValue) error=\(error.localizedDescription)"
+                )
+            }
+        }
+
+        throw lastError ?? AppStateError.modelValidationFailed
+    }
+
+    private func handleASRModelOperationFailure(for modelID: ASRModelID, error: Error, fallbackToReadyState: Bool) {
+        downloadProgress = 0
+        lastFailedASRModelID = modelID
+        lastFailedASRModelError = error.localizedDescription
+
+        if fallbackToReadyState, loadedASRModelID != nil {
+            phase = .ready
+            statusText = "Ready"
+            lastError = nil
+            return
+        }
+
+        phase = .error
+        lastError = error.localizedDescription
+        statusText = "Download failed"
+    }
+
+    private func loadRecognizer(for modelID: ASRModelID) async throws {
+        let config = try modelManager.makeRecognizerConfig(for: modelID)
+        try await transcriptionService.loadModel(config: config)
+        loadedASRModelID = modelID
     }
 
     private func beginRecordingFlow(trigger: RecordingSource) async {
@@ -1824,6 +2263,7 @@ final class AppState {
         autoSubmitEnabled = settings.autoSubmitEnabled
         hotkeyConfiguration = settings.hotkeyConfiguration
         echoCancellationEnabled = settings.echoCancellationEnabled
+        selectedASRModelID = settings.selectedASRModelID
         hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
         hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
         isHydratingGeneralSettings = false
@@ -1841,7 +2281,8 @@ final class AppState {
             hotkeyConfiguration: hotkeyConfiguration,
             echoCancellationEnabled: echoCancellationEnabled,
             hasSeenOnboardingWelcome: hasSeenOnboardingWelcome,
-            hasCompletedCoreOnboarding: hasCompletedCoreOnboarding
+            hasCompletedCoreOnboarding: hasCompletedCoreOnboarding,
+            selectedASRModelID: selectedASRModelID
         )
     }
 

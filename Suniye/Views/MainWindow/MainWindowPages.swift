@@ -102,124 +102,244 @@ struct HistoryPage: View {
 
 struct ModelPage: View {
     @Bindable var appState: AppState
+    @State private var isHoveringCurrentModelActions = false
+    @State private var hoveredLibraryModelID: ASRModelID?
+    private let currentModelColumns = [
+        GridItem(.flexible(minimum: 150), spacing: 18, alignment: .leading),
+        GridItem(.flexible(minimum: 150), spacing: 18, alignment: .leading)
+    ]
+    private let libraryModelColumns = [
+        GridItem(.flexible(minimum: 120), spacing: 18, alignment: .leading),
+        GridItem(.flexible(minimum: 120), spacing: 18, alignment: .leading)
+    ]
 
     var body: some View {
         DetailScrollContainer {
-            SectionHeading(title: "ASR Model")
-
-            SurfaceCard {
-                VStack(spacing: 12) {
-                    InfoRow(title: "Name", value: "Parakeet TDT 0.6B v3")
-                    CardDivider()
-                    InfoRow(title: "Quantization", value: "INT8 (CPU-optimized)")
-                    CardDivider()
-                    InfoRow(title: "Disk size", value: appState.modelExpectedSizeText)
-                    CardDivider()
-                    InfoRow(
-                        title: "Status",
-                        value: appState.modelStatusValue,
-                        valueColor: appState.modelStatusColor,
-                        trailingIcon: appState.modelStatusIcon,
-                        trailingIconColor: appState.modelStatusColor
-                    )
-                    CardDivider()
-                    InfoRow(title: "On disk", value: appState.modelInstalledSizeText)
-                }
+            VStack(alignment: .leading, spacing: 4) {
+                DetailPageTitle(title: "ASR Model")
+                Text("Choose the offline recognizer Suniye keeps on your Mac.")
+                    .font(AppTypography.body)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
             }
 
-            SurfaceCard {
-                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                    HStack(alignment: .center, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(appState.isModelInstalled ? "Model Installed" : "Offline Model Required")
-                                .font(AppTypography.bodyMedium)
+            if let banner = appState.asrModelBanner {
+                InlineStatusBanner(
+                    icon: banner.tone.icon,
+                    tint: banner.tone.color,
+                    title: banner.title,
+                    detail: banner.detail,
+                    progress: banner.progress
+                )
+            }
 
-                            if appState.isModelInstalled {
-                                Text(appState.modelLocationText)
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
-                                    .textSelection(.enabled)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            } else {
-                                Text(appState.modelPrimaryActionDetail)
-                                    .font(AppTypography.subheadline)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Current Model")
+                currentModelCard
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Available Models")
+
+                ForEach(appState.availableASRModelEntries) { entry in
+                    modelLibraryRow(for: entry)
+                }
+            }
+        }
+    }
+
+    private var currentModelCard: some View {
+        let entry = appState.currentASRModelEntry
+
+        return SurfaceCard(padding: 18) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            Text(entry.displayName)
+                                .font(AppTypography.pageTitle)
+
+                            StatusPill(
+                                title: appState.modelStatusValue,
+                                tint: appState.modelStatusColor
+                            )
                         }
 
-                        Spacer(minLength: 12)
+                        Text(entry.description)
+                            .font(AppTypography.body)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                        if appState.isModelInstalled {
-                            HStack(spacing: 12) {
-                                ActionIconButton(systemName: "folder", tint: MainWindowPalette.secondaryText) {
-                                    appState.openModelFolder()
-                                }
-                                ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive) {
-                                    appState.deleteModel()
-                                }
-                                .disabled(appState.phase == .downloadingModel)
+                        FlowLayout(spacing: 6) {
+                            ForEach(entry.badges, id: \.self) { badge in
+                                ModelTagBadge(title: badge.rawValue)
                             }
-                        } else {
+                        }
+                    }
+
+                    Spacer(minLength: 24)
+
+                    VStack(alignment: .trailing, spacing: 12) {
+                        if appState.modelPrimaryActionTitle != "Current" {
                             Button(appState.modelPrimaryActionTitle) {
-                                appState.startModelDownload()
+                                appState.performPrimaryASRAction(for: entry.id)
                             }
                             .buttonStyle(.borderedProminent)
-                            .disabled(appState.phase == .downloadingModel)
+                            .disabled(!appState.asrModelCanPerformPrimaryAction(for: entry.id))
+                        }
+
+                        if appState.asrModelSecondaryActionsEnabled(for: entry.id) {
+                            hoverRevealActions(
+                                for: entry.id,
+                                isVisible: isHoveringCurrentModelActions
+                            )
                         }
                     }
+                }
 
-                    if appState.isModelOperationInProgress {
-                        CardDivider()
+                CardDivider()
+                    .padding(.vertical, 2)
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(appState.modelOperationStatusText)
-                                .font(AppTypography.subheadlineSemibold)
+                LazyVGrid(columns: currentModelColumns, alignment: .leading, spacing: 14) {
+                    rowMeta(title: "Speed", value: entry.speedLabel)
+                    rowMeta(title: "Quality", value: entry.qualityLabel)
+                    rowMeta(title: "Languages", value: entry.languageSummary)
+                    rowMeta(title: "Size", value: entry.estimatedSizeText)
+                    rowMeta(title: "On disk", value: appState.asrModelInstalledSizeText(for: entry.id))
+                }
 
-                            if appState.phase == .downloadingModel {
-                                ProgressView(value: appState.downloadProgress)
-                                    .progressViewStyle(.linear)
-                                Text(appState.modelDownloadProgressLabel)
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
-                            } else {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Download complete. Finishing local setup before the model becomes available.")
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
-                                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
+                .stroke(appState.modelStatusColor.opacity(0.28), lineWidth: 1)
+        )
+        .onHover { hovering in
+            isHoveringCurrentModelActions = hovering
+        }
+    }
+
+    private func modelLibraryRow(for entry: ASRModelCatalogEntry) -> some View {
+        SurfaceCard(padding: 16) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            Text(entry.displayName)
+                                .font(AppTypography.bodyMedium)
+
+                            StatusPill(
+                                title: appState.asrModelStatusText(for: entry.id),
+                                tint: appState.asrModelStatusColor(for: entry.id)
+                            )
+                        }
+
+                        Text(entry.description)
+                            .font(AppTypography.body)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        FlowLayout(spacing: 6) {
+                            ForEach(entry.badges, id: \.self) { badge in
+                                ModelTagBadge(title: badge.rawValue)
                             }
                         }
                     }
 
-                    if appState.phase == .loading, appState.isModelInstalled {
-                        CardDivider()
+                    Spacer(minLength: 20)
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Loading model…")
-                                .font(AppTypography.subheadlineSemibold)
+                    VStack(alignment: .trailing, spacing: 12) {
+                        Button(appState.asrModelPrimaryActionTitle(for: entry.id)) {
+                            appState.performPrimaryASRAction(for: entry.id)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!appState.asrModelCanPerformPrimaryAction(for: entry.id))
 
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Preparing the local recognizer.")
-                                .font(AppTypography.caption)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                                .fixedSize(horizontal: false, vertical: true)
+                        if appState.asrModelSecondaryActionsEnabled(for: entry.id) {
+                            hoverRevealActions(
+                                for: entry.id,
+                                isVisible: hoveredLibraryModelID == entry.id
+                            )
                         }
                     }
+                }
 
-                    if let error = appState.lastError, appState.phase == .error {
-                        CardDivider()
+                LazyVGrid(columns: libraryModelColumns, alignment: .leading, spacing: 12) {
+                    rowMeta(title: "Size", value: entry.estimatedSizeText)
+                    rowMeta(title: "Speed", value: entry.speedLabel)
+                    rowMeta(title: "Quality", value: entry.qualityLabel)
+                    rowMeta(title: "Languages", value: entry.languageSummary)
+                }
 
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                if let progressLabel = appState.asrModelProgressLabel(for: entry.id) {
+                    CardDivider()
+                        .padding(.vertical, 2)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        if appState.activeASRModelOperationID == entry.id, appState.phase == .downloadingModel {
+                            ProgressView(value: appState.downloadProgress)
+                                .progressViewStyle(.linear)
+                        } else if appState.activeASRModelOperationID == entry.id, appState.phase == .loading {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+
+                        Text(progressLabel)
                             .font(AppTypography.caption)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
         }
+        .overlay(
+            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
+                .stroke(appState.asrModelStatusColor(for: entry.id).opacity(appState.activeASRModelOperationID == entry.id ? 0.4 : 0), lineWidth: 1)
+        )
+        .onHover { hovering in
+            if hovering {
+                hoveredLibraryModelID = entry.id
+            } else if hoveredLibraryModelID == entry.id {
+                hoveredLibraryModelID = nil
+            }
+        }
+    }
+
+    private func hoverRevealActions(for modelID: ASRModelID, isVisible: Bool) -> some View {
+        HStack(spacing: 6) {
+            ActionIconButton(
+                systemName: "folder",
+                accessibilityLabel: "Open model folder",
+                action: {
+                appState.openModelFolder(for: modelID)
+                }
+            )
+
+            ActionIconButton(
+                systemName: "trash",
+                accessibilityLabel: "Delete model",
+                tint: MainWindowPalette.destructive,
+                action: {
+                appState.deleteASRModel(modelID)
+                }
+            )
+        }
+        .frame(height: AppMetrics.iconButtonSize)
+        .opacity(isVisible ? 1 : 0.001)
+        .offset(y: isVisible ? 0 : -2)
+        .animation(.easeOut(duration: 0.16), value: isVisible)
+    }
+
+    private func rowMeta(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(AppTypography.caption)
+                .foregroundStyle(MainWindowPalette.tertiaryText)
+            Text(value)
+                .font(AppTypography.subheadlineSemibold)
+                .foregroundStyle(Color.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
