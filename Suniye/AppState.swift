@@ -1546,6 +1546,7 @@ final class AppState {
         }
 
         let isCurrentModel = selectedASRModelID == modelID || loadedASRModelID == modelID
+        activeASRModelOperationID = modelID
 
         Task {
             do {
@@ -1597,6 +1598,7 @@ final class AppState {
                 lastFailedASRModelError = error.localizedDescription
                 AppLogger.shared.log(.error, "model delete failed id=\(modelID.rawValue) error=\(error.localizedDescription)")
             }
+            activeASRModelOperationID = nil
         }
     }
 
