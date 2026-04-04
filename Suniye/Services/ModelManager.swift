@@ -132,12 +132,15 @@ final class ModelManager: ModelManagerProtocol {
 
     func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {
         let entry = try installedEntry(for: modelID)
-        let destinationDir = try modelsRootDirectoryURL()
-        let modelDirectory = destinationDir.appendingPathComponent(entry.directoryName, isDirectory: true)
-
-        if FileManager.default.fileExists(atPath: modelDirectory.path) {
-            try FileManager.default.removeItem(at: modelDirectory)
+        let modelsRootDirectory = try modelsRootDirectoryURL()
+        let stagingContainer = try makeStagingContainer(in: modelsRootDirectory, for: entry)
+        defer {
+            if FileManager.default.fileExists(atPath: stagingContainer.path) {
+                try? FileManager.default.removeItem(at: stagingContainer)
+            }
         }
+
+        let stagedModelDirectory = stagingContainer.appendingPathComponent(entry.directoryName, isDirectory: true)
 
         switch entry.downloadSource {
         case let .archive(url):
@@ -162,11 +165,15 @@ final class ModelManager: ModelManagerProtocol {
                 throw ModelError.invalidResponse
             }
 
-            try extract(archive: archiveURL, into: destinationDir)
-            progress(1)
+            try extract(archive: archiveURL, into: stagingContainer)
         case let .remoteFiles(files):
-            try await downloadRemoteFiles(files, into: modelDirectory, progress: progress)
+            try await downloadRemoteFiles(files, into: stagedModelDirectory, progress: progress)
         }
+
+        try Self.validateInstall(entry, at: stagedModelDirectory)
+        let liveModelDirectory = modelsRootDirectory.appendingPathComponent(entry.directoryName, isDirectory: true)
+        try Self.replaceInstalledModel(at: liveModelDirectory, with: stagedModelDirectory)
+        progress(1)
     }
 
     func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64 {
@@ -207,6 +214,13 @@ final class ModelManager: ModelManagerProtocol {
 
     private func catalogEntry(for modelID: ASRModelID) -> ASRModelCatalogEntry {
         ASRModelCatalog.entry(for: modelID)
+    }
+
+    private func makeStagingContainer(in modelsRootDirectory: URL, for entry: ASRModelCatalogEntry) throws -> URL {
+        let stagingContainer = modelsRootDirectory
+            .appendingPathComponent(".\(entry.directoryName)-staging-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: stagingContainer, withIntermediateDirectories: true)
+        return stagingContainer
     }
 
     private func extract(archive: URL, into destination: URL) throws {
@@ -290,8 +304,44 @@ final class ModelManager: ModelManagerProtocol {
             try FileManager.default.copyItem(at: downloadedURL, to: destinationURL)
             completedBytes += fallbackBytes
         }
+    }
 
-        progress(1)
+    static func validateInstall(_ entry: ASRModelCatalogEntry, at modelDirectory: URL) throws {
+        let missingPaths = entry.manifest.requiredRelativePaths.filter {
+            !FileManager.default.fileExists(atPath: modelDirectory.appendingPathComponent($0).path)
+        }
+
+        guard missingPaths.isEmpty else {
+            throw ModelError.extractFailed("missing required files: \(missingPaths.joined(separator: ", "))")
+        }
+    }
+
+    static func replaceInstalledModel(at liveModelDirectory: URL, with stagedModelDirectory: URL) throws {
+        let fileManager = FileManager.default
+        let backupDirectory = liveModelDirectory
+            .deletingLastPathComponent()
+            .appendingPathComponent(".\(liveModelDirectory.lastPathComponent)-backup-\(UUID().uuidString)", isDirectory: true)
+        let hadExistingInstall = fileManager.fileExists(atPath: liveModelDirectory.path)
+
+        do {
+            if hadExistingInstall {
+                try fileManager.moveItem(at: liveModelDirectory, to: backupDirectory)
+            }
+
+            try fileManager.moveItem(at: stagedModelDirectory, to: liveModelDirectory)
+
+            if hadExistingInstall, fileManager.fileExists(atPath: backupDirectory.path) {
+                try? fileManager.removeItem(at: backupDirectory)
+            }
+        } catch {
+            if hadExistingInstall,
+               !fileManager.fileExists(atPath: liveModelDirectory.path),
+               fileManager.fileExists(atPath: backupDirectory.path) {
+                try? fileManager.moveItem(at: backupDirectory, to: liveModelDirectory)
+            }
+
+            throw error
+        }
     }
 }
 
