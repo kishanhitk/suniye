@@ -380,6 +380,26 @@ final class AppStateUpdateTests: XCTestCase {
         })
     }
 
+    func testAttentionItemsExposeMicrophonePermissionFixAction() throws {
+        let updateService = StubUpdateService(checkResult: .success(.upToDate))
+        let appState = makeAppState(updateService: updateService)
+        appState.hasMicPermission = false
+
+        let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "mic-permission-missing" })
+        XCTAssertEqual(item.fixAction, .requestMicrophonePermission)
+        XCTAssertEqual(item.fixTitle, "Grant Access")
+    }
+
+    func testAttentionItemsExposeAccessibilityPermissionFixAction() throws {
+        let updateService = StubUpdateService(checkResult: .success(.upToDate))
+        let appState = makeAppState(updateService: updateService)
+        appState.hasAccessibilityPermission = false
+
+        let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "accessibility-permission-missing" })
+        XCTAssertEqual(item.fixAction, .requestAccessibilityPermission)
+        XCTAssertEqual(item.fixTitle, "Grant Access")
+    }
+
     func testMagicFormatStatusIsReadyWhenEnabledAndConfigured() {
         let updateService = StubUpdateService(checkResult: .success(.upToDate))
         let appState = makeTestAppState(
