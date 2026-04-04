@@ -13,7 +13,8 @@ final class GeneralSettingsStoreTests: XCTestCase {
             autoSubmitEnabled: true,
             hotkeyConfiguration: .keyCombo(keyCode: UInt32(kVK_Space), carbonModifiers: UInt32(optionKey)),
             hasSeenOnboardingWelcome: true,
-            hasCompletedCoreOnboarding: true
+            hasCompletedCoreOnboarding: true,
+            selectedASRModelID: .senseVoice
         )
 
         store.save(settings)

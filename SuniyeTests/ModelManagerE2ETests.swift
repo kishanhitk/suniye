@@ -37,19 +37,39 @@ final class ModelManagerE2ETests: XCTestCase {
 
     func testModelDirectoryResolvesInsideApplicationSupport() throws {
         let manager = ModelManager()
-        let modelDir = try manager.modelDirectoryURL()
+        let modelDir = try manager.modelDirectoryURL(for: .parakeetV3)
 
         XCTAssertTrue(modelDir.path.contains("/Library/Application Support/Suniye/models/"))
     }
 
     func testRecognizerConfigUsesExpectedFileNames() throws {
         let manager = ModelManager()
-        let config = try manager.makeRecognizerConfig()
+        let config = try manager.makeRecognizerConfig(for: .parakeetV3)
 
-        XCTAssertTrue(config.encoderPath.hasSuffix("encoder.int8.onnx"))
-        XCTAssertTrue(config.decoderPath.hasSuffix("decoder.int8.onnx"))
-        XCTAssertTrue(config.joinerPath.hasSuffix("joiner.int8.onnx"))
+        XCTAssertTrue(config.encoderPath?.hasSuffix("encoder.int8.onnx") == true)
+        XCTAssertTrue(config.decoderPath?.hasSuffix("decoder.int8.onnx") == true)
+        XCTAssertTrue(config.joinerPath?.hasSuffix("joiner.int8.onnx") == true)
         XCTAssertTrue(config.tokensPath.hasSuffix("tokens.txt"))
         XCTAssertEqual(config.numThreads, 4)
+    }
+
+    func testMoonshineRecognizerConfigUsesExpectedFiles() throws {
+        let manager = ModelManager()
+        let config = try manager.makeRecognizerConfig(for: .moonshineBase)
+
+        XCTAssertEqual(config.family, .moonshine)
+        XCTAssertTrue(config.preprocessorPath?.hasSuffix("preprocess.onnx") == true)
+        XCTAssertTrue(config.encoderPath?.hasSuffix("encode.int8.onnx") == true)
+        XCTAssertTrue(config.uncachedDecoderPath?.hasSuffix("uncached_decode.int8.onnx") == true)
+        XCTAssertTrue(config.cachedDecoderPath?.hasSuffix("cached_decode.int8.onnx") == true)
+    }
+
+    func testSenseVoiceRecognizerConfigUsesExpectedFiles() throws {
+        let manager = ModelManager()
+        let config = try manager.makeRecognizerConfig(for: .senseVoice)
+
+        XCTAssertEqual(config.family, .senseVoice)
+        XCTAssertTrue(config.modelPath?.hasSuffix("model.int8.onnx") == true)
+        XCTAssertTrue(config.tokensPath.hasSuffix("tokens.txt"))
     }
 }

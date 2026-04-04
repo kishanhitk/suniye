@@ -27,19 +27,24 @@ enum ModelDownloadProgressEstimator {
 }
 
 protocol ModelManagerProtocol {
-    var expectedDownloadSizeBytes: Int64 { get }
-    func modelDirectoryURL() throws -> URL
-    func isModelReady() -> Bool
-    func makeRecognizerConfig() throws -> RecognizerConfig
-    func downloadAndExtractModel(progress: @escaping @Sendable (Double) -> Void) async throws
-    func installedByteCount() -> Int64
-    func deleteModel() throws
+    var catalog: [ASRModelCatalogEntry] { get }
+    var fallbackOrder: [ASRModelID] { get }
+    func modelsRootDirectoryURL() throws -> URL
+    func modelDirectoryURL(for modelID: ASRModelID) throws -> URL
+    func isInstalled(_ modelID: ASRModelID) -> Bool
+    func installedModels() -> [ASRModelID]
+    func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig
+    func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws
+    func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64
+    func installedByteCount(for modelID: ASRModelID) -> Int64
+    func deleteModel(_ modelID: ASRModelID) throws
 }
 
 final class ModelManager: ModelManagerProtocol {
     enum ModelError: LocalizedError {
         case appSupportUnavailable
         case invalidResponse
+        case unknownModel
         case extractFailed(String)
 
         var errorDescription: String? {
@@ -48,17 +53,23 @@ final class ModelManager: ModelManagerProtocol {
                 return "Unable to resolve Application Support directory"
             case .invalidResponse:
                 return "Model download response was invalid"
+            case .unknownModel:
+                return "The selected model is not supported by this build"
             case let .extractFailed(reason):
                 return "Model extraction failed: \(reason)"
             }
         }
     }
 
-    private let modelDownloadURL = URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2")!
-    private let requiredFiles = ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"]
-    let expectedDownloadSizeBytes: Int64 = 680_000_000
+    var catalog: [ASRModelCatalogEntry] {
+        ASRModelCatalog.entries
+    }
 
-    func modelDirectoryURL() throws -> URL {
+    var fallbackOrder: [ASRModelID] {
+        ASRModelCatalog.fallbackOrder
+    }
+
+    func modelsRootDirectoryURL() throws -> URL {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             throw ModelError.appSupportUnavailable
         }
@@ -66,61 +77,112 @@ final class ModelManager: ModelManagerProtocol {
         let dir = appSupport
             .appendingPathComponent("Suniye", isDirectory: true)
             .appendingPathComponent("models", isDirectory: true)
-            .appendingPathComponent("sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8", isDirectory: true)
 
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
 
-    func isModelReady() -> Bool {
+    func modelDirectoryURL(for modelID: ASRModelID) throws -> URL {
+        let dir = try modelsRootDirectoryURL()
+            .appendingPathComponent(catalogEntry(for: modelID).directoryName, isDirectory: true)
+
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    func isInstalled(_ modelID: ASRModelID) -> Bool {
         do {
-            let dir = try modelDirectoryURL()
-            return requiredFiles.allSatisfy { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path) }
+            let entry = try installedEntry(for: modelID)
+            let dir = try modelDirectoryURL(for: modelID)
+            return entry.manifest.requiredRelativePaths.allSatisfy {
+                FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path)
+            }
         } catch {
             return false
         }
     }
 
-    func makeRecognizerConfig() throws -> RecognizerConfig {
-        let dir = try modelDirectoryURL()
+    func installedModels() -> [ASRModelID] {
+        catalog.map(\.id).filter(isInstalled)
+    }
+
+    func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig {
+        let entry = try installedEntry(for: modelID)
+        let dir = try modelDirectoryURL(for: modelID)
+
+        func path(_ relativePath: String?) -> String? {
+            relativePath.map { dir.appendingPathComponent($0).path }
+        }
 
         return RecognizerConfig(
-            encoderPath: dir.appendingPathComponent("encoder.int8.onnx").path,
-            decoderPath: dir.appendingPathComponent("decoder.int8.onnx").path,
-            joinerPath: dir.appendingPathComponent("joiner.int8.onnx").path,
-            tokensPath: dir.appendingPathComponent("tokens.txt").path,
-            numThreads: 4
+            modelID: modelID,
+            family: entry.family,
+            tokensPath: dir.appendingPathComponent(entry.manifest.tokens).path,
+            numThreads: 4,
+            encoderPath: path(entry.manifest.encoder),
+            decoderPath: path(entry.manifest.decoder),
+            joinerPath: path(entry.manifest.joiner),
+            preprocessorPath: path(entry.manifest.preprocessor),
+            uncachedDecoderPath: path(entry.manifest.uncachedDecoder),
+            cachedDecoderPath: path(entry.manifest.cachedDecoder),
+            modelPath: path(entry.manifest.model),
+            language: entry.languageHint,
+            task: entry.taskHint,
+            modelType: entry.recognizerModelType,
+            useInverseTextNormalization: entry.useInverseTextNormalization
         )
     }
 
-    func downloadAndExtractModel(progress: @escaping @Sendable (Double) -> Void) async throws {
-        let destinationDir = try modelDirectoryURL().deletingLastPathComponent()
+    func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {
+        let entry = try installedEntry(for: modelID)
+        let destinationDir = try modelsRootDirectoryURL()
+        let modelDirectory = destinationDir.appendingPathComponent(entry.directoryName, isDirectory: true)
 
-        let downloader = DownloadDelegate(progress: progress, fallbackExpectedSizeBytes: expectedDownloadSizeBytes)
-        let session = URLSession(configuration: .default, delegate: downloader, delegateQueue: nil)
-        defer {
-            session.finishTasksAndInvalidate()
+        if FileManager.default.fileExists(atPath: modelDirectory.path) {
+            try FileManager.default.removeItem(at: modelDirectory)
         }
 
-        let (url, response) = try await downloader.download(from: modelDownloadURL, using: session)
-        defer {
-            if FileManager.default.fileExists(atPath: url.path) {
-                try? FileManager.default.removeItem(at: url)
+        switch entry.downloadSource {
+        case let .archive(url):
+            let downloader = DownloadDelegate(
+                progress: progress,
+                fallbackExpectedSizeBytes: entry.estimatedSizeBytes,
+                temporaryFileBasename: entry.directoryName
+            )
+            let session = URLSession(configuration: .default, delegate: downloader, delegateQueue: nil)
+            defer {
+                session.finishTasksAndInvalidate()
             }
+
+            let (archiveURL, response) = try await downloader.download(from: url, using: session)
+            defer {
+                if FileManager.default.fileExists(atPath: archiveURL.path) {
+                    try? FileManager.default.removeItem(at: archiveURL)
+                }
+            }
+
+            guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
+                throw ModelError.invalidResponse
+            }
+
+            try extract(archive: archiveURL, into: destinationDir)
+            progress(1)
+        case let .remoteFiles(files):
+            try await downloadRemoteFiles(files, into: modelDirectory, progress: progress)
         }
-
-        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
-            throw ModelError.invalidResponse
-        }
-
-        try extract(archive: url, into: destinationDir)
-
-        progress(1)
     }
 
-    func installedByteCount() -> Int64 {
-        guard let directoryURL = try? modelDirectoryURL(),
-              let enumerator = FileManager.default.enumerator(at: directoryURL, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey], options: [.skipsHiddenFiles]) else {
+    func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64 {
+        ASRModelCatalog.entry(for: modelID).estimatedSizeBytes
+    }
+
+    func installedByteCount(for modelID: ASRModelID) -> Int64 {
+        guard let directoryURL = try? modelDirectoryURL(for: modelID),
+              let enumerator = FileManager.default.enumerator(
+                  at: directoryURL,
+                  includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+                  options: [.skipsHiddenFiles]
+              ) else {
             return 0
         }
 
@@ -134,11 +196,20 @@ final class ModelManager: ModelManagerProtocol {
         return total
     }
 
-    func deleteModel() throws {
-        let modelDirectory = try modelDirectoryURL()
+    func deleteModel(_ modelID: ASRModelID) throws {
+        let modelDirectory = try modelDirectoryURL(for: modelID)
         if FileManager.default.fileExists(atPath: modelDirectory.path) {
             try FileManager.default.removeItem(at: modelDirectory)
         }
+    }
+
+    private func installedEntry(for modelID: ASRModelID) throws -> ASRModelCatalogEntry {
+        let entry = catalogEntry(for: modelID)
+        return entry
+    }
+
+    private func catalogEntry(for modelID: ASRModelID) -> ASRModelCatalogEntry {
+        ASRModelCatalog.entry(for: modelID)
     }
 
     private func extract(archive: URL, into destination: URL) throws {
@@ -158,20 +229,92 @@ final class ModelManager: ModelManagerProtocol {
             throw ModelError.extractFailed(message)
         }
     }
+
+    private func downloadRemoteFiles(
+        _ files: [ASRModelRemoteFile],
+        into modelDirectory: URL,
+        progress: @escaping @Sendable (Double) -> Void
+    ) async throws {
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+
+        let totalExpectedBytes = files.reduce(Int64(0)) { partial, file in
+            partial + (file.expectedSizeBytes ?? 0)
+        }
+        var completedBytes: Int64 = 0
+
+        for (index, file) in files.enumerated() {
+            let fallbackBytes = file.expectedSizeBytes ?? max(1, totalExpectedBytes / Int64(max(files.count, 1)))
+            let completedBytesBeforeFile = completedBytes
+            let downloader = DownloadDelegate(
+                progress: { value in
+                    let expectedBytes = max(fallbackBytes, 1)
+                    let aggregateProgress: Double
+                    if totalExpectedBytes > 0 {
+                        aggregateProgress = min(
+                            max(
+                                Double(completedBytesBeforeFile) / Double(totalExpectedBytes) +
+                                    (value * Double(expectedBytes) / Double(totalExpectedBytes)),
+                                0
+                            ),
+                            1
+                        )
+                    } else {
+                        aggregateProgress = (Double(index) + value) / Double(max(files.count, 1))
+                    }
+                    progress(aggregateProgress)
+                },
+                fallbackExpectedSizeBytes: fallbackBytes,
+                temporaryFileBasename: "\(modelDirectory.lastPathComponent)-\(index)"
+            )
+            let session = URLSession(configuration: .default, delegate: downloader, delegateQueue: nil)
+            defer {
+                session.finishTasksAndInvalidate()
+            }
+
+            let (downloadedURL, response) = try await downloader.download(from: file.remoteURL, using: session)
+            defer {
+                if FileManager.default.fileExists(atPath: downloadedURL.path) {
+                    try? FileManager.default.removeItem(at: downloadedURL)
+                }
+            }
+
+            guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
+                throw ModelError.invalidResponse
+            }
+
+            let destinationURL = modelDirectory.appendingPathComponent(file.destinationRelativePath)
+            try FileManager.default.createDirectory(
+                at: destinationURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            try FileManager.default.copyItem(at: downloadedURL, to: destinationURL)
+            completedBytes += fallbackBytes
+        }
+
+        progress(1)
+    }
 }
 
 private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     private let progressBlock: @Sendable (Double) -> Void
     private let fallbackExpectedSizeBytes: Int64
-    private let fileManager = FileManager.default
+    private let temporaryFileBasename: String
     private var continuation: CheckedContinuation<(URL, URLResponse), Error>?
     private var downloadedFileURL: URL?
     private var downloadResponse: URLResponse?
     private var hasResumed = false
 
-    init(progress: @escaping @Sendable (Double) -> Void, fallbackExpectedSizeBytes: Int64) {
-        self.progressBlock = progress
+    init(
+        progress: @escaping @Sendable (Double) -> Void,
+        fallbackExpectedSizeBytes: Int64,
+        temporaryFileBasename: String
+    ) {
+        progressBlock = progress
         self.fallbackExpectedSizeBytes = fallbackExpectedSizeBytes
+        self.temporaryFileBasename = temporaryFileBasename
     }
 
     func download(from url: URL, using session: URLSession) async throws -> (URL, URLResponse) {
@@ -206,8 +349,9 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         didFinishDownloadingTo location: URL
     ) {
         do {
+            let fileManager = FileManager.default
             let persistedURL = fileManager.temporaryDirectory
-                .appendingPathComponent("parakeet-model-\(UUID().uuidString)", isDirectory: false)
+                .appendingPathComponent("\(temporaryFileBasename)-\(UUID().uuidString)", isDirectory: false)
                 .appendingPathExtension("tar.bz2")
             if fileManager.fileExists(atPath: persistedURL.path) {
                 try fileManager.removeItem(at: persistedURL)

@@ -236,4 +236,44 @@ struct GeneralSettings: Codable, Equatable {
     var echoCancellationEnabled: Bool = false
     var hasSeenOnboardingWelcome: Bool? = nil
     var hasCompletedCoreOnboarding: Bool? = nil
+    var selectedASRModelID: ASRModelID = .parakeetV3
+
+    init(
+        preferredInputDeviceID: String? = nil,
+        autoSubmitEnabled: Bool = false,
+        hotkeyConfiguration: HotkeyConfiguration = .globe,
+        echoCancellationEnabled: Bool = false,
+        hasSeenOnboardingWelcome: Bool? = nil,
+        hasCompletedCoreOnboarding: Bool? = nil,
+        selectedASRModelID: ASRModelID = .parakeetV3
+    ) {
+        self.preferredInputDeviceID = preferredInputDeviceID
+        self.autoSubmitEnabled = autoSubmitEnabled
+        self.hotkeyConfiguration = hotkeyConfiguration
+        self.echoCancellationEnabled = echoCancellationEnabled
+        self.hasSeenOnboardingWelcome = hasSeenOnboardingWelcome
+        self.hasCompletedCoreOnboarding = hasCompletedCoreOnboarding
+        self.selectedASRModelID = selectedASRModelID
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case preferredInputDeviceID
+        case autoSubmitEnabled
+        case hotkeyConfiguration
+        case echoCancellationEnabled
+        case hasSeenOnboardingWelcome
+        case hasCompletedCoreOnboarding
+        case selectedASRModelID
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        preferredInputDeviceID = try container.decodeIfPresent(String.self, forKey: .preferredInputDeviceID)
+        autoSubmitEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSubmitEnabled) ?? false
+        hotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .hotkeyConfiguration) ?? .globe
+        echoCancellationEnabled = try container.decodeIfPresent(Bool.self, forKey: .echoCancellationEnabled) ?? false
+        hasSeenOnboardingWelcome = try container.decodeIfPresent(Bool.self, forKey: .hasSeenOnboardingWelcome)
+        hasCompletedCoreOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedCoreOnboarding)
+        selectedASRModelID = try container.decodeIfPresent(ASRModelID.self, forKey: .selectedASRModelID) ?? .parakeetV3
+    }
 }

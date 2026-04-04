@@ -38,9 +38,17 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertFalse(appState.autoSubmitEnabled)
     }
 
+    func testSelectedASRModelPersistsToGeneralSettings() {
+        let generalSettingsStore = TestGeneralSettingsStore()
+        let appState = makeTestAppState(generalSettingsStore: generalSettingsStore)
+
+        appState.selectedASRModelID = .senseVoice
+
+        XCTAssertEqual(generalSettingsStore.latest.selectedASRModelID, .senseVoice)
+    }
+
     func testLegacyInstallWithModelInstalledMarksOnboardingComplete() {
         let modelManager = StubModelManager()
-        modelManager.isReady = true
         let generalSettingsStore = TestGeneralSettingsStore()
 
         let appState = makeTestAppState(
@@ -56,7 +64,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testFreshInstallStartsAtWelcome() {
         let modelManager = StubModelManager()
-        modelManager.isReady = false
+        modelManager.installedModelIDs = []
         let generalSettingsStore = TestGeneralSettingsStore()
 
         let appState = makeTestAppState(
@@ -74,7 +82,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testSeenWelcomeResumesSetup() {
         let modelManager = StubModelManager()
-        modelManager.isReady = false
+        modelManager.installedModelIDs = []
         let generalSettingsStore = TestGeneralSettingsStore(
             value: GeneralSettings(
                 preferredInputDeviceID: nil,
@@ -94,7 +102,6 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testSetupCompleteRoutesToPractice() {
         let modelManager = StubModelManager()
-        modelManager.isReady = true
         let generalSettingsStore = TestGeneralSettingsStore(
             value: GeneralSettings(
                 preferredInputDeviceID: nil,
@@ -128,7 +135,6 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testOnboardingSetupCompletesOnlyWhenPermissionsAndModelAreReady() {
         let modelManager = StubModelManager()
-        modelManager.isReady = true
         let appState = makeTestAppState(modelManager: modelManager)
 
         appState.phase = .ready
@@ -383,7 +389,7 @@ final class AppStateSettingsTests: XCTestCase {
     func testChangingHotkeyRewiresMonitoringWhenRuntimeServicesEnabled() {
         let hotkeyService = StubHotkeyService()
         let modelManager = StubModelManager()
-        modelManager.isReady = false
+        modelManager.installedModelIDs = []
 
         let appState = makeTestAppState(
             modelManager: modelManager,
@@ -400,7 +406,7 @@ final class AppStateSettingsTests: XCTestCase {
     func testHotkeyCallbacksStillDriveRecordingWhenRuntimeServicesEnabled() async {
         let hotkeyService = StubHotkeyService()
         let modelManager = StubModelManager()
-        modelManager.isReady = false
+        modelManager.installedModelIDs = []
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .success("")
         let audioCapture = StubAudioCaptureService()
@@ -452,9 +458,45 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertTrue(appState.hasCompletedCoreOnboarding)
     }
 
+    func testSelectingInstalledASRModelLoadsRecognizerAndPersistsSelection() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3, .senseVoice]
+        let transcriptionService = StubTranscriptionService()
+        let appState = makeTestAppState(modelManager: modelManager, transcriptionService: transcriptionService)
+        appState.phase = .ready
+        appState.selectedASRModelID = .parakeetV3
+        appState.loadedASRModelID = .parakeetV3
+
+        appState.selectASRModel(.senseVoice)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.selectedASRModelID, .senseVoice)
+        XCTAssertEqual(appState.loadedASRModelID, .senseVoice)
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertEqual(transcriptionService.loadedConfigs.last?.modelID, .senseVoice)
+    }
+
+    func testDeletingCurrentASRModelFallsBackToInstalledAlternative() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3, .senseVoice]
+        let transcriptionService = StubTranscriptionService()
+        let appState = makeTestAppState(modelManager: modelManager, transcriptionService: transcriptionService)
+        appState.phase = .ready
+        appState.selectedASRModelID = .parakeetV3
+        appState.loadedASRModelID = .parakeetV3
+
+        appState.deleteASRModel(.parakeetV3)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(modelManager.lastDeletedModelID, .parakeetV3)
+        XCTAssertEqual(appState.selectedASRModelID, .senseVoice)
+        XCTAssertEqual(appState.loadedASRModelID, .senseVoice)
+        XCTAssertEqual(appState.phase, .ready)
+    }
+
     func testModelDownloadSuccessTransitionsSetupToPractice() async {
         let modelManager = StubModelManager()
-        modelManager.isReady = false
+        modelManager.installedModelIDs = []
         let generalSettingsStore = TestGeneralSettingsStore(
             value: GeneralSettings(
                 preferredInputDeviceID: nil,
@@ -480,13 +522,14 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testModelDownloadDerivedUIStateWhileDownloading() {
         let modelManager = StubModelManager()
-        modelManager.isReady = false
+        modelManager.installedModelIDs = []
         let now = Date(timeIntervalSince1970: 600)
         let appState = makeTestAppState(
             modelManager: modelManager,
             nowProvider: { now }
         )
         appState.phase = .downloadingModel
+        appState.activeASRModelOperationID = .parakeetV3
         appState.downloadProgress = 0.25
         appState.modelDownloadStartedAt = Date(timeIntervalSince1970: 540)
 
@@ -496,11 +539,27 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.modelDownloadProgressLabel, "25% downloaded • 170 MB of ~680 MB\nAbout 3m left")
     }
 
+    func testCurrentModelStaysCurrentWhileAnotherModelDownloads() {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.senseVoice]
+        let appState = makeTestAppState(modelManager: modelManager)
+        appState.selectedASRModelID = .senseVoice
+        appState.loadedASRModelID = .senseVoice
+        appState.phase = .downloadingModel
+        appState.activeASRModelOperationID = .moonshineBase
+        appState.downloadProgress = 0.2
+
+        XCTAssertEqual(appState.modelStatusValue, "Current")
+        XCTAssertEqual(appState.modelStatusIcon, "checkmark.circle.fill")
+        XCTAssertEqual(appState.modelPrimaryActionTitle, "Current")
+    }
+
     func testModelDownloadProgressLabelShowsEstimatingBeforeETAIsKnown() {
         let modelManager = StubModelManager()
-        modelManager.isReady = false
+        modelManager.installedModelIDs = []
         let appState = makeTestAppState(modelManager: modelManager)
         appState.phase = .downloadingModel
+        appState.activeASRModelOperationID = .parakeetV3
         appState.downloadProgress = 0
 
         XCTAssertEqual(appState.modelDownloadProgressLabel, "0% downloaded • Zero KB of ~680 MB\nEstimating time remaining")
@@ -508,27 +567,29 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testModelDownloadDerivedUIStateAfterFailure() {
         let modelManager = StubModelManager()
-        modelManager.isReady = false
+        modelManager.installedModelIDs = []
         let appState = makeTestAppState(modelManager: modelManager)
         appState.phase = .error
-        appState.lastError = "network timeout"
+        appState.lastFailedASRModelID = .parakeetV3
+        appState.lastFailedASRModelError = "network timeout"
 
         XCTAssertEqual(appState.modelStatusValue, "Download failed")
         XCTAssertEqual(appState.modelStatusIcon, "xmark.octagon.fill")
         XCTAssertEqual(
             appState.modelPrimaryActionDetail,
-            "Last attempt failed. Retry the offline model download to enable local transcription."
+            "Last attempt failed. Retry setup for Parakeet TDT 0.6B v3 to use it for dictation."
         )
     }
 
     func testModelOperationStateDuringValidationAfterDownload() {
         let modelManager = StubModelManager()
-        modelManager.isReady = false
+        modelManager.installedModelIDs = []
         let appState = makeTestAppState(modelManager: modelManager)
         appState.phase = .loading
+        appState.activeASRModelOperationID = .parakeetV3
 
         XCTAssertTrue(appState.isModelOperationInProgress)
-        XCTAssertEqual(appState.modelOperationStatusText, "Extracting and validating model…")
+        XCTAssertEqual(appState.modelOperationStatusText, "Extracting and validating Parakeet TDT 0.6B v3…")
     }
 
     func testLaunchAtLoginToggleTracksServiceStatus() {

@@ -8,7 +8,7 @@ Open-source, local-first dictation for macOS. Hold a key, speak, and your words 
 
 ## Why Suniye?
 
-- **Private by default** — A 600 MB speech model runs entirely on your Mac. No audio leaves your machine. No cloud. No training data.
+- **Private by default** — Local speech models run entirely on your Mac. No audio leaves your machine. No cloud. No training data.
 - **Works everywhere** — Inserts text directly into whichever app you're using via macOS Accessibility APIs.
 - **Instant** — No network round-trip. Your voice becomes text in milliseconds, not seconds.
 - **One shortcut** — Hold a key (configurable), talk, release. That's it.
@@ -27,7 +27,7 @@ Requires **macOS 14 (Sonoma)** or later.
 4. Grant the permissions Suniye asks for:
    - **Microphone** — to hear you
    - **Accessibility** — to type text into other apps
-5. Suniye will download a ~600 MB speech model on first launch. This is a one-time setup.
+5. Suniye will help you install a local speech model on first launch. You can keep the recommended default or switch to another supported offline model later.
 6. On first launch, Suniye walks you through a short onboarding flow: welcome, setup, and an optional practice dictation.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed steps.
@@ -45,7 +45,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed st
 | **Dashboard** | Session stats, today's word count, total dictation time, recent activity |
 | **History** | Searchable log of past transcriptions with copy and delete |
 | **Hotkey** | Configurable hold-to-talk shortcut (Fn/Globe, modifier combos, etc.) |
-| **Model** | Manage the offline speech model — download, update, or delete |
+| **Model** | Browse local ASR models, install supported options, switch the active model, or remove unused ones |
 | **Vocabulary** | Add domain-specific terms so the app gets your jargon right |
 | **LLM** | Optional AI cleanup — choose a model, set an API key, customize the prompt |
 | **General** | Preferred mic, auto-paste, launch at login, diagnostics |
@@ -70,7 +70,7 @@ Suniye checks for updates automatically on launch (no popups). When an update is
 |---|---|
 | **Platform** | macOS 14+ |
 | **UI** | SwiftUI |
-| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (NVIDIA NeMo Parakeet TDT 0.6B, int8) |
+| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with a curated local model catalog (Parakeet, Moonshine, SenseVoice, Whisper) |
 | **License** | [MIT](LICENSE) |
 
 ### Build from source

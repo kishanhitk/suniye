@@ -299,6 +299,7 @@ struct ActionIconButton: View {
     let systemName: String
     var tint: Color = MainWindowPalette.secondaryText
     let action: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
@@ -306,8 +307,90 @@ struct ActionIconButton: View {
                 .font(AppTypography.bodyMedium)
                 .frame(width: AppMetrics.iconButtonSize, height: AppMetrics.iconButtonSize)
                 .foregroundStyle(tint)
+                .background(
+                    Circle()
+                        .fill(isHovered ? MainWindowPalette.selectedFill : .clear)
+                )
         }
         .buttonStyle(.plain)
+        .contentShape(Circle())
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+struct StatusPill: View {
+    let title: String
+    let tint: Color
+
+    var body: some View {
+        Text(title)
+            .font(AppTypography.caption)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(tint.opacity(0.12))
+            )
+    }
+}
+
+struct ModelTagBadge: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(AppTypography.caption)
+            .foregroundStyle(MainWindowPalette.secondaryText)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(MainWindowPalette.selectedFill)
+            )
+    }
+}
+
+struct InlineStatusBanner: View {
+    let icon: String
+    let tint: Color
+    let title: String
+    let detail: String
+    let progress: Double?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(AppTypography.bodyMedium)
+                    .foregroundStyle(tint)
+
+                Text(title)
+                    .font(AppTypography.bodyMedium)
+                    .foregroundStyle(tint)
+            }
+
+            Text(detail)
+                .font(AppTypography.body)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let progress {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
+                .fill(MainWindowPalette.cardBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
+                .stroke(tint.opacity(0.25), lineWidth: 1)
+        )
     }
 }
 
