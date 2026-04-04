@@ -14,6 +14,8 @@ struct DashboardPage: View {
                     ForEach(appState.attentionItems) { item in
                         AttentionTile(item: item) {
                             onNavigate(item.recommendedSection)
+                        } onFixAction: { action in
+                            appState.handleAttentionFixAction(action)
                         }
                     }
                 }

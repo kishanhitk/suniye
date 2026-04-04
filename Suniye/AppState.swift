@@ -26,27 +26,37 @@ enum AttentionSeverity: String {
     case warning
 }
 
+enum AttentionItemFixAction: Equatable {
+    case requestMicrophonePermission
+    case requestAccessibilityPermission
+
+    var title: String {
+        switch self {
+        case .requestMicrophonePermission, .requestAccessibilityPermission:
+            return "Grant Access"
+        }
+    }
+}
+
 struct AttentionItem: Identifiable, Equatable {
     let id: String
     let title: String
     let detail: String
     let severity: AttentionSeverity
     let recommendedSection: MainWindowSection
-    let fixTitle: String?
-    let fixAction: (@MainActor () -> Void)?
+    let fixAction: AttentionItemFixAction?
 
-    init(id: String, title: String, detail: String, severity: AttentionSeverity, recommendedSection: MainWindowSection, fixTitle: String? = nil, fixAction: (@MainActor () -> Void)? = nil) {
+    var fixTitle: String? {
+        fixAction?.title
+    }
+
+    init(id: String, title: String, detail: String, severity: AttentionSeverity, recommendedSection: MainWindowSection, fixAction: AttentionItemFixAction? = nil) {
         self.id = id
         self.title = title
         self.detail = detail
         self.severity = severity
         self.recommendedSection = recommendedSection
-        self.fixTitle = fixTitle
         self.fixAction = fixAction
-    }
-
-    static func == (lhs: AttentionItem, rhs: AttentionItem) -> Bool {
-        lhs.id == rhs.id && lhs.title == rhs.title && lhs.detail == rhs.detail && lhs.severity == rhs.severity && lhs.recommendedSection == rhs.recommendedSection && lhs.fixTitle == rhs.fixTitle
     }
 }
 
@@ -665,8 +675,7 @@ final class AppState {
                     detail: "Grant microphone access so audio can be captured.",
                     severity: .warning,
                     recommendedSection: .general,
-                    fixTitle: "Grant Access",
-                    fixAction: { [weak self] in self?.requestMicrophonePermission() }
+                    fixAction: .requestMicrophonePermission
                 )
             )
         }
@@ -679,8 +688,7 @@ final class AppState {
                     detail: "Grant accessibility access so transcribed text can be inserted.",
                     severity: .warning,
                     recommendedSection: .general,
-                    fixTitle: "Grant Access",
-                    fixAction: { [weak self] in self?.requestAccessibilityPermission() }
+                    fixAction: .requestAccessibilityPermission
                 )
             )
         }
@@ -944,6 +952,15 @@ final class AppState {
     func requestMicrophonePermission() {
         Task {
             await refreshPermissions(requestMicrophone: true)
+        }
+    }
+
+    func handleAttentionFixAction(_ action: AttentionItemFixAction) {
+        switch action {
+        case .requestMicrophonePermission:
+            requestMicrophonePermission()
+        case .requestAccessibilityPermission:
+            requestAccessibilityPermission()
         }
     }
 
