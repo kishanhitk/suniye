@@ -294,7 +294,7 @@ struct OnboardingView: View {
             Text("Try your first dictation")
                 .font(AppTypography.pageTitle)
 
-            Text("hole globe(fn) and speak")
+            Text("Hold \(appState.hotkeyConfiguration.displayString) and speak")
                 .font(AppTypography.body)
                 .foregroundStyle(MainWindowPalette.secondaryText)
 
