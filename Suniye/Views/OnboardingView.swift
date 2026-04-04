@@ -15,11 +15,18 @@ struct OnboardingView: View {
 
             Spacer()
 
+            onboardingBrandHeader
+
             stepContent
                 .frame(maxWidth: 380)
+                .padding(.top, 20)
                 .id(step)
-                .transition(.opacity)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
 
+            Spacer()
             Spacer()
 
             navigationButtons
@@ -29,7 +36,7 @@ struct OnboardingView: View {
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MainWindowPalette.windowBackground)
-        .animation(.easeInOut(duration: 0.25), value: step)
+        .animation(.easeInOut(duration: 0.3), value: step)
         .onAppear {
             appState.refreshPermissionStatus()
         }
@@ -60,9 +67,7 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var stepContent: some View {
-        VStack(spacing: step == .welcome ? 20 : 18) {
-            onboardingBrandHeader
-
+        VStack(spacing: 18) {
             switch step {
             case .welcome:
                 WelcomeView()
@@ -75,16 +80,19 @@ struct OnboardingView: View {
     }
 
     private var onboardingBrandHeader: some View {
-        VStack(spacing: 10) {
+        let iconSize: CGFloat = step == .welcome ? 64 : 48
+
+        return VStack(spacing: step == .welcome ? 10 : 6) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .interpolation(.high)
-                .frame(width: 64, height: 64)
+                .frame(width: iconSize, height: iconSize)
 
             Text("Suniye")
                 .font(AppTypography.bodyMedium)
                 .foregroundStyle(MainWindowPalette.secondaryText)
         }
+        .animation(.easeInOut(duration: 0.3), value: step)
     }
 
     // MARK: - Setup
@@ -185,15 +193,17 @@ struct OnboardingView: View {
                         ProgressView(value: appState.downloadProgress)
                             .progressViewStyle(.linear)
 
-                        HStack(spacing: 4) {
-                            mixedMonoNumberText(ByteCountFormatter.string(
+                        HStack(spacing: 8) {
+                            (mixedMonoNumberText(ByteCountFormatter.string(
                                 fromByteCount: Int64(Double(appState.modelExpectedByteCount) * appState.downloadProgress),
                                 countStyle: .file
                             ))
-                            (Text("of ")
+                            + Text("of ")
                                 .font(AppTypography.caption)
                             + mixedMonoNumberText(appState.modelExpectedSizeText))
-                            Text("·")
+
+                            Spacer(minLength: 12)
+
                             mixedMonoNumberText(appState.modelDownloadETAStatusText)
                         }
                         .foregroundStyle(MainWindowPalette.secondaryText)
@@ -284,7 +294,7 @@ struct OnboardingView: View {
             Text("Try your first dictation")
                 .font(AppTypography.pageTitle)
 
-            Text("Hold \(appState.hotkeyConfiguration.displayString) and speak")
+            Text("hole globe(fn) and speak")
                 .font(AppTypography.body)
                 .foregroundStyle(MainWindowPalette.secondaryText)
 
@@ -378,8 +388,19 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var navigationButtons: some View {
-        HStack {
-            if step == .setup {
+        switch step {
+        case .welcome:
+            Button {
+                appState.advanceOnboarding()
+            } label: {
+                Text("Get Started")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+
+        case .setup:
+            HStack {
                 Button {
                     appState.goBackOnboarding()
                 } label: {
@@ -392,25 +413,19 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(MainWindowPalette.secondaryText)
-            }
 
-            Spacer()
+                Spacer()
 
-            switch step {
-            case .welcome:
-                Button("Get Started") {
-                    appState.advanceOnboarding()
-                }
-                .buttonStyle(.borderedProminent)
-
-            case .setup:
                 Button("Continue") {
                     appState.advanceOnboarding()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!appState.isOnboardingSetupComplete)
+            }
 
-            case .practice:
+        case .practice:
+            HStack {
+                Spacer()
                 HStack(spacing: 10) {
                     Button("Skip") {
                         appState.finishOnboarding()
