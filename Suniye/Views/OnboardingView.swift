@@ -186,15 +186,16 @@ struct OnboardingView: View {
                             .progressViewStyle(.linear)
 
                         HStack(spacing: 4) {
-                            Text(verbatim: ByteCountFormatter.string(
+                            mixedMonoNumberText(ByteCountFormatter.string(
                                 fromByteCount: Int64(Double(appState.modelExpectedByteCount) * appState.downloadProgress),
                                 countStyle: .file
                             ))
-                            Text("of \(appState.modelExpectedSizeText)")
+                            (Text("of ")
+                                .font(AppTypography.caption)
+                            + mixedMonoNumberText(appState.modelExpectedSizeText))
                             Text("·")
-                            Text(appState.modelDownloadETAStatusText)
+                            mixedMonoNumberText(appState.modelDownloadETAStatusText)
                         }
-                        .font(AppTypography.caption)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                     }
                 } else if appState.phase == .loading {
@@ -336,6 +337,40 @@ struct OnboardingView: View {
             Text(text)
                 .font(AppTypography.caption)
                 .foregroundStyle(color)
+        }
+    }
+
+    private func mixedMonoNumberText(_ value: String) -> Text {
+        let monoCharacterSet = CharacterSet.decimalDigits.union(CharacterSet(charactersIn: "%.,:/+-"))
+        var segments: [(String, Bool)] = []
+        var current = ""
+        var currentIsMono = false
+
+        for character in value {
+            let isMono = character.unicodeScalars.allSatisfy { monoCharacterSet.contains($0) }
+
+            if current.isEmpty {
+                current = String(character)
+                currentIsMono = isMono
+                continue
+            }
+
+            if isMono == currentIsMono {
+                current.append(character)
+            } else {
+                segments.append((current, currentIsMono))
+                current = String(character)
+                currentIsMono = isMono
+            }
+        }
+
+        if !current.isEmpty {
+            segments.append((current, currentIsMono))
+        }
+
+        return segments.reduce(Text("")) { partial, segment in
+            partial + Text(verbatim: segment.0)
+                .font(segment.1 ? AppTypography.codeCaption : AppTypography.caption)
         }
     }
 
