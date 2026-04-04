@@ -274,6 +274,7 @@ struct GeneralSettings: Codable, Equatable {
         echoCancellationEnabled = try container.decodeIfPresent(Bool.self, forKey: .echoCancellationEnabled) ?? false
         hasSeenOnboardingWelcome = try container.decodeIfPresent(Bool.self, forKey: .hasSeenOnboardingWelcome)
         hasCompletedCoreOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedCoreOnboarding)
-        selectedASRModelID = try container.decodeIfPresent(ASRModelID.self, forKey: .selectedASRModelID) ?? .parakeetV3
+        let storedASRModelID = try container.decodeIfPresent(String.self, forKey: .selectedASRModelID)
+        selectedASRModelID = storedASRModelID.flatMap(ASRModelID.init(rawValue:)) ?? .parakeetV3
     }
 }

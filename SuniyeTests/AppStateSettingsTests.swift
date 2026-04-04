@@ -683,6 +683,17 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.modelOperationStatusText, "Extracting and validating Parakeet TDT 0.6B v3…")
     }
 
+    func testMissingLibraryModelShowsDownloadActionTitle() {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3]
+        let appState = makeTestAppState(modelManager: modelManager)
+        appState.selectedASRModelID = .parakeetV3
+        appState.loadedASRModelID = .parakeetV3
+
+        XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .whisperLargeV3Turbo), "Download Model")
+        XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .parakeetV3), "Current")
+    }
+
     func testLaunchAtLoginToggleTracksServiceStatus() {
         let launchService = StubLaunchAtLoginService()
         let appState = makeTestAppState(launchAtLoginService: launchService)

@@ -306,18 +306,26 @@ struct ModelPage: View {
 
     private func hoverRevealActions(for modelID: ASRModelID, isVisible: Bool) -> some View {
         HStack(spacing: 6) {
-            ActionIconButton(systemName: "folder", action: {
+            ActionIconButton(
+                systemName: "folder",
+                accessibilityLabel: "Open model folder",
+                action: {
                 appState.openModelFolder(for: modelID)
-            })
+                }
+            )
 
-            ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive, action: {
+            ActionIconButton(
+                systemName: "trash",
+                accessibilityLabel: "Delete model",
+                tint: MainWindowPalette.destructive,
+                action: {
                 appState.deleteASRModel(modelID)
-            })
+                }
+            )
         }
         .frame(height: AppMetrics.iconButtonSize)
-        .opacity(isVisible ? 1 : 0)
+        .opacity(isVisible ? 1 : 0.001)
         .offset(y: isVisible ? 0 : -2)
-        .allowsHitTesting(isVisible)
         .animation(.easeOut(duration: 0.16), value: isVisible)
     }
 

@@ -297,6 +297,7 @@ struct InfoRow: View {
 
 struct ActionIconButton: View {
     let systemName: String
+    let accessibilityLabel: String
     var tint: Color = MainWindowPalette.secondaryText
     let action: () -> Void
     @State private var isHovered = false
@@ -314,6 +315,7 @@ struct ActionIconButton: View {
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
+        .accessibilityLabel(Text(accessibilityLabel))
         .onHover { hovering in
             isHovered = hovering
         }
@@ -510,8 +512,8 @@ struct TranscriptHistoryRow: View {
                     .font(AppTypography.subheadline)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                 Spacer(minLength: 0)
-                ActionIconButton(systemName: "doc.on.doc", action: onCopy)
-                ActionIconButton(systemName: "trash", tint: MainWindowPalette.destructive, action: onDelete)
+                ActionIconButton(systemName: "doc.on.doc", accessibilityLabel: "Copy result", action: onCopy)
+                ActionIconButton(systemName: "trash", accessibilityLabel: "Delete result", tint: MainWindowPalette.destructive, action: onDelete)
             }
 
             Text(result.text)

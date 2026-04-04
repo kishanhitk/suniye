@@ -8,7 +8,7 @@ Open-source, local-first dictation for macOS. Hold a key, speak, and your words 
 
 ## Why Suniye?
 
-- **Private by default** — Local speech models run entirely on your Mac. No audio leaves your machine. No cloud. No training data.
+- **Private by default** — Local speech models run entirely on your Mac. Audio never leaves your machine, with no cloud processing or training data retention.
 - **Works everywhere** — Inserts text directly into whichever app you're using via macOS Accessibility APIs.
 - **Instant** — No network round-trip. Your voice becomes text in milliseconds, not seconds.
 - **One shortcut** — Hold a key (configurable), talk, release. That's it.

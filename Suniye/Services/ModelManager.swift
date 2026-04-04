@@ -83,11 +83,8 @@ final class ModelManager: ModelManagerProtocol {
     }
 
     func modelDirectoryURL(for modelID: ASRModelID) throws -> URL {
-        let dir = try modelsRootDirectoryURL()
+        try modelsRootDirectoryURL()
             .appendingPathComponent(catalogEntry(for: modelID).directoryName, isDirectory: true)
-
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
     }
 
     func isInstalled(_ modelID: ASRModelID) -> Bool {

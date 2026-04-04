@@ -805,7 +805,7 @@ final class AppState {
             return "Current"
         }
 
-        return "Use Model"
+        return modelManager.isInstalled(modelID) ? "Use Model" : "Download Model"
     }
 
     func asrModelCanPerformPrimaryAction(for modelID: ASRModelID) -> Bool {
@@ -2002,6 +2002,10 @@ final class AppState {
     }
 
     private func loadFirstAvailableASRModel(from candidateModelIDs: [ASRModelID]) async throws -> ASRModelID {
+        guard !candidateModelIDs.isEmpty else {
+            throw AppStateError.modelValidationFailed
+        }
+
         var lastError: Error?
 
         for modelID in candidateModelIDs {
