@@ -520,6 +520,31 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertTrue(appState.hasCompletedCoreOnboarding)
     }
 
+    func testOnboardingModelDownloadUsesSelectedASRModel() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = []
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                preferredInputDeviceID: nil,
+                hasSeenOnboardingWelcome: true,
+                hasCompletedCoreOnboarding: false,
+                selectedASRModelID: .parakeetV3
+            )
+        )
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            generalSettingsStore: generalSettingsStore
+        )
+        appState.activeOnboardingStep = .setup
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.startModelDownload()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(modelManager.lastDownloadedModelID, .parakeetV3)
+    }
+
     func testModelDownloadDerivedUIStateWhileDownloading() {
         let modelManager = StubModelManager()
         modelManager.installedModelIDs = []
