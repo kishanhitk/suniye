@@ -337,7 +337,7 @@ final class ModelManager: ModelManagerProtocol {
             if hadExistingInstall,
                !fileManager.fileExists(atPath: liveModelDirectory.path),
                fileManager.fileExists(atPath: backupDirectory.path) {
-                try? fileManager.moveItem(at: backupDirectory, to: liveModelDirectory)
+                try fileManager.moveItem(at: backupDirectory, to: liveModelDirectory)
             }
 
             throw error

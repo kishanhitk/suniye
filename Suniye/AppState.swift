@@ -765,12 +765,12 @@ final class AppState {
             return "Current"
         }
 
-        if modelManager.isInstalled(modelID) {
-            return "Installed"
-        }
-
         if lastFailedASRModelID == modelID {
             return "Failed"
+        }
+
+        if modelManager.isInstalled(modelID) {
+            return "Installed"
         }
 
         return "Missing"
