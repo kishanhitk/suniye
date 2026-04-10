@@ -234,6 +234,8 @@ struct GeneralSettings: Codable, Equatable {
     var autoSubmitEnabled: Bool = false
     var hotkeyConfiguration: HotkeyConfiguration = .globe
     var echoCancellationEnabled: Bool = false
+    var hideFloatingIndicatorWhenIdle: Bool = false
+    var floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil
     var hasSeenOnboardingWelcome: Bool? = nil
     var hasCompletedCoreOnboarding: Bool? = nil
     var selectedASRModelID: ASRModelID = .parakeetV3
@@ -243,6 +245,8 @@ struct GeneralSettings: Codable, Equatable {
         autoSubmitEnabled: Bool = false,
         hotkeyConfiguration: HotkeyConfiguration = .globe,
         echoCancellationEnabled: Bool = false,
+        hideFloatingIndicatorWhenIdle: Bool = false,
+        floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil,
         hasSeenOnboardingWelcome: Bool? = nil,
         hasCompletedCoreOnboarding: Bool? = nil,
         selectedASRModelID: ASRModelID = .parakeetV3
@@ -251,6 +255,8 @@ struct GeneralSettings: Codable, Equatable {
         self.autoSubmitEnabled = autoSubmitEnabled
         self.hotkeyConfiguration = hotkeyConfiguration
         self.echoCancellationEnabled = echoCancellationEnabled
+        self.hideFloatingIndicatorWhenIdle = hideFloatingIndicatorWhenIdle
+        self.floatingIndicatorPlacement = floatingIndicatorPlacement
         self.hasSeenOnboardingWelcome = hasSeenOnboardingWelcome
         self.hasCompletedCoreOnboarding = hasCompletedCoreOnboarding
         self.selectedASRModelID = selectedASRModelID
@@ -261,6 +267,8 @@ struct GeneralSettings: Codable, Equatable {
         case autoSubmitEnabled
         case hotkeyConfiguration
         case echoCancellationEnabled
+        case hideFloatingIndicatorWhenIdle
+        case floatingIndicatorPlacement
         case hasSeenOnboardingWelcome
         case hasCompletedCoreOnboarding
         case selectedASRModelID
@@ -272,9 +280,16 @@ struct GeneralSettings: Codable, Equatable {
         autoSubmitEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSubmitEnabled) ?? false
         hotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .hotkeyConfiguration) ?? .globe
         echoCancellationEnabled = try container.decodeIfPresent(Bool.self, forKey: .echoCancellationEnabled) ?? false
+        hideFloatingIndicatorWhenIdle = try container.decodeIfPresent(Bool.self, forKey: .hideFloatingIndicatorWhenIdle) ?? false
+        floatingIndicatorPlacement = try container.decodeIfPresent(FloatingIndicatorPlacement.self, forKey: .floatingIndicatorPlacement)
         hasSeenOnboardingWelcome = try container.decodeIfPresent(Bool.self, forKey: .hasSeenOnboardingWelcome)
         hasCompletedCoreOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedCoreOnboarding)
         let storedASRModelID = try container.decodeIfPresent(String.self, forKey: .selectedASRModelID)
         selectedASRModelID = storedASRModelID.flatMap(ASRModelID.init(rawValue:)) ?? .parakeetV3
     }
+}
+
+struct FloatingIndicatorPlacement: Codable, Equatable {
+    var centerXRatio: Double
+    var bottomYRatio: Double
 }

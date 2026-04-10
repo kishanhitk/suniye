@@ -11,6 +11,7 @@
 		08572C9D373070F699B86BAC /* libonnxruntime.dylib in Resources */ = {isa = PBXBuildFile; fileRef = 7F2C36902B68E9D5934114DD /* libonnxruntime.dylib */; };
 		087B92BAEB91B2A23153DA41 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABAF17E14062BC73F65CF7FD /* UpdateService.swift */; };
 		0BB11537C982C731E8A9C06D /* LaunchAtLoginService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EEDE3A134D7940680E98B65 /* LaunchAtLoginService.swift */; };
+		1382B9023A773ADC62E71907 /* FloatingIndicatorLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C333F9E2D2E53C8388E26E /* FloatingIndicatorLayoutTests.swift */; };
 		17F9EC88DB57EDE0C99E7A51 /* AppStateUpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F198C419B5376572D7185A29 /* AppStateUpdateTests.swift */; };
 		1C1DC32CFF5C5C55DE937923 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E4B536164381A9A3E3C653 /* AudioCaptureService.swift */; };
 		1D86CE52AD421422DC26FA71 /* OpenRouterPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9D8487CCDF6CB1A7023E095 /* OpenRouterPostProcessor.swift */; };
@@ -160,6 +161,7 @@
 		DA6D9C9D8CF9BF854941CE7C /* SuniyeNativeBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SuniyeNativeBridge.mm; sourceTree = "<group>"; };
 		DDBA8DA30905F29C03B8A36D /* AppStateSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSettingsTests.swift; sourceTree = "<group>"; };
 		E3471ED7BC0D817AF7D5C516 /* SherpaOnnx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherpaOnnx.swift; sourceTree = "<group>"; };
+		E5C333F9E2D2E53C8388E26E /* FloatingIndicatorLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorLayoutTests.swift; sourceTree = "<group>"; };
 		E62E23E5D4CD3C127DD7F39C /* AppVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersionTests.swift; sourceTree = "<group>"; };
 		E69ACF4C1E158980EDDDA56F /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		E801051B07B298FAF2CBA95F /* SuniyeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SuniyeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -225,6 +227,7 @@
 				F198C419B5376572D7185A29 /* AppStateUpdateTests.swift */,
 				E62E23E5D4CD3C127DD7F39C /* AppVersionTests.swift */,
 				1B6F2EB76CF32A101E8454D9 /* AudioCaptureServiceTests.swift */,
+				E5C333F9E2D2E53C8388E26E /* FloatingIndicatorLayoutTests.swift */,
 				730EF6DDF61D565A9D49DFCA /* GeneralSettingsStoreTests.swift */,
 				66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */,
 				BDD66CF413C1ACA8DB2719C4 /* KeychainServiceTests.swift */,
@@ -468,6 +471,7 @@
 				17F9EC88DB57EDE0C99E7A51 /* AppStateUpdateTests.swift in Sources */,
 				70911BA331D12E52A95C209F /* AppVersionTests.swift in Sources */,
 				56F6C83F84D44FC17F6C1AE2 /* AudioCaptureServiceTests.swift in Sources */,
+				1382B9023A773ADC62E71907 /* FloatingIndicatorLayoutTests.swift in Sources */,
 				898E0CC20B6C61DE45A0BC0B /* GeneralSettingsStoreTests.swift in Sources */,
 				538CCC22F273225E882F7463 /* HistoryStoreTests.swift in Sources */,
 				B6E82EB100F0460A6BBF520D /* KeychainServiceTests.swift in Sources */,
