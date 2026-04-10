@@ -106,54 +106,172 @@ final class StubUpdateService: UpdateServiceProtocol {
 }
 
 final class StubModelManager: ModelManagerProtocol {
-    var expectedDownloadSizeBytes: Int64 = 680_000_000
-    var isReady = true
-    var byteCount: Int64 = 631_000_000
+    var catalog: [ASRModelCatalogEntry] = ASRModelCatalog.entries
+    var fallbackOrder: [ASRModelID] = ASRModelCatalog.fallbackOrder
+    var installedModelIDs: Set<ASRModelID> = [.parakeetV3]
+    var installedByteCounts: [ASRModelID: Int64] = [
+        .parakeetV3: 631_000_000,
+        .parakeetV2English: 482_468_385,
+        .moonshineBase: 285_000_000,
+        .senseVoice: 240_000_000,
+        .whisperTinyEnglish: 118_071_777,
+        .whisperBaseEnglish: 208_576_005,
+        .whisperSmallEnglish: 635_693_775,
+        .whisperLargeV3Turbo: 563_790_207,
+        .whisperDistilLargeV3: 529_350_808,
+        .whisperLargeV3: 1_700_000_000
+    ]
     var deleteCallCount = 0
+    var lastDeletedModelID: ASRModelID?
+    var lastDownloadedModelID: ASRModelID?
     var downloadResult: Result<Void, Error> = .success(())
-    var recognizerConfig = RecognizerConfig(
-        encoderPath: "/tmp/encoder.int8.onnx",
-        decoderPath: "/tmp/decoder.int8.onnx",
-        joinerPath: "/tmp/joiner.int8.onnx",
-        tokensPath: "/tmp/tokens.txt",
-        numThreads: 4
-    )
+    var recognizerConfigs: [ASRModelID: RecognizerConfig] = [
+        .parakeetV3: RecognizerConfig(
+            modelID: .parakeetV3,
+            family: .nemoTransducer,
+            tokensPath: "/tmp/parakeet/tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/parakeet/encoder.int8.onnx",
+            decoderPath: "/tmp/parakeet/decoder.int8.onnx",
+            joinerPath: "/tmp/parakeet/joiner.int8.onnx",
+            modelType: "nemo_transducer"
+        ),
+        .parakeetV2English: RecognizerConfig(
+            modelID: .parakeetV2English,
+            family: .nemoTransducer,
+            tokensPath: "/tmp/parakeet-v2/tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/parakeet-v2/encoder.int8.onnx",
+            decoderPath: "/tmp/parakeet-v2/decoder.int8.onnx",
+            joinerPath: "/tmp/parakeet-v2/joiner.int8.onnx",
+            modelType: "nemo_transducer"
+        ),
+        .moonshineBase: RecognizerConfig(
+            modelID: .moonshineBase,
+            family: .moonshine,
+            tokensPath: "/tmp/moonshine/tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/moonshine/encode.int8.onnx",
+            preprocessorPath: "/tmp/moonshine/preprocess.onnx",
+            uncachedDecoderPath: "/tmp/moonshine/uncached_decode.int8.onnx",
+            cachedDecoderPath: "/tmp/moonshine/cached_decode.int8.onnx"
+        ),
+        .senseVoice: RecognizerConfig(
+            modelID: .senseVoice,
+            family: .senseVoice,
+            tokensPath: "/tmp/sensevoice/tokens.txt",
+            numThreads: 4,
+            modelPath: "/tmp/sensevoice/model.int8.onnx",
+            language: "auto",
+            useInverseTextNormalization: true
+        ),
+        .whisperLargeV3: RecognizerConfig(
+            modelID: .whisperLargeV3,
+            family: .whisper,
+            tokensPath: "/tmp/whisper/large-v3-tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/whisper/large-v3-encoder.int8.onnx",
+            decoderPath: "/tmp/whisper/large-v3-decoder.int8.onnx"
+        ),
+        .whisperTinyEnglish: RecognizerConfig(
+            modelID: .whisperTinyEnglish,
+            family: .whisper,
+            tokensPath: "/tmp/whisper-tiny/tiny.en-tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/whisper-tiny/tiny.en-encoder.int8.onnx",
+            decoderPath: "/tmp/whisper-tiny/tiny.en-decoder.int8.onnx"
+        ),
+        .whisperBaseEnglish: RecognizerConfig(
+            modelID: .whisperBaseEnglish,
+            family: .whisper,
+            tokensPath: "/tmp/whisper-base/base.en-tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/whisper-base/base.en-encoder.int8.onnx",
+            decoderPath: "/tmp/whisper-base/base.en-decoder.int8.onnx"
+        ),
+        .whisperSmallEnglish: RecognizerConfig(
+            modelID: .whisperSmallEnglish,
+            family: .whisper,
+            tokensPath: "/tmp/whisper-small/small.en-tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/whisper-small/small.en-encoder.int8.onnx",
+            decoderPath: "/tmp/whisper-small/small.en-decoder.int8.onnx"
+        ),
+        .whisperLargeV3Turbo: RecognizerConfig(
+            modelID: .whisperLargeV3Turbo,
+            family: .whisper,
+            tokensPath: "/tmp/whisper-turbo/turbo-tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/whisper-turbo/turbo-encoder.int8.onnx",
+            decoderPath: "/tmp/whisper-turbo/turbo-decoder.int8.onnx"
+        ),
+        .whisperDistilLargeV3: RecognizerConfig(
+            modelID: .whisperDistilLargeV3,
+            family: .whisper,
+            tokensPath: "/tmp/whisper-distil-large-v3/distil-large-v3-tokens.txt",
+            numThreads: 4,
+            encoderPath: "/tmp/whisper-distil-large-v3/distil-large-v3-encoder.int8.onnx",
+            decoderPath: "/tmp/whisper-distil-large-v3/distil-large-v3-decoder.int8.onnx"
+        )
+    ]
 
-    func modelDirectoryURL() throws -> URL {
-        URL(fileURLWithPath: "/tmp/suniye-model", isDirectory: true)
+    func modelsRootDirectoryURL() throws -> URL {
+        URL(fileURLWithPath: "/tmp/suniye-models", isDirectory: true)
     }
 
-    func isModelReady() -> Bool {
-        isReady
+    func modelDirectoryURL(for modelID: ASRModelID) throws -> URL {
+        URL(fileURLWithPath: "/tmp/suniye-models/\(modelID.rawValue)", isDirectory: true)
     }
 
-    func makeRecognizerConfig() throws -> RecognizerConfig {
-        recognizerConfig
+    func isInstalled(_ modelID: ASRModelID) -> Bool {
+        installedModelIDs.contains(modelID)
     }
 
-    func downloadAndExtractModel(progress: @escaping @Sendable (Double) -> Void) async throws {
+    func installedModels() -> [ASRModelID] {
+        catalog.map(\.id).filter { installedModelIDs.contains($0) }
+    }
+
+    func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig {
+        recognizerConfigs[modelID] ?? recognizerConfigs[.parakeetV3]!
+    }
+
+    func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {
         progress(1)
         try downloadResult.get()
-        isReady = true
+        installedModelIDs.insert(modelID)
+        lastDownloadedModelID = modelID
     }
 
-    func installedByteCount() -> Int64 {
-        byteCount
+    func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64 {
+        ASRModelCatalog.entry(for: modelID).estimatedSizeBytes
     }
 
-    func deleteModel() throws {
+    func installedByteCount(for modelID: ASRModelID) -> Int64 {
+        installedByteCounts[modelID] ?? 0
+    }
+
+    func deleteModel(_ modelID: ASRModelID) throws {
         deleteCallCount += 1
-        isReady = false
+        lastDeletedModelID = modelID
+        installedModelIDs.remove(modelID)
     }
 }
 
 final class StubTranscriptionService: TranscriptionServiceProtocol {
     var transcribeResult: Result<String, Error> = .success("")
+    var loadModelResult: Result<Void, Error> = .success(())
+    var loadModelErrorsByModelID: [ASRModelID: Error] = [:]
     var unloadCallCount = 0
     var loadCallCount = 0
+    var loadedConfigs: [RecognizerConfig] = []
 
     func loadModel(config: RecognizerConfig) async throws {
         loadCallCount += 1
+        loadedConfigs.append(config)
+        if let error = loadModelErrorsByModelID[config.modelID] {
+            throw error
+        }
+        try loadModelResult.get()
     }
 
     func transcribe(samples: [Float], sampleRate: Int) async throws -> String {

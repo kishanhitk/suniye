@@ -1,11 +1,55 @@
 import Foundation
 
 struct RecognizerConfig {
-    let encoderPath: String
-    let decoderPath: String
-    let joinerPath: String
+    let modelID: ASRModelID
+    let family: ASRModelFamily
     let tokensPath: String
     let numThreads: Int
+    let encoderPath: String?
+    let decoderPath: String?
+    let joinerPath: String?
+    let preprocessorPath: String?
+    let uncachedDecoderPath: String?
+    let cachedDecoderPath: String?
+    let modelPath: String?
+    let language: String
+    let task: String
+    let modelType: String
+    let useInverseTextNormalization: Bool
+
+    init(
+        modelID: ASRModelID = .parakeetV3,
+        family: ASRModelFamily = .nemoTransducer,
+        tokensPath: String,
+        numThreads: Int,
+        encoderPath: String? = nil,
+        decoderPath: String? = nil,
+        joinerPath: String? = nil,
+        preprocessorPath: String? = nil,
+        uncachedDecoderPath: String? = nil,
+        cachedDecoderPath: String? = nil,
+        modelPath: String? = nil,
+        language: String = "",
+        task: String = "transcribe",
+        modelType: String = "",
+        useInverseTextNormalization: Bool = false
+    ) {
+        self.modelID = modelID
+        self.family = family
+        self.tokensPath = tokensPath
+        self.numThreads = numThreads
+        self.encoderPath = encoderPath
+        self.decoderPath = decoderPath
+        self.joinerPath = joinerPath
+        self.preprocessorPath = preprocessorPath
+        self.uncachedDecoderPath = uncachedDecoderPath
+        self.cachedDecoderPath = cachedDecoderPath
+        self.modelPath = modelPath
+        self.language = language
+        self.task = task
+        self.modelType = modelType
+        self.useInverseTextNormalization = useInverseTextNormalization
+    }
 }
 
 protocol TranscriptionServiceProtocol {
@@ -19,6 +63,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         case recognizerNotLoaded
         case emptyAudio
         case missingModelFile(String)
+        case invalidRecognizerConfiguration
         case recognizerCreationFailed(String?)
         case streamCreationFailed
         case decodeResultUnavailable
@@ -31,6 +76,8 @@ actor TranscriptionService: TranscriptionServiceProtocol {
                 return "No audio captured"
             case let .missingModelFile(path):
                 return "Required model file is missing: \(path)"
+            case .invalidRecognizerConfiguration:
+                return "The selected model files are incomplete"
             case let .recognizerCreationFailed(message):
                 if let message, !message.isEmpty {
                     return "Failed to create sherpa-onnx offline recognizer: \(message)"
@@ -56,27 +103,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
     func loadModel(config: RecognizerConfig) async throws {
         try validateModelPaths(config)
 
-        let transducer = sherpaOnnxOfflineTransducerModelConfig(
-            encoder: config.encoderPath,
-            decoder: config.decoderPath,
-            joiner: config.joinerPath
-        )
-
-        let modelConfig = sherpaOnnxOfflineModelConfig(
-            tokens: config.tokensPath,
-            transducer: transducer,
-            numThreads: max(1, config.numThreads),
-            provider: "cpu",
-            debug: 0,
-            modelType: "nemo_transducer"
-        )
-
-        let recognizerConfig = sherpaOnnxOfflineRecognizerConfig(
-            featConfig: sherpaOnnxFeatureConfig(sampleRate: 16_000, featureDim: 80),
-            modelConfig: modelConfig,
-            decodingMethod: "greedy_search",
-            maxActivePaths: 4
-        )
+        let recognizerConfig = try makeRecognizerConfig(for: config)
         var configCopy = recognizerConfig
         var nativeError: UnsafeMutablePointer<CChar>?
 
@@ -157,8 +184,120 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         loadedConfig = nil
     }
 
+    private func makeRecognizerConfig(for config: RecognizerConfig) throws -> SherpaOnnxOfflineRecognizerConfig {
+        let modelConfig: SherpaOnnxOfflineModelConfig
+
+        switch config.family {
+        case .nemoTransducer:
+            guard let encoderPath = config.encoderPath,
+                  let decoderPath = config.decoderPath,
+                  let joinerPath = config.joinerPath else {
+                throw ServiceError.invalidRecognizerConfiguration
+            }
+
+            let transducer = sherpaOnnxOfflineTransducerModelConfig(
+                encoder: encoderPath,
+                decoder: decoderPath,
+                joiner: joinerPath
+            )
+
+            modelConfig = sherpaOnnxOfflineModelConfig(
+                tokens: config.tokensPath,
+                transducer: transducer,
+                numThreads: max(1, config.numThreads),
+                provider: "cpu",
+                debug: 0,
+                modelType: config.modelType
+            )
+        case .moonshine:
+            guard let preprocessorPath = config.preprocessorPath,
+                  let encoderPath = config.encoderPath,
+                  let uncachedDecoderPath = config.uncachedDecoderPath,
+                  let cachedDecoderPath = config.cachedDecoderPath else {
+                throw ServiceError.invalidRecognizerConfiguration
+            }
+
+            let moonshine = sherpaOnnxOfflineMoonshineModelConfig(
+                preprocessor: preprocessorPath,
+                encoder: encoderPath,
+                uncachedDecoder: uncachedDecoderPath,
+                cachedDecoder: cachedDecoderPath
+            )
+
+            modelConfig = sherpaOnnxOfflineModelConfig(
+                tokens: config.tokensPath,
+                numThreads: max(1, config.numThreads),
+                provider: "cpu",
+                debug: 0,
+                moonshine: moonshine
+            )
+        case .senseVoice:
+            guard let modelPath = config.modelPath else {
+                throw ServiceError.invalidRecognizerConfiguration
+            }
+
+            let senseVoice = sherpaOnnxOfflineSenseVoiceModelConfig(
+                model: modelPath,
+                language: config.language,
+                useInverseTextNormalization: config.useInverseTextNormalization
+            )
+
+            modelConfig = sherpaOnnxOfflineModelConfig(
+                tokens: config.tokensPath,
+                numThreads: max(1, config.numThreads),
+                provider: "cpu",
+                debug: 0,
+                senseVoice: senseVoice
+            )
+        case .whisper:
+            guard let encoderPath = config.encoderPath,
+                  let decoderPath = config.decoderPath else {
+                throw ServiceError.invalidRecognizerConfiguration
+            }
+
+            let whisper = sherpaOnnxOfflineWhisperModelConfig(
+                encoder: encoderPath,
+                decoder: decoderPath,
+                language: config.language,
+                task: config.task
+            )
+
+            modelConfig = sherpaOnnxOfflineModelConfig(
+                tokens: config.tokensPath,
+                whisper: whisper,
+                numThreads: max(1, config.numThreads),
+                provider: "cpu",
+                debug: 0
+            )
+        }
+
+        return sherpaOnnxOfflineRecognizerConfig(
+            featConfig: sherpaOnnxFeatureConfig(sampleRate: 16_000, featureDim: 80),
+            modelConfig: modelConfig,
+            decodingMethod: "greedy_search",
+            maxActivePaths: 4
+        )
+    }
+
     private func validateModelPaths(_ config: RecognizerConfig) throws {
-        let paths = [config.encoderPath, config.decoderPath, config.joinerPath, config.tokensPath]
+        var paths = [config.tokensPath]
+
+        switch config.family {
+        case .nemoTransducer:
+            paths.append(contentsOf: [config.encoderPath, config.decoderPath, config.joinerPath].compactMap { $0 })
+        case .moonshine:
+            paths.append(contentsOf: [
+                config.preprocessorPath,
+                config.encoderPath,
+                config.uncachedDecoderPath,
+                config.cachedDecoderPath
+            ].compactMap { $0 })
+        case .senseVoice:
+            paths.append(contentsOf: [config.modelPath].compactMap { $0 })
+        case .whisper:
+            paths.append(contentsOf: [config.encoderPath, config.decoderPath].compactMap { $0 })
+        }
+
         for path in paths where !FileManager.default.fileExists(atPath: path) {
             throw ServiceError.missingModelFile(path)
         }

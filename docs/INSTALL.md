@@ -33,6 +33,11 @@ Grant permissions when prompted:
 
 After that, Suniye shows a short first-run onboarding flow that covers setup and an optional practice dictation.
 
+During setup:
+- Suniye downloads the currently selected speech model.
+- Fresh installs default to `Parakeet TDT 0.6B v3`.
+- After onboarding, you can open `ASR Model` in settings to install or switch to another supported local model.
+
 ## 6) Update flow (manual install)
 On each app launch, Suniye checks GitHub Releases in the background.
 

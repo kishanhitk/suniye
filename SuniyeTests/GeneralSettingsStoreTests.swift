@@ -15,12 +15,39 @@ final class GeneralSettingsStoreTests: XCTestCase {
             hideFloatingIndicatorWhenIdle: true,
             floatingIndicatorPlacement: FloatingIndicatorPlacement(centerXRatio: 0.2, bottomYRatio: 0.15),
             hasSeenOnboardingWelcome: true,
-            hasCompletedCoreOnboarding: true
+            hasCompletedCoreOnboarding: true,
+            selectedASRModelID: .senseVoice
         )
 
         store.save(settings)
 
         XCTAssertEqual(store.load(), settings)
+    }
+
+    func testUnknownASRModelIDFallsBackWithoutResettingOtherSettings() {
+        let suite = "dev.suniye.tests.general.unknown-model.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        let payload = """
+        {
+          "preferredInputDeviceID": "usb-mic",
+          "autoSubmitEnabled": true,
+          "echoCancellationEnabled": true,
+          "hasSeenOnboardingWelcome": true,
+          "hasCompletedCoreOnboarding": true,
+          "selectedASRModelID": "futureModel"
+        }
+        """
+
+        defaults.set(Data(payload.utf8), forKey: "general")
+        let loaded = store.load()
+
+        XCTAssertEqual(loaded.preferredInputDeviceID, "usb-mic")
+        XCTAssertEqual(loaded.autoSubmitEnabled, true)
+        XCTAssertEqual(loaded.echoCancellationEnabled, true)
+        XCTAssertEqual(loaded.hasSeenOnboardingWelcome, true)
+        XCTAssertEqual(loaded.hasCompletedCoreOnboarding, true)
+        XCTAssertEqual(loaded.selectedASRModelID, .parakeetV3)
     }
 
     func testHotkeyDisplayStringsMatchUIExamples() {

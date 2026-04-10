@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct OnboardingView: View {
@@ -14,11 +15,18 @@ struct OnboardingView: View {
 
             Spacer()
 
+            onboardingBrandHeader
+
             stepContent
                 .frame(maxWidth: 380)
+                .padding(.top, 20)
                 .id(step)
-                .transition(.opacity)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
 
+            Spacer()
             Spacer()
 
             navigationButtons
@@ -28,7 +36,7 @@ struct OnboardingView: View {
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MainWindowPalette.windowBackground)
-        .animation(.easeInOut(duration: 0.25), value: step)
+        .animation(.easeInOut(duration: 0.3), value: step)
         .onAppear {
             appState.refreshPermissionStatus()
         }
@@ -59,14 +67,32 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var stepContent: some View {
-        switch step {
-        case .welcome:
-            WelcomeView()
-        case .setup:
-            setupContent
-        case .practice:
-            practiceContent
+        VStack(spacing: 18) {
+            switch step {
+            case .welcome:
+                WelcomeView()
+            case .setup:
+                setupContent
+            case .practice:
+                practiceContent
+            }
         }
+    }
+
+    private var onboardingBrandHeader: some View {
+        let iconSize: CGFloat = step == .welcome ? 64 : 48
+
+        return VStack(spacing: step == .welcome ? 10 : 6) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: iconSize, height: iconSize)
+
+            Text("Suniye")
+                .font(AppTypography.bodyMedium)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+        }
+        .animation(.easeInOut(duration: 0.3), value: step)
     }
 
     // MARK: - Setup
@@ -167,16 +193,19 @@ struct OnboardingView: View {
                         ProgressView(value: appState.downloadProgress)
                             .progressViewStyle(.linear)
 
-                        HStack(spacing: 4) {
-                            Text(verbatim: ByteCountFormatter.string(
+                        HStack(spacing: 8) {
+                            (mixedMonoNumberText(ByteCountFormatter.string(
                                 fromByteCount: Int64(Double(appState.modelExpectedByteCount) * appState.downloadProgress),
                                 countStyle: .file
                             ))
-                            Text("of \(appState.modelExpectedSizeText)")
-                            Text("·")
-                            Text(appState.modelDownloadETAStatusText)
+                            + Text(" of ")
+                                .font(AppTypography.caption)
+                            + mixedMonoNumberText(appState.modelExpectedSizeText))
+
+                            Spacer(minLength: 12)
+
+                            mixedMonoNumberText(appState.modelDownloadETAStatusText)
                         }
-                        .font(AppTypography.caption)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                     }
                 } else if appState.phase == .loading {
@@ -321,12 +350,57 @@ struct OnboardingView: View {
         }
     }
 
+    private func mixedMonoNumberText(_ value: String) -> Text {
+        let monoCharacterSet = CharacterSet.decimalDigits.union(CharacterSet(charactersIn: "%.,:/+-"))
+        var segments: [(String, Bool)] = []
+        var current = ""
+        var currentIsMono = false
+
+        for character in value {
+            let isMono = character.unicodeScalars.allSatisfy { monoCharacterSet.contains($0) }
+
+            if current.isEmpty {
+                current = String(character)
+                currentIsMono = isMono
+                continue
+            }
+
+            if isMono == currentIsMono {
+                current.append(character)
+            } else {
+                segments.append((current, currentIsMono))
+                current = String(character)
+                currentIsMono = isMono
+            }
+        }
+
+        if !current.isEmpty {
+            segments.append((current, currentIsMono))
+        }
+
+        return segments.reduce(Text("")) { partial, segment in
+            partial + Text(verbatim: segment.0)
+                .font(segment.1 ? AppTypography.codeCaption : AppTypography.caption)
+        }
+    }
+
     // MARK: - Navigation
 
     @ViewBuilder
     private var navigationButtons: some View {
-        HStack {
-            if step == .setup {
+        switch step {
+        case .welcome:
+            Button {
+                appState.advanceOnboarding()
+            } label: {
+                Text("Get Started")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+
+        case .setup:
+            HStack {
                 Button {
                     appState.goBackOnboarding()
                 } label: {
@@ -339,25 +413,19 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(MainWindowPalette.secondaryText)
-            }
 
-            Spacer()
+                Spacer()
 
-            switch step {
-            case .welcome:
-                Button("Get Started") {
-                    appState.advanceOnboarding()
-                }
-                .buttonStyle(.borderedProminent)
-
-            case .setup:
                 Button("Continue") {
                     appState.advanceOnboarding()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!appState.isOnboardingSetupComplete)
+            }
 
-            case .practice:
+        case .practice:
+            HStack {
+                Spacer()
                 HStack(spacing: 10) {
                     Button("Skip") {
                         appState.finishOnboarding()
