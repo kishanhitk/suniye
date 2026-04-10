@@ -234,6 +234,13 @@ struct GeneralSettings: Codable, Equatable {
     var autoSubmitEnabled: Bool = false
     var hotkeyConfiguration: HotkeyConfiguration = .globe
     var echoCancellationEnabled: Bool = false
+    var hideFloatingIndicatorWhenIdle: Bool = false
+    var floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil
     var hasSeenOnboardingWelcome: Bool? = nil
     var hasCompletedCoreOnboarding: Bool? = nil
+}
+
+struct FloatingIndicatorPlacement: Codable, Equatable {
+    var centerXRatio: Double
+    var bottomYRatio: Double
 }

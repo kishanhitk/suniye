@@ -2,9 +2,62 @@ import AppKit
 import QuartzCore
 import SwiftUI
 
+enum FloatingIndicatorLayout {
+    static func frame(
+        for size: NSSize,
+        in visibleFrame: NSRect,
+        placement: FloatingIndicatorPlacement?,
+        bottomMargin: CGFloat
+    ) -> NSRect {
+        guard let placement else {
+            return defaultFrame(for: size, in: visibleFrame, bottomMargin: bottomMargin)
+        }
+
+        let centerX = visibleFrame.minX + visibleFrame.width * placement.centerXRatio.clampedToUnitInterval()
+        let bottomY = visibleFrame.minY + visibleFrame.height * placement.bottomYRatio.clampedToUnitInterval()
+        let frame = NSRect(
+            x: centerX - size.width / 2,
+            y: bottomY,
+            width: size.width,
+            height: size.height
+        )
+        return clampedFrame(frame, within: visibleFrame)
+    }
+
+    static func defaultFrame(for size: NSSize, in visibleFrame: NSRect, bottomMargin: CGFloat) -> NSRect {
+        let x = visibleFrame.midX - size.width / 2
+        let y = visibleFrame.minY + bottomMargin
+        return NSRect(x: x, y: y, width: size.width, height: size.height)
+    }
+
+    static func placement(for frame: NSRect, in visibleFrame: NSRect) -> FloatingIndicatorPlacement {
+        let clampedFrame = clampedFrame(frame, within: visibleFrame)
+        let centerXRatio = visibleFrame.width > 0
+            ? (clampedFrame.midX - visibleFrame.minX) / visibleFrame.width
+            : 0.5
+        let bottomYRatio = visibleFrame.height > 0
+            ? (clampedFrame.minY - visibleFrame.minY) / visibleFrame.height
+            : 0
+
+        return FloatingIndicatorPlacement(
+            centerXRatio: Double(centerXRatio).clampedToUnitInterval(),
+            bottomYRatio: Double(bottomYRatio).clampedToUnitInterval()
+        )
+    }
+
+    static func clampedFrame(_ frame: NSRect, within visibleFrame: NSRect) -> NSRect {
+        let maxX = max(visibleFrame.maxX - frame.width, visibleFrame.minX)
+        let maxY = max(visibleFrame.maxY - frame.height, visibleFrame.minY)
+        let x = min(max(frame.minX, visibleFrame.minX), maxX)
+        let y = min(max(frame.minY, visibleFrame.minY), maxY)
+        return NSRect(x: x, y: y, width: frame.width, height: frame.height)
+    }
+}
+
 @MainActor
 final class FloatingIndicatorController {
     var onAction: (() -> Void)?
+    var onPlacementChanged: ((FloatingIndicatorPlacement?) -> Void)?
 
     private var panel: NSPanel?
     private var hostingView: NSHostingView<FloatingIndicatorView>?
@@ -13,7 +66,13 @@ final class FloatingIndicatorController {
     private var baseState: FloatingIndicatorState = .idle
     private var isHovered = false
     private var anchoredScreenID: CGDirectDisplayID?
+    private var customPlacement: FloatingIndicatorPlacement?
+    private var hideWhenIdle = false
     private var lastLoggedStateValue: String?
+    private var dragStartPanelFrame: NSRect?
+    private var dragStartMouseLocation: NSPoint?
+    private var isDragging = false
+    private var isStarted = false
     private let bottomMargin: CGFloat = 28
     private let animationDuration: TimeInterval = 0.11
 
@@ -24,17 +83,15 @@ final class FloatingIndicatorController {
     }
 
     func start() {
+        isStarted = true
         ensurePanel()
         startPointerTracking()
         render()
-
-        guard let panel else { return }
-        panel.alphaValue = 1
-        panel.orderFrontRegardless()
         AppLogger.shared.log(.info, "floating indicator started")
     }
 
     func stop() {
+        isStarted = false
         pointerTrackingTimer?.invalidate()
         pointerTrackingTimer = nil
         hoverExitTask?.cancel()
@@ -42,6 +99,16 @@ final class FloatingIndicatorController {
         guard let panel, panel.isVisible else { return }
         panel.orderOut(nil)
         AppLogger.shared.log(.info, "floating indicator stopped")
+    }
+
+    func configure(hideWhenIdle: Bool, placement: FloatingIndicatorPlacement?) {
+        let didChangeVisibility = self.hideWhenIdle != hideWhenIdle
+        let didChangePlacement = customPlacement != placement
+        self.hideWhenIdle = hideWhenIdle
+        customPlacement = placement
+        guard didChangeVisibility || didChangePlacement else { return }
+        guard isStarted else { return }
+        render()
     }
 
     func update(_ state: FloatingIndicatorState) {
@@ -56,6 +123,7 @@ final class FloatingIndicatorController {
             hoverExitTask = nil
             isHovered = false
         }
+        guard isStarted else { return }
         render()
     }
 
@@ -64,6 +132,13 @@ final class FloatingIndicatorController {
             return .hover
         }
         return baseState
+    }
+
+    private var shouldShowPanel: Bool {
+        if hideWhenIdle, case .idle = effectiveState {
+            return false
+        }
+        return true
     }
 
     private var panelShouldCaptureMouseEvents: Bool {
@@ -105,6 +180,12 @@ final class FloatingIndicatorController {
                 },
                 onAction: { [weak self] in
                     self?.onAction?()
+                },
+                onDragChanged: { [weak self] in
+                    self?.handleDragChanged()
+                },
+                onDragEnded: { [weak self] in
+                    self?.handleDragEnded()
                 }
             )
         )
@@ -119,6 +200,7 @@ final class FloatingIndicatorController {
 
     private func setHovered(_ hovered: Bool) {
         guard baseState.tracksPointerScreen else { return }
+        guard shouldShowPanel else { return }
         if hovered {
             hoverExitTask?.cancel()
             hoverExitTask = nil
@@ -159,12 +241,26 @@ final class FloatingIndicatorController {
             },
             onAction: { [weak self] in
                 self?.onAction?()
+            },
+            onDragChanged: { [weak self] in
+                self?.handleDragChanged()
+            },
+            onDragEnded: { [weak self] in
+                self?.handleDragEnded()
             }
         )
 
         panel.ignoresMouseEvents = !panelShouldCaptureMouseEvents
-        positionPanel(targetFrame: targetFrame, animated: !panel.frame.equalTo(targetFrame))
-        panel.orderFrontRegardless()
+        if !isDragging {
+            positionPanel(targetFrame: targetFrame, animated: shouldShowPanel && !panel.frame.equalTo(targetFrame))
+        }
+        panel.alphaValue = 1
+        if shouldShowPanel {
+            panel.orderFrontRegardless()
+        } else {
+            isHovered = false
+            panel.orderOut(nil)
+        }
         if lastLoggedStateValue != state.logValue {
             lastLoggedStateValue = state.logValue
             AppLogger.shared.log(.info, "floating indicator update state=\(state.logValue)")
@@ -181,6 +277,7 @@ final class FloatingIndicatorController {
     }
 
     private func tickPointerTracking() {
+        guard !isDragging else { return }
         guard effectiveState.tracksPointerScreen else { return }
         guard let screen = currentMouseScreen() else { return }
 
@@ -195,10 +292,12 @@ final class FloatingIndicatorController {
         guard let screen else { return .zero }
 
         anchoredScreenID = screen.displayID
-        let frame = screen.visibleFrame
-        let x = frame.midX - size.width / 2
-        let y = frame.minY + bottomMargin
-        return NSRect(x: x, y: y, width: size.width, height: size.height)
+        return FloatingIndicatorLayout.frame(
+            for: size,
+            in: screen.visibleFrame,
+            placement: customPlacement,
+            bottomMargin: bottomMargin
+        )
     }
 
     private func positionPanel(targetFrame: NSRect, animated: Bool) {
@@ -212,6 +311,62 @@ final class FloatingIndicatorController {
             }
         } else {
             panel.setFrame(targetFrame, display: true)
+        }
+    }
+
+    private func handleDragChanged() {
+        guard canDragCurrentState else { return }
+        guard let panel else { return }
+        let screen = resolvedScreen() ?? currentMouseScreen() ?? NSScreen.main ?? NSScreen.screens.first
+        guard let screen else { return }
+
+        if !isDragging {
+            dragStartPanelFrame = panel.frame
+            dragStartMouseLocation = NSEvent.mouseLocation
+            isDragging = true
+        }
+
+        guard let dragStartPanelFrame, let dragStartMouseLocation else { return }
+        let mouseLocation = NSEvent.mouseLocation
+        let deltaX = mouseLocation.x - dragStartMouseLocation.x
+        let deltaY = mouseLocation.y - dragStartMouseLocation.y
+        let targetFrame = FloatingIndicatorLayout.clampedFrame(
+            NSRect(
+                x: dragStartPanelFrame.minX + deltaX,
+                y: dragStartPanelFrame.minY + deltaY,
+                width: dragStartPanelFrame.width,
+                height: dragStartPanelFrame.height
+            ),
+            within: screen.visibleFrame
+        )
+        anchoredScreenID = screen.displayID
+        positionPanel(targetFrame: targetFrame, animated: false)
+    }
+
+    private func handleDragEnded() {
+        defer {
+            dragStartPanelFrame = nil
+            dragStartMouseLocation = nil
+            isDragging = false
+            render()
+        }
+
+        guard canDragCurrentState else { return }
+        guard let panel else { return }
+        let screen = resolvedScreen() ?? currentMouseScreen() ?? NSScreen.main ?? NSScreen.screens.first
+        guard let screen else { return }
+
+        let placement = FloatingIndicatorLayout.placement(for: panel.frame, in: screen.visibleFrame)
+        customPlacement = placement
+        onPlacementChanged?(placement)
+    }
+
+    private var canDragCurrentState: Bool {
+        switch effectiveState {
+        case .idle, .hover:
+            return true
+        case .listening, .processing, .error:
+            return false
         }
     }
 
@@ -238,6 +393,12 @@ final class FloatingIndicatorController {
             let width = min(max(CGFloat(message.count) * 6.2, 170), 240) + 32
             return NSSize(width: width, height: 52)
         }
+    }
+}
+
+private extension Double {
+    func clampedToUnitInterval() -> Double {
+        min(max(self, 0), 1)
     }
 }
 

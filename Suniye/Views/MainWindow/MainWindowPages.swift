@@ -701,6 +701,40 @@ struct GeneralPage: View {
             }
 
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Indicator")
+
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                        SettingsToggleRow(
+                            title: "Hide While Idle",
+                            detail: "Hide the floating indicator when Suniye is ready but not actively dictating. When hidden, floating click-to-start is unavailable until the indicator appears again for recording, processing, or errors.",
+                            isOn: $appState.hideFloatingIndicatorWhenIdle
+                        )
+
+                        CardDivider()
+
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Indicator Position")
+                                    .font(AppTypography.body)
+                                Text("Drag the floating pill to place it somewhere that stays out of the way.")
+                                    .font(AppTypography.subheadline)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                            }
+
+                            Spacer(minLength: 12)
+
+                            Button("Reset Position") {
+                                appState.resetFloatingIndicatorPlacement()
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(appState.floatingIndicatorPlacement == nil)
+                        }
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
                 SectionHeading(title: "After Paste")
 
                 SurfaceCard {

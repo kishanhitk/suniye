@@ -287,6 +287,32 @@ final class AppState {
             onStateChange?()
         }
     }
+    var hideFloatingIndicatorWhenIdle = false {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            guard oldValue != hideFloatingIndicatorWhenIdle else {
+                return
+            }
+            persistGeneralSettings()
+            syncFloatingIndicatorPreferences()
+            onStateChange?()
+        }
+    }
+    var floatingIndicatorPlacement: FloatingIndicatorPlacement? {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            guard oldValue != floatingIndicatorPlacement else {
+                return
+            }
+            persistGeneralSettings()
+            syncFloatingIndicatorPreferences()
+            onStateChange?()
+        }
+    }
     var hotkeyConfiguration: HotkeyConfiguration = .globe {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -824,6 +850,10 @@ final class AppState {
             floatingIndicatorController.onAction = { [weak self] in
                 self?.toggleFloatingIndicatorRecording()
             }
+            floatingIndicatorController.onPlacementChanged = { [weak self] placement in
+                self?.handleFloatingIndicatorPlacementChanged(placement)
+            }
+            syncFloatingIndicatorPreferences()
         }
 
         if startServices {
@@ -1222,6 +1252,10 @@ final class AppState {
                 showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             }
         }
+    }
+
+    func resetFloatingIndicatorPlacement() {
+        floatingIndicatorPlacement = nil
     }
 
     func startRecordingFromUI() {
@@ -1807,6 +1841,8 @@ final class AppState {
         autoSubmitEnabled = settings.autoSubmitEnabled
         hotkeyConfiguration = settings.hotkeyConfiguration
         echoCancellationEnabled = settings.echoCancellationEnabled
+        hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
+        floatingIndicatorPlacement = settings.floatingIndicatorPlacement
         hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
         hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
         isHydratingGeneralSettings = false
@@ -1823,6 +1859,8 @@ final class AppState {
             autoSubmitEnabled: autoSubmitEnabled,
             hotkeyConfiguration: hotkeyConfiguration,
             echoCancellationEnabled: echoCancellationEnabled,
+            hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,
+            floatingIndicatorPlacement: floatingIndicatorPlacement,
             hasSeenOnboardingWelcome: hasSeenOnboardingWelcome,
             hasCompletedCoreOnboarding: hasCompletedCoreOnboarding
         )
@@ -1995,6 +2033,18 @@ final class AppState {
         floatingIndicatorState = state
         guard floatingIndicatorEnabled else { return }
         floatingIndicatorController.update(state)
+    }
+
+    private func syncFloatingIndicatorPreferences() {
+        guard floatingIndicatorEnabled else { return }
+        floatingIndicatorController.configure(
+            hideWhenIdle: hideFloatingIndicatorWhenIdle,
+            placement: floatingIndicatorPlacement
+        )
+    }
+
+    func handleFloatingIndicatorPlacementChanged(_ placement: FloatingIndicatorPlacement?) {
+        floatingIndicatorPlacement = placement
     }
 
     private func showTransientIndicatorError(

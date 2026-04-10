@@ -12,6 +12,8 @@ final class GeneralSettingsStoreTests: XCTestCase {
             preferredInputDeviceID: "usb-mic",
             autoSubmitEnabled: true,
             hotkeyConfiguration: .keyCombo(keyCode: UInt32(kVK_Space), carbonModifiers: UInt32(optionKey)),
+            hideFloatingIndicatorWhenIdle: true,
+            floatingIndicatorPlacement: FloatingIndicatorPlacement(centerXRatio: 0.2, bottomYRatio: 0.15),
             hasSeenOnboardingWelcome: true,
             hasCompletedCoreOnboarding: true
         )
@@ -31,5 +33,32 @@ final class GeneralSettingsStoreTests: XCTestCase {
             HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_Grave), carbonModifiers: 0).displayString,
             "`"
         )
+    }
+
+    func testStoreLoadBackfillsNewIndicatorFields() throws {
+        let suite = "dev.suniye.tests.general.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+
+        let legacyJSON = """
+        {
+          "preferredInputDeviceID": "usb-mic",
+          "autoSubmitEnabled": true,
+          "hotkeyConfiguration": {
+            "kind": "globe",
+            "keyCode": 63,
+            "carbonModifiers": 0
+          },
+          "echoCancellationEnabled": false,
+          "hasSeenOnboardingWelcome": true,
+          "hasCompletedCoreOnboarding": false
+        }
+        """
+        defaults.set(try XCTUnwrap(legacyJSON.data(using: .utf8)), forKey: "general")
+
+        let settings = store.load()
+
+        XCTAssertFalse(settings.hideFloatingIndicatorWhenIdle)
+        XCTAssertNil(settings.floatingIndicatorPlacement)
     }
 }

@@ -38,6 +38,66 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertFalse(appState.autoSubmitEnabled)
     }
 
+    func testFloatingIndicatorSettingsDefaultToVisibleIdleAndDefaultPlacement() {
+        let appState = makeTestAppState()
+
+        XCTAssertFalse(appState.hideFloatingIndicatorWhenIdle)
+        XCTAssertNil(appState.floatingIndicatorPlacement)
+    }
+
+    func testFloatingIndicatorSettingsLoadFromGeneralSettings() {
+        let placement = FloatingIndicatorPlacement(centerXRatio: 0.18, bottomYRatio: 0.22)
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                preferredInputDeviceID: nil,
+                autoSubmitEnabled: false,
+                hotkeyConfiguration: .globe,
+                echoCancellationEnabled: false,
+                hideFloatingIndicatorWhenIdle: true,
+                floatingIndicatorPlacement: placement,
+                hasSeenOnboardingWelcome: false,
+                hasCompletedCoreOnboarding: false
+            )
+        )
+        let appState = makeTestAppState(generalSettingsStore: generalSettingsStore)
+
+        XCTAssertTrue(appState.hideFloatingIndicatorWhenIdle)
+        XCTAssertEqual(appState.floatingIndicatorPlacement, placement)
+    }
+
+    func testChangingHideFloatingIndicatorWhenIdlePersistsGeneralSettings() {
+        let generalSettingsStore = TestGeneralSettingsStore()
+        let appState = makeTestAppState(generalSettingsStore: generalSettingsStore)
+
+        appState.hideFloatingIndicatorWhenIdle = true
+
+        XCTAssertTrue(generalSettingsStore.latest.hideFloatingIndicatorWhenIdle)
+    }
+
+    func testResetFloatingIndicatorPlacementClearsSavedPlacement() {
+        let placement = FloatingIndicatorPlacement(centerXRatio: 0.33, bottomYRatio: 0.18)
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(floatingIndicatorPlacement: placement)
+        )
+        let appState = makeTestAppState(generalSettingsStore: generalSettingsStore)
+
+        appState.resetFloatingIndicatorPlacement()
+
+        XCTAssertNil(appState.floatingIndicatorPlacement)
+        XCTAssertNil(generalSettingsStore.latest.floatingIndicatorPlacement)
+    }
+
+    func testHandlingFloatingIndicatorPlacementChangePersistsGeneralSettings() {
+        let generalSettingsStore = TestGeneralSettingsStore()
+        let appState = makeTestAppState(generalSettingsStore: generalSettingsStore)
+        let placement = FloatingIndicatorPlacement(centerXRatio: 0.61, bottomYRatio: 0.12)
+
+        appState.handleFloatingIndicatorPlacementChanged(placement)
+
+        XCTAssertEqual(appState.floatingIndicatorPlacement, placement)
+        XCTAssertEqual(generalSettingsStore.latest.floatingIndicatorPlacement, placement)
+    }
+
     func testLegacyInstallWithModelInstalledMarksOnboardingComplete() {
         let modelManager = StubModelManager()
         modelManager.isReady = true

@@ -4,6 +4,8 @@ struct FloatingIndicatorView: View {
     let state: FloatingIndicatorState
     let onHoverChanged: (Bool) -> Void
     let onAction: () -> Void
+    let onDragChanged: () -> Void
+    let onDragEnded: () -> Void
 
     var body: some View {
         VStack(spacing: helperText == nil ? 0 : 8) {
@@ -48,6 +50,17 @@ struct FloatingIndicatorView: View {
             guard isInteractive else { return }
             onAction()
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 4)
+                .onChanged { _ in
+                    guard isDraggable else { return }
+                    onDragChanged()
+                }
+                .onEnded { _ in
+                    guard isDraggable else { return }
+                    onDragEnded()
+                }
+        )
     }
 
     @ViewBuilder
@@ -104,6 +117,15 @@ struct FloatingIndicatorView: View {
         case let .listening(_, source):
             return source == .manual
         default:
+            return false
+        }
+    }
+
+    private var isDraggable: Bool {
+        switch state {
+        case .idle, .hover:
+            return true
+        case .listening, .processing, .error:
             return false
         }
     }
