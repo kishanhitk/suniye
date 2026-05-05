@@ -40,6 +40,20 @@ struct MenuBarView: View {
                     .disabled(appState.phase != .recording)
             }
 
+            Menu("Format: \(appState.magicFormatMenuTitle)") {
+                Button(formatMenuTitle("Off", isSelected: !appState.llmEnabled)) {
+                    appState.setMagicFormatEnabledFromMenu(false)
+                }
+
+                Divider()
+
+                ForEach(MagicFormatMode.allCases, id: \.self) { mode in
+                    Button(formatMenuTitle(mode.displayName, isSelected: appState.llmEnabled && appState.magicFormatMode == mode)) {
+                        appState.selectMagicFormatMode(mode)
+                    }
+                }
+            }
+
             Button(appState.activeOnboardingStep == nil ? "Open Suniye" : "Continue Setup") {
                 appState.openMainWindow()
             }
@@ -72,5 +86,9 @@ struct MenuBarView: View {
 
     private var statusIcon: String {
         appState.phase == .recording ? "mic.fill" : "mic"
+    }
+
+    private func formatMenuTitle(_ title: String, isSelected: Bool) -> String {
+        isSelected ? "[x] \(title)" : title
     }
 }

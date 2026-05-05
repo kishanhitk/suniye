@@ -59,6 +59,76 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(fakeLLM.callCount, 1)
     }
 
+    func testRawMagicFormatModeSkipsLLMAndSetupWarnings() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished text"))
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.magicFormatMode = .raw
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(fakeLLM.callCount, 0)
+        XCTAssertFalse(appState.canTestMagicFormatSetup(apiKeyDraft: "draft-key"))
+        XCTAssertEqual(appState.magicFormatSetupState, .raw)
+        XCTAssertFalse(appState.attentionItems.contains(where: { $0.id == "llm-key-missing" }))
+    }
+
+    func testSelectedMagicFormatModePromptIsPassedToLLM() async {
+        let fakeLLM = CapturingLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.magicFormatMode = .email
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "polished")
+        XCTAssertEqual(fakeLLM.lastConfig?.systemPrompt, MagicFormatMode.email.defaultPrompt)
+    }
+
+    func testMagicFormatPromptOverrideAndReset() async {
+        let fakeLLM = CapturingLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.magicFormatMode = .notes
+        appState.setMagicFormatPrompt("custom notes prompt")
+        appState.refreshLLMKeyStatus()
+
+        _ = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(fakeLLM.lastConfig?.systemPrompt, "custom notes prompt")
+        XCTAssertTrue(appState.canResetMagicFormatPrompt)
+
+        appState.resetMagicFormatPrompt()
+        _ = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(fakeLLM.lastConfig?.systemPrompt, MagicFormatMode.notes.defaultPrompt)
+        XCTAssertFalse(appState.canResetMagicFormatPrompt)
+    }
+
     func testToggleOnFailureFallsBackToRaw() async {
         let fakeLLM = FakeLLMPostProcessor(result: .failure(LLMPostProcessorError.timeout))
         let keychain = TestKeychainService(value: "api-key")
@@ -514,8 +584,12 @@ final class AppStateLLMTests: XCTestCase {
             keychainService: keychain
         )
 
-        XCTAssertEqual(appState.llmBaseSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(appState.magicFormatMode, .custom)
+        XCTAssertEqual(appState.magicFormatPromptText, "BASE\n\nUSER")
+        XCTAssertEqual(appState.llmBaseSystemPrompt, LLMDefaults.defaultBaseSystemPrompt)
         XCTAssertEqual(appState.llmSystemPrompt, "")
+        XCTAssertEqual(store.latest.selectedMagicFormatMode, .custom)
+        XCTAssertEqual(store.latest.promptOverride(for: .custom), "BASE\n\nUSER")
         XCTAssertEqual(store.latest.systemPrompt, "")
         XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.defaultTimeoutSeconds)
         XCTAssertEqual(store.latest.maxTokens, LLMDefaults.defaultMaxTokens)
@@ -546,9 +620,11 @@ final class AppStateLLMTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            appState.llmBaseSystemPrompt,
+            appState.magicFormatPromptText,
             "Preserve meaning and intent.\n\nPreserve meaning"
         )
+        XCTAssertEqual(appState.magicFormatMode, .custom)
+        XCTAssertEqual(appState.llmBaseSystemPrompt, LLMDefaults.defaultBaseSystemPrompt)
         XCTAssertEqual(appState.llmSystemPrompt, "")
         XCTAssertEqual(store.latest.systemPrompt, "")
     }
@@ -577,7 +653,9 @@ final class AppStateLLMTests: XCTestCase {
             keychainService: keychain
         )
 
-        XCTAssertEqual(appState.llmBaseSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(appState.magicFormatMode, .custom)
+        XCTAssertEqual(appState.magicFormatPromptText, "BASE\n\nUSER")
+        XCTAssertEqual(appState.llmBaseSystemPrompt, LLMDefaults.defaultBaseSystemPrompt)
         XCTAssertEqual(appState.llmSystemPrompt, "")
         XCTAssertEqual(store.latest.systemPrompt, "")
     }

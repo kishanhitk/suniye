@@ -80,8 +80,97 @@ enum LLMEndpointProvider {
     case generic
 }
 
+enum MagicFormatMode: String, CaseIterable, Codable {
+    case raw
+    case cleanDictation
+    case message
+    case email
+    case notes
+    case custom
+
+    var displayName: String {
+        switch self {
+        case .raw:
+            return "Raw"
+        case .cleanDictation:
+            return "Clean Dictation"
+        case .message:
+            return "Message"
+        case .email:
+            return "Email"
+        case .notes:
+            return "Notes"
+        case .custom:
+            return "Custom"
+        }
+    }
+
+    var menuLabel: String {
+        switch self {
+        case .raw:
+            return "Raw"
+        case .cleanDictation:
+            return "Clean"
+        case .message:
+            return "Message"
+        case .email:
+            return "Email"
+        case .notes:
+            return "Notes"
+        case .custom:
+            return "Custom"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .raw:
+            return "Paste the local transcription exactly as Suniye heard it."
+        case .cleanDictation:
+            return "Fix obvious transcription errors while preserving your wording and tone."
+        case .message:
+            return "Make dictated text feel natural for chat, Slack, and quick replies."
+        case .email:
+            return "Polish dictation into clear, respectful email-ready prose."
+        case .notes:
+            return "Shape longer dictation into readable notes with light structure."
+        case .custom:
+            return "Use your own instructions for rewriting dictated text."
+        }
+    }
+
+    var usesLLM: Bool {
+        self != .raw
+    }
+
+    var defaultPrompt: String {
+        switch self {
+        case .raw:
+            return ""
+        case .cleanDictation:
+            return LLMDefaults.defaultBaseSystemPrompt
+        case .message:
+            return """
+Fix transcription errors and make the text sound like a concise, natural message. Preserve the user's meaning, keep the tone casual, and do not add new facts. Return only the rewritten message, nothing else.
+"""
+        case .email:
+            return """
+Fix transcription errors and rewrite the text as polished email-ready prose. Preserve the user's meaning, keep the tone warm and professional, and do not add new facts. Return only the rewritten text, nothing else.
+"""
+        case .notes:
+            return """
+Fix transcription errors and format the text as clear notes. Use short paragraphs or bullets only when they make the dictation easier to scan. Preserve the user's meaning and do not add new facts. Return only the formatted notes, nothing else.
+"""
+        case .custom:
+            return LLMDefaults.defaultBaseSystemPrompt
+        }
+    }
+}
+
 struct LLMSettings: Codable, Equatable {
     var isEnabled: Bool = false
+    var selectedMagicFormatMode: MagicFormatMode = .cleanDictation
+    var promptOverridesByMode: [String: String] = [:]
     var selectedModelPreset: LLMModelPreset = .gemini25Flash
     var customModelId: String = ""
     var endpointURLString: String = LLMDefaults.defaultEndpointURLString
@@ -93,6 +182,8 @@ struct LLMSettings: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case isEnabled
+        case selectedMagicFormatMode
+        case promptOverridesByMode
         case selectedModelPreset
         case customModelId
         case endpointURLString
@@ -107,6 +198,8 @@ struct LLMSettings: Codable, Equatable {
 
     init(
         isEnabled: Bool = false,
+        selectedMagicFormatMode: MagicFormatMode = .cleanDictation,
+        promptOverridesByMode: [String: String] = [:],
         selectedModelPreset: LLMModelPreset = .gemini25Flash,
         customModelId: String = "",
         endpointURLString: String = LLMDefaults.defaultEndpointURLString,
@@ -117,6 +210,8 @@ struct LLMSettings: Codable, Equatable {
         maxTokens: Int = LLMDefaults.defaultMaxTokens
     ) {
         self.isEnabled = isEnabled
+        self.selectedMagicFormatMode = selectedMagicFormatMode
+        self.promptOverridesByMode = Self.normalizedPromptOverrides(promptOverridesByMode)
         self.selectedModelPreset = selectedModelPreset
         self.customModelId = customModelId
         self.endpointURLString = endpointURLString
@@ -130,6 +225,8 @@ struct LLMSettings: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? false
+        let decodedMode = try container.decodeIfPresent(MagicFormatMode.self, forKey: .selectedMagicFormatMode)
+        promptOverridesByMode = Self.normalizedPromptOverrides(try container.decodeIfPresent([String: String].self, forKey: .promptOverridesByMode) ?? [:])
         selectedModelPreset = try container.decodeIfPresent(LLMModelPreset.self, forKey: .selectedModelPreset) ?? .gemini25Flash
         customModelId = try container.decodeIfPresent(String.self, forKey: .customModelId) ?? ""
         endpointURLString = try container.decodeIfPresent(String.self, forKey: .endpointURLString) ?? LLMDefaults.defaultEndpointURLString
@@ -138,11 +235,25 @@ struct LLMSettings: Codable, Equatable {
         keywordsRaw = try container.decodeIfPresent(String.self, forKey: .keywordsRaw) ?? ""
         timeoutSeconds = LLMDefaults.clampTimeout(try container.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? LLMDefaults.defaultTimeoutSeconds)
         maxTokens = LLMDefaults.clampMaxTokens(try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? LLMDefaults.defaultMaxTokens)
+
+        if let decodedMode {
+            selectedMagicFormatMode = decodedMode
+        } else {
+            let legacyPrompt = Self.legacyMergedPromptForMigration(basePrompt: baseSystemPrompt, systemPrompt: systemPrompt)
+            if legacyPrompt == LLMDefaults.defaultBaseSystemPrompt {
+                selectedMagicFormatMode = .cleanDictation
+            } else {
+                selectedMagicFormatMode = .custom
+                promptOverridesByMode[MagicFormatMode.custom.rawValue] = legacyPrompt
+            }
+        }
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encode(selectedMagicFormatMode, forKey: .selectedMagicFormatMode)
+        try container.encode(promptOverridesByMode, forKey: .promptOverridesByMode)
         try container.encode(selectedModelPreset, forKey: .selectedModelPreset)
         try container.encode(customModelId, forKey: .customModelId)
         try container.encode(endpointURLString, forKey: .endpointURLString)
@@ -158,7 +269,37 @@ struct LLMSettings: Codable, Equatable {
     }
 
     var composedSystemPrompt: String {
-        let normalizedBase = baseSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if promptOverridesByMode.isEmpty,
+           selectedMagicFormatMode == .cleanDictation,
+           (baseSystemPrompt != LLMDefaults.defaultBaseSystemPrompt || !systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+            return Self.legacyComposedPrompt(basePrompt: baseSystemPrompt, systemPrompt: systemPrompt)
+        }
+
+        return effectivePrompt(for: selectedMagicFormatMode)
+    }
+
+    func effectivePrompt(for mode: MagicFormatMode) -> String {
+        let override = promptOverride(for: mode)
+        if let override {
+            return override
+        }
+        return mode.defaultPrompt
+    }
+
+    func promptOverride(for mode: MagicFormatMode) -> String? {
+        guard let value = promptOverridesByMode[mode.rawValue]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    func hasPromptOverride(for mode: MagicFormatMode) -> Bool {
+        promptOverride(for: mode) != nil
+    }
+
+    private static func legacyComposedPrompt(basePrompt: String, systemPrompt: String) -> String {
+        let normalizedBase = basePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedUser = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
 
         var sections: [String] = []
@@ -169,6 +310,34 @@ struct LLMSettings: Codable, Equatable {
         }
 
         return sections.joined(separator: "\n\n")
+    }
+
+    private static func legacyMergedPromptForMigration(basePrompt: String, systemPrompt: String) -> String {
+        let normalizedBase = basePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedExtra = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let visiblePrompt = normalizedBase.isEmpty ? LLMDefaults.defaultBaseSystemPrompt : normalizedBase
+
+        guard !normalizedExtra.isEmpty else {
+            return visiblePrompt
+        }
+
+        if visiblePrompt == normalizedExtra || visiblePrompt.hasSuffix("\n\n\(normalizedExtra)") {
+            return visiblePrompt
+        }
+
+        return "\(visiblePrompt)\n\n\(normalizedExtra)"
+    }
+
+    private static func normalizedPromptOverrides(_ overrides: [String: String]) -> [String: String] {
+        var normalized: [String: String] = [:]
+        for mode in MagicFormatMode.allCases {
+            guard let value = overrides[mode.rawValue]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else {
+                continue
+            }
+            normalized[mode.rawValue] = value
+        }
+        return normalized
     }
 
     var endpointProvider: LLMEndpointProvider {

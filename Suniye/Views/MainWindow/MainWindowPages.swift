@@ -357,10 +357,15 @@ struct StylePage: View {
             }
 
             if appState.llmEnabled {
-                connectionSection
-                modelSection
-                vocabularySection
-                promptSection
+                modeSection
+                if appState.magicFormatMode.usesLLM {
+                    connectionSection
+                    modelSection
+                    vocabularySection
+                    promptSection
+                } else {
+                    rawModeSection
+                }
             }
         }
     }
@@ -403,6 +408,49 @@ struct StylePage: View {
                             .font(AppTypography.caption)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                     }
+                }
+            }
+        }
+    }
+
+    // MARK: - Mode
+
+    private var modeSection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+            SectionHeading(title: "Mode")
+
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    NativePopupPicker(
+                        items: MagicFormatMode.allCases,
+                        selection: $appState.magicFormatMode,
+                        title: \.displayName
+                    )
+                    .frame(maxWidth: 320)
+
+                    Text(appState.magicFormatModeDescription)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private var rawModeSection: some View {
+        SurfaceCard {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "text.quote")
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("No cloud cleanup")
+                        .font(AppTypography.bodyMedium)
+                    Text("Raw mode skips Magic Format requests and pastes the local transcription exactly as Suniye heard it.")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -596,11 +644,28 @@ struct StylePage: View {
 
             SurfaceCard {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Instructions for rewriting your text.")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("\(appState.magicFormatMode.displayName) instructions")
+                                .font(AppTypography.subheadlineSemibold)
+                            Text("Edit this mode's prompt, or reset to Suniye's curated default.")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                        }
 
-                    TextEditor(text: $appState.llmBaseSystemPrompt)
+                        Spacer(minLength: 12)
+
+                        Button("Reset Prompt") {
+                            appState.resetMagicFormatPrompt()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!appState.canResetMagicFormatPrompt)
+                    }
+
+                    TextEditor(text: Binding(
+                        get: { appState.magicFormatPromptText },
+                        set: { appState.setMagicFormatPrompt($0) }
+                    ))
                         .font(AppTypography.body)
                         .frame(minHeight: 120)
                         .padding(8)
@@ -652,6 +717,8 @@ struct StylePage: View {
         switch appState.magicFormatSetupState {
         case .off:
             return .gray
+        case .raw:
+            return MainWindowPalette.secondaryText
         case .needsAPIKey, .needsServiceSetup:
             return .orange
         case .ready:
@@ -660,12 +727,17 @@ struct StylePage: View {
     }
 
     private var setupStatusText: String {
+        if appState.magicFormatSetupState == .raw {
+            return "Raw mode: no cleanup requests"
+        }
         if appState.isMagicFormatSetupVerified {
             return "Connected and ready"
         }
         switch appState.magicFormatSetupState {
         case .off:
             return "Off"
+        case .raw:
+            return "Raw mode: no cleanup requests"
         case .needsAPIKey:
             return "Add an API key to get started"
         case .needsServiceSetup:

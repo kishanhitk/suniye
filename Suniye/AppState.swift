@@ -62,6 +62,7 @@ struct AttentionItem: Identifiable, Equatable {
 
 enum MagicFormatSetupState: Equatable {
     case off
+    case raw
     case needsAPIKey
     case needsServiceSetup
     case ready
@@ -70,6 +71,8 @@ enum MagicFormatSetupState: Equatable {
         switch self {
         case .off:
             return "Off"
+        case .raw:
+            return "Raw"
         case .needsAPIKey:
             return "Needs API key"
         case .needsServiceSetup:
@@ -83,6 +86,8 @@ enum MagicFormatSetupState: Equatable {
         switch self {
         case .off:
             return "Turn it on to improve dictation before text is pasted."
+        case .raw:
+            return "Raw mode is on, so text is pasted exactly as transcribed."
         case .needsAPIKey:
             return "Add an API key to start using Magic Format."
         case .needsServiceSetup:
@@ -96,6 +101,8 @@ enum MagicFormatSetupState: Equatable {
         switch self {
         case .off:
             return "pause.circle"
+        case .raw:
+            return "text.quote"
         case .needsAPIKey, .needsServiceSetup:
             return "exclamationmark.circle"
         case .ready:
@@ -105,7 +112,7 @@ enum MagicFormatSetupState: Equatable {
 
     var color: Color {
         switch self {
-        case .off:
+        case .off, .raw:
             return MainWindowPalette.secondaryText
         case .needsAPIKey, .needsServiceSetup:
             return .orange
@@ -459,6 +466,12 @@ final class AppState {
     var llmEnabled = false {
         didSet { persistLLMSettings() }
     }
+    var magicFormatMode: MagicFormatMode = .cleanDictation {
+        didSet { persistLLMSettings() }
+    }
+    var llmPromptOverridesByMode: [String: String] = [:] {
+        didSet { persistLLMSettings() }
+    }
     var llmSelectedModelPreset: LLMModelPreset = .gemini25Flash {
         didSet { persistLLMSettings() }
     }
@@ -533,7 +546,30 @@ final class AppState {
         modelManager.isInstalled(selectedASRModelID)
     }
 
+    var isMagicFormatUsingLLM: Bool {
+        llmEnabled && magicFormatMode.usesLLM
+    }
+
+    var magicFormatModeDescription: String {
+        magicFormatMode.description
+    }
+
+    var magicFormatMenuTitle: String {
+        llmEnabled ? magicFormatMode.menuLabel : "Off"
+    }
+
+    var magicFormatPromptText: String {
+        currentLLMSettings().effectivePrompt(for: magicFormatMode)
+    }
+
+    var canResetMagicFormatPrompt: Bool {
+        currentLLMSettings().hasPromptOverride(for: magicFormatMode)
+    }
+
     var llmKeyStatusText: String {
+        if llmEnabled && !magicFormatMode.usesLLM {
+            return "Not needed"
+        }
         if hasLLMAPIKey && isMagicFormatSetupVerified {
             return "Connected"
         }
@@ -545,7 +581,7 @@ final class AppState {
     }
 
     func canTestMagicFormatSetup(apiKeyDraft: String) -> Bool {
-        guard llmEnabled, !isMagicFormatSetupTestInProgress else {
+        guard isMagicFormatUsingLLM, !isMagicFormatSetupTestInProgress else {
             return false
         }
         guard llmEndpointValidationError == nil, llmModelValidationError == nil else {
@@ -558,6 +594,9 @@ final class AppState {
         guard llmEnabled else {
             return .off
         }
+        guard magicFormatMode.usesLLM else {
+            return .raw
+        }
         if llmEndpointValidationError != nil || llmModelValidationError != nil {
             return .needsServiceSetup
         }
@@ -568,11 +607,17 @@ final class AppState {
     }
 
     var llmEndpointValidationError: String? {
-        currentLLMSettings().endpointValidationError
+        guard isMagicFormatUsingLLM else {
+            return nil
+        }
+        return currentLLMSettings().endpointValidationError
     }
 
     var llmModelValidationError: String? {
-        currentLLMSettings().modelValidationError
+        guard isMagicFormatUsingLLM else {
+            return nil
+        }
+        return currentLLMSettings().modelValidationError
     }
 
     var llmStatusHint: String? {
@@ -589,6 +634,34 @@ final class AppState {
 
     var vocabularyTerms: [String] {
         currentLLMSettings().keywords
+    }
+
+    func selectMagicFormatMode(_ mode: MagicFormatMode) {
+        magicFormatMode = mode
+        if !llmEnabled {
+            llmEnabled = true
+        }
+    }
+
+    func setMagicFormatEnabledFromMenu(_ isEnabled: Bool) {
+        llmEnabled = isEnabled
+    }
+
+    func setMagicFormatPrompt(_ value: String) {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var overrides = llmPromptOverridesByMode
+        if normalized.isEmpty || normalized == magicFormatMode.defaultPrompt.trimmingCharacters(in: .whitespacesAndNewlines) {
+            overrides.removeValue(forKey: magicFormatMode.rawValue)
+        } else {
+            overrides[magicFormatMode.rawValue] = value
+        }
+        llmPromptOverridesByMode = overrides
+    }
+
+    func resetMagicFormatPrompt() {
+        var overrides = llmPromptOverridesByMode
+        overrides.removeValue(forKey: magicFormatMode.rawValue)
+        llmPromptOverridesByMode = overrides
     }
 
     var recentResultsPreview: [RecentResult] {
@@ -965,7 +1038,7 @@ final class AppState {
             )
         }
 
-        if llmEnabled, let endpointValidationError = llmEndpointValidationError {
+        if isMagicFormatUsingLLM, let endpointValidationError = llmEndpointValidationError {
             items.append(
                 AttentionItem(
                     id: "llm-endpoint-invalid",
@@ -977,7 +1050,7 @@ final class AppState {
             )
         }
 
-        if llmEnabled, let modelValidationError = llmModelValidationError {
+        if isMagicFormatUsingLLM, let modelValidationError = llmModelValidationError {
             items.append(
                 AttentionItem(
                     id: "llm-model-invalid",
@@ -989,7 +1062,7 @@ final class AppState {
             )
         }
 
-        if llmEnabled && !hasLLMAPIKey {
+        if isMagicFormatUsingLLM && !hasLLMAPIKey {
             items.append(
                 AttentionItem(
                     id: "llm-key-missing",
@@ -1344,7 +1417,7 @@ final class AppState {
     func testMagicFormatSetup(apiKeyDraft: String) async {
         clearMagicFormatSetupTestResult()
 
-        guard llmEnabled else {
+        guard isMagicFormatUsingLLM else {
             return
         }
         guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
@@ -1893,7 +1966,7 @@ final class AppState {
             break
         }
 
-        guard llmEnabled else {
+        guard isMagicFormatUsingLLM else {
             return rawText
         }
 
@@ -2361,20 +2434,29 @@ final class AppState {
             extraPrompt: settings.systemPrompt
         )
         let shouldNormalizeHiddenSettings = settings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || settings.baseSystemPrompt != LLMDefaults.defaultBaseSystemPrompt
             || settings.timeoutSeconds != LLMDefaults.defaultTimeoutSeconds
             || settings.maxTokens != LLMDefaults.defaultMaxTokens
+        var loadedMagicFormatMode = settings.selectedMagicFormatMode
+        var loadedPromptOverrides = settings.promptOverridesByMode
+        if loadedPromptOverrides.isEmpty, mergedPrompt != LLMDefaults.defaultBaseSystemPrompt {
+            loadedMagicFormatMode = .custom
+            loadedPromptOverrides[MagicFormatMode.custom.rawValue] = mergedPrompt
+        }
         llmEnabled = settings.isEnabled
+        magicFormatMode = loadedMagicFormatMode
+        llmPromptOverridesByMode = loadedPromptOverrides
         llmSelectedModelPreset = settings.selectedModelPreset
         llmCustomModelId = settings.customModelId
         llmEndpointURLString = settings.endpointURLString
-        llmBaseSystemPrompt = mergedPrompt
+        llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt
         llmSystemPrompt = ""
         llmKeywordsRaw = settings.keywordsRaw
         llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
         llmMaxTokens = LLMDefaults.defaultMaxTokens
         isHydratingLLMSettings = false
 
-        if shouldNormalizeHiddenSettings {
+        if shouldNormalizeHiddenSettings || mergedPrompt != settings.baseSystemPrompt {
             persistLLMSettings()
         }
     }
@@ -2391,10 +2473,12 @@ final class AppState {
     private func currentLLMSettings() -> LLMSettings {
         LLMSettings(
             isEnabled: llmEnabled,
+            selectedMagicFormatMode: magicFormatMode,
+            promptOverridesByMode: llmPromptOverridesByMode,
             selectedModelPreset: llmSelectedModelPreset,
             customModelId: llmCustomModelId,
             endpointURLString: llmEndpointURLString,
-            baseSystemPrompt: llmBaseSystemPrompt,
+            baseSystemPrompt: LLMDefaults.defaultBaseSystemPrompt,
             systemPrompt: "",
             keywordsRaw: llmKeywordsRaw,
             timeoutSeconds: LLMDefaults.defaultTimeoutSeconds,

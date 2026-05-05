@@ -12,7 +12,7 @@ Open-source, local-first dictation for macOS. Hold a key, speak, and your words 
 - **Works everywhere** — Inserts text directly into whichever app you're using via macOS Accessibility APIs.
 - **Instant** — No network round-trip. Your voice becomes text in milliseconds, not seconds.
 - **One shortcut** — Hold a key (configurable), talk, release. That's it.
-- **Optional LLM cleanup** — Connect any OpenAI-compatible endpoint to polish transcriptions, fix grammar, or apply domain-specific vocabulary.
+- **Optional Magic Format** — Connect any OpenAI-compatible endpoint to clean up dictation with editable presets for raw text, messages, email, notes, and custom workflows.
 
 ## Install
 
@@ -47,7 +47,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed st
 | **Hotkey** | Configurable hold-to-talk shortcut (Fn/Globe, modifier combos, etc.) |
 | **Model** | Compare local ASR models by speed, quality, size, and language support; install supported options, switch the active model, or remove unused ones |
 | **Vocabulary** | Add domain-specific terms so the app gets your jargon right |
-| **LLM** | Optional AI cleanup — choose a model, set an API key, customize the prompt |
+| **Magic Format** | Optional AI cleanup — switch between Raw, Clean Dictation, Message, Email, Notes, and Custom presets; edit prompts, choose a model, and set an API key |
 | **General** | Preferred mic, auto-paste, launch at login, diagnostics |
 
 ## Supported speech models
@@ -79,7 +79,7 @@ Suniye checks for updates automatically on launch (no popups). When an update is
 
 - All transcription happens **locally** on your Mac.
 - The only network calls are model downloads and update checks against GitHub Releases.
-- If you enable the optional LLM feature, transcribed text is sent to the LLM provider you configure.
+- If you enable a Magic Format mode that uses LLM cleanup, transcribed text is sent to the LLM provider you configure. Raw mode skips LLM requests.
 
 ## Technical details
 
