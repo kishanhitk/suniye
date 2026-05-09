@@ -4,6 +4,10 @@ import XCTest
 @testable import Suniye
 
 final class TextInsertionServiceTests: XCTestCase {
+    private enum TestError: Error {
+        case keyPostFailed
+    }
+
     func testClipboardSnapshotRoundTripsAllItemTypes() {
         let item = NSPasteboardItem()
         item.setString("plain", forType: .string)
@@ -65,6 +69,32 @@ final class TextInsertionServiceTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "fallback")
         XCTAssertEqual(postedKeyCodes, [42])
         XCTAssertEqual(postedFlags, [.maskCommand])
+    }
+
+    func testInsertTextStillRestoresClipboardWhenPasteKeyPostingThrows() throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setString("previous", forType: .string)
+
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementProvider = { nil }
+        service.pasteKeyCodeProvider = { 42 }
+        service.clipboardRestoreDelay = 0
+        service.keyPoster = { _, _ in
+            throw TestError.keyPostFailed
+        }
+
+        XCTAssertThrowsError(try service.insertText("fallback")) { error in
+            XCTAssertTrue(error is TestError)
+        }
+
+        let restored = expectation(description: "clipboard restored")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            XCTAssertEqual(pasteboard.string(forType: .string), "previous")
+            restored.fulfill()
+        }
+        wait(for: [restored], timeout: 1)
     }
 
     func testSubmitActiveInputPostsReturnKey() throws {

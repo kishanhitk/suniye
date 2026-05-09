@@ -43,8 +43,12 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        try postKey(pasteKeyCode(), flags: .maskCommand)
+        scheduleClipboardRestore(previousItems, to: pasteboard)
 
+        try postKey(pasteKeyCode(), flags: .maskCommand)
+    }
+
+    private func scheduleClipboardRestore(_ previousItems: ClipboardSnapshot, to pasteboard: NSPasteboard) {
         DispatchQueue.main.asyncAfter(deadline: .now() + clipboardRestoreDelay) {
             pasteboard.clearContents()
             pasteboard.writeObjects(Self.pasteboardItems(from: previousItems))
@@ -98,7 +102,13 @@ final class TextInsertionService: TextInsertionServiceProtocol {
             return false
         }
 
-        return ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField", "AXWebArea"].contains(role)
+        // AXWebArea is a web document root, not an editable text input; setting selected text on it is invalid.
+        return [
+            kAXTextFieldRole as String,
+            kAXTextAreaRole as String,
+            kAXComboBoxRole as String,
+            "AXSearchField",
+        ].contains(role)
     }
 
     private func setSelectedText(_ text: String, on element: AXUIElement) -> Bool {
@@ -201,7 +211,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     }
 
     private static func virtualKeyCode(for character: String) -> CGKeyCode? {
-        guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+        guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
               let layoutDataRef = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
             return nil
         }
