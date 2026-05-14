@@ -1,3 +1,4 @@
+import AppKit
 import Carbon
 import XCTest
 @testable import Suniye
@@ -31,6 +32,34 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.sessionCount, 1)
         XCTAssertEqual(appState.wordsTranscribed, 3)
         XCTAssertEqual(historyStore.value.map(\.id), [second.id])
+    }
+
+    func testCopyLastTranscriptCopiesNewestHistoryResult() {
+        let first = RecentResult(id: UUID(), text: "latest transcript", createdAt: .now, durationSeconds: 1.5, wasLLMPolished: false)
+        let second = RecentResult(id: UUID(), text: "older transcript", createdAt: .now.addingTimeInterval(-60), durationSeconds: 2.5, wasLLMPolished: true)
+        let historyStore = TestHistoryStore()
+        historyStore.value = [first, second]
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString("previous clipboard", forType: .string)
+
+        let appState = makeTestAppState(historyStore: historyStore)
+        let didCopy = appState.copyLastTranscript()
+
+        XCTAssertTrue(didCopy)
+        XCTAssertEqual(pasteboard.string(forType: .string), "latest transcript")
+    }
+
+    func testCopyLastTranscriptReturnsFalseWhenHistoryIsEmpty() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString("previous clipboard", forType: .string)
+        let appState = makeTestAppState()
+
+        let didCopy = appState.copyLastTranscript()
+
+        XCTAssertFalse(didCopy)
+        XCTAssertEqual(pasteboard.string(forType: .string), "previous clipboard")
     }
 
     func testAutoSubmitDefaultsOff() {

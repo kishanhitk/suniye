@@ -7,6 +7,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
 
     private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openMainWindow), keyEquivalent: "o")
+    private let copyLastTranscriptItem = NSMenuItem(title: "Copy Last Transcript", action: #selector(copyLastTranscript), keyEquivalent: "")
     private let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
     private let downloadUpdateItem = NSMenuItem(title: "Download Update", action: #selector(downloadUpdate), keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
@@ -30,12 +31,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.delegate = self
 
         openSettingsItem.target = self
+        copyLastTranscriptItem.target = self
         checkUpdatesItem.target = self
         downloadUpdateItem.target = self
         downloadItem.target = self
         quitItem.target = self
 
         menu.addItem(openSettingsItem)
+        menu.addItem(copyLastTranscriptItem)
+        menu.addItem(.separator())
         menu.addItem(checkUpdatesItem)
         menu.addItem(downloadUpdateItem)
         menu.addItem(downloadItem)
@@ -58,6 +62,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         let updateStatus = appState.updateStatus
         checkUpdatesItem.target = self
+
+        copyLastTranscriptItem.isEnabled = appState.lastTranscriptText != nil
 
         switch updateStatus {
         case .checking:
@@ -128,6 +134,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func openMainWindow() {
         AppLogger.shared.log(.info, "menu action: open main window")
         appState.openMainWindow()
+    }
+
+    @objc
+    private func copyLastTranscript() {
+        let didCopy = appState.copyLastTranscript()
+        AppLogger.shared.log(.info, "menu action: copy last transcript result=\(didCopy ? "copied" : "unavailable")")
     }
 
     @objc

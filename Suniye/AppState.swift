@@ -595,6 +595,10 @@ final class AppState {
         Array(recentResults.prefix(12))
     }
 
+    var lastTranscriptText: String? {
+        recentResults.first?.text
+    }
+
     var todaySessionCount: Int {
         let calendar = Calendar.current
         return recentResults.filter { calendar.isDateInToday($0.createdAt) }.count
@@ -1423,6 +1427,17 @@ final class AppState {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(result.text, forType: .string)
+    }
+
+    @discardableResult
+    func copyLastTranscript() -> Bool {
+        guard let text = lastTranscriptText else {
+            return false
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        return true
     }
 
     func deleteRecentResult(_ result: RecentResult) {
