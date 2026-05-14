@@ -40,13 +40,29 @@ final class TestGeneralSettingsStore: GeneralSettingsStoreProtocol {
 final class SpyTextInsertionService: TextInsertionServiceProtocol {
     private(set) var insertedTexts: [String] = []
     private(set) var submitCallCount = 0
+    var insertError: Error?
+    var submitError: Error?
 
     func insertText(_ text: String) throws {
+        if let insertError {
+            throw insertError
+        }
         insertedTexts.append(text)
     }
 
     func submitActiveInput() throws {
+        if let submitError {
+            throw submitError
+        }
         submitCallCount += 1
+    }
+}
+
+final class SpySoundFeedbackService: SoundFeedbackServiceProtocol {
+    private(set) var playedEvents: [SoundFeedbackEvent] = []
+
+    func play(_ event: SoundFeedbackEvent) {
+        playedEvents.append(event)
     }
 }
 
@@ -354,6 +370,7 @@ func makeTestAppState(
     audioCaptureService: AudioCaptureServiceProtocol = StubAudioCaptureService(),
     textInsertionService: TextInsertionServiceProtocol = SpyTextInsertionService(),
     hotkeyService: HotkeyServiceProtocol = StubHotkeyService(),
+    soundFeedbackService: SoundFeedbackServiceProtocol = SpySoundFeedbackService(),
     llmPostProcessor: LLMPostProcessor = NoopLLMPostProcessor(),
     llmSettingsStore: LLMSettingsStoreProtocol = TestLLMSettingsStore(),
     generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
@@ -373,6 +390,7 @@ func makeTestAppState(
         audioCaptureService: audioCaptureService,
         textInsertionService: textInsertionService,
         hotkeyService: hotkeyService,
+        soundFeedbackService: soundFeedbackService,
         llmPostProcessor: llmPostProcessor,
         llmSettingsStore: llmSettingsStore,
         generalSettingsStore: generalSettingsStore,

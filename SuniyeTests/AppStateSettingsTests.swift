@@ -67,6 +67,20 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertFalse(appState.autoSubmitEnabled)
     }
 
+    func testSoundFeedbackDefaultsOff() {
+        let appState = makeTestAppState()
+        XCTAssertFalse(appState.soundFeedbackEnabled)
+    }
+
+    func testChangingSoundFeedbackPersistsGeneralSettings() {
+        let generalSettingsStore = TestGeneralSettingsStore()
+        let appState = makeTestAppState(generalSettingsStore: generalSettingsStore)
+
+        appState.soundFeedbackEnabled = true
+
+        XCTAssertTrue(generalSettingsStore.latest.soundFeedbackEnabled)
+    }
+
     func testFloatingIndicatorSettingsDefaultToVisibleIdleAndDefaultPlacement() {
         let appState = makeTestAppState()
 
@@ -255,6 +269,63 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.phase, .recording)
     }
 
+    func testSoundFeedbackDisabledDoesNotPlayRecordingStartSound() async {
+        let audioCapture = StubAudioCaptureService()
+        let soundFeedback = SpySoundFeedbackService()
+        let appState = makeTestAppState(
+            audioCaptureService: audioCapture,
+            soundFeedbackService: soundFeedback
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
+        XCTAssertTrue(soundFeedback.playedEvents.isEmpty)
+    }
+
+    func testSoundFeedbackEnabledPlaysRecordingStartAfterCaptureStarts() async {
+        let audioCapture = StubAudioCaptureService()
+        let soundFeedback = SpySoundFeedbackService()
+        let appState = makeTestAppState(
+            audioCaptureService: audioCapture,
+            soundFeedbackService: soundFeedback
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.soundFeedbackEnabled = true
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
+        XCTAssertEqual(soundFeedback.playedEvents, [.recordingStarted])
+    }
+
+    func testSoundFeedbackEnabledDoesNotPlayRecordingStartWhenCaptureFails() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.startCaptureError = FakeError(message: "mic unavailable")
+        let soundFeedback = SpySoundFeedbackService()
+        let appState = makeTestAppState(
+            audioCaptureService: audioCapture,
+            soundFeedbackService: soundFeedback
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.soundFeedbackEnabled = true
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
+        XCTAssertEqual(soundFeedback.playedEvents, [.error])
+    }
+
     func testStartRecordingClearsRetryableTranscriptionError() async {
         let audioCapture = StubAudioCaptureService()
         let appState = makeTestAppState(audioCaptureService: audioCapture)
@@ -350,6 +421,157 @@ final class AppStateSettingsTests: XCTestCase {
 
         XCTAssertNil(appState.lastError)
         XCTAssertEqual(appState.phase, .ready)
+    }
+
+    func testSoundFeedbackEnabledPlaysSuccessForCompletedDictation() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("Hello")
+        let soundFeedback = SpySoundFeedbackService()
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            soundFeedbackService: soundFeedback
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.soundFeedbackEnabled = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(soundFeedback.playedEvents, [.recordingStarted, .transcriptionSucceeded])
+    }
+
+    func testSoundFeedbackEnabledPlaysSuccessForSubmitOnlyCommand() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("send")
+        let textInsertionService = SpyTextInsertionService()
+        let soundFeedback = SpySoundFeedbackService()
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            textInsertionService: textInsertionService,
+            soundFeedbackService: soundFeedback
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.soundFeedbackEnabled = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(textInsertionService.submitCallCount, 1)
+        XCTAssertEqual(soundFeedback.playedEvents, [.recordingStarted, .transcriptionSucceeded])
+    }
+
+    func testSoundFeedbackEnabledPlaysErrorForInsertionFailure() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("Hello")
+        let textInsertionService = SpyTextInsertionService()
+        textInsertionService.insertError = FakeError(message: "paste failed")
+        let soundFeedback = SpySoundFeedbackService()
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            textInsertionService: textInsertionService,
+            soundFeedbackService: soundFeedback
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.soundFeedbackEnabled = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(soundFeedback.playedEvents, [.recordingStarted, .error])
+    }
+
+    func testSoundFeedbackEnabledPlaysErrorForTranscriptionFailure() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .failure(FakeError(message: "decoder failed"))
+        let soundFeedback = SpySoundFeedbackService()
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            soundFeedbackService: soundFeedback
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.soundFeedbackEnabled = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(soundFeedback.playedEvents, [.recordingStarted, .error])
+    }
+
+    func testSoundFeedbackEnabledPlaysErrorForEmptyNoSubmitTranscription() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("")
+        let soundFeedback = SpySoundFeedbackService()
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            soundFeedbackService: soundFeedback
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.soundFeedbackEnabled = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(soundFeedback.playedEvents, [.recordingStarted, .error])
+    }
+
+    func testSoundFeedbackEnabledPlaysErrorForEmptyPracticeTranscription() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000)
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("")
+        let soundFeedback = SpySoundFeedbackService()
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            soundFeedbackService: soundFeedback
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.soundFeedbackEnabled = true
+        appState.activeOnboardingStep = .practice
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.stopRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(soundFeedback.playedEvents, [.recordingStarted, .error])
     }
 
     func testPracticeModeStoresPreviewWithoutInsertionOrHistory() async {

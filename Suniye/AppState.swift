@@ -355,6 +355,15 @@ final class AppState {
             onStateChange?()
         }
     }
+    var soundFeedbackEnabled = false {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
     var hideFloatingIndicatorWhenIdle = false {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -1016,6 +1025,7 @@ final class AppState {
     private let audioCaptureService: AudioCaptureServiceProtocol
     private let textInsertionService: TextInsertionServiceProtocol
     private let hotkeyService: HotkeyServiceProtocol
+    private let soundFeedbackService: SoundFeedbackServiceProtocol
     private let floatingIndicatorController = FloatingIndicatorController()
     private let llmPostProcessor: LLMPostProcessor
     private let llmSettingsStore: LLMSettingsStoreProtocol
@@ -1059,6 +1069,7 @@ final class AppState {
         audioCaptureService: AudioCaptureServiceProtocol = AudioCaptureService(),
         textInsertionService: TextInsertionServiceProtocol = TextInsertionService(),
         hotkeyService: HotkeyServiceProtocol = HotkeyService(),
+        soundFeedbackService: SoundFeedbackServiceProtocol = SoundFeedbackService(),
         llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
         llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
@@ -1077,6 +1088,7 @@ final class AppState {
         self.audioCaptureService = audioCaptureService
         self.textInsertionService = textInsertionService
         self.hotkeyService = hotkeyService
+        self.soundFeedbackService = soundFeedbackService
         self.llmPostProcessor = llmPostProcessor
         self.llmSettingsStore = llmSettingsStore
         self.generalSettingsStore = generalSettingsStore
@@ -2120,6 +2132,7 @@ final class AppState {
             lastError = "Microphone permission not granted"
             statusText = "Permission required"
             AppLogger.shared.log(.warning, "microphone permission denied")
+            playSoundFeedback(.error)
             showTransientIndicatorError("Microphone permission required")
             return
         }
@@ -2131,6 +2144,7 @@ final class AppState {
             lastError = "Accessibility permission not granted"
             statusText = "Accessibility required"
             AppLogger.shared.log(.warning, "accessibility permission denied before recording")
+            playSoundFeedback(.error)
             showTransientIndicatorError("Enable Accessibility for dictation")
             return
         }
@@ -2155,11 +2169,13 @@ final class AppState {
                 onboardingPracticeResult = nil
             }
             setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0), source: trigger))
+            playSoundFeedback(.recordingStarted)
             AppLogger.shared.log(.info, "recording started input=\(selectedInputDeviceID ?? "default")")
         } catch {
             lastError = "Audio start failed: \(error.localizedDescription)"
             statusText = "Ready"
             AppLogger.shared.log(.error, "audio start failed: \(error.localizedDescription)")
+            playSoundFeedback(.error)
             showTransientIndicatorError("Failed to start audio capture")
         }
     }
@@ -2209,6 +2225,7 @@ final class AppState {
 
             let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
             let wasLLMPolished = AppState.didLLMPolish(input: llmInputText, output: llmOutputText)
+            var didCompleteDictation = false
 
             if destination == .systemInsertion && (!finalText.isEmpty || shouldSubmit) {
                 if !hasAccessibilityPermission {
@@ -2234,6 +2251,7 @@ final class AppState {
                         at: 0
                     )
                     AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
+                    didCompleteDictation = true
                 }
 
                 if shouldSubmit {
@@ -2242,10 +2260,12 @@ final class AppState {
                     }
                     try textInsertionService.submitActiveInput()
                     AppLogger.shared.log(.info, "submit command executed")
+                    didCompleteDictation = true
                 }
 
                 if finalText.isEmpty && !shouldSubmit {
                     AppLogger.shared.log(.warning, "transcription returned empty text samples=\(samples.count) sr=\(sampleRate)")
+                    playSoundFeedback(.error)
                 }
             case .onboardingPractice:
                 onboardingPracticeText = finalText
@@ -2255,13 +2275,18 @@ final class AppState {
                         : "Practice mode captured audio, but there was no text to preview."
                     onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
                     AppLogger.shared.log(.warning, "onboarding practice produced empty text")
+                    playSoundFeedback(.error)
                 } else {
                     onboardingPracticeResult = OnboardingPracticeResult(
                         message: "Captured locally. You can finish onboarding whenever you're ready.",
                         severity: .success
                     )
                     AppLogger.shared.log(.info, "onboarding practice transcription complete words=\(wordCount)")
+                    didCompleteDictation = true
                 }
+            }
+            if didCompleteDictation {
+                playSoundFeedback(.transcriptionSucceeded)
             }
             activeRecordingSource = nil
             recordingStart = nil
@@ -2283,6 +2308,7 @@ final class AppState {
             phase = .ready
             statusText = "Ready"
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
+            playSoundFeedback(.error)
             showTransientIndicatorError("Transcription failed")
         }
     }
@@ -2312,6 +2338,7 @@ final class AppState {
         autoSubmitEnabled = settings.autoSubmitEnabled
         hotkeyConfiguration = settings.hotkeyConfiguration
         echoCancellationEnabled = settings.echoCancellationEnabled
+        soundFeedbackEnabled = settings.soundFeedbackEnabled
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
         floatingIndicatorPlacement = settings.floatingIndicatorPlacement
         selectedASRModelID = settings.selectedASRModelID
@@ -2331,6 +2358,7 @@ final class AppState {
             autoSubmitEnabled: autoSubmitEnabled,
             hotkeyConfiguration: hotkeyConfiguration,
             echoCancellationEnabled: echoCancellationEnabled,
+            soundFeedbackEnabled: soundFeedbackEnabled,
             hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,
             floatingIndicatorPlacement: floatingIndicatorPlacement,
             hasSeenOnboardingWelcome: hasSeenOnboardingWelcome,
@@ -2506,6 +2534,11 @@ final class AppState {
         floatingIndicatorState = state
         guard floatingIndicatorEnabled else { return }
         floatingIndicatorController.update(state)
+    }
+
+    private func playSoundFeedback(_ event: SoundFeedbackEvent) {
+        guard soundFeedbackEnabled else { return }
+        soundFeedbackService.play(event)
     }
 
     private func syncFloatingIndicatorPreferences() {
