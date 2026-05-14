@@ -799,6 +799,15 @@ struct GeneralPage: View {
                             detail: "Filters out system audio (music, video, TTS) from the microphone during dictation. Uses Apple's Voice Processing. Leave off to preserve full-quality Bluetooth headphone playback.",
                             isOn: $appState.echoCancellationEnabled
                         )
+
+                        CardDivider()
+                            .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
+
+                        SettingsToggleRow(
+                            title: "Sound Feedback",
+                            detail: "Play short local sounds when recording starts, dictation succeeds, or dictation fails.",
+                            isOn: $appState.soundFeedbackEnabled
+                        )
                     }
                 }
             }

@@ -12,6 +12,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
             preferredInputDeviceID: "usb-mic",
             autoSubmitEnabled: true,
             hotkeyConfiguration: .keyCombo(keyCode: UInt32(kVK_Space), carbonModifiers: UInt32(optionKey)),
+            soundFeedbackEnabled: true,
             hideFloatingIndicatorWhenIdle: true,
             floatingIndicatorPlacement: FloatingIndicatorPlacement(centerXRatio: 0.2, bottomYRatio: 0.15),
             hasSeenOnboardingWelcome: true,
@@ -45,6 +46,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertEqual(loaded.preferredInputDeviceID, "usb-mic")
         XCTAssertEqual(loaded.autoSubmitEnabled, true)
         XCTAssertEqual(loaded.echoCancellationEnabled, true)
+        XCTAssertEqual(loaded.soundFeedbackEnabled, false)
         XCTAssertEqual(loaded.hasSeenOnboardingWelcome, true)
         XCTAssertEqual(loaded.hasCompletedCoreOnboarding, true)
         XCTAssertEqual(loaded.selectedASRModelID, .parakeetV3)
@@ -87,5 +89,6 @@ final class GeneralSettingsStoreTests: XCTestCase {
 
         XCTAssertFalse(settings.hideFloatingIndicatorWhenIdle)
         XCTAssertNil(settings.floatingIndicatorPlacement)
+        XCTAssertFalse(settings.soundFeedbackEnabled)
     }
 }

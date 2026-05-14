@@ -234,6 +234,7 @@ struct GeneralSettings: Codable, Equatable {
     var autoSubmitEnabled: Bool = false
     var hotkeyConfiguration: HotkeyConfiguration = .globe
     var echoCancellationEnabled: Bool = false
+    var soundFeedbackEnabled: Bool = false
     var hideFloatingIndicatorWhenIdle: Bool = false
     var floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil
     var hasSeenOnboardingWelcome: Bool? = nil
@@ -245,6 +246,7 @@ struct GeneralSettings: Codable, Equatable {
         autoSubmitEnabled: Bool = false,
         hotkeyConfiguration: HotkeyConfiguration = .globe,
         echoCancellationEnabled: Bool = false,
+        soundFeedbackEnabled: Bool = false,
         hideFloatingIndicatorWhenIdle: Bool = false,
         floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil,
         hasSeenOnboardingWelcome: Bool? = nil,
@@ -255,6 +257,7 @@ struct GeneralSettings: Codable, Equatable {
         self.autoSubmitEnabled = autoSubmitEnabled
         self.hotkeyConfiguration = hotkeyConfiguration
         self.echoCancellationEnabled = echoCancellationEnabled
+        self.soundFeedbackEnabled = soundFeedbackEnabled
         self.hideFloatingIndicatorWhenIdle = hideFloatingIndicatorWhenIdle
         self.floatingIndicatorPlacement = floatingIndicatorPlacement
         self.hasSeenOnboardingWelcome = hasSeenOnboardingWelcome
@@ -267,6 +270,7 @@ struct GeneralSettings: Codable, Equatable {
         case autoSubmitEnabled
         case hotkeyConfiguration
         case echoCancellationEnabled
+        case soundFeedbackEnabled
         case hideFloatingIndicatorWhenIdle
         case floatingIndicatorPlacement
         case hasSeenOnboardingWelcome
@@ -280,6 +284,7 @@ struct GeneralSettings: Codable, Equatable {
         autoSubmitEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSubmitEnabled) ?? false
         hotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .hotkeyConfiguration) ?? .globe
         echoCancellationEnabled = try container.decodeIfPresent(Bool.self, forKey: .echoCancellationEnabled) ?? false
+        soundFeedbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundFeedbackEnabled) ?? false
         hideFloatingIndicatorWhenIdle = try container.decodeIfPresent(Bool.self, forKey: .hideFloatingIndicatorWhenIdle) ?? false
         floatingIndicatorPlacement = try container.decodeIfPresent(FloatingIndicatorPlacement.self, forKey: .floatingIndicatorPlacement)
         hasSeenOnboardingWelcome = try container.decodeIfPresent(Bool.self, forKey: .hasSeenOnboardingWelcome)

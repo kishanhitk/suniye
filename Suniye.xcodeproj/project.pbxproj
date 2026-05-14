@@ -38,6 +38,7 @@
 		58BD775AF83F95F70DC21BF5 /* libonnxruntime.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 1215194BCE451924E1C06FDD /* libonnxruntime.dylib */; };
 		5CEBE7C5B635C70620A16FF3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0D96966D22AF827757DB24D /* Assets.xcassets */; };
 		5E5EF53C95B7F9CB9C00B459 /* ModelDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B090C348C7D6E3317FC06B66 /* ModelDownloadView.swift */; };
+		63217592A63F5325B2D8E6C5 /* SoundFeedbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CB08DB3B0815DC0E822412 /* SoundFeedbackService.swift */; };
 		633FB6F05F2C6507FF021D1F /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF32A97362B13A4984C14FA6 /* AppVersion.swift */; };
 		67C62EE8BA2F2B763D8477D6 /* Suniye.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F3C3D023876B9EE8256C00 /* Suniye.swift */; };
 		6BADE038613593570D9E1F5F /* AppStateLLMTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D89C1656C10C1E6D3921D81 /* AppStateLLMTests.swift */; };
@@ -117,6 +118,7 @@
 		3985E6550A900F3B6818F86C /* MainWindowPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowPages.swift; sourceTree = "<group>"; };
 		3ECD2622B5D49CEAF4D4736A /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		4213B4B666CF5B60F3371019 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
+		46CB08DB3B0815DC0E822412 /* SoundFeedbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundFeedbackService.swift; sourceTree = "<group>"; };
 		49C6F3D1EED6DBFE38C52EC9 /* MainWindowSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowSection.swift; sourceTree = "<group>"; };
 		547A58E2F28180249AF7E769 /* c-api.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "c-api.h"; sourceTree = "<group>"; };
 		626CB9CE980C310ED49F770F /* TranscriptionServiceE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionServiceE2ETests.swift; sourceTree = "<group>"; };
@@ -300,6 +302,7 @@
 				6E03421F785ED24BFBF7A030 /* LLMSettingsStore.swift */,
 				865C597BBA404F5F6A049278 /* ModelManager.swift */,
 				B9D8487CCDF6CB1A7023E095 /* OpenRouterPostProcessor.swift */,
+				46CB08DB3B0815DC0E822412 /* SoundFeedbackService.swift */,
 				01EE242F81867FE9A5048297 /* TextInsertionService.swift */,
 				633F09E2901A308614E595B1 /* TranscriptionService.swift */,
 				ABAF17E14062BC73F65CF7FD /* UpdateService.swift */,
@@ -454,6 +457,7 @@
 				1D86CE52AD421422DC26FA71 /* OpenRouterPostProcessor.swift in Sources */,
 				E9210190CDD60F212008A02A /* SettingsModels.swift in Sources */,
 				DC8532A515E87705B0F4BFC5 /* SherpaOnnx.swift in Sources */,
+				63217592A63F5325B2D8E6C5 /* SoundFeedbackService.swift in Sources */,
 				9CEC29D27FCC952C4C618C70 /* StatusItemController.swift in Sources */,
 				67C62EE8BA2F2B763D8477D6 /* Suniye.swift in Sources */,
 				34A83F20C1CEA0EA82E71CAC /* SuniyeNativeBridge.mm in Sources */,
