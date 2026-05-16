@@ -36,21 +36,37 @@ const releaseDateFormatter = new Intl.DateTimeFormat("en", {
   timeZone: "UTC",
 });
 
-const releasesResponse = await fetch(
-  "https://api.github.com/repos/kishanhitk/suniye/releases?per_page=8",
-  {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "suniye-website",
-    },
-  }
-);
+async function fetchGitHubReleases(): Promise<GitHubRelease[]> {
+  try {
+    const response = await fetch(
+      "https://api.github.com/repos/kishanhitk/suniye/releases?per_page=8",
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "suniye-website",
+        },
+      }
+    );
 
-if (!releasesResponse.ok) {
-  throw new Error(`Failed to fetch GitHub releases: ${releasesResponse.status}`);
+    if (!response.ok) {
+      console.warn(`Failed to fetch GitHub releases: ${response.status}`);
+      return [];
+    }
+
+    const payload = await response.json();
+    if (!Array.isArray(payload)) {
+      console.warn("Failed to fetch GitHub releases: unexpected response shape");
+      return [];
+    }
+
+    return payload as GitHubRelease[];
+  } catch (error) {
+    console.warn("Failed to fetch GitHub releases", error);
+    return [];
+  }
 }
 
-const githubReleases = (await releasesResponse.json()) as GitHubRelease[];
+const githubReleases = await fetchGitHubReleases();
 
 function parseReleaseItems(body: string | null): ReleaseItem[] {
   const cleanTitle = (title: string) => title.replace(/^\[codex\]\s*/i, "");
@@ -211,7 +227,7 @@ const releases = githubReleases
         </div>
 
         <div id="release-list">
-          {releases.map((release, i) => (
+          {releases.length > 0 ? releases.map((release, i) => (
             <article
               class="reveal grid gap-7 border-t border-border/70 py-10 md:grid-cols-[220px_1fr] md:gap-12 md:py-12"
               style={`transition-delay: ${i * 0.06}s`}
@@ -270,7 +286,11 @@ const releases = githubReleases
                 )}
               </div>
             </article>
-          ))}
+          )) : (
+            <p class="reveal border-t border-border/70 py-10 text-muted">
+              Release notes are temporarily unavailable.
+            </p>
+          )}
         </div>
       </div>
     </section>
