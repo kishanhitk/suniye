@@ -1,0 +1,316 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+export const prerender = false;
+
+const githubUrl = "https://github.com/kishanhitk/suniye";
+const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/download/Suniye.dmg";
+const heroWords = "Suniye Changelog".split(" ");
+
+if (Astro.cache.enabled) {
+  Astro.cache.set({
+    maxAge: 300,
+    swr: 3600,
+    tags: ["github-releases"],
+  });
+}
+
+interface GitHubRelease {
+  tag_name: string;
+  name: string | null;
+  html_url: string;
+  published_at: string | null;
+  body: string | null;
+  prerelease: boolean;
+  draft: boolean;
+}
+
+interface ReleaseItem {
+  title: string;
+}
+
+const releaseDateFormatter = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+const releasesResponse = await fetch(
+  "https://api.github.com/repos/kishanhitk/suniye/releases?per_page=8",
+  {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "suniye-website",
+    },
+  }
+);
+
+if (!releasesResponse.ok) {
+  throw new Error(`Failed to fetch GitHub releases: ${releasesResponse.status}`);
+}
+
+const githubReleases = (await releasesResponse.json()) as GitHubRelease[];
+
+function parseReleaseItems(body: string | null): ReleaseItem[] {
+  const cleanTitle = (title: string) => title.replace(/^\[codex\]\s*/i, "");
+
+  const seen = new Set<string>();
+  return (body ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("* "))
+    .map((line) => line.slice(2).trim())
+    .map((line) => {
+      const match = line.match(/^(.*?) by @([^\s]+) in (https:\/\/github\.com\/\S+)$/);
+      if (!match) {
+        return { title: cleanTitle(line) };
+      }
+
+      const [, title] = match;
+      return {
+        title: cleanTitle(title),
+      };
+    })
+    .filter((item) => {
+      const key = item.title;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+}
+
+function parseFullChangelogUrl(body: string | null): string | undefined {
+  return body?.match(/\*\*Full Changelog\*\*: (https:\/\/\S+)/)?.[1];
+}
+
+const releases = githubReleases
+  .filter((release) => !release.draft)
+  .map((release, index) => ({
+    version: release.name || release.tag_name,
+    date: release.published_at
+      ? releaseDateFormatter.format(new Date(release.published_at))
+      : "Unpublished",
+    status: index === 0 ? "Latest" : release.prerelease ? "Prerelease" : undefined,
+    href: release.html_url,
+    items: parseReleaseItems(release.body),
+    fullChangelogUrl: parseFullChangelogUrl(release.body),
+  }));
+---
+
+<Layout
+  title="Suniye Changelog - What's New"
+  description="Updates to Suniye's recording, transcription, insertion, and local-first macOS workflows."
+  canonicalPath="/changelog"
+>
+  <nav class="fixed top-0 z-50 w-full border-b border-border/60 bg-bg/90 backdrop-blur-md">
+    <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <a href="/" class="flex items-center gap-2.5">
+        <img src="/suniye-icon.png" alt="Suniye" class="h-7 w-7 rounded-[5px]" />
+        <span class="font-display text-base tracking-tight">Suniye</span>
+      </a>
+      <div class="flex items-center gap-5">
+        <a
+          href="/"
+          class="hidden font-display text-sm text-muted transition-colors hover:text-ink sm:inline"
+        >
+          Home
+        </a>
+        <a
+          href={githubUrl}
+          target="_blank"
+          rel="noopener"
+          class="font-display text-sm text-muted transition-colors hover:text-ink"
+        >
+          GitHub
+        </a>
+        <a
+          href={downloadUrl}
+          class="hidden rounded-lg bg-ink px-4 py-2 font-display text-sm text-bg transition-colors hover:bg-ink/85 sm:inline-flex"
+        >
+          Download
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <section class="relative overflow-hidden pt-28 pb-16 md:pt-36 md:pb-20">
+      <div class="mx-auto max-w-6xl px-6">
+        <div class="max-w-3xl">
+          <svg
+            class="mb-8 h-10 w-auto text-accent md:h-14"
+            viewBox="0 0 160 80"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              class="waveform-path"
+              d="M 8 50 Q 14 50 20 42 L 40 10 L 62 70 L 84 10 L 106 70 L 124 36 Q 130 26 140 26"
+              stroke="currentColor"
+              stroke-width="7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+
+          <h1 class="font-display text-[1.875rem] leading-tight tracking-tight sm:text-4xl md:text-6xl md:leading-[1.1]">
+            {heroWords.map((word, i) => (
+              <span
+                class="hero-word"
+                style={`animation-delay: ${0.1 + i * 0.1}s`}
+              >
+                {word}{" "}
+              </span>
+            ))}
+          </h1>
+
+          <div class="fade-in mt-8 flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:items-center">
+            <a
+              href={downloadUrl}
+              class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 font-display text-sm text-white transition-colors hover:bg-accent-hover"
+            >
+              Download Latest Release
+            </a>
+            <a
+              href={`${githubUrl}/releases`}
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 font-display text-sm text-ink transition-colors hover:bg-surface"
+            >
+              GitHub Releases
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <svg
+        class="pointer-events-none absolute -right-20 top-24 hidden h-[320px] w-auto text-border/40 lg:block"
+        viewBox="0 0 160 80"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M 8 50 Q 14 50 20 42 L 40 10 L 62 70 L 84 10 L 106 70 L 124 36 Q 130 26 140 26"
+          stroke="currentColor"
+          stroke-width="4"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </section>
+
+    <section class="border-t border-border/60 py-16 md:py-24">
+      <div class="mx-auto max-w-6xl px-6">
+        <div class="reveal mb-8">
+          <h2 class="font-display text-sm uppercase tracking-widest text-muted">
+            Recent releases
+          </h2>
+        </div>
+
+        <div id="release-list">
+          {releases.map((release, i) => (
+            <article
+              class="reveal grid gap-7 border-t border-border/70 py-10 md:grid-cols-[220px_1fr] md:gap-12 md:py-12"
+              style={`transition-delay: ${i * 0.06}s`}
+            >
+              <div class="md:sticky md:top-28 md:self-start">
+                <div class="flex flex-wrap items-center gap-3 md:block">
+                  <h3 class="font-display text-2xl tracking-tight text-ink md:text-3xl">
+                    {release.version}
+                  </h3>
+                  <p class="font-display text-xs uppercase tracking-widest text-muted md:mt-3">
+                    {release.date}
+                  </p>
+                </div>
+                {release.status && (
+                  <a
+                    href={release.href}
+                    target="_blank"
+                    rel="noopener"
+                    class="mt-4 inline-flex rounded-full border border-accent/20 bg-accent/5 px-3 py-1 font-display text-xs text-accent transition-colors hover:border-accent/40 hover:bg-accent/10"
+                  >
+                    {release.status}
+                  </a>
+                )}
+              </div>
+
+              <div>
+                <h4 class="font-display text-sm uppercase tracking-widest text-muted">
+                  What's Changed
+                </h4>
+
+                {release.items.length > 0 ? (
+                  <ul class="mt-6 space-y-5">
+                    {release.items.map((item) => (
+                      <li>
+                        <p class="max-w-[20rem] text-lg leading-relaxed tracking-tight text-ink sm:max-w-3xl md:text-xl">
+                          {item.title}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p class="mt-6 max-w-[20rem] leading-relaxed text-muted sm:max-w-3xl">
+                    No release notes published for this release.
+                  </p>
+                )}
+
+                {release.fullChangelogUrl && (
+                  <a
+                    href={release.fullChangelogUrl}
+                    target="_blank"
+                    rel="noopener"
+                    class="mt-8 inline-flex font-display text-sm text-accent transition-colors hover:text-accent-hover"
+                  >
+                    Full Changelog
+                  </a>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-border/60 py-10">
+    <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 md:flex-row">
+      <div class="flex items-center gap-2.5">
+        <img src="/suniye-icon.png" alt="" class="h-5 w-5 rounded-[3px]" />
+        <span class="font-display text-sm text-muted">
+          Suniye &middot; MIT License
+        </span>
+      </div>
+      <div class="flex items-center gap-6 font-display text-sm text-muted">
+        <a href="/" class="transition-colors hover:text-ink">
+          Home
+        </a>
+        <a href={githubUrl} target="_blank" rel="noopener" class="transition-colors hover:text-ink">
+          GitHub
+        </a>
+        <a href={`${githubUrl}/issues`} target="_blank" rel="noopener" class="transition-colors hover:text-ink">
+          Issues
+        </a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
+    );
+
+    document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
+  </script>
+</Layout>

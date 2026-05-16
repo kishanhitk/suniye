@@ -10,7 +10,8 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "astro": "^5.7.13"
+    "@astrojs/cloudflare": "^13.5.1",
+    "astro": "^6.3.3"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
