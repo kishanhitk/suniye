@@ -7,5 +7,6 @@ third_party/
 .e2e/
 website/node_modules/
 website/.astro/
+website/.wrangler/
 Suniye.xcodeproj/project.xcworkspace/xcuserdata/
 Suniye.xcodeproj/xcuserdata/
