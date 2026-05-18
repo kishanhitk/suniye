@@ -303,6 +303,7 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
     var onLevelsUpdate: (([Float]) -> Void)?
     var startCaptureCallCount = 0
     var lastPreferredInputDeviceID: String?
+    var lastEchoCancellationEnabled: Bool?
     var stopCaptureResult = CapturedAudio(samples: [], sampleRate: 16_000)
     var availableDevices: [AudioInputDevice] = []
     var startCaptureError: Error?
@@ -310,6 +311,7 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
     func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws {
         startCaptureCallCount += 1
         lastPreferredInputDeviceID = preferredInputDeviceID
+        lastEchoCancellationEnabled = echoCancellationEnabled
         if let startCaptureError {
             throw startCaptureError
         }

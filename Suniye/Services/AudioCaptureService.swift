@@ -69,7 +69,10 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
         stopActiveCapture()
 
-        var backend = Self.captureBackendValue(echoCancellationEnabled: echoCancellationEnabled)
+        var backend = Self.captureBackendValue(
+            echoCancellationEnabled: echoCancellationEnabled,
+            inputDeviceUsesBluetooth: Self.inputDeviceUsesBluetoothTransport(forUID: preferredInputDeviceID)
+        )
 
         switch backend {
         case .standardEngine:
@@ -137,8 +140,14 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         return CapturedAudio(samples: out, sampleRate: captureSampleRate)
     }
 
-    static func captureBackend(echoCancellationEnabled: Bool) -> String {
-        switch captureBackendValue(echoCancellationEnabled: echoCancellationEnabled) {
+    static func captureBackend(
+        echoCancellationEnabled: Bool,
+        inputDeviceUsesBluetooth: Bool? = nil
+    ) -> String {
+        switch captureBackendValue(
+            echoCancellationEnabled: echoCancellationEnabled,
+            inputDeviceUsesBluetooth: inputDeviceUsesBluetooth
+        ) {
         case .standardEngine:
             return "standardEngine"
         case .halInput:
@@ -148,8 +157,19 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         }
     }
 
-    private static func captureBackendValue(echoCancellationEnabled: Bool) -> CaptureBackend {
-        echoCancellationEnabled ? .voiceProcessingEngine : .standardEngine
+    private static func captureBackendValue(
+        echoCancellationEnabled: Bool,
+        inputDeviceUsesBluetooth: Bool?
+    ) -> CaptureBackend {
+        guard echoCancellationEnabled else {
+            return .standardEngine
+        }
+
+        if inputDeviceUsesBluetooth == true {
+            return .standardEngine
+        }
+
+        return .voiceProcessingEngine
     }
 
     private func startStandardCapture(preferredInputDeviceID: String?) throws {
@@ -687,6 +707,34 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
             return device
         }
         return defaultInputDeviceID()
+    }
+
+    private static func inputDeviceUsesBluetoothTransport(forUID uid: String?) -> Bool? {
+        guard let deviceID = inputDeviceID(forUID: uid) else {
+            return nil
+        }
+        guard inputChannelCount(for: deviceID) > 0 else {
+            return nil
+        }
+        guard let transportType = deviceTransportType(for: deviceID) else {
+            return nil
+        }
+        return transportType == kAudioDeviceTransportTypeBluetooth
+            || transportType == kAudioDeviceTransportTypeBluetoothLE
+    }
+
+    private static func deviceTransportType(for deviceID: AudioObjectID) -> UInt32? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var transportType: UInt32 = 0
+        var dataSize = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &dataSize, &transportType) == noErr else {
+            return nil
+        }
+        return transportType
     }
 
     fileprivate func handleHALInput(

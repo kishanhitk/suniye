@@ -269,6 +269,22 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.phase, .recording)
     }
 
+    func testEchoCancellationSettingPassedToCaptureService() async {
+        let audioCapture = StubAudioCaptureService()
+        let appState = makeTestAppState(audioCaptureService: audioCapture)
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.echoCancellationEnabled = true
+
+        appState.startRecordingFromUI()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
+        XCTAssertEqual(audioCapture.lastEchoCancellationEnabled, true)
+        XCTAssertEqual(appState.phase, .recording)
+    }
+
     func testSoundFeedbackDisabledDoesNotPlayRecordingStartSound() async {
         let audioCapture = StubAudioCaptureService()
         let soundFeedback = SpySoundFeedbackService()
