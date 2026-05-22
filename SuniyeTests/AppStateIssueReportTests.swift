@@ -122,4 +122,84 @@ final class AppStateIssueReportTests: XCTestCase {
         XCTAssertEqual(message, "Enter a valid email address or leave it blank.")
         XCTAssertEqual(uploadService.submissions.count, 0)
     }
+
+    func testReviewIssueReportDiagnosticsRemovesTemporaryArchiveAfterOpening() async throws {
+        let diagnosticsURL = try makeTemporaryDiagnosticsArchive()
+        let diagnosticService = StubDiagnosticBundleService(result: .success(diagnosticsURL))
+        var openedURL: URL?
+        let appState = makeTestAppState(
+            diagnosticBundleService: diagnosticService,
+            fileOpener: { url in
+                openedURL = url
+                XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+                return true
+            }
+        )
+
+        await appState.reviewIssueReportDiagnostics()
+
+        XCTAssertEqual(openedURL, diagnosticsURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: diagnosticsURL.path))
+        XCTAssertEqual(appState.issueReportStatus, .idle)
+        XCTAssertEqual(appState.issueReportDiagnosticsMessage, "Diagnostics opened for review.")
+    }
+
+    func testReviewIssueReportDiagnosticsRemovesTemporaryArchiveWhenOpenFails() async throws {
+        let diagnosticsURL = try makeTemporaryDiagnosticsArchive()
+        let diagnosticService = StubDiagnosticBundleService(result: .success(diagnosticsURL))
+        let appState = makeTestAppState(
+            diagnosticBundleService: diagnosticService,
+            fileOpener: { _ in false }
+        )
+
+        await appState.reviewIssueReportDiagnostics()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: diagnosticsURL.path))
+        XCTAssertEqual(appState.issueReportStatus, .failed("Could not open diagnostics."))
+    }
+
+    func testExportIssueReportDiagnosticsRemovesTemporaryArchiveWhenCanceled() async throws {
+        let diagnosticsURL = try makeTemporaryDiagnosticsArchive()
+        let diagnosticService = StubDiagnosticBundleService(result: .success(diagnosticsURL))
+        var requestedDefaultName: String?
+        let appState = makeTestAppState(
+            diagnosticBundleService: diagnosticService,
+            issueReportDiagnosticsDestinationPicker: { defaultName in
+                requestedDefaultName = defaultName
+                return nil
+            }
+        )
+
+        await appState.exportIssueReportDiagnostics()
+
+        XCTAssertEqual(requestedDefaultName, diagnosticsURL.lastPathComponent)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: diagnosticsURL.path))
+        XCTAssertEqual(appState.issueReportStatus, .idle)
+        XCTAssertNil(appState.issueReportDiagnosticsMessage)
+    }
+
+    func testExportIssueReportDiagnosticsRemovesTemporaryArchiveAfterCopying() async throws {
+        let diagnosticsURL = try makeTemporaryDiagnosticsArchive([5, 6, 7])
+        let destinationURL = FileManager.default.temporaryDirectory.appendingPathComponent("diagnostics-export-\(UUID().uuidString).zip")
+        defer { try? FileManager.default.removeItem(at: destinationURL) }
+
+        let diagnosticService = StubDiagnosticBundleService(result: .success(diagnosticsURL))
+        let appState = makeTestAppState(
+            diagnosticBundleService: diagnosticService,
+            issueReportDiagnosticsDestinationPicker: { _ in destinationURL }
+        )
+
+        await appState.exportIssueReportDiagnostics()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: diagnosticsURL.path))
+        XCTAssertEqual(try Data(contentsOf: destinationURL), Data([5, 6, 7]))
+        XCTAssertEqual(appState.issueReportStatus, .idle)
+        XCTAssertEqual(appState.issueReportDiagnosticsMessage, "Diagnostics exported.")
+    }
+
+    private func makeTemporaryDiagnosticsArchive(_ bytes: [UInt8] = [1, 2, 3]) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("diagnostics-\(UUID().uuidString).zip")
+        try Data(bytes).write(to: url)
+        return url
+    }
 }

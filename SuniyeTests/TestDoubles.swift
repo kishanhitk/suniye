@@ -385,6 +385,7 @@ func makeTestAppState(
     currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
     nowProvider: @escaping () -> Date = Date.init,
     fileOpener: @escaping (URL) -> Bool = { _ in true },
+    issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
     startServices: Bool = false,
     llmE2EMode: LLME2EMode = .none
 ) -> AppState {
@@ -407,6 +408,7 @@ func makeTestAppState(
         currentAppVersionProvider: currentAppVersionProvider,
         nowProvider: nowProvider,
         fileOpener: fileOpener,
+        issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         startServices: startServices,
         llmE2EMode: llmE2EMode
     )

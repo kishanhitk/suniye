@@ -1065,6 +1065,7 @@ final class AppState {
     private let currentAppVersionProvider: () -> AppVersion?
     private let nowProvider: () -> Date
     private let fileOpener: (URL) -> Bool
+    private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
 
@@ -1110,6 +1111,12 @@ final class AppState {
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
         nowProvider: @escaping () -> Date = Date.init,
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
+        issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { defaultName in
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = defaultName
+            panel.canCreateDirectories = true
+            return panel.runModal() == .OK ? panel.url : nil
+        },
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
     ) {
@@ -1131,6 +1138,7 @@ final class AppState {
         self.currentAppVersionProvider = currentAppVersionProvider
         self.nowProvider = nowProvider
         self.fileOpener = fileOpener
+        self.issueReportDiagnosticsDestinationPicker = issueReportDiagnosticsDestinationPicker
         self.runtimeServicesEnabled = startServices
         self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
@@ -1769,6 +1777,9 @@ final class AppState {
                 includeDiagnosticsOverride: true
             )
             let diagnosticsURL = try await makeDiagnosticBundle(payload: payload)
+            defer {
+                try? FileManager.default.removeItem(at: diagnosticsURL)
+            }
             if fileOpener(diagnosticsURL) {
                 issueReportStatus = .idle
                 issueReportDiagnosticsMessage = "Diagnostics opened for review."
@@ -1791,12 +1802,11 @@ final class AppState {
                 includeDiagnosticsOverride: true
             )
             let diagnosticsURL = try await makeDiagnosticBundle(payload: payload)
+            defer {
+                try? FileManager.default.removeItem(at: diagnosticsURL)
+            }
 
-            let panel = NSSavePanel()
-            panel.nameFieldStringValue = diagnosticsURL.lastPathComponent
-            panel.canCreateDirectories = true
-            let result = panel.runModal()
-            guard result == .OK, let destinationURL = panel.url else {
+            guard let destinationURL = issueReportDiagnosticsDestinationPicker(diagnosticsURL.lastPathComponent) else {
                 issueReportStatus = .idle
                 return
             }
@@ -1807,7 +1817,6 @@ final class AppState {
             try FileManager.default.copyItem(at: diagnosticsURL, to: destinationURL)
             issueReportStatus = .idle
             issueReportDiagnosticsMessage = "Diagnostics exported."
-            try? FileManager.default.removeItem(at: diagnosticsURL)
         } catch {
             issueReportStatus = .failed(issueReportErrorMessage(error))
         }
