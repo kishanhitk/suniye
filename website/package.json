@@ -10,6 +10,9 @@
     "preview": "astro preview",
     "test": "bun test"
   },
+  "overrides": {
+    "vite": "^7"
+  },
   "dependencies": {
     "@astrojs/cloudflare": "^13.5.1",
     "astro": "^6.3.3"
