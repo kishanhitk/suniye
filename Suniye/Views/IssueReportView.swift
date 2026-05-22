@@ -63,6 +63,13 @@ struct IssueReportView: View {
             TextField("Briefly summarize the issue", text: $appState.issueReportTitle)
                 .textFieldStyle(.roundedBorder)
                 .disabled(appState.issueReportStatus.isBusy)
+
+            if let message = appState.issueReportTitleRequirementMessage {
+                validationCaption(
+                    message,
+                    isEmpty: appState.issueReportTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+            }
         }
     }
 
@@ -81,6 +88,13 @@ struct IssueReportView: View {
                         .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
                 )
                 .disabled(appState.issueReportStatus.isBusy)
+
+            if let message = appState.issueReportDescriptionRequirementMessage {
+                validationCaption(
+                    message,
+                    isEmpty: appState.issueReportDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+            }
         }
     }
 
@@ -182,11 +196,23 @@ struct IssueReportView: View {
 
             Spacer()
 
+            if let message = appState.issueReportSubmitRequirementMessage,
+               !appState.issueReportStatus.isBusy {
+                Label(message, systemImage: "info.circle")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 260, alignment: .trailing)
+            }
+
             Button("Send Report") {
                 Task { await appState.submitIssueReport() }
             }
             .buttonStyle(.borderedProminent)
             .disabled(!appState.canSubmitIssueReport)
+            .help(appState.issueReportSubmitRequirementMessage ?? "Send the issue report")
+            .accessibilityHint(appState.issueReportSubmitRequirementMessage ?? "Sends the issue report and selected diagnostics.")
         }
         .padding(24)
         .overlay(alignment: .top) {
@@ -194,5 +220,12 @@ struct IssueReportView: View {
                 .fill(MainWindowPalette.divider)
                 .frame(height: 1)
         }
+    }
+
+    private func validationCaption(_ message: String, isEmpty: Bool) -> some View {
+        Text(message)
+            .font(AppTypography.caption)
+            .foregroundStyle(isEmpty ? MainWindowPalette.secondaryText : Color.red)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

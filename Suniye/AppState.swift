@@ -475,9 +475,37 @@ final class AppState {
 
     var canSubmitIssueReport: Bool {
         !issueReportStatus.isBusy
-            && issueReportTitle.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3
-            && issueReportDescription.trimmingCharacters(in: .whitespacesAndNewlines).count >= 10
-            && issueReportContactEmailValidationError == nil
+            && issueReportSubmitRequirementMessage == nil
+    }
+
+    var issueReportTitleRequirementMessage: String? {
+        let count = issueReportTitle.trimmingCharacters(in: .whitespacesAndNewlines).count
+        guard count < 3 else {
+            return nil
+        }
+
+        let remaining = 3 - count
+        return remaining == 1
+            ? "Add 1 more character to the title."
+            : "Add \(remaining) more characters to the title."
+    }
+
+    var issueReportDescriptionRequirementMessage: String? {
+        let count = issueReportDescription.trimmingCharacters(in: .whitespacesAndNewlines).count
+        guard count < 10 else {
+            return nil
+        }
+
+        let remaining = 10 - count
+        return remaining == 1
+            ? "Add 1 more character to the description."
+            : "Add \(remaining) more characters to the description."
+    }
+
+    var issueReportSubmitRequirementMessage: String? {
+        issueReportTitleRequirementMessage
+            ?? issueReportDescriptionRequirementMessage
+            ?? issueReportContactEmailValidationError
     }
 
     var issueReportContactEmailValidationError: String? {

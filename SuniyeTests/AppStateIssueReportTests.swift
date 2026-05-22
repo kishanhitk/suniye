@@ -88,6 +88,28 @@ final class AppStateIssueReportTests: XCTestCase {
         XCTAssertEqual(uploadService.submissions.count, 0)
     }
 
+    func testIssueReportDraftRequirementMessagesExplainDisabledSubmit() {
+        let appState = makeTestAppState()
+
+        XCTAssertFalse(appState.canSubmitIssueReport)
+        XCTAssertEqual(appState.issueReportTitleRequirementMessage, "Add 3 more characters to the title.")
+        XCTAssertEqual(appState.issueReportDescriptionRequirementMessage, "Add 10 more characters to the description.")
+        XCTAssertEqual(appState.issueReportSubmitRequirementMessage, "Add 3 more characters to the title.")
+
+        appState.issueReportTitle = "Bug"
+        XCTAssertNil(appState.issueReportTitleRequirementMessage)
+        XCTAssertEqual(appState.issueReportSubmitRequirementMessage, "Add 10 more characters to the description.")
+
+        appState.issueReportDescription = "Crashes now"
+        XCTAssertNil(appState.issueReportDescriptionRequirementMessage)
+        XCTAssertNil(appState.issueReportSubmitRequirementMessage)
+        XCTAssertTrue(appState.canSubmitIssueReport)
+
+        appState.issueReportContactEmail = "not-an-email"
+        XCTAssertEqual(appState.issueReportSubmitRequirementMessage, "Enter a valid email address or leave it blank.")
+        XCTAssertFalse(appState.canSubmitIssueReport)
+    }
+
     func testSubmitIssueReportIgnoresReentryWhileBusy() async {
         let diagnosticService = StubDiagnosticBundleService()
         let uploadService = StubIssueReportUploadService()
