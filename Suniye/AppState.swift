@@ -465,6 +465,32 @@ final class AppState {
     var hasMicPermission = false
     var hasAccessibilityPermission = false
 
+    var issueReportType: IssueReportType = .other
+    var issueReportTitle = ""
+    var issueReportDescription = ""
+    var issueReportContactEmail = ""
+    var issueReportIncludesDiagnostics = true
+    var issueReportStatus: IssueReportSubmissionStatus = .idle
+    var issueReportDiagnosticsMessage: String?
+
+    var canSubmitIssueReport: Bool {
+        !issueReportStatus.isBusy
+            && issueReportTitle.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3
+            && issueReportDescription.trimmingCharacters(in: .whitespacesAndNewlines).count >= 10
+            && issueReportContactEmailValidationError == nil
+    }
+
+    var issueReportContactEmailValidationError: String? {
+        let email = issueReportContactEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty else {
+            return nil
+        }
+        guard email.range(of: #"^[^@\s]+@[^@\s]+\.[^@\s]+$"#, options: .regularExpression) != nil else {
+            return "Enter a valid email address or leave it blank."
+        }
+        return nil
+    }
+
     var llmEnabled = false {
         didSet { persistLLMSettings() }
     }
@@ -1034,6 +1060,8 @@ final class AppState {
     private let keychainService: KeychainServiceProtocol
     private let updateService: UpdateServiceProtocol
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
+    private let diagnosticBundleService: DiagnosticBundleServiceProtocol
+    private let issueReportUploadService: IssueReportUploadServiceProtocol
     private let currentAppVersionProvider: () -> AppVersion?
     private let nowProvider: () -> Date
     private let fileOpener: (URL) -> Bool
@@ -1077,6 +1105,8 @@ final class AppState {
         keychainService: KeychainServiceProtocol = KeychainService(),
         updateService: UpdateServiceProtocol = GitHubUpdateService(),
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
+        diagnosticBundleService: DiagnosticBundleServiceProtocol = DiagnosticBundleService(),
+        issueReportUploadService: IssueReportUploadServiceProtocol = IssueReportUploadService(),
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
         nowProvider: @escaping () -> Date = Date.init,
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
@@ -1096,6 +1126,8 @@ final class AppState {
         self.keychainService = keychainService
         self.updateService = updateService
         self.launchAtLoginService = launchAtLoginService
+        self.diagnosticBundleService = diagnosticBundleService
+        self.issueReportUploadService = issueReportUploadService
         self.currentAppVersionProvider = currentAppVersionProvider
         self.nowProvider = nowProvider
         self.fileOpener = fileOpener
@@ -1671,6 +1703,110 @@ final class AppState {
 
     func openMainWindow() {
         MainWindowController.shared.show(appState: self)
+    }
+
+    func openIssueReportWindow() {
+        issueReportDiagnosticsMessage = nil
+        IssueReportWindowController.shared.show(appState: self)
+    }
+
+    func resetIssueReportDraft() {
+        issueReportType = .other
+        issueReportTitle = ""
+        issueReportDescription = ""
+        issueReportContactEmail = ""
+        issueReportIncludesDiagnostics = true
+        issueReportStatus = .idle
+        issueReportDiagnosticsMessage = nil
+    }
+
+    func submitIssueReport() async {
+        if let validationError = validateIssueReportDraft() {
+            issueReportStatus = .failed(validationError)
+            return
+        }
+
+        let reportId = IssueReportPayload.makeReportId()
+        let payload = makeIssueReportPayload(reportId: reportId)
+        var diagnosticsURL: URL?
+
+        do {
+            issueReportDiagnosticsMessage = nil
+            if issueReportIncludesDiagnostics {
+                issueReportStatus = .preparing
+                diagnosticsURL = try await makeDiagnosticBundle(payload: payload)
+            }
+
+            issueReportStatus = .sending
+            let response = try await issueReportUploadService.submit(
+                payload: payload,
+                diagnosticsURL: diagnosticsURL
+            )
+            issueReportStatus = .sent(identifier: response.issueIdentifier, url: response.issueUrl)
+            AppLogger.shared.log(.info, "issue report sent id=\(response.issueIdentifier) report_id=\(response.reportId)")
+        } catch {
+            issueReportStatus = .failed(issueReportErrorMessage(error))
+            AppLogger.shared.log(.error, "issue report failed: \(error.localizedDescription)")
+        }
+
+        if let diagnosticsURL {
+            try? FileManager.default.removeItem(at: diagnosticsURL)
+        }
+    }
+
+    func reviewIssueReportDiagnostics() async {
+        do {
+            issueReportStatus = .preparing
+            issueReportDiagnosticsMessage = nil
+            let payload = makeIssueReportPayload(
+                reportId: IssueReportPayload.makeReportId(),
+                titleOverride: issueReportTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Diagnostic preview" : nil,
+                descriptionOverride: issueReportDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Diagnostic preview for manual support." : nil,
+                includeDiagnosticsOverride: true
+            )
+            let diagnosticsURL = try await makeDiagnosticBundle(payload: payload)
+            if fileOpener(diagnosticsURL) {
+                issueReportStatus = .idle
+                issueReportDiagnosticsMessage = "Diagnostics opened for review."
+            } else {
+                issueReportStatus = .failed("Could not open diagnostics.")
+            }
+        } catch {
+            issueReportStatus = .failed(issueReportErrorMessage(error))
+        }
+    }
+
+    func exportIssueReportDiagnostics() async {
+        do {
+            issueReportStatus = .preparing
+            issueReportDiagnosticsMessage = nil
+            let payload = makeIssueReportPayload(
+                reportId: IssueReportPayload.makeReportId(),
+                titleOverride: issueReportTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Diagnostic export" : nil,
+                descriptionOverride: issueReportDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Diagnostic export for manual support." : nil,
+                includeDiagnosticsOverride: true
+            )
+            let diagnosticsURL = try await makeDiagnosticBundle(payload: payload)
+
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = diagnosticsURL.lastPathComponent
+            panel.canCreateDirectories = true
+            let result = panel.runModal()
+            guard result == .OK, let destinationURL = panel.url else {
+                issueReportStatus = .idle
+                return
+            }
+
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            try FileManager.default.copyItem(at: diagnosticsURL, to: destinationURL)
+            issueReportStatus = .idle
+            issueReportDiagnosticsMessage = "Diagnostics exported."
+            try? FileManager.default.removeItem(at: diagnosticsURL)
+        } catch {
+            issueReportStatus = .failed(issueReportErrorMessage(error))
+        }
     }
 
     func toggleFloatingIndicatorRecording() {
@@ -2459,6 +2595,92 @@ final class AppState {
         }
 
         return "\(visiblePrompt)\n\n\(normalizedExtra)"
+    }
+
+    private func validateIssueReportDraft() -> String? {
+        if issueReportTitle.trimmingCharacters(in: .whitespacesAndNewlines).count < 3 {
+            return "Add a short title for the issue."
+        }
+        if issueReportDescription.trimmingCharacters(in: .whitespacesAndNewlines).count < 10 {
+            return "Describe what happened in a little more detail."
+        }
+        if let issueReportContactEmailValidationError {
+            return issueReportContactEmailValidationError
+        }
+        return nil
+    }
+
+    private func makeIssueReportPayload(
+        reportId: String,
+        titleOverride: String? = nil,
+        descriptionOverride: String? = nil,
+        includeDiagnosticsOverride: Bool? = nil
+    ) -> IssueReportPayload {
+        let version = currentAppVersionProvider()
+        let entry = currentASRModelEntry
+        return IssueReportPayload(
+            schemaVersion: 1,
+            reportId: reportId,
+            issueType: issueReportType,
+            title: titleOverride ?? issueReportTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: descriptionOverride ?? issueReportDescription.trimmingCharacters(in: .whitespacesAndNewlines),
+            contactEmail: normalizedIssueReportEmail,
+            includeDiagnostics: includeDiagnosticsOverride ?? issueReportIncludesDiagnostics,
+            app: .init(
+                version: version?.displayString ?? "Unknown",
+                build: version?.build.map(String.init),
+                macOSVersion: ProcessInfo.processInfo.suniyeOperatingSystemVersionString,
+                architecture: ProcessInfo.suniyeArchitecture
+            ),
+            state: .init(
+                phase: phase.rawValue,
+                lastError: lastError.map { DiagnosticRedactor().redact($0) },
+                updateStatus: updateStatus.rawValue
+            ),
+            permissions: .init(
+                microphone: hasMicPermission,
+                accessibility: hasAccessibilityPermission
+            ),
+            model: .init(
+                selectedModelId: selectedASRModelID.rawValue,
+                selectedModelName: entry.displayName,
+                selectedModelInstalled: modelManager.isInstalled(selectedASRModelID),
+                installedModelIds: modelManager.installedModels().map(\.rawValue)
+            ),
+            settings: .init(
+                autoSubmitEnabled: autoSubmitEnabled,
+                echoCancellationEnabled: echoCancellationEnabled,
+                soundFeedbackEnabled: soundFeedbackEnabled,
+                hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,
+                llmEnabled: llmEnabled,
+                llmHasAPIKey: hasLLMAPIKey
+            )
+        )
+    }
+
+    private var normalizedIssueReportEmail: String? {
+        let email = issueReportContactEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        return email.isEmpty ? nil : email
+    }
+
+    private func makeDiagnosticBundle(payload: IssueReportPayload) async throws -> URL {
+        let logFileURL = AppLogger.shared.logFileURL
+        let rotatedLogFileURL = logFileURL.deletingLastPathComponent().appendingPathComponent("app.log.1")
+        return try await diagnosticBundleService.makeBundle(
+            request: DiagnosticBundleRequest(
+                payload: payload,
+                createdAt: nowProvider(),
+                logFileURL: logFileURL,
+                rotatedLogFileURL: FileManager.default.fileExists(atPath: rotatedLogFileURL.path) ? rotatedLogFileURL : nil
+            )
+        )
+    }
+
+    private func issueReportErrorMessage(_ error: Error) -> String {
+        if let localized = (error as? LocalizedError)?.errorDescription, !localized.isEmpty {
+            return localized
+        }
+        return error.localizedDescription
     }
 
     private func openSystemSettings(urlCandidates: [String]) {

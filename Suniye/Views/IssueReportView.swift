@@ -1,0 +1,198 @@
+import SwiftUI
+
+struct IssueReportView: View {
+    @Bindable var appState: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    issueTypePicker
+                    titleField
+                    descriptionField
+                    contactField
+                    diagnosticsSection
+                    statusView
+                }
+                .padding(24)
+            }
+
+            footer
+        }
+        .background(MainWindowPalette.windowBackground)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Report a Problem")
+                .font(AppTypography.pageTitle)
+                .foregroundStyle(Color.primary)
+            Text("Send a description and sanitized diagnostics directly to the Suniye Linear project.")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
+        .padding(.bottom, 18)
+    }
+
+    private var issueTypePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Issue Type")
+                .font(AppTypography.bodyMedium)
+
+            Picker("Issue Type", selection: $appState.issueReportType) {
+                ForEach(IssueReportType.allCases) { type in
+                    Text(type.title).tag(type)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(maxWidth: 260, alignment: .leading)
+            .disabled(appState.issueReportStatus.isBusy)
+        }
+    }
+
+    private var titleField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Title")
+                .font(AppTypography.bodyMedium)
+            TextField("Briefly summarize the issue", text: $appState.issueReportTitle)
+                .textFieldStyle(.roundedBorder)
+                .disabled(appState.issueReportStatus.isBusy)
+        }
+    }
+
+    private var descriptionField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("What happened?")
+                .font(AppTypography.bodyMedium)
+            TextEditor(text: $appState.issueReportDescription)
+                .font(AppTypography.body)
+                .frame(minHeight: 130)
+                .scrollContentBackground(.hidden)
+                .background(MainWindowPalette.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
+                )
+                .disabled(appState.issueReportStatus.isBusy)
+        }
+    }
+
+    private var contactField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Email")
+                .font(AppTypography.bodyMedium)
+            TextField("Optional", text: $appState.issueReportContactEmail)
+                .textFieldStyle(.roundedBorder)
+                .disabled(appState.issueReportStatus.isBusy)
+
+            if let error = appState.issueReportContactEmailValidationError {
+                Text(error)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var diagnosticsSection: some View {
+        SurfaceCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle(isOn: $appState.issueReportIncludesDiagnostics) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Include diagnostic logs")
+                            .font(AppTypography.bodyMedium)
+                        Text("Includes sanitized app logs and metadata. Audio, transcripts, clipboard contents, API keys, model files, and full system logs are never included.")
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+                .disabled(appState.issueReportStatus.isBusy)
+
+                CardDivider()
+
+                HStack(spacing: 8) {
+                    Button("Review Diagnostics") {
+                        Task { await appState.reviewIssueReportDiagnostics() }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(appState.issueReportStatus.isBusy)
+
+                    Button("Export Diagnostics") {
+                        Task { await appState.exportIssueReportDiagnostics() }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(appState.issueReportStatus.isBusy)
+                }
+
+                if let message = appState.issueReportDiagnosticsMessage {
+                    Text(message)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var statusView: some View {
+        switch appState.issueReportStatus {
+        case .idle:
+            EmptyView()
+        case .preparing:
+            Label("Preparing diagnostics...", systemImage: "archivebox")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+        case .sending:
+            Label("Sending report...", systemImage: "paperplane")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+        case let .sent(identifier, url):
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Report sent: \(identifier)", systemImage: "checkmark.circle.fill")
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(.green)
+                if let url {
+                    Link("Open in Linear", destination: url)
+                        .font(AppTypography.subheadline)
+                }
+            }
+        case let .failed(message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            Button("Reset") {
+                appState.resetIssueReportDraft()
+            }
+            .buttonStyle(.bordered)
+            .disabled(appState.issueReportStatus.isBusy)
+
+            Spacer()
+
+            Button("Send Report") {
+                Task { await appState.submitIssueReport() }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!appState.canSubmitIssueReport)
+        }
+        .padding(24)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(MainWindowPalette.divider)
+                .frame(height: 1)
+        }
+    }
+}

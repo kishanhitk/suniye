@@ -4,7 +4,7 @@ Open-source, local-first dictation for macOS. Hold a key, speak, and your words 
 
 > **Alpha** — Expect rough edges and breaking changes.
 
-**[Website](https://suniye.kishans.in)** · **[Download](https://github.com/kishanhitk/suniye/releases/latest)** · **[Report Bug](https://github.com/kishanhitk/suniye/issues)**
+**[Website](https://suniye.kishans.in)** · **[Download](https://github.com/kishanhitk/suniye/releases/latest)** · **Report bugs from inside the app**
 
 ## Why Suniye?
 
@@ -37,6 +37,10 @@ See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed st
 1. A small icon appears in your **menu bar** — that's Suniye.
 2. **Hold your hotkey** (default: Fn/Globe) and speak.
 3. Release the key — your speech is transcribed and pasted at the cursor.
+
+## Reporting issues
+
+Use **Report a Problem** from the menu bar, the General page, or the Help menu. Suniye sends your description and an optional sanitized diagnostics bundle to the maintainer's Linear workspace. Diagnostics include app logs and metadata only; audio, transcripts, clipboard contents, API keys, model files, and full system logs are not included.
 
 ## Features
 
