@@ -88,6 +88,24 @@ final class AppStateIssueReportTests: XCTestCase {
         XCTAssertEqual(uploadService.submissions.count, 0)
     }
 
+    func testSubmitIssueReportIgnoresReentryWhileBusy() async {
+        let diagnosticService = StubDiagnosticBundleService()
+        let uploadService = StubIssueReportUploadService()
+        let appState = makeTestAppState(
+            diagnosticBundleService: diagnosticService,
+            issueReportUploadService: uploadService
+        )
+        appState.issueReportTitle = "Hotkey failed"
+        appState.issueReportDescription = "The configured hotkey did not start recording."
+        appState.issueReportStatus = .sending
+
+        await appState.submitIssueReport()
+
+        XCTAssertEqual(appState.issueReportStatus, .sending)
+        XCTAssertEqual(diagnosticService.requests.count, 0)
+        XCTAssertEqual(uploadService.submissions.count, 0)
+    }
+
     func testSubmitIssueReportValidatesEmail() async {
         let uploadService = StubIssueReportUploadService()
         let appState = makeTestAppState(issueReportUploadService: uploadService)

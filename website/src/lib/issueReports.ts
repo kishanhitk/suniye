@@ -57,6 +57,19 @@ export interface IssueReportEndpointConfig {
   linearReportLabelId?: string;
   linearReportProjectId?: string;
   linearReportStateId?: string;
+  rateLimit?: IssueReportRateLimitConfig | false;
+}
+
+export interface IssueReportRateLimitConfig {
+  store?: IssueReportRateLimitStore;
+  maxRequests?: number;
+  windowSeconds?: number;
+  failureMode?: "open" | "closed";
+}
+
+export interface IssueReportRateLimitStore {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, ttlSeconds: number): Promise<void>;
 }
 
 export interface IssueReportSuccess {
@@ -112,6 +125,8 @@ interface LinearAttachmentCreateResponse {
 
 export const maxDiagnosticsBytes = 10 * 1024 * 1024;
 const maxRequestBytes = maxDiagnosticsBytes + 128 * 1024;
+const defaultRateLimitMaxRequests = 6;
+const defaultRateLimitWindowSeconds = 10 * 60;
 
 export function jsonResponse(payload: IssueReportResponse, status = payload.success ? 200 : 400): Response {
   return new Response(JSON.stringify(payload), {
@@ -130,6 +145,11 @@ export async function handleIssueReportRequest(
 ): Promise<Response> {
   if (request.method !== "POST") {
     return jsonResponse(errorResponse("method_not_allowed", "Use POST for issue reports."), 405);
+  }
+
+  const rateLimitResponse = await checkRateLimit(request, config.rateLimit);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
   }
 
   if (!config.linearApiKey || !config.linearTeamId) {
@@ -158,9 +178,9 @@ export async function handleIssueReportRequest(
     return jsonResponse(errorResponse("missing_payload", "Missing report payload."), 400);
   }
 
-  let payload: IssueReportPayload;
+  let payload: unknown;
   try {
-    payload = JSON.parse(payloadPart) as IssueReportPayload;
+    payload = JSON.parse(payloadPart);
   } catch {
     return jsonResponse(errorResponse("invalid_payload_json", "Report payload is not valid JSON."), 400);
   }
@@ -172,10 +192,11 @@ export async function handleIssueReportRequest(
       400
     );
   }
+  const issueReportPayload = payload as IssueReportPayload;
 
   const diagnosticsPart = form.get("diagnostics");
   const diagnosticsFile = diagnosticsPart instanceof File && diagnosticsPart.size > 0 ? diagnosticsPart : undefined;
-  const diagnosticsError = validateDiagnosticsFile(payload, diagnosticsFile);
+  const diagnosticsError = validateDiagnosticsFile(issueReportPayload, diagnosticsFile);
   if (diagnosticsError) {
     return jsonResponse(errorResponse("invalid_diagnostics", diagnosticsError), 400);
   }
@@ -185,15 +206,19 @@ export async function handleIssueReportRequest(
       ? await uploadFileToLinear(diagnosticsFile, config, fetcher)
       : undefined;
 
-    const issue = await createLinearIssue(payload, diagnosticsAssetUrl, config, fetcher);
+    const issue = await createLinearIssue(issueReportPayload, diagnosticsAssetUrl, config, fetcher);
 
     if (diagnosticsAssetUrl) {
-      await createLinearAttachment(issue.id, diagnosticsAssetUrl, payload, config, fetcher);
+      try {
+        await createLinearAttachment(issue.id, diagnosticsAssetUrl, issueReportPayload, config, fetcher);
+      } catch (error) {
+        console.error("Issue report attachment creation failed", error);
+      }
     }
 
     return jsonResponse({
       success: true,
-      reportId: payload.reportId,
+      reportId: issueReportPayload.reportId,
       issueId: issue.id,
       issueIdentifier: issue.identifier,
       issueUrl: issue.url,
@@ -207,29 +232,42 @@ export async function handleIssueReportRequest(
   }
 }
 
-export function validatePayload(payload: IssueReportPayload): string[] {
+export function validatePayload(payload: unknown): string[] {
   const errors: string[] = [];
-  if (payload?.schemaVersion !== 1) {
+  if (!isObject(payload)) {
+    return ["Report payload must be an object."];
+  }
+
+  if (payload.schemaVersion !== 1) {
     errors.push("Unsupported schema version.");
   }
-  if (!isReasonableText(payload?.reportId, 8, 100)) {
+  if (!isReasonableText(payload.reportId, 8, 100)) {
     errors.push("Report ID is required.");
   }
-  if (!issueReportTypes.includes(payload?.issueType)) {
+  if (!issueReportTypes.includes(payload.issueType as IssueReportType)) {
     errors.push("Issue type is invalid.");
   }
-  if (!isReasonableText(payload?.title, 3, 160)) {
+  if (!isReasonableText(payload.title, 3, 160)) {
     errors.push("Title must be 3-160 characters.");
   }
-  if (!isReasonableText(payload?.description, 10, 10_000)) {
+  if (!isReasonableText(payload.description, 10, 10_000)) {
     errors.push("Description must be 10-10000 characters.");
   }
-  if (payload?.contactEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(payload.contactEmail)) {
+  if (payload.contactEmail !== undefined && typeof payload.contactEmail !== "string") {
+    errors.push("Contact email is invalid.");
+  } else if (payload.contactEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(payload.contactEmail)) {
     errors.push("Contact email is invalid.");
   }
-  if (!payload?.app || !payload?.state || !payload?.permissions || !payload?.model || !payload?.settings) {
-    errors.push("Required metadata is missing.");
+  if (typeof payload.includeDiagnostics !== "boolean") {
+    errors.push("includeDiagnostics must be a boolean.");
   }
+
+  validateAppMetadata(payload.app, errors);
+  validateStateMetadata(payload.state, errors);
+  validatePermissionMetadata(payload.permissions, errors);
+  validateModelMetadata(payload.model, errors);
+  validateSettingsMetadata(payload.settings, errors);
+
   return errors;
 }
 
@@ -459,11 +497,210 @@ async function linearGraphQL<T>(
   return payload.data;
 }
 
+async function checkRateLimit(
+  request: Request,
+  config: IssueReportRateLimitConfig | false | undefined
+): Promise<Response | undefined> {
+  if (config === false) {
+    return undefined;
+  }
+
+  const store = config?.store ?? defaultRateLimitStore();
+  if (!store) {
+    console.error("Issue report rate limiter is not available.");
+    return config?.failureMode === "open"
+      ? undefined
+      : jsonResponse(errorResponse("rate_limiter_unavailable", "Issue reporting is temporarily unavailable."), 503);
+  }
+
+  const maxRequests = config?.maxRequests ?? defaultRateLimitMaxRequests;
+  const windowSeconds = config?.windowSeconds ?? defaultRateLimitWindowSeconds;
+  const now = Math.floor(Date.now() / 1000);
+  const key = await makeRateLimitKey(request);
+
+  try {
+    const current = parseRateLimitRecord(await store.get(key), now, windowSeconds);
+    if (current.count >= maxRequests) {
+      console.warn("Issue report rate limit exceeded", { key, resetAt: current.resetAt });
+      return jsonResponse(errorResponse("rate_limited", "Too many issue reports. Please try again later."), 429);
+    }
+
+    await store.put(
+      key,
+      JSON.stringify({ count: current.count + 1, resetAt: current.resetAt }),
+      Math.max(1, current.resetAt - now)
+    );
+    return undefined;
+  } catch (error) {
+    console.error("Issue report rate limiter failed", error);
+    return config?.failureMode === "open"
+      ? undefined
+      : jsonResponse(errorResponse("rate_limiter_unavailable", "Issue reporting is temporarily unavailable."), 503);
+  }
+}
+
+function defaultRateLimitStore(): IssueReportRateLimitStore | undefined {
+  const cacheStorage = (globalThis as typeof globalThis & { caches?: CacheStorage }).caches;
+  const cache = cacheStorage?.default;
+  if (!cache) {
+    return undefined;
+  }
+
+  return {
+    async get(key: string): Promise<string | null> {
+      const response = await cache.match(rateLimitCacheRequest(key));
+      return response ? response.text() : null;
+    },
+    async put(key: string, value: string, ttlSeconds: number): Promise<void> {
+      await cache.put(
+        rateLimitCacheRequest(key),
+        new Response(value, {
+          headers: {
+            "Cache-Control": `public, max-age=${ttlSeconds}`,
+          },
+        })
+      );
+    },
+  };
+}
+
+function rateLimitCacheRequest(key: string): Request {
+  return new Request(`https://suniye-rate-limit.invalid/issue-reports/${encodeURIComponent(key)}`);
+}
+
+async function makeRateLimitKey(request: Request): Promise<string> {
+  const ip = request.headers.get("CF-Connecting-IP")
+    ?? request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim()
+    ?? "unknown";
+  const userAgent = request.headers.get("User-Agent")?.slice(0, 200) ?? "unknown";
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${ip}\n${userAgent}`)
+  );
+  const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return hash.slice(0, 32);
+}
+
+function parseRateLimitRecord(
+  value: string | null,
+  now: number,
+  windowSeconds: number
+): { count: number; resetAt: number } {
+  if (!value) {
+    return { count: 0, resetAt: now + windowSeconds };
+  }
+
+  try {
+    const parsed = JSON.parse(value) as { count?: unknown; resetAt?: unknown };
+    if (
+      typeof parsed.count !== "number"
+      || typeof parsed.resetAt !== "number"
+      || parsed.resetAt <= now
+    ) {
+      return { count: 0, resetAt: now + windowSeconds };
+    }
+    return { count: parsed.count, resetAt: parsed.resetAt };
+  } catch {
+    return { count: 0, resetAt: now + windowSeconds };
+  }
+}
+
+function validateAppMetadata(value: unknown, errors: string[]): void {
+  if (!isObject(value)) {
+    errors.push("App metadata is missing.");
+    return;
+  }
+  if (!isReasonableText(value.version, 1, 100)) {
+    errors.push("App version is required.");
+  }
+  if (value.build !== undefined && !isReasonableText(value.build, 1, 100)) {
+    errors.push("App build is invalid.");
+  }
+  if (!isReasonableText(value.macOSVersion, 1, 100)) {
+    errors.push("macOS version is required.");
+  }
+  if (!isReasonableText(value.architecture, 1, 100)) {
+    errors.push("Architecture is required.");
+  }
+}
+
+function validateStateMetadata(value: unknown, errors: string[]): void {
+  if (!isObject(value)) {
+    errors.push("State metadata is missing.");
+    return;
+  }
+  if (!isReasonableText(value.phase, 1, 100)) {
+    errors.push("App phase is required.");
+  }
+  if (value.lastError !== undefined && typeof value.lastError !== "string") {
+    errors.push("Last error is invalid.");
+  }
+  if (value.updateStatus !== undefined && typeof value.updateStatus !== "string") {
+    errors.push("Update status is invalid.");
+  }
+}
+
+function validatePermissionMetadata(value: unknown, errors: string[]): void {
+  if (!isObject(value)) {
+    errors.push("Permission metadata is missing.");
+    return;
+  }
+  if (typeof value.microphone !== "boolean") {
+    errors.push("Microphone permission is invalid.");
+  }
+  if (typeof value.accessibility !== "boolean") {
+    errors.push("Accessibility permission is invalid.");
+  }
+}
+
+function validateModelMetadata(value: unknown, errors: string[]): void {
+  if (!isObject(value)) {
+    errors.push("Model metadata is missing.");
+    return;
+  }
+  if (!isReasonableText(value.selectedModelId, 1, 200)) {
+    errors.push("Selected model ID is required.");
+  }
+  if (!isReasonableText(value.selectedModelName, 1, 200)) {
+    errors.push("Selected model name is required.");
+  }
+  if (typeof value.selectedModelInstalled !== "boolean") {
+    errors.push("Selected model install state is invalid.");
+  }
+  if (!isStringArray(value.installedModelIds)) {
+    errors.push("Installed model IDs are invalid.");
+  }
+}
+
+function validateSettingsMetadata(value: unknown, errors: string[]): void {
+  if (!isObject(value)) {
+    errors.push("Settings metadata is missing.");
+    return;
+  }
+
+  for (const key of [
+    "autoSubmitEnabled",
+    "echoCancellationEnabled",
+    "soundFeedbackEnabled",
+    "hideFloatingIndicatorWhenIdle",
+    "llmEnabled",
+    "llmHasAPIKey",
+  ]) {
+    if (typeof value[key] !== "boolean") {
+      errors.push(`${key} setting is invalid.`);
+    }
+  }
+}
+
 function errorResponse(code: string, message: string): IssueReportFailure {
   return {
     success: false,
     error: { code, message },
   };
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isReasonableText(value: unknown, minLength: number, maxLength: number): value is string {
@@ -472,6 +709,12 @@ function isReasonableText(value: unknown, minLength: number, maxLength: number):
   }
   const trimmed = value.trim();
   return trimmed.length >= minLength && trimmed.length <= maxLength;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value)
+    && value.length <= 100
+    && value.every((item) => isReasonableText(item, 1, 200));
 }
 
 function trimForMarkdown(value: string, maxLength: number): string {

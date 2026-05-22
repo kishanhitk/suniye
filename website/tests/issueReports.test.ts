@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   handleIssueReportRequest,
   makeLinearIssueDescription,
+  type IssueReportEndpointConfig,
   type IssueReportPayload,
 } from "../src/lib/issueReports";
 
@@ -48,7 +49,7 @@ describe("issue report endpoint", () => {
   test("rejects non-POST requests", async () => {
     const response = await handleIssueReportRequest(
       new Request("https://suniye.test/api/issue-reports"),
-      { linearApiKey: "linear", linearTeamId: "team" },
+      linearConfig(),
       failingFetch
     );
 
@@ -62,7 +63,7 @@ describe("issue report endpoint", () => {
   test("rejects missing Linear configuration", async () => {
     const response = await handleIssueReportRequest(
       makeMultipartRequest(validPayload, makeZipFile()),
-      {},
+      { rateLimit: false },
       failingFetch
     );
 
@@ -76,7 +77,7 @@ describe("issue report endpoint", () => {
   test("rejects invalid payloads", async () => {
     const response = await handleIssueReportRequest(
       makeMultipartRequest({ ...validPayload, title: "No" }, makeZipFile()),
-      { linearApiKey: "linear", linearTeamId: "team" },
+      linearConfig(),
       failingFetch
     );
 
@@ -90,7 +91,7 @@ describe("issue report endpoint", () => {
   test("rejects missing diagnostics when requested", async () => {
     const response = await handleIssueReportRequest(
       makeMultipartRequest(validPayload, undefined),
-      { linearApiKey: "linear", linearTeamId: "team" },
+      linearConfig(),
       failingFetch
     );
 
@@ -110,7 +111,7 @@ describe("issue report endpoint", () => {
           "Content-Length": String(11 * 1024 * 1024),
         },
       }),
-      { linearApiKey: "linear", linearTeamId: "team" },
+      linearConfig(),
       failingFetch
     );
 
@@ -118,6 +119,57 @@ describe("issue report endpoint", () => {
     expect(await response.json()).toMatchObject({
       success: false,
       error: { code: "request_too_large" },
+    });
+  });
+
+  test("rejects rate-limited requests before parsing the form", async () => {
+    const store = new MemoryRateLimitStore();
+    await store.put("unused", "{}", 1);
+    store.nextGetValue = JSON.stringify({
+      count: 1,
+      resetAt: Math.floor(Date.now() / 1000) + 60,
+    });
+
+    const response = await handleIssueReportRequest(
+      new Request("https://suniye.test/api/issue-reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "multipart/form-data; boundary=test",
+          "CF-Connecting-IP": "203.0.113.1",
+          "User-Agent": "Suniye/IssueReporter",
+        },
+      }),
+      linearConfig({
+        rateLimit: {
+          store,
+          maxRequests: 1,
+          windowSeconds: 60,
+        },
+      }),
+      failingFetch
+    );
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({
+      success: false,
+      error: { code: "rate_limited" },
+    });
+  });
+
+  test("rejects malformed nested metadata as invalid payload", async () => {
+    const response = await handleIssueReportRequest(
+      makeMultipartRequest({
+        ...validPayload,
+        model: { ...validPayload.model, installedModelIds: "parakeetV3" },
+      }, makeZipFile()),
+      linearConfig(),
+      failingFetch
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      success: false,
+      error: { code: "invalid_payload" },
     });
   });
 
@@ -183,8 +235,7 @@ describe("issue report endpoint", () => {
     const response = await handleIssueReportRequest(
       makeMultipartRequest(validPayload, makeZipFile()),
       {
-        linearApiKey: "linear",
-        linearTeamId: "team",
+        ...linearConfig(),
         linearReportLabelId: "label",
       },
       fetcher
@@ -204,6 +255,72 @@ describe("issue report endpoint", () => {
       "https://api.linear.app/graphql",
       "https://api.linear.app/graphql",
     ]);
+  });
+
+  test("returns created issue when attachment creation fails", async () => {
+    const fetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = String(input);
+
+      if (url === "https://api.linear.app/graphql") {
+        const body = JSON.parse(String(init?.body));
+        if (body.query.includes("FileUpload")) {
+          return Response.json({
+            data: {
+              fileUpload: {
+                success: true,
+                uploadFile: {
+                  uploadUrl: "https://upload.linear.test/diagnostics",
+                  assetUrl: "https://uploads.linear.app/private/diagnostics.zip",
+                  headers: [],
+                },
+              },
+            },
+          });
+        }
+        if (body.query.includes("IssueCreate")) {
+          return Response.json({
+            data: {
+              issueCreate: {
+                success: true,
+                issue: {
+                  id: "issue-id",
+                  identifier: "KIS-128",
+                  url: "https://linear.app/kishan/issue/KIS-128/report",
+                },
+              },
+            },
+          });
+        }
+        if (body.query.includes("AttachmentCreate")) {
+          return Response.json({
+            data: {
+              attachmentCreate: {
+                success: false,
+              },
+            },
+          });
+        }
+      }
+
+      if (url === "https://upload.linear.test/diagnostics") {
+        return new Response(null, { status: 200 });
+      }
+
+      throw new Error(`Unexpected fetch ${url}`);
+    };
+
+    const response = await handleIssueReportRequest(
+      makeMultipartRequest(validPayload, makeZipFile()),
+      linearConfig(),
+      fetcher
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      success: true,
+      issueId: "issue-id",
+      issueIdentifier: "KIS-128",
+    });
   });
 });
 
@@ -239,6 +356,28 @@ function makeZipFile(size = 24): File {
   });
 }
 
+function linearConfig(overrides: Partial<IssueReportEndpointConfig> = {}): IssueReportEndpointConfig {
+  return {
+    linearApiKey: "linear",
+    linearTeamId: "team",
+    rateLimit: false,
+    ...overrides,
+  };
+}
+
 async function failingFetch(): Promise<Response> {
   throw new Error("fetch should not be called");
+}
+
+class MemoryRateLimitStore {
+  nextGetValue: string | null = null;
+  values = new Map<string, string>();
+
+  async get(key: string): Promise<string | null> {
+    return this.nextGetValue ?? this.values.get(key) ?? null;
+  }
+
+  async put(key: string, value: string, _ttlSeconds?: number): Promise<void> {
+    this.values.set(key, value);
+  }
 }

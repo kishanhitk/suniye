@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-enum IssueReportType: String, CaseIterable, Codable, Identifiable {
+enum IssueReportType: String, CaseIterable, Codable, Identifiable, Sendable {
     case dictation
     case hotkey
     case transcription
@@ -29,7 +29,7 @@ enum IssueReportType: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-enum IssueReportSubmissionStatus: Equatable {
+enum IssueReportSubmissionStatus: Equatable, Sendable {
     case idle
     case preparing
     case sending
@@ -46,7 +46,7 @@ enum IssueReportSubmissionStatus: Equatable {
     }
 }
 
-struct IssueReportPayload: Codable, Equatable {
+struct IssueReportPayload: Codable, Equatable, Sendable {
     let schemaVersion: Int
     let reportId: String
     let issueType: IssueReportType
@@ -60,32 +60,32 @@ struct IssueReportPayload: Codable, Equatable {
     let model: ModelMetadata
     let settings: SettingsMetadata
 
-    struct AppMetadata: Codable, Equatable {
+    struct AppMetadata: Codable, Equatable, Sendable {
         let version: String
         let build: String?
         let macOSVersion: String
         let architecture: String
     }
 
-    struct StateMetadata: Codable, Equatable {
+    struct StateMetadata: Codable, Equatable, Sendable {
         let phase: String
         let lastError: String?
         let updateStatus: String?
     }
 
-    struct PermissionMetadata: Codable, Equatable {
+    struct PermissionMetadata: Codable, Equatable, Sendable {
         let microphone: Bool
         let accessibility: Bool
     }
 
-    struct ModelMetadata: Codable, Equatable {
+    struct ModelMetadata: Codable, Equatable, Sendable {
         let selectedModelId: String
         let selectedModelName: String
         let selectedModelInstalled: Bool
         let installedModelIds: [String]
     }
 
-    struct SettingsMetadata: Codable, Equatable {
+    struct SettingsMetadata: Codable, Equatable, Sendable {
         let autoSubmitEnabled: Bool
         let echoCancellationEnabled: Bool
         let soundFeedbackEnabled: Bool
@@ -95,7 +95,7 @@ struct IssueReportPayload: Codable, Equatable {
     }
 }
 
-struct DiagnosticBundleRequest: Equatable {
+struct DiagnosticBundleRequest: Equatable, Sendable {
     let payload: IssueReportPayload
     let createdAt: Date
     let logFileURL: URL
@@ -110,14 +110,14 @@ protocol IssueReportUploadServiceProtocol {
     func submit(payload: IssueReportPayload, diagnosticsURL: URL?) async throws -> IssueReportSubmissionResponse
 }
 
-struct IssueReportSubmissionResponse: Decodable, Equatable {
+struct IssueReportSubmissionResponse: Decodable, Equatable, Sendable {
     let reportId: String
     let issueId: String
     let issueIdentifier: String
     let issueUrl: URL?
 }
 
-enum IssueReportError: LocalizedError, Equatable {
+enum IssueReportError: LocalizedError, Equatable, Sendable {
     case missingEndpoint
     case invalidResponse
     case serverMessage(String)
@@ -146,7 +146,7 @@ enum IssueReportError: LocalizedError, Equatable {
     }
 }
 
-struct DiagnosticRedactor {
+struct DiagnosticRedactor: Sendable {
     private let homeDirectory: String
 
     init(homeDirectory: String = NSHomeDirectory()) {
@@ -223,14 +223,16 @@ final class DiagnosticBundleService: DiagnosticBundleServiceProtocol {
             try Self.writeRedactedLog(
                 from: request.logFileURL,
                 to: stagingDirectory.appendingPathComponent("app.log"),
-                redactor: redactor
+                redactor: redactor,
+                fileManager: fileManager
             )
             if let rotatedLogFileURL = request.rotatedLogFileURL,
                fileManager.fileExists(atPath: rotatedLogFileURL.path) {
                 try Self.writeRedactedLog(
                     from: rotatedLogFileURL,
                     to: stagingDirectory.appendingPathComponent("app.log.1"),
-                    redactor: redactor
+                    redactor: redactor,
+                    fileManager: fileManager
                 )
             }
 
@@ -248,9 +250,14 @@ final class DiagnosticBundleService: DiagnosticBundleServiceProtocol {
         }
     }
 
-    private static func writeRedactedLog(from sourceURL: URL, to destinationURL: URL, redactor: DiagnosticRedactor) throws {
+    private static func writeRedactedLog(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        redactor: DiagnosticRedactor,
+        fileManager: FileManager
+    ) throws {
         let text: String
-        if FileManager.default.fileExists(atPath: sourceURL.path) {
+        if fileManager.fileExists(atPath: sourceURL.path) {
             text = (try? String(contentsOf: sourceURL, encoding: .utf8)) ?? ""
         } else {
             text = ""
@@ -296,7 +303,6 @@ final class DiagnosticBundleService: DiagnosticBundleServiceProtocol {
 final class IssueReportUploadService: IssueReportUploadServiceProtocol {
     private let session: URLSession
     private let endpointURL: URL?
-    private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
     init(
@@ -314,7 +320,11 @@ final class IssueReportUploadService: IssueReportUploadServiceProtocol {
         }
 
         let boundary = "Boundary-\(UUID().uuidString)"
-        let body = try makeMultipartBody(payload: payload, diagnosticsURL: diagnosticsURL, boundary: boundary)
+        let body = try await Self.makeMultipartBody(
+            payload: payload,
+            diagnosticsURL: diagnosticsURL,
+            boundary: boundary
+        )
 
         var request = URLRequest(url: endpointURL)
         request.httpMethod = "POST"
@@ -358,41 +368,46 @@ final class IssueReportUploadService: IssueReportUploadServiceProtocol {
         )
     }
 
-    private func makeMultipartBody(payload: IssueReportPayload, diagnosticsURL: URL?, boundary: String) throws -> Data {
-        var body = Data()
-        let payloadData: Data
-        do {
-            payloadData = try encoder.encode(payload)
-        } catch {
-            throw IssueReportError.invalidInput(error.localizedDescription)
-        }
-
-        body.appendMultipartField(
-            name: "payload",
-            valueData: payloadData,
-            contentType: "application/json",
-            boundary: boundary
-        )
-
-        if let diagnosticsURL {
+    private static func makeMultipartBody(
+        payload: IssueReportPayload,
+        diagnosticsURL: URL?,
+        boundary: String
+    ) async throws -> Data {
+        try await Task.detached(priority: .utility) {
+            var body = Data()
+            let payloadData: Data
             do {
-                let diagnosticsData = try Data(contentsOf: diagnosticsURL)
-                body.appendMultipartFile(
-                    name: "diagnostics",
-                    filename: diagnosticsURL.lastPathComponent,
-                    data: diagnosticsData,
-                    contentType: "application/zip",
-                    boundary: boundary
-                )
+                payloadData = try JSONEncoder().encode(payload)
             } catch {
-                throw IssueReportError.fileIO(error.localizedDescription)
+                throw IssueReportError.invalidInput(error.localizedDescription)
             }
-        }
 
-        body.appendString("--\(boundary)--\r\n")
-        return body
+            body.appendMultipartField(
+                name: "payload",
+                valueData: payloadData,
+                contentType: "application/json",
+                boundary: boundary
+            )
+
+            if let diagnosticsURL {
+                do {
+                    let diagnosticsData = try Data(contentsOf: diagnosticsURL)
+                    body.appendMultipartFile(
+                        name: "diagnostics",
+                        filename: diagnosticsURL.lastPathComponent,
+                        data: diagnosticsData,
+                        contentType: "application/zip",
+                        boundary: boundary
+                    )
+                } catch {
+                    throw IssueReportError.fileIO(error.localizedDescription)
+                }
+            }
+
+            body.appendString("--\(boundary)--\r\n")
+            return body
+        }.value
     }
-
     private static func endpointURL(from bundle: Bundle) -> URL? {
         guard
             let raw = bundle.object(forInfoDictionaryKey: "SuniyeIssueReportEndpointURL") as? String,

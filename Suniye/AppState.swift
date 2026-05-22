@@ -1721,6 +1721,10 @@ final class AppState {
     }
 
     func submitIssueReport() async {
+        guard !issueReportStatus.isBusy else {
+            return
+        }
+
         if let validationError = validateIssueReportDraft() {
             issueReportStatus = .failed(validationError)
             return
