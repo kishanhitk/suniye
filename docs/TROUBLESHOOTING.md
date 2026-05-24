@@ -21,6 +21,7 @@ xattr -dr com.apple.quarantine /Applications/Suniye.app
 
 ## Update check fails
 - Check network access to `https://suniye.kishans.in/appcast.xml`.
+- If you use the Tip channel, also check network access to `https://suniye.kishans.in/appcast-tip.xml`.
 - If the appcast is unavailable, check that the latest GitHub release includes `appcast.xml`.
 
 ## Downloaded the wrong model during onboarding

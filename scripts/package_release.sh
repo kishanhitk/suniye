@@ -5,11 +5,29 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${ROOT_DIR}/dist"
 VERSION=""
 BUILD_NUMBER=""
+BUILD_CHANNEL="${SUNIYE_BUILD_CHANNEL:-stable}"
+APPCAST_CHANNEL=""
+DOWNLOAD_URL_PREFIX=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/package_release.sh --version vX.Y.Z [--build-number <number>] [--dist-dir <dir>]
+Usage: scripts/package_release.sh --version vX.Y.Z [--build-number <number>] [--build-channel stable|tip] [--appcast-channel <name>] [--download-url-prefix <url>] [--dist-dir <dir>]
 USAGE
+}
+
+channel_rank() {
+  case "$1" in
+    tip)
+      echo "1"
+      ;;
+    stable)
+      echo "8"
+      ;;
+    *)
+      echo "Unknown build channel: $1" >&2
+      return 1
+      ;;
+  esac
 }
 
 while [[ $# -gt 0 ]]; do
@@ -20,6 +38,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --build-number)
       BUILD_NUMBER="$2"
+      shift 2
+      ;;
+    --build-channel)
+      BUILD_CHANNEL="$2"
+      shift 2
+      ;;
+    --appcast-channel)
+      APPCAST_CHANNEL="$2"
+      shift 2
+      ;;
+    --download-url-prefix)
+      DOWNLOAD_URL_PREFIX="$2"
       shift 2
       ;;
     --dist-dir)
@@ -44,17 +74,24 @@ if [[ -z "${VERSION}" ]]; then
   exit 1
 fi
 
-if [[ -z "${BUILD_NUMBER}" ]]; then
-  BUILD_NUMBER="${SUNIYE_BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-}}"
-fi
+CHANNEL_RANK="$(channel_rank "${BUILD_CHANNEL}")"
 
 if [[ -z "${BUILD_NUMBER}" ]]; then
-  echo "Build number is required. Pass --build-number, set SUNIYE_BUILD_NUMBER, or run in GitHub Actions with GITHUB_RUN_NUMBER." >&2
+  BUILD_NUMBER="${SUNIYE_BUILD_NUMBER:-}"
+fi
+
+if [[ -z "${BUILD_NUMBER}" ]] && git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  COMMIT_COUNT="$(git -C "${ROOT_DIR}" rev-list --count HEAD)"
+  BUILD_NUMBER="$((COMMIT_COUNT * 10 + CHANNEL_RANK))"
+fi
+
+if [[ -z "${BUILD_NUMBER}" || ! "${BUILD_NUMBER}" =~ ^[0-9]+$ ]]; then
+  echo "Build number must be numeric, got: ${BUILD_NUMBER}" >&2
   exit 1
 fi
 
-if [[ ! "${BUILD_NUMBER}" =~ ^[0-9]+$ ]]; then
-  echo "Build number must be numeric, got: ${BUILD_NUMBER}" >&2
+if [[ -n "${APPCAST_CHANNEL}" && ! "${APPCAST_CHANNEL}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "Appcast channel may only contain letters, numbers, dots, underscores, and dashes: ${APPCAST_CHANNEL}" >&2
   exit 1
 fi
 
@@ -64,6 +101,7 @@ DERIVED_DATA="${ROOT_DIR}/.derivedData-release"
 BUILD_ARGS=(Release --derived-data-path "${DERIVED_DATA}" --output-dir "${DIST_DIR}")
 BUILD_ARGS+=(--version "${VERSION}")
 BUILD_ARGS+=(--build-number "${BUILD_NUMBER}")
+BUILD_ARGS+=(--build-channel "${BUILD_CHANNEL}")
 "${ROOT_DIR}/scripts/build_app.sh" "${BUILD_ARGS[@]}"
 
 APP_PATH="${DIST_DIR}/Suniye.app"
@@ -99,9 +137,16 @@ rm -rf "${DMG_STAGING}"
   shasum -a 256 "Suniye.dmg" "Suniye.app.zip" > "SHA256SUMS.txt"
 )
 
-"${ROOT_DIR}/scripts/generate_appcast.sh" --version "${VERSION}" --dist-dir "${DIST_DIR}"
+APPCAST_ARGS=(--version "${VERSION}" --dist-dir "${DIST_DIR}")
+if [[ -n "${DOWNLOAD_URL_PREFIX}" ]]; then
+  APPCAST_ARGS+=(--download-url-prefix "${DOWNLOAD_URL_PREFIX}")
+fi
+if [[ -n "${APPCAST_CHANNEL}" ]]; then
+  APPCAST_ARGS+=(--channel "${APPCAST_CHANNEL}")
+fi
+"${ROOT_DIR}/scripts/generate_appcast.sh" "${APPCAST_ARGS[@]}"
 
-echo "Packaged ${VERSION}"
+echo "Packaged ${VERSION} build ${BUILD_NUMBER} channel ${BUILD_CHANNEL}"
 
 echo "Artifacts created in: ${DIST_DIR}"
 ls -lh "${DIST_DIR}/Suniye.dmg" "${DIST_DIR}/Suniye.app.zip" "${DIST_DIR}/SHA256SUMS.txt"

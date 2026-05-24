@@ -106,6 +106,7 @@ final class TestKeychainService: KeychainServiceProtocol {
 final class StubAppUpdateController: AppUpdateControllerProtocol {
     var canCheckForUpdates = false
     var automaticallyChecksForUpdates = false
+    var updateChannel: UpdateChannel = .stable
     var onStateChange: (() -> Void)?
 
     private(set) var startCallCount = 0

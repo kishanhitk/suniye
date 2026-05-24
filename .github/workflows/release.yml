@@ -48,10 +48,10 @@ jobs:
       - name: Package release artifacts
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: ./scripts/package_release.sh --version "${GITHUB_REF_NAME}" --dist-dir dist
+        run: ./scripts/package_release.sh --version "${GITHUB_REF_NAME}" --build-channel stable --dist-dir dist
 
       - name: Verify release artifacts
-        run: ./scripts/verify_release.sh --version "${GITHUB_REF_NAME}" --dist-dir dist
+        run: ./scripts/verify_release.sh --version "${GITHUB_REF_NAME}" --build-channel stable --dist-dir dist
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v3

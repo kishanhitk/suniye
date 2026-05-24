@@ -229,6 +229,58 @@ struct HotkeyConfiguration: Codable, Equatable {
     }
 }
 
+enum UpdateChannel: String, Codable, CaseIterable, Identifiable {
+    case stable
+    case tip
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .stable:
+            return "Stable"
+        case .tip:
+            return "Tip"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .stable:
+            return "Stable releases only."
+        case .tip:
+            return "Latest main-branch builds."
+        }
+    }
+
+    var appcastURLString: String {
+        switch self {
+        case .stable:
+            return "https://suniye.kishans.in/appcast.xml"
+        case .tip:
+            return "https://suniye.kishans.in/appcast-tip.xml"
+        }
+    }
+
+    var sparkleChannelName: String? {
+        switch self {
+        case .stable:
+            return nil
+        case .tip:
+            return rawValue
+        }
+    }
+
+    var sparkleAllowedChannels: Set<String> {
+        switch self {
+        case .stable:
+            return []
+        case .tip:
+            return [rawValue]
+        }
+    }
+}
+
 struct GeneralSettings: Codable, Equatable {
     var preferredInputDeviceID: String?
     var autoSubmitEnabled: Bool = false
@@ -240,6 +292,7 @@ struct GeneralSettings: Codable, Equatable {
     var hasSeenOnboardingWelcome: Bool? = nil
     var hasCompletedCoreOnboarding: Bool? = nil
     var selectedASRModelID: ASRModelID = .parakeetV3
+    var updateChannel: UpdateChannel = .stable
 
     init(
         preferredInputDeviceID: String? = nil,
@@ -251,7 +304,8 @@ struct GeneralSettings: Codable, Equatable {
         floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil,
         hasSeenOnboardingWelcome: Bool? = nil,
         hasCompletedCoreOnboarding: Bool? = nil,
-        selectedASRModelID: ASRModelID = .parakeetV3
+        selectedASRModelID: ASRModelID = .parakeetV3,
+        updateChannel: UpdateChannel = .stable
     ) {
         self.preferredInputDeviceID = preferredInputDeviceID
         self.autoSubmitEnabled = autoSubmitEnabled
@@ -263,6 +317,7 @@ struct GeneralSettings: Codable, Equatable {
         self.hasSeenOnboardingWelcome = hasSeenOnboardingWelcome
         self.hasCompletedCoreOnboarding = hasCompletedCoreOnboarding
         self.selectedASRModelID = selectedASRModelID
+        self.updateChannel = updateChannel
     }
 
     enum CodingKeys: String, CodingKey {
@@ -276,6 +331,7 @@ struct GeneralSettings: Codable, Equatable {
         case hasSeenOnboardingWelcome
         case hasCompletedCoreOnboarding
         case selectedASRModelID
+        case updateChannel
     }
 
     init(from decoder: Decoder) throws {
@@ -291,6 +347,8 @@ struct GeneralSettings: Codable, Equatable {
         hasCompletedCoreOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedCoreOnboarding)
         let storedASRModelID = try container.decodeIfPresent(String.self, forKey: .selectedASRModelID)
         selectedASRModelID = storedASRModelID.flatMap(ASRModelID.init(rawValue:)) ?? .parakeetV3
+        let storedUpdateChannel = try container.decodeIfPresent(String.self, forKey: .updateChannel)
+        updateChannel = storedUpdateChannel.flatMap(UpdateChannel.init(rawValue:)) ?? .stable
     }
 }
 

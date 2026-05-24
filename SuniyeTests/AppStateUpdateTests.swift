@@ -44,6 +44,32 @@ final class AppStateUpdateTests: XCTestCase {
         XCTAssertTrue(appState.automaticallyChecksForUpdates)
     }
 
+    func testUpdateChannelLoadsFromGeneralSettingsAndAppliesToController() {
+        let updateController = StubAppUpdateController()
+        let appState = makeAppState(
+            generalSettingsStore: TestGeneralSettingsStore(value: GeneralSettings(updateChannel: .tip)),
+            appUpdateController: updateController
+        )
+
+        XCTAssertEqual(appState.updateChannel, .tip)
+        XCTAssertEqual(updateController.updateChannel, .tip)
+    }
+
+    func testSetUpdateChannelPersistsAndUpdatesController() {
+        let updateController = StubAppUpdateController()
+        let generalSettingsStore = TestGeneralSettingsStore()
+        let appState = makeAppState(
+            generalSettingsStore: generalSettingsStore,
+            appUpdateController: updateController
+        )
+
+        appState.setUpdateChannel(.tip)
+
+        XCTAssertEqual(appState.updateChannel, .tip)
+        XCTAssertEqual(updateController.updateChannel, .tip)
+        XCTAssertEqual(generalSettingsStore.latest.updateChannel, .tip)
+    }
+
     func testMagicFormatStatusIsOffWhenDisabled() {
         let appState = makeAppState()
 
@@ -112,11 +138,12 @@ final class AppStateUpdateTests: XCTestCase {
     }
 
     private func makeAppState(
+        generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
         appUpdateController: StubAppUpdateController? = nil
     ) -> AppState {
         makeTestAppState(
             llmSettingsStore: TestLLMSettingsStore(),
-            generalSettingsStore: TestGeneralSettingsStore(),
+            generalSettingsStore: generalSettingsStore,
             historyStore: TestHistoryStore(),
             keychainService: TestKeychainService(value: nil),
             appUpdateController: appUpdateController ?? StubAppUpdateController(),

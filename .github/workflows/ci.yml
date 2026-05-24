@@ -55,3 +55,78 @@ jobs:
             .derivedData
             .e2e
             dist
+
+  publish-tip:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-test
+    runs-on: macos-14
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Preflight
+        run: ./scripts/e2e_preflight.sh
+
+      - name: Package tip artifacts
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          TIP_VERSION="$(git describe --tags --match 'v[0-9]*' --abbrev=0)"
+          TIP_URL_PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/tip/"
+          ./scripts/package_release.sh \
+            --version "${TIP_VERSION}" \
+            --build-channel tip \
+            --appcast-channel tip \
+            --download-url-prefix "${TIP_URL_PREFIX}" \
+            --dist-dir dist-tip
+
+      - name: Verify tip artifacts
+        run: |
+          TIP_VERSION="$(git describe --tags --match 'v[0-9]*' --abbrev=0)"
+          TIP_URL_PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/tip/"
+          ./scripts/verify_release.sh \
+            --version "${TIP_VERSION}" \
+            --download-url-prefix "${TIP_URL_PREFIX}" \
+            --channel tip \
+            --build-channel tip \
+            --dist-dir dist-tip
+
+      - name: Publish tip release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f tip "${GITHUB_SHA}"
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" refs/tags/tip
+
+          NOTES_FILE="$(mktemp)"
+          printf 'Tip builds are generated from the latest main branch commit.\n\nCommit: %s\n' "${GITHUB_SHA}" > "${NOTES_FILE}"
+
+          if gh release view tip --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release edit tip --repo "${GITHUB_REPOSITORY}" --title "Suniye Tip" --prerelease --notes-file "${NOTES_FILE}"
+          else
+            gh release create tip --repo "${GITHUB_REPOSITORY}" --title "Suniye Tip" --prerelease --latest=false --notes-file "${NOTES_FILE}"
+          fi
+
+          gh release upload tip --repo "${GITHUB_REPOSITORY}" \
+            dist-tip/Suniye.dmg \
+            dist-tip/Suniye.app.zip \
+            dist-tip/SHA256SUMS.txt \
+            dist-tip/appcast.xml \
+            --clobber

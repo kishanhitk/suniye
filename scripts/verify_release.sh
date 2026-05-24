@@ -4,10 +4,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${ROOT_DIR}/dist"
 VERSION=""
+DOWNLOAD_URL_PREFIX=""
+APPCAST_CHANNEL=""
+BUILD_CHANNEL=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/verify_release.sh [--version vX.Y.Z] [--dist-dir <dir>]
+Usage: scripts/verify_release.sh [--version vX.Y.Z] [--download-url-prefix <url>] [--channel <name>] [--build-channel stable|tip] [--dist-dir <dir>]
 USAGE
 }
 
@@ -21,6 +24,18 @@ while [[ $# -gt 0 ]]; do
       DIST_DIR="$2"
       shift 2
       ;;
+    --download-url-prefix)
+      DOWNLOAD_URL_PREFIX="$2"
+      shift 2
+      ;;
+    --channel)
+      APPCAST_CHANNEL="$2"
+      shift 2
+      ;;
+    --build-channel)
+      BUILD_CHANNEL="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -32,6 +47,24 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+case "${BUILD_CHANNEL}" in
+  ""|stable|tip)
+    ;;
+  *)
+    echo "Unknown build channel: ${BUILD_CHANNEL}" >&2
+    exit 1
+    ;;
+esac
+
+if [[ -n "${APPCAST_CHANNEL}" && ! "${APPCAST_CHANNEL}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "Appcast channel may only contain letters, numbers, dots, underscores, and dashes: ${APPCAST_CHANNEL}" >&2
+  exit 1
+fi
+
+if [[ -n "${DOWNLOAD_URL_PREFIX}" ]]; then
+  DOWNLOAD_URL_PREFIX="${DOWNLOAD_URL_PREFIX%/}/"
+fi
 
 DMG_PATH="${DIST_DIR}/Suniye.dmg"
 ZIP_PATH="${DIST_DIR}/Suniye.app.zip"
@@ -54,12 +87,22 @@ trap '/usr/bin/hdiutil detach "${MOUNT_POINT}" -quiet >/dev/null 2>&1 || true; r
 [[ -d "${MOUNT_POINT}/Suniye.app" ]] || { echo "DMG missing Suniye.app" >&2; exit 1; }
 [[ -L "${MOUNT_POINT}/Applications" ]] || { echo "DMG missing Applications symlink" >&2; exit 1; }
 
-/usr/bin/python3 - "${APPCAST_PATH}" "${VERSION}" <<'PY'
+if [[ -n "${BUILD_CHANNEL}" ]]; then
+  APP_BUILD_CHANNEL="$(/usr/libexec/PlistBuddy -c "Print :SuniyeBuildChannel" "${MOUNT_POINT}/Suniye.app/Contents/Info.plist" 2>/dev/null || true)"
+  if [[ "${APP_BUILD_CHANNEL}" != "${BUILD_CHANNEL}" ]]; then
+    echo "App build channel ${APP_BUILD_CHANNEL:-<missing>} does not match ${BUILD_CHANNEL}" >&2
+    exit 1
+  fi
+fi
+
+/usr/bin/python3 - "${APPCAST_PATH}" "${VERSION}" "${DOWNLOAD_URL_PREFIX}" "${APPCAST_CHANNEL}" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
 path = sys.argv[1]
 version = sys.argv[2]
+download_url_prefix = sys.argv[3]
+expected_channel = sys.argv[4]
 root = ET.parse(path).getroot()
 
 namespace = {"sparkle": "http://www.andymatuschak.org/xml-namespaces/sparkle"}
@@ -75,8 +118,18 @@ if enclosure is None:
 if not enclosure.attrib.get("{http://www.andymatuschak.org/xml-namespaces/sparkle}edSignature"):
     raise SystemExit("Appcast enclosure is missing Sparkle EdDSA signature")
 
+actual_channel = item.findtext("sparkle:channel", namespaces=namespace)
+if expected_channel:
+    if actual_channel != expected_channel:
+        raise SystemExit(f"Appcast channel {actual_channel!r} does not match {expected_channel!r}")
+elif actual_channel not in (None, ""):
+    raise SystemExit(f"Stable appcast should not include a Sparkle channel, got {actual_channel!r}")
+
 if version:
-    expected_url = f"https://github.com/kishanhitk/suniye/releases/download/{version}/Suniye.dmg"
+    if download_url_prefix:
+        expected_url = f"{download_url_prefix}Suniye.dmg"
+    else:
+        expected_url = f"https://github.com/kishanhitk/suniye/releases/download/{version}/Suniye.dmg"
     enclosure_url = enclosure.attrib.get("url", "")
     if enclosure_url != expected_url:
         raise SystemExit(f"Appcast enclosure URL {enclosure_url!r} does not match {expected_url!r}")

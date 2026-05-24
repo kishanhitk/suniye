@@ -893,6 +893,36 @@ struct GeneralPage: View {
 
                         CardDivider()
 
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Update Channel")
+                                    .font(AppTypography.body)
+                                Text(appState.updateChannel.detail)
+                                    .font(AppTypography.subheadline)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                            }
+
+                            Spacer(minLength: 12)
+
+                            Picker(
+                                "Update Channel",
+                                selection: Binding(
+                                    get: { appState.updateChannel },
+                                    set: { appState.setUpdateChannel($0) }
+                                )
+                            ) {
+                                ForEach(UpdateChannel.allCases) { channel in
+                                    Text(channel.title)
+                                        .tag(channel)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .frame(width: 160)
+                        }
+
+                        CardDivider()
+
                         SettingsToggleRow(
                             title: "Automatically Check for Updates",
                             detail: "Suniye checks in the background and asks before installing.",

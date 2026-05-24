@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { handleAppcastRequest } from "../src/lib/appcast";
+import { handleAppcastRequest, handleTipAppcastRequest } from "../src/lib/appcast";
 
 const xml = `<?xml version="1.0" encoding="utf-8"?><rss version="2.0"></rss>`;
 
@@ -31,6 +31,24 @@ describe("appcast endpoint", () => {
     );
 
     expect(response.status).toBe(502);
+  });
+
+  test("proxies tip appcast XML", async () => {
+    const response = await handleTipAppcastRequest(
+      new Request("https://suniye.test/appcast-tip.xml"),
+      async (input) => {
+        expect(input).toBe("https://github.com/kishanhitk/suniye/releases/download/tip/appcast.xml");
+        return new Response(xml, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/xml",
+          },
+        });
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(xml);
   });
 
   test("rejects unsupported methods", async () => {
