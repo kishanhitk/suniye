@@ -204,8 +204,6 @@ struct ASRModelBannerState: Equatable {
 @Observable
 final class AppState {
     typealias RecordingSource = FloatingIndicatorState.Source
-    private static let automaticUpdateCheckInterval: TimeInterval = 5 * 60 * 60
-    private static let automaticUpdateTimerTolerance: TimeInterval = 5 * 60
 
     enum Phase: String {
         case needsModel
@@ -214,16 +212,6 @@ final class AppState {
         case ready
         case recording
         case transcribing
-        case error
-    }
-
-    enum UpdateStatus: String {
-        case idle
-        case checking
-        case upToDate
-        case available
-        case downloading
-        case downloaded
         case error
     }
 
@@ -244,38 +232,22 @@ final class AppState {
     }
     var lastError: String?
 
-    var updateStatus: UpdateStatus = .idle {
+    var canCheckForUpdates = false {
         didSet {
-            if oldValue != updateStatus {
-                onStateChange?()
-                AppLogger.shared.log(.info, "update status changed: \(oldValue.rawValue) -> \(updateStatus.rawValue)")
-            }
-        }
-    }
-    var availableUpdateVersion: String? {
-        didSet {
-            if oldValue != availableUpdateVersion {
+            if oldValue != canCheckForUpdates {
                 onStateChange?()
             }
         }
     }
-    var updateStatusText = "No update check yet." {
+    var automaticallyChecksForUpdates = false {
         didSet {
-            if oldValue != updateStatusText {
+            if oldValue != automaticallyChecksForUpdates {
                 onStateChange?()
             }
         }
     }
     var appVersionText: String {
         currentAppVersionProvider()?.displayString ?? "Unknown"
-    }
-
-    var updateDownloadProgress: Double = 0 {
-        didSet {
-            if oldValue != updateDownloadProgress {
-                onStateChange?()
-            }
-        }
     }
 
     var downloadProgress: Double = 0 {
@@ -1086,7 +1058,7 @@ final class AppState {
     private let generalSettingsStore: GeneralSettingsStoreProtocol
     private let historyStore: HistoryStoreProtocol
     private let keychainService: KeychainServiceProtocol
-    private let updateService: UpdateServiceProtocol
+    private let appUpdateController: AppUpdateControllerProtocol
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
     private let diagnosticBundleService: DiagnosticBundleServiceProtocol
     private let issueReportUploadService: IssueReportUploadServiceProtocol
@@ -1105,20 +1077,9 @@ final class AppState {
     private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
     private let llmE2EMode: LLME2EMode
-    private var availableUpdateRelease: UpdateRelease?
-    private var downloadedUpdateArchiveURL: URL?
-    private var automaticUpdateTimer: Timer?
-    private var lastAutomaticUpdateAttemptAt: Date?
-
     private enum DictationDestination: Equatable {
         case systemInsertion
         case onboardingPractice
-    }
-
-    deinit {
-        MainActor.assumeIsolated {
-            automaticUpdateTimer?.invalidate()
-        }
     }
 
     init(
@@ -1133,7 +1094,7 @@ final class AppState {
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
         historyStore: HistoryStoreProtocol = HistoryStore(),
         keychainService: KeychainServiceProtocol = KeychainService(),
-        updateService: UpdateServiceProtocol = GitHubUpdateService(),
+        appUpdateController: AppUpdateControllerProtocol? = nil,
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
         diagnosticBundleService: DiagnosticBundleServiceProtocol = DiagnosticBundleService(),
         issueReportUploadService: IssueReportUploadServiceProtocol = IssueReportUploadService(),
@@ -1166,7 +1127,7 @@ final class AppState {
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
         self.keychainService = keychainService
-        self.updateService = updateService
+        self.appUpdateController = appUpdateController ?? SparkleUpdateController()
         self.launchAtLoginService = launchAtLoginService
         self.diagnosticBundleService = diagnosticBundleService
         self.issueReportUploadService = issueReportUploadService
@@ -1178,6 +1139,9 @@ final class AppState {
         self.runtimeServicesEnabled = startServices
         self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
+        self.appUpdateController.onStateChange = { [weak self] in
+            self?.refreshUpdateControllerState()
+        }
         self.audioCaptureService.onLevelsUpdate = { [weak self] levels in
             Task { @MainActor [weak self] in
                 self?.handleAudioLevelsUpdate(levels)
@@ -1188,6 +1152,7 @@ final class AppState {
         loadHistory()
         loadGeneralSettings()
         loadLLMSettings()
+        refreshUpdateControllerState()
         refreshInputDevices()
         refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
@@ -1890,201 +1855,27 @@ final class AppState {
         }
     }
 
-    func startAutomaticUpdateChecks() {
-        guard automaticUpdateTimer == nil else {
-            return
-        }
-
-        AppLogger.shared.log(.info, "automatic update checks started interval=\(Int(Self.automaticUpdateCheckInterval))s")
-
-        Task { @MainActor [weak self] in
-            await self?.performAutomaticUpdateCheckIfEligible()
-        }
-
-        let timer = Timer.scheduledTimer(withTimeInterval: Self.automaticUpdateCheckInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.performAutomaticUpdateCheckIfEligible()
-            }
-        }
-        timer.tolerance = Self.automaticUpdateTimerTolerance
-        automaticUpdateTimer = timer
+    func startUpdateController() {
+        AppLogger.shared.log(.info, "sparkle updater start")
+        appUpdateController.start()
+        refreshUpdateControllerState()
     }
 
-    func performAutomaticUpdateCheckIfEligible(now: Date? = nil) async {
-        let now = now ?? nowProvider()
-        guard shouldPerformAutomaticUpdateCheck(now: now) else {
-            return
-        }
-
-        lastAutomaticUpdateAttemptAt = now
-        await checkForUpdates(background: true)
+    func checkForUpdates() {
+        AppLogger.shared.log(.info, "sparkle updater manual check")
+        appUpdateController.checkForUpdates()
+        refreshUpdateControllerState()
     }
 
-    func checkForUpdates(background: Bool) async {
-        guard updateStatus != .checking, updateStatus != .downloading else {
-            return
-        }
-
-        if !background, updateStatus == .downloaded, downloadedUpdateArchiveURL != nil {
-            AppLogger.shared.log(.info, "manual update check skipped: installer already cached")
-            return
-        }
-
-        let previousUpdateStatus = updateStatus
-        let previousUpdateStatusText = updateStatusText
-        let hadCachedDownloadedUpdate = previousUpdateStatus == .downloaded && downloadedUpdateArchiveURL != nil
-
-        updateStatus = .checking
-        if !background {
-            updateStatusText = "Checking for updates..."
-        }
-
-        guard let currentVersion = currentAppVersionProvider() else {
-            AppLogger.shared.log(.error, "update check failed: local app version missing")
-            if hadCachedDownloadedUpdate {
-                updateStatus = .downloaded
-                updateStatusText = previousUpdateStatusText
-            } else if background {
-                updateStatus = previousUpdateStatus
-                updateStatusText = previousUpdateStatusText
-            } else {
-                updateStatus = .error
-                updateStatusText = "Unable to read local app version."
-            }
-            return
-        }
-
-        do {
-            let result = try await updateService.checkForUpdate(currentVersion: currentVersion)
-            switch result {
-            case .upToDate:
-                availableUpdateRelease = nil
-                availableUpdateVersion = nil
-                downloadedUpdateArchiveURL = nil
-                if background {
-                    updateStatus = .idle
-                } else {
-                    updateStatus = .upToDate
-                    updateStatusText = "You're up to date."
-                }
-                AppLogger.shared.log(.info, "update check complete: up-to-date")
-            case let .updateAvailable(release):
-                availableUpdateRelease = release
-                availableUpdateVersion = release.versionTag
-                updateStatus = .available
-                updateStatusText = "Update available: \(release.versionTag)"
-                AppLogger.shared.log(.info, "update available: \(release.versionTag)")
-                await downloadLatestUpdateInBackground(release: release)
-            }
-        } catch {
-            AppLogger.shared.log(.warning, "update check failed: \(error.localizedDescription)")
-            if hadCachedDownloadedUpdate {
-                updateStatus = .downloaded
-                updateStatusText = previousUpdateStatusText
-            } else if background {
-                updateStatus = previousUpdateStatus
-                updateStatusText = previousUpdateStatusText
-            } else {
-                updateStatus = .error
-                updateStatusText = error.localizedDescription
-            }
-        }
+    func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
+        appUpdateController.automaticallyChecksForUpdates = enabled
+        refreshUpdateControllerState()
+        AppLogger.shared.log(.info, "sparkle automatic update checks set enabled=\(enabled)")
     }
 
-    func downloadAndOpenUpdate() async {
-        guard updateStatus != .downloading else {
-            return
-        }
-        guard let release = availableUpdateRelease else {
-            updateStatus = .error
-            updateStatusText = "No update is currently available."
-            return
-        }
-
-        if let downloadedUpdateArchiveURL {
-            if fileOpener(downloadedUpdateArchiveURL) {
-                updateStatus = .downloaded
-                updateStatusText = "Installer opened for \(release.versionTag)."
-                AppLogger.shared.log(.info, "opened downloaded installer: \(downloadedUpdateArchiveURL.path)")
-            } else {
-                updateStatus = .downloaded
-                updateStatusText = "Update is ready to install. Failed to open the installer. Try again."
-                AppLogger.shared.log(.error, "open downloaded installer failed: \(downloadedUpdateArchiveURL.path)")
-            }
-            return
-        }
-
-        updateStatus = .downloading
-        updateStatusText = "Downloading update..."
-        updateDownloadProgress = 0
-
-        do {
-            let archiveURL = try await updateService.downloadAndVerify(release: release)
-            downloadedUpdateArchiveURL = archiveURL
-            guard fileOpener(archiveURL) else {
-                updateStatus = .downloaded
-                updateDownloadProgress = 1
-                updateStatusText = "Update downloaded. Failed to open installer. Try again."
-                AppLogger.shared.log(.error, "update download complete but open failed: \(archiveURL.path)")
-                return
-            }
-            updateDownloadProgress = 1
-            updateStatus = .downloaded
-            updateStatusText = "Update downloaded. Installer opened."
-            AppLogger.shared.log(.info, "update download complete and opened: \(archiveURL.path)")
-        } catch {
-            updateStatus = .available
-            updateStatusText = error.localizedDescription
-            updateDownloadProgress = 0
-            AppLogger.shared.log(.error, "update download failed: \(error.localizedDescription)")
-        }
-    }
-
-    func openReleaseNotes() {
-        guard let release = availableUpdateRelease else {
-            return
-        }
-        NSWorkspace.shared.open(release.htmlURL)
-    }
-
-    private func downloadLatestUpdateInBackground(release: UpdateRelease) async {
-        guard updateStatus != .downloading else {
-            return
-        }
-
-        updateStatus = .downloading
-        updateStatusText = "Downloading update \(release.versionTag)..."
-        updateDownloadProgress = 0
-
-        do {
-            let archiveURL = try await updateService.downloadAndVerify(release: release)
-            downloadedUpdateArchiveURL = archiveURL
-            updateDownloadProgress = 1
-            updateStatus = .downloaded
-            updateStatusText = "Update \(release.versionTag) is ready to install."
-            AppLogger.shared.log(.info, "update predownload complete: \(archiveURL.path)")
-        } catch {
-            updateStatus = .available
-            updateStatusText = "Update available: \(release.versionTag)"
-            updateDownloadProgress = 0
-            downloadedUpdateArchiveURL = nil
-            AppLogger.shared.log(.warning, "update predownload failed: \(error.localizedDescription)")
-        }
-    }
-
-    private func shouldPerformAutomaticUpdateCheck(now: Date) -> Bool {
-        switch updateStatus {
-        case .checking, .downloading, .downloaded:
-            return false
-        case .idle, .upToDate, .available, .error:
-            break
-        }
-
-        guard let lastAutomaticUpdateAttemptAt else {
-            return true
-        }
-
-        return now.timeIntervalSince(lastAutomaticUpdateAttemptAt) >= Self.automaticUpdateCheckInterval
+    private func refreshUpdateControllerState() {
+        canCheckForUpdates = appUpdateController.canCheckForUpdates
+        automaticallyChecksForUpdates = appUpdateController.automaticallyChecksForUpdates
     }
 
     func postProcessTextIfEnabled(_ rawText: String) async -> String {
@@ -2683,7 +2474,7 @@ final class AppState {
             state: .init(
                 phase: phase.rawValue,
                 lastError: lastError.map { DiagnosticRedactor().redact($0) },
-                updateStatus: updateStatus.rawValue
+                updateStatus: "sparkle"
             ),
             permissions: .init(
                 microphone: hasMicPermission,

@@ -22,9 +22,17 @@ struct SuniyeApp: App {
     }
 }
 
-private extension ProcessInfo {
+extension ProcessInfo {
     var isRunningUnderXCTest: Bool {
         environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    var shouldStartUpdateController: Bool {
+        if isRunningUnderXCTest {
+            return false
+        }
+
+        return !CommandLine.arguments.contains { $0.hasPrefix("--e2e-") }
     }
 
     var shouldStartRuntimeServices: Bool {

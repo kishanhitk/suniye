@@ -108,6 +108,10 @@ if [[ -z "${BUILD_NUMBER}" ]]; then
   BUILD_NUMBER="${SUNIYE_BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-}}"
 fi
 
+if [[ -z "${BUILD_NUMBER}" ]] && git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_NUMBER="$(git -C "${ROOT_DIR}" rev-list --count HEAD)"
+fi
+
 if [[ -n "${BUILD_NUMBER}" ]] && [[ ! "${BUILD_NUMBER}" =~ ^[0-9]+$ ]]; then
   echo "Build number must be numeric, got: ${BUILD_NUMBER}" >&2
   exit 1
@@ -157,6 +161,25 @@ fi
 xcodebuild "${xcodebuild_args[@]}"
 
 APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/Suniye.app"
+SPARKLE_FRAMEWORK_PATH="${APP_PATH}/Contents/Frameworks/Sparkle.framework"
+if [[ -d "${SPARKLE_FRAMEWORK_PATH}" ]]; then
+  SPARKLE_FRAMEWORK_VERSION="$(readlink "${SPARKLE_FRAMEWORK_PATH}/Versions/Current" 2>/dev/null || true)"
+  if [[ -z "${SPARKLE_FRAMEWORK_VERSION}" || "${SPARKLE_FRAMEWORK_VERSION}" == /* || "${SPARKLE_FRAMEWORK_VERSION}" == *".."* ]]; then
+    SPARKLE_FRAMEWORK_VERSION="B"
+  fi
+
+  SPARKLE_UPDATER_DEST="${SPARKLE_FRAMEWORK_PATH}/Versions/${SPARKLE_FRAMEWORK_VERSION}/Updater.app"
+  SPARKLE_UPDATER_SOURCE="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/Sparkle.framework/Versions/${SPARKLE_FRAMEWORK_VERSION}/Updater.app"
+  if [[ ! -d "${SPARKLE_UPDATER_DEST}" ]]; then
+    if [[ ! -d "${SPARKLE_UPDATER_SOURCE}" ]]; then
+      echo "Sparkle Updater.app is missing from the embedded framework and the built framework product." >&2
+      exit 1
+    fi
+    /usr/bin/ditto "${SPARKLE_UPDATER_SOURCE}" "${SPARKLE_UPDATER_DEST}"
+    echo "Restored Sparkle Updater.app in embedded framework."
+  fi
+fi
+
 FINAL_APP_PATH="${APP_PATH}"
 SHOULD_CLEAN_DERIVED_APP="0"
 

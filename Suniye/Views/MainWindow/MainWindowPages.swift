@@ -21,29 +21,6 @@ struct DashboardPage: View {
                 }
             }
 
-            if appState.updateStatus == .downloaded {
-                SurfaceCard {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Update ready to install")
-                                .font(AppTypography.bodyMedium)
-                            Text(appState.updateStatusText)
-                                .font(AppTypography.subheadline)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                        }
-
-                        Spacer(minLength: 12)
-
-                        Button("Install Update") {
-                            Task {
-                                await appState.downloadAndOpenUpdate()
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-            }
-
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 DashboardMetricCard(icon: "waveform", iconTint: .blue, value: "\(appState.sessionCount)", label: "Sessions")
                 DashboardMetricCard(icon: "calendar", iconTint: .orange, value: "\(appState.todaySessionCount)", label: "Today")
@@ -916,48 +893,30 @@ struct GeneralPage: View {
 
                         CardDivider()
 
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(appState.updateStatusText)
-                                    .font(AppTypography.subheadline)
-                                    .foregroundStyle(appState.updateStatus == .error ? .red : MainWindowPalette.secondaryText)
+                        SettingsToggleRow(
+                            title: "Automatically Check for Updates",
+                            detail: "Suniye checks in the background and asks before installing.",
+                            isOn: Binding(
+                                get: { appState.automaticallyChecksForUpdates },
+                                set: { appState.setAutomaticallyChecksForUpdates($0) }
+                            )
+                        )
 
-                                if appState.updateStatus == .downloading {
-                                    ProgressView(value: appState.updateDownloadProgress)
-                                        .progressViewStyle(.linear)
-                                }
+                        CardDivider()
+
+                        HStack(spacing: 8) {
+                            Button("Report a Problem") {
+                                appState.openIssueReportWindow()
                             }
+                            .buttonStyle(.bordered)
 
                             Spacer(minLength: 12)
 
-                            HStack(spacing: 8) {
-                                Button("Report a Problem") {
-                                    appState.openIssueReportWindow()
-                                }
-                                .buttonStyle(.bordered)
-
-                                if appState.updateStatus == .available || appState.updateStatus == .downloaded {
-                                    Button("Release Notes") {
-                                        appState.openReleaseNotes()
-                                    }
-                                    .buttonStyle(.bordered)
-
-                                    Button(appState.updateStatus == .downloaded ? "Install" : "Download") {
-                                        Task {
-                                            await appState.downloadAndOpenUpdate()
-                                        }
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                } else {
-                                    Button(appState.updateStatus == .checking ? "Checking..." : "Check for Updates") {
-                                        Task {
-                                            await appState.checkForUpdates(background: false)
-                                        }
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .disabled(appState.updateStatus == .checking || appState.updateStatus == .downloading)
-                                }
+                            Button("Check for Updates") {
+                                appState.checkForUpdates()
                             }
+                            .buttonStyle(.bordered)
+                            .disabled(!appState.canCheckForUpdates)
                         }
                     }
                 }

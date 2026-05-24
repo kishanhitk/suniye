@@ -19,6 +19,10 @@ xattr -dr com.apple.quarantine /Applications/Suniye.app
 - Check network access to GitHub Releases.
 - Ensure enough disk space in `~/Library/Application Support/Suniye/models`.
 
+## Update check fails
+- Check network access to `https://suniye.kishans.in/appcast.xml`.
+- If the appcast is unavailable, check that the latest GitHub release includes `appcast.xml`.
+
 ## Downloaded the wrong model during onboarding
 - Open the app settings and go to `ASR Model`.
 - Install the model you want, then click `Use Model`.

@@ -26,11 +26,17 @@
 	<string>Suniye needs microphone access to capture dictation.</string>
 	<key>SuniyeIssueReportEndpointURL</key>
 	<string>https://suniye.kishans.in/api/issue-reports</string>
-	<key>VSUpdatePreferredAssetName</key>
-	<string>Suniye.dmg</string>
-	<key>VSUpdateRepoName</key>
-	<string>suniye</string>
-	<key>VSUpdateRepoOwner</key>
-	<string>kishanhitk</string>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://suniye.kishans.in/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>u4x493+uxEBa64/ypY9EWf5GZfVgA67NwXswhnKNaaw=</string>
+	<key>SUShowReleaseNotes</key>
+	<true/>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>
