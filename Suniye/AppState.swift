@@ -1094,6 +1094,7 @@ final class AppState {
     private let nowProvider: () -> Date
     private let fileOpener: (URL) -> Bool
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
+    private let temporaryFileCleanupScheduler: (URL) -> Void
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
 
@@ -1145,6 +1146,12 @@ final class AppState {
             panel.canCreateDirectories = true
             return panel.runModal() == .OK ? panel.url : nil
         },
+        temporaryFileCleanupScheduler: @escaping (URL) -> Void = { url in
+            Task.detached(priority: .utility) {
+                try? await Task.sleep(nanoseconds: 5 * 60 * 1_000_000_000)
+                try? FileManager.default.removeItem(at: url)
+            }
+        },
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
     ) {
@@ -1167,6 +1174,7 @@ final class AppState {
         self.nowProvider = nowProvider
         self.fileOpener = fileOpener
         self.issueReportDiagnosticsDestinationPicker = issueReportDiagnosticsDestinationPicker
+        self.temporaryFileCleanupScheduler = temporaryFileCleanupScheduler
         self.runtimeServicesEnabled = startServices
         self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
@@ -1805,13 +1813,12 @@ final class AppState {
                 includeDiagnosticsOverride: true
             )
             let diagnosticsURL = try await makeDiagnosticBundle(payload: payload)
-            defer {
-                try? FileManager.default.removeItem(at: diagnosticsURL)
-            }
             if fileOpener(diagnosticsURL) {
+                temporaryFileCleanupScheduler(diagnosticsURL)
                 issueReportStatus = .idle
                 issueReportDiagnosticsMessage = "Diagnostics opened for review."
             } else {
+                try? FileManager.default.removeItem(at: diagnosticsURL)
                 issueReportStatus = .failed("Could not open diagnostics.")
             }
         } catch {

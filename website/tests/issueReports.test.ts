@@ -158,6 +158,26 @@ describe("issue report endpoint", () => {
     });
   });
 
+  test("rejects oversized streamed requests without Content-Length", async () => {
+    const response = await handleIssueReportRequest(
+      new Request("https://suniye.test/api/issue-reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "multipart/form-data; boundary=test",
+        },
+        body: new Blob([new Uint8Array(11 * 1024 * 1024)]),
+      }),
+      linearConfig(),
+      failingFetch
+    );
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({
+      success: false,
+      error: { code: "request_too_large" },
+    });
+  });
+
   test("rejects rate-limited requests before parsing the form", async () => {
     const store = new MemoryRateLimitStore();
     await store.put("unused", "{}", 1);
@@ -190,6 +210,52 @@ describe("issue report endpoint", () => {
       success: false,
       error: { code: "rate_limited" },
     });
+  });
+
+  test("rate limit key cannot be bypassed by rotating User-Agent", async () => {
+    const store = new MemoryRateLimitStore();
+    const config = linearConfig({
+      rateLimit: {
+        store,
+        maxRequests: 1,
+        windowSeconds: 60,
+      },
+    });
+
+    const first = await handleIssueReportRequest(
+      makeRateLimitedProbeRequest("203.0.113.2", "Suniye/1.0"),
+      config,
+      failingFetch
+    );
+    const second = await handleIssueReportRequest(
+      makeRateLimitedProbeRequest("203.0.113.2", "DifferentAgent/1.0"),
+      config,
+      failingFetch
+    );
+
+    expect(first.status).toBe(415);
+    expect(second.status).toBe(429);
+  });
+
+  test("serializes concurrent rate limit updates for the same key", async () => {
+    const store = new MemoryRateLimitStore();
+    store.getDelayMs = 10;
+    store.putDelayMs = 10;
+
+    const config = linearConfig({
+      rateLimit: {
+        store,
+        maxRequests: 1,
+        windowSeconds: 60,
+      },
+    });
+
+    const responses = await Promise.all([
+      handleIssueReportRequest(makeRateLimitedProbeRequest("203.0.113.3", "Suniye/1.0"), config, failingFetch),
+      handleIssueReportRequest(makeRateLimitedProbeRequest("203.0.113.3", "DifferentAgent/1.0"), config, failingFetch),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([415, 429]);
   });
 
   test("rejects malformed nested metadata as invalid payload", async () => {
@@ -401,19 +467,39 @@ function linearConfig(overrides: Partial<IssueReportEndpointConfig> = {}): Issue
   };
 }
 
+function makeRateLimitedProbeRequest(ip: string, userAgent: string): Request {
+  return new Request("https://suniye.test/api/issue-reports", {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain",
+      "CF-Connecting-IP": ip,
+      "User-Agent": userAgent,
+    },
+    body: "probe",
+  });
+}
+
 async function failingFetch(): Promise<Response> {
   throw new Error("fetch should not be called");
 }
 
 class MemoryRateLimitStore {
   nextGetValue: string | null = null;
+  getDelayMs = 0;
+  putDelayMs = 0;
   values = new Map<string, string>();
 
   async get(key: string): Promise<string | null> {
+    if (this.getDelayMs > 0) {
+      await Bun.sleep(this.getDelayMs);
+    }
     return this.nextGetValue ?? this.values.get(key) ?? null;
   }
 
   async put(key: string, value: string, _ttlSeconds?: number): Promise<void> {
+    if (this.putDelayMs > 0) {
+      await Bun.sleep(this.putDelayMs);
+    }
     this.values.set(key, value);
   }
 }

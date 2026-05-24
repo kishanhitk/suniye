@@ -161,14 +161,14 @@ export async function handleIssueReportRequest(
     return jsonResponse(errorResponse("invalid_content_type", "Expected multipart/form-data."), 415);
   }
 
-  const contentLength = Number(request.headers.get("Content-Length") ?? "0");
-  if (Number.isFinite(contentLength) && contentLength > maxRequestBytes) {
-    return jsonResponse(errorResponse("request_too_large", "Issue report is too large."), 413);
+  const boundedRequest = await requestWithSizeLimit(request, maxRequestBytes);
+  if (boundedRequest instanceof Response) {
+    return boundedRequest;
   }
 
   let form: FormData;
   try {
-    form = await request.formData();
+    form = await boundedRequest.formData();
   } catch {
     return jsonResponse(errorResponse("invalid_form", "Could not read the report form."), 400);
   }
@@ -519,24 +519,82 @@ async function checkRateLimit(
   const key = await makeRateLimitKey(request);
 
   try {
-    const current = parseRateLimitRecord(await store.get(key), now, windowSeconds);
-    if (current.count >= maxRequests) {
-      console.warn("Issue report rate limit exceeded", { key, resetAt: current.resetAt });
-      return jsonResponse(errorResponse("rate_limited", "Too many issue reports. Please try again later."), 429);
-    }
+    return await withRateLimitKeyLock(key, async () => {
+      const current = parseRateLimitRecord(await store.get(key), now, windowSeconds);
+      if (current.count >= maxRequests) {
+        console.warn("Issue report rate limit exceeded", { key, resetAt: current.resetAt });
+        return jsonResponse(errorResponse("rate_limited", "Too many issue reports. Please try again later."), 429);
+      }
 
-    await store.put(
-      key,
-      JSON.stringify({ count: current.count + 1, resetAt: current.resetAt }),
-      Math.max(1, current.resetAt - now)
-    );
-    return undefined;
+      await store.put(
+        key,
+        JSON.stringify({ count: current.count + 1, resetAt: current.resetAt }),
+        Math.max(1, current.resetAt - now)
+      );
+      return undefined;
+    });
   } catch (error) {
     console.error("Issue report rate limiter failed", error);
     return config?.failureMode === "open"
       ? undefined
       : jsonResponse(errorResponse("rate_limiter_unavailable", "Issue reporting is temporarily unavailable."), 503);
   }
+}
+
+async function requestWithSizeLimit(request: Request, maxBytes: number): Promise<Request | Response> {
+  const contentLengthHeader = request.headers.get("Content-Length");
+  if (contentLengthHeader) {
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      return jsonResponse(errorResponse("request_too_large", "Issue report is too large."), 413);
+    }
+  }
+
+  if (!request.body) {
+    return request;
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value) {
+        continue;
+      }
+
+      receivedBytes += value.byteLength;
+      if (receivedBytes > maxBytes) {
+        await reader.cancel();
+        return jsonResponse(errorResponse("request_too_large", "Issue report is too large."), 413);
+      }
+
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(receivedBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  const headers = new Headers(request.headers);
+  headers.delete("Content-Length");
+
+  return new Request(request.url, {
+    method: request.method,
+    headers,
+    body,
+  });
 }
 
 function defaultRateLimitStore(): IssueReportRateLimitStore | undefined {
@@ -564,6 +622,29 @@ function defaultRateLimitStore(): IssueReportRateLimitStore | undefined {
   };
 }
 
+const rateLimitKeyLocks = new Map<string, Promise<void>>();
+
+async function withRateLimitKeyLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  const previousLock = rateLimitKeyLocks.get(key) ?? Promise.resolve();
+  let releaseCurrentLock: () => void = () => {};
+  const currentLock = new Promise<void>((resolve) => {
+    releaseCurrentLock = resolve;
+  });
+  const nextLock = previousLock.catch(() => undefined).then(() => currentLock);
+  rateLimitKeyLocks.set(key, nextLock);
+
+  await previousLock.catch(() => undefined);
+
+  try {
+    return await operation();
+  } finally {
+    releaseCurrentLock();
+    if (rateLimitKeyLocks.get(key) === nextLock) {
+      rateLimitKeyLocks.delete(key);
+    }
+  }
+}
+
 function rateLimitCacheRequest(key: string): Request {
   return new Request(`https://suniye-rate-limit.invalid/issue-reports/${encodeURIComponent(key)}`);
 }
@@ -572,10 +653,9 @@ async function makeRateLimitKey(request: Request): Promise<string> {
   const ip = request.headers.get("CF-Connecting-IP")
     ?? request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim()
     ?? "unknown";
-  const userAgent = request.headers.get("User-Agent")?.slice(0, 200) ?? "unknown";
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(`${ip}\n${userAgent}`)
+    new TextEncoder().encode(ip)
   );
   const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
   return hash.slice(0, 32);

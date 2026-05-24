@@ -145,23 +145,29 @@ final class AppStateIssueReportTests: XCTestCase {
         XCTAssertEqual(uploadService.submissions.count, 0)
     }
 
-    func testReviewIssueReportDiagnosticsRemovesTemporaryArchiveAfterOpening() async throws {
+    func testReviewIssueReportDiagnosticsSchedulesTemporaryArchiveCleanupAfterOpening() async throws {
         let diagnosticsURL = try makeTemporaryDiagnosticsArchive()
+        defer { try? FileManager.default.removeItem(at: diagnosticsURL) }
         let diagnosticService = StubDiagnosticBundleService(result: .success(diagnosticsURL))
         var openedURL: URL?
+        var scheduledCleanupURL: URL?
         let appState = makeTestAppState(
             diagnosticBundleService: diagnosticService,
             fileOpener: { url in
                 openedURL = url
                 XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
                 return true
+            },
+            temporaryFileCleanupScheduler: { url in
+                scheduledCleanupURL = url
             }
         )
 
         await appState.reviewIssueReportDiagnostics()
 
         XCTAssertEqual(openedURL, diagnosticsURL)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: diagnosticsURL.path))
+        XCTAssertEqual(scheduledCleanupURL, diagnosticsURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: diagnosticsURL.path))
         XCTAssertEqual(appState.issueReportStatus, .idle)
         XCTAssertEqual(appState.issueReportDiagnosticsMessage, "Diagnostics opened for review.")
     }

@@ -386,6 +386,7 @@ func makeTestAppState(
     nowProvider: @escaping () -> Date = Date.init,
     fileOpener: @escaping (URL) -> Bool = { _ in true },
     issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
+    temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
     startServices: Bool = false,
     llmE2EMode: LLME2EMode = .none
 ) -> AppState {
@@ -409,6 +410,7 @@ func makeTestAppState(
         nowProvider: nowProvider,
         fileOpener: fileOpener,
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
+        temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
         startServices: startServices,
         llmE2EMode: llmE2EMode
     )
