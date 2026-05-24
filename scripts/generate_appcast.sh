@@ -5,13 +5,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${ROOT_DIR}/dist"
 VERSION=""
 DOWNLOAD_URL_PREFIX=""
+APPCAST_CHANNEL=""
 SPARKLE_ACCOUNT="${SPARKLE_ACCOUNT:-suniye}"
 PRIVATE_KEY_FILE=""
 CREATED_PRIVATE_KEY_FILE=0
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/generate_appcast.sh --version vX.Y.Z [--dist-dir <dir>] [--download-url-prefix <url>] [--private-key-file <path>]
+Usage: scripts/generate_appcast.sh --version vX.Y.Z [--dist-dir <dir>] [--download-url-prefix <url>] [--channel <name>] [--private-key-file <path>]
 USAGE
 }
 
@@ -27,6 +28,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --download-url-prefix)
       DOWNLOAD_URL_PREFIX="$2"
+      shift 2
+      ;;
+    --channel)
+      APPCAST_CHANNEL="$2"
       shift 2
       ;;
     --private-key-file)
@@ -48,6 +53,11 @@ done
 if [[ -z "${VERSION}" ]]; then
   echo "--version is required" >&2
   usage >&2
+  exit 1
+fi
+
+if [[ -n "${APPCAST_CHANNEL}" && ! "${APPCAST_CHANNEL}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "Appcast channel may only contain letters, numbers, dots, underscores, and dashes: ${APPCAST_CHANNEL}" >&2
   exit 1
 fi
 
@@ -106,19 +116,25 @@ cleanup() {
 trap cleanup EXIT
 cp "${DMG_PATH}" "${APPCAST_WORK_DIR}/Suniye.dmg"
 
+generate_args=(
+  --download-url-prefix "${DOWNLOAD_URL_PREFIX}"
+  --maximum-versions 1
+  -o "${APPCAST_PATH}"
+)
+
+if [[ -n "${APPCAST_CHANNEL}" ]]; then
+  generate_args+=(--channel "${APPCAST_CHANNEL}")
+fi
+
 if [[ "${PRIVATE_KEY_FILE}" == keychain:* ]]; then
   "${GENERATE_APPCAST}" \
     --account "${SPARKLE_ACCOUNT}" \
-    --download-url-prefix "${DOWNLOAD_URL_PREFIX}" \
-    --maximum-versions 1 \
-    -o "${APPCAST_PATH}" \
+    "${generate_args[@]}" \
     "${APPCAST_WORK_DIR}"
 else
   "${GENERATE_APPCAST}" \
     --ed-key-file "${PRIVATE_KEY_FILE}" \
-    --download-url-prefix "${DOWNLOAD_URL_PREFIX}" \
-    --maximum-versions 1 \
-    -o "${APPCAST_PATH}" \
+    "${generate_args[@]}" \
     "${APPCAST_WORK_DIR}"
 fi
 

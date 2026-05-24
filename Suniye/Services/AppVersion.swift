@@ -44,13 +44,21 @@ struct SemVer: Comparable, Equatable {
 struct AppVersion {
     let marketing: SemVer
     let build: Int?
+    let channel: UpdateChannel
+
+    init(marketing: SemVer, build: Int?, channel: UpdateChannel = .stable) {
+        self.marketing = marketing
+        self.build = build
+        self.channel = channel
+    }
 
     var displayString: String {
         let version = "\(marketing.major).\(marketing.minor).\(marketing.patch)"
+        let channelSuffix = channel == .tip ? " Tip" : ""
         if let build {
-            return "v\(version) (\(build))"
+            return "v\(version) (\(build))\(channelSuffix)"
         }
-        return "v\(version)"
+        return "v\(version)\(channelSuffix)"
     }
 
     static func fromBundle(_ bundle: Bundle = .main) -> AppVersion? {
@@ -63,6 +71,8 @@ struct AppVersion {
 
         let buildRaw = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         let build = buildRaw.flatMap(Int.init)
-        return AppVersion(marketing: marketing, build: build)
+        let channelRaw = bundle.object(forInfoDictionaryKey: "SuniyeBuildChannel") as? String
+        let channel = channelRaw.flatMap(UpdateChannel.init(rawValue:)) ?? .stable
+        return AppVersion(marketing: marketing, build: build, channel: channel)
     }
 }

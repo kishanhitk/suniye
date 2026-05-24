@@ -13,6 +13,7 @@ BUILD_DESTINATION=""
 BUILD_ARCH=""
 VERSION=""
 BUILD_NUMBER=""
+BUILD_CHANNEL="${SUNIYE_BUILD_CHANNEL:-stable}"
 LOCAL_CODESIGN_IDENTITY=""
 
 usage() {
@@ -26,8 +27,24 @@ Options:
   --output-dir <dir>          Copy built app to a deterministic output directory
   --version <vX.Y.Z>          Override MARKETING_VERSION in the build
   --build-number <number>     Override CURRENT_PROJECT_VERSION in the build
+  --build-channel <stable|tip> Embed the installed build channel
   --open            Open the resulting app after build/install
 USAGE
+}
+
+channel_rank() {
+  case "$1" in
+    tip)
+      echo "1"
+      ;;
+    stable)
+      echo "8"
+      ;;
+    *)
+      echo "Unknown build channel: $1" >&2
+      return 1
+      ;;
+  esac
 }
 
 while [[ $# -gt 0 ]]; do
@@ -55,6 +72,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --build-number)
       BUILD_NUMBER="$2"
+      shift
+      ;;
+    --build-channel)
+      BUILD_CHANNEL="$2"
       shift
       ;;
     --open)
@@ -104,12 +125,15 @@ if ! xcodebuild -version >/dev/null 2>&1; then
   exit 1
 fi
 
+CHANNEL_RANK="$(channel_rank "${BUILD_CHANNEL}")"
+
 if [[ -z "${BUILD_NUMBER}" ]]; then
-  BUILD_NUMBER="${SUNIYE_BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-}}"
+  BUILD_NUMBER="${SUNIYE_BUILD_NUMBER:-}"
 fi
 
 if [[ -z "${BUILD_NUMBER}" ]] && git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  BUILD_NUMBER="$(git -C "${ROOT_DIR}" rev-list --count HEAD)"
+  COMMIT_COUNT="$(git -C "${ROOT_DIR}" rev-list --count HEAD)"
+  BUILD_NUMBER="$((COMMIT_COUNT * 10 + CHANNEL_RANK))"
 fi
 
 if [[ -n "${BUILD_NUMBER}" ]] && [[ ! "${BUILD_NUMBER}" =~ ^[0-9]+$ ]]; then
@@ -149,6 +173,8 @@ fi
 if [[ -n "${BUILD_NUMBER}" ]]; then
   xcodebuild_args+=(CURRENT_PROJECT_VERSION="${BUILD_NUMBER}")
 fi
+
+xcodebuild_args+=(SUNIYE_BUILD_CHANNEL="${BUILD_CHANNEL}")
 
 if [[ -n "${LOCAL_CODESIGN_IDENTITY}" ]]; then
   echo "Using local signing identity: ${LOCAL_CODESIGN_IDENTITY}"

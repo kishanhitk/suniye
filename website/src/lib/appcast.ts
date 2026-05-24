@@ -1,9 +1,10 @@
-const DEFAULT_APPCAST_URL = "https://github.com/kishanhitk/suniye/releases/latest/download/appcast.xml";
+export const STABLE_APPCAST_URL = "https://github.com/kishanhitk/suniye/releases/latest/download/appcast.xml";
+export const TIP_APPCAST_URL = "https://github.com/kishanhitk/suniye/releases/download/tip/appcast.xml";
 
 export async function handleAppcastRequest(
   request: Request,
   fetcher: typeof fetch = fetch,
-  appcastURL: string = DEFAULT_APPCAST_URL
+  appcastURL: string = STABLE_APPCAST_URL
 ): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Method not allowed", {
@@ -37,4 +38,11 @@ export async function handleAppcastRequest(
       "Cache-Control": "public, max-age=300, s-maxage=300, stale-while-revalidate=3600",
     },
   });
+}
+
+export function handleTipAppcastRequest(
+  request: Request,
+  fetcher: typeof fetch = fetch
+): Promise<Response> {
+  return handleAppcastRequest(request, fetcher, TIP_APPCAST_URL);
 }

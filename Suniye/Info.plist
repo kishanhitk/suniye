@@ -24,8 +24,6 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Suniye needs microphone access to capture dictation.</string>
-	<key>SuniyeIssueReportEndpointURL</key>
-	<string>https://suniye.kishans.in/api/issue-reports</string>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
@@ -38,5 +36,9 @@
 	<true/>
 	<key>SUVerifyUpdateBeforeExtraction</key>
 	<true/>
+	<key>SuniyeBuildChannel</key>
+	<string>$(SUNIYE_BUILD_CHANNEL)</string>
+	<key>SuniyeIssueReportEndpointURL</key>
+	<string>https://suniye.kishans.in/api/issue-reports</string>
 </dict>
 </plist>

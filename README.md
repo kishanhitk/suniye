@@ -73,11 +73,15 @@ All supported models run offline on your Mac and are managed from the `ASR Model
 
 ## Updating
 
-Suniye checks for updates automatically in the background. When an update is available:
+Suniye checks for updates automatically in the background. Stable releases are the default. To test the latest `main` branch build, open `General` settings and switch **Update Channel** from `Stable` to `Tip`.
+
+When an update is available:
 
 1. Open the menu bar icon.
 2. Click **Check for Updates...** if you want to check manually.
 3. Follow the native updater prompt to install and relaunch.
+
+Switching from Tip back to Stable does not downgrade the app. Sparkle will offer the next stable release once it has a newer build number than the installed tip build.
 
 ### Sparkle signing key recovery
 

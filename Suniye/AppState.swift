@@ -246,6 +246,17 @@ final class AppState {
             }
         }
     }
+    var updateChannel: UpdateChannel = .stable {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != updateChannel else {
+                return
+            }
+
+            persistGeneralSettings()
+            applyUpdateChannelToController()
+            onStateChange?()
+        }
+    }
     var appVersionText: String {
         currentAppVersionProvider()?.displayString ?? "Unknown"
     }
@@ -1873,9 +1884,18 @@ final class AppState {
         AppLogger.shared.log(.info, "sparkle automatic update checks set enabled=\(enabled)")
     }
 
+    func setUpdateChannel(_ channel: UpdateChannel) {
+        updateChannel = channel
+        AppLogger.shared.log(.info, "sparkle update channel set channel=\(channel.rawValue)")
+    }
+
     private func refreshUpdateControllerState() {
         canCheckForUpdates = appUpdateController.canCheckForUpdates
         automaticallyChecksForUpdates = appUpdateController.automaticallyChecksForUpdates
+    }
+
+    private func applyUpdateChannelToController() {
+        appUpdateController.updateChannel = updateChannel
     }
 
     func postProcessTextIfEnabled(_ rawText: String) async -> String {
@@ -2317,9 +2337,11 @@ final class AppState {
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
         floatingIndicatorPlacement = settings.floatingIndicatorPlacement
         selectedASRModelID = settings.selectedASRModelID
+        updateChannel = settings.updateChannel
         hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
         hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
         isHydratingGeneralSettings = false
+        applyUpdateChannelToController()
         normalizeOnboardingSettingsIfNeeded(loadedSettings: settings)
     }
 
@@ -2338,7 +2360,8 @@ final class AppState {
             floatingIndicatorPlacement: floatingIndicatorPlacement,
             hasSeenOnboardingWelcome: hasSeenOnboardingWelcome,
             hasCompletedCoreOnboarding: hasCompletedCoreOnboarding,
-            selectedASRModelID: selectedASRModelID
+            selectedASRModelID: selectedASRModelID,
+            updateChannel: updateChannel
         )
     }
 
@@ -2474,7 +2497,7 @@ final class AppState {
             state: .init(
                 phase: phase.rawValue,
                 lastError: lastError.map { DiagnosticRedactor().redact($0) },
-                updateStatus: "sparkle"
+                updateStatus: "sparkle-\(updateChannel.rawValue)"
             ),
             permissions: .init(
                 microphone: hasMicPermission,

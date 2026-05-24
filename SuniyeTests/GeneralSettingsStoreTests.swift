@@ -17,7 +17,8 @@ final class GeneralSettingsStoreTests: XCTestCase {
             floatingIndicatorPlacement: FloatingIndicatorPlacement(centerXRatio: 0.2, bottomYRatio: 0.15),
             hasSeenOnboardingWelcome: true,
             hasCompletedCoreOnboarding: true,
-            selectedASRModelID: .senseVoice
+            selectedASRModelID: .senseVoice,
+            updateChannel: .tip
         )
 
         store.save(settings)
@@ -36,7 +37,8 @@ final class GeneralSettingsStoreTests: XCTestCase {
           "echoCancellationEnabled": true,
           "hasSeenOnboardingWelcome": true,
           "hasCompletedCoreOnboarding": true,
-          "selectedASRModelID": "futureModel"
+          "selectedASRModelID": "futureModel",
+          "updateChannel": "futureChannel"
         }
         """
 
@@ -50,6 +52,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertEqual(loaded.hasSeenOnboardingWelcome, true)
         XCTAssertEqual(loaded.hasCompletedCoreOnboarding, true)
         XCTAssertEqual(loaded.selectedASRModelID, .parakeetV3)
+        XCTAssertEqual(loaded.updateChannel, .stable)
     }
 
     func testHotkeyDisplayStringsMatchUIExamples() {
@@ -90,5 +93,6 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertFalse(settings.hideFloatingIndicatorWhenIdle)
         XCTAssertNil(settings.floatingIndicatorPlacement)
         XCTAssertFalse(settings.soundFeedbackEnabled)
+        XCTAssertEqual(settings.updateChannel, .stable)
     }
 }

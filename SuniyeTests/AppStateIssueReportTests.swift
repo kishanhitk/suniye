@@ -48,6 +48,7 @@ final class AppStateIssueReportTests: XCTestCase {
         )
         XCTAssertEqual(uploadService.submissions.first?.payload.permissions.accessibility, false)
         XCTAssertEqual(uploadService.submissions.first?.payload.app.version, "v0.0.8 (8)")
+        XCTAssertEqual(uploadService.submissions.first?.payload.state.updateStatus, "sparkle-stable")
     }
 
     func testSubmitIssueReportCanOmitDiagnostics() async {

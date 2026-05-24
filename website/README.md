@@ -35,4 +35,9 @@ The endpoint applies a server-side Cloudflare Cache API rate limit before any Li
 
 ## Sparkle appcast endpoint
 
-The Cloudflare deployment hosts `GET /appcast.xml` for Sparkle update checks. It proxies the `appcast.xml` asset from the latest GitHub release and applies short edge cache headers so installed apps can keep using a stable `https://suniye.kishans.in/appcast.xml` feed URL.
+The Cloudflare deployment hosts Sparkle update feeds:
+
+- `GET /appcast.xml` proxies the `appcast.xml` asset from the latest stable GitHub release.
+- `GET /appcast-tip.xml` proxies the mutable `appcast.xml` asset from the `tip` prerelease.
+
+Both endpoints apply short edge cache headers so installed apps can keep using stable `https://suniye.kishans.in/...` feed URLs.

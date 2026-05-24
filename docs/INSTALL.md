@@ -39,7 +39,9 @@ During setup:
 - After onboarding, you can open `ASR Model` in settings to install or switch to another supported local model.
 
 ## 6) Update flow
-Suniye checks for updates in the background.
+Suniye checks for updates in the background. The default update channel is `Stable`.
+
+To test the latest `main` branch build, open `General` settings and switch `Update Channel` to `Tip`. Switching back to `Stable` changes future checks, but Sparkle will not downgrade an installed tip build.
 
 If a newer version is found:
 1. Open the menu bar menu.
