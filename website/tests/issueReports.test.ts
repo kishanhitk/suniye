@@ -276,11 +276,12 @@ describe("issue report endpoint", () => {
   });
 
   test("creates Linear upload, issue, and attachment", async () => {
-    const calls: Array<{ url: string; body?: string; method?: string }> = [];
+    const calls: Array<{ url: string; authorization?: string | null; body?: string; method?: string }> = [];
     const fetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const url = String(input);
       calls.push({
         url,
+        authorization: new Headers(init?.headers).get("Authorization"),
         method: init?.method,
         body: typeof init?.body === "string" ? init.body : undefined,
       });
@@ -357,6 +358,11 @@ describe("issue report endpoint", () => {
       "https://api.linear.app/graphql",
       "https://api.linear.app/graphql",
     ]);
+    expect(
+      calls
+        .filter((call) => call.url === "https://api.linear.app/graphql")
+        .map((call) => call.authorization)
+    ).toEqual(["linear", "linear", "linear"]);
   });
 
   test("returns created issue when attachment creation fails", async () => {

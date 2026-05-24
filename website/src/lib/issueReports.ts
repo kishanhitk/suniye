@@ -475,7 +475,7 @@ async function linearGraphQL<T>(
   const response = await fetcher("https://api.linear.app/graphql", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${config.linearApiKey}`,
+      Authorization: config.linearApiKey,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
