@@ -33,7 +33,7 @@ enum IssueReportSubmissionStatus: Equatable, Sendable {
     case idle
     case preparing
     case sending
-    case sent(identifier: String, url: URL?)
+    case sent
     case failed(String)
 
     var isBusy: Bool {

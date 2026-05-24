@@ -19,7 +19,9 @@ final class IssueReportWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let content = IssueReportView(appState: appState)
+        let content = IssueReportView(appState: appState) { [weak self] in
+            self?.window?.performClose(nil)
+        }
             .frame(minWidth: 560, minHeight: 580)
         let host = NSHostingView(rootView: content)
 

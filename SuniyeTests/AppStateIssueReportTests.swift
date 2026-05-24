@@ -30,12 +30,10 @@ final class AppStateIssueReportTests: XCTestCase {
 
         await appState.submitIssueReport()
 
-        guard case let .sent(identifier, url) = appState.issueReportStatus else {
+        guard case .sent = appState.issueReportStatus else {
             XCTFail("Expected sent status")
             return
         }
-        XCTAssertEqual(identifier, "KIS-128")
-        XCTAssertEqual(url?.absoluteString, "https://linear.app/kishan/issue/KIS-128/report")
         XCTAssertEqual(diagnosticService.requests.count, 1)
         XCTAssertEqual(uploadService.submissions.count, 1)
         XCTAssertEqual(uploadService.submissions.first?.diagnosticsURL, diagnosticsURL)

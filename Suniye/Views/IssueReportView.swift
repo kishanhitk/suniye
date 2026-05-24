@@ -2,8 +2,21 @@ import SwiftUI
 
 struct IssueReportView: View {
     @Bindable var appState: AppState
+    var onClose: () -> Void = {}
 
     var body: some View {
+        Group {
+            switch appState.issueReportStatus {
+            case .sent:
+                successView
+            case .idle, .preparing, .sending, .failed:
+                formView
+            }
+        }
+        .background(MainWindowPalette.windowBackground)
+    }
+
+    private var formView: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
 
@@ -21,7 +34,6 @@ struct IssueReportView: View {
 
             footer
         }
-        .background(MainWindowPalette.windowBackground)
     }
 
     private var header: some View {
@@ -29,7 +41,7 @@ struct IssueReportView: View {
             Text("Report a Problem")
                 .font(AppTypography.pageTitle)
                 .foregroundStyle(Color.primary)
-            Text("Send a description and sanitized diagnostics directly to the Suniye Linear project.")
+            Text("Tell us what went wrong. You can include sanitized diagnostics if they would help us find the rough edge faster.")
                 .font(AppTypography.subheadline)
                 .foregroundStyle(MainWindowPalette.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -168,16 +180,8 @@ struct IssueReportView: View {
             Label("Sending report...", systemImage: "paperplane")
                 .font(AppTypography.subheadline)
                 .foregroundStyle(MainWindowPalette.secondaryText)
-        case let .sent(identifier, url):
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Report sent: \(identifier)", systemImage: "checkmark.circle.fill")
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(.green)
-                if let url {
-                    Link("Open in Linear", destination: url)
-                        .font(AppTypography.subheadline)
-                }
-            }
+        case .sent:
+            EmptyView()
         case let .failed(message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(AppTypography.subheadline)
@@ -195,16 +199,6 @@ struct IssueReportView: View {
             .disabled(appState.issueReportStatus.isBusy)
 
             Spacer()
-
-            if let message = appState.issueReportSubmitRequirementMessage,
-               !appState.issueReportStatus.isBusy {
-                Label(message, systemImage: "info.circle")
-                    .font(AppTypography.caption)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: 260, alignment: .trailing)
-            }
 
             Button("Send Report") {
                 Task { await appState.submitIssueReport() }
@@ -227,5 +221,42 @@ struct IssueReportView: View {
             .font(AppTypography.caption)
             .foregroundStyle(isEmpty ? MainWindowPalette.secondaryText : Color.red)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var successView: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 48)
+
+            VStack(spacing: 18) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 46, weight: .semibold))
+                    .foregroundStyle(.green)
+                    .accessibilityHidden(true)
+
+                VStack(spacing: 8) {
+                    Text("Thanks, we caught it.")
+                        .font(AppTypography.pageTitle)
+                        .multilineTextAlignment(.center)
+
+                    Text("The bug has been reported. You left us a clear trail, and we will take it from here.")
+                        .font(AppTypography.body)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button("Close") {
+                    appState.resetIssueReportDraft()
+                    onClose()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
+            .frame(maxWidth: 380)
+
+            Spacer(minLength: 48)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
     }
 }

@@ -1766,7 +1766,7 @@ final class AppState {
                 payload: payload,
                 diagnosticsURL: diagnosticsURL
             )
-            issueReportStatus = .sent(identifier: response.issueIdentifier, url: response.issueUrl)
+            issueReportStatus = .sent
             AppLogger.shared.log(.info, "issue report sent id=\(response.issueIdentifier) report_id=\(response.reportId)")
         } catch {
             issueReportStatus = .failed(issueReportErrorMessage(error))
