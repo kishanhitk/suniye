@@ -455,6 +455,7 @@ final class AppState {
     var issueReportIncludesDiagnostics = true
     var issueReportStatus: IssueReportSubmissionStatus = .idle
     var issueReportDiagnosticsMessage: String?
+    private var shouldResetIssueReportAfterClosedSubmission = false
 
     var canSubmitIssueReport: Bool {
         !issueReportStatus.isBusy
@@ -1726,8 +1727,38 @@ final class AppState {
     }
 
     func openIssueReportWindow() {
-        issueReportDiagnosticsMessage = nil
+        prepareIssueReportWindowPresentation()
         IssueReportWindowController.shared.show(appState: self)
+    }
+
+    func prepareIssueReportWindowPresentation() {
+        issueReportDiagnosticsMessage = nil
+
+        guard shouldResetIssueReportAfterClosedSubmission else {
+            return
+        }
+
+        switch issueReportStatus {
+        case .sent, .failed:
+            resetIssueReportDraft()
+        case .idle:
+            shouldResetIssueReportAfterClosedSubmission = false
+        case .preparing, .sending:
+            break
+        }
+    }
+
+    func issueReportWindowDidClose() {
+        switch issueReportStatus {
+        case .sent:
+            resetIssueReportDraft()
+        case .failed where shouldResetIssueReportAfterClosedSubmission:
+            resetIssueReportDraft()
+        case .preparing, .sending:
+            shouldResetIssueReportAfterClosedSubmission = true
+        case .idle, .failed:
+            shouldResetIssueReportAfterClosedSubmission = false
+        }
     }
 
     func resetIssueReportDraft() {
@@ -1738,6 +1769,7 @@ final class AppState {
         issueReportIncludesDiagnostics = true
         issueReportStatus = .idle
         issueReportDiagnosticsMessage = nil
+        shouldResetIssueReportAfterClosedSubmission = false
     }
 
     func submitIssueReport() async {
@@ -1766,7 +1798,7 @@ final class AppState {
                 payload: payload,
                 diagnosticsURL: diagnosticsURL
             )
-            issueReportStatus = .sent(identifier: response.issueIdentifier, url: response.issueUrl)
+            issueReportStatus = .sent
             AppLogger.shared.log(.info, "issue report sent id=\(response.issueIdentifier) report_id=\(response.reportId)")
         } catch {
             issueReportStatus = .failed(issueReportErrorMessage(error))

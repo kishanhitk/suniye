@@ -40,7 +40,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed st
 
 ## Reporting issues
 
-Use **Report a Problem** from the menu bar, the General page, or the Help menu. Suniye sends your description and an optional sanitized diagnostics bundle to the maintainer's Linear workspace. Diagnostics include app logs and metadata only; audio, transcripts, clipboard contents, API keys, model files, and full system logs are not included.
+Use **Report a Problem** from the menu bar, the General page, or the Help menu. Suniye sends your description and an optional sanitized diagnostics bundle to the maintainer's private issue queue. Diagnostics include app logs and metadata only; audio, transcripts, clipboard contents, API keys, model files, and full system logs are not included.
 
 ## Features
 

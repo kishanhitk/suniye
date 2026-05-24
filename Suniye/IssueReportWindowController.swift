@@ -6,11 +6,13 @@ final class IssueReportWindowController: NSObject, NSWindowDelegate {
     static let shared = IssueReportWindowController()
 
     private var window: NSWindow?
+    private weak var appState: AppState?
 
     private override init() {}
 
     func show(appState: AppState) {
         NSApp.setActivationPolicy(.regular)
+        self.appState = appState
 
         if let window {
             NSApp.activate(ignoringOtherApps: true)
@@ -19,7 +21,9 @@ final class IssueReportWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let content = IssueReportView(appState: appState)
+        let content = IssueReportView(appState: appState) { [weak self] in
+            self?.window?.performClose(nil)
+        }
             .frame(minWidth: 560, minHeight: 580)
         let host = NSHostingView(rootView: content)
 
@@ -44,6 +48,8 @@ final class IssueReportWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        appState?.issueReportWindowDidClose()
+        appState = nil
         window = nil
     }
 }

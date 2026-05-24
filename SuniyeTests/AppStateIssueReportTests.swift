@@ -30,12 +30,10 @@ final class AppStateIssueReportTests: XCTestCase {
 
         await appState.submitIssueReport()
 
-        guard case let .sent(identifier, url) = appState.issueReportStatus else {
+        guard case .sent = appState.issueReportStatus else {
             XCTFail("Expected sent status")
             return
         }
-        XCTAssertEqual(identifier, "KIS-128")
-        XCTAssertEqual(url?.absoluteString, "https://linear.app/kishan/issue/KIS-128/report")
         XCTAssertEqual(diagnosticService.requests.count, 1)
         XCTAssertEqual(uploadService.submissions.count, 1)
         XCTAssertEqual(uploadService.submissions.first?.diagnosticsURL, diagnosticsURL)
@@ -127,6 +125,50 @@ final class AppStateIssueReportTests: XCTestCase {
         XCTAssertEqual(appState.issueReportStatus, .sending)
         XCTAssertEqual(diagnosticService.requests.count, 0)
         XCTAssertEqual(uploadService.submissions.count, 0)
+    }
+
+    func testIssueReportWindowCloseWhileSendingResetsCompletedSubmissionOnNextPresentation() {
+        let appState = makeTestAppState()
+        appState.issueReportType = .hotkey
+        appState.issueReportTitle = "Hotkey failed"
+        appState.issueReportDescription = "The configured hotkey did not start recording."
+        appState.issueReportContactEmail = "user@example.com"
+        appState.issueReportIncludesDiagnostics = false
+        appState.issueReportDiagnosticsMessage = "Diagnostics opened for review."
+        appState.issueReportStatus = .sending
+
+        appState.issueReportWindowDidClose()
+        appState.prepareIssueReportWindowPresentation()
+
+        XCTAssertEqual(appState.issueReportStatus, .sending)
+        XCTAssertEqual(appState.issueReportTitle, "Hotkey failed")
+        XCTAssertNil(appState.issueReportDiagnosticsMessage)
+
+        appState.issueReportStatus = .sent
+        appState.issueReportDiagnosticsMessage = "Diagnostics opened for review."
+
+        appState.prepareIssueReportWindowPresentation()
+
+        XCTAssertEqual(appState.issueReportStatus, .idle)
+        XCTAssertEqual(appState.issueReportType, .other)
+        XCTAssertEqual(appState.issueReportTitle, "")
+        XCTAssertEqual(appState.issueReportDescription, "")
+        XCTAssertEqual(appState.issueReportContactEmail, "")
+        XCTAssertTrue(appState.issueReportIncludesDiagnostics)
+        XCTAssertNil(appState.issueReportDiagnosticsMessage)
+    }
+
+    func testIssueReportWindowCloseAfterSentResetsDraftImmediately() {
+        let appState = makeTestAppState()
+        appState.issueReportTitle = "Paste failed"
+        appState.issueReportDescription = "Dictation completed but nothing appeared in the focused app."
+        appState.issueReportStatus = .sent
+
+        appState.issueReportWindowDidClose()
+
+        XCTAssertEqual(appState.issueReportStatus, .idle)
+        XCTAssertEqual(appState.issueReportTitle, "")
+        XCTAssertEqual(appState.issueReportDescription, "")
     }
 
     func testSubmitIssueReportValidatesEmail() async {
