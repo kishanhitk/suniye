@@ -127,6 +127,50 @@ final class AppStateIssueReportTests: XCTestCase {
         XCTAssertEqual(uploadService.submissions.count, 0)
     }
 
+    func testIssueReportWindowCloseWhileSendingResetsCompletedSubmissionOnNextPresentation() {
+        let appState = makeTestAppState()
+        appState.issueReportType = .hotkey
+        appState.issueReportTitle = "Hotkey failed"
+        appState.issueReportDescription = "The configured hotkey did not start recording."
+        appState.issueReportContactEmail = "user@example.com"
+        appState.issueReportIncludesDiagnostics = false
+        appState.issueReportDiagnosticsMessage = "Diagnostics opened for review."
+        appState.issueReportStatus = .sending
+
+        appState.issueReportWindowDidClose()
+        appState.prepareIssueReportWindowPresentation()
+
+        XCTAssertEqual(appState.issueReportStatus, .sending)
+        XCTAssertEqual(appState.issueReportTitle, "Hotkey failed")
+        XCTAssertNil(appState.issueReportDiagnosticsMessage)
+
+        appState.issueReportStatus = .sent
+        appState.issueReportDiagnosticsMessage = "Diagnostics opened for review."
+
+        appState.prepareIssueReportWindowPresentation()
+
+        XCTAssertEqual(appState.issueReportStatus, .idle)
+        XCTAssertEqual(appState.issueReportType, .other)
+        XCTAssertEqual(appState.issueReportTitle, "")
+        XCTAssertEqual(appState.issueReportDescription, "")
+        XCTAssertEqual(appState.issueReportContactEmail, "")
+        XCTAssertTrue(appState.issueReportIncludesDiagnostics)
+        XCTAssertNil(appState.issueReportDiagnosticsMessage)
+    }
+
+    func testIssueReportWindowCloseAfterSentResetsDraftImmediately() {
+        let appState = makeTestAppState()
+        appState.issueReportTitle = "Paste failed"
+        appState.issueReportDescription = "Dictation completed but nothing appeared in the focused app."
+        appState.issueReportStatus = .sent
+
+        appState.issueReportWindowDidClose()
+
+        XCTAssertEqual(appState.issueReportStatus, .idle)
+        XCTAssertEqual(appState.issueReportTitle, "")
+        XCTAssertEqual(appState.issueReportDescription, "")
+    }
+
     func testSubmitIssueReportValidatesEmail() async {
         let uploadService = StubIssueReportUploadService()
         let appState = makeTestAppState(issueReportUploadService: uploadService)

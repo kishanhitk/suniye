@@ -48,9 +48,7 @@ final class IssueReportWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        if case .sent = appState?.issueReportStatus {
-            appState?.resetIssueReportDraft()
-        }
+        appState?.issueReportWindowDidClose()
         appState = nil
         window = nil
     }
