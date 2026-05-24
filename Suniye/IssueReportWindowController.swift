@@ -6,11 +6,13 @@ final class IssueReportWindowController: NSObject, NSWindowDelegate {
     static let shared = IssueReportWindowController()
 
     private var window: NSWindow?
+    private weak var appState: AppState?
 
     private override init() {}
 
     func show(appState: AppState) {
         NSApp.setActivationPolicy(.regular)
+        self.appState = appState
 
         if let window {
             NSApp.activate(ignoringOtherApps: true)
@@ -46,6 +48,10 @@ final class IssueReportWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        if case .sent = appState?.issueReportStatus {
+            appState?.resetIssueReportDraft()
+        }
+        appState = nil
         window = nil
     }
 }
