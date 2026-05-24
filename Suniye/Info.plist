@@ -24,6 +24,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Suniye needs microphone access to capture dictation.</string>
+	<key>SuniyeIssueReportEndpointURL</key>
+	<string>https://suniye.kishans.in/api/issue-reports</string>
 	<key>VSUpdatePreferredAssetName</key>
 	<string>Suniye.dmg</string>
 	<key>VSUpdateRepoName</key>

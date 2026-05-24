@@ -930,8 +930,13 @@ struct GeneralPage: View {
 
                             Spacer(minLength: 12)
 
-                            if appState.updateStatus == .available || appState.updateStatus == .downloaded {
-                                HStack(spacing: 8) {
+                            HStack(spacing: 8) {
+                                Button("Report a Problem") {
+                                    appState.openIssueReportWindow()
+                                }
+                                .buttonStyle(.bordered)
+
+                                if appState.updateStatus == .available || appState.updateStatus == .downloaded {
                                     Button("Release Notes") {
                                         appState.openReleaseNotes()
                                     }
@@ -943,15 +948,15 @@ struct GeneralPage: View {
                                         }
                                     }
                                     .buttonStyle(.borderedProminent)
-                                }
-                            } else {
-                                Button(appState.updateStatus == .checking ? "Checking..." : "Check for Updates") {
-                                    Task {
-                                        await appState.checkForUpdates(background: false)
+                                } else {
+                                    Button(appState.updateStatus == .checking ? "Checking..." : "Check for Updates") {
+                                        Task {
+                                            await appState.checkForUpdates(background: false)
+                                        }
                                     }
+                                    .buttonStyle(.bordered)
+                                    .disabled(appState.updateStatus == .checking || appState.updateStatus == .downloading)
                                 }
-                                .buttonStyle(.bordered)
-                                .disabled(appState.updateStatus == .checking || appState.updateStatus == .downloading)
                             }
                         }
                     }

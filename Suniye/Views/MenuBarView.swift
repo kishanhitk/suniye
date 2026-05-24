@@ -50,6 +50,10 @@ struct MenuBarView: View {
 
             Divider()
 
+            Button("Report a Problem...") {
+                appState.openIssueReportWindow()
+            }
+
             Button("Quit Suniye") {
                 NSApplication.shared.terminate(nil)
             }

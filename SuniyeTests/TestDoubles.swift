@@ -380,9 +380,13 @@ func makeTestAppState(
     keychainService: KeychainServiceProtocol = TestKeychainService(value: nil),
     updateService: UpdateServiceProtocol = StubUpdateService(checkResult: .success(.upToDate)),
     launchAtLoginService: LaunchAtLoginServiceProtocol = StubLaunchAtLoginService(),
+    diagnosticBundleService: DiagnosticBundleServiceProtocol = StubDiagnosticBundleService(),
+    issueReportUploadService: IssueReportUploadServiceProtocol = StubIssueReportUploadService(),
     currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
     nowProvider: @escaping () -> Date = Date.init,
     fileOpener: @escaping (URL) -> Bool = { _ in true },
+    issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
+    temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
     startServices: Bool = false,
     llmE2EMode: LLME2EMode = .none
 ) -> AppState {
@@ -400,9 +404,13 @@ func makeTestAppState(
         keychainService: keychainService,
         updateService: updateService,
         launchAtLoginService: launchAtLoginService,
+        diagnosticBundleService: diagnosticBundleService,
+        issueReportUploadService: issueReportUploadService,
         currentAppVersionProvider: currentAppVersionProvider,
         nowProvider: nowProvider,
         fileOpener: fileOpener,
+        issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
+        temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
         startServices: startServices,
         llmE2EMode: llmE2EMode
     )
@@ -414,4 +422,41 @@ private final class NoopLLMPostProcessor: LLMPostProcessor {
     }
 
     func testSetup(config: LLMConfig) async throws {}
+}
+
+final class StubDiagnosticBundleService: DiagnosticBundleServiceProtocol {
+    var result: Result<URL, Error>
+    private(set) var requests: [DiagnosticBundleRequest] = []
+
+    init(result: Result<URL, Error> = .success(FileManager.default.temporaryDirectory.appendingPathComponent("diagnostics.zip"))) {
+        self.result = result
+    }
+
+    func makeBundle(request: DiagnosticBundleRequest) async throws -> URL {
+        requests.append(request)
+        return try result.get()
+    }
+}
+
+final class StubIssueReportUploadService: IssueReportUploadServiceProtocol {
+    var result: Result<IssueReportSubmissionResponse, Error>
+    private(set) var submissions: [(payload: IssueReportPayload, diagnosticsURL: URL?)] = []
+
+    init(
+        result: Result<IssueReportSubmissionResponse, Error> = .success(
+            IssueReportSubmissionResponse(
+                reportId: "suniye-test-report",
+                issueId: "issue-id",
+                issueIdentifier: "KIS-128",
+                issueUrl: URL(string: "https://linear.app/kishan/issue/KIS-128/report")
+            )
+        )
+    ) {
+        self.result = result
+    }
+
+    func submit(payload: IssueReportPayload, diagnosticsURL: URL?) async throws -> IssueReportSubmissionResponse {
+        submissions.append((payload, diagnosticsURL))
+        return try result.get()
+    }
 }

@@ -11,6 +11,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
     private let downloadUpdateItem = NSMenuItem(title: "Download Update", action: #selector(downloadUpdate), keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
+    private let reportIssueItem = NSMenuItem(title: "Report a Problem...", action: #selector(reportIssue), keyEquivalent: "")
     private let quitItem = NSMenuItem(title: "Quit Suniye", action: #selector(quitApp), keyEquivalent: "q")
 
     init(appState: AppState) {
@@ -35,6 +36,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         checkUpdatesItem.target = self
         downloadUpdateItem.target = self
         downloadItem.target = self
+        reportIssueItem.target = self
         quitItem.target = self
 
         menu.addItem(openSettingsItem)
@@ -44,6 +46,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(downloadUpdateItem)
         menu.addItem(downloadItem)
         menu.addItem(.separator())
+        menu.addItem(reportIssueItem)
         menu.addItem(quitItem)
 
         if let button = statusItem.button {
@@ -162,6 +165,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func downloadModel() {
         AppLogger.shared.log(.info, "menu action: download model")
         appState.startModelDownload()
+    }
+
+    @objc
+    private func reportIssue() {
+        AppLogger.shared.log(.info, "menu action: report issue")
+        appState.openIssueReportWindow()
     }
 
     @objc

@@ -11,6 +11,14 @@ struct SuniyeApp: App {
         Settings {
             EmptyView()
         }
+        .commands {
+            CommandGroup(after: .help) {
+                Button("Report a Problem...") {
+                    sharedAppState.openIssueReportWindow()
+                }
+                .keyboardShortcut("/", modifiers: [.command, .shift])
+            }
+        }
     }
 }
 

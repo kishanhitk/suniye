@@ -29,6 +29,7 @@ targets:
         ATSApplicationFontsPath: "."
         LSUIElement: true
         NSMicrophoneUsageDescription: Suniye needs microphone access to capture dictation.
+        SuniyeIssueReportEndpointURL: https://suniye.kishans.in/api/issue-reports
         VSUpdateRepoOwner: kishanhitk
         VSUpdateRepoName: suniye
         VSUpdatePreferredAssetName: Suniye.dmg
