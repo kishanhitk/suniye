@@ -73,16 +73,28 @@ All supported models run offline on your Mac and are managed from the `ASR Model
 
 ## Updating
 
-Suniye checks for updates automatically on launch (no popups). When an update is available:
+Suniye checks for updates automatically in the background. When an update is available:
 
 1. Open the menu bar icon.
-2. Click **Download Update...** — the app downloads and verifies the new version.
-3. Replace the old app with the new one.
+2. Click **Check for Updates...** if you want to check manually.
+3. Follow the native updater prompt to install and relaunch.
+
+### Sparkle signing key recovery
+
+GitHub Actions secrets are write-only. You cannot read `SPARKLE_PRIVATE_KEY` back from GitHub after storing it.
+
+The owner copy is kept in the local macOS Keychain under Sparkle account `suniye`. To export it from a Sparkle distribution:
+
+```bash
+./bin/generate_keys --account suniye -x ./suniye-sparkle-private-key
+```
+
+Keep that exported file in a password manager or other secret store, then delete the local export.
 
 ## Privacy
 
 - All transcription happens **locally** on your Mac.
-- The only network calls are model downloads and update checks against GitHub Releases.
+- The only network calls are model downloads, update checks, and issue reports you explicitly submit.
 - If you enable the optional LLM feature, transcribed text is sent to the LLM provider you configure.
 
 ## Technical details

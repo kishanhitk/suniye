@@ -102,22 +102,27 @@ final class TestKeychainService: KeychainServiceProtocol {
     }
 }
 
-final class StubUpdateService: UpdateServiceProtocol {
-    private(set) var checkCallCount = 0
-    var checkResult: Result<UpdateCheckResult, Error>
-    var downloadResult: Result<URL, Error> = .failure(UpdateError.network("not configured"))
+@MainActor
+final class StubAppUpdateController: AppUpdateControllerProtocol {
+    var canCheckForUpdates = false
+    var automaticallyChecksForUpdates = false
+    var onStateChange: (() -> Void)?
 
-    init(checkResult: Result<UpdateCheckResult, Error>) {
-        self.checkResult = checkResult
+    private(set) var startCallCount = 0
+    private(set) var checkForUpdatesCallCount = 0
+
+    func start() {
+        startCallCount += 1
+        canCheckForUpdates = true
+        onStateChange?()
     }
 
-    func checkForUpdate(currentVersion: AppVersion) async throws -> UpdateCheckResult {
-        checkCallCount += 1
-        return try checkResult.get()
+    func checkForUpdates() {
+        checkForUpdatesCallCount += 1
     }
 
-    func downloadAndVerify(release: UpdateRelease) async throws -> URL {
-        try downloadResult.get()
+    func notifyStateChanged() {
+        onStateChange?()
     }
 }
 
@@ -378,7 +383,7 @@ func makeTestAppState(
     generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
     historyStore: HistoryStoreProtocol = TestHistoryStore(),
     keychainService: KeychainServiceProtocol = TestKeychainService(value: nil),
-    updateService: UpdateServiceProtocol = StubUpdateService(checkResult: .success(.upToDate)),
+    appUpdateController: AppUpdateControllerProtocol? = nil,
     launchAtLoginService: LaunchAtLoginServiceProtocol = StubLaunchAtLoginService(),
     diagnosticBundleService: DiagnosticBundleServiceProtocol = StubDiagnosticBundleService(),
     issueReportUploadService: IssueReportUploadServiceProtocol = StubIssueReportUploadService(),
@@ -402,7 +407,7 @@ func makeTestAppState(
         generalSettingsStore: generalSettingsStore,
         historyStore: historyStore,
         keychainService: keychainService,
-        updateService: updateService,
+        appUpdateController: appUpdateController ?? StubAppUpdateController(),
         launchAtLoginService: launchAtLoginService,
         diagnosticBundleService: diagnosticBundleService,
         issueReportUploadService: issueReportUploadService,

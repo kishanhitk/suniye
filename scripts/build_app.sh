@@ -108,6 +108,10 @@ if [[ -z "${BUILD_NUMBER}" ]]; then
   BUILD_NUMBER="${SUNIYE_BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-}}"
 fi
 
+if [[ -z "${BUILD_NUMBER}" ]] && git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_NUMBER="$(git -C "${ROOT_DIR}" rev-list --count HEAD)"
+fi
+
 if [[ -n "${BUILD_NUMBER}" ]] && [[ ! "${BUILD_NUMBER}" =~ ^[0-9]+$ ]]; then
   echo "Build number must be numeric, got: ${BUILD_NUMBER}" >&2
   exit 1

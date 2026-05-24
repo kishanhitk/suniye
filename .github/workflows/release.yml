@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -43,7 +45,9 @@ jobs:
             test
 
       - name: Package release artifacts
-        run: ./scripts/package_release.sh --version "${GITHUB_REF_NAME}" --build-number "${GITHUB_RUN_NUMBER}" --dist-dir dist
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: ./scripts/package_release.sh --version "${GITHUB_REF_NAME}" --dist-dir dist
 
       - name: Verify release artifacts
         run: ./scripts/verify_release.sh --version "${GITHUB_REF_NAME}" --dist-dir dist
@@ -55,4 +59,5 @@ jobs:
             dist/Suniye.dmg
             dist/Suniye.app.zip
             dist/SHA256SUMS.txt
+            dist/appcast.xml
           generate_release_notes: true

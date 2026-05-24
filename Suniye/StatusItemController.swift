@@ -9,7 +9,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openMainWindow), keyEquivalent: "o")
     private let copyLastTranscriptItem = NSMenuItem(title: "Copy Last Transcript", action: #selector(copyLastTranscript), keyEquivalent: "")
     private let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
-    private let downloadUpdateItem = NSMenuItem(title: "Download Update", action: #selector(downloadUpdate), keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
     private let reportIssueItem = NSMenuItem(title: "Report a Problem...", action: #selector(reportIssue), keyEquivalent: "")
     private let quitItem = NSMenuItem(title: "Quit Suniye", action: #selector(quitApp), keyEquivalent: "q")
@@ -34,7 +33,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openSettingsItem.target = self
         copyLastTranscriptItem.target = self
         checkUpdatesItem.target = self
-        downloadUpdateItem.target = self
         downloadItem.target = self
         reportIssueItem.target = self
         quitItem.target = self
@@ -43,7 +41,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(copyLastTranscriptItem)
         menu.addItem(.separator())
         menu.addItem(checkUpdatesItem)
-        menu.addItem(downloadUpdateItem)
         menu.addItem(downloadItem)
         menu.addItem(.separator())
         menu.addItem(reportIssueItem)
@@ -63,55 +60,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func refresh() {
         let phase = appState.phase
 
-        let updateStatus = appState.updateStatus
         checkUpdatesItem.target = self
 
         copyLastTranscriptItem.isEnabled = appState.lastTranscriptText != nil
 
-        switch updateStatus {
-        case .checking:
-            checkUpdatesItem.title = "Checking for Updates..."
-            checkUpdatesItem.action = nil
-            checkUpdatesItem.isEnabled = false
-        case .available:
-            if let version = appState.availableUpdateVersion {
-                checkUpdatesItem.title = "Download Update: \(version)"
-            } else {
-                checkUpdatesItem.title = "Download Update"
-            }
-            checkUpdatesItem.action = #selector(downloadUpdate)
-            checkUpdatesItem.isEnabled = true
-        case .upToDate:
-            checkUpdatesItem.title = "Up to Date"
-            checkUpdatesItem.action = #selector(checkForUpdates)
-            checkUpdatesItem.isEnabled = true
-        case .downloading:
-            checkUpdatesItem.title = "Downloading Update..."
-            checkUpdatesItem.action = nil
-            checkUpdatesItem.isEnabled = false
-        case .downloaded:
-            if let version = appState.availableUpdateVersion {
-                checkUpdatesItem.title = "Install Update: \(version)"
-            } else {
-                checkUpdatesItem.title = "Install Update"
-            }
-            checkUpdatesItem.action = #selector(downloadUpdate)
-            checkUpdatesItem.isEnabled = true
-        case .error:
-            checkUpdatesItem.title = "Check for Updates..."
-            checkUpdatesItem.action = #selector(checkForUpdates)
-            checkUpdatesItem.isEnabled = true
-        case .idle:
-            checkUpdatesItem.title = "Check for Updates..."
-            checkUpdatesItem.action = #selector(checkForUpdates)
-            checkUpdatesItem.isEnabled = true
-        }
-
-        downloadUpdateItem.target = self
-        downloadUpdateItem.action = #selector(downloadUpdate)
-        downloadUpdateItem.title = updateStatus == .downloaded ? "Install Update" : "Download Update"
-        downloadUpdateItem.isHidden = true
-        downloadUpdateItem.isEnabled = false
+        checkUpdatesItem.title = "Check for Updates..."
+        checkUpdatesItem.action = #selector(checkForUpdates)
+        checkUpdatesItem.isEnabled = appState.canCheckForUpdates
 
         downloadItem.isEnabled = phase == .needsModel || phase == .downloadingModel || phase == .error
         downloadItem.isHidden = !(phase == .needsModel || phase == .downloadingModel || phase == .error)
@@ -148,17 +103,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc
     private func checkForUpdates() {
         AppLogger.shared.log(.info, "menu action: check updates")
-        Task {
-            await appState.checkForUpdates(background: false)
-        }
-    }
-
-    @objc
-    private func downloadUpdate() {
-        AppLogger.shared.log(.info, "menu action: download update")
-        Task {
-            await appState.downloadAndOpenUpdate()
-        }
+        appState.checkForUpdates()
     }
 
     @objc

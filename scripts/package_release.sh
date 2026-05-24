@@ -39,7 +39,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${BUILD_NUMBER}" ]]; then
-  BUILD_NUMBER="${GITHUB_RUN_NUMBER:-}"
+  BUILD_NUMBER="${SUNIYE_BUILD_NUMBER:-}"
+fi
+
+if [[ -z "${BUILD_NUMBER}" ]] && git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_NUMBER="$(git -C "${ROOT_DIR}" rev-list --count HEAD)"
 fi
 
 mkdir -p "${DIST_DIR}"
@@ -58,13 +62,14 @@ APP_PATH="${DIST_DIR}/Suniye.app"
 ZIP_PATH="${DIST_DIR}/Suniye.app.zip"
 DMG_PATH="${DIST_DIR}/Suniye.dmg"
 CHECKSUMS_PATH="${DIST_DIR}/SHA256SUMS.txt"
+APPCAST_PATH="${DIST_DIR}/appcast.xml"
 
 if [[ ! -d "${APP_PATH}" ]]; then
   echo "Expected app not found at ${APP_PATH}" >&2
   exit 1
 fi
 
-rm -f "${ZIP_PATH}" "${DMG_PATH}" "${CHECKSUMS_PATH}"
+rm -f "${ZIP_PATH}" "${DMG_PATH}" "${CHECKSUMS_PATH}" "${APPCAST_PATH}"
 
 # Create zip artifact
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "${ZIP_PATH}"
@@ -85,8 +90,15 @@ rm -rf "${DMG_STAGING}"
 )
 
 if [[ -n "${VERSION}" ]]; then
+  "${ROOT_DIR}/scripts/generate_appcast.sh" --version "${VERSION}" --dist-dir "${DIST_DIR}"
+fi
+
+if [[ -n "${VERSION}" ]]; then
   echo "Packaged ${VERSION}"
 fi
 
 echo "Artifacts created in: ${DIST_DIR}"
 ls -lh "${DIST_DIR}/Suniye.dmg" "${DIST_DIR}/Suniye.app.zip" "${DIST_DIR}/SHA256SUMS.txt"
+if [[ -f "${APPCAST_PATH}" ]]; then
+  ls -lh "${APPCAST_PATH}"
+fi

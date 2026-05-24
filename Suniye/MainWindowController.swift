@@ -85,7 +85,9 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         AppLogger.shared.log(.info, "applicationDidFinishLaunching")
         statusItemController = StatusItemController(appState: sharedAppState)
         MainWindowController.shared.show(appState: sharedAppState)
-        sharedAppState.startAutomaticUpdateChecks()
+        if ProcessInfo.processInfo.shouldStartUpdateController {
+            sharedAppState.startUpdateController()
+        }
         if CommandLine.arguments.contains("--e2e-indicator-smoke") {
             sharedAppState.runIndicatorE2ESmoke()
         }
@@ -107,8 +109,5 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
     func applicationDidBecomeActive(_ notification: Notification) {
         AppLogger.shared.log(.info, "applicationDidBecomeActive; refreshing permission status")
         sharedAppState.refreshPermissionStatus()
-        Task {
-            await sharedAppState.performAutomaticUpdateCheckIfEligible()
-        }
     }
 }

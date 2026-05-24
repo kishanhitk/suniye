@@ -36,8 +36,9 @@ done
 DMG_PATH="${DIST_DIR}/Suniye.dmg"
 ZIP_PATH="${DIST_DIR}/Suniye.app.zip"
 CHECKSUMS_PATH="${DIST_DIR}/SHA256SUMS.txt"
+APPCAST_PATH="${DIST_DIR}/appcast.xml"
 
-for f in "${DMG_PATH}" "${ZIP_PATH}" "${CHECKSUMS_PATH}"; do
+for f in "${DMG_PATH}" "${ZIP_PATH}" "${CHECKSUMS_PATH}" "${APPCAST_PATH}"; do
   [[ -f "${f}" ]] || { echo "Missing artifact: ${f}" >&2; exit 1; }
 done
 
@@ -52,6 +53,41 @@ trap '/usr/bin/hdiutil detach "${MOUNT_POINT}" -quiet >/dev/null 2>&1 || true; r
 
 [[ -d "${MOUNT_POINT}/Suniye.app" ]] || { echo "DMG missing Suniye.app" >&2; exit 1; }
 [[ -L "${MOUNT_POINT}/Applications" ]] || { echo "DMG missing Applications symlink" >&2; exit 1; }
+
+/usr/bin/python3 - "${APPCAST_PATH}" "${VERSION}" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+path = sys.argv[1]
+version = sys.argv[2]
+root = ET.parse(path).getroot()
+
+namespace = {"sparkle": "http://www.andymatuschak.org/xml-namespaces/sparkle"}
+items = root.findall("./channel/item")
+if not items:
+    raise SystemExit("Appcast has no update items")
+
+item = items[0]
+enclosure = item.find("enclosure")
+if enclosure is None:
+    raise SystemExit("Appcast item is missing enclosure")
+
+if not enclosure.attrib.get("{http://www.andymatuschak.org/xml-namespaces/sparkle}edSignature"):
+    raise SystemExit("Appcast enclosure is missing Sparkle EdDSA signature")
+
+if version:
+    expected_url = f"https://github.com/kishanhitk/suniye/releases/download/{version}/Suniye.dmg"
+    enclosure_url = enclosure.attrib.get("url", "")
+    if enclosure_url != expected_url:
+        raise SystemExit(f"Appcast enclosure URL {enclosure_url!r} does not match {expected_url!r}")
+
+    short_version = item.findtext("sparkle:shortVersionString", namespaces=namespace)
+    normalized = version[1:] if version.startswith("v") else version
+    if short_version != normalized:
+        raise SystemExit(f"Appcast short version {short_version!r} does not match {normalized!r}")
+elif not enclosure.attrib.get("url", "").endswith("/Suniye.dmg"):
+    raise SystemExit("Appcast enclosure does not point to Suniye.dmg")
+PY
 
 /usr/bin/hdiutil detach "${MOUNT_POINT}" -quiet >/dev/null
 rm -rf "${MOUNT_POINT}"

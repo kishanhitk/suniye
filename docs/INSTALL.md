@@ -38,11 +38,10 @@ During setup:
 - Fresh installs default to `Parakeet TDT 0.6B v3`.
 - After onboarding, you can open `ASR Model` in settings to install or switch to another supported local model.
 
-## 6) Update flow (manual install)
-On each app launch, Suniye checks GitHub Releases in the background.
+## 6) Update flow
+Suniye checks for updates in the background.
 
 If a newer version is found:
 1. Open the menu bar menu.
-2. Click `Download Update...`.
-3. The app downloads and verifies the archive checksum against `SHA256SUMS.txt`.
-4. The installer/archive is opened; replace the app in `/Applications` manually.
+2. Click `Check for Updates...` if you want to check manually.
+3. Follow the native updater prompt to install and relaunch.
