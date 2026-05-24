@@ -48,11 +48,12 @@ if [[ -z "${BUILD_NUMBER}" ]]; then
   BUILD_NUMBER="${SUNIYE_BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-}}"
 fi
 
-if [[ -z "${BUILD_NUMBER}" ]] && git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  BUILD_NUMBER="$(git -C "${ROOT_DIR}" rev-list --count HEAD)"
+if [[ -z "${BUILD_NUMBER}" ]]; then
+  echo "Build number is required. Pass --build-number, set SUNIYE_BUILD_NUMBER, or run in GitHub Actions with GITHUB_RUN_NUMBER." >&2
+  exit 1
 fi
 
-if [[ -n "${BUILD_NUMBER}" ]] && [[ ! "${BUILD_NUMBER}" =~ ^[0-9]+$ ]]; then
+if [[ ! "${BUILD_NUMBER}" =~ ^[0-9]+$ ]]; then
   echo "Build number must be numeric, got: ${BUILD_NUMBER}" >&2
   exit 1
 fi
@@ -62,9 +63,7 @@ DERIVED_DATA="${ROOT_DIR}/.derivedData-release"
 
 BUILD_ARGS=(Release --derived-data-path "${DERIVED_DATA}" --output-dir "${DIST_DIR}")
 BUILD_ARGS+=(--version "${VERSION}")
-if [[ -n "${BUILD_NUMBER}" ]]; then
-  BUILD_ARGS+=(--build-number "${BUILD_NUMBER}")
-fi
+BUILD_ARGS+=(--build-number "${BUILD_NUMBER}")
 "${ROOT_DIR}/scripts/build_app.sh" "${BUILD_ARGS[@]}"
 
 APP_PATH="${DIST_DIR}/Suniye.app"
