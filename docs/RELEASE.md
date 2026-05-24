@@ -4,7 +4,8 @@
 Use semantic tags: `vMAJOR.MINOR.PATCH`.
 
 Release automation treats the git tag as the source of truth for `MARKETING_VERSION`.
-Release automation derives `CURRENT_PROJECT_VERSION` from `git rev-list --count HEAD` so stable and preview builds share one monotonic build sequence.
+GitHub release automation derives `CURRENT_PROJECT_VERSION` from `GITHUB_RUN_NUMBER`, which is monotonic for the Release workflow and keeps Sparkle update ordering stable across normal and hotfix release branches.
+For local packaging, pass `--build-number` or set `SUNIYE_BUILD_NUMBER` when you need to match or preview an exact release build. If neither value is supplied outside GitHub Actions, the scripts fall back to `git rev-list --count HEAD` for local test artifacts only.
 Do not manually bump app version metadata in `project.yml` just to cut a release tag.
 
 ## Pre-release checklist
