@@ -58,6 +58,72 @@ protocol TranscriptionServiceProtocol {
     func unloadModel() async
 }
 
+struct AudioRecognitionPreprocessor {
+    struct Stats {
+        let rms: Float
+        let peak: Float
+    }
+
+    struct PreparedAudio {
+        let samples: [Float]
+        let gain: Float
+        let inputStats: Stats
+        let outputStats: Stats
+
+        var didNormalize: Bool {
+            gain > 1.0001
+        }
+    }
+
+    private static let targetRMS: Float = 0.035
+    private static let targetPeak: Float = 0.85
+    private static let maxGain: Float = 32
+    private static let minimumPeakForGain: Float = 0.003
+    private static let minimumGainToApply: Float = 1.2
+
+    static func prepareForRecognition(_ input: [Float]) -> PreparedAudio {
+        let inputStats = stats(of: input)
+        guard !input.isEmpty,
+              inputStats.peak >= minimumPeakForGain,
+              inputStats.rms < targetRMS else {
+            return PreparedAudio(samples: input, gain: 1, inputStats: inputStats, outputStats: inputStats)
+        }
+
+        let rmsGain = targetRMS / max(inputStats.rms, Float.leastNonzeroMagnitude)
+        let peakGain = targetPeak / max(inputStats.peak, Float.leastNonzeroMagnitude)
+        let gain = min(maxGain, rmsGain, peakGain)
+
+        guard gain >= minimumGainToApply else {
+            return PreparedAudio(samples: input, gain: 1, inputStats: inputStats, outputStats: inputStats)
+        }
+
+        let output = input.map { sample in
+            min(1, max(-1, sample * gain))
+        }
+        return PreparedAudio(
+            samples: output,
+            gain: gain,
+            inputStats: inputStats,
+            outputStats: stats(of: output)
+        )
+    }
+
+    static func stats(of values: [Float]) -> Stats {
+        guard !values.isEmpty else {
+            return Stats(rms: 0, peak: 0)
+        }
+
+        var sum: Double = 0
+        var peak: Float = 0
+        for sample in values {
+            let value = Double(sample)
+            sum += value * value
+            peak = max(peak, abs(sample))
+        }
+        return Stats(rms: Float((sum / Double(values.count)).squareRoot()), peak: peak)
+    }
+}
+
 actor TranscriptionService: TranscriptionServiceProtocol {
     enum ServiceError: LocalizedError {
         case recognizerNotLoaded
@@ -134,6 +200,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
 
         let effectiveSampleRate = max(8_000, sampleRate)
         let inputDuration = Double(samples.count) / Double(effectiveSampleRate)
+        let preparedAudio = AudioRecognitionPreprocessor.prepareForRecognition(samples)
         AppLogger.shared.log(
             .info,
             String(
@@ -143,6 +210,19 @@ actor TranscriptionService: TranscriptionServiceProtocol {
                 inputDuration
             )
         )
+        if preparedAudio.didNormalize {
+            AppLogger.shared.log(
+                .info,
+                String(
+                    format: "transcribe audio normalized gain=%.2f inputRMS=%.5f inputPeak=%.5f outputRMS=%.5f outputPeak=%.5f",
+                    preparedAudio.gain,
+                    preparedAudio.inputStats.rms,
+                    preparedAudio.inputStats.peak,
+                    preparedAudio.outputStats.rms,
+                    preparedAudio.outputStats.peak
+                )
+            )
+        }
 
         guard let stream = SherpaOnnxCreateOfflineStream(recognizer) else {
             throw ServiceError.streamCreationFailed
@@ -151,7 +231,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
             SherpaOnnxDestroyOfflineStream(stream)
         }
 
-        samples.withUnsafeBufferPointer { buffer in
+        preparedAudio.samples.withUnsafeBufferPointer { buffer in
             guard let baseAddress = buffer.baseAddress, !buffer.isEmpty else {
                 return
             }
