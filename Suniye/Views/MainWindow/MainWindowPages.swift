@@ -392,31 +392,25 @@ struct StylePage: View {
 
     private var providerSection: some View {
         VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-            SectionHeading(title: "Provider")
+            SectionHeading(title: "Magic Format Provider")
 
             SurfaceCard {
-                VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 16) {
+                    Text("Provider")
+                        .font(AppTypography.body)
+                        .foregroundStyle(Color.primary)
+
+                    Spacer(minLength: 12)
+
                     NativePopupPicker(
                         items: MagicFormatProvider.allCases,
                         selection: $appState.llmProvider,
                         title: { $0.displayName },
                         isEnabled: providerPickerEnabled(_:)
                     )
-                    .frame(maxWidth: 320)
-
-                    Text(appState.llmProvider.description)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
-
-                    HStack(spacing: 6) {
-                        Image(systemName: appState.appleMagicFormatAvailability.isAvailable ? "checkmark.circle.fill" : "info.circle.fill")
-                            .font(AppTypography.caption)
-                            .foregroundStyle(appState.appleMagicFormatAvailability.isAvailable ? .green : .orange)
-                        Text(appState.magicFormatProviderDetailText)
-                            .font(AppTypography.caption)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                    }
+                    .frame(width: 280)
                 }
+                .frame(maxWidth: .infinity, minHeight: 28)
             }
         }
     }
