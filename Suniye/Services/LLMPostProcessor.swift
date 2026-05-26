@@ -232,8 +232,16 @@ enum MagicFormatOutputSanitizer {
             "make a list",
             "format as a list",
             "turn this into a list",
+            "in order",
+            "in an order",
+            "ordered list",
+            "ordered sequence",
         ]
         if phraseTriggers.contains(where: { lowercased.contains($0) }) {
+            return true
+        }
+
+        if containsOrdinalSequence(in: lowercased) {
             return true
         }
 
@@ -246,6 +254,22 @@ enum MagicFormatOutputSanitizer {
             "agenda",
         ]
         return wordTriggers.contains { containsWord($0, in: lowercased) }
+    }
+
+    private static func containsOrdinalSequence(in text: String) -> Bool {
+        let ordinalWords = [
+            "first",
+            "second",
+            "third",
+            "fourth",
+            "fifth",
+            "sixth",
+            "seventh",
+            "eighth",
+            "ninth",
+            "tenth",
+        ]
+        return ordinalWords.filter { containsWord($0, in: text) }.count >= 2
     }
 
     private static func containsWord(_ word: String, in text: String) -> Bool {

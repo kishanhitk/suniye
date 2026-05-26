@@ -88,6 +88,21 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         XCTAssertEqual(client.callCount, 1)
     }
 
+    func testOrderedFirstSecondOutputIsAccepted() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "1. Create a Linear ticket.\n2. Create a git branch.",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(
+            text: "do these things in an order first create a linear ticket second create a get a branch",
+            config: makeConfig()
+        )
+
+        XCTAssertEqual(output, "1. Create a Linear ticket.\n2. Create a git branch.")
+        XCTAssertEqual(client.callCount, 1)
+    }
+
     func testUnrequestedMultilineOutputRetries() async throws {
         let client = FakeAppleFoundationModelsClient(outputs: [
             "First line.\nSecond line.",
