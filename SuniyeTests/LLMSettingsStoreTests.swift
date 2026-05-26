@@ -40,9 +40,11 @@ final class LLMSettingsStoreTests: XCTestCase {
 
         var settings = LLMSettings()
         settings.isEnabled = true
+        settings.provider = .appleFoundationModels
         settings.selectedModelPreset = .custom
         settings.customModelId = "openai/gpt-4.1-mini"
         settings.baseSystemPrompt = "base"
+        settings.appleSystemPrompt = "apple"
         settings.systemPrompt = "custom"
         settings.keywordsRaw = "swift, xcode"
         settings.timeoutSeconds = 7.5
@@ -52,6 +54,36 @@ final class LLMSettingsStoreTests: XCTestCase {
 
         let loaded = store.load()
         XCTAssertEqual(loaded, settings)
+    }
+
+    func testMissingProviderAndApplePromptDecodeToDefaults() throws {
+        let data = """
+        {
+          "isEnabled": true,
+          "selectedModelPreset": "gpt41Mini",
+          "customModelId": "",
+          "endpointURLString": "\(LLMDefaults.defaultEndpointURLString)",
+          "baseSystemPrompt": "api prompt",
+          "systemPrompt": "",
+          "keywordsRaw": "",
+          "timeoutSeconds": 3,
+          "maxTokens": 128
+        }
+        """.data(using: .utf8)!
+
+        let settings = try JSONDecoder().decode(LLMSettings.self, from: data)
+
+        XCTAssertEqual(settings.provider, .automatic)
+        XCTAssertEqual(settings.appleSystemPrompt, LLMDefaults.defaultAppleMagicFormatPrompt)
+    }
+
+    func testAppleAndAPIPromptsAreIndependent() {
+        var settings = LLMSettings()
+        settings.baseSystemPrompt = "api prompt"
+        settings.appleSystemPrompt = "apple prompt"
+
+        XCTAssertEqual(settings.composedSystemPrompt, "api prompt")
+        XCTAssertEqual(settings.composedAppleSystemPrompt, "apple prompt")
     }
 
     func testTimeoutAndTokenClamping() {

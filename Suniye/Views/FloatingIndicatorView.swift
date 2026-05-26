@@ -72,8 +72,8 @@ struct FloatingIndicatorView: View {
             hoverContent
         case let .listening(levels, _):
             ListeningMeterView(levels: levels)
-        case .processing:
-            processingContent
+        case let .processing(message):
+            processingContent(message: message)
         case let .error(message):
             Text(message)
                 .font(AppTypography.subheadlineSemibold)
@@ -94,9 +94,16 @@ struct FloatingIndicatorView: View {
         }
     }
 
-    private var processingContent: some View {
+    private func processingContent(message: String?) -> some View {
         HStack(spacing: 10) {
-            dotTrack(count: 8)
+            if let message {
+                Text(message)
+                    .font(AppTypography.subheadlineSemibold)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+            } else {
+                dotTrack(count: 8)
+            }
             ProgressView()
                 .controlSize(.small)
                 .tint(.white.opacity(0.92))
@@ -165,8 +172,11 @@ struct FloatingIndicatorView: View {
             return 152
         case .listening:
             return 116
-        case .processing:
-            return 128
+        case let .processing(message):
+            guard let message else {
+                return 128
+            }
+            return min(max(CGFloat(message.count) * 6.5 + 54, 260), 360)
         case let .error(message):
             return min(max(CGFloat(message.count) * 6.4, 170), 240) + 16
         }

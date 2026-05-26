@@ -148,24 +148,7 @@ Rules:
     }
 
     func sanitizeOutput(_ raw: String) -> String {
-        var output = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if output.hasPrefix("```") {
-            let lines = output.components(separatedBy: .newlines)
-            let filtered = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
-            output = filtered.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        let prefixes = ["output:", "polished:", "rewritten:", "text:"]
-        for prefix in prefixes {
-            if output.lowercased().hasPrefix(prefix),
-               let range = output.range(of: ":") {
-                output = String(output[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-                break
-            }
-        }
-
-        return output
+        MagicFormatOutputSanitizer.sanitize(raw)
     }
 
     private struct TimeoutError: Error {}

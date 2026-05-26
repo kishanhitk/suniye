@@ -380,6 +380,7 @@ func makeTestAppState(
     hotkeyService: HotkeyServiceProtocol = StubHotkeyService(),
     soundFeedbackService: SoundFeedbackServiceProtocol = SpySoundFeedbackService(),
     llmPostProcessor: LLMPostProcessor = NoopLLMPostProcessor(),
+    appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor = NoopAppleMagicFormatPostProcessor(),
     llmSettingsStore: LLMSettingsStoreProtocol = TestLLMSettingsStore(),
     generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
     historyStore: HistoryStoreProtocol = TestHistoryStore(),
@@ -393,6 +394,7 @@ func makeTestAppState(
     fileOpener: @escaping (URL) -> Bool = { _ in true },
     issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
+    magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
     startServices: Bool = false,
     llmE2EMode: LLME2EMode = .none
 ) -> AppState {
@@ -404,6 +406,7 @@ func makeTestAppState(
         hotkeyService: hotkeyService,
         soundFeedbackService: soundFeedbackService,
         llmPostProcessor: llmPostProcessor,
+        appleMagicFormatPostProcessor: appleMagicFormatPostProcessor,
         llmSettingsStore: llmSettingsStore,
         generalSettingsStore: generalSettingsStore,
         historyStore: historyStore,
@@ -417,6 +420,7 @@ func makeTestAppState(
         fileOpener: fileOpener,
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
+        magicFormatSlowWarningDelaySeconds: magicFormatSlowWarningDelaySeconds,
         startServices: startServices,
         llmE2EMode: llmE2EMode
     )
@@ -428,6 +432,20 @@ private final class NoopLLMPostProcessor: LLMPostProcessor {
     }
 
     func testSetup(config: LLMConfig) async throws {}
+}
+
+final class NoopAppleMagicFormatPostProcessor: AppleMagicFormatPostProcessor {
+    var availability: AppleFoundationModelsAvailability
+
+    init(availability: AppleFoundationModelsAvailability = .unsupportedSDKOrRuntime) {
+        self.availability = availability
+    }
+
+    func polish(text: String, config: AppleMagicFormatConfig) async throws -> String {
+        text
+    }
+
+    func testSetup(config: AppleMagicFormatConfig) async throws {}
 }
 
 final class StubDiagnosticBundleService: DiagnosticBundleServiceProtocol {

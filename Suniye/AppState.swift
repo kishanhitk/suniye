@@ -506,6 +506,9 @@ final class AppState {
     var llmEnabled = false {
         didSet { persistLLMSettings() }
     }
+    var llmProvider: MagicFormatProvider = .automatic {
+        didSet { persistLLMSettings() }
+    }
     var llmSelectedModelPreset: LLMModelPreset = .gemini25Flash {
         didSet { persistLLMSettings() }
     }
@@ -516,6 +519,9 @@ final class AppState {
         didSet { persistLLMSettings() }
     }
     var llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt {
+        didSet { persistLLMSettings() }
+    }
+    var llmAppleSystemPrompt = LLMDefaults.defaultAppleMagicFormatPrompt {
         didSet { persistLLMSettings() }
     }
     var llmSystemPrompt = "" {
@@ -581,6 +587,9 @@ final class AppState {
     }
 
     var llmKeyStatusText: String {
+        if usesAppleMagicFormatSettings {
+            return appleMagicFormatAvailability.isAvailable ? "Ready" : "Unavailable"
+        }
         if hasLLMAPIKey && isMagicFormatSetupVerified {
             return "Connected"
         }
@@ -592,7 +601,7 @@ final class AppState {
     }
 
     func canTestMagicFormatSetup(apiKeyDraft: String) -> Bool {
-        guard llmEnabled, !isMagicFormatSetupTestInProgress else {
+        guard llmEnabled, needsAPIConfigurationForMagicFormat, !isMagicFormatSetupTestInProgress else {
             return false
         }
         guard llmEndpointValidationError == nil, llmModelValidationError == nil else {
@@ -605,6 +614,9 @@ final class AppState {
         guard llmEnabled else {
             return .off
         }
+        if usesAppleMagicFormatSettings {
+            return appleMagicFormatAvailability.isAvailable ? .ready : .needsServiceSetup
+        }
         if llmEndpointValidationError != nil || llmModelValidationError != nil {
             return .needsServiceSetup
         }
@@ -615,11 +627,17 @@ final class AppState {
     }
 
     var llmEndpointValidationError: String? {
-        currentLLMSettings().endpointValidationError
+        guard needsAPIConfigurationForMagicFormat else {
+            return nil
+        }
+        return currentLLMSettings().endpointValidationError
     }
 
     var llmModelValidationError: String? {
-        currentLLMSettings().modelValidationError
+        guard needsAPIConfigurationForMagicFormat else {
+            return nil
+        }
+        return currentLLMSettings().modelValidationError
     }
 
     var llmStatusHint: String? {
@@ -636,6 +654,46 @@ final class AppState {
 
     var vocabularyTerms: [String] {
         currentLLMSettings().keywords
+    }
+
+    var appleMagicFormatAvailability: AppleFoundationModelsAvailability {
+        appleMagicFormatPostProcessor.availability
+    }
+
+    var usesAppleMagicFormatSettings: Bool {
+        switch llmProvider {
+        case .automatic:
+            return appleMagicFormatAvailability.isAvailable
+        case .appleFoundationModels:
+            return true
+        case .openAICompatible:
+            return false
+        }
+    }
+
+    var needsAPIConfigurationForMagicFormat: Bool {
+        switch llmProvider {
+        case .automatic:
+            return !appleMagicFormatAvailability.isAvailable
+        case .appleFoundationModels:
+            return false
+        case .openAICompatible:
+            return true
+        }
+    }
+
+    var magicFormatProviderDetailText: String {
+        switch llmProvider {
+        case .automatic:
+            if appleMagicFormatAvailability.isAvailable {
+                return "Using Apple Intelligence locally."
+            }
+            return "Apple Intelligence unavailable. API endpoint will be used if configured."
+        case .appleFoundationModels:
+            return appleMagicFormatAvailability.statusText
+        case .openAICompatible:
+            return "Using your OpenAI-compatible endpoint."
+        }
     }
 
     var recentResultsPreview: [RecentResult] {
@@ -1016,7 +1074,7 @@ final class AppState {
             )
         }
 
-        if llmEnabled, let endpointValidationError = llmEndpointValidationError {
+        if llmEnabled, needsAPIConfigurationForMagicFormat, let endpointValidationError = llmEndpointValidationError {
             items.append(
                 AttentionItem(
                     id: "llm-endpoint-invalid",
@@ -1028,7 +1086,7 @@ final class AppState {
             )
         }
 
-        if llmEnabled, let modelValidationError = llmModelValidationError {
+        if llmEnabled, needsAPIConfigurationForMagicFormat, let modelValidationError = llmModelValidationError {
             items.append(
                 AttentionItem(
                     id: "llm-model-invalid",
@@ -1040,12 +1098,24 @@ final class AppState {
             )
         }
 
-        if llmEnabled && !hasLLMAPIKey {
+        if llmEnabled && needsAPIConfigurationForMagicFormat && !hasLLMAPIKey {
             items.append(
                 AttentionItem(
                     id: "llm-key-missing",
                     title: "Magic Format needs an API key",
                     detail: "Magic Format is on, but your API key is missing.",
+                    severity: .warning,
+                    recommendedSection: .style
+                )
+            )
+        }
+
+        if llmEnabled && llmProvider == .appleFoundationModels && !appleMagicFormatAvailability.isAvailable {
+            items.append(
+                AttentionItem(
+                    id: "apple-magic-format-unavailable",
+                    title: "Apple Intelligence unavailable",
+                    detail: appleMagicFormatAvailability.statusText,
                     severity: .warning,
                     recommendedSection: .style
                 )
@@ -1066,6 +1136,7 @@ final class AppState {
     private let soundFeedbackService: SoundFeedbackServiceProtocol
     private let floatingIndicatorController = FloatingIndicatorController()
     private let llmPostProcessor: LLMPostProcessor
+    private let appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let generalSettingsStore: GeneralSettingsStoreProtocol
     private let historyStore: HistoryStoreProtocol
@@ -1079,6 +1150,7 @@ final class AppState {
     private let fileOpener: (URL) -> Bool
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
     private let temporaryFileCleanupScheduler: (URL) -> Void
+    private let magicFormatSlowWarningDelaySeconds: TimeInterval
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
 
@@ -1094,6 +1166,11 @@ final class AppState {
         case onboardingPractice
     }
 
+    private enum EffectiveMagicFormatProvider {
+        case appleFoundationModels
+        case openAICompatible
+    }
+
     init(
         modelManager: ModelManagerProtocol = ModelManager(),
         transcriptionService: TranscriptionServiceProtocol = TranscriptionService(),
@@ -1102,6 +1179,7 @@ final class AppState {
         hotkeyService: HotkeyServiceProtocol = HotkeyService(),
         soundFeedbackService: SoundFeedbackServiceProtocol = SoundFeedbackService(),
         llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
+        appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor = AppleFoundationModelsPostProcessor(),
         llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
         historyStore: HistoryStoreProtocol = HistoryStore(),
@@ -1125,6 +1203,7 @@ final class AppState {
                 try? FileManager.default.removeItem(at: url)
             }
         },
+        magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
     ) {
@@ -1135,6 +1214,7 @@ final class AppState {
         self.hotkeyService = hotkeyService
         self.soundFeedbackService = soundFeedbackService
         self.llmPostProcessor = llmPostProcessor
+        self.appleMagicFormatPostProcessor = appleMagicFormatPostProcessor
         self.llmSettingsStore = llmSettingsStore
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
@@ -1148,6 +1228,7 @@ final class AppState {
         self.fileOpener = fileOpener
         self.issueReportDiagnosticsDestinationPicker = issueReportDiagnosticsDestinationPicker
         self.temporaryFileCleanupScheduler = temporaryFileCleanupScheduler
+        self.magicFormatSlowWarningDelaySeconds = magicFormatSlowWarningDelaySeconds
         self.runtimeServicesEnabled = startServices
         self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
@@ -1416,6 +1497,9 @@ final class AppState {
         guard llmEnabled else {
             return
         }
+        guard needsAPIConfigurationForMagicFormat else {
+            return
+        }
         guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
             return
         }
@@ -1486,6 +1570,10 @@ final class AppState {
     func removeVocabularyTerm(_ value: String) {
         let filtered = vocabularyTerms.filter { $0.caseInsensitiveCompare(value) != .orderedSame }
         llmKeywordsRaw = filtered.joined(separator: "\n")
+    }
+
+    func resetAppleMagicFormatPrompt() {
+        llmAppleSystemPrompt = LLMDefaults.defaultAppleMagicFormatPrompt
     }
 
     func copyRecentResult(_ result: RecentResult) {
@@ -1951,6 +2039,31 @@ final class AppState {
             return rawText
         }
 
+        guard let provider = resolvedMagicFormatProvider() else {
+            AppLogger.shared.log(.warning, "llm fallback raw reason=apple_unavailable availability=\(appleMagicFormatAvailability.logValue)")
+            return rawText
+        }
+
+        switch provider {
+        case .appleFoundationModels:
+            return await postProcessTextWithApple(input: input, rawText: rawText)
+        case .openAICompatible:
+            return await postProcessTextWithAPI(input: input, rawText: rawText)
+        }
+    }
+
+    private func resolvedMagicFormatProvider() -> EffectiveMagicFormatProvider? {
+        switch llmProvider {
+        case .automatic:
+            return appleMagicFormatAvailability.isAvailable ? .appleFoundationModels : .openAICompatible
+        case .appleFoundationModels:
+            return appleMagicFormatAvailability.isAvailable ? .appleFoundationModels : nil
+        case .openAICompatible:
+            return .openAICompatible
+        }
+    }
+
+    private func postProcessTextWithAPI(input: String, rawText: String) async -> String {
         guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
             AppLogger.shared.log(.warning, "llm fallback raw reason=invalid_endpoint")
             return rawText
@@ -1977,7 +2090,11 @@ final class AppState {
 
         let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
         let startTime = Date()
+        let slowWarningTask = startMagicFormatSlowWarningTask()
         statusText = "Polishing..."
+        defer {
+            slowWarningTask.cancel()
+        }
 
         do {
             let polished = try await llmPostProcessor.polish(text: input, config: config)
@@ -1987,14 +2104,44 @@ final class AppState {
                 return rawText
             }
             let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            AppLogger.shared.log(.info, "llm polish success model=\(config.modelId) latency_ms=\(latencyMs)")
+            AppLogger.shared.log(.info, "llm polish success provider=api model=\(config.modelId) latency_ms=\(latencyMs)")
             return normalized
         } catch {
             let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
             if let llmError = error as? LLMPostProcessorError {
-                AppLogger.shared.log(.warning, "llm fallback raw reason=\(llmError.logValue) model=\(config.modelId) latency_ms=\(latencyMs)")
+                AppLogger.shared.log(.warning, "llm fallback raw provider=api reason=\(llmError.logValue) model=\(config.modelId) latency_ms=\(latencyMs)")
             } else {
-                AppLogger.shared.log(.warning, "llm fallback raw reason=unknown model=\(config.modelId) latency_ms=\(latencyMs)")
+                AppLogger.shared.log(.warning, "llm fallback raw provider=api reason=unknown model=\(config.modelId) latency_ms=\(latencyMs)")
+            }
+            return rawText
+        }
+    }
+
+    private func postProcessTextWithApple(input: String, rawText: String) async -> String {
+        let config = makeAppleMagicFormatConfig()
+        let startTime = Date()
+        let slowWarningTask = startMagicFormatSlowWarningTask()
+        statusText = "Polishing..."
+        defer {
+            slowWarningTask.cancel()
+        }
+
+        do {
+            let polished = try await appleMagicFormatPostProcessor.polish(text: input, config: config)
+            let normalized = polished.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else {
+                AppLogger.shared.log(.warning, "llm fallback raw provider=apple reason=empty_output")
+                return rawText
+            }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AppLogger.shared.log(.info, "llm polish success provider=apple_foundation_models latency_ms=\(latencyMs)")
+            return normalized
+        } catch {
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            if let llmError = error as? LLMPostProcessorError {
+                AppLogger.shared.log(.warning, "llm fallback raw provider=apple reason=\(llmError.logValue) latency_ms=\(latencyMs)")
+            } else {
+                AppLogger.shared.log(.warning, "llm fallback raw provider=apple reason=unknown latency_ms=\(latencyMs)")
             }
             return rawText
         }
@@ -2009,7 +2156,7 @@ final class AppState {
             try? await Task.sleep(nanoseconds: 220_000_000)
             setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0.72), source: .manual))
             try? await Task.sleep(nanoseconds: 220_000_000)
-            setFloatingIndicatorState(.processing)
+            setFloatingIndicatorState(.processing())
             try? await Task.sleep(nanoseconds: 220_000_000)
             showTransientIndicatorError("Microphone permission required", restoreState: .idle, duration: 0.35)
             try? await Task.sleep(nanoseconds: 900_000_000)
@@ -2217,7 +2364,7 @@ final class AppState {
 
         phase = .transcribing
         statusText = "Transcribing..."
-        setFloatingIndicatorState(.processing)
+        setFloatingIndicatorState(.processing())
 
         let captured = audioCaptureService.stopCapture()
         let samples = captured.samples
@@ -2437,10 +2584,12 @@ final class AppState {
             || settings.timeoutSeconds != LLMDefaults.defaultTimeoutSeconds
             || settings.maxTokens != LLMDefaults.defaultMaxTokens
         llmEnabled = settings.isEnabled
+        llmProvider = settings.provider
         llmSelectedModelPreset = settings.selectedModelPreset
         llmCustomModelId = settings.customModelId
         llmEndpointURLString = settings.endpointURLString
         llmBaseSystemPrompt = mergedPrompt
+        llmAppleSystemPrompt = settings.composedAppleSystemPrompt
         llmSystemPrompt = ""
         llmKeywordsRaw = settings.keywordsRaw
         llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
@@ -2464,10 +2613,12 @@ final class AppState {
     private func currentLLMSettings() -> LLMSettings {
         LLMSettings(
             isEnabled: llmEnabled,
+            provider: llmProvider,
             selectedModelPreset: llmSelectedModelPreset,
             customModelId: llmCustomModelId,
             endpointURLString: llmEndpointURLString,
             baseSystemPrompt: llmBaseSystemPrompt,
+            appleSystemPrompt: llmAppleSystemPrompt,
             systemPrompt: "",
             keywordsRaw: llmKeywordsRaw,
             timeoutSeconds: LLMDefaults.defaultTimeoutSeconds,
@@ -2605,6 +2756,16 @@ final class AppState {
         )
     }
 
+    private func makeAppleMagicFormatConfig() -> AppleMagicFormatConfig {
+        let settings = currentLLMSettings()
+        return AppleMagicFormatConfig(
+            systemPrompt: settings.composedAppleSystemPrompt,
+            keywords: settings.keywords,
+            timeoutSeconds: settings.timeoutSeconds,
+            maxTokens: LLMDefaults.appleMaxTokens
+        )
+    }
+
     private func effectiveMagicFormatTestAPIKey(apiKeyDraft: String) -> String? {
         let normalizedDraft = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedDraft.isEmpty {
@@ -2650,6 +2811,17 @@ final class AppState {
         floatingIndicatorState = state
         guard floatingIndicatorEnabled else { return }
         floatingIndicatorController.update(state)
+    }
+
+    private func startMagicFormatSlowWarningTask() -> Task<Void, Never> {
+        Task { @MainActor [weak self] in
+            guard let delaySeconds = self?.magicFormatSlowWarningDelaySeconds else { return }
+            let nanoseconds = UInt64(max(0, delaySeconds) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard let self, !Task.isCancelled else { return }
+            guard case .processing = self.floatingIndicatorState else { return }
+            self.setFloatingIndicatorState(.processing(message: "Magic Format is taking longer than usual."))
+        }
     }
 
     private func playSoundFeedback(_ event: SoundFeedbackEvent) {
@@ -2701,7 +2873,7 @@ final class AppState {
                 source: activeRecordingSource ?? .manual
             )
         case .transcribing:
-            return .processing
+            return .processing()
         case .needsModel, .downloadingModel, .loading, .ready, .error:
             return .idle
         }

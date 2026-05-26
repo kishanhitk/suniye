@@ -334,8 +334,11 @@ struct StylePage: View {
             }
 
             if appState.llmEnabled {
-                connectionSection
-                modelSection
+                providerSection
+                if appState.needsAPIConfigurationForMagicFormat {
+                    connectionSection
+                    modelSection
+                }
                 vocabularySection
                 promptSection
             }
@@ -377,6 +380,39 @@ struct StylePage: View {
                             .fill(setupStatusColor)
                             .frame(width: 7, height: 7)
                         Text(setupStatusText)
+                            .font(AppTypography.caption)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Provider
+
+    private var providerSection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+            SectionHeading(title: "Provider")
+
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    NativePopupPicker(
+                        items: MagicFormatProvider.allCases,
+                        selection: $appState.llmProvider,
+                        title: { $0.displayName },
+                        isEnabled: providerPickerEnabled(_:)
+                    )
+                    .frame(maxWidth: 320)
+
+                    Text(appState.llmProvider.description)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: appState.appleMagicFormatAvailability.isAvailable ? "checkmark.circle.fill" : "info.circle.fill")
+                            .font(AppTypography.caption)
+                            .foregroundStyle(appState.appleMagicFormatAvailability.isAvailable ? .green : .orange)
+                        Text(appState.magicFormatProviderDetailText)
                             .font(AppTypography.caption)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                     }
@@ -573,11 +609,24 @@ struct StylePage: View {
 
             SurfaceCard {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Instructions for rewriting your text.")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(promptDescription)
+                            .font(AppTypography.caption)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
 
-                    TextEditor(text: $appState.llmBaseSystemPrompt)
+                        Spacer(minLength: 12)
+
+                        if appState.usesAppleMagicFormatSettings {
+                            Button("Reset to Apple Default") {
+                                appState.resetAppleMagicFormatPrompt()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(appState.llmAppleSystemPrompt == LLMDefaults.defaultAppleMagicFormatPrompt)
+                        }
+                    }
+
+                    TextEditor(text: promptBinding)
                         .font(AppTypography.body)
                         .frame(minHeight: 120)
                         .padding(8)
@@ -599,6 +648,25 @@ struct StylePage: View {
     private func addTerm() {
         appState.addVocabularyTerm(vocabularyDraft)
         vocabularyDraft = ""
+    }
+
+    private func providerPickerEnabled(_ provider: MagicFormatProvider) -> Bool {
+        switch provider {
+        case .appleFoundationModels:
+            return appState.appleMagicFormatAvailability.isAvailable
+        case .automatic, .openAICompatible:
+            return true
+        }
+    }
+
+    private var promptBinding: Binding<String> {
+        appState.usesAppleMagicFormatSettings ? $appState.llmAppleSystemPrompt : $appState.llmBaseSystemPrompt
+    }
+
+    private var promptDescription: String {
+        appState.usesAppleMagicFormatSettings
+            ? "Instructions for Apple's local formatter."
+            : "Instructions for rewriting your text."
     }
 
     private var modelPickerPresets: [LLMModelPreset] {
@@ -632,11 +700,19 @@ struct StylePage: View {
         case .needsAPIKey, .needsServiceSetup:
             return .orange
         case .ready:
+            if appState.usesAppleMagicFormatSettings {
+                return .green
+            }
             return appState.isMagicFormatSetupVerified ? .green : .blue
         }
     }
 
     private var setupStatusText: String {
+        if appState.usesAppleMagicFormatSettings {
+            return appState.appleMagicFormatAvailability.isAvailable
+                ? "Apple Intelligence ready"
+                : appState.appleMagicFormatAvailability.statusText
+        }
         if appState.isMagicFormatSetupVerified {
             return "Connected and ready"
         }

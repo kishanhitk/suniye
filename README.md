@@ -12,7 +12,7 @@ Open-source, local-first dictation for macOS. Hold a key, speak, and your words 
 - **Works everywhere** — Inserts text directly into whichever app you're using via macOS Accessibility APIs.
 - **Instant** — No network round-trip. Your voice becomes text in milliseconds, not seconds.
 - **One shortcut** — Hold a key (configurable), talk, release. That's it.
-- **Optional LLM cleanup** — Connect any OpenAI-compatible endpoint to polish transcriptions, fix grammar, or apply domain-specific vocabulary.
+- **Optional Magic Format cleanup** — Use Apple Intelligence locally when available, or connect an OpenAI-compatible endpoint to polish transcriptions and preserve domain-specific vocabulary.
 
 ## Install
 
@@ -51,7 +51,7 @@ Use **Report a Problem** from the menu bar, the General page, or the Help menu. 
 | **Hotkey** | Configurable hold-to-talk shortcut (Fn/Globe, modifier combos, etc.) |
 | **Model** | Compare local ASR models by speed, quality, size, and language support; install supported options, switch the active model, or remove unused ones |
 | **Vocabulary** | Add domain-specific terms so the app gets your jargon right |
-| **LLM** | Optional AI cleanup — choose a model, set an API key, customize the prompt |
+| **Magic Format** | Optional AI cleanup — use Apple Intelligence locally when available, or choose an API model, set an API key, and customize prompts |
 | **General** | Preferred mic, auto-paste, launch at login, diagnostics |
 
 ## Supported speech models
@@ -99,7 +99,7 @@ Keep that exported file in a password manager or other secret store, then delete
 
 - All transcription happens **locally** on your Mac.
 - The only network calls are model downloads, update checks, and issue reports you explicitly submit.
-- If you enable the optional LLM feature, transcribed text is sent to the LLM provider you configure.
+- If you enable Magic Format, Suniye uses Apple Intelligence locally when available. When you choose an API endpoint, transcribed text is sent to the provider you configure.
 
 ## Technical details
 

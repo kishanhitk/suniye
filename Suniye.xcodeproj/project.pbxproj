@@ -57,6 +57,7 @@
 		9CEC29D27FCC952C4C618C70 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2D87825E1C649DC7A33115 /* StatusItemController.swift */; };
 		9F822914FE40C1F233C1E055 /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F51B3DBFA1B6B9385FA63197 /* MainWindowController.swift */; };
 		A0D2E4AA64DD241ACA69457D /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A1F146473FBF70BF26A9257B /* Sparkle */; };
+		A2F15D9699E05918C7A96F38 /* AppleFoundationModelsPostProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A16E593550418D25E53DADE /* AppleFoundationModelsPostProcessorTests.swift */; };
 		AA7DAE1D8BC31737F5640A1B /* FragmentMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 82E6C7AA7DADED73D5C382DA /* FragmentMono-Regular.ttf */; };
 		B251595E3A3080BF2437F31F /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 633F09E2901A308614E595B1 /* TranscriptionService.swift */; };
 		B4C54A8C12A3F949CD83553C /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 865C597BBA404F5F6A049278 /* ModelManager.swift */; };
@@ -76,6 +77,7 @@
 		E9210190CDD60F212008A02A /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045F7AACA142A791AFFA7C43 /* SettingsModels.swift */; };
 		F047041193A8264676FEC71A /* GoogleSans-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = D483D635E7A8E177A09D311E /* GoogleSans-Variable.ttf */; };
 		F75A72DF1CAEBAD284065DE4 /* ModelManagerE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E5CEF1B4FEEFC12719CB94A /* ModelManagerE2ETests.swift */; };
+		F8F1129D24AD0988D93BD4DA /* AppleFoundationModelsPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96753F72AB64EA4C792D7AB5 /* AppleFoundationModelsPostProcessor.swift */; };
 		F9F0D01CE511EF8AE268DC8A /* FloatingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3686A213810FF9BE79E3CC /* FloatingIndicatorView.swift */; };
 		FD68A66D8807B4E102B0E8C7 /* libsherpa-onnx-c-api.dylib in Resources */ = {isa = PBXBuildFile; fileRef = BAF213F3DEF59821572510F4 /* libsherpa-onnx-c-api.dylib */; };
 /* End PBXBuildFile section */
@@ -143,6 +145,8 @@
 		85BCA4A71724B17FDD57DFAD /* Suniye-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Suniye-Bridging-Header.h"; sourceTree = "<group>"; };
 		865C597BBA404F5F6A049278 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
 		897FC3AE1270CBE7E26BE606 /* AppStateIssueReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateIssueReportTests.swift; sourceTree = "<group>"; };
+		8A16E593550418D25E53DADE /* AppleFoundationModelsPostProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessorTests.swift; sourceTree = "<group>"; };
+		96753F72AB64EA4C792D7AB5 /* AppleFoundationModelsPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessor.swift; sourceTree = "<group>"; };
 		9D1534750806E24BA6EAEBB6 /* SuniyeNativeBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SuniyeNativeBridge.h; sourceTree = "<group>"; };
 		9D89C1656C10C1E6D3921D81 /* AppStateLLMTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateLLMTests.swift; sourceTree = "<group>"; };
 		9E2ECDB4CFB11C5B9831460F /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
@@ -236,6 +240,7 @@
 		0CCEE84FE81B135399A9D983 /* SuniyeTests */ = {
 			isa = PBXGroup;
 			children = (
+				8A16E593550418D25E53DADE /* AppleFoundationModelsPostProcessorTests.swift */,
 				897FC3AE1270CBE7E26BE606 /* AppStateIssueReportTests.swift */,
 				9D89C1656C10C1E6D3921D81 /* AppStateLLMTests.swift */,
 				DDBA8DA30905F29C03B8A36D /* AppStateSettingsTests.swift */,
@@ -301,6 +306,7 @@
 		9C4DE280446657D266991A07 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				96753F72AB64EA4C792D7AB5 /* AppleFoundationModelsPostProcessor.swift */,
 				4213B4B666CF5B60F3371019 /* AppLogger.swift */,
 				BF32A97362B13A4984C14FA6 /* AppVersion.swift */,
 				C5E4B536164381A9A3E3C653 /* AudioCaptureService.swift */,
@@ -450,6 +456,7 @@
 				84CB629AA94E239EEC0911F6 /* AppLogger.swift in Sources */,
 				4D8662CE6850AD46ECB306BA /* AppState.swift in Sources */,
 				633FB6F05F2C6507FF021D1F /* AppVersion.swift in Sources */,
+				F8F1129D24AD0988D93BD4DA /* AppleFoundationModelsPostProcessor.swift in Sources */,
 				1C1DC32CFF5C5C55DE937923 /* AudioCaptureService.swift in Sources */,
 				D70B86338C771C5459B2AEC4 /* FloatingIndicatorController.swift in Sources */,
 				C6D9D80335069A671A66A11A /* FloatingIndicatorState.swift in Sources */,
@@ -499,6 +506,7 @@
 				4C5922B0B6EE913379AECED2 /* AppStateSubmitCommandTests.swift in Sources */,
 				17F9EC88DB57EDE0C99E7A51 /* AppStateUpdateTests.swift in Sources */,
 				70911BA331D12E52A95C209F /* AppVersionTests.swift in Sources */,
+				A2F15D9699E05918C7A96F38 /* AppleFoundationModelsPostProcessorTests.swift in Sources */,
 				56F6C83F84D44FC17F6C1AE2 /* AudioCaptureServiceTests.swift in Sources */,
 				1382B9023A773ADC62E71907 /* FloatingIndicatorLayoutTests.swift in Sources */,
 				898E0CC20B6C61DE45A0BC0B /* GeneralSettingsStoreTests.swift in Sources */,

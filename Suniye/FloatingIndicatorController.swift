@@ -387,8 +387,12 @@ final class FloatingIndicatorController {
             return NSSize(width: 272, height: 84)
         case .listening:
             return NSSize(width: 116, height: 40)
-        case .processing:
-            return NSSize(width: 128, height: 40)
+        case let .processing(message):
+            guard let message else {
+                return NSSize(width: 128, height: 40)
+            }
+            let width = min(max(CGFloat(message.count) * 6.5 + 86, 292), 392)
+            return NSSize(width: width, height: 40)
         case let .error(message):
             let width = min(max(CGFloat(message.count) * 6.2, 170), 240) + 32
             return NSSize(width: width, height: 52)

@@ -59,6 +59,110 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(fakeLLM.callCount, 1)
     }
 
+    func testAutomaticProviderUsesAppleWhenAvailable() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("apple polished")
+        )
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .automatic
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "apple polished")
+        XCTAssertEqual(fakeApple.callCount, 1)
+        XCTAssertEqual(fakeLLM.callCount, 0)
+    }
+
+    func testAutomaticProviderFallsBackToAPIWhenAppleUnavailable() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .modelNotReady,
+            result: .success("apple polished")
+        )
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .automatic
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "api polished")
+        XCTAssertEqual(fakeApple.callCount, 0)
+        XCTAssertEqual(fakeLLM.callCount, 1)
+    }
+
+    func testExplicitAppleProviderDoesNotRequireAPIKey() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("apple polished")
+        )
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .appleFoundationModels
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "apple polished")
+        XCTAssertEqual(fakeApple.callCount, 1)
+        XCTAssertEqual(fakeLLM.callCount, 0)
+    }
+
+    func testExplicitAPIProviderStillRequiresAPIKey() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("apple polished")
+        )
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .openAICompatible
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(fakeApple.callCount, 0)
+        XCTAssertEqual(fakeLLM.callCount, 0)
+    }
+
     func testToggleOnFailureFallsBackToRaw() async {
         let fakeLLM = FakeLLMPostProcessor(result: .failure(LLMPostProcessorError.timeout))
         let keychain = TestKeychainService(value: "api-key")
@@ -76,6 +180,26 @@ final class AppStateLLMTests: XCTestCase {
 
         XCTAssertEqual(output, "raw text")
         XCTAssertEqual(fakeLLM.callCount, 1)
+    }
+
+    func testAppleProviderFailureFallsBackToRaw() async {
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .available,
+            result: .failure(LLMPostProcessorError.malformedResponse)
+        )
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .appleFoundationModels
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(fakeApple.callCount, 1)
     }
 
     func testToggleOnWithInvalidEndpointFallsBackToRawWithoutCallingProvider() async {
@@ -279,6 +403,57 @@ final class AppStateLLMTests: XCTestCase {
         await appState.testMagicFormatSetup(apiKeyDraft: "   ")
 
         XCTAssertEqual(fakeLLM.lastTestConfig?.apiKey, "saved-key")
+    }
+
+    func testMagicFormatSlowWarningUpdatesProcessingPill() async {
+        let fakeApple = BlockingAppleMagicFormatPostProcessor()
+        let store = TestLLMSettingsStore()
+        let appState = makeTestAppState(
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            magicFormatSlowWarningDelaySeconds: 0.05
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .appleFoundationModels
+        appState.floatingIndicatorState = .processing()
+
+        let task = Task {
+            await appState.postProcessTextIfEnabled("raw text")
+        }
+
+        await fakeApple.waitUntilStarted()
+        try? await Task.sleep(nanoseconds: 120_000_000)
+
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .processing(message: "Magic Format is taking longer than usual.")
+        )
+
+        fakeApple.resume(output: "polished")
+        let output = await task.value
+        XCTAssertEqual(output, "polished")
+    }
+
+    func testMagicFormatSlowWarningCancelsOnFastSuccess() async {
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("polished")
+        )
+        let store = TestLLMSettingsStore()
+        let appState = makeTestAppState(
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            magicFormatSlowWarningDelaySeconds: 0.05
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .appleFoundationModels
+        appState.floatingIndicatorState = .processing()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+        try? await Task.sleep(nanoseconds: 120_000_000)
+
+        XCTAssertEqual(output, "polished")
+        XCTAssertEqual(appState.floatingIndicatorState, .processing())
     }
 
     func testTestMagicFormatSetupTracksProgressAndSuccessResult() async {
@@ -621,6 +796,60 @@ private final class CapturingLLMPostProcessor: LLMPostProcessor {
 
     func testSetup(config: LLMConfig) async throws {
         lastTestConfig = config
+    }
+}
+
+private final class CapturingAppleMagicFormatPostProcessor: AppleMagicFormatPostProcessor {
+    var availability: AppleFoundationModelsAvailability
+    private let result: Result<String, Error>
+    private(set) var callCount = 0
+    private(set) var lastConfig: AppleMagicFormatConfig?
+
+    init(availability: AppleFoundationModelsAvailability, result: Result<String, Error>) {
+        self.availability = availability
+        self.result = result
+    }
+
+    func polish(text: String, config: AppleMagicFormatConfig) async throws -> String {
+        callCount += 1
+        lastConfig = config
+        return try result.get()
+    }
+
+    func testSetup(config: AppleMagicFormatConfig) async throws {
+        lastConfig = config
+    }
+}
+
+private final class BlockingAppleMagicFormatPostProcessor: AppleMagicFormatPostProcessor {
+    var availability: AppleFoundationModelsAvailability = .available
+    private var startedContinuation: CheckedContinuation<Void, Never>?
+    private var resumeContinuation: CheckedContinuation<String, Never>?
+    private(set) var callCount = 0
+
+    func polish(text: String, config: AppleMagicFormatConfig) async throws -> String {
+        callCount += 1
+        startedContinuation?.resume()
+        startedContinuation = nil
+        return await withCheckedContinuation { continuation in
+            resumeContinuation = continuation
+        }
+    }
+
+    func testSetup(config: AppleMagicFormatConfig) async throws {}
+
+    func waitUntilStarted() async {
+        if callCount > 0 {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            startedContinuation = continuation
+        }
+    }
+
+    func resume(output: String) {
+        resumeContinuation?.resume(returning: output)
+        resumeContinuation = nil
     }
 }
 
