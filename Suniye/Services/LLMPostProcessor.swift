@@ -182,6 +182,11 @@ enum MagicFormatOutputSanitizer {
             return true
         }
 
+        if containsWord("items", in: lowercased),
+           lowercased.contains(":") || lowercased.contains(",") || lowercased.contains(" and ") {
+            return true
+        }
+
         let wordTriggers = [
             "list",
             "bullets",
