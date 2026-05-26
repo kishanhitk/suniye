@@ -57,7 +57,7 @@ final class OpenRouterPostProcessorTests: XCTestCase {
         )
 
         let output = try await processor.polish(text: "hello world", config: config)
-        XCTAssertEqual(output, "hello world.")
+        XCTAssertEqual(output, "Output: hello world.")
     }
 
     func testSetupBuildsMinimalValidationRequest() async throws {
@@ -161,11 +161,11 @@ final class OpenRouterPostProcessorTests: XCTestCase {
         }
     }
 
-    func testSanitizeOutputRemovesFencesAndPrefix() {
+    func testSanitizeOutputOnlyTrimsOuterWhitespace() {
         let processor = OpenRouterPostProcessor(session: makeSession())
-        let raw = "```\nPolished: hello\nworld\n```"
+        let raw = " \n```\nPolished: hello\nworld\n```\n "
         let output = processor.sanitizeOutput(raw)
-        XCTAssertEqual(output, "hello\nworld")
+        XCTAssertEqual(output, "```\nPolished: hello\nworld\n```")
     }
 
     private func makeSession() -> URLSession {

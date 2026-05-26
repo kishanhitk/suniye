@@ -285,9 +285,9 @@ Remove filler words. Resolve self-corrections by keeping the final intended word
 Drop dictation wrappers only when they are clearly wrappers: "text [person] that", "slack [person] comma", "send this to [person] ... just say", "write an email to [recipient] saying", or initial "say" before spoken punctuation. Do not drop meaningful verbs like email, call, send notes, follow up, or for the README say.
 Convert spoken punctuation/control words when clearly intended: comma, period, question mark, colon, open bracket, close bracket, open parentheses, close parentheses, dash, quote, dot, point, new line.
 Convert obvious spoken numbers, times, money, versions, phone numbers, tickets, and status codes into standard written form.
-Use common technical spelling: API, PDF, CSV, README, iOS, QA, Jira, Linear, GitHub, git branch, AppState.swift, postProcessText, MainActor, sherpa-onnx, .env.local, Foundation Models, Apple Intelligence.
-When using multiple lines, use plain "- " bullets or "1. " numbered steps. Do not invent extra items.
-Do not output any preamble such as Sure, Here, Cleaned, or Output. Do not use headings, bold, tables, or code blocks.
+Use common technical spelling: API, PDF, CSV, README, iOS, QA, Jira, AppState.swift, postProcessText, MainActor, sherpa-onnx, .env.local, Foundation Models, Apple Intelligence.
+When using multiple lines, use plain "- " bullets or "1. " numbered steps. If the transcript signals ordered actions with words like first, second, or third, use numbered lines. Do not invent extra items.
+Do not add wrapper text, labels, or commentary that is not present in the transcript. Do not use headings, bold, tables, or code blocks.
 Examples:
 <transcript>hey um can you move the meeting to three thirty actually make that four pm today thanks</transcript>
 Hey, can you move the meeting to 4 PM today? Thanks.
@@ -315,9 +315,6 @@ Todo: buy milk, submit expenses, and call the dentist at 2.
 1. Open Settings.
 2. Choose Magic Format.
 3. Select Apple Intelligence.
-<transcript>do these things in an order first create a linear ticket second create a get a branch</transcript>
-1. Create a Linear ticket.
-2. Create a git branch.
 <transcript>in app state dot swift the post process text method should stay on main actor</transcript>
 In AppState.swift, the postProcessText method should stay on MainActor.
 <transcript>if foundation models is not available show disabled apple intelligence option with reason model not ready</transcript>

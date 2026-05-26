@@ -31,7 +31,7 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
 
         var lastInvalidOutputWasEmpty = false
         for attempt in 0 ..< 2 {
-            let instructions = makeInstructions(config: config, retrying: attempt > 0)
+            let instructions = makeInstructions(config: config, text: trimmedInput, retrying: attempt > 0)
             let prompt = makePrompt(text: trimmedInput)
 
             do {
@@ -65,15 +65,23 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
         }
     }
 
-    private func makeInstructions(config: AppleMagicFormatConfig, retrying: Bool) -> String {
+    private func makeInstructions(config: AppleMagicFormatConfig, text: String, retrying: Bool) -> String {
         var sections = [config.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)]
 
         if !config.keywords.isEmpty {
             sections.append("Vocabulary terms to preserve exactly when present: \(config.keywords.joined(separator: ", ")).")
         }
 
+        if MagicFormatOutputSanitizer.allowsMultilineOutput(for: text) {
+            sections.append("Formatting intent detected: return a plain-text multi-line list. Use numbered lines for ordered actions or steps; otherwise use plain hyphen bullets. Do not add headings or extra items.")
+        }
+
         if retrying {
-            sections.append("Retry correction: return only the cleaned transcript text. One line. No preamble, labels, markdown, quotes around the answer, or extra commentary.")
+            if MagicFormatOutputSanitizer.allowsMultilineOutput(for: text) {
+                sections.append("Retry correction: return only the cleaned transcript text as a plain-text list. Do not add wrapper text, markdown, quotes around the answer, or extra commentary.")
+            } else {
+                sections.append("Retry correction: return only the cleaned transcript text. One line. Do not add wrapper text, markdown, quotes around the answer, or extra commentary.")
+            }
         }
 
         return sections

@@ -100,24 +100,7 @@ enum LLMPostProcessorError: LocalizedError {
 
 enum MagicFormatOutputSanitizer {
     static func sanitize(_ raw: String) -> String {
-        var output = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if output.hasPrefix("```") {
-            let lines = output.components(separatedBy: .newlines)
-            let filtered = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
-            output = filtered.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        let prefixes = ["output:", "polished:", "rewritten:", "text:"]
-        for prefix in prefixes {
-            if output.lowercased().hasPrefix(prefix),
-               let range = output.range(of: ":") {
-                output = String(output[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-                break
-            }
-        }
-
-        return output
+        raw.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func isValidPlainText(_ output: String, for input: String) -> Bool {
@@ -131,10 +114,6 @@ enum MagicFormatOutputSanitizer {
 
         let lowercased = trimmed.lowercased()
         if lowercased.contains("<transcript") || lowercased.contains("</transcript>") {
-            return false
-        }
-
-        if startsWithBlockedLeadIn(lowercased) {
             return false
         }
 
@@ -152,54 +131,12 @@ enum MagicFormatOutputSanitizer {
         return true
     }
 
-    private static func startsWithBlockedLeadIn(_ lowercased: String) -> Bool {
-        let blockedLeadIns = [
-            "sure, here is",
-            "sure, here's",
-            "sure, the cleaned",
-            "here is the cleaned",
-            "here's the cleaned",
-            "here is the polished",
-            "here's the polished",
-            "here is the rewritten",
-            "here's the rewritten",
-            "here is the output",
-            "here's the output",
-            "here is the list",
-            "here's the list",
-            "here is a list",
-            "here's a list",
-            "cleaned:",
-            "cleaned text:",
-            "output:",
-            "output text:",
-            "the cleaned text",
-            "the cleaned transcript",
-            "the polished text",
-            "the polished transcript",
-        ]
-
-        return blockedLeadIns.contains { hasLeadInPrefix(lowercased, phrase: $0) }
-    }
-
-    private static func hasLeadInPrefix(_ text: String, phrase: String) -> Bool {
-        guard text.hasPrefix(phrase) else {
-            return false
-        }
-        guard text.count > phrase.count else {
-            return true
-        }
-
-        let nextIndex = text.index(text.startIndex, offsetBy: phrase.count)
-        return isBoundary(text[nextIndex])
-    }
-
     private static func isBoundary(_ character: Character) -> Bool {
         character.unicodeScalars.allSatisfy { !CharacterSet.alphanumerics.contains($0) }
     }
 
     private static func isValidMultilineOutput(_ output: String, for input: String) -> Bool {
-        guard shouldAllowMultilineOutput(for: input) else {
+        guard allowsMultilineOutput(for: input) else {
             return false
         }
 
@@ -213,7 +150,7 @@ enum MagicFormatOutputSanitizer {
         return true
     }
 
-    private static func shouldAllowMultilineOutput(for input: String) -> Bool {
+    static func allowsMultilineOutput(for input: String) -> Bool {
         let lowercased = input.lowercased()
         let phraseTriggers = [
             "new line",

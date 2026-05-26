@@ -2,13 +2,13 @@ import XCTest
 @testable import Suniye
 
 final class AppleFoundationModelsPostProcessorTests: XCTestCase {
-    func testPolishReturnsValidSanitizedOutput() async throws {
+    func testPolishReturnsTrimmedOutputWithoutStrippingPrefixes() async throws {
         let client = FakeAppleFoundationModelsClient(outputs: ["Output: Final text."])
         let processor = AppleFoundationModelsPostProcessor(client: client)
 
         let output = try await processor.polish(text: " raw text ", config: makeConfig())
 
-        XCTAssertEqual(output, "Final text.")
+        XCTAssertEqual(output, "Output: Final text.")
         XCTAssertEqual(client.prompts.first, "<transcript>\nraw text\n</transcript>")
         XCTAssertTrue(client.instructions.first?.contains("Suniye") == true)
     }
@@ -45,17 +45,16 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         XCTAssertEqual(client.callCount, 3)
     }
 
-    func testSingleLinePreambleLeadInRetries() async throws {
+    func testLiteralPreambleLikeUserTextIsAccepted() async throws {
         let client = FakeAppleFoundationModelsClient(outputs: [
             "Here is the cleaned text: Final text.",
-            "Final text.",
         ])
         let processor = AppleFoundationModelsPostProcessor(client: client)
 
         let output = try await processor.polish(text: "raw text", config: makeConfig())
 
-        XCTAssertEqual(output, "Final text.")
-        XCTAssertEqual(client.callCount, 2)
+        XCTAssertEqual(output, "Here is the cleaned text: Final text.")
+        XCTAssertEqual(client.callCount, 1)
     }
 
     func testRequestedBulletListOutputIsAccepted() async throws {
@@ -101,6 +100,8 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
 
         XCTAssertEqual(output, "1. Create a Linear ticket.\n2. Create a git branch.")
         XCTAssertEqual(client.callCount, 1)
+        XCTAssertTrue(client.instructions.first?.contains("Formatting intent detected") == true)
+        XCTAssertFalse(client.instructions.first?.contains("Linear ticket") == true)
     }
 
     func testUnrequestedMultilineOutputRetries() async throws {
