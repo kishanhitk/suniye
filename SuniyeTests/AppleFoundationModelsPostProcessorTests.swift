@@ -72,6 +72,23 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         XCTAssertEqual(client.callCount, 1)
     }
 
+    func testListOfCommaSeparatedItemsOutputIsAcceptedAndPromptedGenerically() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "- Fan\n- Laptop\n- Book",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(
+            text: "List of items to order: Fan, laptop, book.",
+            config: makeConfig()
+        )
+
+        XCTAssertEqual(output, "- Fan\n- Laptop\n- Book")
+        XCTAssertEqual(client.callCount, 1)
+        XCTAssertTrue(client.instructions.first?.contains("comma-separated \"list of ...\" requests") == true)
+        XCTAssertTrue(client.instructions.first?.contains("one item per line") == true)
+    }
+
     func testRequestedNumberedStepsOutputIsAccepted() async throws {
         let client = FakeAppleFoundationModelsClient(outputs: [
             "1. Open Settings.\n2. Choose Magic Format.\n3. Select Apple Intelligence.",

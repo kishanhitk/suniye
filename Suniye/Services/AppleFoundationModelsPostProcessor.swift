@@ -73,7 +73,7 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
         }
 
         if MagicFormatOutputSanitizer.allowsMultilineOutput(for: text) {
-            sections.append("Formatting intent detected: return a plain-text multi-line list. Use numbered lines for ordered actions or steps; otherwise use plain hyphen bullets. Do not add headings or extra items.")
+            sections.append("Formatting intent detected: return a plain-text multi-line list with one item per line. Use plain hyphen bullets for unordered item lists, including comma-separated \"list of ...\" requests. Use numbered lines only for ordered actions, steps, or explicit numbered lists. Do not add headings or extra items.")
         }
 
         if retrying {
