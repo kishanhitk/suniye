@@ -85,7 +85,26 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
 
         XCTAssertEqual(output, "- Fan\n- Laptop\n- Book")
         XCTAssertEqual(client.callCount, 1)
-        XCTAssertTrue(client.instructions.first?.contains("comma-separated \"list of ...\" requests") == true)
+        XCTAssertTrue(client.instructions.first?.contains("\"list of ...\" requests") == true)
+        XCTAssertTrue(client.instructions.first?.contains("commas, pauses, or \"and\"") == true)
+        XCTAssertTrue(client.instructions.first?.contains("one item per line") == true)
+    }
+
+    func testListOfItemsSeparatedByAndOutputIsAcceptedAndPromptedGenerically() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "- Fan\n- Laptop\n- Book",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(
+            text: "List of items to order: fan laptop and book.",
+            config: makeConfig()
+        )
+
+        XCTAssertEqual(output, "- Fan\n- Laptop\n- Book")
+        XCTAssertEqual(client.callCount, 1)
+        XCTAssertTrue(client.instructions.first?.contains("\"list of ...\" requests") == true)
+        XCTAssertTrue(client.instructions.first?.contains("commas, pauses, or \"and\"") == true)
         XCTAssertTrue(client.instructions.first?.contains("one item per line") == true)
     }
 
