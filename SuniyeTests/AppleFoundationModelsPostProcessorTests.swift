@@ -58,6 +58,49 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         XCTAssertEqual(client.callCount, 2)
     }
 
+    func testRequestedBulletListOutputIsAccepted() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "- Buy milk\n- Submit expenses\n- Call the dentist at 2 PM",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(
+            text: "make this a bullet list buy milk submit expenses and call dentist at two",
+            config: makeConfig()
+        )
+
+        XCTAssertEqual(output, "- Buy milk\n- Submit expenses\n- Call the dentist at 2 PM")
+        XCTAssertEqual(client.callCount, 1)
+    }
+
+    func testRequestedNumberedStepsOutputIsAccepted() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "1. Open Settings.\n2. Choose Magic Format.\n3. Select Apple Intelligence.",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(
+            text: "numbered steps open settings choose magic format select apple intelligence",
+            config: makeConfig()
+        )
+
+        XCTAssertEqual(output, "1. Open Settings.\n2. Choose Magic Format.\n3. Select Apple Intelligence.")
+        XCTAssertEqual(client.callCount, 1)
+    }
+
+    func testUnrequestedMultilineOutputRetries() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "First line.\nSecond line.",
+            "Final text.",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(text: "raw text", config: makeConfig())
+
+        XCTAssertEqual(output, "Final text.")
+        XCTAssertEqual(client.callCount, 2)
+    }
+
     func testInvalidOutputAfterRetryThrowsMalformedResponse() async {
         let client = FakeAppleFoundationModelsClient(outputs: [
             "Sure, here is the cleaned text:\n\nCleaned text.",

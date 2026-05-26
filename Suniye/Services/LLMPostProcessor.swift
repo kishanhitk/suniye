@@ -125,7 +125,7 @@ enum MagicFormatOutputSanitizer {
         guard !trimmed.isEmpty else {
             return false
         }
-        if trimmed.contains("\n") || trimmed.contains("```") {
+        if trimmed.contains("```") {
             return false
         }
 
@@ -135,6 +135,11 @@ enum MagicFormatOutputSanitizer {
         }
 
         if startsWithBlockedLeadIn(lowercased) {
+            return false
+        }
+
+        if trimmed.rangeOfCharacter(from: .newlines) != nil,
+           !isValidMultilineOutput(trimmed, for: input) {
             return false
         }
 
@@ -160,6 +165,10 @@ enum MagicFormatOutputSanitizer {
             "here's the rewritten",
             "here is the output",
             "here's the output",
+            "here is the list",
+            "here's the list",
+            "here is a list",
+            "here's a list",
             "cleaned:",
             "cleaned text:",
             "output:",
@@ -187,5 +196,69 @@ enum MagicFormatOutputSanitizer {
 
     private static func isBoundary(_ character: Character) -> Bool {
         character.unicodeScalars.allSatisfy { !CharacterSet.alphanumerics.contains($0) }
+    }
+
+    private static func isValidMultilineOutput(_ output: String, for input: String) -> Bool {
+        guard shouldAllowMultilineOutput(for: input) else {
+            return false
+        }
+
+        let lines = output
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard lines.count <= 20, lines.allSatisfy({ !$0.isEmpty }) else {
+            return false
+        }
+
+        return true
+    }
+
+    private static func shouldAllowMultilineOutput(for input: String) -> Bool {
+        let lowercased = input.lowercased()
+        let phraseTriggers = [
+            "new line",
+            "new lines",
+            "next line",
+            "line break",
+            "line breaks",
+            "separate lines",
+            "separate line",
+            "bullet list",
+            "bulleted list",
+            "numbered list",
+            "todo list",
+            "to do list",
+            "as a list",
+            "make a list",
+            "format as a list",
+            "turn this into a list",
+        ]
+        if phraseTriggers.contains(where: { lowercased.contains($0) }) {
+            return true
+        }
+
+        let wordTriggers = [
+            "list",
+            "bullets",
+            "bullet",
+            "checklist",
+            "steps",
+            "agenda",
+        ]
+        return wordTriggers.contains { containsWord($0, in: lowercased) }
+    }
+
+    private static func containsWord(_ word: String, in text: String) -> Bool {
+        var searchStart = text.startIndex
+        while searchStart < text.endIndex,
+              let range = text.range(of: word, range: searchStart ..< text.endIndex) {
+            let hasLeadingBoundary = range.lowerBound == text.startIndex || isBoundary(text[text.index(before: range.lowerBound)])
+            let hasTrailingBoundary = range.upperBound == text.endIndex || isBoundary(text[range.upperBound])
+            if hasLeadingBoundary && hasTrailingBoundary {
+                return true
+            }
+            searchStart = range.upperBound
+        }
+        return false
     }
 }
