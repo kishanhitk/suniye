@@ -182,8 +182,7 @@ enum MagicFormatOutputSanitizer {
             return true
         }
 
-        if containsWord("items", in: lowercased),
-           lowercased.contains(":") || lowercased.contains(",") || lowercased.contains(" and ") {
+        if hasLikelyItemListLeadIn(for: lowercased) {
             return true
         }
 
@@ -196,6 +195,14 @@ enum MagicFormatOutputSanitizer {
             "agenda",
         ]
         return wordTriggers.contains { containsWord($0, in: lowercased) }
+    }
+
+    static func hasLikelyItemListLeadIn(for input: String) -> Bool {
+        let lowercased = input.lowercased()
+        guard containsWord("items", in: lowercased) else {
+            return false
+        }
+        return lowercased.contains(":") || lowercased.contains(",") || lowercased.contains(" and ")
     }
 
     private static func containsOrdinalSequence(in text: String) -> Bool {

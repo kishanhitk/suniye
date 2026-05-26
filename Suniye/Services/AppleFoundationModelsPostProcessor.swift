@@ -73,11 +73,22 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
         }
 
         if MagicFormatOutputSanitizer.allowsMultilineOutput(for: text) {
-            sections.append("""
-            Critical list lead-in rule: when this list input contains text before a colon, that text is part of the user's content. Keep it as the first line, cleaned only for grammar, followed by list items on later lines. Do not drop it.
+            if MagicFormatOutputSanitizer.hasLikelyItemListLeadIn(for: text) {
+                sections.append("""
+                Formatting intent detected: this transcript is an item list with a user-provided lead-in before the item run. Return exactly this structure: first line = the cleaned lead-in ending with a colon; following lines = one bullet per item.
 
-            Formatting intent detected: return a plain-text multi-line list with one item per line. Preserve any user-provided list lead-in or label as the first line ending with a colon; text before a colon is user content, so never drop it. Do not invent a lead-in. Use plain hyphen bullets for unordered item lists, including "list of ..." requests where items are separated by commas, pauses, or "and". Use numbered lines only for ordered actions, steps, or explicit numbered lists. Do not add extra items.
-            """)
+                Do not return only bullets. If the transcript has no colon, infer the lead-in from the words before the item run and remove separator noise before the first item. Use plain hyphen bullets for unordered item lists, including "list of ..." requests where items are separated by commas, pauses, or "and". Use numbered lines only for ordered actions, steps, or explicit numbered lists. Correct obvious ASR item-word errors only when the surrounding items make the intended object clear. Do not invent extra items.
+
+                Example:
+                <transcript>these are the supplies we need for pens comma paper comma tape</transcript>
+                These are the supplies we need:
+                - Pens
+                - Paper
+                - Tape
+                """)
+            } else {
+                sections.append("Formatting intent detected: return a plain-text multi-line list with one item per line. Use plain hyphen bullets for unordered item lists. Use numbered lines only for ordered actions, steps, or explicit numbered lists. Do not add headings or extra items.")
+            }
         }
 
         if retrying {

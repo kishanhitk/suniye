@@ -70,11 +70,13 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
 
         XCTAssertEqual(output, "- Buy milk\n- Submit expenses\n- Call the dentist at 2 PM")
         XCTAssertEqual(client.callCount, 1)
+        XCTAssertTrue(client.instructions.first?.contains("return a plain-text multi-line list") == true)
+        XCTAssertFalse(client.instructions.first?.contains("Return exactly this structure") == true)
     }
 
     func testListOfCommaSeparatedItemsOutputIsAcceptedAndPromptedGenerically() async throws {
         let client = FakeAppleFoundationModelsClient(outputs: [
-            "- Fan\n- Laptop\n- Book",
+            "List of items to order:\n- Fan\n- Laptop\n- Book",
         ])
         let processor = AppleFoundationModelsPostProcessor(client: client)
 
@@ -83,16 +85,15 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
             config: makeConfig()
         )
 
-        XCTAssertEqual(output, "- Fan\n- Laptop\n- Book")
+        XCTAssertEqual(output, "List of items to order:\n- Fan\n- Laptop\n- Book")
         XCTAssertEqual(client.callCount, 1)
-        XCTAssertTrue(client.instructions.first?.contains("\"list of ...\" requests") == true)
-        XCTAssertTrue(client.instructions.first?.contains("commas, pauses, or \"and\"") == true)
-        XCTAssertTrue(client.instructions.first?.contains("one item per line") == true)
+        XCTAssertTrue(client.instructions.first?.contains("Return exactly this structure") == true)
+        XCTAssertTrue(client.instructions.first?.contains("one bullet per item") == true)
     }
 
     func testListOfItemsSeparatedByAndOutputIsAcceptedAndPromptedGenerically() async throws {
         let client = FakeAppleFoundationModelsClient(outputs: [
-            "- Fan\n- Laptop\n- Book",
+            "List of items to order:\n- Fan\n- Laptop\n- Book",
         ])
         let processor = AppleFoundationModelsPostProcessor(client: client)
 
@@ -101,11 +102,10 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
             config: makeConfig()
         )
 
-        XCTAssertEqual(output, "- Fan\n- Laptop\n- Book")
+        XCTAssertEqual(output, "List of items to order:\n- Fan\n- Laptop\n- Book")
         XCTAssertEqual(client.callCount, 1)
-        XCTAssertTrue(client.instructions.first?.contains("\"list of ...\" requests") == true)
-        XCTAssertTrue(client.instructions.first?.contains("commas, pauses, or \"and\"") == true)
-        XCTAssertTrue(client.instructions.first?.contains("one item per line") == true)
+        XCTAssertTrue(client.instructions.first?.contains("Return exactly this structure") == true)
+        XCTAssertTrue(client.instructions.first?.contains("one bullet per item") == true)
     }
 
     func testListLeadInOutputIsAcceptedAndPromptedToPreserveLeadIn() async throws {
@@ -121,9 +121,28 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
 
         XCTAssertEqual(output, "These are the items you should order:\n- Laptop\n- Bag\n- Phone\n- Charger")
         XCTAssertEqual(client.callCount, 1)
-        XCTAssertTrue(client.instructions.first?.contains("Preserve any user-provided list lead-in") == true)
-        XCTAssertTrue(client.instructions.first?.contains("never drop it") == true)
-        XCTAssertTrue(client.instructions.first?.contains("Do not invent a lead-in") == true)
+        XCTAssertTrue(client.instructions.first?.contains("user-provided lead-in") == true)
+        XCTAssertTrue(client.instructions.first?.contains("Do not return only bullets") == true)
+        XCTAssertTrue(client.instructions.first?.contains("infer the lead-in") == true)
+    }
+
+    func testNoColonListLeadInOutputIsAcceptedAndPromptedToPreserveLeadIn() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "These are the items we should have:\n- Laptop\n- Back\n- Phone\n- Charger",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(
+            text: "These are the items we should have on laptop, back, phone, charger.",
+            config: makeConfig()
+        )
+
+        XCTAssertEqual(output, "These are the items we should have:\n- Laptop\n- Back\n- Phone\n- Charger")
+        XCTAssertEqual(client.callCount, 1)
+        XCTAssertTrue(client.instructions.first?.contains("Return exactly this structure") == true)
+        XCTAssertTrue(client.instructions.first?.contains("Do not return only bullets") == true)
+        XCTAssertTrue(client.instructions.first?.contains("remove separator noise before the first item") == true)
+        XCTAssertTrue(client.instructions.first?.contains("these are the supplies we need") == true)
     }
 
     func testRequestedNumberedStepsOutputIsAccepted() async throws {
