@@ -134,17 +134,7 @@ enum MagicFormatOutputSanitizer {
             return false
         }
 
-        let blockedPrefixes = [
-            "sure",
-            "here",
-            "cleaned",
-            "output",
-            "the cleaned",
-            "i can",
-            "i cannot",
-            "sorry",
-        ]
-        if blockedPrefixes.contains(where: { lowercased.hasPrefix($0) }) {
+        if startsWithBlockedLeadIn(lowercased) {
             return false
         }
 
@@ -155,5 +145,47 @@ enum MagicFormatOutputSanitizer {
         }
 
         return true
+    }
+
+    private static func startsWithBlockedLeadIn(_ lowercased: String) -> Bool {
+        let blockedLeadIns = [
+            "sure, here is",
+            "sure, here's",
+            "sure, the cleaned",
+            "here is the cleaned",
+            "here's the cleaned",
+            "here is the polished",
+            "here's the polished",
+            "here is the rewritten",
+            "here's the rewritten",
+            "here is the output",
+            "here's the output",
+            "cleaned:",
+            "cleaned text:",
+            "output:",
+            "output text:",
+            "the cleaned text",
+            "the cleaned transcript",
+            "the polished text",
+            "the polished transcript",
+        ]
+
+        return blockedLeadIns.contains { hasLeadInPrefix(lowercased, phrase: $0) }
+    }
+
+    private static func hasLeadInPrefix(_ text: String, phrase: String) -> Bool {
+        guard text.hasPrefix(phrase) else {
+            return false
+        }
+        guard text.count > phrase.count else {
+            return true
+        }
+
+        let nextIndex = text.index(text.startIndex, offsetBy: phrase.count)
+        return isBoundary(text[nextIndex])
+    }
+
+    private static func isBoundary(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { !CharacterSet.alphanumerics.contains($0) }
     }
 }

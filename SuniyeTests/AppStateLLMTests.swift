@@ -183,23 +183,29 @@ final class AppStateLLMTests: XCTestCase {
     }
 
     func testAppleProviderFailureFallsBackToRaw() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
         let fakeApple = CapturingAppleMagicFormatPostProcessor(
             availability: .available,
             result: .failure(LLMPostProcessorError.malformedResponse)
         )
+        let keychain = TestKeychainService(value: "api-key")
         let store = TestLLMSettingsStore()
 
         let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
             appleMagicFormatPostProcessor: fakeApple,
-            llmSettingsStore: store
+            llmSettingsStore: store,
+            keychainService: keychain
         )
         appState.llmEnabled = true
         appState.llmProvider = .appleFoundationModels
+        appState.refreshLLMKeyStatus()
 
         let output = await appState.postProcessTextIfEnabled("raw text")
 
         XCTAssertEqual(output, "raw text")
         XCTAssertEqual(fakeApple.callCount, 1)
+        XCTAssertEqual(fakeLLM.callCount, 0)
     }
 
     func testToggleOnWithInvalidEndpointFallsBackToRawWithoutCallingProvider() async {

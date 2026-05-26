@@ -101,25 +101,73 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
 
     private struct TimeoutError: Error {}
 
-    private func withTimeout<T>(seconds: Double, operation: @escaping () async throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask {
-                try await operation()
+    private func withTimeout<T: Sendable>(seconds: Double, operation: @escaping () async throws -> T) async throws -> T {
+        let race = TimeoutRace<T>()
+        let workTask = Task {
+            do {
+                race.finish(.success(try await operation()))
+            } catch {
+                race.finish(.failure(error))
             }
-            group.addTask {
+        }
+        let timeoutTask = Task {
+            do {
                 let nanoseconds = UInt64(max(0, seconds) * 1_000_000_000)
                 try await Task.sleep(nanoseconds: nanoseconds)
-                throw TimeoutError()
+                race.finish(.failure(TimeoutError()))
+            } catch {
+                race.finish(.failure(error))
             }
+        }
 
+        return try await withTaskCancellationHandler {
             defer {
-                group.cancelAll()
+                workTask.cancel()
+                timeoutTask.cancel()
             }
+            return try await race.wait()
+        } onCancel: {
+            workTask.cancel()
+            timeoutTask.cancel()
+            race.finish(.failure(CancellationError()))
+        }
+    }
+}
 
-            guard let result = try await group.next() else {
-                throw TimeoutError()
+private final class TimeoutRace<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+    private var result: Result<T, Error>?
+
+    func finish(_ result: Result<T, Error>) {
+        var continuationToResume: CheckedContinuation<T, Error>?
+
+        lock.lock()
+        if self.result == nil {
+            self.result = result
+            continuationToResume = continuation
+            continuation = nil
+        }
+        lock.unlock()
+
+        continuationToResume?.resume(with: result)
+    }
+
+    func wait() async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            var resultToResume: Result<T, Error>?
+
+            lock.lock()
+            if let result {
+                resultToResume = result
+            } else {
+                self.continuation = continuation
             }
-            return result
+            lock.unlock()
+
+            if let resultToResume {
+                continuation.resume(with: resultToResume)
+            }
         }
     }
 }

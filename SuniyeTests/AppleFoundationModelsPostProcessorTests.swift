@@ -27,6 +27,37 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         XCTAssertTrue(client.instructions.last?.contains("Retry correction") == true)
     }
 
+    func testLegitimateSentenceStartersAreAccepted() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "Sure, let's do that.",
+            "Here is the update.",
+            "Sorry, I cannot make it today.",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let sureOutput = try await processor.polish(text: "sure let's do that", config: makeConfig())
+        let hereOutput = try await processor.polish(text: "here is the update", config: makeConfig())
+        let sorryOutput = try await processor.polish(text: "sorry I cannot make it today", config: makeConfig())
+
+        XCTAssertEqual(sureOutput, "Sure, let's do that.")
+        XCTAssertEqual(hereOutput, "Here is the update.")
+        XCTAssertEqual(sorryOutput, "Sorry, I cannot make it today.")
+        XCTAssertEqual(client.callCount, 3)
+    }
+
+    func testSingleLinePreambleLeadInRetries() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "Here is the cleaned text: Final text.",
+            "Final text.",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(text: "raw text", config: makeConfig())
+
+        XCTAssertEqual(output, "Final text.")
+        XCTAssertEqual(client.callCount, 2)
+    }
+
     func testInvalidOutputAfterRetryThrowsMalformedResponse() async {
         let client = FakeAppleFoundationModelsClient(outputs: [
             "Sure, here is the cleaned text:\n\nCleaned text.",
