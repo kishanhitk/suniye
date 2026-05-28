@@ -95,6 +95,12 @@ if [[ -n "${APPCAST_CHANNEL}" && ! "${APPCAST_CHANNEL}" =~ ^[A-Za-z0-9._-]+$ ]];
   exit 1
 fi
 
+if [[ -z "${SUNIYE_CODESIGN_IDENTITY:-}" ]]; then
+  echo "SUNIYE_CODESIGN_IDENTITY is required for release packaging." >&2
+  echo "Create/import the stable self-signed release identity before packaging." >&2
+  exit 1
+fi
+
 mkdir -p "${DIST_DIR}"
 DERIVED_DATA="${ROOT_DIR}/.derivedData-release"
 
@@ -102,6 +108,8 @@ BUILD_ARGS=(Release --derived-data-path "${DERIVED_DATA}" --output-dir "${DIST_D
 BUILD_ARGS+=(--version "${VERSION}")
 BUILD_ARGS+=(--build-number "${BUILD_NUMBER}")
 BUILD_ARGS+=(--build-channel "${BUILD_CHANNEL}")
+BUILD_ARGS+=(--codesign-identity "${SUNIYE_CODESIGN_IDENTITY}")
+BUILD_ARGS+=(--release-sign)
 "${ROOT_DIR}/scripts/build_app.sh" "${BUILD_ARGS[@]}"
 
 APP_PATH="${DIST_DIR}/Suniye.app"
@@ -116,6 +124,7 @@ if [[ ! -d "${APP_PATH}" ]]; then
 fi
 
 /usr/bin/codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
+"${ROOT_DIR}/scripts/verify_release_signing.sh" "${APP_PATH}"
 
 rm -f "${ZIP_PATH}" "${DMG_PATH}" "${CHECKSUMS_PATH}" "${APPCAST_PATH}"
 

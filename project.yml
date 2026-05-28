@@ -25,7 +25,9 @@ targets:
     type: application
     platform: macOS
     sources:
-      - Suniye
+      - path: Suniye
+        excludes:
+          - Frameworks/**
     info:
       path: Suniye/Info.plist
       properties:

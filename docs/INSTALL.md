@@ -17,8 +17,8 @@ Match the output against `SHA256SUMS.txt`.
 1. Open `Suniye.dmg`.
 2. Drag `Suniye.app` into `/Applications`.
 
-## 4) First launch (unsigned app)
-Because the app is not notarized, macOS may block first launch.
+## 4) First launch (self-signed app)
+Suniye is self-signed but not notarized, so macOS may block first launch.
 
 If that happens, remove quarantine and try again:
 
@@ -30,6 +30,8 @@ xattr -dr com.apple.quarantine /Applications/Suniye.app
 Grant permissions when prompted:
 - Microphone
 - Accessibility (for text insertion)
+
+If you are updating from an older ad hoc-signed Suniye release, macOS may ask for these permissions one more time. Future self-signed updates should preserve the grants.
 
 After that, Suniye shows a short first-run onboarding flow that covers setup and an optional practice dictation.
 

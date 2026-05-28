@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		06E62A9DB81ED2EA8E9F0330 /* LLMPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C803DEDF9EAE9D4E8C14C7E /* LLMPostProcessor.swift */; };
-		08572C9D373070F699B86BAC /* libonnxruntime.dylib in Resources */ = {isa = PBXBuildFile; fileRef = 7F2C36902B68E9D5934114DD /* libonnxruntime.dylib */; };
 		087B92BAEB91B2A23153DA41 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABAF17E14062BC73F65CF7FD /* UpdateService.swift */; };
 		0BB11537C982C731E8A9C06D /* LaunchAtLoginService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EEDE3A134D7940680E98B65 /* LaunchAtLoginService.swift */; };
 		1382B9023A773ADC62E71907 /* FloatingIndicatorLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C333F9E2D2E53C8388E26E /* FloatingIndicatorLayoutTests.swift */; };
@@ -51,7 +50,6 @@
 		84CB629AA94E239EEC0911F6 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4213B4B666CF5B60F3371019 /* AppLogger.swift */; };
 		86AC38418D4F76638222975C /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F2DDA03B5269D9475CA06C9 /* OnboardingView.swift */; };
 		898E0CC20B6C61DE45A0BC0B /* GeneralSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 730EF6DDF61D565A9D49DFCA /* GeneralSettingsStoreTests.swift */; };
-		8A316AF1F2E3CA91B1F0FAC2 /* libonnxruntime.1.23.2.dylib in Resources */ = {isa = PBXBuildFile; fileRef = 01A3090AE3D61E7A07047803 /* libonnxruntime.1.23.2.dylib */; };
 		90783B5C1E7D43413D251BBC /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01EE242F81867FE9A5048297 /* TextInsertionService.swift */; };
 		96D47C5DFE84C5C9C49BBAD6 /* OpenRouterPostProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386B9D8DFD2BB94A83C15741 /* OpenRouterPostProcessorTests.swift */; };
 		9CEC29D27FCC952C4C618C70 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2D87825E1C649DC7A33115 /* StatusItemController.swift */; };
@@ -77,7 +75,6 @@
 		F047041193A8264676FEC71A /* GoogleSans-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = D483D635E7A8E177A09D311E /* GoogleSans-Variable.ttf */; };
 		F75A72DF1CAEBAD284065DE4 /* ModelManagerE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E5CEF1B4FEEFC12719CB94A /* ModelManagerE2ETests.swift */; };
 		F9F0D01CE511EF8AE268DC8A /* FloatingIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3686A213810FF9BE79E3CC /* FloatingIndicatorView.swift */; };
-		FD68A66D8807B4E102B0E8C7 /* libsherpa-onnx-c-api.dylib in Resources */ = {isa = PBXBuildFile; fileRef = BAF213F3DEF59821572510F4 /* libsherpa-onnx-c-api.dylib */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -106,7 +103,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		01A3090AE3D61E7A07047803 /* libonnxruntime.1.23.2.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = libonnxruntime.1.23.2.dylib; sourceTree = "<group>"; };
 		01EE242F81867FE9A5048297 /* TextInsertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionService.swift; sourceTree = "<group>"; };
 		045F7AACA142A791AFFA7C43 /* SettingsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModels.swift; sourceTree = "<group>"; };
 		0B9102217BDA1AFAF69837DE /* LLMSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettings.swift; sourceTree = "<group>"; };
@@ -138,7 +134,6 @@
 		75E6194F3E61C3D677F93DA9 /* libsherpa-onnx-c-api.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = "libsherpa-onnx-c-api.dylib"; path = "Suniye/Frameworks/libsherpa-onnx-c-api.dylib"; sourceTree = "<group>"; };
 		7C803DEDF9EAE9D4E8C14C7E /* LLMPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMPostProcessor.swift; sourceTree = "<group>"; };
 		7EEDE3A134D7940680E98B65 /* LaunchAtLoginService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginService.swift; sourceTree = "<group>"; };
-		7F2C36902B68E9D5934114DD /* libonnxruntime.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = libonnxruntime.dylib; sourceTree = "<group>"; };
 		82E6C7AA7DADED73D5C382DA /* FragmentMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "FragmentMono-Regular.ttf"; sourceTree = "<group>"; };
 		85BCA4A71724B17FDD57DFAD /* Suniye-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Suniye-Bridging-Header.h"; sourceTree = "<group>"; };
 		865C597BBA404F5F6A049278 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
@@ -155,7 +150,6 @@
 		B7E769F836704229B962F80C /* MainWindowComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowComponents.swift; sourceTree = "<group>"; };
 		B9D8487CCDF6CB1A7023E095 /* OpenRouterPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterPostProcessor.swift; sourceTree = "<group>"; };
 		BAD363F5B6346BBC43B06E2E /* FloatingIndicatorState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorState.swift; sourceTree = "<group>"; };
-		BAF213F3DEF59821572510F4 /* libsherpa-onnx-c-api.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = "libsherpa-onnx-c-api.dylib"; sourceTree = "<group>"; };
 		BDD66CF413C1ACA8DB2719C4 /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
 		BF32A97362B13A4984C14FA6 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
 		C0ED09D876730BF3FA833FFE /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
@@ -226,7 +220,6 @@
 				9D1534750806E24BA6EAEBB6 /* SuniyeNativeBridge.h */,
 				DA6D9C9D8CF9BF854941CE7C /* SuniyeNativeBridge.mm */,
 				3B0062F685A6185CFE33BE63 /* Fonts */,
-				F524B702F3306B43AF23557A /* Frameworks */,
 				9C4DE280446657D266991A07 /* Services */,
 				ACABD336294DBFA58C26FE31 /* Views */,
 			);
@@ -338,16 +331,6 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
-		F524B702F3306B43AF23557A /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				01A3090AE3D61E7A07047803 /* libonnxruntime.1.23.2.dylib */,
-				7F2C36902B68E9D5934114DD /* libonnxruntime.dylib */,
-				BAF213F3DEF59821572510F4 /* libsherpa-onnx-c-api.dylib */,
-			);
-			path = Frameworks;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -433,9 +416,6 @@
 				81F6D8FCAFCBE596A30B1381 /* FragmentMono-Italic.ttf in Resources */,
 				AA7DAE1D8BC31737F5640A1B /* FragmentMono-Regular.ttf in Resources */,
 				F047041193A8264676FEC71A /* GoogleSans-Variable.ttf in Resources */,
-				8A316AF1F2E3CA91B1F0FAC2 /* libonnxruntime.1.23.2.dylib in Resources */,
-				08572C9D373070F699B86BAC /* libonnxruntime.dylib in Resources */,
-				FD68A66D8807B4E102B0E8C7 /* libsherpa-onnx-c-api.dylib in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

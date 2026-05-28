@@ -81,19 +81,34 @@ done
 )
 
 MOUNT_POINT="$(mktemp -d /tmp/suniye-dmg-XXXXXX)"
+ZIP_EXTRACT_DIR="$(mktemp -d /tmp/suniye-zip-XXXXXX)"
 /usr/bin/hdiutil attach "${DMG_PATH}" -mountpoint "${MOUNT_POINT}" -nobrowse -readonly >/dev/null
-trap '/usr/bin/hdiutil detach "${MOUNT_POINT}" -quiet >/dev/null 2>&1 || true; rm -rf "${MOUNT_POINT}"' EXIT
+trap '/usr/bin/hdiutil detach "${MOUNT_POINT}" -quiet >/dev/null 2>&1 || true; rm -rf "${MOUNT_POINT}" "${ZIP_EXTRACT_DIR}"' EXIT
 
 [[ -d "${MOUNT_POINT}/Suniye.app" ]] || { echo "DMG missing Suniye.app" >&2; exit 1; }
 [[ -L "${MOUNT_POINT}/Applications" ]] || { echo "DMG missing Applications symlink" >&2; exit 1; }
 
-if [[ -n "${BUILD_CHANNEL}" ]]; then
-  APP_BUILD_CHANNEL="$(/usr/libexec/PlistBuddy -c "Print :SuniyeBuildChannel" "${MOUNT_POINT}/Suniye.app/Contents/Info.plist" 2>/dev/null || true)"
-  if [[ "${APP_BUILD_CHANNEL}" != "${BUILD_CHANNEL}" ]]; then
-    echo "App build channel ${APP_BUILD_CHANNEL:-<missing>} does not match ${BUILD_CHANNEL}" >&2
+verify_app_build_channel() {
+  local app_path="$1"
+  local label="$2"
+
+  [[ -z "${BUILD_CHANNEL}" ]] && return 0
+
+  local app_build_channel
+  app_build_channel="$(/usr/libexec/PlistBuddy -c "Print :SuniyeBuildChannel" "${app_path}/Contents/Info.plist" 2>/dev/null || true)"
+  if [[ "${app_build_channel}" != "${BUILD_CHANNEL}" ]]; then
+    echo "${label} build channel ${app_build_channel:-<missing>} does not match ${BUILD_CHANNEL}" >&2
     exit 1
   fi
-fi
+}
+
+verify_app_build_channel "${MOUNT_POINT}/Suniye.app" "DMG app"
+"${ROOT_DIR}/scripts/verify_release_signing.sh" "${MOUNT_POINT}/Suniye.app"
+
+/usr/bin/ditto -x -k "${ZIP_PATH}" "${ZIP_EXTRACT_DIR}"
+[[ -d "${ZIP_EXTRACT_DIR}/Suniye.app" ]] || { echo "ZIP missing Suniye.app" >&2; exit 1; }
+verify_app_build_channel "${ZIP_EXTRACT_DIR}/Suniye.app" "ZIP app"
+"${ROOT_DIR}/scripts/verify_release_signing.sh" "${ZIP_EXTRACT_DIR}/Suniye.app"
 
 /usr/bin/python3 - "${APPCAST_PATH}" "${VERSION}" "${DOWNLOAD_URL_PREFIX}" "${APPCAST_CHANNEL}" <<'PY'
 import sys
