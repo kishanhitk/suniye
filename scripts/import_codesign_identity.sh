@@ -61,10 +61,14 @@ done < <(security list-keychains -d user | sed -e 's/^[[:space:]]*"//' -e 's/"$/
 security list-keychains -d user -s "${KEYCHAIN_PATH}" "${EXISTING_KEYCHAINS[@]}"
 security set-key-partition-list -S apple-tool:,apple: -s -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
 
-if ! security find-identity -v -p codesigning "${KEYCHAIN_PATH}" | grep -F "\"${CODESIGN_IDENTITY}\"" >/dev/null; then
+if ! security find-identity -p codesigning "${KEYCHAIN_PATH}" | grep -F "\"${CODESIGN_IDENTITY}\"" >/dev/null; then
   echo "Imported keychain does not contain codesign identity: ${CODESIGN_IDENTITY}" >&2
-  security find-identity -v -p codesigning "${KEYCHAIN_PATH}" >&2 || true
+  security find-identity -p codesigning "${KEYCHAIN_PATH}" >&2 || true
   exit 1
+fi
+
+if ! security find-identity -v -p codesigning "${KEYCHAIN_PATH}" | grep -F "\"${CODESIGN_IDENTITY}\"" >/dev/null; then
+  echo "Imported self-signed identity is present but not trusted by this runner; continuing." >&2
 fi
 
 if [[ -n "${GITHUB_ENV:-}" ]]; then
