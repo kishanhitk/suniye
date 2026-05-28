@@ -49,6 +49,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
     private var targetFormat: AVAudioFormat?
     private var captureSampleRate: Int = 16_000
     private var samples: [Float] = []
+    // Audio taps run off the main thread, while start/stop are driven by AppState.
+    // Keep buffered samples and meter state behind one lock to avoid Swift array races.
     private let lock = NSLock()
     private var activeBackend: CaptureBackend?
     private let meterBarCount = 12
@@ -60,14 +62,15 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
     }
 
     func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws {
+        stopActiveCapture()
+
+        let resetLevels = Array(repeating: Float(0), count: meterBarCount)
         lock.lock()
         samples.removeAll(keepingCapacity: true)
-        lock.unlock()
-        smoothedLevels = Array(repeating: 0, count: meterBarCount)
+        smoothedLevels = resetLevels
         lastLevelEmissionTime = 0
-        emitLevels(smoothedLevels)
-
-        stopActiveCapture()
+        lock.unlock()
+        emitLevels(resetLevels)
 
         var backend = Self.captureBackendValue(
             echoCancellationEnabled: echoCancellationEnabled,
@@ -116,28 +119,32 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
     func stopCapture() -> CapturedAudio {
         stopActiveCapture()
-        emitLevels(Array(repeating: 0, count: meterBarCount))
-        smoothedLevels = Array(repeating: 0, count: meterBarCount)
 
+        let resetLevels = Array(repeating: Float(0), count: meterBarCount)
         lock.lock()
         let out = samples
         samples.removeAll(keepingCapacity: false)
+        smoothedLevels = resetLevels
+        lastLevelEmissionTime = 0
+        let sampleRate = captureSampleRate
         lock.unlock()
+        emitLevels(resetLevels)
+
         let rms = Self.rms(of: out)
         let peak = out.reduce(0) { max($0, abs($1)) }
-        let seconds = out.isEmpty ? 0 : Double(out.count) / Double(captureSampleRate)
+        let seconds = out.isEmpty ? 0 : Double(out.count) / Double(sampleRate)
         AppLogger.shared.log(
             .info,
             String(
                 format: "audio capture stop samples=%d sr=%d duration=%.2fs rms=%.5f peak=%.5f",
                 out.count,
-                captureSampleRate,
+                sampleRate,
                 seconds,
                 rms,
                 peak
             )
         )
-        return CapturedAudio(samples: out, sampleRate: captureSampleRate)
+        return CapturedAudio(samples: out, sampleRate: sampleRate)
     }
 
     static func captureBackend(
@@ -200,7 +207,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
         let nativeFormat = inputNode.outputFormat(forBus: 0)
         let sampleRate = max(8_000, Int(nativeFormat.sampleRate.rounded()))
-        captureSampleRate = sampleRate
+        setCaptureSampleRate(sampleRate)
 
         let tapFormat: AVAudioFormat
         if nativeFormat.channelCount > 1 {
@@ -283,7 +290,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         // Read format after VP enable — VP changes the node to a multi-channel aggregate.
         let nativeFormat = inputNode.outputFormat(forBus: 0)
         let sampleRate = max(8_000, Int(nativeFormat.sampleRate.rounded()))
-        captureSampleRate = sampleRate
+        setCaptureSampleRate(sampleRate)
 
         // VP on Apple Silicon reports 5ch (3-mic array + 2-ch speaker ref).
         // AVAudioConverter can't downmix VP multi-channel correctly (produces zeros).
@@ -441,13 +448,14 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
             halInputUnit = unit
             try Self.checkStatus(AudioUnitInitialize(unit), operation: "initialize HAL input")
             try Self.checkStatus(AudioOutputUnitStart(unit), operation: "start HAL input")
-            captureSampleRate = max(8_000, Int(deviceFormat.mSampleRate.rounded()))
+            let sampleRate = max(8_000, Int(deviceFormat.mSampleRate.rounded()))
+            setCaptureSampleRate(sampleRate)
             inputFormat = nil
             targetFormat = nil
             converter = nil
             AppLogger.shared.log(
                 .info,
-                "audio capture start backend=halInput sr=\(captureSampleRate) channels=1 tapChannels=1 aec=false"
+                "audio capture start backend=halInput sr=\(sampleRate) channels=1 tapChannels=1 aec=false"
             )
         } catch {
             halInputUnit = nil
@@ -483,11 +491,9 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
             let frameCount = Int(converted.frameLength)
             let ptr = channelData[0]
             let chunk = Array(UnsafeBufferPointer(start: ptr, count: frameCount))
-            updateLevel(from: chunk)
-
-            lock.lock()
-            samples.append(contentsOf: chunk)
-            lock.unlock()
+            if let levels = appendCapturedSamples(chunk) {
+                emitLevels(levels)
+            }
             return
         }
 
@@ -540,10 +546,9 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
         if channels == 1 {
             let chunk = Array(UnsafeBufferPointer(start: channelData[0], count: frameCount))
-            updateLevel(from: chunk)
-            lock.lock()
-            samples.append(contentsOf: chunk)
-            lock.unlock()
+            if let levels = appendCapturedSamples(chunk) {
+                emitLevels(levels)
+            }
             return
         }
 
@@ -558,14 +563,24 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         for i in 0 ..< frameCount {
             mixed[i] *= scale
         }
-        updateLevel(from: mixed)
-        lock.lock()
-        samples.append(contentsOf: mixed)
-        lock.unlock()
+        if let levels = appendCapturedSamples(mixed) {
+            emitLevels(levels)
+        }
     }
 
-    private func updateLevel(from values: [Float]) {
-        guard !values.isEmpty else { return }
+    private func appendCapturedSamples(_ chunk: [Float]) -> [Float]? {
+        guard !chunk.isEmpty else {
+            return nil
+        }
+
+        lock.lock()
+        samples.append(contentsOf: chunk)
+        let levelsToEmit = updateLevelLocked(from: chunk)
+        lock.unlock()
+        return levelsToEmit
+    }
+
+    private func updateLevelLocked(from values: [Float]) -> [Float]? {
         let chunkSize = max(1, values.count / meterBarCount)
         var nextLevels = Array(repeating: Float(0), count: meterBarCount)
 
@@ -573,8 +588,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
             let start = index * chunkSize
             let end = index == meterBarCount - 1 ? values.count : min(values.count, start + chunkSize)
             guard start < end else { continue }
-            let slice = Array(values[start ..< end])
-            let rms = Self.rms(of: slice)
+            let rms = Self.rms(of: values, in: start ..< end)
             let normalized = min(max(rms * 12, 0), 1)
             nextLevels[index] = normalized
         }
@@ -587,9 +601,9 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         }
 
         let now = CACurrentMediaTime()
-        guard now - lastLevelEmissionTime >= 1.0 / 30.0 else { return }
+        guard now - lastLevelEmissionTime >= 1.0 / 30.0 else { return nil }
         lastLevelEmissionTime = now
-        emitLevels(smoothedLevels)
+        return smoothedLevels
     }
 
     private func emitLevels(_ levels: [Float]) {
@@ -599,14 +613,26 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
         }
     }
 
+    private func setCaptureSampleRate(_ sampleRate: Int) {
+        lock.lock()
+        captureSampleRate = sampleRate
+        lock.unlock()
+    }
+
     private static func rms(of values: [Float]) -> Float {
         guard !values.isEmpty else { return 0 }
+        return rms(of: values, in: values.indices)
+    }
+
+    private static func rms(of values: [Float], in range: Range<Int>) -> Float {
+        guard !range.isEmpty else { return 0 }
         var sum: Double = 0
-        for sample in values {
+        for index in range {
+            let sample = values[index]
             let v = Double(sample)
             sum += v * v
         }
-        return Float((sum / Double(values.count)).squareRoot())
+        return Float((sum / Double(range.count)).squareRoot())
     }
 
     private static func allDeviceIDs() -> [AudioObjectID] {
@@ -771,9 +797,9 @@ final class AudioCaptureService: AudioCaptureServiceProtocol {
 
         let floatPointer = data.bindMemory(to: Float.self, capacity: Int(inNumberFrames))
         let chunk = Array(UnsafeBufferPointer(start: floatPointer, count: Int(inNumberFrames)))
-        lock.lock()
-        samples.append(contentsOf: chunk)
-        lock.unlock()
+        if let levels = appendCapturedSamples(chunk) {
+            emitLevels(levels)
+        }
         return noErr
     }
 

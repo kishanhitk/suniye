@@ -45,6 +45,13 @@ jobs:
             -derivedDataPath .derivedData \
             test
 
+      - name: Import code signing identity
+        env:
+          SUNIYE_CODESIGN_CERTIFICATE_P12_BASE64: ${{ secrets.SUNIYE_CODESIGN_CERTIFICATE_P12_BASE64 }}
+          SUNIYE_CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.SUNIYE_CODESIGN_CERTIFICATE_PASSWORD }}
+          SUNIYE_CODESIGN_IDENTITY: ${{ secrets.SUNIYE_CODESIGN_IDENTITY }}
+        run: ./scripts/import_codesign_identity.sh
+
       - name: Package release artifacts
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
@@ -63,3 +70,7 @@ jobs:
             dist/SHA256SUMS.txt
             dist/appcast.xml
           generate_release_notes: true
+
+      - name: Cleanup code signing identity
+        if: always()
+        run: ./scripts/import_codesign_identity.sh cleanup
