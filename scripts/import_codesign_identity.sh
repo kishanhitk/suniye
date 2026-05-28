@@ -45,6 +45,7 @@ security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
 security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
 security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
 security import "${CERT_PATH}" \
+  -f pkcs12 \
   -k "${KEYCHAIN_PATH}" \
   -P "${SUNIYE_CODESIGN_CERTIFICATE_PASSWORD}" \
   -T /usr/bin/codesign \
