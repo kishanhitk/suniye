@@ -9,7 +9,7 @@ Stable uses channel rank `8`; Tip uses channel rank `1`. That makes a stable rel
 For local packaging, let `scripts/package_release.sh` compute the build number or pass `--build-number` / `SUNIYE_BUILD_NUMBER` for an explicit override.
 Do not manually bump app version metadata in `project.yml` just to cut a release tag.
 
-## Pre-release checklist
+## Prerelease checklist
 1. PR description and commits reflect the release changes accurately.
 2. User-facing docs are updated for onboarding, settings, and supported model changes (`README.md`, `docs/*`).
 3. `./scripts/doctor.sh` passes.

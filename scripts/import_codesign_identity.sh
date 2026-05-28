@@ -33,6 +33,7 @@ CODESIGN_IDENTITY="${SUNIYE_CODESIGN_IDENTITY:-${DEFAULT_IDENTITY}}"
 KEYCHAIN_PATH="${RUNNER_TEMP:-/tmp}/suniye-codesign.keychain-db"
 KEYCHAIN_PASSWORD="$(uuidgen)"
 CERT_PATH="$(mktemp "${RUNNER_TEMP:-/tmp}/suniye-codesign-cert.XXXXXX")"
+trap 'rm -f "${CERT_PATH}"' EXIT
 
 cleanup
 
@@ -49,7 +50,6 @@ security import "${CERT_PATH}" \
   -T /usr/bin/codesign \
   -T /usr/bin/security \
   -T /usr/bin/xcodebuild
-rm -f "${CERT_PATH}"
 
 EXISTING_KEYCHAINS=()
 while IFS= read -r existing_keychain; do

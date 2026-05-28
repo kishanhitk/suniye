@@ -82,6 +82,11 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --codesign-identity)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "--codesign-identity requires a value." >&2
+        usage >&2
+        exit 1
+      fi
       LOCAL_CODESIGN_IDENTITY="$2"
       shift
       ;;

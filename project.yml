@@ -57,10 +57,6 @@ targets:
         LIBRARY_SEARCH_PATHS:
           - $(inherited)
           - $(PROJECT_DIR)/Suniye/Frameworks
-      configs:
-        Release:
-          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
-          ENABLE_HARDENED_RUNTIME: NO
     dependencies:
       - package: Sparkle
       - framework: Suniye/Frameworks/libsherpa-onnx-c-api.dylib
