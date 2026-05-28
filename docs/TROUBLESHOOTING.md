@@ -1,7 +1,7 @@
 # Troubleshooting
 
 ## "App is damaged" / blocked by macOS
-This project currently publishes unsigned binaries.
+Suniye is currently self-signed but not notarized.
 If macOS blocks the app on first launch, remove quarantine from the installed app:
 
 ```bash
@@ -45,6 +45,8 @@ Rebuild and copy runtime libs:
 Grant and re-check:
 - Microphone access
 - Accessibility permissions
+
+If this happened immediately after updating from an older ad hoc-signed build, grant the permissions once more. Suniye releases now use one stable self-signed identity so future updates should preserve those grants.
 
 ## Bluetooth audio drops to call quality while dictating
 - Leave **Echo Cancellation** off unless you need speaker/audio playback removal from the mic signal.

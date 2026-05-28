@@ -95,6 +95,8 @@ if [[ -n "${BUILD_CHANNEL}" ]]; then
   fi
 fi
 
+"${ROOT_DIR}/scripts/verify_release_signing.sh" "${MOUNT_POINT}/Suniye.app"
+
 /usr/bin/python3 - "${APPCAST_PATH}" "${VERSION}" "${DOWNLOAD_URL_PREFIX}" "${APPCAST_CHANNEL}" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
