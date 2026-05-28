@@ -19,6 +19,17 @@ final class AudioRecognitionPreprocessorTests: XCTestCase {
 
         let prepared = AudioRecognitionPreprocessor.prepareForRecognition(samples)
 
+        XCTAssertFalse(prepared.didNormalize)
+        XCTAssertEqual(prepared.gain, 1)
+        XCTAssertEqual(prepared.samples, samples)
+    }
+
+    func testAudioBelowMinimumGainThresholdIsNotMarkedAsNormalized() {
+        let samples = sineWave(amplitude: 0.045, seconds: 1)
+
+        let prepared = AudioRecognitionPreprocessor.prepareForRecognition(samples)
+
+        XCTAssertFalse(prepared.didNormalize)
         XCTAssertEqual(prepared.gain, 1)
         XCTAssertEqual(prepared.samples, samples)
     }
@@ -28,6 +39,7 @@ final class AudioRecognitionPreprocessorTests: XCTestCase {
 
         let prepared = AudioRecognitionPreprocessor.prepareForRecognition(samples)
 
+        XCTAssertFalse(prepared.didNormalize)
         XCTAssertEqual(prepared.gain, 1)
         XCTAssertEqual(prepared.samples, samples)
     }

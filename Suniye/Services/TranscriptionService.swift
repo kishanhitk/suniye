@@ -71,7 +71,7 @@ struct AudioRecognitionPreprocessor {
         let outputStats: Stats
 
         var didNormalize: Bool {
-            gain > 1.0001
+            gain >= AudioRecognitionPreprocessor.minimumGainToApply
         }
     }
 
