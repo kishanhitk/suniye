@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		020967A2000D318C6A9ECE23 /* AudioRecognitionPreprocessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5AF8B0C31B3D3BC319A700 /* AudioRecognitionPreprocessorTests.swift */; };
 		06E62A9DB81ED2EA8E9F0330 /* LLMPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C803DEDF9EAE9D4E8C14C7E /* LLMPostProcessor.swift */; };
 		087B92BAEB91B2A23153DA41 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABAF17E14062BC73F65CF7FD /* UpdateService.swift */; };
 		0BB11537C982C731E8A9C06D /* LaunchAtLoginService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EEDE3A134D7940680E98B65 /* LaunchAtLoginService.swift */; };
@@ -123,6 +124,7 @@
 		4213B4B666CF5B60F3371019 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
 		46CB08DB3B0815DC0E822412 /* SoundFeedbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundFeedbackService.swift; sourceTree = "<group>"; };
 		49C6F3D1EED6DBFE38C52EC9 /* MainWindowSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowSection.swift; sourceTree = "<group>"; };
+		4D5AF8B0C31B3D3BC319A700 /* AudioRecognitionPreprocessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecognitionPreprocessorTests.swift; sourceTree = "<group>"; };
 		547A58E2F28180249AF7E769 /* c-api.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "c-api.h"; sourceTree = "<group>"; };
 		626CB9CE980C310ED49F770F /* TranscriptionServiceE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionServiceE2ETests.swift; sourceTree = "<group>"; };
 		633F09E2901A308614E595B1 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
@@ -236,6 +238,7 @@
 				F198C419B5376572D7185A29 /* AppStateUpdateTests.swift */,
 				E62E23E5D4CD3C127DD7F39C /* AppVersionTests.swift */,
 				1B6F2EB76CF32A101E8454D9 /* AudioCaptureServiceTests.swift */,
+				4D5AF8B0C31B3D3BC319A700 /* AudioRecognitionPreprocessorTests.swift */,
 				E5C333F9E2D2E53C8388E26E /* FloatingIndicatorLayoutTests.swift */,
 				730EF6DDF61D565A9D49DFCA /* GeneralSettingsStoreTests.swift */,
 				66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */,
@@ -480,6 +483,7 @@
 				17F9EC88DB57EDE0C99E7A51 /* AppStateUpdateTests.swift in Sources */,
 				70911BA331D12E52A95C209F /* AppVersionTests.swift in Sources */,
 				56F6C83F84D44FC17F6C1AE2 /* AudioCaptureServiceTests.swift in Sources */,
+				020967A2000D318C6A9ECE23 /* AudioRecognitionPreprocessorTests.swift in Sources */,
 				1382B9023A773ADC62E71907 /* FloatingIndicatorLayoutTests.swift in Sources */,
 				898E0CC20B6C61DE45A0BC0B /* GeneralSettingsStoreTests.swift in Sources */,
 				538CCC22F273225E882F7463 /* HistoryStoreTests.swift in Sources */,
