@@ -45,6 +45,7 @@ final class LLMSettingsStoreTests: XCTestCase {
         settings.customModelId = "openai/gpt-4.1-mini"
         settings.baseSystemPrompt = "base"
         settings.appleSystemPrompt = "apple"
+        settings.gemmaSystemPrompt = "gemma"
         settings.systemPrompt = "custom"
         settings.keywordsRaw = "swift, xcode"
         settings.timeoutSeconds = 7.5
@@ -56,7 +57,7 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(loaded, settings)
     }
 
-    func testMissingProviderAndApplePromptDecodeToDefaults() throws {
+    func testMissingProviderAndLocalPromptsDecodeToDefaults() throws {
         let data = """
         {
           "isEnabled": true,
@@ -75,15 +76,18 @@ final class LLMSettingsStoreTests: XCTestCase {
 
         XCTAssertEqual(settings.provider, .automatic)
         XCTAssertEqual(settings.appleSystemPrompt, LLMDefaults.defaultAppleMagicFormatPrompt)
+        XCTAssertEqual(settings.gemmaSystemPrompt, LLMDefaults.defaultGemmaMagicFormatPrompt)
     }
 
-    func testAppleAndAPIPromptsAreIndependent() {
+    func testAppleGemmaAndAPIPromptsAreIndependent() {
         var settings = LLMSettings()
         settings.baseSystemPrompt = "api prompt"
         settings.appleSystemPrompt = "apple prompt"
+        settings.gemmaSystemPrompt = "gemma prompt"
 
         XCTAssertEqual(settings.composedSystemPrompt, "api prompt")
         XCTAssertEqual(settings.composedAppleSystemPrompt, "apple prompt")
+        XCTAssertEqual(settings.composedGemmaSystemPrompt, "gemma prompt")
     }
 
     func testTimeoutAndTokenClamping() {
@@ -143,6 +147,12 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(LLMModelPreset.gemini25Flash.displayName, "Gemini 2.5 Flash")
         XCTAssertEqual(LLMModelPreset.gpt41Mini.displayName, "GPT-4.1 Mini")
         XCTAssertEqual(LLMModelPreset.gpt41Mini.subtitle, "OpenAI, balanced")
+    }
+
+    func testMagicFormatProviderMetadataIncludesLocalGemma() {
+        XCTAssertEqual(MagicFormatProvider.localGemma.displayName, "Local Gemma")
+        XCTAssertEqual(MagicFormatProvider.localGemma.description, "Local formatting with Gemma 4 Q4.")
+        XCTAssertTrue(MagicFormatProvider.allCases.contains(.localGemma))
     }
 
     func testMagicFormatPresetMetadataMatchesFriendlyEditingStyles() {

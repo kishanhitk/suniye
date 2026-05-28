@@ -111,6 +111,39 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(fakeLLM.callCount, 1)
     }
 
+    func testAutomaticProviderUsesLocalGemmaWhenAppleUnavailableAndGemmaAvailable() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .modelNotReady,
+            result: .success("apple polished")
+        )
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            appleMagicFormatPostProcessor: fakeApple,
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .automatic
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "gemma polished")
+        XCTAssertEqual(fakeGemma.callCount, 1)
+        XCTAssertEqual(fakeApple.callCount, 0)
+        XCTAssertEqual(fakeLLM.callCount, 0)
+        XCTAssertFalse(appState.needsAPIConfigurationForMagicFormat)
+    }
+
     func testExplicitAppleProviderDoesNotRequireAPIKey() async {
         let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
         let fakeApple = CapturingAppleMagicFormatPostProcessor(
@@ -135,6 +168,54 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(output, "apple polished")
         XCTAssertEqual(fakeApple.callCount, 1)
         XCTAssertEqual(fakeLLM.callCount, 0)
+    }
+
+    func testExplicitLocalGemmaProviderDoesNotRequireAPIKey() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "gemma polished")
+        XCTAssertEqual(fakeGemma.callCount, 1)
+        XCTAssertEqual(fakeLLM.callCount, 0)
+        XCTAssertEqual(appState.magicFormatSetupState, .ready)
+    }
+
+    func testExplicitLocalGemmaProviderUnavailableFallsBackToRaw() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .modelNotInstalled,
+            result: .success("gemma polished")
+        )
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            llmSettingsStore: store
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(fakeGemma.callCount, 0)
+        XCTAssertEqual(appState.magicFormatSetupState, .needsServiceSetup)
     }
 
     func testExplicitAPIProviderStillRequiresAPIKey() async {
@@ -823,6 +904,28 @@ private final class CapturingAppleMagicFormatPostProcessor: AppleMagicFormatPost
     }
 
     func testSetup(config: AppleMagicFormatConfig) async throws {
+        lastConfig = config
+    }
+}
+
+private final class CapturingLocalGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor {
+    var availability: LocalGemmaAvailability
+    private let result: Result<String, Error>
+    private(set) var callCount = 0
+    private(set) var lastConfig: LocalGemmaMagicFormatConfig?
+
+    init(availability: LocalGemmaAvailability, result: Result<String, Error>) {
+        self.availability = availability
+        self.result = result
+    }
+
+    func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
+        callCount += 1
+        lastConfig = config
+        return try result.get()
+    }
+
+    func testSetup(config: LocalGemmaMagicFormatConfig) async throws {
         lastConfig = config
     }
 }

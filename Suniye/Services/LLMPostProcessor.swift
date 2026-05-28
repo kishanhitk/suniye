@@ -16,6 +16,14 @@ struct AppleMagicFormatConfig: Equatable {
     let maxTokens: Int
 }
 
+struct LocalGemmaMagicFormatConfig: Equatable {
+    let systemPrompt: String
+    let keywords: [String]
+    let startupTimeoutSeconds: Double
+    let generationTimeoutSeconds: Double
+    let maxTokens: Int
+}
+
 protocol LLMPostProcessor {
     func polish(text: String, config: LLMConfig) async throws -> String
     func testSetup(config: LLMConfig) async throws
@@ -25,6 +33,12 @@ protocol AppleMagicFormatPostProcessor {
     var availability: AppleFoundationModelsAvailability { get }
     func polish(text: String, config: AppleMagicFormatConfig) async throws -> String
     func testSetup(config: AppleMagicFormatConfig) async throws
+}
+
+protocol LocalGemmaMagicFormatPostProcessor {
+    var availability: LocalGemmaAvailability { get }
+    func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String
+    func testSetup(config: LocalGemmaMagicFormatConfig) async throws
 }
 
 enum AppleFoundationModelsAvailability: Equatable {
@@ -65,6 +79,38 @@ enum AppleFoundationModelsAvailability: Equatable {
             return "model_not_ready"
         case .unsupportedSDKOrRuntime:
             return "unsupported_sdk_or_runtime"
+        }
+    }
+}
+
+enum LocalGemmaAvailability: Equatable {
+    case available
+    case runtimeUnavailable
+    case modelNotInstalled
+
+    var isAvailable: Bool {
+        self == .available
+    }
+
+    var statusText: String {
+        switch self {
+        case .available:
+            return "Gemma 4 Q4 ready."
+        case .runtimeUnavailable:
+            return "Local Gemma runtime is not available."
+        case .modelNotInstalled:
+            return "Local Gemma 4 Q4 model is not available."
+        }
+    }
+
+    var logValue: String {
+        switch self {
+        case .available:
+            return "available"
+        case .runtimeUnavailable:
+            return "runtime_unavailable"
+        case .modelNotInstalled:
+            return "model_not_installed"
         }
     }
 }
@@ -233,5 +279,51 @@ enum MagicFormatOutputSanitizer {
             searchStart = range.upperBound
         }
         return false
+    }
+}
+
+enum MagicFormatPromptComposer {
+    static func makeInstructions(
+        systemPrompt: String,
+        keywords: [String],
+        text: String,
+        retrying: Bool
+    ) -> String {
+        var sections = [systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)]
+
+        if !keywords.isEmpty {
+            sections.append("Vocabulary terms to preserve exactly when present: \(keywords.joined(separator: ", ")).")
+        }
+
+        if MagicFormatOutputSanitizer.allowsMultilineOutput(for: text) {
+            if MagicFormatOutputSanitizer.hasLikelyItemListLeadIn(for: text) {
+                sections.append("""
+                Formatting intent detected: this transcript is an item list with a user-provided lead-in before the item run. Return exactly this structure: first line = the cleaned lead-in ending with a colon; following lines = one bullet per item.
+
+                Do not return only bullets. If the transcript has no colon, infer the lead-in from the words before the item run and remove separator noise before the first item. Use plain hyphen bullets for unordered item lists, including "list of ..." requests where items are separated by commas, pauses, or "and". Use numbered lines only for ordered actions, steps, or explicit numbered lists. Correct obvious ASR item-word errors only when the surrounding items make the intended object clear. Do not invent extra items.
+
+                Example:
+                <transcript>these are the supplies we need for pens comma paper comma tape</transcript>
+                These are the supplies we need:
+                - Pens
+                - Paper
+                - Tape
+                """)
+            } else {
+                sections.append("Formatting intent detected: return a plain-text multi-line list with one item per line. Use plain hyphen bullets for unordered item lists. Use numbered lines only for ordered actions, steps, or explicit numbered lists. Do not add headings or extra items.")
+            }
+        }
+
+        if retrying {
+            if MagicFormatOutputSanitizer.allowsMultilineOutput(for: text) {
+                sections.append("Retry correction: return only the cleaned transcript text as a plain-text list. Do not add wrapper text, markdown, quotes around the answer, or extra commentary.")
+            } else {
+                sections.append("Retry correction: return only the cleaned transcript text. One line. Do not add wrapper text, markdown, quotes around the answer, or extra commentary.")
+            }
+        }
+
+        return sections
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
     }
 }

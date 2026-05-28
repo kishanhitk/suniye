@@ -3,6 +3,7 @@ import Foundation
 enum MagicFormatProvider: String, CaseIterable, Codable {
     case automatic
     case appleFoundationModels
+    case localGemma
     case openAICompatible
 
     var displayName: String {
@@ -11,6 +12,8 @@ enum MagicFormatProvider: String, CaseIterable, Codable {
             return "Automatic"
         case .appleFoundationModels:
             return "Apple Intelligence"
+        case .localGemma:
+            return "Local Gemma"
         case .openAICompatible:
             return "API Endpoint"
         }
@@ -19,9 +22,11 @@ enum MagicFormatProvider: String, CaseIterable, Codable {
     var description: String {
         switch self {
         case .automatic:
-            return "Apple Intelligence when available, API fallback."
+            return "Apple Intelligence, then local Gemma, then API fallback."
         case .appleFoundationModels:
             return "Local formatting with Apple's on-device model."
+        case .localGemma:
+            return "Local formatting with Gemma 4 Q4."
         case .openAICompatible:
             return "Use your OpenAI-compatible endpoint and API key."
         }
@@ -116,6 +121,7 @@ struct LLMSettings: Codable, Equatable {
     var endpointURLString: String = LLMDefaults.defaultEndpointURLString
     var baseSystemPrompt: String = LLMDefaults.defaultBaseSystemPrompt
     var appleSystemPrompt: String = LLMDefaults.defaultAppleMagicFormatPrompt
+    var gemmaSystemPrompt: String = LLMDefaults.defaultGemmaMagicFormatPrompt
     var systemPrompt: String = ""
     var keywordsRaw: String = ""
     var timeoutSeconds: Double = LLMDefaults.defaultTimeoutSeconds
@@ -129,6 +135,7 @@ struct LLMSettings: Codable, Equatable {
         case endpointURLString
         case baseSystemPrompt
         case appleSystemPrompt
+        case gemmaSystemPrompt
         case systemPrompt
         case keywordsRaw
         case timeoutSeconds
@@ -145,6 +152,7 @@ struct LLMSettings: Codable, Equatable {
         endpointURLString: String = LLMDefaults.defaultEndpointURLString,
         baseSystemPrompt: String = LLMDefaults.defaultBaseSystemPrompt,
         appleSystemPrompt: String = LLMDefaults.defaultAppleMagicFormatPrompt,
+        gemmaSystemPrompt: String = LLMDefaults.defaultGemmaMagicFormatPrompt,
         systemPrompt: String = "",
         keywordsRaw: String = "",
         timeoutSeconds: Double = LLMDefaults.defaultTimeoutSeconds,
@@ -157,6 +165,7 @@ struct LLMSettings: Codable, Equatable {
         self.endpointURLString = endpointURLString
         self.baseSystemPrompt = baseSystemPrompt
         self.appleSystemPrompt = appleSystemPrompt
+        self.gemmaSystemPrompt = gemmaSystemPrompt
         self.systemPrompt = systemPrompt
         self.keywordsRaw = keywordsRaw
         self.timeoutSeconds = LLMDefaults.clampTimeout(timeoutSeconds)
@@ -172,6 +181,7 @@ struct LLMSettings: Codable, Equatable {
         endpointURLString = try container.decodeIfPresent(String.self, forKey: .endpointURLString) ?? LLMDefaults.defaultEndpointURLString
         baseSystemPrompt = try container.decodeIfPresent(String.self, forKey: .baseSystemPrompt) ?? LLMDefaults.defaultBaseSystemPrompt
         appleSystemPrompt = try container.decodeIfPresent(String.self, forKey: .appleSystemPrompt) ?? LLMDefaults.defaultAppleMagicFormatPrompt
+        gemmaSystemPrompt = try container.decodeIfPresent(String.self, forKey: .gemmaSystemPrompt) ?? LLMDefaults.defaultGemmaMagicFormatPrompt
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         keywordsRaw = try container.decodeIfPresent(String.self, forKey: .keywordsRaw) ?? ""
         timeoutSeconds = LLMDefaults.clampTimeout(try container.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? LLMDefaults.defaultTimeoutSeconds)
@@ -187,6 +197,7 @@ struct LLMSettings: Codable, Equatable {
         try container.encode(endpointURLString, forKey: .endpointURLString)
         try container.encode(baseSystemPrompt, forKey: .baseSystemPrompt)
         try container.encode(appleSystemPrompt, forKey: .appleSystemPrompt)
+        try container.encode(gemmaSystemPrompt, forKey: .gemmaSystemPrompt)
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(keywordsRaw, forKey: .keywordsRaw)
         try container.encode(timeoutSeconds, forKey: .timeoutSeconds)
@@ -214,6 +225,11 @@ struct LLMSettings: Codable, Equatable {
     var composedAppleSystemPrompt: String {
         let normalized = appleSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         return normalized.isEmpty ? LLMDefaults.defaultAppleMagicFormatPrompt : normalized
+    }
+
+    var composedGemmaSystemPrompt: String {
+        let normalized = gemmaSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? LLMDefaults.defaultGemmaMagicFormatPrompt : normalized
     }
 
     var endpointProvider: LLMEndpointProvider {
@@ -369,6 +385,8 @@ For the README, say: run xcodegen generate before opening the project.
 <transcript>the csv header is user id comma created at comma plan id</transcript>
 The CSV header is: user_id, created_at, plan_id.
 """
+
+    static let defaultGemmaMagicFormatPrompt = defaultAppleMagicFormatPrompt
 
     static func parseKeywords(from raw: String) -> [String] {
         let separators = CharacterSet(charactersIn: ",\n")

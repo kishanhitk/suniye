@@ -338,6 +338,8 @@ struct StylePage: View {
                 if appState.needsAPIConfigurationForMagicFormat {
                     connectionSection
                     modelSection
+                } else if appState.usesLocalGemmaMagicFormatSettings {
+                    localGemmaSection
                 }
                 vocabularySection
                 promptSection
@@ -411,6 +413,24 @@ struct StylePage: View {
                     .frame(width: 280)
                 }
                 .frame(maxWidth: .infinity, minHeight: 28)
+            }
+        }
+    }
+
+    // MARK: - Local Gemma
+
+    private var localGemmaSection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+            SectionHeading(title: "Local Model")
+
+            SurfaceCard {
+                VStack(spacing: 10) {
+                    settingsValueRow(label: "Model", value: LocalGemmaDefaults.modelDisplayName)
+                    CardDivider()
+                    settingsValueRow(label: "Size", value: LocalGemmaDefaults.expectedSizeText)
+                    CardDivider()
+                    settingsValueRow(label: "Runtime", value: appState.localGemmaMagicFormatAvailability.statusText)
+                }
             }
         }
     }
@@ -617,6 +637,13 @@ struct StylePage: View {
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                             .disabled(appState.llmAppleSystemPrompt == LLMDefaults.defaultAppleMagicFormatPrompt)
+                        } else if appState.usesLocalGemmaMagicFormatSettings {
+                            Button("Reset to Gemma Default") {
+                                appState.resetGemmaMagicFormatPrompt()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(appState.llmGemmaSystemPrompt == LLMDefaults.defaultGemmaMagicFormatPrompt)
                         }
                     }
 
@@ -648,19 +675,31 @@ struct StylePage: View {
         switch provider {
         case .appleFoundationModels:
             return appState.appleMagicFormatAvailability.isAvailable
+        case .localGemma:
+            return appState.localGemmaMagicFormatAvailability.isAvailable
         case .automatic, .openAICompatible:
             return true
         }
     }
 
     private var promptBinding: Binding<String> {
-        appState.usesAppleMagicFormatSettings ? $appState.llmAppleSystemPrompt : $appState.llmBaseSystemPrompt
+        if appState.usesAppleMagicFormatSettings {
+            return $appState.llmAppleSystemPrompt
+        }
+        if appState.usesLocalGemmaMagicFormatSettings {
+            return $appState.llmGemmaSystemPrompt
+        }
+        return $appState.llmBaseSystemPrompt
     }
 
     private var promptDescription: String {
-        appState.usesAppleMagicFormatSettings
-            ? "Instructions for Apple's local formatter."
-            : "Instructions for rewriting your text."
+        if appState.usesAppleMagicFormatSettings {
+            return "Instructions for Apple's local formatter."
+        }
+        if appState.usesLocalGemmaMagicFormatSettings {
+            return "Instructions for local Gemma."
+        }
+        return "Instructions for rewriting your text."
     }
 
     private var modelPickerPresets: [LLMModelPreset] {
@@ -694,7 +733,7 @@ struct StylePage: View {
         case .needsAPIKey, .needsServiceSetup:
             return .orange
         case .ready:
-            if appState.usesAppleMagicFormatSettings {
+            if appState.usesLocalMagicFormatSettings {
                 return .green
             }
             return appState.isMagicFormatSetupVerified ? .green : .blue
@@ -706,6 +745,11 @@ struct StylePage: View {
             return appState.appleMagicFormatAvailability.isAvailable
                 ? "Apple Intelligence ready"
                 : appState.appleMagicFormatAvailability.statusText
+        }
+        if appState.usesLocalGemmaMagicFormatSettings {
+            return appState.localGemmaMagicFormatAvailability.isAvailable
+                ? "Local Gemma ready"
+                : appState.localGemmaMagicFormatAvailability.statusText
         }
         if appState.isMagicFormatSetupVerified {
             return "Connected and ready"
@@ -720,6 +764,22 @@ struct StylePage: View {
         case .ready:
             return "Run a connection test to verify"
         }
+    }
+
+    private func settingsValueRow(label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            Text(label)
+                .font(AppTypography.body)
+                .foregroundStyle(Color.primary)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .font(AppTypography.body)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+                .multilineTextAlignment(.trailing)
+        }
+        .frame(maxWidth: .infinity, minHeight: 28)
     }
 }
 

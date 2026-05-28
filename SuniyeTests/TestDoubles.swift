@@ -381,6 +381,7 @@ func makeTestAppState(
     soundFeedbackService: SoundFeedbackServiceProtocol = SpySoundFeedbackService(),
     llmPostProcessor: LLMPostProcessor = NoopLLMPostProcessor(),
     appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor = NoopAppleMagicFormatPostProcessor(),
+    localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor = NoopLocalGemmaMagicFormatPostProcessor(),
     llmSettingsStore: LLMSettingsStoreProtocol = TestLLMSettingsStore(),
     generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
     historyStore: HistoryStoreProtocol = TestHistoryStore(),
@@ -407,6 +408,7 @@ func makeTestAppState(
         soundFeedbackService: soundFeedbackService,
         llmPostProcessor: llmPostProcessor,
         appleMagicFormatPostProcessor: appleMagicFormatPostProcessor,
+        localGemmaMagicFormatPostProcessor: localGemmaMagicFormatPostProcessor,
         llmSettingsStore: llmSettingsStore,
         generalSettingsStore: generalSettingsStore,
         historyStore: historyStore,
@@ -446,6 +448,20 @@ final class NoopAppleMagicFormatPostProcessor: AppleMagicFormatPostProcessor {
     }
 
     func testSetup(config: AppleMagicFormatConfig) async throws {}
+}
+
+final class NoopLocalGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor {
+    var availability: LocalGemmaAvailability
+
+    init(availability: LocalGemmaAvailability = .modelNotInstalled) {
+        self.availability = availability
+    }
+
+    func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
+        text
+    }
+
+    func testSetup(config: LocalGemmaMagicFormatConfig) async throws {}
 }
 
 final class StubDiagnosticBundleService: DiagnosticBundleServiceProtocol {
