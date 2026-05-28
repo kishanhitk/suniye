@@ -23,6 +23,19 @@ enum LocalGemmaDefaults {
     static let startupTimeoutSeconds = 90.0
     static let generationTimeoutSeconds = 15.0
     static let maxTokens = 256
+
+    static func serverArguments(modelPath: String, port: Int) -> [String] {
+        [
+            "--model", modelPath,
+            "--host", "127.0.0.1",
+            "--port", "\(port)",
+            "--ctx-size", "4096",
+            "--parallel", "1",
+            "--reasoning", "off",
+            "--no-webui",
+            "--log-disable",
+        ]
+    }
 }
 
 struct LocalGemmaModelCandidate: Equatable {
@@ -358,6 +371,7 @@ private final class LocalGemmaLlamaCppClient: LocalGemmaClient {
                 ["role": "user", "content": prompt],
             ],
             "temperature": 0,
+            "top_k": 1,
             "top_p": 1,
             "max_tokens": maxTokens,
             "stream": false,
@@ -408,15 +422,7 @@ private actor LocalGemmaLlamaServer {
         let url = URL(string: "http://127.0.0.1:\(port)")!
         let process = Process()
         process.executableURL = runtime.serverExecutableURL
-        process.arguments = [
-            "--model", runtime.modelURL.path,
-            "--host", "127.0.0.1",
-            "--port", "\(port)",
-            "--ctx-size", "4096",
-            "--parallel", "1",
-            "--no-webui",
-            "--log-disable",
-        ]
+        process.arguments = LocalGemmaDefaults.serverArguments(modelPath: runtime.modelURL.path, port: port)
         process.standardOutput = Pipe()
         process.standardError = Pipe()
 

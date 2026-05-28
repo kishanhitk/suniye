@@ -87,6 +87,16 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         XCTAssertEqual(client.prompts.first, "Connection test.")
     }
 
+    func testServerArgumentsDisableReasoning() {
+        let arguments = LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf", port: 51_234)
+
+        XCTAssertEqual(arguments.first, "--model")
+        XCTAssertTrue(arguments.contains("/tmp/model.gguf"))
+        XCTAssertTrue(arguments.contains("51234"))
+        XCTAssertTrue(arguments.contains("--reasoning"))
+        XCTAssertTrue(arguments.contains("off"))
+    }
+
     private func makeConfig() -> LocalGemmaMagicFormatConfig {
         LocalGemmaMagicFormatConfig(
             systemPrompt: LLMDefaults.defaultGemmaMagicFormatPrompt,
