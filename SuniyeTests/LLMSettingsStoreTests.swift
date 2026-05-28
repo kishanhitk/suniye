@@ -90,6 +90,12 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.composedGemmaSystemPrompt, "gemma prompt")
     }
 
+    func testDefaultGemmaPromptIsTunedSeparatelyFromApplePrompt() {
+        XCTAssertNotEqual(LLMDefaults.defaultGemmaMagicFormatPrompt, LLMDefaults.defaultAppleMagicFormatPrompt)
+        XCTAssertTrue(LLMDefaults.defaultGemmaMagicFormatPrompt.contains("Pattern examples"))
+        XCTAssertTrue(LLMDefaults.defaultAppleMagicFormatPrompt.contains("Critical list lead-in rule"))
+    }
+
     func testTimeoutAndTokenClamping() {
         let settings = LLMSettings(timeoutSeconds: 99, maxTokens: 2)
         XCTAssertEqual(settings.timeoutSeconds, LLMDefaults.maxTimeoutSeconds)

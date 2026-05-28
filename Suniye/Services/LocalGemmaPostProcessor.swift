@@ -25,7 +25,7 @@ enum LocalGemmaDefaults {
     static let maxTokens = 256
 
     static func serverArguments(modelPath: String, port: Int) -> [String] {
-        [
+        return [
             "--model", modelPath,
             "--host", "127.0.0.1",
             "--port", "\(port)",
@@ -76,7 +76,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
 
         var lastInvalidOutputWasEmpty = false
         for attempt in 0 ..< 2 {
-            let instructions = makeInstructions(config: config, text: trimmedInput, retrying: attempt > 0)
+            let instructions = makeInstructions(config: config, retrying: attempt > 0)
             let prompt = makePrompt(text: trimmedInput)
 
             do {
@@ -117,13 +117,20 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
         }
     }
 
-    private func makeInstructions(config: LocalGemmaMagicFormatConfig, text: String, retrying: Bool) -> String {
-        MagicFormatPromptComposer.makeInstructions(
-            systemPrompt: config.systemPrompt,
-            keywords: config.keywords,
-            text: text,
-            retrying: retrying
-        )
+    private func makeInstructions(config: LocalGemmaMagicFormatConfig, retrying: Bool) -> String {
+        var sections = [config.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)]
+
+        if !config.keywords.isEmpty {
+            sections.append("Vocabulary terms to preserve exactly when present: \(config.keywords.joined(separator: ", ")).")
+        }
+
+        if retrying {
+            sections.append("Retry correction: return only the cleaned transcript text. Do not add wrapper text, markdown, quotes around the answer, or extra commentary.")
+        }
+
+        return sections
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
     }
 
     private func makePrompt(text: String) -> String {
@@ -364,11 +371,16 @@ private final class LocalGemmaLlamaCppClient: LocalGemmaClient {
     }
 
     private func makePayload(instructions: String, prompt: String, maxTokens: Int, modelName: String) -> [String: Any] {
-        [
+        let userContent = """
+        \(instructions)
+
+        \(prompt)
+        """
+
+        return [
             "model": modelName,
             "messages": [
-                ["role": "system", "content": instructions],
-                ["role": "user", "content": prompt],
+                ["role": "user", "content": userContent],
             ],
             "temperature": 0,
             "top_k": 1,

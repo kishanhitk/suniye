@@ -29,7 +29,7 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         XCTAssertEqual(output, "Polished text")
     }
 
-    func testListLeadInPromptMatchesApplePromptComposer() async throws {
+    func testGemmaInstructionsUseGenericPromptWithoutListHeuristics() async throws {
         let client = FakeLocalGemmaClient(outputs: [
             "These are the items we should have:\n- Laptop\n- Back\n- Phone\n- Charger",
         ])
@@ -41,9 +41,9 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         )
 
         XCTAssertEqual(output, "These are the items we should have:\n- Laptop\n- Back\n- Phone\n- Charger")
-        XCTAssertTrue(client.instructions.first?.contains("Return exactly this structure") == true)
-        XCTAssertTrue(client.instructions.first?.contains("Do not return only bullets") == true)
-        XCTAssertTrue(client.instructions.first?.contains("remove separator noise before the first item") == true)
+        XCTAssertTrue(client.instructions.first?.contains("You clean one dictated transcript") == true)
+        XCTAssertFalse(client.instructions.first?.contains("Formatting intent detected") == true)
+        XCTAssertFalse(client.instructions.first?.contains("Return exactly this structure") == true)
     }
 
     func testInvalidOutputRetriesOnce() async throws {
