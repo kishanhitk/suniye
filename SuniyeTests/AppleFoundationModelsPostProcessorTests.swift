@@ -71,7 +71,7 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         XCTAssertEqual(output, "- Buy milk\n- Submit expenses\n- Call the dentist at 2 PM")
         XCTAssertEqual(client.callCount, 1)
         XCTAssertTrue(client.instructions.first?.contains("return a plain-text multi-line list") == true)
-        XCTAssertFalse(client.instructions.first?.contains("Return exactly this structure") == true)
+        XCTAssertFalse(client.instructions.first?.contains("Preserve that lead-in") == true)
     }
 
     func testListOfCommaSeparatedItemsOutputIsAcceptedAndPromptedGenerically() async throws {
@@ -87,8 +87,9 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
 
         XCTAssertEqual(output, "List of items to order:\n- Fan\n- Laptop\n- Book")
         XCTAssertEqual(client.callCount, 1)
-        XCTAssertTrue(client.instructions.first?.contains("Return exactly this structure") == true)
+        XCTAssertTrue(client.instructions.first?.contains("Preserve that lead-in") == true)
         XCTAssertTrue(client.instructions.first?.contains("one bullet per item") == true)
+        XCTAssertFalse(client.instructions.first?.contains("<transcript>") == true)
     }
 
     func testListOfItemsSeparatedByAndOutputIsAcceptedAndPromptedGenerically() async throws {
@@ -104,7 +105,7 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
 
         XCTAssertEqual(output, "List of items to order:\n- Fan\n- Laptop\n- Book")
         XCTAssertEqual(client.callCount, 1)
-        XCTAssertTrue(client.instructions.first?.contains("Return exactly this structure") == true)
+        XCTAssertTrue(client.instructions.first?.contains("Preserve that lead-in") == true)
         XCTAssertTrue(client.instructions.first?.contains("one bullet per item") == true)
     }
 
@@ -124,6 +125,7 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         XCTAssertTrue(client.instructions.first?.contains("user-provided lead-in") == true)
         XCTAssertTrue(client.instructions.first?.contains("Do not return only bullets") == true)
         XCTAssertTrue(client.instructions.first?.contains("infer the lead-in") == true)
+        XCTAssertFalse(client.instructions.first?.contains("Example:") == true)
     }
 
     func testNoColonListLeadInOutputIsAcceptedAndPromptedToPreserveLeadIn() async throws {
@@ -139,10 +141,10 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
 
         XCTAssertEqual(output, "These are the items we should have:\n- Laptop\n- Back\n- Phone\n- Charger")
         XCTAssertEqual(client.callCount, 1)
-        XCTAssertTrue(client.instructions.first?.contains("Return exactly this structure") == true)
+        XCTAssertTrue(client.instructions.first?.contains("Preserve that lead-in") == true)
         XCTAssertTrue(client.instructions.first?.contains("Do not return only bullets") == true)
-        XCTAssertTrue(client.instructions.first?.contains("remove separator noise before the first item") == true)
-        XCTAssertTrue(client.instructions.first?.contains("these are the supplies we need") == true)
+        XCTAssertTrue(client.instructions.first?.contains("remove only separator noise before the first item") == true)
+        XCTAssertFalse(client.instructions.first?.contains("these are the supplies we need") == true)
     }
 
     func testRequestedNumberedStepsOutputIsAccepted() async throws {

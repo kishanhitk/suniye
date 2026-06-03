@@ -298,16 +298,9 @@ enum MagicFormatPromptComposer {
         if MagicFormatOutputSanitizer.allowsMultilineOutput(for: text) {
             if MagicFormatOutputSanitizer.hasLikelyItemListLeadIn(for: text) {
                 sections.append("""
-                Formatting intent detected: this transcript is an item list with a user-provided lead-in before the item run. Return exactly this structure: first line = the cleaned lead-in ending with a colon; following lines = one bullet per item.
+                Formatting intent detected: this transcript appears to contain an item list with a user-provided lead-in. Preserve that lead-in as the first line ending with a colon, then return one bullet per item.
 
-                Do not return only bullets. If the transcript has no colon, infer the lead-in from the words before the item run and remove separator noise before the first item. Use plain hyphen bullets for unordered item lists, including "list of ..." requests where items are separated by commas, pauses, or "and". Use numbered lines only for ordered actions, steps, or explicit numbered lists. Correct obvious ASR item-word errors only when the surrounding items make the intended object clear. Do not invent extra items.
-
-                Example:
-                <transcript>these are the supplies we need for pens comma paper comma tape</transcript>
-                These are the supplies we need:
-                - Pens
-                - Paper
-                - Tape
+                Do not return only bullets. If the transcript has no explicit colon, infer the lead-in from the words before the item run and remove only separator noise before the first item. Use plain hyphen bullets for unordered item lists. Use numbered lines only for ordered actions, steps, or explicit numbered lists. Correct obvious item-word dictation errors only when the surrounding items make the intended object clear. Do not invent extra items.
                 """)
             } else {
                 sections.append("Formatting intent detected: return a plain-text multi-line list with one item per line. Use plain hyphen bullets for unordered item lists. Use numbered lines only for ordered actions, steps, or explicit numbered lists. Do not add headings or extra items.")

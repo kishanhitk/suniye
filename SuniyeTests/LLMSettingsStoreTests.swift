@@ -92,8 +92,35 @@ final class LLMSettingsStoreTests: XCTestCase {
 
     func testDefaultGemmaPromptIsTunedSeparatelyFromApplePrompt() {
         XCTAssertNotEqual(LLMDefaults.defaultGemmaMagicFormatPrompt, LLMDefaults.defaultAppleMagicFormatPrompt)
-        XCTAssertTrue(LLMDefaults.defaultGemmaMagicFormatPrompt.contains("Pattern examples"))
-        XCTAssertTrue(LLMDefaults.defaultAppleMagicFormatPrompt.contains("Critical list lead-in rule"))
+        XCTAssertTrue(LLMDefaults.defaultGemmaMagicFormatPrompt.contains("Do not infer a list from ordinary use"))
+        XCTAssertTrue(LLMDefaults.defaultAppleMagicFormatPrompt.contains("Use one line by default"))
+    }
+
+    func testDefaultLocalPromptsAvoidAppSpecificExamples() {
+        let prompts = [
+            LLMDefaults.defaultAppleMagicFormatPrompt,
+            LLMDefaults.defaultGemmaMagicFormatPrompt,
+        ]
+        let appSpecificTerms = [
+            "<transcript>",
+            "Suniye",
+            "Magic Format",
+            "Apple Intelligence",
+            "Foundation Models",
+            "AppState",
+            "postProcessText",
+            "MainActor",
+            "sherpa",
+            "xcodegen",
+            "Linear ticket",
+            "git branch",
+        ]
+
+        for prompt in prompts {
+            for term in appSpecificTerms {
+                XCTAssertFalse(prompt.contains(term), "Default prompt should not contain app-specific term: \(term)")
+            }
+        }
     }
 
     func testTimeoutAndTokenClamping() {
