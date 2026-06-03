@@ -8,10 +8,11 @@ BUILD_NUMBER=""
 BUILD_CHANNEL="${SUNIYE_BUILD_CHANNEL:-stable}"
 APPCAST_CHANNEL=""
 DOWNLOAD_URL_PREFIX=""
+RELEASE_NOTES_FILE=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/package_release.sh --version vX.Y.Z [--build-number <number>] [--build-channel stable|tip] [--appcast-channel <name>] [--download-url-prefix <url>] [--dist-dir <dir>]
+Usage: scripts/package_release.sh --version vX.Y.Z [--build-number <number>] [--build-channel stable|tip] [--appcast-channel <name>] [--download-url-prefix <url>] [--dist-dir <dir>] [--release-notes-file <path>]
 USAGE
 }
 
@@ -56,6 +57,10 @@ while [[ $# -gt 0 ]]; do
       DIST_DIR="$2"
       shift 2
       ;;
+    --release-notes-file)
+      RELEASE_NOTES_FILE="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -92,6 +97,11 @@ fi
 
 if [[ -n "${APPCAST_CHANNEL}" && ! "${APPCAST_CHANNEL}" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "Appcast channel may only contain letters, numbers, dots, underscores, and dashes: ${APPCAST_CHANNEL}" >&2
+  exit 1
+fi
+
+if [[ -n "${RELEASE_NOTES_FILE}" && ! -s "${RELEASE_NOTES_FILE}" ]]; then
+  echo "Release notes file is missing or empty: ${RELEASE_NOTES_FILE}" >&2
   exit 1
 fi
 
@@ -152,6 +162,9 @@ if [[ -n "${DOWNLOAD_URL_PREFIX}" ]]; then
 fi
 if [[ -n "${APPCAST_CHANNEL}" ]]; then
   APPCAST_ARGS+=(--channel "${APPCAST_CHANNEL}")
+fi
+if [[ -n "${RELEASE_NOTES_FILE}" ]]; then
+  APPCAST_ARGS+=(--release-notes-file "${RELEASE_NOTES_FILE}")
 fi
 "${ROOT_DIR}/scripts/generate_appcast.sh" "${APPCAST_ARGS[@]}"
 

@@ -9,10 +9,11 @@ APPCAST_CHANNEL=""
 SPARKLE_ACCOUNT="${SPARKLE_ACCOUNT:-suniye}"
 PRIVATE_KEY_FILE=""
 CREATED_PRIVATE_KEY_FILE=0
+RELEASE_NOTES_FILE=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/generate_appcast.sh --version vX.Y.Z [--dist-dir <dir>] [--download-url-prefix <url>] [--channel <name>] [--private-key-file <path>]
+Usage: scripts/generate_appcast.sh --version vX.Y.Z [--dist-dir <dir>] [--download-url-prefix <url>] [--channel <name>] [--private-key-file <path>] [--release-notes-file <path>]
 USAGE
 }
 
@@ -36,6 +37,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --private-key-file)
       PRIVATE_KEY_FILE="$2"
+      shift 2
+      ;;
+    --release-notes-file)
+      RELEASE_NOTES_FILE="$2"
       shift 2
       ;;
     -h|--help)
@@ -71,6 +76,10 @@ DMG_PATH="${DIST_DIR}/Suniye.dmg"
 APPCAST_PATH="${DIST_DIR}/appcast.xml"
 
 [[ -f "${DMG_PATH}" ]] || { echo "Missing artifact: ${DMG_PATH}" >&2; exit 1; }
+if [[ -n "${RELEASE_NOTES_FILE}" && ! -s "${RELEASE_NOTES_FILE}" ]]; then
+  echo "Release notes file is missing or empty: ${RELEASE_NOTES_FILE}" >&2
+  exit 1
+fi
 
 SPARKLE_TOOL_ROOTS=(
   "${ROOT_DIR}/.derivedData-release/SourcePackages/artifacts/sparkle/Sparkle/bin"
@@ -115,10 +124,21 @@ cleanup() {
 }
 trap cleanup EXIT
 cp "${DMG_PATH}" "${APPCAST_WORK_DIR}/Suniye.dmg"
+if [[ -n "${RELEASE_NOTES_FILE}" ]]; then
+  cp "${RELEASE_NOTES_FILE}" "${APPCAST_WORK_DIR}/Suniye.md"
+else
+  cat > "${APPCAST_WORK_DIR}/Suniye.md" <<EOF
+# Suniye ${VERSION}
+
+View the full release notes on GitHub:
+https://github.com/kishanhitk/suniye/releases/tag/${VERSION}
+EOF
+fi
 
 generate_args=(
   --download-url-prefix "${DOWNLOAD_URL_PREFIX}"
   --maximum-versions 1
+  --embed-release-notes
   -o "${APPCAST_PATH}"
 )
 

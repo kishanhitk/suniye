@@ -26,7 +26,7 @@ Do not manually bump app version metadata in `project.yml` just to cut a release
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
-2. GitHub Actions `release.yml` injects the tag version, computes the stable build number, builds artifacts, and creates the release.
+2. GitHub Actions `release.yml` asks GitHub to generate release notes for the tag, embeds them in the Sparkle appcast, injects the tag version, computes the stable build number, builds artifacts, and creates the release.
 
 ## Tip builds
 Every push to `main` publishes a mutable prerelease/tag named `tip`.
@@ -41,6 +41,7 @@ The Tip workflow packages the latest `main` commit with:
 ```
 
 The Tip appcast is served from `https://suniye.kishans.in/appcast-tip.xml`.
+Both Stable and Tip appcasts must include Sparkle release notes, either as an embedded `<description>` or a `<sparkle:releaseNotesLink>`.
 
 ## Artifacts
 - `Suniye.dmg`

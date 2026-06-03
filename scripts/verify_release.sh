@@ -133,6 +133,11 @@ if enclosure is None:
 if not enclosure.attrib.get("{http://www.andymatuschak.org/xml-namespaces/sparkle}edSignature"):
     raise SystemExit("Appcast enclosure is missing Sparkle EdDSA signature")
 
+description = item.findtext("description")
+release_notes_link = item.findtext("sparkle:releaseNotesLink", namespaces=namespace)
+if not (description and description.strip()) and not (release_notes_link and release_notes_link.strip()):
+    raise SystemExit("Appcast item is missing Sparkle release notes")
+
 actual_channel = item.findtext("sparkle:channel", namespaces=namespace)
 if expected_channel:
     if actual_channel != expected_channel:
