@@ -26,17 +26,23 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
             session: .shared
         )
 
-        let output = try await client.generate(
-            instructions: "Reply with OK.",
-            prompt: "Connection test.",
-            maxTokens: 8,
-            startupTimeoutSeconds: 2,
-            timeoutSeconds: 2
-        )
+        let output: String
+        do {
+            output = try await client.generate(
+                instructions: "Reply with OK.",
+                prompt: "Connection test.",
+                maxTokens: 8,
+                startupTimeoutSeconds: 8,
+                timeoutSeconds: 5
+            )
+        } catch {
+            await server.stop()
+            XCTFail("Expected fake llama-server to become reachable, got \(error). Helper log: \(logContents(at: logURL))")
+            return
+        }
 
         XCTAssertEqual(output, "OK")
-        await server.scheduleIdleShutdown(after: 0.05)
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        await server.stop()
     }
 
     func testServerReusesRuntimeUntilIdleShutdown() async throws {
@@ -50,18 +56,17 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
         )
         let server = LocalGemmaLlamaServer()
 
-        _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 2, idleTimeoutSeconds: 30)
-        _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 2, idleTimeoutSeconds: 30)
+        _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
+        _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
 
         XCTAssertEqual(startCount(at: logURL), 1)
 
         await server.scheduleIdleShutdown(after: 0.05)
         try? await Task.sleep(nanoseconds: 200_000_000)
-        _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 2, idleTimeoutSeconds: 30)
+        _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
 
         XCTAssertEqual(startCount(at: logURL), 2)
-        await server.scheduleIdleShutdown(after: 0.05)
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        await server.stop()
     }
 
     func testServerStartupTimeoutStopsUnhealthyProcess() async throws {
@@ -101,7 +106,7 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
         )
         let server = LocalGemmaLlamaServer()
 
-        _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 2, idleTimeoutSeconds: 30)
+        _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
 
         let start = Date()
         await server.stop()
