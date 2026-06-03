@@ -31,7 +31,8 @@ final class OpenRouterPostProcessorTests: XCTestCase {
             let messages = try XCTUnwrap(json["messages"] as? [[String: String]])
             let system = try XCTUnwrap(messages.first(where: { $0["role"] == "system" })?["content"])
             XCTAssertTrue(system.contains("prompt"))
-            XCTAssertTrue(system.contains("Keyword hints: swift"))
+            XCTAssertTrue(system.contains("Vocabulary terms to preserve exactly when present: swift."))
+            XCTAssertEqual(messages.last?["content"], "<transcript>\nhello world\n</transcript>")
 
             let responseJSON: [String: Any] = [
                 "choices": [
@@ -57,7 +58,7 @@ final class OpenRouterPostProcessorTests: XCTestCase {
         )
 
         let output = try await processor.polish(text: "hello world", config: config)
-        XCTAssertEqual(output, "hello world.")
+        XCTAssertEqual(output, "Output: hello world.")
     }
 
     func testSetupBuildsMinimalValidationRequest() async throws {
@@ -161,11 +162,11 @@ final class OpenRouterPostProcessorTests: XCTestCase {
         }
     }
 
-    func testSanitizeOutputRemovesFencesAndPrefix() {
+    func testSanitizeOutputOnlyTrimsOuterWhitespace() {
         let processor = OpenRouterPostProcessor(session: makeSession())
-        let raw = "```\nPolished: hello\nworld\n```"
+        let raw = " \n```\nPolished: hello\nworld\n```\n "
         let output = processor.sanitizeOutput(raw)
-        XCTAssertEqual(output, "hello\nworld")
+        XCTAssertEqual(output, "```\nPolished: hello\nworld\n```")
     }
 
     private func makeSession() -> URLSession {

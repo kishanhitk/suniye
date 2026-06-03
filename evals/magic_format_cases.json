@@ -1,0 +1,128 @@
+[
+  {
+    "id": "text_intent_preserved_001",
+    "category": "intent_preservation",
+    "input": "text maya that i'm running about ten minutes late and don't wait for me",
+    "expected": "Text Maya that I'm running about ten minutes late and don't wait for me."
+  },
+  {
+    "id": "slack_intent_preserved_001",
+    "category": "intent_preservation",
+    "input": "slack sam comma the build is green but qa still needs to sign off",
+    "expected": "Slack Sam, the build is green, but QA still needs to sign off."
+  },
+  {
+    "id": "minimal_grammar_change_001",
+    "category": "minimal_rewrite",
+    "input": "i think we should maybe wait until monday because the numbers are not final yet",
+    "expected": "I think we should maybe wait until Monday because the numbers are not final yet."
+  },
+  {
+    "id": "no_tone_improvement_001",
+    "category": "minimal_rewrite",
+    "input": "this is kind of messy but i don't want to rewrite it just fix punctuation",
+    "expected": "This is kind of messy, but I don't want to rewrite it. Just fix punctuation."
+  },
+  {
+    "id": "list_leadin_001",
+    "category": "list_formatting",
+    "input": "these are the items we should have laptop bag phone charger",
+    "expected": "These are the items we should have:\n- Laptop\n- Bag\n- Phone\n- Charger"
+  },
+  {
+    "id": "simple_ordered_steps_001",
+    "category": "list_formatting",
+    "input": "do these in order first check the logs second restart the app third send me the result",
+    "expected": "Do these in order:\n1. Check the logs\n2. Restart the app\n3. Send me the result"
+  },
+  {
+    "id": "readme_context_preserved_001",
+    "category": "technical_formatting",
+    "input": "for the readme say run npm install and then npm test before opening a pr",
+    "expected": "For the README, say: run npm install and then npm test before opening a PR."
+  },
+  {
+    "id": "csv_header_001",
+    "category": "technical_formatting",
+    "input": "the csv header is user id comma created at comma plan id comma trial ends at",
+    "expected": "The CSV header is: user_id, created_at, plan_id, trial_ends_at."
+  },
+  {
+    "id": "spoken_symbols_001",
+    "category": "spoken_symbols",
+    "input": "say open bracket blocked close bracket waiting on apple intelligence model download",
+    "expected": "[Blocked] Waiting on Apple Intelligence model download."
+  },
+  {
+    "id": "numbers_without_rephrasing_001",
+    "category": "numbers_money_time",
+    "input": "the meeting is from nine fifteen to ten forty five and the budget is twelve thousand dollars",
+    "expected": "The meeting is from 9:15 to 10:45 and the budget is $12,000."
+  },
+  {
+    "id": "bullet_list_request_preserved_001",
+    "category": "list_formatting",
+    "input": "make this a bullet list renew passport check flights and ask rahul about hotel points",
+    "expected": "Make this a bullet list:\n- Renew passport\n- Check flights\n- Ask Rahul about hotel points"
+  },
+  {
+    "id": "numbered_list_request_preserved_001",
+    "category": "list_formatting",
+    "input": "write this as a numbered list check logs restart app send me the result",
+    "expected": "Write this as a numbered list:\n1. Check logs\n2. Restart app\n3. Send me the result"
+  },
+  {
+    "id": "bullet_point_request_preserved_001",
+    "category": "list_formatting",
+    "input": "create a bullet point out of these first books pen notebook",
+    "expected": "Create a bullet point out of these:\n- Books\n- Pen\n- Notebook"
+  },
+  {
+    "id": "natural_list_leadin_001",
+    "category": "list_formatting",
+    "input": "the things we need are laptop bag phone and charger",
+    "expected": "The things we need are:\n- Laptop\n- Bag\n- Phone\n- Charger"
+  },
+  {
+    "id": "shopping_list_label_001",
+    "category": "list_formatting",
+    "input": "shopping list milk eggs bread and coffee",
+    "expected": "Shopping list:\n- Milk\n- Eggs\n- Bread\n- Coffee"
+  },
+  {
+    "id": "packing_list_label_001",
+    "category": "list_formatting",
+    "input": "packing list colon jacket comma passport comma charger",
+    "expected": "Packing list:\n- Jacket\n- Passport\n- Charger"
+  },
+  {
+    "id": "ordered_words_preserved_001",
+    "category": "list_formatting",
+    "input": "first download the model second run the local test third compare the output",
+    "expected": "1. Download the model\n2. Run the local test\n3. Compare the output"
+  },
+  {
+    "id": "task_leadin_preserved_001",
+    "category": "list_formatting",
+    "input": "do these things in order first create a ticket second make a branch third open a draft pr",
+    "expected": "Do these things in order:\n1. Create a ticket\n2. Make a branch\n3. Open a draft PR"
+  },
+  {
+    "id": "text_intent_preserved_002",
+    "category": "intent_preservation",
+    "input": "text maya that i am running ten minutes late and don't wait for me",
+    "expected": "Text Maya that I am running ten minutes late and don't wait for me."
+  },
+  {
+    "id": "readme_context_preserved_002",
+    "category": "technical_formatting",
+    "input": "for the readme say run npm install and then npm test before opening a pr",
+    "expected": "For the README, say: run npm install and then npm test before opening a PR."
+  },
+  {
+    "id": "csv_header_002",
+    "category": "technical_formatting",
+    "input": "the csv header is user id comma created at comma plan id comma trial ends at",
+    "expected": "The CSV header is: user_id, created_at, plan_id, trial_ends_at."
+  }
+]

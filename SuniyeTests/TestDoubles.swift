@@ -279,6 +279,83 @@ final class StubModelManager: ModelManagerProtocol {
     }
 }
 
+final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
+    var catalog: [LocalLLMModelCatalogEntry] = LocalLLMModelCatalog.entries
+    var preferredModelID: LocalLLMModelID = LocalLLMModelCatalog.preferredModelID
+    var isHardwareSupported = true
+    var installedModelIDs: Set<LocalLLMModelID> = []
+    var installedByteCounts: [LocalLLMModelID: Int64] = [
+        LocalLLMModelCatalog.preferredModelID: LocalLLMModelCatalog.entry(for: LocalLLMModelCatalog.preferredModelID).expectedSizeBytes
+    ]
+    var downloadResult: Result<Void, Error> = .success(())
+    var deleteCallCount = 0
+    var downloadCallCount = 0
+    var cancelCallCount = 0
+    var lastDeletedModelID: LocalLLMModelID?
+    var lastDownloadedModelID: LocalLLMModelID?
+    var lastProgressHandler: (@Sendable (LocalLLMDownloadProgress) -> Void)?
+    var progressValues: [LocalLLMDownloadProgress] = []
+    var rootDirectory = URL(fileURLWithPath: "/tmp/suniye-llm", isDirectory: true)
+    var onDownloadFinished: (() -> Void)?
+
+    func modelsRootDirectoryURL() throws -> URL {
+        rootDirectory
+    }
+
+    func modelFileURL(for modelID: LocalLLMModelID) throws -> URL {
+        rootDirectory.appendingPathComponent(catalogEntry(for: modelID).filename)
+    }
+
+    func isInstalled(_ modelID: LocalLLMModelID) -> Bool {
+        isHardwareSupported && installedModelIDs.contains(modelID)
+    }
+
+    func installedByteCount(for modelID: LocalLLMModelID) -> Int64 {
+        isInstalled(modelID) ? (installedByteCounts[modelID] ?? 0) : 0
+    }
+
+    func installState(for modelID: LocalLLMModelID) -> LocalLLMInstallState {
+        guard isHardwareSupported else {
+            return .unavailable("Requires Apple Silicon.")
+        }
+        guard isInstalled(modelID) else {
+            return .notInstalled
+        }
+        return .installed(installedByteCount(for: modelID))
+    }
+
+    func downloadModel(_ modelID: LocalLLMModelID, progress: @escaping @Sendable (LocalLLMDownloadProgress) -> Void) async throws {
+        downloadCallCount += 1
+        lastDownloadedModelID = modelID
+        lastProgressHandler = progress
+        let entry = catalogEntry(for: modelID)
+        let progressValue = LocalLLMDownloadProgress(
+            fractionCompleted: 1,
+            downloadedBytes: entry.expectedSizeBytes,
+            expectedBytes: entry.expectedSizeBytes
+        )
+        progressValues.append(progressValue)
+        progress(progressValue)
+        try downloadResult.get()
+        installedModelIDs.insert(modelID)
+        onDownloadFinished?()
+    }
+
+    func cancelDownload() {
+        cancelCallCount += 1
+    }
+
+    func deleteModel(_ modelID: LocalLLMModelID) throws {
+        deleteCallCount += 1
+        lastDeletedModelID = modelID
+        installedModelIDs.remove(modelID)
+    }
+
+    private func catalogEntry(for modelID: LocalLLMModelID) -> LocalLLMModelCatalogEntry {
+        catalog.first { $0.id == modelID } ?? LocalLLMModelCatalog.entry(for: modelID)
+    }
+}
+
 final class StubTranscriptionService: TranscriptionServiceProtocol {
     var transcribeResult: Result<String, Error> = .success("")
     var loadModelResult: Result<Void, Error> = .success(())
@@ -380,6 +457,9 @@ func makeTestAppState(
     hotkeyService: HotkeyServiceProtocol = StubHotkeyService(),
     soundFeedbackService: SoundFeedbackServiceProtocol = SpySoundFeedbackService(),
     llmPostProcessor: LLMPostProcessor = NoopLLMPostProcessor(),
+    appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor = NoopAppleMagicFormatPostProcessor(),
+    localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor = NoopLocalGemmaMagicFormatPostProcessor(),
+    localLLMModelManager: LocalLLMModelManagerProtocol = StubLocalLLMModelManager(),
     llmSettingsStore: LLMSettingsStoreProtocol = TestLLMSettingsStore(),
     generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
     historyStore: HistoryStoreProtocol = TestHistoryStore(),
@@ -393,6 +473,7 @@ func makeTestAppState(
     fileOpener: @escaping (URL) -> Bool = { _ in true },
     issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
+    magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
     startServices: Bool = false,
     llmE2EMode: LLME2EMode = .none
 ) -> AppState {
@@ -404,6 +485,9 @@ func makeTestAppState(
         hotkeyService: hotkeyService,
         soundFeedbackService: soundFeedbackService,
         llmPostProcessor: llmPostProcessor,
+        appleMagicFormatPostProcessor: appleMagicFormatPostProcessor,
+        localGemmaMagicFormatPostProcessor: localGemmaMagicFormatPostProcessor,
+        localLLMModelManager: localLLMModelManager,
         llmSettingsStore: llmSettingsStore,
         generalSettingsStore: generalSettingsStore,
         historyStore: historyStore,
@@ -417,6 +501,7 @@ func makeTestAppState(
         fileOpener: fileOpener,
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
+        magicFormatSlowWarningDelaySeconds: magicFormatSlowWarningDelaySeconds,
         startServices: startServices,
         llmE2EMode: llmE2EMode
     )
@@ -428,6 +513,34 @@ private final class NoopLLMPostProcessor: LLMPostProcessor {
     }
 
     func testSetup(config: LLMConfig) async throws {}
+}
+
+final class NoopAppleMagicFormatPostProcessor: AppleMagicFormatPostProcessor {
+    var availability: AppleFoundationModelsAvailability
+
+    init(availability: AppleFoundationModelsAvailability = .unsupportedSDKOrRuntime) {
+        self.availability = availability
+    }
+
+    func polish(text: String, config: AppleMagicFormatConfig) async throws -> String {
+        text
+    }
+
+    func testSetup(config: AppleMagicFormatConfig) async throws {}
+}
+
+final class NoopLocalGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor {
+    var availability: LocalGemmaAvailability
+
+    init(availability: LocalGemmaAvailability = .modelNotInstalled) {
+        self.availability = availability
+    }
+
+    func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
+        text
+    }
+
+    func testSetup(config: LocalGemmaMagicFormatConfig) async throws {}
 }
 
 final class StubDiagnosticBundleService: DiagnosticBundleServiceProtocol {

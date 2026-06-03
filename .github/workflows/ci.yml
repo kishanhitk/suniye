@@ -27,6 +27,9 @@ jobs:
       - name: Download model for smoke checks
         run: ./scripts/setup_model.sh
 
+      - name: Build Local LLM helper
+        run: ./scripts/setup_llama_cpp.sh
+
       - name: Build Debug
         run: ./scripts/build_app.sh Debug --derived-data-path .derivedData --output-dir dist
 
@@ -42,9 +45,11 @@ jobs:
           xcodebuild \
             -project Suniye.xcodeproj \
             -scheme Suniye \
-            -destination 'platform=macOS' \
+            -destination 'platform=macOS,arch=arm64' \
             -derivedDataPath .derivedData \
-            test
+            test \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES
 
       - name: Upload logs/artifacts on failure
         if: failure()

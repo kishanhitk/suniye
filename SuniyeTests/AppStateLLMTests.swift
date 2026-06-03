@@ -59,6 +59,339 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(fakeLLM.callCount, 1)
     }
 
+    func testAutomaticProviderUsesAppleWhenAvailable() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("apple polished")
+        )
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .automatic
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "apple polished")
+        XCTAssertEqual(fakeApple.callCount, 1)
+        XCTAssertEqual(fakeLLM.callCount, 0)
+    }
+
+    func testAutomaticProviderFallsBackToAPIWhenAppleUnavailable() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .modelNotReady,
+            result: .success("apple polished")
+        )
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .automatic
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "api polished")
+        XCTAssertEqual(fakeApple.callCount, 0)
+        XCTAssertEqual(fakeLLM.callCount, 1)
+    }
+
+    func testAutomaticProviderUsesLocalGemmaWhenAppleUnavailableAndGemmaAvailable() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .modelNotReady,
+            result: .success("apple polished")
+        )
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            appleMagicFormatPostProcessor: fakeApple,
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .automatic
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "gemma polished")
+        XCTAssertEqual(fakeGemma.callCount, 1)
+        XCTAssertEqual(fakeApple.callCount, 0)
+        XCTAssertEqual(fakeLLM.callCount, 0)
+        XCTAssertFalse(appState.needsAPIConfigurationForMagicFormat)
+    }
+
+    func testExplicitAppleProviderDoesNotRequireAPIKey() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("apple polished")
+        )
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .appleFoundationModels
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "apple polished")
+        XCTAssertEqual(fakeApple.callCount, 1)
+        XCTAssertEqual(fakeLLM.callCount, 0)
+    }
+
+    func testExplicitLocalGemmaProviderDoesNotRequireAPIKey() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "gemma polished")
+        XCTAssertEqual(fakeGemma.callCount, 1)
+        XCTAssertEqual(fakeLLM.callCount, 0)
+        XCTAssertEqual(appState.magicFormatSetupState, .ready)
+    }
+
+    func testExplicitLocalGemmaProviderUnavailableFallsBackToRaw() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .modelNotInstalled,
+            result: .success("gemma polished")
+        )
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            llmSettingsStore: store
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(fakeGemma.callCount, 0)
+        XCTAssertEqual(appState.magicFormatSetupState, .needsServiceSetup)
+    }
+
+    func testLocalGemmaNotInstalledShowsDownloadState() {
+        let localManager = StubLocalLLMModelManager()
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+
+        XCTAssertEqual(appState.localGemmaInstallState, .notInstalled)
+        XCTAssertTrue(appState.canStartLocalGemmaDownload)
+        XCTAssertEqual(appState.localGemmaMagicFormatAvailability, .modelNotInstalled)
+        XCTAssertEqual(appState.magicFormatSetupState, .needsServiceSetup)
+    }
+
+    func testLocalGemmaDownloadUpdatesInstallState() async {
+        let localManager = StubLocalLLMModelManager()
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+        let downloadFinished = expectation(description: "local Gemma download finished")
+        localManager.onDownloadFinished = {
+            downloadFinished.fulfill()
+        }
+
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        appState.startLocalGemmaDownload()
+        await fulfillment(of: [downloadFinished], timeout: 1)
+        await waitUntil(timeoutSeconds: 1) {
+            appState.localGemmaInstallState.isInstalled
+        }
+
+        XCTAssertEqual(localManager.downloadCallCount, 1)
+        XCTAssertTrue(appState.localGemmaInstallState.isInstalled)
+        XCTAssertFalse(appState.canStartLocalGemmaDownload)
+    }
+
+    func testLocalGemmaDownloadIgnoresStaleProgressAfterInstall() async {
+        let localManager = StubLocalLLMModelManager()
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+        let downloadFinished = expectation(description: "local Gemma download finished")
+        localManager.onDownloadFinished = {
+            downloadFinished.fulfill()
+        }
+
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        appState.startLocalGemmaDownload()
+        await fulfillment(of: [downloadFinished], timeout: 1)
+        await waitUntil(timeoutSeconds: 1) {
+            appState.localGemmaInstallState.isInstalled
+        }
+
+        localManager.lastProgressHandler?(LocalLLMDownloadProgress(
+            fractionCompleted: 1,
+            downloadedBytes: LocalGemmaDefaults.modelEntry.expectedSizeBytes,
+            expectedBytes: LocalGemmaDefaults.modelEntry.expectedSizeBytes
+        ))
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertTrue(appState.localGemmaInstallState.isInstalled)
+    }
+
+    func testLocalGemmaCancelForwardsToManager() {
+        let localManager = StubLocalLLMModelManager()
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+        appState.localGemmaInstallState = .downloading(LocalLLMDownloadProgress(
+            fractionCompleted: 0.25,
+            downloadedBytes: 25,
+            expectedBytes: 100
+        ))
+
+        appState.cancelLocalGemmaDownload()
+
+        XCTAssertEqual(localManager.cancelCallCount, 1)
+    }
+
+    func testLocalGemmaDeleteModelUpdatesInstallState() async {
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager
+        )
+
+        XCTAssertTrue(appState.localGemmaInstallState.isInstalled)
+
+        await appState.deleteLocalGemmaModel()
+
+        XCTAssertEqual(fakeGemma.stopRuntimeCallCount, 1)
+        XCTAssertEqual(localManager.deleteCallCount, 1)
+        XCTAssertEqual(appState.localGemmaInstallState, .notInstalled)
+    }
+
+    func testLocalGemmaUnsupportedHardwareIsDisabled() {
+        let localManager = StubLocalLLMModelManager()
+        localManager.isHardwareSupported = false
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+
+        XCTAssertFalse(appState.isLocalGemmaProviderSelectable)
+        XCTAssertEqual(appState.localGemmaInstallState, .unavailable("Requires Apple Silicon."))
+        XCTAssertEqual(appState.localGemmaMagicFormatAvailability, .unsupportedHardware)
+    }
+
+    func testMagicFormatProviderPresenterKeepsAutomaticSelectable() {
+        let appState = makeTestAppState()
+        appState.llmProvider = .automatic
+
+        let presenter = MagicFormatProviderPresenter(appState: appState)
+
+        XCTAssertEqual(presenter.providerOptions, [
+            .localGemma,
+            .appleFoundationModels,
+            .automatic,
+            .openAICompatible
+        ])
+        XCTAssertEqual(presenter.displayedProviderSelection, .automatic)
+        XCTAssertTrue(presenter.isSelectable(.automatic))
+    }
+
+    func testLocalGemmaSetupTestDoesNotRequireAPIKey() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager,
+            keychainService: TestKeychainService(value: nil)
+        )
+
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        await appState.testLocalGemmaSetup()
+
+        XCTAssertNotNil(fakeGemma.lastConfig)
+        XCTAssertEqual(appState.magicFormatSetupTestResult, MagicFormatSetupTestResult(message: "Local model works.", severity: .success))
+    }
+
+    func testExplicitAPIProviderStillRequiresAPIKey() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("apple polished")
+        )
+        let keychain = TestKeychainService(value: nil)
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .openAICompatible
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(fakeApple.callCount, 0)
+        XCTAssertEqual(fakeLLM.callCount, 0)
+    }
+
     func testToggleOnFailureFallsBackToRaw() async {
         let fakeLLM = FakeLLMPostProcessor(result: .failure(LLMPostProcessorError.timeout))
         let keychain = TestKeychainService(value: "api-key")
@@ -76,6 +409,32 @@ final class AppStateLLMTests: XCTestCase {
 
         XCTAssertEqual(output, "raw text")
         XCTAssertEqual(fakeLLM.callCount, 1)
+    }
+
+    func testAppleProviderFailureFallsBackToRaw() async {
+        let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .available,
+            result: .failure(LLMPostProcessorError.malformedResponse)
+        )
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .appleFoundationModels
+        appState.refreshLLMKeyStatus()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(fakeApple.callCount, 1)
+        XCTAssertEqual(fakeLLM.callCount, 0)
     }
 
     func testToggleOnWithInvalidEndpointFallsBackToRawWithoutCallingProvider() async {
@@ -279,6 +638,57 @@ final class AppStateLLMTests: XCTestCase {
         await appState.testMagicFormatSetup(apiKeyDraft: "   ")
 
         XCTAssertEqual(fakeLLM.lastTestConfig?.apiKey, "saved-key")
+    }
+
+    func testMagicFormatSlowWarningUpdatesProcessingPill() async {
+        let fakeApple = BlockingAppleMagicFormatPostProcessor()
+        let store = TestLLMSettingsStore()
+        let appState = makeTestAppState(
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            magicFormatSlowWarningDelaySeconds: 0.05
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .appleFoundationModels
+        appState.floatingIndicatorState = .processing()
+
+        let task = Task {
+            await appState.postProcessTextIfEnabled("raw text")
+        }
+
+        await fakeApple.waitUntilStarted()
+        try? await Task.sleep(nanoseconds: 120_000_000)
+
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .processing(message: "Magic Format is taking longer than usual.")
+        )
+
+        fakeApple.resume(output: "polished")
+        let output = await task.value
+        XCTAssertEqual(output, "polished")
+    }
+
+    func testMagicFormatSlowWarningCancelsOnFastSuccess() async {
+        let fakeApple = CapturingAppleMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("polished")
+        )
+        let store = TestLLMSettingsStore()
+        let appState = makeTestAppState(
+            appleMagicFormatPostProcessor: fakeApple,
+            llmSettingsStore: store,
+            magicFormatSlowWarningDelaySeconds: 0.05
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .appleFoundationModels
+        appState.floatingIndicatorState = .processing()
+
+        let output = await appState.postProcessTextIfEnabled("raw text")
+        try? await Task.sleep(nanoseconds: 120_000_000)
+
+        XCTAssertEqual(output, "polished")
+        XCTAssertEqual(appState.floatingIndicatorState, .processing())
     }
 
     func testTestMagicFormatSetupTracksProgressAndSuccessResult() async {
@@ -521,6 +931,40 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(store.latest.maxTokens, LLMDefaults.defaultMaxTokens)
     }
 
+    func testLoadMigratesLegacyCustomPromptIntoMissingProviderPrompts() throws {
+        let data = """
+        {
+          "isEnabled": true,
+          "provider": "automatic",
+          "selectedModelPreset": "gpt41Mini",
+          "customModelId": "",
+          "endpointURLString": "\(LLMDefaults.defaultEndpointURLString)",
+          "baseSystemPrompt": "BASE",
+          "systemPrompt": "USER",
+          "keywordsRaw": "",
+          "timeoutSeconds": 9,
+          "maxTokens": 256
+        }
+        """.data(using: .utf8)!
+        let settings = try JSONDecoder().decode(LLMSettings.self, from: data)
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+        store.save(settings)
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+
+        XCTAssertEqual(appState.llmBaseSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(appState.llmAppleSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(appState.llmGemmaSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(store.latest.appleSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(store.latest.gemmaSystemPrompt, "BASE\n\nUSER")
+    }
+
     func testLoadPreservesLegacyHiddenPromptWhenItMatchesOnlySubstringOfBasePrompt() {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
         let keychain = TestKeychainService(value: "api-key")
@@ -581,78 +1025,17 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(appState.llmSystemPrompt, "")
         XCTAssertEqual(store.latest.systemPrompt, "")
     }
-}
 
-private final class FakeLLMPostProcessor: LLMPostProcessor {
-    private let result: Result<String, Error>
-    private let testSetupResult: Result<Void, Error>
-    private(set) var callCount = 0
-    private(set) var setupTestCallCount = 0
-
-    init(result: Result<String, Error>, testSetupResult: Result<Void, Error> = .success(())) {
-        self.result = result
-        self.testSetupResult = testSetupResult
-    }
-
-    func polish(text: String, config: LLMConfig) async throws -> String {
-        callCount += 1
-        return try result.get()
-    }
-
-    func testSetup(config: LLMConfig) async throws {
-        setupTestCallCount += 1
-        try testSetupResult.get()
-    }
-}
-
-private final class CapturingLLMPostProcessor: LLMPostProcessor {
-    private let result: Result<String, Error>
-    private(set) var lastConfig: LLMConfig?
-    private(set) var lastTestConfig: LLMConfig?
-
-    init(result: Result<String, Error>) {
-        self.result = result
-    }
-
-    func polish(text: String, config: LLMConfig) async throws -> String {
-        lastConfig = config
-        return try result.get()
-    }
-
-    func testSetup(config: LLMConfig) async throws {
-        lastTestConfig = config
-    }
-}
-
-private final class BlockingLLMPostProcessor: LLMPostProcessor {
-    private var continuation: CheckedContinuation<Void, Never>?
-    private var startContinuation: CheckedContinuation<Void, Never>?
-    var testSetupResult: Result<Void, Error> = .success(())
-
-    func polish(text: String, config: LLMConfig) async throws -> String {
-        text
-    }
-
-    func testSetup(config: LLMConfig) async throws {
-        startContinuation?.resume()
-        startContinuation = nil
-        await withCheckedContinuation { continuation in
-            self.continuation = continuation
+    private func waitUntil(
+        timeoutSeconds: TimeInterval,
+        condition: @escaping @MainActor () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while !condition(), Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
         }
-        try testSetupResult.get()
-    }
-
-    func waitUntilStarted() async {
-        if continuation != nil {
-            return
-        }
-        await withCheckedContinuation { continuation in
-            startContinuation = continuation
-        }
-    }
-
-    func resume() {
-        continuation?.resume()
-        continuation = nil
+        XCTAssertTrue(condition(), file: file, line: line)
     }
 }

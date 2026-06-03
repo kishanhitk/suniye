@@ -506,6 +506,9 @@ final class AppState {
     var llmEnabled = false {
         didSet { persistLLMSettings() }
     }
+    var llmProvider: MagicFormatProvider = .automatic {
+        didSet { persistLLMSettings() }
+    }
     var llmSelectedModelPreset: LLMModelPreset = .gemini25Flash {
         didSet { persistLLMSettings() }
     }
@@ -516,6 +519,12 @@ final class AppState {
         didSet { persistLLMSettings() }
     }
     var llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt {
+        didSet { persistLLMSettings() }
+    }
+    var llmAppleSystemPrompt = LLMDefaults.defaultAppleMagicFormatPrompt {
+        didSet { persistLLMSettings() }
+    }
+    var llmGemmaSystemPrompt = LLMDefaults.defaultGemmaMagicFormatPrompt {
         didSet { persistLLMSettings() }
     }
     var llmSystemPrompt = "" {
@@ -556,6 +565,13 @@ final class AppState {
     var isMagicFormatSetupTestInProgress = false
     var magicFormatSetupTestResult: MagicFormatSetupTestResult?
     private var magicFormatSetupTestRequestID = 0
+    var localGemmaInstallState: LocalLLMInstallState = .notInstalled {
+        didSet {
+            if oldValue != localGemmaInstallState {
+                onStateChange?()
+            }
+        }
+    }
 
     var launchAtLoginStatus: LaunchAtLoginStatus = .disabled
     var launchAtLoginError: String?
@@ -581,6 +597,12 @@ final class AppState {
     }
 
     var llmKeyStatusText: String {
+        if usesLocalMagicFormatSettings {
+            if usesAppleMagicFormatSettings {
+                return appleMagicFormatAvailability.isAvailable ? "Ready" : "Unavailable"
+            }
+            return localGemmaMagicFormatAvailability.isAvailable ? "Ready" : "Unavailable"
+        }
         if hasLLMAPIKey && isMagicFormatSetupVerified {
             return "Connected"
         }
@@ -592,7 +614,7 @@ final class AppState {
     }
 
     func canTestMagicFormatSetup(apiKeyDraft: String) -> Bool {
-        guard llmEnabled, !isMagicFormatSetupTestInProgress else {
+        guard llmEnabled, needsAPIConfigurationForMagicFormat, !isMagicFormatSetupTestInProgress else {
             return false
         }
         guard llmEndpointValidationError == nil, llmModelValidationError == nil else {
@@ -605,6 +627,12 @@ final class AppState {
         guard llmEnabled else {
             return .off
         }
+        if usesAppleMagicFormatSettings {
+            return appleMagicFormatAvailability.isAvailable ? .ready : .needsServiceSetup
+        }
+        if usesLocalGemmaMagicFormatSettings {
+            return localGemmaMagicFormatAvailability.isAvailable ? .ready : .needsServiceSetup
+        }
         if llmEndpointValidationError != nil || llmModelValidationError != nil {
             return .needsServiceSetup
         }
@@ -615,11 +643,17 @@ final class AppState {
     }
 
     var llmEndpointValidationError: String? {
-        currentLLMSettings().endpointValidationError
+        guard needsAPIConfigurationForMagicFormat else {
+            return nil
+        }
+        return currentLLMSettings().endpointValidationError
     }
 
     var llmModelValidationError: String? {
-        currentLLMSettings().modelValidationError
+        guard needsAPIConfigurationForMagicFormat else {
+            return nil
+        }
+        return currentLLMSettings().modelValidationError
     }
 
     var llmStatusHint: String? {
@@ -636,6 +670,122 @@ final class AppState {
 
     var vocabularyTerms: [String] {
         currentLLMSettings().keywords
+    }
+
+    var appleMagicFormatAvailability: AppleFoundationModelsAvailability {
+        appleMagicFormatPostProcessor.availability
+    }
+
+    var localGemmaMagicFormatAvailability: LocalGemmaAvailability {
+        guard localLLMModelManager.isHardwareSupported else {
+            return .unsupportedHardware
+        }
+        guard localLLMModelManager.isInstalled(localLLMModelManager.preferredModelID) else {
+            return .modelNotInstalled
+        }
+        return localGemmaMagicFormatPostProcessor.availability
+    }
+
+    var isLocalGemmaProviderSelectable: Bool {
+        localLLMModelManager.isHardwareSupported
+    }
+
+    var localGemmaModelEntry: LocalLLMModelCatalogEntry {
+        localGemmaCatalogEntry(for: localLLMModelManager.preferredModelID)
+    }
+
+    var localGemmaInstallStatusText: String {
+        switch localGemmaInstallState {
+        case let .unavailable(reason):
+            return reason
+        case .notInstalled:
+            return "Local model not installed."
+        case let .downloading(progress):
+            return "\(progress.percentageText) downloaded • \(progress.downloadedSizeText) of \(progress.expectedSizeText)"
+        case .verifying:
+            return "Verifying local model..."
+        case let .installed(byteCount):
+            if localGemmaMagicFormatAvailability.isAvailable {
+                return "Local model ready."
+            }
+            let sizeText = ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file)
+            return "\(sizeText) installed. \(localGemmaMagicFormatAvailability.statusText)"
+        case let .failed(message):
+            return message
+        }
+    }
+
+    var localGemmaInstallProgress: Double? {
+        if case let .downloading(progress) = localGemmaInstallState {
+            return progress.fractionCompleted
+        }
+        return nil
+    }
+
+    var canStartLocalGemmaDownload: Bool {
+        guard localLLMModelManager.isHardwareSupported,
+              !localGemmaInstallState.isActive,
+              localGemmaDownloadTask == nil else {
+            return false
+        }
+        return !localGemmaInstallState.isInstalled
+    }
+
+    var canCancelLocalGemmaDownload: Bool {
+        if case .downloading = localGemmaInstallState {
+            return true
+        }
+        return false
+    }
+
+    var canDeleteLocalGemmaModel: Bool {
+        localGemmaInstallState.isInstalled && !localGemmaInstallState.isActive
+    }
+
+    var usesAppleMagicFormatSettings: Bool {
+        MagicFormatCoordinator.usesAppleSettings(
+            requestedProvider: llmProvider,
+            appleAvailability: appleMagicFormatAvailability
+        )
+    }
+
+    var usesLocalGemmaMagicFormatSettings: Bool {
+        MagicFormatCoordinator.usesLocalGemmaSettings(
+            requestedProvider: llmProvider,
+            appleAvailability: appleMagicFormatAvailability,
+            localGemmaAvailability: localGemmaMagicFormatAvailability
+        )
+    }
+
+    var usesLocalMagicFormatSettings: Bool {
+        usesAppleMagicFormatSettings || usesLocalGemmaMagicFormatSettings
+    }
+
+    var needsAPIConfigurationForMagicFormat: Bool {
+        MagicFormatCoordinator.needsAPIConfiguration(
+            requestedProvider: llmProvider,
+            appleAvailability: appleMagicFormatAvailability,
+            localGemmaAvailability: localGemmaMagicFormatAvailability
+        )
+    }
+
+    var magicFormatProviderDetailText: String {
+        switch llmProvider {
+        case .automatic:
+            if appleMagicFormatAvailability.isAvailable {
+                return "Using Apple Intelligence locally."
+            }
+            if localGemmaMagicFormatAvailability.isAvailable {
+                return "Using local model."
+            }
+            return "Local providers unavailable. API endpoint will be used if configured."
+        case .appleFoundationModels:
+            return appleMagicFormatAvailability.statusText
+        case .localGemma:
+            return localGemmaInstallStatusText
+        case .openAICompatible:
+            return "Using your OpenAI-compatible endpoint."
+        }
     }
 
     var recentResultsPreview: [RecentResult] {
@@ -982,8 +1132,8 @@ final class AppState {
             items.append(
                 AttentionItem(
                     id: "model-missing",
-                    title: "Model not installed",
-                    detail: "Download \(currentASRModelEntry.displayName) to enable dictation.",
+                    title: "Dictation model not installed",
+                    detail: "Download \(currentASRModelEntry.displayName) to enable offline speech recognition.",
                     severity: .warning,
                     recommendedSection: .model
                 )
@@ -1016,7 +1166,7 @@ final class AppState {
             )
         }
 
-        if llmEnabled, let endpointValidationError = llmEndpointValidationError {
+        if llmEnabled, needsAPIConfigurationForMagicFormat, let endpointValidationError = llmEndpointValidationError {
             items.append(
                 AttentionItem(
                     id: "llm-endpoint-invalid",
@@ -1028,7 +1178,7 @@ final class AppState {
             )
         }
 
-        if llmEnabled, let modelValidationError = llmModelValidationError {
+        if llmEnabled, needsAPIConfigurationForMagicFormat, let modelValidationError = llmModelValidationError {
             items.append(
                 AttentionItem(
                     id: "llm-model-invalid",
@@ -1040,12 +1190,36 @@ final class AppState {
             )
         }
 
-        if llmEnabled && !hasLLMAPIKey {
+        if llmEnabled && needsAPIConfigurationForMagicFormat && !hasLLMAPIKey {
             items.append(
                 AttentionItem(
                     id: "llm-key-missing",
                     title: "Magic Format needs an API key",
                     detail: "Magic Format is on, but your API key is missing.",
+                    severity: .warning,
+                    recommendedSection: .style
+                )
+            )
+        }
+
+        if llmEnabled && llmProvider == .appleFoundationModels && !appleMagicFormatAvailability.isAvailable {
+            items.append(
+                AttentionItem(
+                    id: "apple-magic-format-unavailable",
+                    title: "Magic Format Apple Intelligence unavailable",
+                    detail: "\(appleMagicFormatAvailability.statusText) This only affects Magic Format cleanup.",
+                    severity: .warning,
+                    recommendedSection: .style
+                )
+            )
+        }
+
+        if llmEnabled && llmProvider == .localGemma && !localGemmaMagicFormatAvailability.isAvailable {
+            items.append(
+                AttentionItem(
+                    id: "local-gemma-magic-format-unavailable",
+                    title: "Magic Format local model unavailable",
+                    detail: "\(localGemmaMagicFormatAvailability.statusText) This only affects Magic Format cleanup, not dictation.",
                     severity: .warning,
                     recommendedSection: .style
                 )
@@ -1066,6 +1240,10 @@ final class AppState {
     private let soundFeedbackService: SoundFeedbackServiceProtocol
     private let floatingIndicatorController = FloatingIndicatorController()
     private let llmPostProcessor: LLMPostProcessor
+    private let appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
+    private let localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor
+    private let magicFormatCoordinator: MagicFormatCoordinator
+    private let localLLMModelManager: LocalLLMModelManagerProtocol
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let generalSettingsStore: GeneralSettingsStoreProtocol
     private let historyStore: HistoryStoreProtocol
@@ -1079,12 +1257,15 @@ final class AppState {
     private let fileOpener: (URL) -> Bool
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
     private let temporaryFileCleanupScheduler: (URL) -> Void
+    private let magicFormatSlowWarningDelaySeconds: TimeInterval
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
 
     private var recordingStart: Date?
     private var activeRecordingSource: RecordingSource?
     private var overlayErrorResetTask: Task<Void, Never>?
+    private var localGemmaDownloadTask: Task<Void, Never>?
+    private var localGemmaDownloadID: UUID?
     private var isHydratingLLMSettings = false
     private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
@@ -1102,6 +1283,9 @@ final class AppState {
         hotkeyService: HotkeyServiceProtocol = HotkeyService(),
         soundFeedbackService: SoundFeedbackServiceProtocol = SoundFeedbackService(),
         llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
+        appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor = AppleFoundationModelsPostProcessor(),
+        localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor? = nil,
+        localLLMModelManager: LocalLLMModelManagerProtocol = LocalLLMModelManager(),
         llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
         historyStore: HistoryStoreProtocol = HistoryStore(),
@@ -1125,6 +1309,7 @@ final class AppState {
                 try? FileManager.default.removeItem(at: url)
             }
         },
+        magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
     ) {
@@ -1135,6 +1320,19 @@ final class AppState {
         self.hotkeyService = hotkeyService
         self.soundFeedbackService = soundFeedbackService
         self.llmPostProcessor = llmPostProcessor
+        self.appleMagicFormatPostProcessor = appleMagicFormatPostProcessor
+        self.localLLMModelManager = localLLMModelManager
+        let resolvedLocalGemmaPostProcessor = localGemmaMagicFormatPostProcessor ?? LocalGemmaPostProcessor(
+            client: LocalGemmaLlamaCppClient(
+                locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager)
+            )
+        )
+        self.localGemmaMagicFormatPostProcessor = resolvedLocalGemmaPostProcessor
+        self.magicFormatCoordinator = MagicFormatCoordinator(
+            apiPostProcessor: llmPostProcessor,
+            applePostProcessor: appleMagicFormatPostProcessor,
+            localGemmaPostProcessor: resolvedLocalGemmaPostProcessor
+        )
         self.llmSettingsStore = llmSettingsStore
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
@@ -1148,6 +1346,7 @@ final class AppState {
         self.fileOpener = fileOpener
         self.issueReportDiagnosticsDestinationPicker = issueReportDiagnosticsDestinationPicker
         self.temporaryFileCleanupScheduler = temporaryFileCleanupScheduler
+        self.magicFormatSlowWarningDelaySeconds = magicFormatSlowWarningDelaySeconds
         self.runtimeServicesEnabled = startServices
         self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
@@ -1168,6 +1367,7 @@ final class AppState {
         refreshInputDevices()
         refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
+        refreshLocalGemmaInstallState()
 
         if floatingIndicatorEnabled {
             floatingIndicatorController.onAction = { [weak self] in
@@ -1338,6 +1538,14 @@ final class AppState {
         ])
     }
 
+    func openAppleIntelligenceSettings() {
+        openSystemSettings(urlCandidates: [
+            "x-apple.systempreferences:com.apple.Siri-Settings.extension",
+            "x-apple.systempreferences:com.apple.preference.speech",
+            "x-apple.systempreferences:",
+        ])
+    }
+
     func refreshInputDevices() {
         let devices = audioCaptureService.availableInputDevices()
         availableInputDevices = devices
@@ -1416,6 +1624,9 @@ final class AppState {
         guard llmEnabled else {
             return
         }
+        guard needsAPIConfigurationForMagicFormat else {
+            return
+        }
         guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
             return
         }
@@ -1428,7 +1639,12 @@ final class AppState {
 
         let requestID = magicFormatSetupTestRequestID
         isMagicFormatSetupTestInProgress = true
-        let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
+        let config = MagicFormatCoordinator.makeAPIConfig(
+            settings: currentLLMSettings(),
+            apiKey: apiKey,
+            endpointURL: endpointURL,
+            modelId: modelId
+        )
         let startTime = Date()
 
         defer {
@@ -1486,6 +1702,159 @@ final class AppState {
     func removeVocabularyTerm(_ value: String) {
         let filtered = vocabularyTerms.filter { $0.caseInsensitiveCompare(value) != .orderedSame }
         llmKeywordsRaw = filtered.joined(separator: "\n")
+    }
+
+    func resetAppleMagicFormatPrompt() {
+        llmAppleSystemPrompt = LLMDefaults.defaultAppleMagicFormatPrompt
+    }
+
+    func resetGemmaMagicFormatPrompt() {
+        llmGemmaSystemPrompt = LLMDefaults.defaultGemmaMagicFormatPrompt
+    }
+
+    func resetBaseMagicFormatPrompt() {
+        llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt
+    }
+
+    func refreshLocalGemmaInstallState() {
+        guard !localGemmaInstallState.isActive else {
+            return
+        }
+        localGemmaInstallState = localLLMModelManager.installState(for: localLLMModelManager.preferredModelID)
+    }
+
+    func startLocalGemmaDownload() {
+        guard canStartLocalGemmaDownload else {
+            return
+        }
+
+        let modelID = localLLMModelManager.preferredModelID
+        let entry = localGemmaCatalogEntry(for: modelID)
+        localGemmaInstallState = .downloading(LocalLLMDownloadProgress(
+            fractionCompleted: 0,
+            downloadedBytes: 0,
+            expectedBytes: entry.expectedSizeBytes
+        ))
+        clearMagicFormatSetupTestResult()
+
+        let downloadID = UUID()
+        localGemmaDownloadID = downloadID
+        localGemmaDownloadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            do {
+                AppLogger.shared.log(.info, "local gemma download started model=\(entry.filename)")
+                try await self.localLLMModelManager.downloadModel(modelID) { [weak self] progress in
+                    Task { @MainActor in
+                        guard let self,
+                              self.localGemmaDownloadID == downloadID,
+                              self.localGemmaInstallState.isActive else { return }
+                        if progress.fractionCompleted >= 0.999 {
+                            self.localGemmaInstallState = .verifying
+                        } else {
+                            self.localGemmaInstallState = .downloading(progress)
+                        }
+                    }
+                }
+
+                self.localGemmaDownloadID = nil
+                self.localGemmaInstallState = self.localLLMModelManager.installState(for: modelID)
+                self.magicFormatSetupTestResult = nil
+                AppLogger.shared.log(.info, "local gemma download complete model=\(entry.filename)")
+            } catch {
+                self.localGemmaDownloadID = nil
+                let message: String
+                if Task.isCancelled || (error as NSError).code == NSURLErrorCancelled {
+                    message = "Download canceled."
+                    AppLogger.shared.log(.info, "local gemma download canceled model=\(entry.filename)")
+                } else {
+                    message = error.localizedDescription
+                    AppLogger.shared.log(.error, "local gemma download failed model=\(entry.filename) error=\(message)")
+                }
+                self.localGemmaInstallState = .failed(message)
+            }
+
+            self.localGemmaDownloadTask = nil
+        }
+    }
+
+    func cancelLocalGemmaDownload() {
+        guard canCancelLocalGemmaDownload else {
+            return
+        }
+        localGemmaDownloadTask?.cancel()
+        localLLMModelManager.cancelDownload()
+    }
+
+    func deleteLocalGemmaModel() async {
+        guard !localGemmaInstallState.isActive else {
+            return
+        }
+
+        await localGemmaMagicFormatPostProcessor.stopRuntime()
+
+        let modelID = localLLMModelManager.preferredModelID
+        do {
+            try localLLMModelManager.deleteModel(modelID)
+            localGemmaInstallState = localLLMModelManager.installState(for: modelID)
+            clearMagicFormatSetupTestResult()
+            AppLogger.shared.log(.info, "local gemma model deleted")
+        } catch {
+            localGemmaInstallState = .failed(error.localizedDescription)
+            AppLogger.shared.log(.error, "local gemma model delete failed error=\(error.localizedDescription)")
+        }
+    }
+
+    func testLocalGemmaSetup() async {
+        clearMagicFormatSetupTestResult()
+
+        guard llmEnabled, usesLocalGemmaMagicFormatSettings else {
+            return
+        }
+
+        guard localGemmaInstallState.isInstalled else {
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: "Download the local model first.",
+                severity: .error
+            )
+            return
+        }
+
+        let requestID = magicFormatSetupTestRequestID
+        isMagicFormatSetupTestInProgress = true
+        let startTime = Date()
+        let config = MagicFormatCoordinator.makeLocalGemmaConfig(settings: currentLLMSettings())
+
+        defer {
+            if requestID == magicFormatSetupTestRequestID {
+                isMagicFormatSetupTestInProgress = false
+            }
+        }
+
+        do {
+            try await localGemmaMagicFormatPostProcessor.testSetup(config: config)
+            guard requestID == magicFormatSetupTestRequestID else {
+                AppLogger.shared.log(.info, "ignored stale local gemma setup test success")
+                return
+            }
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: "Local model works.",
+                severity: .success
+            )
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AppLogger.shared.log(.info, "local gemma setup test success latency_ms=\(latencyMs)")
+        } catch {
+            guard requestID == magicFormatSetupTestRequestID else {
+                AppLogger.shared.log(.info, "ignored stale local gemma setup test failure")
+                return
+            }
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: localGemmaSetupTestMessage(for: error),
+                severity: .error
+            )
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AppLogger.shared.log(.warning, "local gemma setup test failed latency_ms=\(latencyMs) error=\(error.localizedDescription)")
+        }
     }
 
     func copyRecentResult(_ result: RecentResult) {
@@ -1951,53 +2320,35 @@ final class AppState {
             return rawText
         }
 
-        guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
-            AppLogger.shared.log(.warning, "llm fallback raw reason=invalid_endpoint")
-            return rawText
-        }
-
-        guard let modelId = currentLLMSettings().validatedModelId else {
-            AppLogger.shared.log(.warning, "llm fallback raw reason=invalid_model")
-            return rawText
-        }
-
-        // TODO: Generic OpenAI-compatible backends can be keyless, but the current
-        // LLM settings flow still treats a missing API key as a hard stop.
-        guard hasLLMAPIKey else {
-            AppLogger.shared.log(.warning, "llm fallback raw reason=missing_key")
-            return rawText
-        }
-
-        guard let apiKey = try? keychainService.getLLMKey(),
-              !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            AppLogger.shared.log(.warning, "llm fallback raw reason=key_read_failed")
-            refreshLLMKeyStatus()
-            return rawText
-        }
-
-        let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
-        let startTime = Date()
-        statusText = "Polishing..."
-
-        do {
-            let polished = try await llmPostProcessor.polish(text: input, config: config)
-            let normalized = polished.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalized.isEmpty else {
-                AppLogger.shared.log(.warning, "llm fallback raw reason=empty_output model=\(config.modelId)")
-                return rawText
-            }
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            AppLogger.shared.log(.info, "llm polish success model=\(config.modelId) latency_ms=\(latencyMs)")
-            return normalized
-        } catch {
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            if let llmError = error as? LLMPostProcessorError {
-                AppLogger.shared.log(.warning, "llm fallback raw reason=\(llmError.logValue) model=\(config.modelId) latency_ms=\(latencyMs)")
-            } else {
-                AppLogger.shared.log(.warning, "llm fallback raw reason=unknown model=\(config.modelId) latency_ms=\(latencyMs)")
-            }
-            return rawText
-        }
+        return await magicFormatCoordinator.polish(
+            input: input,
+            rawText: rawText,
+            request: MagicFormatCoordinator.PolishRequest(
+                requestedProvider: llmProvider,
+                settings: currentLLMSettings(),
+                hasAPIKey: hasLLMAPIKey,
+                appleAvailability: appleMagicFormatAvailability,
+                localGemmaAvailability: localGemmaMagicFormatAvailability,
+                readAPIKey: { [keychainService] in
+                    try? keychainService.getLLMKey()
+                },
+                onAPIKeyReadFailed: { [weak self] in
+                    self?.refreshLLMKeyStatus()
+                },
+                startSlowWarning: { [weak self] in
+                    self?.startMagicFormatSlowWarningTask() ?? Task {}
+                },
+                setStatusText: { [weak self] text in
+                    self?.statusText = text
+                },
+                setProcessingMessage: { [weak self] message in
+                    guard let self, case .processing = self.floatingIndicatorState else {
+                        return
+                    }
+                    self.setFloatingIndicatorState(.processing(message: message))
+                }
+            )
+        )
     }
 
     func runIndicatorE2ESmoke() {
@@ -2009,7 +2360,7 @@ final class AppState {
             try? await Task.sleep(nanoseconds: 220_000_000)
             setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0.72), source: .manual))
             try? await Task.sleep(nanoseconds: 220_000_000)
-            setFloatingIndicatorState(.processing)
+            setFloatingIndicatorState(.processing())
             try? await Task.sleep(nanoseconds: 220_000_000)
             showTransientIndicatorError("Microphone permission required", restoreState: .idle, duration: 0.35)
             try? await Task.sleep(nanoseconds: 900_000_000)
@@ -2217,7 +2568,7 @@ final class AppState {
 
         phase = .transcribing
         statusText = "Transcribing..."
-        setFloatingIndicatorState(.processing)
+        setFloatingIndicatorState(.processing())
 
         let captured = audioCaptureService.stopCapture()
         let samples = captured.samples
@@ -2433,14 +2784,34 @@ final class AppState {
             basePrompt: settings.baseSystemPrompt,
             extraPrompt: settings.systemPrompt
         )
+        let providerPromptMigration = Self.legacyProviderPromptMigration(
+            settings: settings,
+            mergedPrompt: mergedPrompt
+        )
+        let shouldMigrateProviderPrompts = providerPromptMigration != nil
+            && (!settings.hasExplicitAppleSystemPrompt || !settings.hasExplicitGemmaSystemPrompt)
         let shouldNormalizeHiddenSettings = settings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             || settings.timeoutSeconds != LLMDefaults.defaultTimeoutSeconds
             || settings.maxTokens != LLMDefaults.defaultMaxTokens
+            || shouldMigrateProviderPrompts
         llmEnabled = settings.isEnabled
+        llmProvider = settings.provider
         llmSelectedModelPreset = settings.selectedModelPreset
         llmCustomModelId = settings.customModelId
         llmEndpointURLString = settings.endpointURLString
         llmBaseSystemPrompt = mergedPrompt
+        llmAppleSystemPrompt = Self.loadedProviderPrompt(
+            explicitPrompt: settings.composedAppleSystemPrompt,
+            hasExplicitPrompt: settings.hasExplicitAppleSystemPrompt,
+            defaultPrompt: LLMDefaults.defaultAppleMagicFormatPrompt,
+            migrationPrompt: providerPromptMigration
+        )
+        llmGemmaSystemPrompt = Self.loadedProviderPrompt(
+            explicitPrompt: settings.composedGemmaSystemPrompt,
+            hasExplicitPrompt: settings.hasExplicitGemmaSystemPrompt,
+            defaultPrompt: LLMDefaults.defaultGemmaMagicFormatPrompt,
+            migrationPrompt: providerPromptMigration
+        )
         llmSystemPrompt = ""
         llmKeywordsRaw = settings.keywordsRaw
         llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
@@ -2464,10 +2835,13 @@ final class AppState {
     private func currentLLMSettings() -> LLMSettings {
         LLMSettings(
             isEnabled: llmEnabled,
+            provider: llmProvider,
             selectedModelPreset: llmSelectedModelPreset,
             customModelId: llmCustomModelId,
             endpointURLString: llmEndpointURLString,
             baseSystemPrompt: llmBaseSystemPrompt,
+            appleSystemPrompt: llmAppleSystemPrompt,
+            gemmaSystemPrompt: llmGemmaSystemPrompt,
             systemPrompt: "",
             keywordsRaw: llmKeywordsRaw,
             timeoutSeconds: LLMDefaults.defaultTimeoutSeconds,
@@ -2489,6 +2863,31 @@ final class AppState {
         }
 
         return "\(visiblePrompt)\n\n\(normalizedExtra)"
+    }
+
+    private static func legacyProviderPromptMigration(settings: LLMSettings, mergedPrompt: String) -> String? {
+        let normalizedBase = settings.baseSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let visiblePrompt = normalizedBase.isEmpty ? LLMDefaults.defaultBaseSystemPrompt : normalizedBase
+        let normalizedExtra = settings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let legacyPromptWasCustomized = !normalizedExtra.isEmpty || visiblePrompt != LLMDefaults.defaultBaseSystemPrompt
+        return legacyPromptWasCustomized ? mergedPrompt : nil
+    }
+
+    private static func loadedProviderPrompt(
+        explicitPrompt: String,
+        hasExplicitPrompt: Bool,
+        defaultPrompt: String,
+        migrationPrompt: String?
+    ) -> String {
+        guard !hasExplicitPrompt else {
+            let normalized = explicitPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized.isEmpty ? defaultPrompt : normalized
+        }
+        return migrationPrompt ?? defaultPrompt
+    }
+
+    private func localGemmaCatalogEntry(for modelID: LocalLLMModelID) -> LocalLLMModelCatalogEntry {
+        localLLMModelManager.catalog.first { $0.id == modelID } ?? LocalLLMModelCatalog.entry(for: modelID)
     }
 
     private func validateIssueReportDraft() -> String? {
@@ -2593,18 +2992,6 @@ final class AppState {
         onStateChange?()
     }
 
-    private func makeLLMConfig(apiKey: String, endpointURL: URL, modelId: String) -> LLMConfig {
-        let settings = currentLLMSettings()
-        return LLMConfig(
-            modelId: modelId,
-            endpointURL: endpointURL,
-            systemPrompt: settings.composedSystemPrompt,
-            keywords: settings.keywords,
-            timeoutSeconds: settings.timeoutSeconds,
-            apiKey: apiKey
-        )
-    }
-
     private func effectiveMagicFormatTestAPIKey(apiKeyDraft: String) -> String? {
         let normalizedDraft = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedDraft.isEmpty {
@@ -2646,10 +3033,40 @@ final class AppState {
         }
     }
 
+    private func localGemmaSetupTestMessage(for error: Error) -> String {
+        if let llmError = error as? LLMPostProcessorError {
+            switch llmError {
+            case .timeout:
+                return "Local model took too long to respond."
+            case .invalidConfiguration:
+                return localGemmaMagicFormatAvailability.statusText
+            case .provider, .malformedResponse, .emptyOutput:
+                return "Local model responded, but not in a compatible format."
+            case .network:
+                return "Couldn't reach the local model server."
+            case .unauthorized:
+                return "Local model rejected the local authorization token."
+            }
+        }
+
+        return error.localizedDescription
+    }
+
     private func setFloatingIndicatorState(_ state: FloatingIndicatorState) {
         floatingIndicatorState = state
         guard floatingIndicatorEnabled else { return }
         floatingIndicatorController.update(state)
+    }
+
+    private func startMagicFormatSlowWarningTask() -> Task<Void, Never> {
+        Task { @MainActor [weak self] in
+            guard let delaySeconds = self?.magicFormatSlowWarningDelaySeconds else { return }
+            let nanoseconds = UInt64(max(0, delaySeconds) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard let self, !Task.isCancelled else { return }
+            guard case .processing = self.floatingIndicatorState else { return }
+            self.setFloatingIndicatorState(.processing(message: "Magic Format is taking longer than usual."))
+        }
     }
 
     private func playSoundFeedback(_ event: SoundFeedbackEvent) {
@@ -2701,7 +3118,7 @@ final class AppState {
                 source: activeRecordingSource ?? .manual
             )
         case .transcribing:
-            return .processing
+            return .processing()
         case .needsModel, .downloadingModel, .loading, .ready, .error:
             return .idle
         }
@@ -2835,27 +3252,6 @@ final class AppState {
             return .forceFailure
         }
         return .none
-    }
-}
-
-private extension LLMPostProcessorError {
-    var logValue: String {
-        switch self {
-        case .invalidConfiguration:
-            return "invalid_config"
-        case .timeout:
-            return "timeout"
-        case .unauthorized:
-            return "unauthorized"
-        case .provider:
-            return "provider_error"
-        case .malformedResponse:
-            return "malformed_response"
-        case .emptyOutput:
-            return "empty_output"
-        case .network:
-            return "network"
-        }
     }
 }
 

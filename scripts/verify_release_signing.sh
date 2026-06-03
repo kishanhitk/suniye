@@ -40,6 +40,19 @@ if grep -q 'com.apple.security.get-task-allow' <<<"${SIGNING_DETAILS}"; then
   exit 1
 fi
 
+LLAMA_SERVER_PATH="${APP_PATH}/Contents/Helpers/llama-server"
+if [[ ! -x "${LLAMA_SERVER_PATH}" ]]; then
+  echo "Release app is missing executable local LLM helper: ${LLAMA_SERVER_PATH}" >&2
+  exit 1
+fi
+
+LLAMA_SERVER_LINKS="$(/usr/bin/otool -L "${LLAMA_SERVER_PATH}" 2>&1 || true)"
+if grep -E '/opt/homebrew|/usr/local' <<<"${LLAMA_SERVER_LINKS}" >/dev/null; then
+  echo "llama-server must not depend on Homebrew/local dylibs in release artifacts." >&2
+  echo "${LLAMA_SERVER_LINKS}" >&2
+  exit 1
+fi
+
 /usr/bin/codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
 
 while IFS= read -r -d '' executable_path; do

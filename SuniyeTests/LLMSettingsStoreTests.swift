@@ -40,9 +40,12 @@ final class LLMSettingsStoreTests: XCTestCase {
 
         var settings = LLMSettings()
         settings.isEnabled = true
+        settings.provider = .appleFoundationModels
         settings.selectedModelPreset = .custom
         settings.customModelId = "openai/gpt-4.1-mini"
         settings.baseSystemPrompt = "base"
+        settings.appleSystemPrompt = "apple"
+        settings.gemmaSystemPrompt = "gemma"
         settings.systemPrompt = "custom"
         settings.keywordsRaw = "swift, xcode"
         settings.timeoutSeconds = 7.5
@@ -52,6 +55,74 @@ final class LLMSettingsStoreTests: XCTestCase {
 
         let loaded = store.load()
         XCTAssertEqual(loaded, settings)
+    }
+
+    func testMissingProviderAndLocalPromptsDecodeToDefaults() throws {
+        let data = """
+        {
+          "isEnabled": true,
+          "selectedModelPreset": "gpt41Mini",
+          "customModelId": "",
+          "endpointURLString": "\(LLMDefaults.defaultEndpointURLString)",
+          "baseSystemPrompt": "api prompt",
+          "systemPrompt": "",
+          "keywordsRaw": "",
+          "timeoutSeconds": 12,
+          "maxTokens": 128
+        }
+        """.data(using: .utf8)!
+
+        let settings = try JSONDecoder().decode(LLMSettings.self, from: data)
+
+        XCTAssertEqual(settings.provider, .automatic)
+        XCTAssertEqual(settings.appleSystemPrompt, LLMDefaults.defaultAppleMagicFormatPrompt)
+        XCTAssertEqual(settings.gemmaSystemPrompt, LLMDefaults.defaultGemmaMagicFormatPrompt)
+        XCTAssertFalse(settings.hasExplicitAppleSystemPrompt)
+        XCTAssertFalse(settings.hasExplicitGemmaSystemPrompt)
+    }
+
+    func testAppleGemmaAndAPIPromptsAreIndependent() {
+        var settings = LLMSettings()
+        settings.baseSystemPrompt = "api prompt"
+        settings.appleSystemPrompt = "apple prompt"
+        settings.gemmaSystemPrompt = "gemma prompt"
+
+        XCTAssertEqual(settings.composedSystemPrompt, "api prompt")
+        XCTAssertEqual(settings.composedAppleSystemPrompt, "apple prompt")
+        XCTAssertEqual(settings.composedGemmaSystemPrompt, "gemma prompt")
+    }
+
+    func testDefaultGemmaPromptIsTunedSeparatelyFromApplePrompt() {
+        XCTAssertNotEqual(LLMDefaults.defaultGemmaMagicFormatPrompt, LLMDefaults.defaultAppleMagicFormatPrompt)
+        XCTAssertTrue(LLMDefaults.defaultGemmaMagicFormatPrompt.contains("Do not infer a list from ordinary use"))
+        XCTAssertTrue(LLMDefaults.defaultAppleMagicFormatPrompt.contains("Use one line by default"))
+    }
+
+    func testDefaultLocalPromptsAvoidAppSpecificExamples() {
+        let prompts = [
+            LLMDefaults.defaultAppleMagicFormatPrompt,
+            LLMDefaults.defaultGemmaMagicFormatPrompt,
+        ]
+        let appSpecificTerms = [
+            "<transcript>",
+            "Suniye",
+            "Magic Format",
+            "Apple Intelligence",
+            "Foundation Models",
+            "AppState",
+            "postProcessText",
+            "MainActor",
+            "sherpa",
+            "xcodegen",
+            "Linear ticket",
+            "git branch",
+        ]
+
+        for prompt in prompts {
+            for term in appSpecificTerms {
+                XCTAssertFalse(prompt.contains(term), "Default prompt should not contain app-specific term: \(term)")
+            }
+        }
     }
 
     func testTimeoutAndTokenClamping() {
@@ -111,6 +182,12 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(LLMModelPreset.gemini25Flash.displayName, "Gemini 2.5 Flash")
         XCTAssertEqual(LLMModelPreset.gpt41Mini.displayName, "GPT-4.1 Mini")
         XCTAssertEqual(LLMModelPreset.gpt41Mini.subtitle, "OpenAI, balanced")
+    }
+
+    func testMagicFormatProviderMetadataIncludesLocalGemma() {
+        XCTAssertEqual(MagicFormatProvider.localGemma.displayName, "Local Model")
+        XCTAssertEqual(MagicFormatProvider.localGemma.description, "Local formatting with an on-device LLM.")
+        XCTAssertTrue(MagicFormatProvider.allCases.contains(.localGemma))
     }
 
     func testMagicFormatPresetMetadataMatchesFriendlyEditingStyles() {

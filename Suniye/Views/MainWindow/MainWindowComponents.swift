@@ -171,6 +171,19 @@ struct NativePopupPicker<Item: Hashable>: NSViewRepresentable {
     let items: [Item]
     @Binding var selection: Item
     let title: (Item) -> String
+    let isEnabled: (Item) -> Bool
+
+    init(
+        items: [Item],
+        selection: Binding<Item>,
+        title: @escaping (Item) -> String,
+        isEnabled: @escaping (Item) -> Bool = { _ in true }
+    ) {
+        self.items = items
+        _selection = selection
+        self.title = title
+        self.isEnabled = isEnabled
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(selection: $selection)
@@ -193,6 +206,10 @@ struct NativePopupPicker<Item: Hashable>: NSViewRepresentable {
         if needsReload {
             nsView.removeAllItems()
             nsView.addItems(withTitles: titles)
+        }
+
+        for (index, item) in items.enumerated() {
+            nsView.item(at: index)?.isEnabled = isEnabled(item)
         }
 
         if let selectedIndex = items.firstIndex(of: selection), nsView.indexOfSelectedItem != selectedIndex {

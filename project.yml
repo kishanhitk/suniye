@@ -28,6 +28,7 @@ targets:
       - path: Suniye
         excludes:
           - Frameworks/**
+          - LocalLLM/**
     info:
       path: Suniye/Info.plist
       properties:
@@ -61,6 +62,36 @@ targets:
       - package: Sparkle
       - framework: Suniye/Frameworks/libsherpa-onnx-c-api.dylib
       - framework: Suniye/Frameworks/libonnxruntime.dylib
+    postBuildScripts:
+      - name: Embed Local LLM Helper
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+
+          HELPER_SOURCE="${SUNIYE_LLAMA_SERVER_PATH:-${SRCROOT}/Suniye/LocalLLM/llama-server}"
+          HELPER_DEST="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/llama-server"
+          HELPER_REQUIRED="false"
+
+          if [[ "${CONFIGURATION}" == "Release" ]]; then
+            for arch in ${ARCHS:-}; do
+              if [[ "${arch}" == "arm64" || "${arch}" == "arm64e" ]]; then
+                HELPER_REQUIRED="true"
+                break
+              fi
+            done
+          fi
+
+          if [[ -x "${HELPER_SOURCE}" ]]; then
+            mkdir -p "$(dirname "${HELPER_DEST}")"
+            /usr/bin/ditto "${HELPER_SOURCE}" "${HELPER_DEST}"
+            /bin/chmod 755 "${HELPER_DEST}"
+            echo "Embedded local LLM helper: ${HELPER_DEST}"
+          elif [[ "${HELPER_REQUIRED}" == "true" ]]; then
+            echo "Missing local LLM helper at ${HELPER_SOURCE}. Run scripts/setup_llama_cpp.sh or set SUNIYE_LLAMA_SERVER_PATH." >&2
+            exit 1
+          else
+            echo "Skipping local LLM helper embed; helper not found at ${HELPER_SOURCE}."
+          fi
   SuniyeTests:
     type: bundle.unit-test
     platform: macOS
