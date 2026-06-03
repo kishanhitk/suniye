@@ -173,6 +173,11 @@ struct StylePage: View {
         case .automatic:
             VStack(alignment: .leading, spacing: 8) {
                 settingsValueRow(label: "Using", value: appState.magicFormatProviderDetailText)
+
+                if appState.needsAPIConfigurationForMagicFormat {
+                    CardDivider()
+                    apiEndpointConfigurationDisclosure(title: "Configure API fallback...")
+                }
             }
         case .appleFoundationModels:
             providerPromptDisclosure(isExpanded: $isApplePromptExpanded)
@@ -197,36 +202,38 @@ struct StylePage: View {
                 providerPromptDisclosure(isExpanded: $isLocalGemmaPromptExpanded)
             }
         case .openAICompatible:
-            VStack(alignment: .leading, spacing: 10) {
-                DisclosureGroup(isExpanded: $isAPIEndpointConfigurationExpanded) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        promptAdvancedSection
-                        CardDivider()
-                        apiConnectionAdvancedSection
-                        CardDivider()
-                        apiModelAdvancedSection
-                        CardDivider()
-                        apiTestAdvancedSection
-                    }
-                    .padding(.top, AppMetrics.disclosureContentTopPadding)
-                } label: {
-                    HStack(spacing: 8) {
-                        Text("Configure...")
-                            .font(AppTypography.subheadlineSemibold)
+            apiEndpointConfigurationDisclosure(title: "Configure...")
+        }
+    }
 
-                        Spacer(minLength: 12)
+    private func apiEndpointConfigurationDisclosure(title: String) -> some View {
+        DisclosureGroup(isExpanded: $isAPIEndpointConfigurationExpanded) {
+            VStack(alignment: .leading, spacing: 12) {
+                promptAdvancedSection
+                CardDivider()
+                apiConnectionAdvancedSection
+                CardDivider()
+                apiModelAdvancedSection
+                CardDivider()
+                apiTestAdvancedSection
+            }
+            .padding(.top, AppMetrics.disclosureContentTopPadding)
+        } label: {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(AppTypography.subheadlineSemibold)
 
-                        if let result = appState.magicFormatSetupTestResult {
-                            Label(result.message, systemImage: result.severity == .success ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .font(AppTypography.caption)
-                                .foregroundStyle(result.severity.color)
-                                .multilineTextAlignment(.trailing)
-                        }
-                    }
+                Spacer(minLength: 12)
+
+                if let result = appState.magicFormatSetupTestResult {
+                    Label(result.message, systemImage: result.severity == .success ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(result.severity.color)
+                        .multilineTextAlignment(.trailing)
                 }
-                .disclosureGroupStyle(.automatic)
             }
         }
+        .disclosureGroupStyle(.automatic)
     }
 
     private func providerPromptDisclosure(isExpanded: Binding<Bool>) -> some View {
