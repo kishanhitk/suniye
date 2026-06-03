@@ -295,13 +295,14 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
     var lastDownloadedModelID: LocalLLMModelID?
     var progressValues: [LocalLLMDownloadProgress] = []
     var rootDirectory = URL(fileURLWithPath: "/tmp/suniye-llm", isDirectory: true)
+    var onDownloadFinished: (() -> Void)?
 
     func modelsRootDirectoryURL() throws -> URL {
         rootDirectory
     }
 
     func modelFileURL(for modelID: LocalLLMModelID) throws -> URL {
-        rootDirectory.appendingPathComponent(LocalLLMModelCatalog.entry(for: modelID).filename)
+        rootDirectory.appendingPathComponent(catalogEntry(for: modelID).filename)
     }
 
     func isInstalled(_ modelID: LocalLLMModelID) -> Bool {
@@ -325,7 +326,7 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
     func downloadModel(_ modelID: LocalLLMModelID, progress: @escaping @Sendable (LocalLLMDownloadProgress) -> Void) async throws {
         downloadCallCount += 1
         lastDownloadedModelID = modelID
-        let entry = LocalLLMModelCatalog.entry(for: modelID)
+        let entry = catalogEntry(for: modelID)
         let progressValue = LocalLLMDownloadProgress(
             fractionCompleted: 1,
             downloadedBytes: entry.expectedSizeBytes,
@@ -335,6 +336,7 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
         progress(progressValue)
         try downloadResult.get()
         installedModelIDs.insert(modelID)
+        onDownloadFinished?()
     }
 
     func cancelDownload() {
@@ -345,6 +347,10 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
         deleteCallCount += 1
         lastDeletedModelID = modelID
         installedModelIDs.remove(modelID)
+    }
+
+    private func catalogEntry(for modelID: LocalLLMModelID) -> LocalLLMModelCatalogEntry {
+        catalog.first { $0.id == modelID } ?? LocalLLMModelCatalog.entry(for: modelID)
     }
 }
 

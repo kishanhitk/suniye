@@ -67,7 +67,7 @@ final class LLMSettingsStoreTests: XCTestCase {
           "baseSystemPrompt": "api prompt",
           "systemPrompt": "",
           "keywordsRaw": "",
-          "timeoutSeconds": 3,
+          "timeoutSeconds": 12,
           "maxTokens": 128
         }
         """.data(using: .utf8)!
@@ -77,6 +77,8 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.provider, .automatic)
         XCTAssertEqual(settings.appleSystemPrompt, LLMDefaults.defaultAppleMagicFormatPrompt)
         XCTAssertEqual(settings.gemmaSystemPrompt, LLMDefaults.defaultGemmaMagicFormatPrompt)
+        XCTAssertFalse(settings.hasExplicitAppleSystemPrompt)
+        XCTAssertFalse(settings.hasExplicitGemmaSystemPrompt)
     }
 
     func testAppleGemmaAndAPIPromptsAreIndependent() {

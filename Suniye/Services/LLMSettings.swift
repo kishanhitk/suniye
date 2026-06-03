@@ -122,6 +122,8 @@ struct LLMSettings: Codable, Equatable {
     var baseSystemPrompt: String = LLMDefaults.defaultBaseSystemPrompt
     var appleSystemPrompt: String = LLMDefaults.defaultAppleMagicFormatPrompt
     var gemmaSystemPrompt: String = LLMDefaults.defaultGemmaMagicFormatPrompt
+    var hasExplicitAppleSystemPrompt = true
+    var hasExplicitGemmaSystemPrompt = true
     var systemPrompt: String = ""
     var keywordsRaw: String = ""
     var timeoutSeconds: Double = LLMDefaults.defaultTimeoutSeconds
@@ -180,8 +182,12 @@ struct LLMSettings: Codable, Equatable {
         customModelId = try container.decodeIfPresent(String.self, forKey: .customModelId) ?? ""
         endpointURLString = try container.decodeIfPresent(String.self, forKey: .endpointURLString) ?? LLMDefaults.defaultEndpointURLString
         baseSystemPrompt = try container.decodeIfPresent(String.self, forKey: .baseSystemPrompt) ?? LLMDefaults.defaultBaseSystemPrompt
-        appleSystemPrompt = try container.decodeIfPresent(String.self, forKey: .appleSystemPrompt) ?? LLMDefaults.defaultAppleMagicFormatPrompt
-        gemmaSystemPrompt = try container.decodeIfPresent(String.self, forKey: .gemmaSystemPrompt) ?? LLMDefaults.defaultGemmaMagicFormatPrompt
+        let decodedAppleSystemPrompt = try container.decodeIfPresent(String.self, forKey: .appleSystemPrompt)
+        let decodedGemmaSystemPrompt = try container.decodeIfPresent(String.self, forKey: .gemmaSystemPrompt)
+        hasExplicitAppleSystemPrompt = decodedAppleSystemPrompt != nil
+        hasExplicitGemmaSystemPrompt = decodedGemmaSystemPrompt != nil
+        appleSystemPrompt = decodedAppleSystemPrompt ?? LLMDefaults.defaultAppleMagicFormatPrompt
+        gemmaSystemPrompt = decodedGemmaSystemPrompt ?? LLMDefaults.defaultGemmaMagicFormatPrompt
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         keywordsRaw = try container.decodeIfPresent(String.self, forKey: .keywordsRaw) ?? ""
         timeoutSeconds = LLMDefaults.clampTimeout(try container.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? LLMDefaults.defaultTimeoutSeconds)
@@ -279,7 +285,7 @@ struct LLMSettings: Codable, Equatable {
 
 enum LLMDefaults {
     static let defaultEndpointURLString = "https://openrouter.ai/api/v1/chat/completions"
-    static let defaultTimeoutSeconds = 3.0
+    static let defaultTimeoutSeconds = 12.0
     static let defaultMaxTokens = 128
     static let appleMaxTokens = 256
     static let minTimeoutSeconds = 1.0

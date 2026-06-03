@@ -240,11 +240,18 @@ final class AppStateLLMTests: XCTestCase {
     func testLocalGemmaDownloadUpdatesInstallState() async {
         let localManager = StubLocalLLMModelManager()
         let appState = makeTestAppState(localLLMModelManager: localManager)
+        let downloadFinished = expectation(description: "local Gemma download finished")
+        localManager.onDownloadFinished = {
+            downloadFinished.fulfill()
+        }
 
         appState.llmEnabled = true
         appState.llmProvider = .localGemma
         appState.startLocalGemmaDownload()
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        await fulfillment(of: [downloadFinished], timeout: 1)
+        await waitUntil(timeoutSeconds: 1) {
+            appState.localGemmaInstallState.isInstalled
+        }
 
         XCTAssertEqual(localManager.downloadCallCount, 1)
         XCTAssertTrue(appState.localGemmaInstallState.isInstalled)
@@ -294,6 +301,22 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertFalse(appState.isLocalGemmaProviderSelectable)
         XCTAssertEqual(appState.localGemmaInstallState, .unavailable("Requires Apple Silicon."))
         XCTAssertEqual(appState.localGemmaMagicFormatAvailability, .unsupportedHardware)
+    }
+
+    func testMagicFormatProviderPresenterKeepsAutomaticSelectable() {
+        let appState = makeTestAppState()
+        appState.llmProvider = .automatic
+
+        let presenter = MagicFormatProviderPresenter(appState: appState)
+
+        XCTAssertEqual(presenter.providerOptions, [
+            .localGemma,
+            .appleFoundationModels,
+            .automatic,
+            .openAICompatible
+        ])
+        XCTAssertEqual(presenter.displayedProviderSelection, .automatic)
+        XCTAssertTrue(presenter.isSelectable(.automatic))
     }
 
     func testLocalGemmaSetupTestDoesNotRequireAPIKey() async {
@@ -882,6 +905,40 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(store.latest.maxTokens, LLMDefaults.defaultMaxTokens)
     }
 
+    func testLoadMigratesLegacyCustomPromptIntoMissingProviderPrompts() throws {
+        let data = """
+        {
+          "isEnabled": true,
+          "provider": "automatic",
+          "selectedModelPreset": "gpt41Mini",
+          "customModelId": "",
+          "endpointURLString": "\(LLMDefaults.defaultEndpointURLString)",
+          "baseSystemPrompt": "BASE",
+          "systemPrompt": "USER",
+          "keywordsRaw": "",
+          "timeoutSeconds": 9,
+          "maxTokens": 256
+        }
+        """.data(using: .utf8)!
+        let settings = try JSONDecoder().decode(LLMSettings.self, from: data)
+        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
+        let keychain = TestKeychainService(value: "api-key")
+        let store = TestLLMSettingsStore()
+        store.save(settings)
+
+        let appState = makeTestAppState(
+            llmPostProcessor: fakeLLM,
+            llmSettingsStore: store,
+            keychainService: keychain
+        )
+
+        XCTAssertEqual(appState.llmBaseSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(appState.llmAppleSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(appState.llmGemmaSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(store.latest.appleSystemPrompt, "BASE\n\nUSER")
+        XCTAssertEqual(store.latest.gemmaSystemPrompt, "BASE\n\nUSER")
+    }
+
     func testLoadPreservesLegacyHiddenPromptWhenItMatchesOnlySubstringOfBasePrompt() {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
         let keychain = TestKeychainService(value: "api-key")
@@ -941,5 +998,18 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(appState.llmBaseSystemPrompt, "BASE\n\nUSER")
         XCTAssertEqual(appState.llmSystemPrompt, "")
         XCTAssertEqual(store.latest.systemPrompt, "")
+    }
+
+    private func waitUntil(
+        timeoutSeconds: TimeInterval,
+        condition: @escaping @MainActor () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while !condition(), Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(condition(), file: file, line: line)
     }
 }

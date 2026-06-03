@@ -11,21 +11,11 @@ struct MagicFormatProviderPresenter {
     let appState: AppState
 
     var providerOptions: [MagicFormatProvider] {
-        [.localGemma, .appleFoundationModels, .openAICompatible]
+        [.localGemma, .appleFoundationModels, .automatic, .openAICompatible]
     }
 
     var displayedProviderSelection: MagicFormatProvider {
-        guard appState.llmProvider == .automatic else {
-            return appState.llmProvider
-        }
-
-        if appState.appleMagicFormatAvailability.isAvailable {
-            return .appleFoundationModels
-        }
-        if appState.localGemmaMagicFormatAvailability.isAvailable {
-            return .localGemma
-        }
-        return .openAICompatible
+        appState.llmProvider
     }
 
     var appleIntelligenceSymbolName: String {

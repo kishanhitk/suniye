@@ -691,7 +691,7 @@ final class AppState {
     }
 
     var localGemmaModelEntry: LocalLLMModelCatalogEntry {
-        LocalLLMModelCatalog.entry(for: localLLMModelManager.preferredModelID)
+        localGemmaCatalogEntry(for: localLLMModelManager.preferredModelID)
     }
 
     var localGemmaInstallStatusText: String {
@@ -1728,7 +1728,7 @@ final class AppState {
         }
 
         let modelID = localLLMModelManager.preferredModelID
-        let entry = LocalLLMModelCatalog.entry(for: modelID)
+        let entry = localGemmaCatalogEntry(for: modelID)
         localGemmaInstallState = .downloading(LocalLLMDownloadProgress(
             fractionCompleted: 0,
             downloadedBytes: 0,
@@ -2777,17 +2777,34 @@ final class AppState {
             basePrompt: settings.baseSystemPrompt,
             extraPrompt: settings.systemPrompt
         )
+        let providerPromptMigration = Self.legacyProviderPromptMigration(
+            settings: settings,
+            mergedPrompt: mergedPrompt
+        )
+        let shouldMigrateProviderPrompts = providerPromptMigration != nil
+            && (!settings.hasExplicitAppleSystemPrompt || !settings.hasExplicitGemmaSystemPrompt)
         let shouldNormalizeHiddenSettings = settings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             || settings.timeoutSeconds != LLMDefaults.defaultTimeoutSeconds
             || settings.maxTokens != LLMDefaults.defaultMaxTokens
+            || shouldMigrateProviderPrompts
         llmEnabled = settings.isEnabled
         llmProvider = settings.provider
         llmSelectedModelPreset = settings.selectedModelPreset
         llmCustomModelId = settings.customModelId
         llmEndpointURLString = settings.endpointURLString
         llmBaseSystemPrompt = mergedPrompt
-        llmAppleSystemPrompt = settings.composedAppleSystemPrompt
-        llmGemmaSystemPrompt = settings.composedGemmaSystemPrompt
+        llmAppleSystemPrompt = Self.loadedProviderPrompt(
+            explicitPrompt: settings.composedAppleSystemPrompt,
+            hasExplicitPrompt: settings.hasExplicitAppleSystemPrompt,
+            defaultPrompt: LLMDefaults.defaultAppleMagicFormatPrompt,
+            migrationPrompt: providerPromptMigration
+        )
+        llmGemmaSystemPrompt = Self.loadedProviderPrompt(
+            explicitPrompt: settings.composedGemmaSystemPrompt,
+            hasExplicitPrompt: settings.hasExplicitGemmaSystemPrompt,
+            defaultPrompt: LLMDefaults.defaultGemmaMagicFormatPrompt,
+            migrationPrompt: providerPromptMigration
+        )
         llmSystemPrompt = ""
         llmKeywordsRaw = settings.keywordsRaw
         llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
@@ -2839,6 +2856,31 @@ final class AppState {
         }
 
         return "\(visiblePrompt)\n\n\(normalizedExtra)"
+    }
+
+    private static func legacyProviderPromptMigration(settings: LLMSettings, mergedPrompt: String) -> String? {
+        let normalizedBase = settings.baseSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let visiblePrompt = normalizedBase.isEmpty ? LLMDefaults.defaultBaseSystemPrompt : normalizedBase
+        let normalizedExtra = settings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let legacyPromptWasCustomized = !normalizedExtra.isEmpty || visiblePrompt != LLMDefaults.defaultBaseSystemPrompt
+        return legacyPromptWasCustomized ? mergedPrompt : nil
+    }
+
+    private static func loadedProviderPrompt(
+        explicitPrompt: String,
+        hasExplicitPrompt: Bool,
+        defaultPrompt: String,
+        migrationPrompt: String?
+    ) -> String {
+        guard !hasExplicitPrompt else {
+            let normalized = explicitPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized.isEmpty ? defaultPrompt : normalized
+        }
+        return migrationPrompt ?? defaultPrompt
+    }
+
+    private func localGemmaCatalogEntry(for modelID: LocalLLMModelID) -> LocalLLMModelCatalogEntry {
+        localLLMModelManager.catalog.first { $0.id == modelID } ?? LocalLLMModelCatalog.entry(for: modelID)
     }
 
     private func validateIssueReportDraft() -> String? {
