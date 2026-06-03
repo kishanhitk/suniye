@@ -94,12 +94,15 @@ jobs:
         run: |
           TIP_VERSION="$(git describe --tags --match 'v[0-9]*' --abbrev=0)"
           TIP_URL_PREFIX="https://github.com/${GITHUB_REPOSITORY}/releases/download/tip/"
+          NOTES_FILE="$(mktemp)"
+          printf 'Tip builds are generated from the latest main branch commit.\n\nCommit: %s\n' "${GITHUB_SHA}" > "${NOTES_FILE}"
           ./scripts/package_release.sh \
             --version "${TIP_VERSION}" \
             --build-channel tip \
             --appcast-channel tip \
             --download-url-prefix "${TIP_URL_PREFIX}" \
-            --dist-dir dist-tip
+            --dist-dir dist-tip \
+            --release-notes-file "${NOTES_FILE}"
 
       - name: Verify tip artifacts
         run: |

@@ -54,8 +54,18 @@ jobs:
 
       - name: Package release artifacts
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: ./scripts/package_release.sh --version "${GITHUB_REF_NAME}" --build-channel stable --dist-dir dist
+        run: |
+          RELEASE_NOTES_FILE="$(mktemp)"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="${GITHUB_REF_NAME}" \
+            --jq .body > "${RELEASE_NOTES_FILE}"
+          ./scripts/package_release.sh \
+            --version "${GITHUB_REF_NAME}" \
+            --build-channel stable \
+            --dist-dir dist \
+            --release-notes-file "${RELEASE_NOTES_FILE}"
 
       - name: Verify release artifacts
         run: ./scripts/verify_release.sh --version "${GITHUB_REF_NAME}" --build-channel stable --dist-dir dist
