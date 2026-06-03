@@ -15,6 +15,7 @@ VERSION=""
 BUILD_NUMBER=""
 BUILD_CHANNEL="${SUNIYE_BUILD_CHANNEL:-stable}"
 LOCAL_CODESIGN_IDENTITY=""
+SHOULD_RELEASE_SIGN="0"
 
 usage() {
   cat <<'USAGE'
@@ -28,6 +29,8 @@ Options:
   --version <vX.Y.Z>          Override MARKETING_VERSION in the build
   --build-number <number>     Override CURRENT_PROJECT_VERSION in the build
   --build-channel <stable|tip> Embed the installed build channel
+  --codesign-identity <name>  Use a specific signing identity
+  --release-sign              Re-sign release bundle inside-out after build
   --open            Open the resulting app after build/install
 USAGE
 }
@@ -77,6 +80,18 @@ while [[ $# -gt 0 ]]; do
     --build-channel)
       BUILD_CHANNEL="$2"
       shift
+      ;;
+    --codesign-identity)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "--codesign-identity requires a value." >&2
+        usage >&2
+        exit 1
+      fi
+      LOCAL_CODESIGN_IDENTITY="$2"
+      shift
+      ;;
+    --release-sign)
+      SHOULD_RELEASE_SIGN="1"
       ;;
     --open)
       SHOULD_OPEN="1"
@@ -145,7 +160,12 @@ if [[ -z "${LOCAL_CODESIGN_IDENTITY}" ]]; then
   LOCAL_CODESIGN_IDENTITY="${SUNIYE_CODESIGN_IDENTITY:-}"
 fi
 
-if [[ -z "${LOCAL_CODESIGN_IDENTITY}" ]] && command -v security >/dev/null 2>&1; then
+if [[ "${SHOULD_RELEASE_SIGN}" == "1" && -z "${LOCAL_CODESIGN_IDENTITY}" ]]; then
+  echo "--release-sign requires --codesign-identity or SUNIYE_CODESIGN_IDENTITY." >&2
+  exit 1
+fi
+
+if [[ "${SHOULD_RELEASE_SIGN}" != "1" && -z "${LOCAL_CODESIGN_IDENTITY}" ]] && command -v security >/dev/null 2>&1; then
   LOCAL_CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/"Suniye Local Dev"/ { print $2; exit }')"
 fi
 
@@ -182,6 +202,19 @@ if [[ -n "${LOCAL_CODESIGN_IDENTITY}" ]]; then
     CODE_SIGN_STYLE=Manual
     CODE_SIGN_IDENTITY="${LOCAL_CODESIGN_IDENTITY}"
   )
+
+  if [[ -n "${SUNIYE_CODESIGN_KEYCHAIN_PATH:-}" ]]; then
+    xcodebuild_args+=(OTHER_CODE_SIGN_FLAGS="--timestamp=none --keychain ${SUNIYE_CODESIGN_KEYCHAIN_PATH}")
+  elif [[ "${SHOULD_RELEASE_SIGN}" == "1" ]]; then
+    xcodebuild_args+=(OTHER_CODE_SIGN_FLAGS="--timestamp=none")
+  fi
+fi
+
+if [[ "${SHOULD_RELEASE_SIGN}" == "1" ]]; then
+  xcodebuild_args+=(
+    CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
+    ENABLE_HARDENED_RUNTIME=NO
+  )
 fi
 
 xcodebuild "${xcodebuild_args[@]}"
@@ -204,6 +237,10 @@ if [[ -d "${SPARKLE_FRAMEWORK_PATH}" ]]; then
     /usr/bin/ditto "${SPARKLE_UPDATER_SOURCE}" "${SPARKLE_UPDATER_DEST}"
     echo "Restored Sparkle Updater.app in embedded framework."
   fi
+fi
+
+if [[ "${SHOULD_RELEASE_SIGN}" == "1" ]]; then
+  "${ROOT_DIR}/scripts/sign_release_app.sh" "${APP_PATH}" "${LOCAL_CODESIGN_IDENTITY}"
 fi
 
 FINAL_APP_PATH="${APP_PATH}"

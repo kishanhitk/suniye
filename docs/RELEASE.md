@@ -9,13 +9,13 @@ Stable uses channel rank `8`; Tip uses channel rank `1`. That makes a stable rel
 For local packaging, let `scripts/package_release.sh` compute the build number or pass `--build-number` / `SUNIYE_BUILD_NUMBER` for an explicit override.
 Do not manually bump app version metadata in `project.yml` just to cut a release tag.
 
-## Pre-release checklist
+## Prerelease checklist
 1. PR description and commits reflect the release changes accurately.
 2. User-facing docs are updated for onboarding, settings, and supported model changes (`README.md`, `docs/*`).
 3. `./scripts/doctor.sh` passes.
 4. `./scripts/e2e_preflight.sh` passes.
 5. `./scripts/e2e_smoke.sh` passes.
-6. `./scripts/package_release.sh --version <version> --build-channel stable` runs locally.
+6. `SUNIYE_CODESIGN_IDENTITY="Suniye Self-Signed Release" ./scripts/package_release.sh --version <version> --build-channel stable` runs locally.
 7. `./scripts/verify_release.sh --dist-dir dist --version <version> --build-channel stable` passes.
 8. Third-party license/redistribution verification completed (`THIRD_PARTY_NOTICES.md`).
 9. If the ASR catalog changed, verify the supported model names and download assets still match the published sherpa-onnx artifacts.
@@ -26,7 +26,7 @@ Do not manually bump app version metadata in `project.yml` just to cut a release
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
-2. GitHub Actions `release.yml` injects the tag version, computes the stable build number, builds artifacts, and creates the release.
+2. GitHub Actions `release.yml` asks GitHub to generate release notes for the tag, embeds them in the Sparkle appcast, injects the tag version, computes the stable build number, builds artifacts, and creates the release.
 
 ## Tip builds
 Every push to `main` publishes a mutable prerelease/tag named `tip`.
@@ -41,6 +41,7 @@ The Tip workflow packages the latest `main` commit with:
 ```
 
 The Tip appcast is served from `https://suniye.kishans.in/appcast-tip.xml`.
+Both Stable and Tip appcasts must include Sparkle release notes, either as an embedded `<description>` or a `<sparkle:releaseNotesLink>`.
 
 ## Artifacts
 - `Suniye.dmg`
@@ -57,6 +58,44 @@ The local owner copy is stored in the macOS Keychain under Sparkle account `suni
 ```
 Move the exported file to a password manager or another secret store, then delete the local export.
 
+## Code signing identity
+Until Suniye moves to Apple Developer ID signing, releases use one long-lived self-signed code-signing identity named `Suniye Self-Signed Release`.
+
+This identity is not trusted by Gatekeeper and does not notarize the app. Its purpose is to keep Suniye's designated requirement stable across updates so macOS Microphone and Accessibility permissions do not reset on every release.
+
+Create the identity on the release owner's Mac:
+1. Open Keychain Access.
+2. Choose **Keychain Access > Certificate Assistant > Create a Certificate**.
+3. Name it `Suniye Self-Signed Release`.
+4. Choose **Self Signed Root** for identity type.
+5. Choose **Code Signing** for certificate type.
+6. Enable **Let me override defaults** and use a long validity period.
+7. Finish certificate creation and confirm it appears in the login keychain with a private key.
+
+Export the identity:
+1. In Keychain Access, select the `Suniye Self-Signed Release` identity, including its private key.
+2. Export as a password-protected `.p12`.
+3. Store the `.p12` and password in a password manager.
+4. Generate the GitHub secret value:
+```bash
+base64 -i Suniye-Self-Signed-Release.p12 | tr -d '\n' | pbcopy
+```
+
+Configure GitHub Actions secrets:
+- `SUNIYE_CODESIGN_CERTIFICATE_P12_BASE64`: base64-encoded `.p12`
+- `SUNIYE_CODESIGN_CERTIFICATE_PASSWORD`: `.p12` export password
+- `SUNIYE_CODESIGN_IDENTITY`: `Suniye Self-Signed Release`
+
+For an emergency local release, import the `.p12` into the local keychain and run:
+```bash
+SUNIYE_CODESIGN_IDENTITY="Suniye Self-Signed Release" \
+  ./scripts/package_release.sh --version vX.Y.Z --build-channel stable --dist-dir dist
+```
+
+Do not rotate or recreate this self-signed identity unless there is no alternative. Changing it changes Suniye's designated requirement and can force users to grant Microphone and Accessibility permissions again.
+
+Users moving from the current ad hoc-signed releases to the first self-signed release may need to grant Microphone and Accessibility permissions one more time. A later migration to Apple Developer ID signing will likely cause one more permission regrant, then should stabilize under the Apple Team ID.
+
 ## Update contract
 Sparkle updater behavior depends on release artifact names and signed appcast metadata:
 - Preferred install artifact: `Suniye.dmg`
@@ -64,5 +103,6 @@ Sparkle updater behavior depends on release artifact names and signed appcast me
 - Checksum manifest: `SHA256SUMS.txt`
 - Sparkle appcast: `appcast.xml`, served to the app from `https://suniye.kishans.in/appcast.xml`
 - Tip appcast: `appcast.xml` on the `tip` prerelease, served to the app from `https://suniye.kishans.in/appcast-tip.xml`
+- App code signing: all Stable and Tip release artifacts must use the same `Suniye Self-Signed Release` identity.
 
 `SHA256SUMS.txt` must include checksum lines for published artifacts, especially `Suniye.dmg`.
