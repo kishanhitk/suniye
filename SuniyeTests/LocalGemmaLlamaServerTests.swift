@@ -86,6 +86,31 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
         XCTAssertEqual(startCount(at: logURL), 1)
     }
 
+    func testStopWaitsForHelperProcessExit() async throws {
+        let tempDir = try makeTemporaryDirectory()
+        let logURL = tempDir.appendingPathComponent("starts.log")
+        let helperURL = try makeFakeLlamaServer(
+            in: tempDir,
+            logURL: logURL,
+            terminationDelaySeconds: 0.25
+        )
+        let runtime = LocalGemmaRuntime(
+            serverExecutableURL: helperURL,
+            model: LocalGemmaDefaults.modelEntry,
+            modelURL: tempDir.appendingPathComponent(LocalGemmaDefaults.modelFilename)
+        )
+        let server = LocalGemmaLlamaServer()
+
+        _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 2, idleTimeoutSeconds: 30)
+
+        let start = Date()
+        await server.stop()
+        let elapsed = Date().timeIntervalSince(start)
+
+        XCTAssertGreaterThanOrEqual(elapsed, 0.18)
+        XCTAssertTrue(logContents(at: logURL).contains("term"))
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("suniye-llama-server-tests-\(UUID().uuidString)", isDirectory: true)
@@ -96,13 +121,20 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
         return url
     }
 
-    private func makeFakeLlamaServer(in directory: URL, logURL: URL, healthStatus: Int = 200) throws -> URL {
+    private func makeFakeLlamaServer(
+        in directory: URL,
+        logURL: URL,
+        healthStatus: Int = 200,
+        terminationDelaySeconds: Double = 0
+    ) throws -> URL {
         let scriptURL = directory.appendingPathComponent("fake-llama-server")
         let logPathLiteral = try jsonStringLiteral(logURL.path)
         let script = """
         #!/usr/bin/python3
         import json
+        import signal
         import sys
+        import time
         import traceback
         from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -111,11 +143,20 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
             port = int(sys.argv[sys.argv.index("--port") + 1])
             api_key = sys.argv[sys.argv.index("--api-key") + 1]
             health_status = \(healthStatus)
+            termination_delay_seconds = \(terminationDelaySeconds)
         except Exception:
             with open(log_path, "a", encoding="utf-8") as log:
                 log.write("argument_error\\n")
                 log.write(traceback.format_exc())
             raise
+
+        def handle_sigterm(signum, frame):
+            with open(log_path, "a", encoding="utf-8") as log:
+                log.write("term\\n")
+            time.sleep(termination_delay_seconds)
+            sys.exit(0)
+
+        signal.signal(signal.SIGTERM, handle_sigterm)
 
         with open(log_path, "a", encoding="utf-8") as log:
             log.write("start\\n")
@@ -170,6 +211,13 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
         guard let contents = try? String(contentsOf: url, encoding: .utf8) else {
             return 0
         }
-        return contents.split(separator: "\n").count
+        return contents
+            .split(separator: "\n")
+            .filter { $0 == "start" }
+            .count
+    }
+
+    private func logContents(at url: URL) -> String {
+        (try? String(contentsOf: url, encoding: .utf8)) ?? ""
     }
 }

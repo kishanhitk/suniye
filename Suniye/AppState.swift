@@ -743,25 +743,18 @@ final class AppState {
     }
 
     var usesAppleMagicFormatSettings: Bool {
-        switch llmProvider {
-        case .automatic:
-            return appleMagicFormatAvailability.isAvailable
-        case .appleFoundationModels:
-            return true
-        case .localGemma, .openAICompatible:
-            return false
-        }
+        MagicFormatCoordinator.usesAppleSettings(
+            requestedProvider: llmProvider,
+            appleAvailability: appleMagicFormatAvailability
+        )
     }
 
     var usesLocalGemmaMagicFormatSettings: Bool {
-        switch llmProvider {
-        case .automatic:
-            return !appleMagicFormatAvailability.isAvailable && localGemmaMagicFormatAvailability.isAvailable
-        case .localGemma:
-            return true
-        case .appleFoundationModels, .openAICompatible:
-            return false
-        }
+        MagicFormatCoordinator.usesLocalGemmaSettings(
+            requestedProvider: llmProvider,
+            appleAvailability: appleMagicFormatAvailability,
+            localGemmaAvailability: localGemmaMagicFormatAvailability
+        )
     }
 
     var usesLocalMagicFormatSettings: Bool {
@@ -769,16 +762,11 @@ final class AppState {
     }
 
     var needsAPIConfigurationForMagicFormat: Bool {
-        switch llmProvider {
-        case .automatic:
-            return !appleMagicFormatAvailability.isAvailable && !localGemmaMagicFormatAvailability.isAvailable
-        case .appleFoundationModels:
-            return false
-        case .localGemma:
-            return false
-        case .openAICompatible:
-            return true
-        }
+        MagicFormatCoordinator.needsAPIConfiguration(
+            requestedProvider: llmProvider,
+            appleAvailability: appleMagicFormatAvailability,
+            localGemmaAvailability: localGemmaMagicFormatAvailability
+        )
     }
 
     var magicFormatProviderDetailText: String {
@@ -1254,6 +1242,7 @@ final class AppState {
     private let llmPostProcessor: LLMPostProcessor
     private let appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
     private let localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor
+    private let magicFormatCoordinator: MagicFormatCoordinator
     private let localLLMModelManager: LocalLLMModelManagerProtocol
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let generalSettingsStore: GeneralSettingsStoreProtocol
@@ -1285,12 +1274,6 @@ final class AppState {
         case onboardingPractice
     }
 
-    private enum EffectiveMagicFormatProvider {
-        case appleFoundationModels
-        case localGemma
-        case openAICompatible
-    }
-
     init(
         modelManager: ModelManagerProtocol = ModelManager(),
         transcriptionService: TranscriptionServiceProtocol = TranscriptionService(),
@@ -1300,7 +1283,7 @@ final class AppState {
         soundFeedbackService: SoundFeedbackServiceProtocol = SoundFeedbackService(),
         llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
         appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor = AppleFoundationModelsPostProcessor(),
-        localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor = LocalGemmaPostProcessor(),
+        localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor? = nil,
         localLLMModelManager: LocalLLMModelManagerProtocol = LocalLLMModelManager(),
         llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
@@ -1337,8 +1320,18 @@ final class AppState {
         self.soundFeedbackService = soundFeedbackService
         self.llmPostProcessor = llmPostProcessor
         self.appleMagicFormatPostProcessor = appleMagicFormatPostProcessor
-        self.localGemmaMagicFormatPostProcessor = localGemmaMagicFormatPostProcessor
         self.localLLMModelManager = localLLMModelManager
+        let resolvedLocalGemmaPostProcessor = localGemmaMagicFormatPostProcessor ?? LocalGemmaPostProcessor(
+            client: LocalGemmaLlamaCppClient(
+                locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager)
+            )
+        )
+        self.localGemmaMagicFormatPostProcessor = resolvedLocalGemmaPostProcessor
+        self.magicFormatCoordinator = MagicFormatCoordinator(
+            apiPostProcessor: llmPostProcessor,
+            applePostProcessor: appleMagicFormatPostProcessor,
+            localGemmaPostProcessor: resolvedLocalGemmaPostProcessor
+        )
         self.llmSettingsStore = llmSettingsStore
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
@@ -1645,7 +1638,12 @@ final class AppState {
 
         let requestID = magicFormatSetupTestRequestID
         isMagicFormatSetupTestInProgress = true
-        let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
+        let config = MagicFormatCoordinator.makeAPIConfig(
+            settings: currentLLMSettings(),
+            apiKey: apiKey,
+            endpointURL: endpointURL,
+            modelId: modelId
+        )
         let startTime = Date()
 
         defer {
@@ -1717,20 +1715,6 @@ final class AppState {
         llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt
     }
 
-    func selectRecommendedMagicFormatProviderIfAutomatic() {
-        guard llmProvider == .automatic else {
-            return
-        }
-
-        if isLocalGemmaProviderSelectable {
-            llmProvider = .localGemma
-        } else if appleMagicFormatAvailability.isAvailable {
-            llmProvider = .appleFoundationModels
-        } else {
-            llmProvider = .openAICompatible
-        }
-    }
-
     func refreshLocalGemmaInstallState() {
         guard !localGemmaInstallState.isActive else {
             return
@@ -1795,10 +1779,12 @@ final class AppState {
         localLLMModelManager.cancelDownload()
     }
 
-    func deleteLocalGemmaModel() {
+    func deleteLocalGemmaModel() async {
         guard !localGemmaInstallState.isActive else {
             return
         }
+
+        await localGemmaMagicFormatPostProcessor.stopRuntime()
 
         let modelID = localLLMModelManager.preferredModelID
         do {
@@ -1830,7 +1816,7 @@ final class AppState {
         let requestID = magicFormatSetupTestRequestID
         isMagicFormatSetupTestInProgress = true
         let startTime = Date()
-        let config = makeLocalGemmaMagicFormatConfig()
+        let config = MagicFormatCoordinator.makeLocalGemmaConfig(settings: currentLLMSettings())
 
         defer {
             if requestID == magicFormatSetupTestRequestID {
@@ -2327,155 +2313,35 @@ final class AppState {
             return rawText
         }
 
-        guard let provider = resolvedMagicFormatProvider() else {
-            AppLogger.shared.log(.warning, "llm fallback raw reason=local_provider_unavailable apple_availability=\(appleMagicFormatAvailability.logValue) gemma_availability=\(localGemmaMagicFormatAvailability.logValue)")
-            return rawText
-        }
-
-        switch provider {
-        case .appleFoundationModels:
-            return await postProcessTextWithApple(input: input, rawText: rawText)
-        case .localGemma:
-            return await postProcessTextWithLocalGemma(input: input, rawText: rawText)
-        case .openAICompatible:
-            return await postProcessTextWithAPI(input: input, rawText: rawText)
-        }
-    }
-
-    private func resolvedMagicFormatProvider() -> EffectiveMagicFormatProvider? {
-        switch llmProvider {
-        case .automatic:
-            if appleMagicFormatAvailability.isAvailable {
-                return .appleFoundationModels
-            }
-            if localGemmaMagicFormatAvailability.isAvailable {
-                return .localGemma
-            }
-            return .openAICompatible
-        case .appleFoundationModels:
-            return appleMagicFormatAvailability.isAvailable ? .appleFoundationModels : nil
-        case .localGemma:
-            return localGemmaMagicFormatAvailability.isAvailable ? .localGemma : nil
-        case .openAICompatible:
-            return .openAICompatible
-        }
-    }
-
-    private func postProcessTextWithAPI(input: String, rawText: String) async -> String {
-        guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
-            AppLogger.shared.log(.warning, "llm fallback raw reason=invalid_endpoint")
-            return rawText
-        }
-
-        guard let modelId = currentLLMSettings().validatedModelId else {
-            AppLogger.shared.log(.warning, "llm fallback raw reason=invalid_model")
-            return rawText
-        }
-
-        // TODO: Generic OpenAI-compatible backends can be keyless, but the current
-        // LLM settings flow still treats a missing API key as a hard stop.
-        guard hasLLMAPIKey else {
-            AppLogger.shared.log(.warning, "llm fallback raw reason=missing_key")
-            return rawText
-        }
-
-        guard let apiKey = try? keychainService.getLLMKey(),
-              !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            AppLogger.shared.log(.warning, "llm fallback raw reason=key_read_failed")
-            refreshLLMKeyStatus()
-            return rawText
-        }
-
-        let config = makeLLMConfig(apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
-        let startTime = Date()
-        let slowWarningTask = startMagicFormatSlowWarningTask()
-        statusText = "Polishing..."
-        defer {
-            slowWarningTask.cancel()
-        }
-
-        do {
-            let polished = try await llmPostProcessor.polish(text: input, config: config)
-            let normalized = polished.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalized.isEmpty else {
-                AppLogger.shared.log(.warning, "llm fallback raw reason=empty_output model=\(config.modelId)")
-                return rawText
-            }
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            AppLogger.shared.log(.info, "llm polish success provider=api model=\(config.modelId) latency_ms=\(latencyMs)")
-            return normalized
-        } catch {
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            if let llmError = error as? LLMPostProcessorError {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=api reason=\(llmError.logValue) model=\(config.modelId) latency_ms=\(latencyMs)")
-            } else {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=api reason=unknown model=\(config.modelId) latency_ms=\(latencyMs)")
-            }
-            return rawText
-        }
-    }
-
-    private func postProcessTextWithApple(input: String, rawText: String) async -> String {
-        let config = makeAppleMagicFormatConfig()
-        let startTime = Date()
-        let slowWarningTask = startMagicFormatSlowWarningTask()
-        statusText = "Polishing..."
-        defer {
-            slowWarningTask.cancel()
-        }
-
-        do {
-            let polished = try await appleMagicFormatPostProcessor.polish(text: input, config: config)
-            let normalized = polished.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalized.isEmpty else {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=apple reason=empty_output")
-                return rawText
-            }
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            AppLogger.shared.log(.info, "llm polish success provider=apple_foundation_models latency_ms=\(latencyMs)")
-            return normalized
-        } catch {
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            if let llmError = error as? LLMPostProcessorError {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=apple reason=\(llmError.logValue) latency_ms=\(latencyMs)")
-            } else {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=apple reason=unknown latency_ms=\(latencyMs)")
-            }
-            return rawText
-        }
-    }
-
-    private func postProcessTextWithLocalGemma(input: String, rawText: String) async -> String {
-        let config = makeLocalGemmaMagicFormatConfig()
-        let startTime = Date()
-        let slowWarningTask = startMagicFormatSlowWarningTask()
-        statusText = "Starting local model..."
-        if case .processing = floatingIndicatorState {
-            setFloatingIndicatorState(.processing(message: "Starting local model..."))
-        }
-        defer {
-            slowWarningTask.cancel()
-        }
-
-        do {
-            let polished = try await localGemmaMagicFormatPostProcessor.polish(text: input, config: config)
-            let normalized = polished.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalized.isEmpty else {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=\(LocalGemmaDefaults.providerLogName) reason=empty_output")
-                return rawText
-            }
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            AppLogger.shared.log(.info, "llm polish success provider=\(LocalGemmaDefaults.providerLogName) model=\(LocalGemmaDefaults.modelDisplayName) latency_ms=\(latencyMs)")
-            return normalized
-        } catch {
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            if let llmError = error as? LLMPostProcessorError {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=\(LocalGemmaDefaults.providerLogName) reason=\(llmError.logValue) latency_ms=\(latencyMs)")
-            } else {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=\(LocalGemmaDefaults.providerLogName) reason=unknown latency_ms=\(latencyMs)")
-            }
-            return rawText
-        }
+        return await magicFormatCoordinator.polish(
+            input: input,
+            rawText: rawText,
+            request: MagicFormatCoordinator.PolishRequest(
+                requestedProvider: llmProvider,
+                settings: currentLLMSettings(),
+                hasAPIKey: hasLLMAPIKey,
+                appleAvailability: appleMagicFormatAvailability,
+                localGemmaAvailability: localGemmaMagicFormatAvailability,
+                readAPIKey: { [keychainService] in
+                    try? keychainService.getLLMKey()
+                },
+                onAPIKeyReadFailed: { [weak self] in
+                    self?.refreshLLMKeyStatus()
+                },
+                startSlowWarning: { [weak self] in
+                    self?.startMagicFormatSlowWarningTask() ?? Task {}
+                },
+                setStatusText: { [weak self] text in
+                    self?.statusText = text
+                },
+                setProcessingMessage: { [weak self] message in
+                    guard let self, case .processing = self.floatingIndicatorState else {
+                        return
+                    }
+                    self.setFloatingIndicatorState(.processing(message: message))
+                }
+            )
+        )
     }
 
     func runIndicatorE2ESmoke() {
@@ -3077,39 +2943,6 @@ final class AppState {
         onStateChange?()
     }
 
-    private func makeLLMConfig(apiKey: String, endpointURL: URL, modelId: String) -> LLMConfig {
-        let settings = currentLLMSettings()
-        return LLMConfig(
-            modelId: modelId,
-            endpointURL: endpointURL,
-            systemPrompt: settings.composedSystemPrompt,
-            keywords: settings.keywords,
-            timeoutSeconds: settings.timeoutSeconds,
-            apiKey: apiKey
-        )
-    }
-
-    private func makeAppleMagicFormatConfig() -> AppleMagicFormatConfig {
-        let settings = currentLLMSettings()
-        return AppleMagicFormatConfig(
-            systemPrompt: settings.composedAppleSystemPrompt,
-            keywords: settings.keywords,
-            timeoutSeconds: settings.timeoutSeconds,
-            maxTokens: LLMDefaults.appleMaxTokens
-        )
-    }
-
-    private func makeLocalGemmaMagicFormatConfig() -> LocalGemmaMagicFormatConfig {
-        let settings = currentLLMSettings()
-        return LocalGemmaMagicFormatConfig(
-            systemPrompt: settings.composedGemmaSystemPrompt,
-            keywords: settings.keywords,
-            startupTimeoutSeconds: LocalGemmaDefaults.startupTimeoutSeconds,
-            generationTimeoutSeconds: LocalGemmaDefaults.generationTimeoutSeconds,
-            maxTokens: LocalGemmaDefaults.maxTokens
-        )
-    }
-
     private func effectiveMagicFormatTestAPIKey(apiKeyDraft: String) -> String? {
         let normalizedDraft = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedDraft.isEmpty {
@@ -3370,27 +3203,6 @@ final class AppState {
             return .forceFailure
         }
         return .none
-    }
-}
-
-private extension LLMPostProcessorError {
-    var logValue: String {
-        switch self {
-        case .invalidConfiguration:
-            return "invalid_config"
-        case .timeout:
-            return "timeout"
-        case .unauthorized:
-            return "unauthorized"
-        case .provider:
-            return "provider_error"
-        case .malformedResponse:
-            return "malformed_response"
-        case .emptyOutput:
-            return "empty_output"
-        case .network:
-            return "network"
-        }
     }
 }
 

@@ -21,32 +21,24 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
     }
 
     func polish(text: String, config: AppleMagicFormatConfig) async throws -> String {
-        let trimmedInput = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedInput.isEmpty else {
-            throw LLMPostProcessorError.emptyOutput
-        }
         guard availability.isAvailable else {
             throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
         }
 
-        var lastInvalidOutputWasEmpty = false
-        for attempt in 0 ..< 2 {
-            let instructions = makeInstructions(config: config, text: trimmedInput, retrying: attempt > 0)
-            let prompt = makePrompt(text: trimmedInput)
-
+        return try await MagicFormatPipeline.polish(
+            text: text,
+            systemPrompt: config.systemPrompt,
+            keywords: config.keywords,
+            maxTokens: config.maxTokens
+        ) { request in
             do {
-                let raw = try await withTimeout(seconds: config.timeoutSeconds) {
+                return try await withTimeout(seconds: config.timeoutSeconds) {
                     try await self.client.generate(
-                        instructions: instructions,
-                        prompt: prompt,
-                        maxTokens: config.maxTokens
+                        instructions: request.instructions,
+                        prompt: request.prompt,
+                        maxTokens: request.maxTokens ?? config.maxTokens
                     )
                 }
-                let sanitized = MagicFormatOutputSanitizer.sanitize(raw)
-                if MagicFormatOutputSanitizer.isValidPlainText(sanitized, for: trimmedInput) {
-                    return sanitized
-                }
-                lastInvalidOutputWasEmpty = sanitized.isEmpty
             } catch let error as LLMPostProcessorError {
                 throw error
             } catch is TimeoutError {
@@ -55,31 +47,12 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
                 throw LLMPostProcessorError.provider(error.localizedDescription)
             }
         }
-
-        throw lastInvalidOutputWasEmpty ? LLMPostProcessorError.emptyOutput : LLMPostProcessorError.malformedResponse
     }
 
     func testSetup(config: AppleMagicFormatConfig) async throws {
         guard availability.isAvailable else {
             throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
         }
-    }
-
-    private func makeInstructions(config: AppleMagicFormatConfig, text: String, retrying: Bool) -> String {
-        MagicFormatPromptComposer.makeInstructions(
-            systemPrompt: config.systemPrompt,
-            keywords: config.keywords,
-            text: text,
-            retrying: retrying
-        )
-    }
-
-    private func makePrompt(text: String) -> String {
-        """
-        <transcript>
-        \(text)
-        </transcript>
-        """
     }
 
     private static func makeDefaultClient() -> AppleFoundationModelsClient {

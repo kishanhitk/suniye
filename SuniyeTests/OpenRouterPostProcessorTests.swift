@@ -31,7 +31,8 @@ final class OpenRouterPostProcessorTests: XCTestCase {
             let messages = try XCTUnwrap(json["messages"] as? [[String: String]])
             let system = try XCTUnwrap(messages.first(where: { $0["role"] == "system" })?["content"])
             XCTAssertTrue(system.contains("prompt"))
-            XCTAssertTrue(system.contains("Keyword hints: swift"))
+            XCTAssertTrue(system.contains("Vocabulary terms to preserve exactly when present: swift."))
+            XCTAssertEqual(messages.last?["content"], "<transcript>\nhello world\n</transcript>")
 
             let responseJSON: [String: Any] = [
                 "choices": [

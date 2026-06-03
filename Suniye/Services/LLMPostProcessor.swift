@@ -39,6 +39,11 @@ protocol LocalGemmaMagicFormatPostProcessor {
     var availability: LocalGemmaAvailability { get }
     func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String
     func testSetup(config: LocalGemmaMagicFormatConfig) async throws
+    func stopRuntime() async
+}
+
+extension LocalGemmaMagicFormatPostProcessor {
+    func stopRuntime() async {}
 }
 
 enum AppleFoundationModelsAvailability: Equatable {
@@ -147,181 +152,23 @@ enum LLMPostProcessorError: LocalizedError {
             return "Network error: \(reason)"
         }
     }
-}
 
-enum MagicFormatOutputSanitizer {
-    static func sanitize(_ raw: String) -> String {
-        raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    static func isValidPlainText(_ output: String, for input: String) -> Bool {
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return false
+    var logValue: String {
+        switch self {
+        case .invalidConfiguration:
+            return "invalid_config"
+        case .timeout:
+            return "timeout"
+        case .unauthorized:
+            return "unauthorized"
+        case .provider:
+            return "provider_error"
+        case .malformedResponse:
+            return "malformed_response"
+        case .emptyOutput:
+            return "empty_output"
+        case .network:
+            return "network"
         }
-        if trimmed.contains("```") {
-            return false
-        }
-
-        let lowercased = trimmed.lowercased()
-        if lowercased.contains("<transcript") || lowercased.contains("</transcript>") {
-            return false
-        }
-
-        if trimmed.rangeOfCharacter(from: .newlines) != nil,
-           !isValidMultilineOutput(trimmed, for: input) {
-            return false
-        }
-
-        let inputLength = input.trimmingCharacters(in: .whitespacesAndNewlines).count
-        let maxReasonableLength = max(inputLength * 3, inputLength + 240)
-        if trimmed.count > maxReasonableLength {
-            return false
-        }
-
-        return true
-    }
-
-    private static func isBoundary(_ character: Character) -> Bool {
-        character.unicodeScalars.allSatisfy { !CharacterSet.alphanumerics.contains($0) }
-    }
-
-    private static func isValidMultilineOutput(_ output: String, for input: String) -> Bool {
-        guard allowsMultilineOutput(for: input) else {
-            return false
-        }
-
-        let lines = output
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-        guard lines.count <= 20, lines.allSatisfy({ !$0.isEmpty }) else {
-            return false
-        }
-
-        return true
-    }
-
-    static func allowsMultilineOutput(for input: String) -> Bool {
-        let lowercased = input.lowercased()
-        let phraseTriggers = [
-            "new line",
-            "new lines",
-            "next line",
-            "line break",
-            "line breaks",
-            "separate lines",
-            "separate line",
-            "bullet list",
-            "bulleted list",
-            "numbered list",
-            "todo list",
-            "to do list",
-            "as a list",
-            "make a list",
-            "format as a list",
-            "turn this into a list",
-            "in order",
-            "in an order",
-            "ordered list",
-            "ordered sequence",
-        ]
-        if phraseTriggers.contains(where: { lowercased.contains($0) }) {
-            return true
-        }
-
-        if containsOrdinalSequence(in: lowercased) {
-            return true
-        }
-
-        if hasLikelyItemListLeadIn(for: lowercased) {
-            return true
-        }
-
-        let wordTriggers = [
-            "list",
-            "bullets",
-            "bullet",
-            "checklist",
-            "steps",
-            "agenda",
-        ]
-        return wordTriggers.contains { containsWord($0, in: lowercased) }
-    }
-
-    static func hasLikelyItemListLeadIn(for input: String) -> Bool {
-        let lowercased = input.lowercased()
-        guard containsWord("items", in: lowercased) else {
-            return false
-        }
-        return lowercased.contains(":") || lowercased.contains(",") || lowercased.contains(" and ")
-    }
-
-    private static func containsOrdinalSequence(in text: String) -> Bool {
-        let ordinalWords = [
-            "first",
-            "second",
-            "third",
-            "fourth",
-            "fifth",
-            "sixth",
-            "seventh",
-            "eighth",
-            "ninth",
-            "tenth",
-        ]
-        return ordinalWords.filter { containsWord($0, in: text) }.count >= 2
-    }
-
-    private static func containsWord(_ word: String, in text: String) -> Bool {
-        var searchStart = text.startIndex
-        while searchStart < text.endIndex,
-              let range = text.range(of: word, range: searchStart ..< text.endIndex) {
-            let hasLeadingBoundary = range.lowerBound == text.startIndex || isBoundary(text[text.index(before: range.lowerBound)])
-            let hasTrailingBoundary = range.upperBound == text.endIndex || isBoundary(text[range.upperBound])
-            if hasLeadingBoundary && hasTrailingBoundary {
-                return true
-            }
-            searchStart = range.upperBound
-        }
-        return false
-    }
-}
-
-enum MagicFormatPromptComposer {
-    static func makeInstructions(
-        systemPrompt: String,
-        keywords: [String],
-        text: String,
-        retrying: Bool
-    ) -> String {
-        var sections = [systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)]
-
-        if !keywords.isEmpty {
-            sections.append("Vocabulary terms to preserve exactly when present: \(keywords.joined(separator: ", ")).")
-        }
-
-        if MagicFormatOutputSanitizer.allowsMultilineOutput(for: text) {
-            if MagicFormatOutputSanitizer.hasLikelyItemListLeadIn(for: text) {
-                sections.append("""
-                Formatting intent detected: this transcript appears to contain an item list with a user-provided lead-in. Preserve that lead-in as the first line ending with a colon, then return one bullet per item.
-
-                Do not return only bullets. If the transcript has no explicit colon, infer the lead-in from the words before the item run and remove only separator noise before the first item. Use plain hyphen bullets for unordered item lists. Use numbered lines only for ordered actions, steps, or explicit numbered lists. Correct obvious item-word dictation errors only when the surrounding items make the intended object clear. Do not invent extra items.
-                """)
-            } else {
-                sections.append("Formatting intent detected: return a plain-text multi-line list with one item per line. Use plain hyphen bullets for unordered item lists. Use numbered lines only for ordered actions, steps, or explicit numbered lists. Do not add headings or extra items.")
-            }
-        }
-
-        if retrying {
-            if MagicFormatOutputSanitizer.allowsMultilineOutput(for: text) {
-                sections.append("Retry correction: return only the cleaned transcript text as a plain-text list. Do not add wrapper text, markdown, quotes around the answer, or extra commentary.")
-            } else {
-                sections.append("Retry correction: return only the cleaned transcript text. One line. Do not add wrapper text, markdown, quotes around the answer, or extra commentary.")
-            }
-        }
-
-        return sections
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n\n")
     }
 }

@@ -29,7 +29,7 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         XCTAssertEqual(output, "Polished text")
     }
 
-    func testGemmaInstructionsUseGenericPromptWithoutListHeuristics() async throws {
+    func testGemmaInstructionsUseSharedFormattingIntentPolicy() async throws {
         let client = FakeLocalGemmaClient(outputs: [
             "These are the items we should have:\n- Laptop\n- Back\n- Phone\n- Charger",
         ])
@@ -42,7 +42,8 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
 
         XCTAssertEqual(output, "These are the items we should have:\n- Laptop\n- Back\n- Phone\n- Charger")
         XCTAssertTrue(client.instructions.first?.contains("You clean one dictated transcript") == true)
-        XCTAssertFalse(client.instructions.first?.contains("Formatting intent detected") == true)
+        XCTAssertTrue(client.instructions.first?.contains("Formatting intent detected") == true)
+        XCTAssertTrue(client.instructions.first?.contains("Preserve that lead-in") == true)
         XCTAssertFalse(client.instructions.first?.contains("Return exactly this structure") == true)
     }
 
