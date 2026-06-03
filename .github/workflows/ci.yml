@@ -45,9 +45,11 @@ jobs:
           xcodebuild \
             -project Suniye.xcodeproj \
             -scheme Suniye \
-            -destination 'platform=macOS' \
+            -destination 'platform=macOS,arch=arm64' \
             -derivedDataPath .derivedData \
-            test
+            test \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES
 
       - name: Upload logs/artifacts on failure
         if: failure()
