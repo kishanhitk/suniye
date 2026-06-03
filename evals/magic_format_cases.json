@@ -33,7 +33,7 @@
     "id": "simple_ordered_steps_001",
     "category": "list_formatting",
     "input": "do these in order first check the logs second restart the app third send me the result",
-    "expected": "Do these in order:\n1. First, check the logs.\n2. Second, restart the app.\n3. Third, send me the result."
+    "expected": "Do these in order:\n1. Check the logs\n2. Restart the app\n3. Send me the result"
   },
   {
     "id": "readme_context_preserved_001",
@@ -72,6 +72,12 @@
     "expected": "Write this as a numbered list:\n1. Check logs\n2. Restart app\n3. Send me the result"
   },
   {
+    "id": "bullet_point_request_preserved_001",
+    "category": "list_formatting",
+    "input": "create a bullet point out of these first books pen notebook",
+    "expected": "Create a bullet point out of these:\n- Books\n- Pen\n- Notebook"
+  },
+  {
     "id": "natural_list_leadin_001",
     "category": "list_formatting",
     "input": "the things we need are laptop bag phone and charger",
@@ -93,13 +99,13 @@
     "id": "ordered_words_preserved_001",
     "category": "list_formatting",
     "input": "first download the model second run the local test third compare the output",
-    "expected": "1. First, download the model.\n2. Second, run the local test.\n3. Third, compare the output."
+    "expected": "1. Download the model\n2. Run the local test\n3. Compare the output"
   },
   {
     "id": "task_leadin_preserved_001",
     "category": "list_formatting",
     "input": "do these things in order first create a ticket second make a branch third open a draft pr",
-    "expected": "Do these things in order:\n1. First, create a ticket.\n2. Second, make a branch.\n3. Third, open a draft PR."
+    "expected": "Do these things in order:\n1. Create a ticket\n2. Make a branch\n3. Open a draft PR"
   },
   {
     "id": "text_intent_preserved_002",
