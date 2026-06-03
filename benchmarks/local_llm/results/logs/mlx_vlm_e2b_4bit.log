@@ -1,0 +1,29 @@
+INFO:     Started server process [82708]
+INFO:     Waiting for application startup.
+2026-06-03 17:59:23,752 - INFO - Pre-loading model: mlx-community/gemma-4-e2b-it-4bit
+Loading model from: mlx-community/gemma-4-e2b-it-4bit
+2026-06-03 17:59:24,034 - INFO - HTTP Request: GET https://huggingface.co/api/models/mlx-community/gemma-4-e2b-it-4bit/revision/main "HTTP/1.1 200 OK"
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Fetching 8 files: 100%|██████████| 8/8 [00:00<00:00, 109655.01it/s]
+/Users/kishan/dev/suniye-mlx-benchmark/.bench-venv/lib/python3.14/site-packages/transformers/audio_utils.py:555: UserWarning: At least one mel filter has all zero values. The value for `num_mel_filters` (128) may be set too high. Or, the value for `num_frequency_bins` (257) may be set too low.
+  warnings.warn(
+Model and processor loaded successfully.
+2026-06-03 17:59:25,352 - INFO - Model ready, continuous batching enabled.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:52294 (Press CTRL+C to quit)
+INFO:     127.0.0.1:52395 - "GET /health HTTP/1.1" 200 OK
+Using cached model: mlx-community/gemma-4-e2b-it-4bit, Adapter: None
+INFO:     127.0.0.1:52396 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Stream finished, cleared cache.
+Using cached model: mlx-community/gemma-4-e2b-it-4bit, Adapter: None
+INFO:     127.0.0.1:52397 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Stream finished, cleared cache.
+Using cached model: mlx-community/gemma-4-e2b-it-4bit, Adapter: None
+INFO:     127.0.0.1:52400 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Stream finished, cleared cache.
+Using cached model: mlx-community/gemma-4-e2b-it-4bit, Adapter: None
+INFO:     127.0.0.1:52401 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+Stream finished, cleared cache.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [82708]

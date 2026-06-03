@@ -1,0 +1,419 @@
+{
+  "created_at": "2026-06-03T17:59:12+0530",
+  "machine": {
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "processor": "Apple M5",
+    "memory_gb": 24.0,
+    "python": "3.14.5"
+  },
+  "models": {
+    "llama_gguf": {
+      "path": "/Users/kishan/Library/Application Support/Suniye/llm/gemma-4-e2b-Q4_K_M.gguf",
+      "size_bytes": 3427873408,
+      "sha256": "d075ddeea9b056b6488af98e4c3776604c7c3196f1e55155c88a085027ab6d31",
+      "expected_size_bytes": 3427873408,
+      "expected_sha256": "d075ddeea9b056b6488af98e4c3776604c7c3196f1e55155c88a085027ab6d31",
+      "matches_expected": true
+    },
+    "mlx_native": {
+      "repo_id": "mlx-community/gemma-4-e2b-it-4bit",
+      "snapshot_path": "/Users/kishan/.cache/huggingface/hub/models--mlx-community--gemma-4-e2b-it-4bit/snapshots/2c3e507453b4f218d05fe3cc97bea5c5a654257e",
+      "size_bytes": 3613530663
+    }
+  },
+  "settings": {
+    "runs": 3,
+    "warmups": 1,
+    "max_tokens": 128,
+    "ctx_size": 4096
+  },
+  "backends": [
+    {
+      "backend": "llama_cpp_q4_k_m_gguf",
+      "model": "gemma-4-e2b-Q4_K_M.gguf",
+      "command": [
+        "llama-server",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "52292",
+        "--model",
+        "/Users/kishan/Library/Application Support/Suniye/llm/gemma-4-e2b-Q4_K_M.gguf",
+        "--ctx-size",
+        "4096",
+        "--gpu-layers",
+        "all",
+        "--no-webui",
+        "--jinja",
+        "--reasoning",
+        "off",
+        "--metrics",
+        "--timeout",
+        "1200"
+      ],
+      "startup_s": 7.412956416999805,
+      "startup_rss_mb": 3493.296875,
+      "samples": [
+        {
+          "phase": "warmup",
+          "index": 0,
+          "prompt": "short_cleanup",
+          "rss_mb": 3508.3125,
+          "ttft_s": 1.019595957999627,
+          "total_s": 1.262354124999547,
+          "completion_tokens": 17,
+          "prompt_tokens": 640,
+          "total_tokens": 657,
+          "tokens_per_s": 13.46690256191471,
+          "output": "Hey Alex, can you review the pricing doc and send me the final number?",
+          "event_count": 19,
+          "usage": {
+            "completion_tokens": 17,
+            "prompt_tokens": 640,
+            "total_tokens": 657,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "cache_n": 0,
+            "prompt_n": 640,
+            "prompt_ms": 1014.286,
+            "prompt_per_token_ms": 1.5848218749999998,
+            "prompt_per_second": 630.9857377504965,
+            "predicted_n": 17,
+            "predicted_ms": 240.617,
+            "predicted_per_token_ms": 14.153941176470587,
+            "predicted_per_second": 70.65169958897336
+          }
+        },
+        {
+          "phase": "run",
+          "index": 1,
+          "prompt": "medium_email",
+          "rss_mb": 3508.40625,
+          "ttft_s": 0.07224949999908858,
+          "total_s": 0.5915093339990563,
+          "completion_tokens": 38,
+          "prompt_tokens": 663,
+          "total_tokens": 701,
+          "tokens_per_s": 64.24243509919089,
+          "output": "Hi Maya, quick update from the call today. We should keep the launch copy short, mention local transcription, and avoid promising cloud sync. Can you send the revised draft by Friday?",
+          "event_count": 40,
+          "usage": {
+            "completion_tokens": 38,
+            "prompt_tokens": 663,
+            "total_tokens": 701,
+            "prompt_tokens_details": {
+              "cached_tokens": 615
+            }
+          },
+          "timings": {
+            "cache_n": 615,
+            "prompt_n": 48,
+            "prompt_ms": 69.712,
+            "prompt_per_token_ms": 1.4523333333333335,
+            "prompt_per_second": 688.5471654808355,
+            "predicted_n": 38,
+            "predicted_ms": 519.24,
+            "predicted_per_token_ms": 13.66421052631579,
+            "predicted_per_second": 73.18388413835605
+          }
+        },
+        {
+          "phase": "run",
+          "index": 2,
+          "prompt": "list_format",
+          "rss_mb": 3508.453125,
+          "ttft_s": 0.058994707998863305,
+          "total_s": 0.3692951249995531,
+          "completion_tokens": 23,
+          "prompt_tokens": 648,
+          "total_tokens": 671,
+          "tokens_per_s": 62.280811315957216,
+          "output": "- check microphone permission\n- download the model\n- hold the hotkey and dictate\n- paste the result",
+          "event_count": 25,
+          "usage": {
+            "completion_tokens": 23,
+            "prompt_tokens": 648,
+            "total_tokens": 671,
+            "prompt_tokens_details": {
+              "cached_tokens": 615
+            }
+          },
+          "timings": {
+            "cache_n": 615,
+            "prompt_n": 33,
+            "prompt_ms": 56.505,
+            "prompt_per_token_ms": 1.7122727272727274,
+            "prompt_per_second": 584.0191133528006,
+            "predicted_n": 23,
+            "predicted_ms": 310.282,
+            "predicted_per_token_ms": 13.490521739130434,
+            "predicted_per_second": 74.12611753179365
+          }
+        },
+        {
+          "phase": "run",
+          "index": 3,
+          "prompt": "short_cleanup",
+          "rss_mb": 3508.484375,
+          "ttft_s": 0.05685020800046914,
+          "total_s": 0.2815035000003263,
+          "completion_tokens": 17,
+          "prompt_tokens": 640,
+          "total_tokens": 657,
+          "tokens_per_s": 60.3900129127357,
+          "output": "Hey Alex, can you review the pricing doc and send me the final number?",
+          "event_count": 19,
+          "usage": {
+            "completion_tokens": 17,
+            "prompt_tokens": 640,
+            "total_tokens": 657,
+            "prompt_tokens_details": {
+              "cached_tokens": 615
+            }
+          },
+          "timings": {
+            "cache_n": 615,
+            "prompt_n": 25,
+            "prompt_ms": 54.395,
+            "prompt_per_token_ms": 2.1758,
+            "prompt_per_second": 459.6010662744737,
+            "predicted_n": 17,
+            "predicted_ms": 224.638,
+            "predicted_per_token_ms": 13.214,
+            "predicted_per_second": 75.67731194187982
+          }
+        }
+      ],
+      "summary": {
+        "runs": 3,
+        "ttft_s": {
+          "mean": 0.06269813866614034,
+          "median": 0.058994707998863305,
+          "min": 0.05685020800046914,
+          "max": 0.07224949999908858
+        },
+        "total_s": {
+          "mean": 0.4141026529996452,
+          "median": 0.3692951249995531,
+          "min": 0.2815035000003263,
+          "max": 0.5915093339990563
+        },
+        "tokens_per_s": {
+          "mean": 62.304419775961264,
+          "median": 62.280811315957216,
+          "min": 60.3900129127357,
+          "max": 64.24243509919089
+        },
+        "rss_mb": {
+          "mean": 3508.4479166666665,
+          "median": 3508.453125,
+          "min": 3508.40625,
+          "max": 3508.484375
+        },
+        "completion_tokens": {
+          "mean": 26.0,
+          "median": 23.0,
+          "min": 17.0,
+          "max": 38.0
+        }
+      },
+      "log_path": "benchmarks/local_llm/results/logs/llama_cpp_q4_k_m_gguf.log"
+    },
+    {
+      "backend": "mlx_vlm_e2b_4bit",
+      "model": "mlx-community/gemma-4-e2b-it-4bit",
+      "command": [
+        "/Users/kishan/dev/suniye-mlx-benchmark/.bench-venv/bin/python",
+        "-m",
+        "mlx_vlm.server",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "52294",
+        "--model",
+        "mlx-community/gemma-4-e2b-it-4bit",
+        "--max-tokens",
+        "128",
+        "--max-kv-size",
+        "4096"
+      ],
+      "startup_s": 2.5606064580006205,
+      "startup_rss_mb": 4145.28125,
+      "samples": [
+        {
+          "phase": "warmup",
+          "index": 0,
+          "prompt": "short_cleanup",
+          "rss_mb": 4158.078125,
+          "ttft_s": 0.42843262500173296,
+          "total_s": 0.6136083750006947,
+          "completion_tokens": 16,
+          "prompt_tokens": 641,
+          "total_tokens": 657,
+          "tokens_per_s": 26.075263395780553,
+          "output": "hey alex comma can you review the pricing doc and send me the final number",
+          "event_count": 18,
+          "usage": {
+            "prompt_tokens": 641,
+            "completion_tokens": 16,
+            "total_tokens": 657,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "prompt_n": 641,
+            "cache_n": 0,
+            "predicted_n": 16,
+            "prompt_ms": 359.2333750002581,
+            "prompt_per_token_ms": 0.560426482059685,
+            "prompt_per_second": 1784.3553650869424,
+            "predicted_ms": 197.63066666782834,
+            "predicted_per_token_ms": 12.351916666739271,
+            "predicted_per_second": 80.95909541656467,
+            "peak_memory": 4.501598624
+          }
+        },
+        {
+          "phase": "run",
+          "index": 1,
+          "prompt": "medium_email",
+          "rss_mb": 4158.234375,
+          "ttft_s": 0.4073906250014261,
+          "total_s": 0.8748416250000446,
+          "completion_tokens": 39,
+          "prompt_tokens": 664,
+          "total_tokens": 703,
+          "tokens_per_s": 44.57949746046664,
+          "output": "new paragraph hi maya comma quick update from the call today period we should keep the launch copy short comma mention local transcription comma and avoid promising cloud sync period can you send the revised draft by friday",
+          "event_count": 41,
+          "usage": {
+            "prompt_tokens": 664,
+            "completion_tokens": 39,
+            "total_tokens": 703,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "prompt_n": 664,
+            "cache_n": 0,
+            "predicted_n": 39,
+            "prompt_ms": 356.03599999922153,
+            "prompt_per_token_ms": 0.5361987951795505,
+            "prompt_per_second": 1864.9799458522505,
+            "predicted_ms": 479.68888089517833,
+            "predicted_per_token_ms": 12.299714894748162,
+            "predicted_per_second": 81.30269754683408,
+            "peak_memory": 4.53467854
+          }
+        },
+        {
+          "phase": "run",
+          "index": 2,
+          "prompt": "list_format",
+          "rss_mb": 4158.234375,
+          "ttft_s": 0.3938954589993955,
+          "total_s": 0.7473800839998148,
+          "completion_tokens": 30,
+          "prompt_tokens": 649,
+          "total_tokens": 679,
+          "tokens_per_s": 40.140218668186286,
+          "output": "make this a bullet list:\n- check microphone permission\n- download the model\n- hold the hotkey and dictate\n- paste the result",
+          "event_count": 32,
+          "usage": {
+            "prompt_tokens": 649,
+            "completion_tokens": 30,
+            "total_tokens": 679,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "prompt_n": 649,
+            "cache_n": 0,
+            "predicted_n": 30,
+            "prompt_ms": 350.8842500013998,
+            "prompt_per_token_ms": 0.5406536979990751,
+            "prompt_per_second": 1849.6127996551882,
+            "predicted_ms": 365.5524568973211,
+            "predicted_per_token_ms": 12.18508189657737,
+            "predicted_per_second": 82.06756495259066,
+            "peak_memory": 4.53467854
+          }
+        },
+        {
+          "phase": "run",
+          "index": 3,
+          "prompt": "short_cleanup",
+          "rss_mb": 4158.234375,
+          "ttft_s": 0.3947000839998509,
+          "total_s": 0.5796552499996324,
+          "completion_tokens": 16,
+          "prompt_tokens": 641,
+          "total_tokens": 657,
+          "tokens_per_s": 27.60261379502756,
+          "output": "hey alex comma can you review the pricing doc and send me the final number",
+          "event_count": 18,
+          "usage": {
+            "prompt_tokens": 641,
+            "completion_tokens": 16,
+            "total_tokens": 657,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          },
+          "timings": {
+            "prompt_n": 641,
+            "cache_n": 0,
+            "predicted_n": 16,
+            "prompt_ms": 349.270875000002,
+            "prompt_per_token_ms": 0.544884360374418,
+            "prompt_per_second": 1835.251794184088,
+            "predicted_ms": 197.26626666573185,
+            "predicted_per_token_ms": 12.32914166660824,
+            "predicted_per_second": 81.10864706083801,
+            "peak_memory": 4.53467854
+          }
+        }
+      ],
+      "summary": {
+        "runs": 3,
+        "ttft_s": {
+          "mean": 0.39866205600022414,
+          "median": 0.3947000839998509,
+          "min": 0.3938954589993955,
+          "max": 0.4073906250014261
+        },
+        "total_s": {
+          "mean": 0.7339589863331639,
+          "median": 0.7473800839998148,
+          "min": 0.5796552499996324,
+          "max": 0.8748416250000446
+        },
+        "tokens_per_s": {
+          "mean": 37.440776641226826,
+          "median": 40.140218668186286,
+          "min": 27.60261379502756,
+          "max": 44.57949746046664
+        },
+        "rss_mb": {
+          "mean": 4158.234375,
+          "median": 4158.234375,
+          "min": 4158.234375,
+          "max": 4158.234375
+        },
+        "completion_tokens": {
+          "mean": 28.333333333333332,
+          "median": 30.0,
+          "min": 16.0,
+          "max": 39.0
+        }
+      },
+      "log_path": "benchmarks/local_llm/results/logs/mlx_vlm_e2b_4bit.log"
+    }
+  ]
+}
