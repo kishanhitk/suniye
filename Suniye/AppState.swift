@@ -565,6 +565,13 @@ final class AppState {
     var isMagicFormatSetupTestInProgress = false
     var magicFormatSetupTestResult: MagicFormatSetupTestResult?
     private var magicFormatSetupTestRequestID = 0
+    var localGemmaInstallState: LocalLLMInstallState = .notInstalled {
+        didSet {
+            if oldValue != localGemmaInstallState {
+                onStateChange?()
+            }
+        }
+    }
 
     var launchAtLoginStatus: LaunchAtLoginStatus = .disabled
     var launchAtLoginError: String?
@@ -670,7 +677,69 @@ final class AppState {
     }
 
     var localGemmaMagicFormatAvailability: LocalGemmaAvailability {
-        localGemmaMagicFormatPostProcessor.availability
+        guard localLLMModelManager.isHardwareSupported else {
+            return .unsupportedHardware
+        }
+        guard localLLMModelManager.isInstalled(localLLMModelManager.preferredModelID) else {
+            return .modelNotInstalled
+        }
+        return localGemmaMagicFormatPostProcessor.availability
+    }
+
+    var isLocalGemmaProviderSelectable: Bool {
+        localLLMModelManager.isHardwareSupported
+    }
+
+    var localGemmaModelEntry: LocalLLMModelCatalogEntry {
+        LocalLLMModelCatalog.entry(for: localLLMModelManager.preferredModelID)
+    }
+
+    var localGemmaInstallStatusText: String {
+        switch localGemmaInstallState {
+        case let .unavailable(reason):
+            return reason
+        case .notInstalled:
+            return "Local model not installed."
+        case let .downloading(progress):
+            return "\(progress.percentageText) downloaded • \(progress.downloadedSizeText) of \(progress.expectedSizeText)"
+        case .verifying:
+            return "Verifying local model..."
+        case let .installed(byteCount):
+            if localGemmaMagicFormatAvailability.isAvailable {
+                return "Local model ready."
+            }
+            let sizeText = ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file)
+            return "\(sizeText) installed. \(localGemmaMagicFormatAvailability.statusText)"
+        case let .failed(message):
+            return message
+        }
+    }
+
+    var localGemmaInstallProgress: Double? {
+        if case let .downloading(progress) = localGemmaInstallState {
+            return progress.fractionCompleted
+        }
+        return nil
+    }
+
+    var canStartLocalGemmaDownload: Bool {
+        guard localLLMModelManager.isHardwareSupported,
+              !localGemmaInstallState.isActive,
+              localGemmaDownloadTask == nil else {
+            return false
+        }
+        return !localGemmaInstallState.isInstalled
+    }
+
+    var canCancelLocalGemmaDownload: Bool {
+        if case .downloading = localGemmaInstallState {
+            return true
+        }
+        return false
+    }
+
+    var canDeleteLocalGemmaModel: Bool {
+        localGemmaInstallState.isInstalled && !localGemmaInstallState.isActive
     }
 
     var usesAppleMagicFormatSettings: Bool {
@@ -719,13 +788,13 @@ final class AppState {
                 return "Using Apple Intelligence locally."
             }
             if localGemmaMagicFormatAvailability.isAvailable {
-                return "Using local Gemma 4 Q4."
+                return "Using local model."
             }
             return "Local providers unavailable. API endpoint will be used if configured."
         case .appleFoundationModels:
             return appleMagicFormatAvailability.statusText
         case .localGemma:
-            return localGemmaMagicFormatAvailability.statusText
+            return localGemmaInstallStatusText
         case .openAICompatible:
             return "Using your OpenAI-compatible endpoint."
         }
@@ -1075,8 +1144,8 @@ final class AppState {
             items.append(
                 AttentionItem(
                     id: "model-missing",
-                    title: "Model not installed",
-                    detail: "Download \(currentASRModelEntry.displayName) to enable dictation.",
+                    title: "Dictation model not installed",
+                    detail: "Download \(currentASRModelEntry.displayName) to enable offline speech recognition.",
                     severity: .warning,
                     recommendedSection: .model
                 )
@@ -1149,8 +1218,8 @@ final class AppState {
             items.append(
                 AttentionItem(
                     id: "apple-magic-format-unavailable",
-                    title: "Apple Intelligence unavailable",
-                    detail: appleMagicFormatAvailability.statusText,
+                    title: "Magic Format Apple Intelligence unavailable",
+                    detail: "\(appleMagicFormatAvailability.statusText) This only affects Magic Format cleanup.",
                     severity: .warning,
                     recommendedSection: .style
                 )
@@ -1161,8 +1230,8 @@ final class AppState {
             items.append(
                 AttentionItem(
                     id: "local-gemma-magic-format-unavailable",
-                    title: "Local Gemma unavailable",
-                    detail: localGemmaMagicFormatAvailability.statusText,
+                    title: "Magic Format local model unavailable",
+                    detail: "\(localGemmaMagicFormatAvailability.statusText) This only affects Magic Format cleanup, not dictation.",
                     severity: .warning,
                     recommendedSection: .style
                 )
@@ -1185,6 +1254,7 @@ final class AppState {
     private let llmPostProcessor: LLMPostProcessor
     private let appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
     private let localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor
+    private let localLLMModelManager: LocalLLMModelManagerProtocol
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let generalSettingsStore: GeneralSettingsStoreProtocol
     private let historyStore: HistoryStoreProtocol
@@ -1205,6 +1275,7 @@ final class AppState {
     private var recordingStart: Date?
     private var activeRecordingSource: RecordingSource?
     private var overlayErrorResetTask: Task<Void, Never>?
+    private var localGemmaDownloadTask: Task<Void, Never>?
     private var isHydratingLLMSettings = false
     private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
@@ -1230,6 +1301,7 @@ final class AppState {
         llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
         appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor = AppleFoundationModelsPostProcessor(),
         localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor = LocalGemmaPostProcessor(),
+        localLLMModelManager: LocalLLMModelManagerProtocol = LocalLLMModelManager(),
         llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
         historyStore: HistoryStoreProtocol = HistoryStore(),
@@ -1266,6 +1338,7 @@ final class AppState {
         self.llmPostProcessor = llmPostProcessor
         self.appleMagicFormatPostProcessor = appleMagicFormatPostProcessor
         self.localGemmaMagicFormatPostProcessor = localGemmaMagicFormatPostProcessor
+        self.localLLMModelManager = localLLMModelManager
         self.llmSettingsStore = llmSettingsStore
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
@@ -1300,6 +1373,7 @@ final class AppState {
         refreshInputDevices()
         refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
+        refreshLocalGemmaInstallState()
 
         if floatingIndicatorEnabled {
             floatingIndicatorController.onAction = { [weak self] in
@@ -1470,6 +1544,14 @@ final class AppState {
         ])
     }
 
+    func openAppleIntelligenceSettings() {
+        openSystemSettings(urlCandidates: [
+            "x-apple.systempreferences:com.apple.Siri-Settings.extension",
+            "x-apple.systempreferences:com.apple.preference.speech",
+            "x-apple.systempreferences:",
+        ])
+    }
+
     func refreshInputDevices() {
         let devices = audioCaptureService.availableInputDevices()
         availableInputDevices = devices
@@ -1629,6 +1711,157 @@ final class AppState {
 
     func resetGemmaMagicFormatPrompt() {
         llmGemmaSystemPrompt = LLMDefaults.defaultGemmaMagicFormatPrompt
+    }
+
+    func resetBaseMagicFormatPrompt() {
+        llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt
+    }
+
+    func selectRecommendedMagicFormatProviderIfAutomatic() {
+        guard llmProvider == .automatic else {
+            return
+        }
+
+        if isLocalGemmaProviderSelectable {
+            llmProvider = .localGemma
+        } else if appleMagicFormatAvailability.isAvailable {
+            llmProvider = .appleFoundationModels
+        } else {
+            llmProvider = .openAICompatible
+        }
+    }
+
+    func refreshLocalGemmaInstallState() {
+        guard !localGemmaInstallState.isActive else {
+            return
+        }
+        localGemmaInstallState = localLLMModelManager.installState(for: localLLMModelManager.preferredModelID)
+    }
+
+    func startLocalGemmaDownload() {
+        guard canStartLocalGemmaDownload else {
+            return
+        }
+
+        let modelID = localLLMModelManager.preferredModelID
+        let entry = LocalLLMModelCatalog.entry(for: modelID)
+        localGemmaInstallState = .downloading(LocalLLMDownloadProgress(
+            fractionCompleted: 0,
+            downloadedBytes: 0,
+            expectedBytes: entry.expectedSizeBytes
+        ))
+        clearMagicFormatSetupTestResult()
+
+        localGemmaDownloadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            do {
+                AppLogger.shared.log(.info, "local gemma download started model=\(entry.filename)")
+                try await self.localLLMModelManager.downloadModel(modelID) { [weak self] progress in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        if progress.fractionCompleted >= 0.999 {
+                            self.localGemmaInstallState = .verifying
+                        } else {
+                            self.localGemmaInstallState = .downloading(progress)
+                        }
+                    }
+                }
+
+                self.localGemmaInstallState = self.localLLMModelManager.installState(for: modelID)
+                self.magicFormatSetupTestResult = nil
+                AppLogger.shared.log(.info, "local gemma download complete model=\(entry.filename)")
+            } catch {
+                let message: String
+                if Task.isCancelled || (error as NSError).code == NSURLErrorCancelled {
+                    message = "Download canceled."
+                    AppLogger.shared.log(.info, "local gemma download canceled model=\(entry.filename)")
+                } else {
+                    message = error.localizedDescription
+                    AppLogger.shared.log(.error, "local gemma download failed model=\(entry.filename) error=\(message)")
+                }
+                self.localGemmaInstallState = .failed(message)
+            }
+
+            self.localGemmaDownloadTask = nil
+        }
+    }
+
+    func cancelLocalGemmaDownload() {
+        guard canCancelLocalGemmaDownload else {
+            return
+        }
+        localGemmaDownloadTask?.cancel()
+        localLLMModelManager.cancelDownload()
+    }
+
+    func deleteLocalGemmaModel() {
+        guard !localGemmaInstallState.isActive else {
+            return
+        }
+
+        let modelID = localLLMModelManager.preferredModelID
+        do {
+            try localLLMModelManager.deleteModel(modelID)
+            localGemmaInstallState = localLLMModelManager.installState(for: modelID)
+            clearMagicFormatSetupTestResult()
+            AppLogger.shared.log(.info, "local gemma model deleted")
+        } catch {
+            localGemmaInstallState = .failed(error.localizedDescription)
+            AppLogger.shared.log(.error, "local gemma model delete failed error=\(error.localizedDescription)")
+        }
+    }
+
+    func testLocalGemmaSetup() async {
+        clearMagicFormatSetupTestResult()
+
+        guard llmEnabled, usesLocalGemmaMagicFormatSettings else {
+            return
+        }
+
+        guard localGemmaInstallState.isInstalled else {
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: "Download the local model first.",
+                severity: .error
+            )
+            return
+        }
+
+        let requestID = magicFormatSetupTestRequestID
+        isMagicFormatSetupTestInProgress = true
+        let startTime = Date()
+        let config = makeLocalGemmaMagicFormatConfig()
+
+        defer {
+            if requestID == magicFormatSetupTestRequestID {
+                isMagicFormatSetupTestInProgress = false
+            }
+        }
+
+        do {
+            try await localGemmaMagicFormatPostProcessor.testSetup(config: config)
+            guard requestID == magicFormatSetupTestRequestID else {
+                AppLogger.shared.log(.info, "ignored stale local gemma setup test success")
+                return
+            }
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: "Local model works.",
+                severity: .success
+            )
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AppLogger.shared.log(.info, "local gemma setup test success latency_ms=\(latencyMs)")
+        } catch {
+            guard requestID == magicFormatSetupTestRequestID else {
+                AppLogger.shared.log(.info, "ignored stale local gemma setup test failure")
+                return
+            }
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: localGemmaSetupTestMessage(for: error),
+                severity: .error
+            )
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AppLogger.shared.log(.warning, "local gemma setup test failed latency_ms=\(latencyMs) error=\(error.localizedDescription)")
+        }
     }
 
     func copyRecentResult(_ result: RecentResult) {
@@ -2216,7 +2449,10 @@ final class AppState {
         let config = makeLocalGemmaMagicFormatConfig()
         let startTime = Date()
         let slowWarningTask = startMagicFormatSlowWarningTask()
-        statusText = "Polishing..."
+        statusText = "Starting local model..."
+        if case .processing = floatingIndicatorState {
+            setFloatingIndicatorState(.processing(message: "Starting local model..."))
+        }
         defer {
             slowWarningTask.cancel()
         }
@@ -2913,6 +3149,25 @@ final class AppState {
         case .malformedResponse, .emptyOutput, .invalidConfiguration:
             return "The service responded, but not in a compatible format."
         }
+    }
+
+    private func localGemmaSetupTestMessage(for error: Error) -> String {
+        if let llmError = error as? LLMPostProcessorError {
+            switch llmError {
+            case .timeout:
+                return "Local model took too long to respond."
+            case .invalidConfiguration:
+                return localGemmaMagicFormatAvailability.statusText
+            case .provider, .malformedResponse, .emptyOutput:
+                return "Local model responded, but not in a compatible format."
+            case .network:
+                return "Couldn't reach the local model server."
+            case .unauthorized:
+                return "Local model rejected the local authorization token."
+            }
+        }
+
+        return error.localizedDescription
     }
 
     private func setFloatingIndicatorState(_ state: FloatingIndicatorState) {

@@ -59,6 +59,7 @@
 		9F822914FE40C1F233C1E055 /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F51B3DBFA1B6B9385FA63197 /* MainWindowController.swift */; };
 		A0D2E4AA64DD241ACA69457D /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A1F146473FBF70BF26A9257B /* Sparkle */; };
 		A2F15D9699E05918C7A96F38 /* AppleFoundationModelsPostProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A16E593550418D25E53DADE /* AppleFoundationModelsPostProcessorTests.swift */; };
+		A450DED6405BD9A57EEB5F5D /* LocalGemmaLlamaServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E002F2ED2661905D8B147320 /* LocalGemmaLlamaServerTests.swift */; };
 		AA7DAE1D8BC31737F5640A1B /* FragmentMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 82E6C7AA7DADED73D5C382DA /* FragmentMono-Regular.ttf */; };
 		B251595E3A3080BF2437F31F /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 633F09E2901A308614E595B1 /* TranscriptionService.swift */; };
 		B4C54A8C12A3F949CD83553C /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 865C597BBA404F5F6A049278 /* ModelManager.swift */; };
@@ -71,11 +72,13 @@
 		D70B86338C771C5459B2AEC4 /* FloatingIndicatorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BFAD0B3FD93106BF02E29E5 /* FloatingIndicatorController.swift */; };
 		D7DEF12DA8F4CFDA5B62F554 /* LLMSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9102217BDA1AFAF69837DE /* LLMSettings.swift */; };
 		D838D2BD8C4395C5E6DC4C7B /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E69ACF4C1E158980EDDDA56F /* MenuBarView.swift */; };
+		D9F4D7341720CE4EEF76C1E4 /* LocalLLMModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D04231EADA487127BD0F97D0 /* LocalLLMModelManager.swift */; };
 		DB41AE744EEE09C11E39DB1C /* ListeningOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1FAF2B003307FDF0EBA9BA0 /* ListeningOverlay.swift */; };
 		DC8532A515E87705B0F4BFC5 /* SherpaOnnx.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3471ED7BC0D817AF7D5C516 /* SherpaOnnx.swift */; };
 		E435A53080A9CFFB863EB188 /* TranscriptionServiceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 626CB9CE980C310ED49F770F /* TranscriptionServiceE2ETests.swift */; };
 		E59D820122464E89DAF21073 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A3F45C96538887F8FF79E57 /* MainWindowView.swift */; };
 		E9210190CDD60F212008A02A /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045F7AACA142A791AFFA7C43 /* SettingsModels.swift */; };
+		EEBF448E040909CCFCADF515 /* LocalLLMModelManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 316F29545ABA85276127E522 /* LocalLLMModelManagerTests.swift */; };
 		F047041193A8264676FEC71A /* GoogleSans-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = D483D635E7A8E177A09D311E /* GoogleSans-Variable.ttf */; };
 		F75A72DF1CAEBAD284065DE4 /* ModelManagerE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E5CEF1B4FEEFC12719CB94A /* ModelManagerE2ETests.swift */; };
 		F8F1129D24AD0988D93BD4DA /* AppleFoundationModelsPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96753F72AB64EA4C792D7AB5 /* AppleFoundationModelsPostProcessor.swift */; };
@@ -121,6 +124,7 @@
 		1BFAD0B3FD93106BF02E29E5 /* FloatingIndicatorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorController.swift; sourceTree = "<group>"; };
 		2A40680D7D6D6D80DF33509F /* IssueReportWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueReportWindowController.swift; sourceTree = "<group>"; };
 		2B2D87825E1C649DC7A33115 /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
+		316F29545ABA85276127E522 /* LocalLLMModelManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMModelManagerTests.swift; sourceTree = "<group>"; };
 		34CC65DD3994740D7F4B27AB /* HotkeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyService.swift; sourceTree = "<group>"; };
 		386B9D8DFD2BB94A83C15741 /* OpenRouterPostProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterPostProcessorTests.swift; sourceTree = "<group>"; };
 		3985E6550A900F3B6818F86C /* MainWindowPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowPages.swift; sourceTree = "<group>"; };
@@ -166,6 +170,7 @@
 		C7F3C3D023876B9EE8256C00 /* Suniye.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Suniye.swift; sourceTree = "<group>"; };
 		CA71D523EC88C51E2E911E4B /* LocalGemmaPostProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaPostProcessorTests.swift; sourceTree = "<group>"; };
 		CF483C4F8F43B591D1E13ABA /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		D04231EADA487127BD0F97D0 /* LocalLLMModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMModelManager.swift; sourceTree = "<group>"; };
 		D0D96966D22AF827757DB24D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D1FAF2B003307FDF0EBA9BA0 /* ListeningOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningOverlay.swift; sourceTree = "<group>"; };
 		D3161CA1497B7EEA0FB2CE36 /* GeneralSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsStore.swift; sourceTree = "<group>"; };
@@ -175,6 +180,7 @@
 		DA3686A213810FF9BE79E3CC /* FloatingIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorView.swift; sourceTree = "<group>"; };
 		DA6D9C9D8CF9BF854941CE7C /* SuniyeNativeBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SuniyeNativeBridge.mm; sourceTree = "<group>"; };
 		DDBA8DA30905F29C03B8A36D /* AppStateSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSettingsTests.swift; sourceTree = "<group>"; };
+		E002F2ED2661905D8B147320 /* LocalGemmaLlamaServerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaLlamaServerTests.swift; sourceTree = "<group>"; };
 		E0C52C50D2C18B69DD4C775D /* TextInsertionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionServiceTests.swift; sourceTree = "<group>"; };
 		E3471ED7BC0D817AF7D5C516 /* SherpaOnnx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherpaOnnx.swift; sourceTree = "<group>"; };
 		E5C333F9E2D2E53C8388E26E /* FloatingIndicatorLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorLayoutTests.swift; sourceTree = "<group>"; };
@@ -254,7 +260,9 @@
 				A90D5B82089314B9767C0F6D /* IssueReportServiceTests.swift */,
 				BDD66CF413C1ACA8DB2719C4 /* KeychainServiceTests.swift */,
 				A2C954DD9B2466B271CC6A1D /* LLMSettingsStoreTests.swift */,
+				E002F2ED2661905D8B147320 /* LocalGemmaLlamaServerTests.swift */,
 				CA71D523EC88C51E2E911E4B /* LocalGemmaPostProcessorTests.swift */,
+				316F29545ABA85276127E522 /* LocalLLMModelManagerTests.swift */,
 				13D4CAFD2439B222AD68BE12 /* MainWindowSectionTests.swift */,
 				6E5CEF1B4FEEFC12719CB94A /* ModelManagerE2ETests.swift */,
 				386B9D8DFD2BB94A83C15741 /* OpenRouterPostProcessorTests.swift */,
@@ -321,6 +329,7 @@
 				0B9102217BDA1AFAF69837DE /* LLMSettings.swift */,
 				6E03421F785ED24BFBF7A030 /* LLMSettingsStore.swift */,
 				F38DC2A495AF93A16B002372 /* LocalGemmaPostProcessor.swift */,
+				D04231EADA487127BD0F97D0 /* LocalLLMModelManager.swift */,
 				865C597BBA404F5F6A049278 /* ModelManager.swift */,
 				B9D8487CCDF6CB1A7023E095 /* OpenRouterPostProcessor.swift */,
 				46CB08DB3B0815DC0E822412 /* SoundFeedbackService.swift */,
@@ -375,6 +384,7 @@
 				99EF748BCBA0691FBF109379 /* Resources */,
 				A29A4D7AFEB429BCA73E739E /* Frameworks */,
 				B806F2BB425A587B745F939B /* Embed Frameworks */,
+				5593D6AA8EFA08CCC085A93F /* Embed Local LLM Helper */,
 			);
 			buildRules = (
 			);
@@ -436,6 +446,28 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		5593D6AA8EFA08CCC085A93F /* Embed Local LLM Helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Local LLM Helper";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\n\nHELPER_SOURCE=\"${SUNIYE_LLAMA_SERVER_PATH:-${SRCROOT}/Suniye/LocalLLM/llama-server}\"\nHELPER_DEST=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/llama-server\"\n\nif [[ -x \"${HELPER_SOURCE}\" ]]; then\n  mkdir -p \"$(dirname \"${HELPER_DEST}\")\"\n  /usr/bin/ditto \"${HELPER_SOURCE}\" \"${HELPER_DEST}\"\n  /bin/chmod 755 \"${HELPER_DEST}\"\n  echo \"Embedded local LLM helper: ${HELPER_DEST}\"\nelif [[ \"${CONFIGURATION}\" == \"Release\" ]]; then\n  echo \"Missing local LLM helper at ${HELPER_SOURCE}. Run scripts/setup_llama_cpp.sh or set SUNIYE_LLAMA_SERVER_PATH.\" >&2\n  exit 1\nelse\n  echo \"Skipping local LLM helper embed; helper not found at ${HELPER_SOURCE}.\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		AF49742217D708DC2E850818 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -463,6 +495,7 @@
 				0BB11537C982C731E8A9C06D /* LaunchAtLoginService.swift in Sources */,
 				DB41AE744EEE09C11E39DB1C /* ListeningOverlay.swift in Sources */,
 				189B9BFB7463476C1FB70AD8 /* LocalGemmaPostProcessor.swift in Sources */,
+				D9F4D7341720CE4EEF76C1E4 /* LocalLLMModelManager.swift in Sources */,
 				5281C912B2528C33773C008C /* MainWindowComponents.swift in Sources */,
 				9F822914FE40C1F233C1E055 /* MainWindowController.swift in Sources */,
 				3A346E97AE82272F134A4D00 /* MainWindowPages.swift in Sources */,
@@ -505,7 +538,9 @@
 				6CED932755ECE82560241EC0 /* IssueReportServiceTests.swift in Sources */,
 				B6E82EB100F0460A6BBF520D /* KeychainServiceTests.swift in Sources */,
 				7EB9B5550B0A955CDFC3FC17 /* LLMSettingsStoreTests.swift in Sources */,
+				A450DED6405BD9A57EEB5F5D /* LocalGemmaLlamaServerTests.swift in Sources */,
 				63B5E0D3334CB7E08AF7D5EA /* LocalGemmaPostProcessorTests.swift in Sources */,
+				EEBF448E040909CCFCADF515 /* LocalLLMModelManagerTests.swift in Sources */,
 				460A066A38DD8822D3A8D8C5 /* MainWindowSectionTests.swift in Sources */,
 				F75A72DF1CAEBAD284065DE4 /* ModelManagerE2ETests.swift in Sources */,
 				96D47C5DFE84C5C9C49BBAD6 /* OpenRouterPostProcessorTests.swift in Sources */,

@@ -279,6 +279,75 @@ final class StubModelManager: ModelManagerProtocol {
     }
 }
 
+final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
+    var catalog: [LocalLLMModelCatalogEntry] = LocalLLMModelCatalog.entries
+    var preferredModelID: LocalLLMModelID = LocalLLMModelCatalog.preferredModelID
+    var isHardwareSupported = true
+    var installedModelIDs: Set<LocalLLMModelID> = []
+    var installedByteCounts: [LocalLLMModelID: Int64] = [
+        LocalLLMModelCatalog.preferredModelID: LocalLLMModelCatalog.entry(for: LocalLLMModelCatalog.preferredModelID).expectedSizeBytes
+    ]
+    var downloadResult: Result<Void, Error> = .success(())
+    var deleteCallCount = 0
+    var downloadCallCount = 0
+    var cancelCallCount = 0
+    var lastDeletedModelID: LocalLLMModelID?
+    var lastDownloadedModelID: LocalLLMModelID?
+    var progressValues: [LocalLLMDownloadProgress] = []
+    var rootDirectory = URL(fileURLWithPath: "/tmp/suniye-llm", isDirectory: true)
+
+    func modelsRootDirectoryURL() throws -> URL {
+        rootDirectory
+    }
+
+    func modelFileURL(for modelID: LocalLLMModelID) throws -> URL {
+        rootDirectory.appendingPathComponent(LocalLLMModelCatalog.entry(for: modelID).filename)
+    }
+
+    func isInstalled(_ modelID: LocalLLMModelID) -> Bool {
+        isHardwareSupported && installedModelIDs.contains(modelID)
+    }
+
+    func installedByteCount(for modelID: LocalLLMModelID) -> Int64 {
+        isInstalled(modelID) ? (installedByteCounts[modelID] ?? 0) : 0
+    }
+
+    func installState(for modelID: LocalLLMModelID) -> LocalLLMInstallState {
+        guard isHardwareSupported else {
+            return .unavailable("Requires Apple Silicon.")
+        }
+        guard isInstalled(modelID) else {
+            return .notInstalled
+        }
+        return .installed(installedByteCount(for: modelID))
+    }
+
+    func downloadModel(_ modelID: LocalLLMModelID, progress: @escaping @Sendable (LocalLLMDownloadProgress) -> Void) async throws {
+        downloadCallCount += 1
+        lastDownloadedModelID = modelID
+        let entry = LocalLLMModelCatalog.entry(for: modelID)
+        let progressValue = LocalLLMDownloadProgress(
+            fractionCompleted: 1,
+            downloadedBytes: entry.expectedSizeBytes,
+            expectedBytes: entry.expectedSizeBytes
+        )
+        progressValues.append(progressValue)
+        progress(progressValue)
+        try downloadResult.get()
+        installedModelIDs.insert(modelID)
+    }
+
+    func cancelDownload() {
+        cancelCallCount += 1
+    }
+
+    func deleteModel(_ modelID: LocalLLMModelID) throws {
+        deleteCallCount += 1
+        lastDeletedModelID = modelID
+        installedModelIDs.remove(modelID)
+    }
+}
+
 final class StubTranscriptionService: TranscriptionServiceProtocol {
     var transcribeResult: Result<String, Error> = .success("")
     var loadModelResult: Result<Void, Error> = .success(())
@@ -382,6 +451,7 @@ func makeTestAppState(
     llmPostProcessor: LLMPostProcessor = NoopLLMPostProcessor(),
     appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor = NoopAppleMagicFormatPostProcessor(),
     localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor = NoopLocalGemmaMagicFormatPostProcessor(),
+    localLLMModelManager: LocalLLMModelManagerProtocol = StubLocalLLMModelManager(),
     llmSettingsStore: LLMSettingsStoreProtocol = TestLLMSettingsStore(),
     generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
     historyStore: HistoryStoreProtocol = TestHistoryStore(),
@@ -409,6 +479,7 @@ func makeTestAppState(
         llmPostProcessor: llmPostProcessor,
         appleMagicFormatPostProcessor: appleMagicFormatPostProcessor,
         localGemmaMagicFormatPostProcessor: localGemmaMagicFormatPostProcessor,
+        localLLMModelManager: localLLMModelManager,
         llmSettingsStore: llmSettingsStore,
         generalSettingsStore: generalSettingsStore,
         historyStore: historyStore,

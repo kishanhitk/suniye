@@ -1,5 +1,6 @@
 .DS_Store
 .derivedData/
+.build/
 dist/
 .derivedData-release/
 .dmg-staging/
@@ -8,5 +9,6 @@ third_party/
 website/node_modules/
 website/.astro/
 website/.wrangler/
+Suniye/LocalLLM/
 Suniye.xcodeproj/project.xcworkspace/xcuserdata/
 Suniye.xcodeproj/xcuserdata/

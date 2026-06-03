@@ -113,6 +113,12 @@ fi
 
 mkdir -p "${DIST_DIR}"
 DERIVED_DATA="${ROOT_DIR}/.derivedData-release"
+LLAMA_SERVER_HELPER="${ROOT_DIR}/Suniye/LocalLLM/llama-server"
+
+if [[ ! -x "${LLAMA_SERVER_HELPER}" ]]; then
+  echo "Preparing Local Gemma llama-server helper..."
+  "${ROOT_DIR}/scripts/setup_llama_cpp.sh"
+fi
 
 BUILD_ARGS=(Release --derived-data-path "${DERIVED_DATA}" --output-dir "${DIST_DIR}")
 BUILD_ARGS+=(--version "${VERSION}")

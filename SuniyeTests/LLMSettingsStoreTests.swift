@@ -183,8 +183,8 @@ final class LLMSettingsStoreTests: XCTestCase {
     }
 
     func testMagicFormatProviderMetadataIncludesLocalGemma() {
-        XCTAssertEqual(MagicFormatProvider.localGemma.displayName, "Local Gemma")
-        XCTAssertEqual(MagicFormatProvider.localGemma.description, "Local formatting with Gemma 4 Q4.")
+        XCTAssertEqual(MagicFormatProvider.localGemma.displayName, "Local Model")
+        XCTAssertEqual(MagicFormatProvider.localGemma.description, "Local formatting with an on-device LLM.")
         XCTAssertTrue(MagicFormatProvider.allCases.contains(.localGemma))
     }
 

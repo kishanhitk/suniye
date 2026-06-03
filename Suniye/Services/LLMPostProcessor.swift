@@ -85,6 +85,7 @@ enum AppleFoundationModelsAvailability: Equatable {
 
 enum LocalGemmaAvailability: Equatable {
     case available
+    case unsupportedHardware
     case runtimeUnavailable
     case modelNotInstalled
 
@@ -95,11 +96,13 @@ enum LocalGemmaAvailability: Equatable {
     var statusText: String {
         switch self {
         case .available:
-            return "Gemma 4 Q4 ready."
+            return "Local model ready."
+        case .unsupportedHardware:
+            return "Local model requires Apple Silicon."
         case .runtimeUnavailable:
-            return "Local Gemma runtime is not available."
+            return "Local model runtime is not available."
         case .modelNotInstalled:
-            return "Local Gemma 4 Q4 model is not available."
+            return "Local model is not installed."
         }
     }
 
@@ -107,6 +110,8 @@ enum LocalGemmaAvailability: Equatable {
         switch self {
         case .available:
             return "available"
+        case .unsupportedHardware:
+            return "unsupported_hardware"
         case .runtimeUnavailable:
             return "runtime_unavailable"
         case .modelNotInstalled:

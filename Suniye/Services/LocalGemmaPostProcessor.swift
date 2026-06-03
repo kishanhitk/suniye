@@ -2,29 +2,18 @@ import Foundation
 
 enum LocalGemmaDefaults {
     static let providerLogName = "local_gemma"
-    static let modelCandidates = [
-        LocalGemmaModelCandidate(
-            displayName: "Gemma 4 E2B Instruct Q4_K_M",
-            repository: "dahus/gemma-4-e2b-it-Q4_K_M-GGUF",
-            filename: "gemma-4-e2b-Q4_K_M.gguf",
-            expectedSizeText: "3.43 GB"
-        ),
-        LocalGemmaModelCandidate(
-            displayName: "Gemma 4 26B A4B Instruct Q4_K_M",
-            repository: "ggml-org/gemma-4-26B-A4B-it-GGUF",
-            filename: "gemma-4-26B-A4B-it-Q4_K_M.gguf",
-            expectedSizeText: "16.8 GB"
-        ),
-    ]
-    static let modelDisplayName = modelCandidates[0].displayName
-    static let modelRepository = modelCandidates[0].repository
-    static let modelFilename = modelCandidates[0].filename
-    static let expectedSizeText = modelCandidates[0].expectedSizeText
+    static let modelID = LocalLLMModelCatalog.preferredModelID
+    static let modelEntry = LocalLLMModelCatalog.entry(for: modelID)
+    static let modelDisplayName = modelEntry.displayName
+    static let modelRepository = modelEntry.repository
+    static let modelFilename = modelEntry.filename
+    static let expectedSizeText = modelEntry.expectedSizeText
     static let startupTimeoutSeconds = 90.0
     static let generationTimeoutSeconds = 15.0
+    static let idleTimeoutSeconds = 180.0
     static let maxTokens = 256
 
-    static func serverArguments(modelPath: String, port: Int) -> [String] {
+    static func serverArguments(modelPath: String, port: Int, apiKey: String) -> [String] {
         return [
             "--model", modelPath,
             "--host", "127.0.0.1",
@@ -32,26 +21,22 @@ enum LocalGemmaDefaults {
             "--ctx-size", "4096",
             "--parallel", "1",
             "--reasoning", "off",
+            "--api-key", apiKey,
             "--no-webui",
             "--log-disable",
         ]
     }
 }
 
-struct LocalGemmaModelCandidate: Equatable {
-    let displayName: String
-    let repository: String
-    let filename: String
-    let expectedSizeText: String
-
-    var huggingFaceCacheDirectoryName: String {
-        "models--\(repository.replacingOccurrences(of: "/", with: "--"))"
-    }
-}
-
 protocol LocalGemmaClient {
     var availability: LocalGemmaAvailability { get }
-    func generate(instructions: String, prompt: String, maxTokens: Int, timeoutSeconds: Double) async throws -> String
+    func generate(
+        instructions: String,
+        prompt: String,
+        maxTokens: Int,
+        startupTimeoutSeconds: Double,
+        timeoutSeconds: Double
+    ) async throws -> String
 }
 
 final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
@@ -84,6 +69,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
                     instructions: instructions,
                     prompt: prompt,
                     maxTokens: config.maxTokens,
+                    startupTimeoutSeconds: config.startupTimeoutSeconds,
                     timeoutSeconds: config.generationTimeoutSeconds
                 )
                 let sanitized = sanitizeGemmaOutput(raw)
@@ -110,6 +96,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             instructions: "Reply with OK.",
             prompt: "Connection test.",
             maxTokens: 8,
+            startupTimeoutSeconds: config.startupTimeoutSeconds,
             timeoutSeconds: config.generationTimeoutSeconds
         )
         guard !sanitizeGemmaOutput(output).isEmpty else {
@@ -162,39 +149,64 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
     }
 }
 
-private struct LocalGemmaRuntime: Equatable {
+struct LocalGemmaRuntime: Equatable {
     let serverExecutableURL: URL
-    let model: LocalGemmaModelCandidate
+    let model: LocalLLMModelCatalogEntry
     let modelURL: URL
 }
 
-private enum LocalGemmaRuntimeResolution {
+enum LocalGemmaRuntimeResolution {
     case success(LocalGemmaRuntime)
     case failure(LocalGemmaAvailability)
 }
 
-private struct LocalGemmaRuntimeLocator {
+struct LocalGemmaRuntimeLocator {
+    let modelManager: LocalLLMModelManagerProtocol
+    let fileManager: FileManager
+
+    init(
+        modelManager: LocalLLMModelManagerProtocol = LocalLLMModelManager(),
+        fileManager: FileManager = .default
+    ) {
+        self.modelManager = modelManager
+        self.fileManager = fileManager
+    }
+
     func resolve() -> LocalGemmaRuntimeResolution {
+        guard modelManager.isHardwareSupported else {
+            return .failure(.unsupportedHardware)
+        }
+        guard modelManager.isInstalled(LocalGemmaDefaults.modelID),
+              let modelURL = try? modelManager.modelFileURL(for: LocalGemmaDefaults.modelID) else {
+            return .failure(.modelNotInstalled)
+        }
         guard let serverURL = findExecutable(named: "llama-server") else {
             return .failure(.runtimeUnavailable)
         }
-        guard let installedModel = findModelFile() else {
-            return .failure(.modelNotInstalled)
-        }
         return .success(LocalGemmaRuntime(
             serverExecutableURL: serverURL,
-            model: installedModel.model,
-            modelURL: installedModel.url
+            model: LocalGemmaDefaults.modelEntry,
+            modelURL: modelURL
         ))
     }
 
     private func findExecutable(named name: String) -> URL? {
-        let fileManager = FileManager.default
+        if let override = ProcessInfo.processInfo.environment["SUNIYE_LLAMA_SERVER_PATH"], !override.isEmpty {
+            let url = URL(fileURLWithPath: override)
+            if fileManager.isExecutableFile(atPath: url.path) {
+                return url
+            }
+        }
+
         let bundleCandidates = [
             Bundle.main.url(forAuxiliaryExecutable: name),
             Bundle.main.url(forResource: name, withExtension: nil),
             Bundle.main.url(forResource: name, withExtension: nil, subdirectory: "LocalLLM"),
             Bundle.main.url(forResource: name, withExtension: nil, subdirectory: "LocalLLM/bin"),
+            Bundle.main.bundleURL
+                .appendingPathComponent("Contents", isDirectory: true)
+                .appendingPathComponent("Helpers", isDirectory: true)
+                .appendingPathComponent(name),
             Bundle.main.bundleURL
                 .appendingPathComponent("Contents", isDirectory: true)
                 .appendingPathComponent("MacOS", isDirectory: true)
@@ -205,107 +217,13 @@ private struct LocalGemmaRuntimeLocator {
                 .appendingPathComponent(name),
         ].compactMap { $0 }
 
-        var candidates = bundleCandidates.map(\.path) + [
-            "/opt/homebrew/bin/\(name)",
-            "/usr/local/bin/\(name)",
-            "/usr/bin/\(name)",
-        ]
-
-        if let path = ProcessInfo.processInfo.environment["PATH"] {
-            candidates.append(
-                contentsOf: path
-                    .split(separator: ":")
-                    .map { String($0) }
-                    .map { URL(fileURLWithPath: $0).appendingPathComponent(name).path }
-            )
-        }
-
-        return candidates
+        return bundleCandidates
             .lazy
-            .map { URL(fileURLWithPath: $0) }
             .first { fileManager.isExecutableFile(atPath: $0.path) }
-    }
-
-    private func findModelFile() -> (model: LocalGemmaModelCandidate, url: URL)? {
-        let fileManager = FileManager.default
-        var candidates: [(LocalGemmaModelCandidate, URL)] = []
-
-        for model in LocalGemmaDefaults.modelCandidates {
-            candidates.append(contentsOf: bundledModelCandidates(model: model).map { (model, $0) })
-        }
-
-        if let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-            let roots = [
-                appSupport
-                    .appendingPathComponent("Suniye", isDirectory: true)
-                    .appendingPathComponent("llm", isDirectory: true),
-                appSupport
-                    .appendingPathComponent("Suniye", isDirectory: true)
-                    .appendingPathComponent("models", isDirectory: true),
-            ]
-            for model in LocalGemmaDefaults.modelCandidates {
-                for root in roots {
-                    candidates.append((model, root.appendingPathComponent(model.filename)))
-                }
-            }
-        }
-
-        for model in LocalGemmaDefaults.modelCandidates {
-            candidates.append(contentsOf: huggingFaceCacheCandidates(model: model).map { (model, $0) })
-        }
-
-        return candidates.first { fileManager.fileExists(atPath: $0.1.path) }
-    }
-
-    private func bundledModelCandidates(model: LocalGemmaModelCandidate) -> [URL] {
-        let modelURL = URL(fileURLWithPath: model.filename)
-        let name = modelURL.deletingPathExtension().lastPathComponent
-        let ext = modelURL.pathExtension
-
-        return [
-            Bundle.main.url(forResource: name, withExtension: ext),
-            Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "LocalLLM"),
-            Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "LocalLLM/models"),
-            Bundle.main.bundleURL
-                .appendingPathComponent("Contents", isDirectory: true)
-                .appendingPathComponent("Resources", isDirectory: true)
-                .appendingPathComponent(model.filename),
-            Bundle.main.bundleURL
-                .appendingPathComponent("Contents", isDirectory: true)
-                .appendingPathComponent("Resources", isDirectory: true)
-                .appendingPathComponent("LocalLLM", isDirectory: true)
-                .appendingPathComponent(model.filename),
-        ].compactMap { $0 }
-    }
-
-    private func huggingFaceCacheCandidates(model: LocalGemmaModelCandidate) -> [URL] {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let snapshotsRoot = home
-            .appendingPathComponent(".cache", isDirectory: true)
-            .appendingPathComponent("huggingface", isDirectory: true)
-            .appendingPathComponent("hub", isDirectory: true)
-            .appendingPathComponent(model.huggingFaceCacheDirectoryName, isDirectory: true)
-            .appendingPathComponent("snapshots", isDirectory: true)
-
-        guard let snapshots = try? FileManager.default.contentsOfDirectory(
-            at: snapshotsRoot,
-            includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return []
-        }
-
-        return snapshots
-            .sorted { lhs, rhs in
-                let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                return lhsDate > rhsDate
-            }
-            .map { $0.appendingPathComponent(model.filename) }
     }
 }
 
-private final class LocalGemmaLlamaCppClient: LocalGemmaClient {
+final class LocalGemmaLlamaCppClient: LocalGemmaClient {
     private let locator: LocalGemmaRuntimeLocator
     private let server: LocalGemmaLlamaServer
     private let session: URLSession
@@ -329,7 +247,13 @@ private final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         }
     }
 
-    func generate(instructions: String, prompt: String, maxTokens: Int, timeoutSeconds: Double) async throws -> String {
+    func generate(
+        instructions: String,
+        prompt: String,
+        maxTokens: Int,
+        startupTimeoutSeconds: Double,
+        timeoutSeconds: Double
+    ) async throws -> String {
         let runtime: LocalGemmaRuntime
         switch locator.resolve() {
         case let .success(resolved):
@@ -338,18 +262,25 @@ private final class LocalGemmaLlamaCppClient: LocalGemmaClient {
             throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
         }
 
-        let baseURL = try await server.baseURL(for: runtime, startupTimeoutSeconds: LocalGemmaDefaults.startupTimeoutSeconds)
-        let url = baseURL.appendingPathComponent("v1/chat/completions")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = timeoutSeconds
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: makePayload(
+        let endpoint = try await server.endpoint(
+            for: runtime,
+            startupTimeoutSeconds: startupTimeoutSeconds,
+            idleTimeoutSeconds: LocalGemmaDefaults.idleTimeoutSeconds
+        )
+        defer {
+            Task {
+                await server.scheduleIdleShutdown(after: LocalGemmaDefaults.idleTimeoutSeconds)
+            }
+        }
+
+        let request = try LocalGemmaCompletionRequestFactory.makeRequest(
+            endpoint: endpoint,
             instructions: instructions,
             prompt: prompt,
             maxTokens: maxTokens,
-            modelName: runtime.model.displayName
-        ))
+            modelName: runtime.model.displayName,
+            timeoutSeconds: timeoutSeconds
+        )
 
         do {
             let (data, response) = try await session.data(for: request)
@@ -369,8 +300,38 @@ private final class LocalGemmaLlamaCppClient: LocalGemmaClient {
             throw LLMPostProcessorError.network(error.localizedDescription)
         }
     }
+}
 
-    private func makePayload(instructions: String, prompt: String, maxTokens: Int, modelName: String) -> [String: Any] {
+struct LocalGemmaServerEndpoint: Equatable {
+    let baseURL: URL
+    let apiKey: String
+}
+
+enum LocalGemmaCompletionRequestFactory {
+    static func makeRequest(
+        endpoint: LocalGemmaServerEndpoint,
+        instructions: String,
+        prompt: String,
+        maxTokens: Int,
+        modelName: String,
+        timeoutSeconds: Double
+    ) throws -> URLRequest {
+        let url = endpoint.baseURL.appendingPathComponent("v1/chat/completions")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeoutSeconds
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(endpoint.apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: makePayload(
+            instructions: instructions,
+            prompt: prompt,
+            maxTokens: maxTokens,
+            modelName: modelName
+        ))
+        return request
+    }
+
+    private static func makePayload(instructions: String, prompt: String, maxTokens: Int, modelName: String) -> [String: Any] {
         let userContent = """
         \(instructions)
 
@@ -389,7 +350,9 @@ private final class LocalGemmaLlamaCppClient: LocalGemmaClient {
             "stream": false,
         ]
     }
+}
 
+private extension LocalGemmaLlamaCppClient {
     private func extractText(from data: Data) throws -> String {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
@@ -418,25 +381,35 @@ private final class LocalGemmaLlamaCppClient: LocalGemmaClient {
     }
 }
 
-private actor LocalGemmaLlamaServer {
+actor LocalGemmaLlamaServer {
     private var process: Process?
     private var runtime: LocalGemmaRuntime?
-    private var serverURL: URL?
+    private var endpoint: LocalGemmaServerEndpoint?
+    private var idleShutdownTask: Task<Void, Never>?
 
-    func baseURL(for runtime: LocalGemmaRuntime, startupTimeoutSeconds: Double) async throws -> URL {
-        if let process, process.isRunning, self.runtime == runtime, let serverURL {
-            return serverURL
+    func endpoint(for runtime: LocalGemmaRuntime, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> LocalGemmaServerEndpoint {
+        if let process, process.isRunning, self.runtime == runtime, let endpoint {
+            scheduleIdleShutdown(after: idleTimeoutSeconds)
+            return endpoint
         }
 
         stop()
 
         let port = Int.random(in: 49_152 ... 65_535)
-        let url = URL(string: "http://127.0.0.1:\(port)")!
+        let endpoint = LocalGemmaServerEndpoint(
+            baseURL: URL(string: "http://127.0.0.1:\(port)")!,
+            apiKey: Self.makeAPIKey()
+        )
         let process = Process()
         process.executableURL = runtime.serverExecutableURL
-        process.arguments = LocalGemmaDefaults.serverArguments(modelPath: runtime.modelURL.path, port: port)
+        process.arguments = LocalGemmaDefaults.serverArguments(
+            modelPath: runtime.modelURL.path,
+            port: port,
+            apiKey: endpoint.apiKey
+        )
         process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        let standardError = Pipe()
+        process.standardError = standardError
 
         do {
             try process.run()
@@ -446,20 +419,55 @@ private actor LocalGemmaLlamaServer {
 
         self.process = process
         self.runtime = runtime
-        self.serverURL = url
+        self.endpoint = endpoint
 
-        try await waitUntilHealthy(baseURL: url, process: process, timeoutSeconds: startupTimeoutSeconds)
-        return url
+        do {
+            try await waitUntilHealthy(
+                endpoint: endpoint,
+                process: process,
+                standardError: standardError,
+                timeoutSeconds: startupTimeoutSeconds
+            )
+        } catch {
+            stop()
+            throw error
+        }
+        scheduleIdleShutdown(after: idleTimeoutSeconds)
+        return endpoint
     }
 
-    private func waitUntilHealthy(baseURL: URL, process: Process, timeoutSeconds: Double) async throws {
+    func scheduleIdleShutdown(after idleTimeoutSeconds: Double) {
+        idleShutdownTask?.cancel()
+        guard idleTimeoutSeconds > 0 else {
+            return
+        }
+        idleShutdownTask = Task { [weak self] in
+            let delayNanos = UInt64(idleTimeoutSeconds * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: delayNanos)
+            guard !Task.isCancelled else {
+                return
+            }
+            await self?.stopForIdleTimeout()
+        }
+    }
+
+    private func waitUntilHealthy(
+        endpoint: LocalGemmaServerEndpoint,
+        process: Process,
+        standardError: Pipe,
+        timeoutSeconds: Double
+    ) async throws {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {
             if !process.isRunning {
-                throw LLMPostProcessorError.provider("server_exited")
+                let reason = Self.exitReason(
+                    status: process.terminationStatus,
+                    standardError: standardError
+                )
+                throw LLMPostProcessorError.provider(reason)
             }
 
-            if await isHealthy(baseURL: baseURL) {
+            if await isHealthy(endpoint: endpoint) {
                 return
             }
 
@@ -469,9 +477,10 @@ private actor LocalGemmaLlamaServer {
         throw LLMPostProcessorError.timeout
     }
 
-    private func isHealthy(baseURL: URL) async -> Bool {
-        var request = URLRequest(url: baseURL.appendingPathComponent("health"))
+    private func isHealthy(endpoint: LocalGemmaServerEndpoint) async -> Bool {
+        var request = URLRequest(url: endpoint.baseURL.appendingPathComponent("health"))
         request.timeoutInterval = 1
+        request.setValue("Bearer \(endpoint.apiKey)", forHTTPHeaderField: "Authorization")
 
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
@@ -484,10 +493,36 @@ private actor LocalGemmaLlamaServer {
         }
     }
 
+    private func stopForIdleTimeout() {
+        AppLogger.shared.log(.info, "local gemma server idle shutdown")
+        stop()
+    }
+
     private func stop() {
+        idleShutdownTask?.cancel()
+        idleShutdownTask = nil
         process?.terminate()
         process = nil
         runtime = nil
-        serverURL = nil
+        endpoint = nil
+    }
+
+    private static func makeAPIKey() -> String {
+        "suniye-\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+    }
+
+    private static func exitReason(status: Int32, standardError: Pipe) -> String {
+        let data = standardError.fileHandleForReading.readDataToEndOfFile()
+        guard let text = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !text.isEmpty else {
+            return "server_exited_\(status)"
+        }
+
+        let lines = text
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let detail = lines.last { !$0.isEmpty } ?? "stderr"
+        return "server_exited_\(status)_\(String(detail.prefix(160)))"
     }
 }

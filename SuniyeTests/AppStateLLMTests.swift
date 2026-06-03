@@ -121,6 +121,8 @@ final class AppStateLLMTests: XCTestCase {
             availability: .available,
             result: .success("gemma polished")
         )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
         let keychain = TestKeychainService(value: nil)
         let store = TestLLMSettingsStore()
 
@@ -128,6 +130,7 @@ final class AppStateLLMTests: XCTestCase {
             llmPostProcessor: fakeLLM,
             appleMagicFormatPostProcessor: fakeApple,
             localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager,
             llmSettingsStore: store,
             keychainService: keychain
         )
@@ -176,12 +179,15 @@ final class AppStateLLMTests: XCTestCase {
             availability: .available,
             result: .success("gemma polished")
         )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
         let keychain = TestKeychainService(value: nil)
         let store = TestLLMSettingsStore()
 
         let appState = makeTestAppState(
             llmPostProcessor: fakeLLM,
             localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager,
             llmSettingsStore: store,
             keychainService: keychain
         )
@@ -216,6 +222,91 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(output, "raw text")
         XCTAssertEqual(fakeGemma.callCount, 0)
         XCTAssertEqual(appState.magicFormatSetupState, .needsServiceSetup)
+    }
+
+    func testLocalGemmaNotInstalledShowsDownloadState() {
+        let localManager = StubLocalLLMModelManager()
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+
+        XCTAssertEqual(appState.localGemmaInstallState, .notInstalled)
+        XCTAssertTrue(appState.canStartLocalGemmaDownload)
+        XCTAssertEqual(appState.localGemmaMagicFormatAvailability, .modelNotInstalled)
+        XCTAssertEqual(appState.magicFormatSetupState, .needsServiceSetup)
+    }
+
+    func testLocalGemmaDownloadUpdatesInstallState() async {
+        let localManager = StubLocalLLMModelManager()
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        appState.startLocalGemmaDownload()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(localManager.downloadCallCount, 1)
+        XCTAssertTrue(appState.localGemmaInstallState.isInstalled)
+        XCTAssertFalse(appState.canStartLocalGemmaDownload)
+    }
+
+    func testLocalGemmaCancelForwardsToManager() {
+        let localManager = StubLocalLLMModelManager()
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+        appState.localGemmaInstallState = .downloading(LocalLLMDownloadProgress(
+            fractionCompleted: 0.25,
+            downloadedBytes: 25,
+            expectedBytes: 100
+        ))
+
+        appState.cancelLocalGemmaDownload()
+
+        XCTAssertEqual(localManager.cancelCallCount, 1)
+    }
+
+    func testLocalGemmaDeleteModelUpdatesInstallState() {
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+
+        XCTAssertTrue(appState.localGemmaInstallState.isInstalled)
+
+        appState.deleteLocalGemmaModel()
+
+        XCTAssertEqual(localManager.deleteCallCount, 1)
+        XCTAssertEqual(appState.localGemmaInstallState, .notInstalled)
+    }
+
+    func testLocalGemmaUnsupportedHardwareIsDisabled() {
+        let localManager = StubLocalLLMModelManager()
+        localManager.isHardwareSupported = false
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+
+        XCTAssertFalse(appState.isLocalGemmaProviderSelectable)
+        XCTAssertEqual(appState.localGemmaInstallState, .unavailable("Requires Apple Silicon."))
+        XCTAssertEqual(appState.localGemmaMagicFormatAvailability, .unsupportedHardware)
+    }
+
+    func testLocalGemmaSetupTestDoesNotRequireAPIKey() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager,
+            keychainService: TestKeychainService(value: nil)
+        )
+
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        await appState.testLocalGemmaSetup()
+
+        XCTAssertNotNil(fakeGemma.lastConfig)
+        XCTAssertEqual(appState.magicFormatSetupTestResult, MagicFormatSetupTestResult(message: "Local model works.", severity: .success))
     }
 
     func testExplicitAPIProviderStillRequiresAPIKey() async {

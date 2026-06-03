@@ -13,12 +13,13 @@ Do not manually bump app version metadata in `project.yml` just to cut a release
 1. PR description and commits reflect the release changes accurately.
 2. User-facing docs are updated for onboarding, settings, and supported model changes (`README.md`, `docs/*`).
 3. `./scripts/doctor.sh` passes.
-4. `./scripts/e2e_preflight.sh` passes.
-5. `./scripts/e2e_smoke.sh` passes.
-6. `SUNIYE_CODESIGN_IDENTITY="Suniye Self-Signed Release" ./scripts/package_release.sh --version <version> --build-channel stable` runs locally.
-7. `./scripts/verify_release.sh --dist-dir dist --version <version> --build-channel stable` passes.
-8. Third-party license/redistribution verification completed (`THIRD_PARTY_NOTICES.md`).
-9. If the ASR catalog changed, verify the supported model names and download assets still match the published sherpa-onnx artifacts.
+4. `./scripts/setup_llama_cpp.sh` has staged `Suniye/LocalLLM/llama-server` for Local Gemma.
+5. `./scripts/e2e_preflight.sh` passes.
+6. `./scripts/e2e_smoke.sh` passes.
+7. `SUNIYE_CODESIGN_IDENTITY="Suniye Self-Signed Release" ./scripts/package_release.sh --version <version> --build-channel stable` runs locally.
+8. `./scripts/verify_release.sh --dist-dir dist --version <version> --build-channel stable` passes.
+9. Third-party license/redistribution verification completed (`THIRD_PARTY_NOTICES.md`).
+10. If the ASR catalog changed, verify the supported model names and download assets still match the published sherpa-onnx artifacts.
 
 ## Publish
 1. Create and push tag:

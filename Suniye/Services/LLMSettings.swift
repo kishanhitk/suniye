@@ -13,7 +13,7 @@ enum MagicFormatProvider: String, CaseIterable, Codable {
         case .appleFoundationModels:
             return "Apple Intelligence"
         case .localGemma:
-            return "Local Gemma"
+            return "Local Model"
         case .openAICompatible:
             return "API Endpoint"
         }
@@ -22,11 +22,11 @@ enum MagicFormatProvider: String, CaseIterable, Codable {
     var description: String {
         switch self {
         case .automatic:
-            return "Apple Intelligence, then local Gemma, then API fallback."
+            return "Apple Intelligence, then local model, then API fallback."
         case .appleFoundationModels:
             return "Local formatting with Apple's on-device model."
         case .localGemma:
-            return "Local formatting with Gemma 4 Q4."
+            return "Local formatting with an on-device LLM."
         case .openAICompatible:
             return "Use your OpenAI-compatible endpoint and API key."
         }

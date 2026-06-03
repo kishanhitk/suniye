@@ -88,13 +88,36 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
     }
 
     func testServerArgumentsDisableReasoning() {
-        let arguments = LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf", port: 51_234)
+        let arguments = LocalGemmaDefaults.serverArguments(modelPath: "/tmp/model.gguf", port: 51_234, apiKey: "local-key")
 
         XCTAssertEqual(arguments.first, "--model")
         XCTAssertTrue(arguments.contains("/tmp/model.gguf"))
         XCTAssertTrue(arguments.contains("51234"))
         XCTAssertTrue(arguments.contains("--reasoning"))
         XCTAssertTrue(arguments.contains("off"))
+        XCTAssertTrue(arguments.contains("--api-key"))
+        XCTAssertTrue(arguments.contains("local-key"))
+        XCTAssertTrue(arguments.contains("--no-webui"))
+    }
+
+    func testCompletionRequestsIncludeBearerAuth() throws {
+        let endpoint = LocalGemmaServerEndpoint(
+            baseURL: URL(string: "http://127.0.0.1:51234")!,
+            apiKey: "secret-local-key"
+        )
+
+        let request = try LocalGemmaCompletionRequestFactory.makeRequest(
+            endpoint: endpoint,
+            instructions: "Clean text.",
+            prompt: "<transcript>raw</transcript>",
+            maxTokens: 64,
+            modelName: "Gemma",
+            timeoutSeconds: 3
+        )
+
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer secret-local-key")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:51234/v1/chat/completions")
     }
 
     private func makeConfig() -> LocalGemmaMagicFormatConfig {
@@ -120,7 +143,13 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         self.outputs = outputs
     }
 
-    func generate(instructions: String, prompt: String, maxTokens: Int, timeoutSeconds: Double) async throws -> String {
+    func generate(
+        instructions: String,
+        prompt: String,
+        maxTokens: Int,
+        startupTimeoutSeconds: Double,
+        timeoutSeconds: Double
+    ) async throws -> String {
         self.instructions.append(instructions)
         prompts.append(prompt)
         let index = callCount

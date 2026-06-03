@@ -52,7 +52,14 @@ sign_if_exists() {
 }
 
 FRAMEWORKS_PATH="${APP_PATH}/Contents/Frameworks"
+HELPERS_PATH="${APP_PATH}/Contents/Helpers"
 SPARKLE_FRAMEWORK_PATH="${FRAMEWORKS_PATH}/Sparkle.framework"
+
+if [[ -d "${HELPERS_PATH}" ]]; then
+  while IFS= read -r -d '' helper_path; do
+    sign_if_exists "${helper_path}"
+  done < <(find "${HELPERS_PATH}" -maxdepth 1 -type f -perm -111 -print0 | sort -z)
+fi
 
 if [[ -d "${SPARKLE_FRAMEWORK_PATH}" ]]; then
   SPARKLE_FRAMEWORK_VERSION="$(readlink "${SPARKLE_FRAMEWORK_PATH}/Versions/Current" 2>/dev/null || true)"

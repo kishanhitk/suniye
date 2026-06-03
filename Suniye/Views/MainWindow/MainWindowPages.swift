@@ -1,4 +1,5 @@
 import Carbon
+import AppKit
 import SwiftUI
 
 struct DashboardPage: View {
@@ -324,6 +325,9 @@ struct StylePage: View {
     @Bindable var appState: AppState
     @State private var vocabularyDraft = ""
     @State private var apiKeyDraft = ""
+    @State private var isApplePromptExpanded = false
+    @State private var isLocalGemmaPromptExpanded = false
+    @State private var isAPIEndpointConfigurationExpanded = false
 
     var body: some View {
         DetailScrollContainer {
@@ -334,15 +338,8 @@ struct StylePage: View {
             }
 
             if appState.llmEnabled {
-                providerSection
-                if appState.needsAPIConfigurationForMagicFormat {
-                    connectionSection
-                    modelSection
-                } else if appState.usesLocalGemmaMagicFormatSettings {
-                    localGemmaSection
-                }
+                formatterSection
                 vocabularySection
-                promptSection
             }
         }
     }
@@ -358,7 +355,7 @@ struct StylePage: View {
                         .foregroundStyle(.purple)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Improve text before pasting")
+                        Text("Magic Format")
                             .font(AppTypography.bodyMedium)
                         Text("Fix grammar, wording, and names after dictation.")
                             .font(AppTypography.caption)
@@ -381,7 +378,7 @@ struct StylePage: View {
                         Circle()
                             .fill(setupStatusColor)
                             .frame(width: 7, height: 7)
-                        Text(setupStatusText)
+                        Text(topStatusText)
                             .font(AppTypography.caption)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                     }
@@ -390,188 +387,304 @@ struct StylePage: View {
         }
     }
 
-    // MARK: - Provider
+    // MARK: - Formatter
 
-    private var providerSection: some View {
+    private var formatterSection: some View {
         VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-            SectionHeading(title: "Magic Format Provider")
+            SectionHeading(title: "Formatter")
 
-            SurfaceCard {
-                HStack(alignment: .center, spacing: 16) {
-                    Text("Provider")
-                        .font(AppTypography.body)
-                        .foregroundStyle(Color.primary)
+            SurfaceCard(padding: 8) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(providerOptions.enumerated()), id: \.element) { index, provider in
+                        formatterProviderRow(for: provider)
 
-                    Spacer(minLength: 12)
+                        if index < providerOptions.count - 1 {
+                            CardDivider()
+                                .padding(.leading, 56)
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear {
+            appState.selectRecommendedMagicFormatProviderIfAutomatic()
+        }
+    }
 
-                    NativePopupPicker(
-                        items: MagicFormatProvider.allCases,
-                        selection: $appState.llmProvider,
-                        title: { $0.displayName },
-                        isEnabled: providerPickerEnabled(_:)
+    private func formatterProviderRow(for provider: MagicFormatProvider) -> some View {
+        let isSelected = appState.llmProvider == provider
+        let isEnabled = providerPickerEnabled(provider)
+        let status = providerStatus(for: provider)
+
+        return VStack(alignment: .leading, spacing: 0) {
+            if isEnabled {
+                Button {
+                    appState.llmProvider = provider
+                } label: {
+                    formatterProviderHeader(for: provider, isSelected: isSelected, isEnabled: isEnabled, status: status)
+                }
+                .buttonStyle(.plain)
+            } else {
+                formatterProviderHeader(for: provider, isSelected: isSelected, isEnabled: isEnabled, status: status)
+            }
+
+            providerUnavailableHelp(for: provider)
+
+            if isSelected {
+                CardDivider()
+                    .padding(.leading, 56)
+                selectedProviderDetails(for: provider)
+                    .padding(.leading, 56)
+                    .padding(.trailing, 10)
+                    .padding(.vertical, 10)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isSelected ? MainWindowPalette.selectedFill.opacity(0.8) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(isSelected ? Color.accentColor.opacity(0.35) : Color.clear, lineWidth: 1)
+        )
+    }
+
+    private func formatterProviderHeader(
+        for provider: MagicFormatProvider,
+        isSelected: Bool,
+        isEnabled: Bool,
+        status: ProviderStatus
+    ) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            providerIcon(for: provider)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(provider.displayName)
+                    .font(AppTypography.bodyMedium)
+                    .foregroundStyle(Color.primary)
+
+                Text(providerSubtitle(for: provider))
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                FlowLayout(spacing: 5) {
+                    ForEach(providerCapabilityTags(for: provider), id: \.self) { tag in
+                        StylePageProviderTagBadge(title: tag)
+                    }
+                }
+                .padding(.top, 3)
+            }
+
+            Spacer(minLength: 12)
+
+            StylePageProviderStatusPill(text: status.text, color: status.color)
+
+            StylePageRadioIndicator(isSelected: isSelected, isEnabled: isEnabled)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .contentShape(Rectangle())
+        .opacity(isEnabled || isSelected ? 1 : 0.76)
+    }
+
+    @ViewBuilder
+    private func selectedProviderDetails(for provider: MagicFormatProvider) -> some View {
+        switch provider {
+        case .automatic:
+            VStack(alignment: .leading, spacing: 8) {
+                settingsValueRow(label: "Using", value: appState.magicFormatProviderDetailText)
+            }
+        case .appleFoundationModels:
+            providerPromptDisclosure(isExpanded: $isApplePromptExpanded)
+        case .localGemma:
+            VStack(alignment: .leading, spacing: 10) {
+                settingsValueRow(label: "Model", value: appState.localGemmaModelEntry.displayName)
+                CardDivider()
+                settingsValueRow(label: "Size", value: appState.localGemmaModelEntry.expectedSizeText)
+
+                if let detail = localGemmaInstallDetail {
+                    CardDivider()
+                    settingsValueRow(
+                        label: detail.label,
+                        value: detail.value,
+                        valueFont: AppTypography.codeBody
                     )
-                    .frame(width: 280)
                 }
-                .frame(maxWidth: .infinity, minHeight: 28)
+
+                CardDivider()
+                localGemmaControls
+                CardDivider()
+                providerPromptDisclosure(isExpanded: $isLocalGemmaPromptExpanded)
             }
-        }
-    }
-
-    // MARK: - Local Gemma
-
-    private var localGemmaSection: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-            SectionHeading(title: "Local Model")
-
-            SurfaceCard {
-                VStack(spacing: 10) {
-                    settingsValueRow(label: "Model", value: LocalGemmaDefaults.modelDisplayName)
-                    CardDivider()
-                    settingsValueRow(label: "Size", value: LocalGemmaDefaults.expectedSizeText)
-                    CardDivider()
-                    settingsValueRow(label: "Runtime", value: appState.localGemmaMagicFormatAvailability.statusText)
-                }
-            }
-        }
-    }
-
-    // MARK: - Connection
-
-    private var connectionSection: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-            SectionHeading(title: "Connection")
-
-            SurfaceCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Endpoint")
-                            .font(AppTypography.subheadlineSemibold)
-                        Text("Any OpenAI-compatible API.")
-                            .font(AppTypography.caption)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-
-                        TextField("https://api.openai.com/v1/chat/completions", text: $appState.llmEndpointURLString)
-                            .textFieldStyle(.roundedBorder)
-                            .font(AppTypography.codeBodyMedium)
-
-                        if let error = appState.llmEndpointValidationError {
-                            Label(error, systemImage: "exclamationmark.triangle.fill")
-                                .font(AppTypography.caption)
-                                .foregroundStyle(.red)
-                        }
-                    }
-
-                    CardDivider()
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("API Key")
-                                .font(AppTypography.subheadlineSemibold)
-                            Spacer(minLength: 12)
-                            StylePageStatusPill(
-                                text: appState.llmKeyStatusText,
-                                isPositive: appState.isMagicFormatSetupVerified
-                            )
-                        }
-
-                        HStack(spacing: 8) {
-                            SecureField("Paste API key", text: $apiKeyDraft)
-                                .textFieldStyle(.roundedBorder)
-                                .onChange(of: apiKeyDraft) { _, _ in
-                                    appState.clearMagicFormatSetupTestResult()
-                                }
-
-                            Button(appState.hasLLMAPIKey ? "Replace" : "Save") {
-                                appState.saveLLMAPIKey(apiKeyDraft)
-                                apiKeyDraft = ""
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                            Button("Clear") {
-                                appState.clearLLMAPIKey()
-                                apiKeyDraft = ""
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(!appState.hasLLMAPIKey)
-                        }
-
-                        if let error = appState.llmKeyOperationError {
-                            Label(error, systemImage: "exclamationmark.triangle.fill")
-                                .font(AppTypography.caption)
-                                .foregroundStyle(.red)
-                        }
-                    }
-
-                    CardDivider()
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            Button(appState.isMagicFormatSetupTestInProgress ? "Testing\u{2026}" : "Test Connection") {
-                                Task {
-                                    await appState.testMagicFormatSetup(apiKeyDraft: apiKeyDraft)
-                                }
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(!appState.canTestMagicFormatSetup(apiKeyDraft: apiKeyDraft))
-
-                            if appState.isMagicFormatSetupTestInProgress {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-
-                            Spacer()
-
-                            if let result = appState.magicFormatSetupTestResult {
-                                Label(result.message, systemImage: result.severity == .success ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                    .font(AppTypography.caption)
-                                    .foregroundStyle(result.severity.color)
-                            }
-                        }
-
-                        Text("Works with unsaved keys too.")
-                            .font(AppTypography.caption)
-                            .foregroundStyle(MainWindowPalette.tertiaryText)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Model
-
-    private var modelSection: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-            SectionHeading(title: "Model")
-
-            SurfaceCard {
-                VStack(alignment: .leading, spacing: 8) {
-                    NativePopupPicker(
-                        items: modelPickerPresets,
-                        selection: $appState.llmSelectedModelPreset,
-                        title: modelPickerTitle(for:)
-                    )
-                    .frame(maxWidth: 320)
-
-                    Text(modelPickerDescription(for: appState.llmSelectedModelPreset))
-                        .font(AppTypography.caption)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
-
-                    if appState.llmSelectedModelPreset == .custom {
+        case .openAICompatible:
+            VStack(alignment: .leading, spacing: 10) {
+                DisclosureGroup(isExpanded: $isAPIEndpointConfigurationExpanded) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        promptAdvancedSection
                         CardDivider()
-                            .padding(.vertical, 2)
+                        apiConnectionAdvancedSection
+                        CardDivider()
+                        apiModelAdvancedSection
+                        CardDivider()
+                        apiTestAdvancedSection
+                    }
+                    .padding(.top, AppMetrics.disclosureContentTopPadding)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("Configure...")
+                            .font(AppTypography.subheadlineSemibold)
 
-                        TextField("gpt-4.1-mini or provider/model-id", text: $appState.llmCustomModelId)
-                            .textFieldStyle(.roundedBorder)
-                            .font(AppTypography.codeBodyMedium)
+                        Spacer(minLength: 12)
 
-                        if let error = appState.llmModelValidationError {
-                            Label(error, systemImage: "exclamationmark.triangle.fill")
+                        if let result = appState.magicFormatSetupTestResult {
+                            Label(result.message, systemImage: result.severity == .success ? "checkmark.circle.fill" : "xmark.circle.fill")
                                 .font(AppTypography.caption)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(result.severity.color)
+                                .multilineTextAlignment(.trailing)
                         }
                     }
                 }
+                .disclosureGroupStyle(.automatic)
+            }
+        }
+    }
+
+    private func providerPromptDisclosure(isExpanded: Binding<Bool>) -> some View {
+        DisclosureGroup(isExpanded: isExpanded) {
+            promptAdvancedSection
+                .padding(.top, AppMetrics.disclosureContentTopPadding)
+        } label: {
+            Text("Prompt")
+                .font(AppTypography.subheadlineSemibold)
+        }
+        .disclosureGroupStyle(.automatic)
+    }
+
+    @ViewBuilder
+    private func providerUnavailableHelp(for provider: MagicFormatProvider) -> some View {
+        switch provider {
+        case .appleFoundationModels where !appState.appleMagicFormatAvailability.isAvailable:
+            CardDivider()
+                .padding(.leading, 56)
+            appleIntelligenceHelpRow
+                .padding(.leading, 56)
+                .padding(.trailing, 10)
+                .padding(.vertical, 10)
+        case .localGemma where !appState.isLocalGemmaProviderSelectable:
+            CardDivider()
+                .padding(.leading, 56)
+            Text("Local Model requires Apple Silicon. Use Apple Intelligence or API Endpoint on this Mac.")
+                .font(AppTypography.caption)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.leading, 56)
+                .padding(.trailing, 10)
+                .padding(.vertical, 10)
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var appleIntelligenceHelpRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(appleIntelligenceHelpText)
+                .font(AppTypography.caption)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 12)
+
+            if appState.appleMagicFormatAvailability == .appleIntelligenceNotEnabled {
+                Button("Open Settings") {
+                    appState.openAppleIntelligenceSettings()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+    }
+
+    private var appleIntelligenceHelpText: String {
+        switch appState.appleMagicFormatAvailability {
+        case .available:
+            return "Apple Intelligence is ready."
+        case .appleIntelligenceNotEnabled:
+            return "Turn on Apple Intelligence in System Settings, then come back to Suniye."
+        case .modelNotReady:
+            return "Apple Intelligence is downloading or preparing its local model. Try again when it is ready."
+        case .deviceNotEligible:
+            return "This Mac is not eligible for Apple Intelligence. Use Local Model or API Endpoint instead."
+        case .unsupportedSDKOrRuntime:
+            return "Apple Intelligence requires macOS 26 or newer. Use Local Model or API Endpoint instead."
+        }
+    }
+
+    private var localGemmaInstallDetail: (label: String, value: String)? {
+        switch appState.localGemmaInstallState {
+        case .unavailable:
+            return ("Runtime", appState.localGemmaInstallStatusText)
+        case .notInstalled, .installed:
+            return nil
+        case .downloading:
+            return ("Download", appState.localGemmaInstallStatusText)
+        case .verifying:
+            return ("Install", appState.localGemmaInstallStatusText)
+        case .failed:
+            return ("Error", appState.localGemmaInstallStatusText)
+        }
+    }
+
+    @ViewBuilder
+    private var localGemmaControls: some View {
+        HStack(spacing: 8) {
+            switch appState.localGemmaInstallState {
+            case .unavailable:
+                EmptyView()
+            case .notInstalled, .failed:
+                Button("Download Local Model") {
+                    appState.startLocalGemmaDownload()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!appState.canStartLocalGemmaDownload)
+            case .downloading:
+                Button("Cancel") {
+                    appState.cancelLocalGemmaDownload()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!appState.canCancelLocalGemmaDownload)
+            case .verifying:
+                ProgressView()
+                    .controlSize(.small)
+            case .installed:
+                Button(appState.isMagicFormatSetupTestInProgress ? "Testing\u{2026}" : "Test") {
+                    Task {
+                        await appState.testLocalGemmaSetup()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(appState.isMagicFormatSetupTestInProgress || !appState.localGemmaMagicFormatAvailability.isAvailable)
+
+                Button("Delete Model") {
+                    appState.deleteLocalGemmaModel()
+                }
+                .buttonStyle(.bordered)
+                .disabled(!appState.canDeleteLocalGemmaModel)
+            }
+
+            if appState.isMagicFormatSetupTestInProgress, appState.usesLocalGemmaMagicFormatSettings {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+            Spacer(minLength: 12)
+
+            if let result = appState.magicFormatSetupTestResult, appState.usesLocalGemmaMagicFormatSettings {
+                Label(result.message, systemImage: result.severity == .success ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(result.severity.color)
+                    .multilineTextAlignment(.trailing)
             }
         }
     }
@@ -584,23 +697,12 @@ struct StylePage: View {
 
             SurfaceCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Words the model should never change.")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text("Protected words")
+                            .font(AppTypography.body)
+                            .foregroundStyle(Color.primary)
+                            .frame(minWidth: 112, alignment: .leading)
 
-                    if !appState.vocabularyTerms.isEmpty {
-                        FlowLayout(spacing: 6) {
-                            ForEach(appState.vocabularyTerms, id: \.self) { term in
-                                StylePageVocabularyTag(term: term) {
-                                    appState.removeVocabularyTerm(term)
-                                }
-                            }
-                        }
-
-                        CardDivider()
-                    }
-
-                    HStack(spacing: 8) {
                         TextField("e.g. Suniye, PostgreSQL, gRPC", text: $vocabularyDraft)
                             .textFieldStyle(.roundedBorder)
                             .font(AppTypography.body)
@@ -610,57 +712,175 @@ struct StylePage: View {
                             .buttonStyle(.bordered)
                             .disabled(vocabularyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
+
+                    if !appState.vocabularyTerms.isEmpty {
+                        CardDivider()
+
+                        FlowLayout(spacing: 6) {
+                            ForEach(appState.vocabularyTerms, id: \.self) { term in
+                                StylePageVocabularyTag(term: term) {
+                                    appState.removeVocabularyTerm(term)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    // MARK: - Prompt
+    private var promptAdvancedSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Prompt")
+                        .font(AppTypography.subheadlineSemibold)
+                    Text(promptDescription)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                }
 
-    private var promptSection: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-            SectionHeading(title: "Prompt")
+                Spacer(minLength: 12)
 
-            SurfaceCard {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(promptDescription)
-                            .font(AppTypography.caption)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
+                Button(promptResetTitle) {
+                    resetPrompt()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isPromptAtDefault)
+            }
 
-                        Spacer(minLength: 12)
+            TextEditor(text: promptBinding)
+                .font(AppTypography.body)
+                .frame(minHeight: 120)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(MainWindowPalette.editorBackground)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
+                )
+        }
+    }
 
-                        if appState.usesAppleMagicFormatSettings {
-                            Button("Reset to Apple Default") {
-                                appState.resetAppleMagicFormatPrompt()
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(appState.llmAppleSystemPrompt == LLMDefaults.defaultAppleMagicFormatPrompt)
-                        } else if appState.usesLocalGemmaMagicFormatSettings {
-                            Button("Reset to Gemma Default") {
-                                appState.resetGemmaMagicFormatPrompt()
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                            .disabled(appState.llmGemmaSystemPrompt == LLMDefaults.defaultGemmaMagicFormatPrompt)
-                        }
-                    }
+    private var apiConnectionAdvancedSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Endpoint")
+                    .font(AppTypography.subheadlineSemibold)
+                TextField("https://api.openai.com/v1/chat/completions", text: $appState.llmEndpointURLString)
+                    .textFieldStyle(.roundedBorder)
+                    .font(AppTypography.codeBodyMedium)
 
-                    TextEditor(text: promptBinding)
-                        .font(AppTypography.body)
-                        .frame(minHeight: 120)
-                        .padding(8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(MainWindowPalette.editorBackground)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
-                        )
+                if let error = appState.llmEndpointValidationError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(.red)
                 }
             }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("API Key")
+                        .font(AppTypography.subheadlineSemibold)
+                    Spacer(minLength: 12)
+                    StylePageStatusPill(
+                        text: appState.llmKeyStatusText,
+                        isPositive: appState.isMagicFormatSetupVerified
+                    )
+                }
+
+                HStack(spacing: 8) {
+                    SecureField("Paste API key", text: $apiKeyDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: apiKeyDraft) { _, _ in
+                            appState.clearMagicFormatSetupTestResult()
+                        }
+
+                    Button(appState.hasLLMAPIKey ? "Replace" : "Save") {
+                        appState.saveLLMAPIKey(apiKeyDraft)
+                        apiKeyDraft = ""
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    Button("Clear") {
+                        appState.clearLLMAPIKey()
+                        apiKeyDraft = ""
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!appState.hasLLMAPIKey)
+                }
+
+                if let error = appState.llmKeyOperationError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private var apiModelAdvancedSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Model")
+                .font(AppTypography.subheadlineSemibold)
+
+            NativePopupPicker(
+                items: modelPickerPresets,
+                selection: $appState.llmSelectedModelPreset,
+                title: modelPickerTitle(for:)
+            )
+            .frame(maxWidth: 320)
+
+            Text(modelPickerDescription(for: appState.llmSelectedModelPreset))
+                .font(AppTypography.caption)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+
+            if appState.llmSelectedModelPreset == .custom {
+                TextField("gpt-4.1-mini or provider/model-id", text: $appState.llmCustomModelId)
+                    .textFieldStyle(.roundedBorder)
+                    .font(AppTypography.codeBodyMedium)
+
+                if let error = appState.llmModelValidationError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private var apiTestAdvancedSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Button(appState.isMagicFormatSetupTestInProgress ? "Testing\u{2026}" : "Test Connection") {
+                    Task {
+                        await appState.testMagicFormatSetup(apiKeyDraft: apiKeyDraft)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!appState.canTestMagicFormatSetup(apiKeyDraft: apiKeyDraft))
+
+                if appState.isMagicFormatSetupTestInProgress {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                Spacer()
+
+                if let result = appState.magicFormatSetupTestResult {
+                    Label(result.message, systemImage: result.severity == .success ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(result.severity.color)
+                }
+            }
+
+            Text("Works with unsaved keys too.")
+                .font(AppTypography.caption)
+                .foregroundStyle(MainWindowPalette.tertiaryText)
         }
     }
 
@@ -671,14 +891,185 @@ struct StylePage: View {
         vocabularyDraft = ""
     }
 
+    private var providerOptions: [MagicFormatProvider] {
+        [.localGemma, .appleFoundationModels, .openAICompatible]
+    }
+
     private func providerPickerEnabled(_ provider: MagicFormatProvider) -> Bool {
         switch provider {
         case .appleFoundationModels:
             return appState.appleMagicFormatAvailability.isAvailable
         case .localGemma:
-            return appState.localGemmaMagicFormatAvailability.isAvailable
+            return appState.isLocalGemmaProviderSelectable
         case .automatic, .openAICompatible:
             return true
+        }
+    }
+
+    private func providerIconName(for provider: MagicFormatProvider) -> String {
+        switch provider {
+        case .automatic:
+            return "wand.and.stars"
+        case .appleFoundationModels:
+            return appleIntelligenceSymbolName
+        case .localGemma:
+            return "cpu"
+        case .openAICompatible:
+            return "key.horizontal"
+        }
+    }
+
+    private var appleIntelligenceSymbolName: String {
+        NSImage(systemSymbolName: "apple.intelligence", accessibilityDescription: nil) == nil
+            ? "sparkles"
+            : "apple.intelligence"
+    }
+
+    @ViewBuilder
+    private func providerIcon(for provider: MagicFormatProvider) -> some View {
+        if provider == .appleFoundationModels && appleIntelligenceSymbolName == "apple.intelligence" {
+            Image(systemName: "apple.intelligence")
+                .symbolRenderingMode(.multicolor)
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(MainWindowPalette.selectedFill.opacity(0.75))
+                )
+        } else {
+            Image(systemName: providerIconName(for: provider))
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(providerIconColor(for: provider))
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(providerIconColor(for: provider).opacity(0.12))
+                )
+        }
+    }
+
+    private func providerIconColor(for provider: MagicFormatProvider) -> Color {
+        switch provider {
+        case .automatic:
+            return .purple
+        case .appleFoundationModels:
+            return .blue
+        case .localGemma:
+            return .green
+        case .openAICompatible:
+            return .orange
+        }
+    }
+
+    private func providerSubtitle(for provider: MagicFormatProvider) -> String {
+        switch provider {
+        case .automatic:
+            return "Chooses Apple Intelligence, local model, then API."
+        case .appleFoundationModels:
+            if !appState.appleMagicFormatAvailability.isAvailable {
+                return appState.appleMagicFormatAvailability.statusText
+            }
+            return "Fast on-device formatting, less accurate than the local model."
+        case .localGemma:
+            return "Fastest local LLM formatter on this Mac."
+        case .openAICompatible:
+            return "Use your OpenAI-compatible endpoint."
+        }
+    }
+
+    private func providerCapabilityTags(for provider: MagicFormatProvider) -> [String] {
+        switch provider {
+        case .automatic:
+            return ["Local first", "Fallbacks"]
+        case .appleFoundationModels:
+            switch appState.appleMagicFormatAvailability {
+            case .available:
+                return ["On-device", "Fast", "Lower accuracy"]
+            case .appleIntelligenceNotEnabled:
+                return ["On-device", "Fast", "Needs setting"]
+            case .modelNotReady:
+                return ["On-device", "Fast", "Preparing"]
+            case .deviceNotEligible, .unsupportedSDKOrRuntime:
+                return ["On-device", "Unavailable", "Lower accuracy"]
+            }
+        case .localGemma:
+            if !appState.isLocalGemmaProviderSelectable {
+                return ["Recommended", "Fastest", "Apple Silicon only"]
+            }
+
+            switch appState.localGemmaInstallState {
+            case .notInstalled, .failed:
+                return ["Recommended", "Fastest", "Download once"]
+            case .downloading:
+                return ["Recommended", "Fastest", "Downloading"]
+            case .verifying:
+                return ["Recommended", "Fastest", "Verifying"]
+            case .installed:
+                return ["Recommended", "Fastest", "Private"]
+            case .unavailable:
+                return ["Recommended", "Fastest", "Runtime missing"]
+            }
+        case .openAICompatible:
+            return ["Cloud/API", "Bring key", "Most flexible"]
+        }
+    }
+
+    private func providerStatus(for provider: MagicFormatProvider) -> ProviderStatus {
+        switch provider {
+        case .automatic:
+            switch appState.magicFormatSetupState {
+            case .off:
+                return ProviderStatus(text: "Off", color: .gray)
+            case .ready:
+                return ProviderStatus(text: "Ready", color: .green)
+            case .needsAPIKey:
+                return ProviderStatus(text: "Needs key", color: .orange)
+            case .needsServiceSetup:
+                return ProviderStatus(text: "Setup needed", color: .orange)
+            }
+        case .appleFoundationModels:
+            switch appState.appleMagicFormatAvailability {
+            case .available:
+                return ProviderStatus(text: "Ready", color: .green)
+            case .appleIntelligenceNotEnabled:
+                return ProviderStatus(text: "Off", color: .orange)
+            case .modelNotReady:
+                return ProviderStatus(text: "Preparing", color: .blue)
+            case .deviceNotEligible:
+                return ProviderStatus(text: "Unsupported", color: .gray)
+            case .unsupportedSDKOrRuntime:
+                return ProviderStatus(text: "Requires macOS 26", color: .gray)
+            }
+        case .localGemma:
+            if !appState.isLocalGemmaProviderSelectable {
+                return ProviderStatus(text: "Requires Apple Silicon", color: .gray)
+            }
+            switch appState.localGemmaInstallState {
+            case .unavailable:
+                return ProviderStatus(text: "Unavailable", color: .gray)
+            case .notInstalled:
+                return ProviderStatus(text: "Not installed", color: .orange)
+            case .downloading:
+                return ProviderStatus(text: "Downloading", color: .blue)
+            case .verifying:
+                return ProviderStatus(text: "Verifying", color: .blue)
+            case .installed:
+                return appState.localGemmaMagicFormatAvailability.isAvailable
+                    ? ProviderStatus(text: "Ready", color: .green)
+                    : ProviderStatus(text: "Setup needed", color: .orange)
+            case .failed:
+                return ProviderStatus(text: "Failed", color: .red)
+            }
+        case .openAICompatible:
+            if appState.llmEndpointValidationError != nil || appState.llmModelValidationError != nil {
+                return ProviderStatus(text: "Invalid", color: .red)
+            }
+            if appState.isMagicFormatSetupVerified {
+                return ProviderStatus(text: "Connected", color: .green)
+            }
+            return appState.hasLLMAPIKey
+                ? ProviderStatus(text: "Saved key", color: .blue)
+                : ProviderStatus(text: "Needs key", color: .orange)
         }
     }
 
@@ -697,9 +1088,39 @@ struct StylePage: View {
             return "Instructions for Apple's local formatter."
         }
         if appState.usesLocalGemmaMagicFormatSettings {
-            return "Instructions for local Gemma."
+            return "Instructions for the local model."
         }
         return "Instructions for rewriting your text."
+    }
+
+    private var promptResetTitle: String {
+        if appState.usesAppleMagicFormatSettings {
+            return "Reset to Apple Default"
+        }
+        if appState.usesLocalGemmaMagicFormatSettings {
+            return "Reset to Local Model Default"
+        }
+        return "Reset to API Default"
+    }
+
+    private var isPromptAtDefault: Bool {
+        if appState.usesAppleMagicFormatSettings {
+            return appState.llmAppleSystemPrompt == LLMDefaults.defaultAppleMagicFormatPrompt
+        }
+        if appState.usesLocalGemmaMagicFormatSettings {
+            return appState.llmGemmaSystemPrompt == LLMDefaults.defaultGemmaMagicFormatPrompt
+        }
+        return appState.llmBaseSystemPrompt == LLMDefaults.defaultBaseSystemPrompt
+    }
+
+    private func resetPrompt() {
+        if appState.usesAppleMagicFormatSettings {
+            appState.resetAppleMagicFormatPrompt()
+        } else if appState.usesLocalGemmaMagicFormatSettings {
+            appState.resetGemmaMagicFormatPrompt()
+        } else {
+            appState.resetBaseMagicFormatPrompt()
+        }
     }
 
     private var modelPickerPresets: [LLMModelPreset] {
@@ -726,6 +1147,27 @@ struct StylePage: View {
         }
     }
 
+    private var topStatusText: String {
+        switch appState.magicFormatSetupState {
+        case .ready:
+            return "Ready - using \(activeFormatterName)"
+        case .off:
+            return "Off"
+        case .needsAPIKey, .needsServiceSetup:
+            return setupStatusText
+        }
+    }
+
+    private var activeFormatterName: String {
+        if appState.usesAppleMagicFormatSettings {
+            return "Apple Intelligence"
+        }
+        if appState.usesLocalGemmaMagicFormatSettings {
+            return "Local Model"
+        }
+        return "API Endpoint"
+    }
+
     private var setupStatusColor: Color {
         switch appState.magicFormatSetupState {
         case .off:
@@ -748,8 +1190,8 @@ struct StylePage: View {
         }
         if appState.usesLocalGemmaMagicFormatSettings {
             return appState.localGemmaMagicFormatAvailability.isAvailable
-                ? "Local Gemma ready"
-                : appState.localGemmaMagicFormatAvailability.statusText
+                ? "Local model ready"
+                : appState.localGemmaInstallStatusText
         }
         if appState.isMagicFormatSetupVerified {
             return "Connected and ready"
@@ -766,7 +1208,7 @@ struct StylePage: View {
         }
     }
 
-    private func settingsValueRow(label: String, value: String) -> some View {
+    private func settingsValueRow(label: String, value: String, valueFont: Font = AppTypography.body) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             Text(label)
                 .font(AppTypography.body)
@@ -775,11 +1217,16 @@ struct StylePage: View {
             Spacer(minLength: 12)
 
             Text(value)
-                .font(AppTypography.body)
+                .font(valueFont)
                 .foregroundStyle(MainWindowPalette.secondaryText)
                 .multilineTextAlignment(.trailing)
         }
         .frame(maxWidth: .infinity, minHeight: 28)
+    }
+
+    private struct ProviderStatus {
+        let text: String
+        let color: Color
     }
 }
 
@@ -797,6 +1244,67 @@ private struct StylePageStatusPill: View {
                 Capsule()
                     .fill(isPositive ? Color.green.opacity(0.1) : MainWindowPalette.selectedFill)
             )
+    }
+}
+
+private struct StylePageProviderStatusPill: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        Text(text)
+            .font(AppTypography.caption)
+            .lineLimit(1)
+            .foregroundStyle(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                Capsule()
+                    .fill(color.opacity(0.12))
+            )
+    }
+}
+
+private struct StylePageProviderTagBadge: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(AppTypography.caption)
+            .foregroundStyle(MainWindowPalette.secondaryText)
+            .lineLimit(1)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(MainWindowPalette.selectedFill.opacity(0.7))
+            )
+    }
+}
+
+private struct StylePageRadioIndicator: View {
+    let isSelected: Bool
+    let isEnabled: Bool
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(indicatorColor, lineWidth: 1.3)
+
+            if isSelected {
+                Circle()
+                    .fill(indicatorColor)
+                    .padding(4)
+            }
+        }
+        .frame(width: 14, height: 14)
+    }
+
+    private var indicatorColor: Color {
+        if isSelected {
+            return .accentColor
+        }
+        return isEnabled ? MainWindowPalette.tertiaryText : MainWindowPalette.divider
     }
 }
 
