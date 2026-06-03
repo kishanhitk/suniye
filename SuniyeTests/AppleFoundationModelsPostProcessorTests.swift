@@ -147,6 +147,23 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         XCTAssertFalse(client.instructions.first?.contains("these are the supplies we need") == true)
     }
 
+    func testThingsListLeadInOutputIsAcceptedAndPromptedToPreserveLeadIn() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "The things we need are:\n- Laptop\n- Bag\n- Phone\n- Charger",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(
+            text: "The things we need are laptop, bag, phone, and charger.",
+            config: makeConfig()
+        )
+
+        XCTAssertEqual(output, "The things we need are:\n- Laptop\n- Bag\n- Phone\n- Charger")
+        XCTAssertEqual(client.callCount, 1)
+        XCTAssertTrue(client.instructions.first?.contains("Preserve that lead-in") == true)
+        XCTAssertTrue(client.instructions.first?.contains("one bullet per item") == true)
+    }
+
     func testRequestedNumberedStepsOutputIsAccepted() async throws {
         let client = FakeAppleFoundationModelsClient(outputs: [
             "1. Open Settings.\n2. Choose Magic Format.\n3. Select Apple Intelligence.",

@@ -1265,6 +1265,7 @@ final class AppState {
     private var activeRecordingSource: RecordingSource?
     private var overlayErrorResetTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
+    private var localGemmaDownloadID: UUID?
     private var isHydratingLLMSettings = false
     private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
@@ -1736,6 +1737,8 @@ final class AppState {
         ))
         clearMagicFormatSetupTestResult()
 
+        let downloadID = UUID()
+        localGemmaDownloadID = downloadID
         localGemmaDownloadTask = Task { @MainActor [weak self] in
             guard let self else { return }
 
@@ -1743,7 +1746,9 @@ final class AppState {
                 AppLogger.shared.log(.info, "local gemma download started model=\(entry.filename)")
                 try await self.localLLMModelManager.downloadModel(modelID) { [weak self] progress in
                     Task { @MainActor in
-                        guard let self else { return }
+                        guard let self,
+                              self.localGemmaDownloadID == downloadID,
+                              self.localGemmaInstallState.isActive else { return }
                         if progress.fractionCompleted >= 0.999 {
                             self.localGemmaInstallState = .verifying
                         } else {
@@ -1752,10 +1757,12 @@ final class AppState {
                     }
                 }
 
+                self.localGemmaDownloadID = nil
                 self.localGemmaInstallState = self.localLLMModelManager.installState(for: modelID)
                 self.magicFormatSetupTestResult = nil
                 AppLogger.shared.log(.info, "local gemma download complete model=\(entry.filename)")
             } catch {
+                self.localGemmaDownloadID = nil
                 let message: String
                 if Task.isCancelled || (error as NSError).code == NSURLErrorCancelled {
                     message = "Download canceled."

@@ -47,6 +47,22 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         XCTAssertFalse(client.instructions.first?.contains("Return exactly this structure") == true)
     }
 
+    func testGemmaAcceptsThingsListLeadIn() async throws {
+        let client = FakeLocalGemmaClient(outputs: [
+            "The things we need are:\n- Laptop\n- Bag\n- Phone\n- Charger",
+        ])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        let output = try await processor.polish(
+            text: "The things we need are laptop, bag, phone, and charger.",
+            config: makeConfig()
+        )
+
+        XCTAssertEqual(output, "The things we need are:\n- Laptop\n- Bag\n- Phone\n- Charger")
+        XCTAssertTrue(client.instructions.first?.contains("Formatting intent detected") == true)
+        XCTAssertTrue(client.instructions.first?.contains("Preserve that lead-in") == true)
+    }
+
     func testInvalidOutputRetriesOnce() async throws {
         let client = FakeLocalGemmaClient(outputs: [
             "<transcript>raw text</transcript>",

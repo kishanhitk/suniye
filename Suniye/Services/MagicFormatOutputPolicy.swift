@@ -171,7 +171,11 @@ enum MagicFormatFormattingIntentDetector {
 
     static func hasLikelyItemListLeadIn(for input: String) -> Bool {
         let lowercased = input.lowercased()
-        guard containsWord("items", in: lowercased) else {
+        let listLeadInNouns = [
+            "items",
+            "things",
+        ]
+        guard listLeadInNouns.contains(where: { containsWord($0, in: lowercased) }) else {
             return false
         }
         return lowercased.contains(":") || lowercased.contains(",") || lowercased.contains(" and ")

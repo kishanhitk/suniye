@@ -258,6 +258,32 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertFalse(appState.canStartLocalGemmaDownload)
     }
 
+    func testLocalGemmaDownloadIgnoresStaleProgressAfterInstall() async {
+        let localManager = StubLocalLLMModelManager()
+        let appState = makeTestAppState(localLLMModelManager: localManager)
+        let downloadFinished = expectation(description: "local Gemma download finished")
+        localManager.onDownloadFinished = {
+            downloadFinished.fulfill()
+        }
+
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        appState.startLocalGemmaDownload()
+        await fulfillment(of: [downloadFinished], timeout: 1)
+        await waitUntil(timeoutSeconds: 1) {
+            appState.localGemmaInstallState.isInstalled
+        }
+
+        localManager.lastProgressHandler?(LocalLLMDownloadProgress(
+            fractionCompleted: 1,
+            downloadedBytes: LocalGemmaDefaults.modelEntry.expectedSizeBytes,
+            expectedBytes: LocalGemmaDefaults.modelEntry.expectedSizeBytes
+        ))
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertTrue(appState.localGemmaInstallState.isInstalled)
+    }
+
     func testLocalGemmaCancelForwardsToManager() {
         let localManager = StubLocalLLMModelManager()
         let appState = makeTestAppState(localLLMModelManager: localManager)

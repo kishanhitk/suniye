@@ -293,6 +293,7 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
     var cancelCallCount = 0
     var lastDeletedModelID: LocalLLMModelID?
     var lastDownloadedModelID: LocalLLMModelID?
+    var lastProgressHandler: (@Sendable (LocalLLMDownloadProgress) -> Void)?
     var progressValues: [LocalLLMDownloadProgress] = []
     var rootDirectory = URL(fileURLWithPath: "/tmp/suniye-llm", isDirectory: true)
     var onDownloadFinished: (() -> Void)?
@@ -326,6 +327,7 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
     func downloadModel(_ modelID: LocalLLMModelID, progress: @escaping @Sendable (LocalLLMDownloadProgress) -> Void) async throws {
         downloadCallCount += 1
         lastDownloadedModelID = modelID
+        lastProgressHandler = progress
         let entry = catalogEntry(for: modelID)
         let progressValue = LocalLLMDownloadProgress(
             fractionCompleted: 1,
