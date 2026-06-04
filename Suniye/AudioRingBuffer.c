@@ -117,20 +117,51 @@ size_t SuniyeAudioRingBufferWritePlanar(
 
     uint64_t writeIndex = 0;
     size_t written = SuniyeAudioRingBufferWritableCount(buffer, frameCount, &writeIndex);
-    for (size_t frame = 0; frame < written; frame++) {
-        float mixed = 0;
-        uint32_t readableChannels = 0;
-        for (uint32_t channel = 0; channel < channelCount; channel++) {
-            if (channels[channel] != NULL) {
-                mixed += channels[channel][frame];
-                readableChannels++;
+    size_t storageIndex = (size_t)(writeIndex % buffer->capacity);
+    size_t firstCount = written < buffer->capacity - storageIndex
+        ? written
+        : buffer->capacity - storageIndex;
+    uint32_t readableChannels = 0;
+    const float *singleChannel = NULL;
+    for (uint32_t channel = 0; channel < channelCount; channel++) {
+        if (channels[channel] != NULL) {
+            readableChannels++;
+            singleChannel = channels[channel];
+        }
+    }
+
+    if (readableChannels <= 1) {
+        if (firstCount > 0) {
+            if (singleChannel == NULL) {
+                memset(buffer->storage + storageIndex, 0, firstCount * sizeof(float));
+            } else {
+                memcpy(buffer->storage + storageIndex, singleChannel, firstCount * sizeof(float));
             }
         }
-        if (readableChannels > 1) {
-            mixed /= (float)readableChannels;
+        if (written > firstCount) {
+            if (singleChannel == NULL) {
+                memset(buffer->storage, 0, (written - firstCount) * sizeof(float));
+            } else {
+                memcpy(buffer->storage, singleChannel + firstCount, (written - firstCount) * sizeof(float));
+            }
         }
+        SuniyeAudioRingBufferCommitWrite(buffer, writeIndex + written, written);
+        return written;
+    }
 
-        buffer->storage[(writeIndex + frame) % buffer->capacity] = mixed;
+    size_t writePosition = storageIndex;
+    for (size_t frame = 0; frame < written; frame++) {
+        float mixed = 0;
+        for (uint32_t channel = 0; channel < channelCount; channel++) {
+            if (channels[channel] != NULL) {
+                mixed += *(channels[channel] + frame);
+            }
+        }
+        buffer->storage[writePosition] = mixed / (float)readableChannels;
+        writePosition++;
+        if (writePosition == buffer->capacity) {
+            writePosition = 0;
+        }
     }
     SuniyeAudioRingBufferCommitWrite(buffer, writeIndex + written, written);
     return written;

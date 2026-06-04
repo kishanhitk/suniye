@@ -1314,9 +1314,30 @@ final class AppState {
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
 
-    private var recordingStart: Date?
-    private var activeRecordingSource: RecordingSource?
-    private var activeAudioCaptureSessionID: UUID?
+    private struct DictationSessionContext {
+        let id: UUID
+        let source: RecordingSource
+        let startedAt: Date
+        let destination: DictationDestination
+    }
+
+    private enum ActiveDictationSession {
+        case starting(DictationSessionContext)
+        case recording(DictationSessionContext)
+        case transcribing(DictationSessionContext)
+
+        var context: DictationSessionContext {
+            switch self {
+            case let .starting(context), let .recording(context), let .transcribing(context):
+                return context
+            }
+        }
+    }
+
+    private var activeDictationSession: ActiveDictationSession?
+    private var activeAudioCaptureSessionID: UUID? { activeDictationSession?.context.id }
+    private var activeRecordingSource: RecordingSource? { activeDictationSession?.context.source }
+    private var recordingStart: Date? { activeDictationSession?.context.startedAt }
     private var overlayErrorResetTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
@@ -1407,31 +1428,22 @@ final class AppState {
         self.appUpdateController.onStateChange = { [weak self] in
             self?.refreshUpdateControllerState()
         }
-        self.audioCaptureService.onLevelsUpdate = { [weak self] sessionID, levels in
+        self.audioCaptureService.onEvent = { [weak self] event in
             Task { @MainActor [weak self] in
-                guard self?.activeAudioCaptureSessionID == sessionID else {
-                    return
+                guard let self else { return }
+                switch event {
+                case let .levelsUpdated(sessionID, levels):
+                    guard activeAudioCaptureSessionID == sessionID else { return }
+                    handleAudioLevelsUpdate(levels)
+                case let .devicesChanged(devices):
+                    applyInputDevices(devices)
+                    refreshAudioRouteSnapshot()
+                case let .routeChanged(sessionID, route):
+                    guard activeAudioCaptureSessionID == sessionID else { return }
+                    audioRouteSnapshot = route
+                case let .interrupted(sessionID, reason):
+                    await handleAudioCaptureInterruption(sessionID: sessionID, reason: reason)
                 }
-                self?.handleAudioLevelsUpdate(levels)
-            }
-        }
-        self.audioCaptureService.onDevicesChanged = { [weak self] devices in
-            Task { @MainActor [weak self] in
-                self?.applyInputDevices(devices)
-                self?.refreshAudioRouteSnapshot()
-            }
-        }
-        self.audioCaptureService.onRouteChanged = { [weak self] sessionID, route in
-            Task { @MainActor [weak self] in
-                guard self?.activeAudioCaptureSessionID == sessionID else {
-                    return
-                }
-                self?.audioRouteSnapshot = route
-            }
-        }
-        self.audioCaptureService.onCaptureInterrupted = { [weak self] sessionID, reason in
-            Task { @MainActor [weak self] in
-                await self?.handleAudioCaptureInterruption(sessionID: sessionID, reason: reason)
             }
         }
 
@@ -2693,14 +2705,18 @@ final class AppState {
         }
 
         let sessionID = UUID()
-        activeAudioCaptureSessionID = sessionID
+        let context = DictationSessionContext(
+            id: sessionID,
+            source: trigger,
+            startedAt: Date(),
+            destination: currentDictationDestination
+        )
+        activeDictationSession = .starting(context)
         phase = .recording
         statusText = "Recording"
-        recordingStart = Date()
-        activeRecordingSource = trigger
         overlayErrorResetTask?.cancel()
         overlayErrorResetTask = nil
-        if currentDictationDestination == .onboardingPractice {
+        if context.destination == .onboardingPractice {
             onboardingPracticeText = ""
             onboardingPracticeResult = nil
         }
@@ -2716,15 +2732,16 @@ final class AppState {
                 await audioCaptureService.cancelCapture(sessionID: sessionID, reason: nil)
                 return
             }
+            if case .some(.starting) = activeDictationSession {
+                activeDictationSession = .recording(context)
+            }
             audioRouteSnapshot = session.route
             AppLogger.shared.log(.info, "recording started session=\(sessionID.uuidString) \(session.route.privacySafeLogValue)")
         } catch {
             guard activeAudioCaptureSessionID == sessionID else {
                 return
             }
-            activeAudioCaptureSessionID = nil
-            activeRecordingSource = nil
-            recordingStart = nil
+            clearActiveDictationSession(sessionID: sessionID)
             phase = .ready
             lastError = "Audio start failed: \(error.localizedDescription)"
             statusText = "Ready"
@@ -2738,26 +2755,24 @@ final class AppState {
         guard phase == .recording else {
             return
         }
-        guard activeRecordingSource == nil || activeRecordingSource == trigger else {
+        guard let context = activeDictationSession?.context, context.source == trigger else {
             return
         }
-        guard let sessionID = activeAudioCaptureSessionID else {
-            return
-        }
+        let sessionID = context.id
 
+        activeDictationSession = .transcribing(context)
         phase = .transcribing
         statusText = "Transcribing..."
         setFloatingIndicatorState(.processing())
 
         let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
-        guard activeAudioCaptureSessionID == sessionID else {
+        guard let context = activeDictationSession?.context, context.id == sessionID else {
             return
         }
-        activeAudioCaptureSessionID = nil
         let samples = captured.samples
         let sampleRate = captured.sampleRate
-        let duration = recordingStart.map { Date().timeIntervalSince($0) } ?? 0
-        let destination = currentDictationDestination
+        let duration = Date().timeIntervalSince(context.startedAt)
+        let destination = context.destination
         AppLogger.shared.log(.info, "dictation stop samples=\(samples.count) sr=\(sampleRate) duration=\(String(format: "%.2f", duration))")
 
         guard captured.outcome == .complete else {
@@ -2854,15 +2869,13 @@ final class AppState {
             if didCompleteDictation {
                 playSoundFeedback(.transcriptionSucceeded)
             }
-            activeRecordingSource = nil
-            recordingStart = nil
+            clearActiveDictationSession(sessionID: sessionID)
             lastError = nil
             phase = .ready
             statusText = "Ready"
             setFloatingIndicatorState(.idle)
         } catch {
-            activeRecordingSource = nil
-            recordingStart = nil
+            clearActiveDictationSession(sessionID: sessionID)
             lastError = "Transcription failed: \(error.localizedDescription)"
             if destination == .onboardingPractice {
                 onboardingPracticeText = ""
@@ -2883,7 +2896,7 @@ final class AppState {
         sessionID: UUID,
         reason: AudioCaptureInterruption
     ) async {
-        guard activeAudioCaptureSessionID == sessionID else {
+        guard let context = activeDictationSession?.context, context.id == sessionID else {
             return
         }
         if reason == .maximumDurationReached {
@@ -2894,8 +2907,7 @@ final class AppState {
         guard activeAudioCaptureSessionID == sessionID else {
             return
         }
-        activeAudioCaptureSessionID = nil
-        handleAudioCaptureFailure(.interrupted(reason), destination: currentDictationDestination)
+        handleAudioCaptureFailure(.interrupted(reason), destination: context.destination)
     }
 
     private func handleAudioCaptureFailure(
@@ -2903,8 +2915,7 @@ final class AppState {
         destination: DictationDestination
     ) {
         let message = outcome.userMessage ?? "Audio capture was interrupted. Try again."
-        activeRecordingSource = nil
-        recordingStart = nil
+        clearActiveDictationSession()
         lastError = "Audio capture failed: \(message)"
         if destination == .onboardingPractice {
             onboardingPracticeText = ""
@@ -3354,6 +3365,13 @@ final class AppState {
 
     private var currentDictationDestination: DictationDestination {
         activeOnboardingStep == .practice ? .onboardingPractice : .systemInsertion
+    }
+
+    private func clearActiveDictationSession(sessionID: UUID? = nil) {
+        guard sessionID == nil || activeAudioCaptureSessionID == sessionID else {
+            return
+        }
+        activeDictationSession = nil
     }
 
     private var isOnboardingBlockingRecordingStart: Bool {

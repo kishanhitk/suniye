@@ -136,7 +136,37 @@ final class CoreAudioDeviceMonitor: AudioDeviceMonitorProtocol {
 
 struct CoreAudioRouteResolution {
     let inputDeviceID: AudioObjectID
-    let snapshot: AudioRouteSnapshot
+    let route: AudioDeviceRoute
+}
+
+protocol AudioCaptureHardwareCatalogProtocol {
+    func availableInputDevices() -> [AudioInputDevice]
+    func resolveDeviceRoute(preferredInputDeviceID: String?) throws -> CoreAudioRouteResolution
+    func deviceID(forUID uid: String) -> AudioObjectID?
+    func processIsRunningInput() -> Bool?
+    func processInputIsMuted() -> Bool?
+}
+
+struct CoreAudioCaptureHardwareCatalog: AudioCaptureHardwareCatalogProtocol {
+    func availableInputDevices() -> [AudioInputDevice] {
+        CoreAudioDeviceCatalog.availableInputDevices()
+    }
+
+    func resolveDeviceRoute(preferredInputDeviceID: String?) throws -> CoreAudioRouteResolution {
+        try CoreAudioDeviceCatalog.resolveDeviceRoute(preferredInputDeviceID: preferredInputDeviceID)
+    }
+
+    func deviceID(forUID uid: String) -> AudioObjectID? {
+        CoreAudioDeviceCatalog.deviceID(forUID: uid)
+    }
+
+    func processIsRunningInput() -> Bool? {
+        CoreAudioDeviceCatalog.processIsRunningInput()
+    }
+
+    func processInputIsMuted() -> Bool? {
+        CoreAudioDeviceCatalog.processInputIsMuted()
+    }
 }
 
 enum CoreAudioDeviceCatalog {
@@ -165,12 +195,7 @@ enum CoreAudioDeviceCatalog {
             }
     }
 
-    static func resolveRoute(
-        preferredInputDeviceID: String?,
-        echoCancellationEnabled: Bool,
-        preferredBackend: AudioCaptureBackend? = nil,
-        fallbackReason: String? = nil
-    ) throws -> CoreAudioRouteResolution {
+    static func resolveDeviceRoute(preferredInputDeviceID: String?) throws -> CoreAudioRouteResolution {
         let resolvedInputID: AudioObjectID
         if let preferredInputDeviceID {
             guard let preferred = deviceID(forUID: preferredInputDeviceID), isAlive(preferred), inputChannelCount(for: preferred) > 0 else {
@@ -192,28 +217,16 @@ enum CoreAudioDeviceCatalog {
         let outputID = defaultDeviceID(selector: kAudioHardwarePropertyDefaultOutputDevice)
         let inputTransport = transport(for: resolvedInputID)
         let outputTransport = outputID.map(transport(for:)) ?? .other
-        let effectiveAEC = echoCancellationEnabled && !inputTransport.isBluetooth && !outputTransport.isBluetooth
-        let backend = preferredBackend ?? (effectiveAEC ? .voiceProcessingEngine : .inputOnlyHAL)
-        let aecReason: String?
-        if echoCancellationEnabled && !effectiveAEC {
-            aecReason = "bluetooth_route"
-        } else {
-            aecReason = fallbackReason
-        }
-        let snapshot = AudioRouteSnapshot(
+        let route = AudioDeviceRoute(
             preferredInputDeviceID: preferredInputDeviceID,
             effectiveInputDeviceID: inputUID,
             effectiveInputName: inputName,
             inputTransport: inputTransport,
             outputTransport: outputTransport,
-            inputSampleRate: max(8_000, Int(nominalSampleRate(for: resolvedInputID).rounded())),
+            nominalInputSampleRate: max(8_000, Int(nominalSampleRate(for: resolvedInputID).rounded())),
             inputChannelCount: inputChannelCount(for: resolvedInputID),
-            requestedEchoCancellation: echoCancellationEnabled,
-            effectiveEchoCancellation: effectiveAEC && backend == .voiceProcessingEngine,
-            backend: backend,
-            fallbackReason: aecReason
         )
-        return CoreAudioRouteResolution(inputDeviceID: resolvedInputID, snapshot: snapshot)
+        return CoreAudioRouteResolution(inputDeviceID: resolvedInputID, route: route)
     }
 
     static func processIsRunningInput() -> Bool? {

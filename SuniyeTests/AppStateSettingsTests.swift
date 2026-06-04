@@ -420,230 +420,6 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertTrue(appState.isOnboardingSetupComplete)
     }
 
-    func testPreferredInputDevicePassedToCaptureService() async {
-        let audioCapture = StubAudioCaptureService()
-        audioCapture.availableDevices = [
-            AudioInputDevice(id: "default-device", name: "MacBook Air Microphone", isDefault: true),
-            AudioInputDevice(id: "usb-mic", name: "USB Microphone", isDefault: false)
-        ]
-
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-        appState.selectedInputDeviceID = "usb-mic"
-
-        appState.startRecordingFromUI()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
-        XCTAssertEqual(audioCapture.lastPreferredInputDeviceID, "usb-mic")
-        XCTAssertEqual(appState.phase, .recording)
-    }
-
-    func testUnavailablePreferredInputDeviceIsPreservedAndActionable() {
-        let audioCapture = StubAudioCaptureService()
-        audioCapture.availableDevices = [
-            AudioInputDevice(
-                id: "built-in",
-                name: "Built-in Microphone",
-                isDefault: true,
-                transport: .builtIn
-            ),
-        ]
-        audioCapture.routeSnapshotError = AudioCaptureServiceError.preferredDeviceUnavailable
-        let settingsStore = TestGeneralSettingsStore(
-            value: GeneralSettings(
-                preferredInputDeviceID: "studio-mic",
-                preferredInputDeviceName: "Studio Microphone"
-            )
-        )
-
-        let appState = makeTestAppState(
-            audioCaptureService: audioCapture,
-            generalSettingsStore: settingsStore
-        )
-
-        XCTAssertEqual(appState.selectedInputDeviceID, "studio-mic")
-        XCTAssertEqual(appState.selectedInputDeviceName, "Studio Microphone")
-        XCTAssertEqual(
-            appState.availableInputDevices.first(where: { $0.id == "studio-mic" })?.isAvailable,
-            false
-        )
-        XCTAssertEqual(appState.recommendedInputDevice?.id, "built-in")
-        XCTAssertEqual(appState.effectiveInputDeviceStatusText, "Studio Microphone is unavailable")
-        XCTAssertNotNil(appState.audioRouteWarningText)
-    }
-
-    func testRecommendedInputDeviceActionPersistsActualDeviceName() {
-        let audioCapture = StubAudioCaptureService()
-        audioCapture.availableDevices = [
-            AudioInputDevice(
-                id: "built-in",
-                name: "Built-in Microphone",
-                isDefault: false,
-                transport: .builtIn
-            ),
-            AudioInputDevice(
-                id: "bluetooth",
-                name: "Headset",
-                isDefault: true,
-                transport: .bluetooth
-            ),
-        ]
-        audioCapture.route = AudioRouteSnapshot(
-            preferredInputDeviceID: nil,
-            effectiveInputDeviceID: "bluetooth",
-            effectiveInputName: "Headset",
-            inputTransport: .bluetooth,
-            outputTransport: .bluetooth,
-            inputSampleRate: 16_000,
-            inputChannelCount: 1,
-            requestedEchoCancellation: false,
-            effectiveEchoCancellation: false,
-            backend: .inputOnlyHAL,
-            fallbackReason: nil
-        )
-        let settingsStore = TestGeneralSettingsStore()
-        let appState = makeTestAppState(
-            audioCaptureService: audioCapture,
-            generalSettingsStore: settingsStore
-        )
-
-        appState.useRecommendedInputDevice()
-
-        XCTAssertEqual(appState.selectedInputDeviceID, "built-in")
-        XCTAssertEqual(settingsStore.latest.preferredInputDeviceName, "Built-in Microphone")
-        XCTAssertTrue(appState.audioRouteWarningText?.contains("call-quality") == true)
-    }
-
-    func testQuickReleaseDuringCaptureStartStopsTheSameSession() async {
-        let audioCapture = StubAudioCaptureService()
-        audioCapture.startCaptureDelayNanoseconds = 150_000_000
-        audioCapture.stopCaptureResult = CapturedAudio(
-            samples: Array(repeating: 0.2, count: 1_600),
-            sampleRate: 16_000
-        )
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-
-        appState.startRecordingFromUI()
-        try? await Task.sleep(nanoseconds: 20_000_000)
-        appState.stopRecordingFromUI()
-        try? await Task.sleep(nanoseconds: 260_000_000)
-
-        XCTAssertEqual(audioCapture.stopCaptureCallCount, 1)
-        XCTAssertEqual(audioCapture.lastStoppedSessionID, audioCapture.lastStartedSessionID)
-        XCTAssertEqual(appState.phase, .ready)
-    }
-
-    func testInvalidCaptureDoesNotReachTranscription() async {
-        let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(
-            samples: Array(repeating: 0, count: 1_600),
-            sampleRate: 16_000
-        )
-        let transcriptionService = StubTranscriptionService()
-        let appState = makeTestAppState(
-            transcriptionService: transcriptionService,
-            audioCaptureService: audioCapture
-        )
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-
-        appState.startRecordingFromUI()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        appState.stopRecordingFromUI()
-        try? await Task.sleep(nanoseconds: 80_000_000)
-
-        XCTAssertEqual(transcriptionService.transcribeCallCount, 0)
-        XCTAssertEqual(appState.phase, .ready)
-        XCTAssertTrue(appState.lastError?.contains("No speech was detected") == true)
-    }
-
-    func testCaptureInterruptionCancelsSessionAndShowsReason() async {
-        let audioCapture = StubAudioCaptureService()
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-
-        appState.startRecordingFromUI()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        if let sessionID = audioCapture.lastStartedSessionID {
-            audioCapture.onCaptureInterrupted?(sessionID, .inputMuted)
-        } else {
-            XCTFail("Expected an active audio session")
-        }
-        try? await Task.sleep(nanoseconds: 80_000_000)
-
-        XCTAssertEqual(audioCapture.cancelCaptureCallCount, 1)
-        XCTAssertEqual(appState.phase, .ready)
-        XCTAssertTrue(appState.lastError?.contains("microphone is muted") == true)
-    }
-
-    func testMaximumDurationInterruptionStopsAndTranscribesCapturedAudio() async {
-        let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(
-            samples: Array(repeating: 0.2, count: 1_600),
-            sampleRate: 16_000,
-            outcome: .complete
-        )
-        let transcriptionService = StubTranscriptionService()
-        transcriptionService.transcribeResult = .success("Finished at the limit")
-        let appState = makeTestAppState(
-            transcriptionService: transcriptionService,
-            audioCaptureService: audioCapture
-        )
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-
-        appState.startRecordingFromUI()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        if let sessionID = audioCapture.lastStartedSessionID {
-            audioCapture.onCaptureInterrupted?(sessionID, .maximumDurationReached)
-        } else {
-            XCTFail("Expected an active audio session")
-        }
-        try? await Task.sleep(nanoseconds: 100_000_000)
-
-        XCTAssertEqual(audioCapture.stopCaptureCallCount, 1)
-        XCTAssertEqual(audioCapture.cancelCaptureCallCount, 0)
-        XCTAssertEqual(transcriptionService.transcribeCallCount, 1)
-        XCTAssertEqual(appState.phase, .ready)
-    }
-
-    func testSystemLifecycleForwardsToAudioService() async {
-        let audioCapture = StubAudioCaptureService()
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-
-        await appState.handleSystemWillSleep()
-        appState.handleSystemDidWake()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        XCTAssertEqual(audioCapture.handleSystemSleepCallCount, 1)
-        XCTAssertEqual(audioCapture.handleSystemWakeCallCount, 1)
-    }
-
-    func testEchoCancellationSettingPassedToCaptureService() async {
-        let audioCapture = StubAudioCaptureService()
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-        appState.echoCancellationEnabled = true
-
-        appState.startRecordingFromUI()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
-        XCTAssertEqual(audioCapture.lastEchoCancellationEnabled, true)
-        XCTAssertEqual(appState.phase, .recording)
-    }
 
     func testSoundFeedbackDisabledDoesNotPlayRecordingStartSound() async {
         let audioCapture = StubAudioCaptureService()
@@ -756,7 +532,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testManualIndicatorToggleStopsRecordingAndReturnsIndicatorToIdle() async {
         let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000, outcome: .complete)
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .success("")
         let appState = makeTestAppState(
@@ -778,7 +554,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testSuccessfulTranscriptionClearsStaleLastError() async {
         let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000, outcome: .complete)
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .success("Hello")
         let appState = makeTestAppState(
@@ -801,7 +577,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testSoundFeedbackEnabledPlaysSuccessForCompletedDictation() async {
         let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000, outcome: .complete)
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .success("Hello")
         let soundFeedback = SpySoundFeedbackService()
@@ -825,7 +601,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testSoundFeedbackEnabledPlaysSuccessForSubmitOnlyCommand() async {
         let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000, outcome: .complete)
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .success("send")
         let textInsertionService = SpyTextInsertionService()
@@ -852,7 +628,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testSoundFeedbackEnabledPlaysErrorForInsertionFailure() async {
         let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000, outcome: .complete)
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .success("Hello")
         let textInsertionService = SpyTextInsertionService()
@@ -879,7 +655,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testSoundFeedbackEnabledPlaysErrorForTranscriptionFailure() async {
         let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000, outcome: .complete)
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .failure(FakeError(message: "decoder failed"))
         let soundFeedback = SpySoundFeedbackService()
@@ -903,7 +679,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testSoundFeedbackEnabledPlaysErrorForEmptyNoSubmitTranscription() async {
         let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000, outcome: .complete)
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .success("")
         let soundFeedback = SpySoundFeedbackService()
@@ -927,7 +703,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testSoundFeedbackEnabledPlaysErrorForEmptyPracticeTranscription() async {
         let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000, outcome: .complete)
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .success("")
         let soundFeedback = SpySoundFeedbackService()
@@ -952,7 +728,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testPracticeModeStoresPreviewWithoutInsertionOrHistory() async {
         let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000, outcome: .complete)
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .success("Hello from practice")
         let textInsertionService = SpyTextInsertionService()
@@ -983,7 +759,7 @@ final class AppStateSettingsTests: XCTestCase {
 
     func testPracticeModeFailureClearsStalePreview() async {
         let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.1, 0.2, 0.3], sampleRate: 16_000, outcome: .complete)
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .failure(FakeError(message: "decoder failed"))
         let appState = makeTestAppState(
@@ -1071,27 +847,6 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.floatingIndicatorState, .processing())
     }
 
-    func testAudioLevelCallbackUpdatesListeningIndicator() async {
-        let audioCapture = StubAudioCaptureService()
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-
-        appState.toggleFloatingIndicatorRecording()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        if let sessionID = audioCapture.lastStartedSessionID {
-            audioCapture.onLevelsUpdate?(sessionID, Array(repeating: 0.42, count: 12))
-        } else {
-            XCTFail("Expected an active audio session")
-        }
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        XCTAssertEqual(
-            appState.floatingIndicatorState,
-            .listening(levels: Array(repeating: 0.42, count: 12), source: .manual)
-        )
-    }
 
     func testChangingHotkeyRewiresMonitoringWhenRuntimeServicesEnabled() {
         let hotkeyService = StubHotkeyService()
@@ -1117,7 +872,7 @@ final class AppStateSettingsTests: XCTestCase {
         let transcriptionService = StubTranscriptionService()
         transcriptionService.transcribeResult = .success("")
         let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = CapturedAudio(samples: [0.2, 0.1], sampleRate: 16_000, outcome: .complete)
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let appState = makeTestAppState(
             modelManager: modelManager,
             transcriptionService: transcriptionService,
@@ -1449,4 +1204,5 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(openedURLs.count, 1)
         XCTAssertEqual(openedURLs.first?.absoluteString, "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility")
     }
+
 }

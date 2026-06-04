@@ -24,6 +24,9 @@ final class IssueReportServiceTests: XCTestCase {
         clipboard=secret clipboard
         device_uid=private-device-id
         device_name=Private Microphone
+        device-uid=private-hyphen-device-id
+        device-name=Private Hyphen Microphone
+        {"device_uid":"private-json-device-id","device-name":"Private JSON Microphone"}
         """
 
         let redacted = redactor.redact(raw)
@@ -37,6 +40,10 @@ final class IssueReportServiceTests: XCTestCase {
         XCTAssertFalse(redacted.contains("secret clipboard"))
         XCTAssertFalse(redacted.contains("private-device-id"))
         XCTAssertFalse(redacted.contains("Private Microphone"))
+        XCTAssertFalse(redacted.contains("private-hyphen-device-id"))
+        XCTAssertFalse(redacted.contains("Private Hyphen Microphone"))
+        XCTAssertFalse(redacted.contains("private-json-device-id"))
+        XCTAssertFalse(redacted.contains("Private JSON Microphone"))
         XCTAssertTrue(redacted.contains("~/Library/Application Support/Suniye/logs/app.log"))
         XCTAssertTrue(redacted.contains("[REDACTED_EMAIL]"))
     }
