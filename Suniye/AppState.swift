@@ -274,14 +274,35 @@ final class AppState {
         }
     }
 
-    var availableInputDevices: [AudioInputDevice] = []
+    var availableInputDevices: [AudioInputDevice] = [] {
+        didSet {
+            if oldValue != availableInputDevices {
+                onStateChange?()
+            }
+        }
+    }
+    private(set) var preferredInputDeviceName: String?
     var selectedInputDeviceID: String? {
         didSet {
             guard !isHydratingGeneralSettings else {
                 return
             }
+            if let selectedInputDeviceID,
+               let selected = availableInputDevices.first(where: { $0.id == selectedInputDeviceID && $0.isAvailable }) {
+                preferredInputDeviceName = selected.name
+            } else if selectedInputDeviceID == nil {
+                preferredInputDeviceName = nil
+            }
             persistGeneralSettings()
+            refreshAudioRouteSnapshot()
             onStateChange?()
+        }
+    }
+    private(set) var audioRouteSnapshot: AudioRouteSnapshot? {
+        didSet {
+            if oldValue != audioRouteSnapshot {
+                onStateChange?()
+            }
         }
     }
     var autoSubmitEnabled = false {
@@ -299,6 +320,7 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
+            refreshAudioRouteSnapshot()
             onStateChange?()
         }
     }
@@ -1056,7 +1078,54 @@ final class AppState {
            let selected = availableInputDevices.first(where: { $0.id == selectedInputDeviceID }) {
             return selected.name
         }
-        return availableInputDevices.first(where: \.isDefault)?.name ?? "System Default"
+        if selectedInputDeviceID != nil {
+            return preferredInputDeviceName ?? "Selected Microphone"
+        }
+        return audioRouteSnapshot?.effectiveInputName
+            ?? availableInputDevices.first(where: \.isDefault)?.name
+            ?? "System Default"
+    }
+
+    var effectiveInputDeviceStatusText: String {
+        guard let route = audioRouteSnapshot else {
+            if selectedInputDeviceID != nil {
+                return "\(selectedInputDeviceName) is unavailable"
+            }
+            return "No microphone is available"
+        }
+        return "Using \(route.effectiveInputName) - \(route.inputTransport.title)"
+    }
+
+    var audioRouteWarningText: String? {
+        if selectedInputDeviceID != nil, audioRouteSnapshot == nil {
+            return "Reconnect this microphone or choose another input device."
+        }
+        guard let route = audioRouteSnapshot else {
+            return nil
+        }
+        if route.inputTransport.isBluetooth {
+            return "Bluetooth microphones put headphones into call-quality audio while dictating."
+        }
+        if route.requestedEchoCancellation, !route.effectiveEchoCancellation {
+            return "Echo cancellation is unavailable for the current audio route."
+        }
+        return nil
+    }
+
+    var recommendedInputDevice: AudioInputDevice? {
+        let effectiveID = audioRouteSnapshot?.effectiveInputDeviceID
+        return availableInputDevices
+            .filter { $0.isAvailable && $0.transport.isRecommendedPhysicalInput && $0.id != effectiveID }
+            .sorted {
+                if $0.isDefault != $1.isDefault {
+                    return $0.isDefault
+                }
+                if $0.transport != $1.transport {
+                    return $0.transport == .builtIn
+                }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            .first
     }
 
     var isOnboardingSetupComplete: Bool {
@@ -1247,6 +1316,7 @@ final class AppState {
 
     private var recordingStart: Date?
     private var activeRecordingSource: RecordingSource?
+    private var activeAudioCaptureSessionID: UUID?
     private var overlayErrorResetTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
@@ -1337,9 +1407,31 @@ final class AppState {
         self.appUpdateController.onStateChange = { [weak self] in
             self?.refreshUpdateControllerState()
         }
-        self.audioCaptureService.onLevelsUpdate = { [weak self] levels in
+        self.audioCaptureService.onLevelsUpdate = { [weak self] sessionID, levels in
             Task { @MainActor [weak self] in
+                guard self?.activeAudioCaptureSessionID == sessionID else {
+                    return
+                }
                 self?.handleAudioLevelsUpdate(levels)
+            }
+        }
+        self.audioCaptureService.onDevicesChanged = { [weak self] devices in
+            Task { @MainActor [weak self] in
+                self?.applyInputDevices(devices)
+                self?.refreshAudioRouteSnapshot()
+            }
+        }
+        self.audioCaptureService.onRouteChanged = { [weak self] sessionID, route in
+            Task { @MainActor [weak self] in
+                guard self?.activeAudioCaptureSessionID == sessionID else {
+                    return
+                }
+                self?.audioRouteSnapshot = route
+            }
+        }
+        self.audioCaptureService.onCaptureInterrupted = { [weak self] sessionID, reason in
+            Task { @MainActor [weak self] in
+                await self?.handleAudioCaptureInterruption(sessionID: sessionID, reason: reason)
             }
         }
 
@@ -1570,13 +1662,56 @@ final class AppState {
     }
 
     func refreshInputDevices() {
-        let devices = audioCaptureService.availableInputDevices()
-        availableInputDevices = devices
+        applyInputDevices(audioCaptureService.availableInputDevices())
+        refreshAudioRouteSnapshot()
+    }
 
+    private func applyInputDevices(_ devices: [AudioInputDevice]) {
+        var visibleDevices = devices
+        if let selectedInputDeviceID,
+           let selected = devices.first(where: { $0.id == selectedInputDeviceID }),
+           preferredInputDeviceName != selected.name {
+            preferredInputDeviceName = selected.name
+            if !isHydratingGeneralSettings {
+                persistGeneralSettings()
+            }
+        }
         if let selectedInputDeviceID,
            !devices.contains(where: { $0.id == selectedInputDeviceID }) {
-            self.selectedInputDeviceID = nil
+            visibleDevices.append(
+                AudioInputDevice(
+                    id: selectedInputDeviceID,
+                    name: preferredInputDeviceName ?? "Selected Microphone",
+                    isDefault: false,
+                    transport: .other,
+                    isAvailable: false
+                )
+            )
         }
+        availableInputDevices = visibleDevices
+    }
+
+    func refreshAudioRouteSnapshot() {
+        audioRouteSnapshot = try? audioCaptureService.routeSnapshot(
+            preferredInputDeviceID: selectedInputDeviceID,
+            echoCancellationEnabled: echoCancellationEnabled
+        )
+    }
+
+    func useRecommendedInputDevice() {
+        guard let recommendedInputDevice else {
+            return
+        }
+        selectedInputDeviceID = recommendedInputDevice.id
+    }
+
+    func handleSystemWillSleep() async {
+        await audioCaptureService.handleSystemSleep()
+    }
+
+    func handleSystemDidWake() {
+        audioCaptureService.handleSystemWake()
+        refreshInputDevices()
     }
 
     func refreshLaunchAtLoginStatus() {
@@ -2549,35 +2684,53 @@ final class AppState {
             showTransientIndicatorError("Enable Accessibility for dictation")
             return
         }
-        startRecording(trigger: trigger)
+        await startRecording(trigger: trigger)
     }
 
-    private func startRecording(trigger: RecordingSource) {
+    private func startRecording(trigger: RecordingSource) async {
         guard phase == .ready else {
             return
         }
 
+        let sessionID = UUID()
+        activeAudioCaptureSessionID = sessionID
+        phase = .recording
+        statusText = "Recording"
+        recordingStart = Date()
+        activeRecordingSource = trigger
+        overlayErrorResetTask?.cancel()
+        overlayErrorResetTask = nil
+        if currentDictationDestination == .onboardingPractice {
+            onboardingPracticeText = ""
+            onboardingPracticeResult = nil
+        }
+        setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0), source: trigger))
+
         do {
-            try audioCaptureService.startCapture(preferredInputDeviceID: selectedInputDeviceID, echoCancellationEnabled: echoCancellationEnabled)
-            phase = .recording
-            statusText = "Recording"
-            recordingStart = Date()
-            activeRecordingSource = trigger
-            overlayErrorResetTask?.cancel()
-            overlayErrorResetTask = nil
-            if currentDictationDestination == .onboardingPractice {
-                onboardingPracticeText = ""
-                onboardingPracticeResult = nil
+            let session = try await audioCaptureService.startCapture(
+                sessionID: sessionID,
+                preferredInputDeviceID: selectedInputDeviceID,
+                echoCancellationEnabled: echoCancellationEnabled
+            )
+            guard activeAudioCaptureSessionID == sessionID else {
+                await audioCaptureService.cancelCapture(sessionID: sessionID, reason: nil)
+                return
             }
-            setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0), source: trigger))
-            playSoundFeedback(.recordingStarted)
-            AppLogger.shared.log(.info, "recording started input=\(selectedInputDeviceID ?? "default")")
+            audioRouteSnapshot = session.route
+            AppLogger.shared.log(.info, "recording started session=\(sessionID.uuidString) \(session.route.privacySafeLogValue)")
         } catch {
+            guard activeAudioCaptureSessionID == sessionID else {
+                return
+            }
+            activeAudioCaptureSessionID = nil
+            activeRecordingSource = nil
+            recordingStart = nil
+            phase = .ready
             lastError = "Audio start failed: \(error.localizedDescription)"
             statusText = "Ready"
             AppLogger.shared.log(.error, "audio start failed: \(error.localizedDescription)")
             playSoundFeedback(.error)
-            showTransientIndicatorError("Failed to start audio capture")
+            showTransientIndicatorError(error.localizedDescription)
         }
     }
 
@@ -2588,17 +2741,29 @@ final class AppState {
         guard activeRecordingSource == nil || activeRecordingSource == trigger else {
             return
         }
+        guard let sessionID = activeAudioCaptureSessionID else {
+            return
+        }
 
         phase = .transcribing
         statusText = "Transcribing..."
         setFloatingIndicatorState(.processing())
 
-        let captured = audioCaptureService.stopCapture()
+        let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
+        guard activeAudioCaptureSessionID == sessionID else {
+            return
+        }
+        activeAudioCaptureSessionID = nil
         let samples = captured.samples
         let sampleRate = captured.sampleRate
         let duration = recordingStart.map { Date().timeIntervalSince($0) } ?? 0
         let destination = currentDictationDestination
         AppLogger.shared.log(.info, "dictation stop samples=\(samples.count) sr=\(sampleRate) duration=\(String(format: "%.2f", duration))")
+
+        guard captured.outcome == .complete else {
+            handleAudioCaptureFailure(captured.outcome, destination: destination)
+            return
+        }
 
         do {
             let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
@@ -2714,6 +2879,44 @@ final class AppState {
         }
     }
 
+    private func handleAudioCaptureInterruption(
+        sessionID: UUID,
+        reason: AudioCaptureInterruption
+    ) async {
+        guard activeAudioCaptureSessionID == sessionID else {
+            return
+        }
+        if reason == .maximumDurationReached {
+            await stopRecordingAndTranscribe(trigger: activeRecordingSource ?? .manual)
+            return
+        }
+        await audioCaptureService.cancelCapture(sessionID: sessionID, reason: reason)
+        guard activeAudioCaptureSessionID == sessionID else {
+            return
+        }
+        activeAudioCaptureSessionID = nil
+        handleAudioCaptureFailure(.interrupted(reason), destination: currentDictationDestination)
+    }
+
+    private func handleAudioCaptureFailure(
+        _ outcome: AudioCaptureOutcome,
+        destination: DictationDestination
+    ) {
+        let message = outcome.userMessage ?? "Audio capture was interrupted. Try again."
+        activeRecordingSource = nil
+        recordingStart = nil
+        lastError = "Audio capture failed: \(message)"
+        if destination == .onboardingPractice {
+            onboardingPracticeText = ""
+            onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
+        }
+        phase = .ready
+        statusText = "Ready"
+        AppLogger.shared.log(.warning, "audio capture rejected outcome=\(String(describing: outcome))")
+        playSoundFeedback(.error)
+        showTransientIndicatorError(message)
+    }
+
     private func loadHistory() {
         isHydratingHistory = true
         recentResults = historyStore.load()
@@ -2736,6 +2939,7 @@ final class AppState {
         isHydratingGeneralSettings = true
         let settings = generalSettingsStore.load()
         selectedInputDeviceID = settings.preferredInputDeviceID
+        preferredInputDeviceName = settings.preferredInputDeviceName
         autoSubmitEnabled = settings.autoSubmitEnabled
         hotkeyConfiguration = settings.hotkeyConfiguration
         echoCancellationEnabled = settings.echoCancellationEnabled
@@ -2758,6 +2962,7 @@ final class AppState {
     private func currentGeneralSettings() -> GeneralSettings {
         GeneralSettings(
             preferredInputDeviceID: selectedInputDeviceID,
+            preferredInputDeviceName: preferredInputDeviceName,
             autoSubmitEnabled: autoSubmitEnabled,
             hotkeyConfiguration: hotkeyConfiguration,
             echoCancellationEnabled: echoCancellationEnabled,

@@ -17,9 +17,16 @@ final class AppLogger {
     private(set) var logFileURL: URL
 
     private init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Suniye", isDirectory: true)
-            .appendingPathComponent("logs", isDirectory: true)
+        let base: URL
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            base = FileManager.default.temporaryDirectory
+                .appendingPathComponent("SuniyeTests-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+                .appendingPathComponent("logs", isDirectory: true)
+        } else {
+            base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+                .appendingPathComponent("Suniye", isDirectory: true)
+                .appendingPathComponent("logs", isDirectory: true)
+        }
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
 
         logFileURL = base.appendingPathComponent("app.log")

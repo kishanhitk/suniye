@@ -393,9 +393,43 @@ struct GeneralPage: View {
                         CardDivider()
                             .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
 
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(
+                                appState.effectiveInputDeviceStatusText,
+                                systemImage: appState.audioRouteSnapshot == nil
+                                    ? "exclamationmark.triangle.fill"
+                                    : "mic.fill"
+                            )
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(
+                                appState.audioRouteSnapshot == nil
+                                    ? Color.orange
+                                    : MainWindowPalette.secondaryText
+                            )
+
+                            if let warning = appState.audioRouteWarningText {
+                                Text(warning)
+                                    .font(AppTypography.subheadline)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                            }
+
+                            if (appState.audioRouteSnapshot?.inputTransport.isBluetooth == true
+                                || appState.audioRouteSnapshot == nil),
+                               let recommended = appState.recommendedInputDevice {
+                                Button("Use \(recommended.name)") {
+                                    appState.useRecommendedInputDevice()
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        CardDivider()
+                            .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
+
                         SettingsToggleRow(
                             title: "Echo Cancellation",
-                            detail: "Filters out system audio (music, video, TTS) from the microphone during dictation. Uses Apple's Voice Processing. Leave off to preserve full-quality Bluetooth headphone playback.",
+                            detail: "Uses Apple's Voice Processing when the current input and output route supports it. It is bypassed for Bluetooth routes.",
                             isOn: $appState.echoCancellationEnabled
                         )
 
@@ -404,7 +438,7 @@ struct GeneralPage: View {
 
                         SettingsToggleRow(
                             title: "Sound Feedback",
-                            detail: "Play short local sounds when recording starts, dictation succeeds, or dictation fails.",
+                            detail: "Play short local sounds when dictation succeeds or fails.",
                             isOn: $appState.soundFeedbackEnabled
                         )
                     }
@@ -578,9 +612,11 @@ struct GeneralPage: View {
 
     private var inputDeviceChoices: [InputDeviceChoice] {
         let devices = appState.availableInputDevices.map {
-            InputDeviceChoice(
+            let availability = $0.isAvailable ? "" : " - Unavailable"
+            let defaultLabel = $0.isDefault ? " - Default" : ""
+            return InputDeviceChoice(
                 id: $0.id,
-                title: $0.isDefault ? "\($0.name) (Default)" : $0.name
+                title: "\($0.name) - \($0.transport.title)\(defaultLabel)\(availability)"
             )
         }
         return [InputDeviceChoice(id: nil, title: "System Default")] + devices

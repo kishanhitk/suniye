@@ -1,7 +1,6 @@
 import AppKit
 
 enum SoundFeedbackEvent: Equatable {
-    case recordingStarted
     case transcriptionSucceeded
     case error
 }
@@ -36,8 +35,6 @@ final class SoundFeedbackService: SoundFeedbackServiceProtocol {
 private extension SoundFeedbackEvent {
     var soundName: NSSound.Name {
         switch self {
-        case .recordingStarted:
-            return NSSound.Name("Tink")
         case .transcriptionSucceeded:
             return NSSound.Name("Ping")
         case .error:

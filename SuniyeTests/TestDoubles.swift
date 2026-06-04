@@ -362,6 +362,7 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     var loadModelErrorsByModelID: [ASRModelID: Error] = [:]
     var unloadCallCount = 0
     var loadCallCount = 0
+    var transcribeCallCount = 0
     var loadedConfigs: [RecognizerConfig] = []
 
     func loadModel(config: RecognizerConfig) async throws {
@@ -374,7 +375,8 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     }
 
     func transcribe(samples: [Float], sampleRate: Int) async throws -> String {
-        try transcribeResult.get()
+        transcribeCallCount += 1
+        return try transcribeResult.get()
     }
 
     func unloadModel() async {
@@ -383,29 +385,91 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
 }
 
 final class StubAudioCaptureService: AudioCaptureServiceProtocol {
-    var onLevelsUpdate: (([Float]) -> Void)?
+    var onLevelsUpdate: ((UUID, [Float]) -> Void)?
+    var onDevicesChanged: (([AudioInputDevice]) -> Void)?
+    var onRouteChanged: ((UUID, AudioRouteSnapshot) -> Void)?
+    var onCaptureInterrupted: ((UUID, AudioCaptureInterruption) -> Void)?
     var startCaptureCallCount = 0
+    var stopCaptureCallCount = 0
+    var cancelCaptureCallCount = 0
+    var handleSystemSleepCallCount = 0
+    var handleSystemWakeCallCount = 0
     var lastPreferredInputDeviceID: String?
     var lastEchoCancellationEnabled: Bool?
+    var lastStartedSessionID: UUID?
+    var lastStoppedSessionID: UUID?
+    var lastCanceledSessionID: UUID?
+    var startCaptureDelayNanoseconds: UInt64 = 0
     var stopCaptureResult = CapturedAudio(samples: [], sampleRate: 16_000)
     var availableDevices: [AudioInputDevice] = []
     var startCaptureError: Error?
+    var routeSnapshotError: Error?
+    var route = AudioRouteSnapshot(
+        preferredInputDeviceID: nil,
+        effectiveInputDeviceID: "default-device",
+        effectiveInputName: "System Microphone",
+        inputTransport: .builtIn,
+        outputTransport: .builtIn,
+        inputSampleRate: 16_000,
+        inputChannelCount: 1,
+        requestedEchoCancellation: false,
+        effectiveEchoCancellation: false,
+        backend: .inputOnlyHAL,
+        fallbackReason: nil
+    )
 
-    func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws {
+    func startCapture(
+        sessionID: UUID,
+        preferredInputDeviceID: String?,
+        echoCancellationEnabled: Bool
+    ) async throws -> AudioCaptureSession {
         startCaptureCallCount += 1
+        lastStartedSessionID = sessionID
         lastPreferredInputDeviceID = preferredInputDeviceID
         lastEchoCancellationEnabled = echoCancellationEnabled
+        if startCaptureDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: startCaptureDelayNanoseconds)
+        }
         if let startCaptureError {
             throw startCaptureError
         }
+        return AudioCaptureSession(id: sessionID, route: route)
     }
 
-    func stopCapture() -> CapturedAudio {
-        stopCaptureResult
+    func stopCapture(sessionID: UUID) async -> CapturedAudio {
+        stopCaptureCallCount += 1
+        lastStoppedSessionID = sessionID
+        return CapturedAudio(
+            sessionID: sessionID,
+            samples: stopCaptureResult.samples,
+            sampleRate: stopCaptureResult.sampleRate,
+            outcome: stopCaptureResult.outcome,
+            route: stopCaptureResult.route
+        )
+    }
+
+    func cancelCapture(sessionID: UUID, reason: AudioCaptureInterruption?) async {
+        cancelCaptureCallCount += 1
+        lastCanceledSessionID = sessionID
     }
 
     func availableInputDevices() -> [AudioInputDevice] {
         availableDevices
+    }
+
+    func routeSnapshot(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws -> AudioRouteSnapshot {
+        if let routeSnapshotError {
+            throw routeSnapshotError
+        }
+        return route
+    }
+
+    func handleSystemSleep() async {
+        handleSystemSleepCallCount += 1
+    }
+
+    func handleSystemWake() {
+        handleSystemWakeCallCount += 1
     }
 }
 

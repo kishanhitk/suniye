@@ -14,10 +14,58 @@ struct RecentResult: Identifiable, Equatable, Codable {
     }
 }
 
-struct AudioInputDevice: Identifiable, Equatable, Codable {
+enum AudioDeviceTransport: String, Equatable, Codable, Sendable {
+    case builtIn
+    case usb
+    case bluetooth
+    case bluetoothLE
+    case continuity
+    case aggregate
+    case virtual
+    case other
+
+    var title: String {
+        switch self {
+        case .builtIn: return "Built-in"
+        case .usb: return "USB"
+        case .bluetooth: return "Bluetooth"
+        case .bluetoothLE: return "Bluetooth LE"
+        case .continuity: return "Continuity"
+        case .aggregate: return "Aggregate"
+        case .virtual: return "Virtual"
+        case .other: return "Other"
+        }
+    }
+
+    var isBluetooth: Bool {
+        self == .bluetooth || self == .bluetoothLE
+    }
+
+    var isRecommendedPhysicalInput: Bool {
+        self == .builtIn || self == .usb
+    }
+}
+
+struct AudioInputDevice: Identifiable, Equatable, Codable, Sendable {
     let id: String
     let name: String
     let isDefault: Bool
+    let transport: AudioDeviceTransport
+    let isAvailable: Bool
+
+    init(
+        id: String,
+        name: String,
+        isDefault: Bool,
+        transport: AudioDeviceTransport = .other,
+        isAvailable: Bool = true
+    ) {
+        self.id = id
+        self.name = name
+        self.isDefault = isDefault
+        self.transport = transport
+        self.isAvailable = isAvailable
+    }
 }
 
 struct HotkeyConfiguration: Codable, Equatable {
@@ -283,6 +331,7 @@ enum UpdateChannel: String, Codable, CaseIterable, Identifiable {
 
 struct GeneralSettings: Codable, Equatable {
     var preferredInputDeviceID: String?
+    var preferredInputDeviceName: String?
     var autoSubmitEnabled: Bool = false
     var hotkeyConfiguration: HotkeyConfiguration = .globe
     var echoCancellationEnabled: Bool = false
@@ -296,6 +345,7 @@ struct GeneralSettings: Codable, Equatable {
 
     init(
         preferredInputDeviceID: String? = nil,
+        preferredInputDeviceName: String? = nil,
         autoSubmitEnabled: Bool = false,
         hotkeyConfiguration: HotkeyConfiguration = .globe,
         echoCancellationEnabled: Bool = false,
@@ -308,6 +358,7 @@ struct GeneralSettings: Codable, Equatable {
         updateChannel: UpdateChannel = .stable
     ) {
         self.preferredInputDeviceID = preferredInputDeviceID
+        self.preferredInputDeviceName = preferredInputDeviceName
         self.autoSubmitEnabled = autoSubmitEnabled
         self.hotkeyConfiguration = hotkeyConfiguration
         self.echoCancellationEnabled = echoCancellationEnabled
@@ -322,6 +373,7 @@ struct GeneralSettings: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case preferredInputDeviceID
+        case preferredInputDeviceName
         case autoSubmitEnabled
         case hotkeyConfiguration
         case echoCancellationEnabled
@@ -337,6 +389,7 @@ struct GeneralSettings: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         preferredInputDeviceID = try container.decodeIfPresent(String.self, forKey: .preferredInputDeviceID)
+        preferredInputDeviceName = try container.decodeIfPresent(String.self, forKey: .preferredInputDeviceName)
         autoSubmitEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSubmitEnabled) ?? false
         hotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .hotkeyConfiguration) ?? .globe
         echoCancellationEnabled = try container.decodeIfPresent(Bool.self, forKey: .echoCancellationEnabled) ?? false

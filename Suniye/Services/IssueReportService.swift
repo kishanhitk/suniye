@@ -165,6 +165,7 @@ struct DiagnosticRedactor: Sendable {
             (#"(?i)\b(api[_-]?key|token|secret|authorization|x-api-key)(\s*[:=]\s*)[^\s,;]+"#, "$1$2[REDACTED]"),
             (#"(?i)\b(sk-[A-Za-z0-9_\-]{12,}|gh[opsu]_[A-Za-z0-9_]{12,}|or-[A-Za-z0-9_\-]{12,})\b"#, "[REDACTED_TOKEN]"),
             (#"(?i)\b(transcript|clipboard|audio)(\s*[:=]\s*)[^\n]+"#, "$1$2[REDACTED]"),
+            (#"(?i)\b(device[_-]?(?:uid|name))(\s*[:=]\s*)[^\n]+"#, "$1$2[REDACTED]"),
             (#"(?i)[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}"#, "[REDACTED_EMAIL]"),
         ]
 
