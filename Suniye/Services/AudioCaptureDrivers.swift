@@ -132,7 +132,8 @@ private final class EngineCaptureDriver: AudioCaptureDriver {
                 forName: .AVAudioEngineConfigurationChange,
                 object: engine,
                 queue: nil
-            ) { _ in
+            ) { [weak self] _ in
+                guard let self, !self.engine.isRunning else { return }
                 onConfigurationChange()
             }
         } catch {

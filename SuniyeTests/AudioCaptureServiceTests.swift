@@ -114,11 +114,48 @@ final class AudioCaptureServiceTests: XCTestCase {
         XCTAssertEqual(session.route.fallbackReason, .backendStartFailed)
     }
 
-    func testSelectedDeviceFormatChangeInterruptsActiveCapture() async throws {
+    func testVoiceProcessingIgnoresNegotiatedHardwareFormatChange() async throws {
         let monitor = StubAudioDeviceMonitor()
+        let catalog = StubAudioCaptureHardwareCatalog(route: makeDeviceRoute())
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 1_600)
+        )
         let service = AudioCaptureService(
             deviceMonitor: monitor,
-            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            hardwareCatalog: catalog,
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        let interrupted = expectation(description: "capture not interrupted")
+        interrupted.isInverted = true
+        service.onEvent = { event in
+            if case .interrupted = event {
+                interrupted.fulfill()
+            }
+        }
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: true
+        )
+
+        catalog.route = makeDeviceRoute(sampleRate: 48_000)
+        monitor.emit(.selectedDeviceFormat)
+        await fulfillment(of: [interrupted], timeout: 0.1)
+        let captured = await service.stopCapture(sessionID: sessionID)
+
+        XCTAssertEqual(factory.startedBackends, [.voiceProcessingEngine])
+        XCTAssertEqual(captured.outcome, .complete)
+    }
+
+    func testSelectedDeviceFormatChangeInterruptsActiveCapture() async throws {
+        let monitor = StubAudioDeviceMonitor()
+        let catalog = StubAudioCaptureHardwareCatalog(route: makeDeviceRoute())
+        let service = AudioCaptureService(
+            deviceMonitor: monitor,
+            hardwareCatalog: catalog,
             driverFactory: StubAudioCaptureDriverFactory(
                 format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1),
                 samples: Array(repeating: 0.2, count: 1_600)
@@ -139,9 +176,85 @@ final class AudioCaptureServiceTests: XCTestCase {
             echoCancellationEnabled: false
         )
 
+        catalog.route = makeDeviceRoute(sampleRate: 48_000)
         monitor.emit(.selectedDeviceFormat)
         await fulfillment(of: [interrupted], timeout: 1)
         await service.cancelCapture(sessionID: sessionID, reason: .formatChanged)
+    }
+
+    func testAECStartupEngineConfigurationChangeRestartsVoiceProcessing() async throws {
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1)
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: true
+        )
+
+        factory.emitConfigurationChange(forStartAt: 0)
+        let captured = await service.stopCapture(sessionID: sessionID)
+
+        XCTAssertEqual(factory.startedBackends, [.voiceProcessingEngine, .voiceProcessingEngine])
+        XCTAssertEqual(captured.outcome, .tooShort)
+    }
+
+    func testAECFallbackStartupEngineConfigurationChangeRestartsStandardEngine() async throws {
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1),
+            failingBackends: [.voiceProcessingEngine]
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: true
+        )
+
+        factory.emitConfigurationChange(forStartAt: 0)
+        let captured = await service.stopCapture(sessionID: sessionID)
+
+        XCTAssertEqual(factory.startedBackends, [.voiceProcessingEngine, .standardEngine, .standardEngine])
+        XCTAssertEqual(captured.outcome, .tooShort)
+    }
+
+    func testEngineConfigurationChangeAfterAudioArrivesInterruptsCapture() async throws {
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 1_600)
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: true
+        )
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        factory.emitConfigurationChange(forStartAt: 0)
+        let captured = await service.stopCapture(sessionID: sessionID)
+
+        XCTAssertEqual(factory.startedBackends, [.voiceProcessingEngine])
+        XCTAssertEqual(captured.outcome, .interrupted(.engineConfigurationChanged))
     }
 
     func testNoFirstFrameFallsBackThenInterrupts() async throws {
@@ -324,7 +437,8 @@ final class AudioCaptureServiceTests: XCTestCase {
 
     private func makeDeviceRoute(
         inputTransport: AudioDeviceTransport = .builtIn,
-        outputTransport: AudioDeviceTransport = .builtIn
+        outputTransport: AudioDeviceTransport = .builtIn,
+        sampleRate: Int = 16_000
     ) -> AudioDeviceRoute {
         AudioDeviceRoute(
             preferredInputDeviceID: nil,
@@ -332,7 +446,7 @@ final class AudioCaptureServiceTests: XCTestCase {
             effectiveInputName: "Test Microphone",
             inputTransport: inputTransport,
             outputTransport: outputTransport,
-            nominalInputSampleRate: 16_000,
+            nominalInputSampleRate: sampleRate,
             inputChannelCount: 1
         )
     }
@@ -404,6 +518,7 @@ private final class StubAudioCaptureDriverFactory: AudioCaptureDriverFactoryProt
     let failingBackends: [AudioCaptureBackend]
     private(set) var startedBackends: [AudioCaptureBackend] = []
     private(set) var drivers: [StubAudioCaptureDriver] = []
+    private var configurationChangeCallbacks: [() -> Void] = []
 
     init(
         format: AudioCaptureFormat,
@@ -425,6 +540,7 @@ private final class StubAudioCaptureDriverFactory: AudioCaptureDriverFactoryProt
         if failingBackends.contains(plan.backend) {
             throw AudioCaptureServiceError.operationFailed("Start test driver", -1)
         }
+        configurationChangeCallbacks.append(onConfigurationChange)
         if !samples.isEmpty {
             samples.withUnsafeBufferPointer {
                 _ = SuniyeAudioRingBufferWrite(ring, $0.baseAddress, samples.count)
@@ -433,5 +549,9 @@ private final class StubAudioCaptureDriverFactory: AudioCaptureDriverFactoryProt
         let driver = StubAudioCaptureDriver(backend: plan.backend, format: format)
         drivers.append(driver)
         return AudioCaptureDriverStart(driver: driver, format: format)
+    }
+
+    func emitConfigurationChange(forStartAt index: Int) {
+        configurationChangeCallbacks[index]()
     }
 }

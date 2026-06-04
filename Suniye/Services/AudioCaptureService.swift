@@ -64,6 +64,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         var interruption: AudioCaptureInterruption?
         var fallbackAttempted = false
         var firstFrameSeen = false
+        var firstFrameDeadlineGeneration = 0
+        var startupConfigurationRecoveryCount = 0
         var smoothedLevels = Array(repeating: Float(0), count: 12)
         var lastLevelEmissionTime: CFTimeInterval = 0
         var drainTimer: DispatchSourceTimer?
@@ -279,7 +281,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         ) { [weak self, weak active] in
             self?.controlQueue.async {
                 guard let self, let active, self.activeCapture === active else { return }
-                self.interruptActiveCapture(.engineConfigurationChanged)
+                self.handleEngineConfigurationChange(for: active)
             }
         }
         active.driver = started.driver
@@ -345,10 +347,13 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     }
 
     private func scheduleFirstFrameDeadline(for active: ActiveCapture) {
+        active.firstFrameDeadlineGeneration += 1
+        let generation = active.firstFrameDeadlineGeneration
         controlQueue.asyncAfter(deadline: .now() + firstFrameDeadlineSeconds) { [weak self, weak active] in
             guard let self,
                   let active,
                   self.activeCapture === active,
+                  active.firstFrameDeadlineGeneration == generation,
                   active.interruption == nil,
                   !active.firstFrameSeen else {
                 return
@@ -386,7 +391,12 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         case .devices, .selectedDeviceAlive:
             interruption = resolvedRouteChangeInterruption(for: active)
         case .selectedDeviceFormat:
-            interruption = .formatChanged
+            // AVAudioEngine negotiates the hardware format while starting,
+            // especially when Voice Processing is enabled. Its configuration
+            // notification is the authoritative signal for engine backends.
+            interruption = active.route.backend == .inputOnlyHAL
+                ? resolvedFormatChangeInterruption(for: active)
+                : nil
         case .selectedDeviceChanged:
             interruption = .deviceChanged
         case .serviceRestarted:
@@ -416,6 +426,85 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
             return resolution.route.effectiveInputDeviceID == active.route.effectiveInputDeviceID
                 ? nil
                 : .deviceChanged
+        } catch {
+            return .deviceUnavailable
+        }
+    }
+
+    private func handleEngineConfigurationChange(for active: ActiveCapture) {
+        guard active.interruption == nil else { return }
+        guard active.requestedEchoCancellation,
+              !active.firstFrameSeen,
+              active.samples.isEmpty,
+              active.startupConfigurationRecoveryCount < 2 else {
+            interruptActiveCapture(.engineConfigurationChanged)
+            return
+        }
+        if let routeInterruption = resolvedRouteChangeInterruption(for: active) {
+            interruptActiveCapture(routeInterruption)
+            return
+        }
+
+        active.startupConfigurationRecoveryCount += 1
+        let backend = active.route.backend
+        AppLogger.shared.log(
+            .warning,
+            "audio engine configuration changed during AEC startup; recovering session=\(active.id.uuidString) attempt=\(active.startupConfigurationRecoveryCount) \(active.route.privacySafeLogValue)"
+        )
+        stopHardware(for: active)
+        SuniyeAudioRingBufferReset(active.ring)
+
+        do {
+            try startDriver(for: recoveryPlan(for: active, backend: backend), active: active)
+            onEvent?(.routeChanged(sessionID: active.id, route: active.route))
+            scheduleFirstFrameDeadline(for: active)
+        } catch {
+            guard backend == .voiceProcessingEngine, !active.fallbackAttempted else {
+                interruptActiveCapture(.engineConfigurationChanged)
+                return
+            }
+            do {
+                try fallbackToStandardEngine(active: active, originalError: error)
+                scheduleFirstFrameDeadline(for: active)
+            } catch {
+                interruptActiveCapture(.engineConfigurationChanged)
+            }
+        }
+    }
+
+    private func recoveryPlan(for active: ActiveCapture, backend: AudioCaptureBackend) -> AudioCapturePlan {
+        switch backend {
+        case .voiceProcessingEngine:
+            return AudioCapturePolicy.primaryPlan(
+                for: active.deviceRoute,
+                echoCancellationEnabled: active.requestedEchoCancellation
+            )
+        case .standardEngine:
+            return AudioCapturePolicy.fallbackPlan(
+                for: active.deviceRoute,
+                echoCancellationEnabled: active.requestedEchoCancellation,
+                reason: active.route.fallbackReason ?? .backendStartFailed
+            )
+        case .inputOnlyHAL:
+            return AudioCapturePolicy.primaryPlan(
+                for: active.deviceRoute,
+                echoCancellationEnabled: active.requestedEchoCancellation
+            )
+        }
+    }
+
+    private func resolvedFormatChangeInterruption(for active: ActiveCapture) -> AudioCaptureInterruption? {
+        do {
+            let resolution = try hardwareCatalog.resolveDeviceRoute(
+                preferredInputDeviceID: active.preferredInputDeviceID
+            )
+            guard resolution.route.effectiveInputDeviceID == active.deviceRoute.effectiveInputDeviceID else {
+                return .deviceChanged
+            }
+            return resolution.route.nominalInputSampleRate == active.deviceRoute.nominalInputSampleRate
+                && resolution.route.inputChannelCount == active.deviceRoute.inputChannelCount
+                ? nil
+                : .formatChanged
         } catch {
             return .deviceUnavailable
         }

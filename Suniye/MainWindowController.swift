@@ -105,6 +105,9 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--e2e-submit-command") {
             sharedAppState.runSubmitCommandE2ESmoke()
         }
+        if CommandLine.arguments.contains("--e2e-audio-aec") {
+            sharedAppState.runAudioAECE2ESmoke()
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

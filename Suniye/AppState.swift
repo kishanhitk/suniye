@@ -2575,6 +2575,58 @@ final class AppState {
         }
     }
 
+    func runAudioAECE2ESmoke() {
+        Task { @MainActor in
+            AppLogger.shared.log(.info, "e2e audio aec smoke start")
+            guard let builtInMicrophone = audioCaptureService.availableInputDevices()
+                .first(where: { $0.transport == .builtIn }) else {
+                AppLogger.shared.log(.error, "e2e audio aec smoke done passed=false reason=no_built_in_microphone")
+                NSApp.terminate(nil)
+                return
+            }
+
+            var passed = false
+            for attempt in 1 ... 3 {
+                let sessionID = UUID()
+                do {
+                    _ = try await audioCaptureService.startCapture(
+                        sessionID: sessionID,
+                        preferredInputDeviceID: builtInMicrophone.id,
+                        echoCancellationEnabled: true
+                    )
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
+                    let interrupted: Bool
+                    if case .interrupted = captured.outcome {
+                        interrupted = true
+                    } else {
+                        interrupted = false
+                    }
+                    let attemptPassed = captured.health.frameCount > 0
+                        && captured.route?.effectiveEchoCancellation == true
+                        && !interrupted
+                    AppLogger.shared.log(
+                        attemptPassed ? .info : .warning,
+                        "e2e audio aec attempt=\(attempt) passed=\(attemptPassed) outcome=\(String(describing: captured.outcome)) frames=\(captured.health.frameCount) \(captured.route?.privacySafeLogValue ?? "route=none")"
+                    )
+                    if attemptPassed {
+                        passed = true
+                        break
+                    }
+                } catch {
+                    AppLogger.shared.log(
+                        .warning,
+                        "e2e audio aec attempt=\(attempt) passed=false start_error=\(error.localizedDescription)"
+                    )
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+
+            AppLogger.shared.log(passed ? .info : .error, "e2e audio aec smoke done passed=\(passed)")
+            NSApp.terminate(nil)
+        }
+    }
+
     private func wireHotkey() {
         hotkeyService.onHotkeyDown = { [weak self] in
             AppLogger.shared.log(.debug, "hotkey callback: down")
