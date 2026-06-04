@@ -75,6 +75,62 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
         await server.stop()
     }
 
+    func testConcurrentColdStartsReuseOneStartup() async throws {
+        let tempDir = try makeTemporaryDirectory()
+        let logURL = tempDir.appendingPathComponent("starts.log")
+        let helperURL = try makeFakeLlamaServer(
+            in: tempDir,
+            logURL: logURL,
+            startupDelaySeconds: 0.25
+        )
+        let runtime = LocalGemmaRuntime(
+            serverExecutableURL: helperURL,
+            model: LocalGemmaDefaults.modelEntry,
+            modelURL: tempDir.appendingPathComponent(LocalGemmaDefaults.modelFilename)
+        )
+        let server = LocalGemmaLlamaServer()
+
+        async let firstEndpoint = server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
+        async let secondEndpoint = server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
+        let endpoints = try await (firstEndpoint, secondEndpoint)
+
+        XCTAssertEqual(endpoints.0, endpoints.1)
+        XCTAssertEqual(startCount(at: logURL), 1)
+        await server.stop()
+    }
+
+    func testStopCancelsSharedStartupWithoutRestarting() async throws {
+        let tempDir = try makeTemporaryDirectory()
+        let logURL = tempDir.appendingPathComponent("starts.log")
+        let helperURL = try makeFakeLlamaServer(
+            in: tempDir,
+            logURL: logURL,
+            startupDelaySeconds: 5
+        )
+        let runtime = LocalGemmaRuntime(
+            serverExecutableURL: helperURL,
+            model: LocalGemmaDefaults.modelEntry,
+            modelURL: tempDir.appendingPathComponent(LocalGemmaDefaults.modelFilename)
+        )
+        let server = LocalGemmaLlamaServer()
+        let startupTask = Task {
+            try await server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
+        }
+
+        let didStart = await waitForStartCount(1, at: logURL)
+        XCTAssertTrue(didStart)
+
+        await server.stop()
+
+        do {
+            _ = try await startupTask.value
+            XCTFail("Expected the in-flight startup to be canceled")
+        } catch {
+            XCTAssertEqual(startCount(at: logURL), 1)
+            XCTAssertTrue(logContents(at: logURL).contains("term"))
+        }
+    }
+
     func testServerStartupTimeoutStopsUnhealthyProcess() async throws {
         let tempDir = try makeTemporaryDirectory()
         let logURL = tempDir.appendingPathComponent("starts.log")
@@ -136,6 +192,7 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
         in directory: URL,
         logURL: URL,
         healthStatus: Int = 200,
+        startupDelaySeconds: Double = 0,
         terminationDelaySeconds: Double = 0
     ) throws -> URL {
         let scriptURL = directory.appendingPathComponent("fake-llama-server")
@@ -154,6 +211,7 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
             port = int(sys.argv[sys.argv.index("--port") + 1])
             api_key = sys.argv[sys.argv.index("--api-key") + 1]
             health_status = \(healthStatus)
+            startup_delay_seconds = \(startupDelaySeconds)
             termination_delay_seconds = \(terminationDelaySeconds)
         except Exception:
             with open(log_path, "a", encoding="utf-8") as log:
@@ -171,6 +229,8 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
 
         with open(log_path, "a", encoding="utf-8") as log:
             log.write("start\\n")
+
+        time.sleep(startup_delay_seconds)
 
         class Handler(BaseHTTPRequestHandler):
             def _authorized(self):
@@ -226,6 +286,17 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
             .split(separator: "\n")
             .filter { $0 == "start" }
             .count
+    }
+
+    private func waitForStartCount(_ expectedCount: Int, at url: URL) async -> Bool {
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            if startCount(at: url) >= expectedCount {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return false
     }
 
     private func logContents(at url: URL) -> String {

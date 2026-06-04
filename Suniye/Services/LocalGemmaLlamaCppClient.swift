@@ -123,10 +123,17 @@ enum LocalGemmaCompletionRequestFactory {
 }
 
 actor LocalGemmaLlamaServer {
+    private struct Startup {
+        let id: UUID
+        let runtime: LocalGemmaRuntime
+        let task: Task<LocalGemmaServerEndpoint, Error>
+    }
+
     private let healthSession: URLSession
     private var process: Process?
     private var runtime: LocalGemmaRuntime?
     private var endpoint: LocalGemmaServerEndpoint?
+    private var startup: Startup?
     private var idleShutdownTask: Task<Void, Never>?
     private var stoppingTask: Task<Void, Never>?
 
@@ -144,7 +151,51 @@ actor LocalGemmaLlamaServer {
             return endpoint
         }
 
+        if let startup, startup.runtime == runtime {
+            let endpoint = try await startup.task.value
+            scheduleIdleShutdown(after: idleTimeoutSeconds)
+            return endpoint
+        }
+
         await stop()
+
+        let startupID = UUID()
+        let startupTask = Task { [weak self] () throws -> LocalGemmaServerEndpoint in
+            guard let self else {
+                throw LLMPostProcessorError.provider("server_start_canceled")
+            }
+            return try await self.start(
+                runtime: runtime,
+                startupID: startupID,
+                startupTimeoutSeconds: startupTimeoutSeconds
+            )
+        }
+        startup = Startup(id: startupID, runtime: runtime, task: startupTask)
+
+        do {
+            let endpoint = try await startupTask.value
+            if startup?.id == startupID {
+                startup = nil
+            }
+            scheduleIdleShutdown(after: idleTimeoutSeconds)
+            return endpoint
+        } catch {
+            if startup?.id == startupID {
+                startup = nil
+            }
+            throw error
+        }
+    }
+
+    private func start(
+        runtime: LocalGemmaRuntime,
+        startupID: UUID,
+        startupTimeoutSeconds: Double
+    ) async throws -> LocalGemmaServerEndpoint {
+        try Task.checkCancellation()
+        guard startup?.id == startupID else {
+            throw LLMPostProcessorError.provider("server_start_canceled")
+        }
 
         let port = Int.random(in: 49_152 ... 65_535)
         let endpoint = LocalGemmaServerEndpoint(
@@ -179,16 +230,32 @@ actor LocalGemmaLlamaServer {
                 timeoutSeconds: startupTimeoutSeconds
             )
         } catch {
-            await stop()
+            await cleanUpFailedStartup(process, startupID: startupID)
             throw error
         }
-        guard self.process === process, process.isRunning, self.runtime == runtime else {
-            await stop()
+        guard startup?.id == startupID,
+              self.process === process,
+              process.isRunning,
+              self.runtime == runtime else {
             throw LLMPostProcessorError.provider("server_stopped_during_startup")
         }
         self.endpoint = endpoint
-        scheduleIdleShutdown(after: idleTimeoutSeconds)
         return endpoint
+    }
+
+    private func cleanUpFailedStartup(_ processToStop: Process, startupID: UUID) async {
+        guard startup?.id == startupID, process === processToStop else {
+            return
+        }
+
+        startup = nil
+        process = nil
+        runtime = nil
+        endpoint = nil
+        await Self.terminateAndWait(
+            processToStop,
+            timeoutSeconds: LocalGemmaDefaults.shutdownTimeoutSeconds
+        )
     }
 
     func scheduleIdleShutdown(after idleTimeoutSeconds: Double) {
@@ -214,6 +281,8 @@ actor LocalGemmaLlamaServer {
     ) async throws {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {
+            try Task.checkCancellation()
+
             if !process.isRunning {
                 let reason = Self.exitReason(
                     status: process.terminationStatus,
@@ -256,6 +325,10 @@ actor LocalGemmaLlamaServer {
     func stop() async {
         idleShutdownTask?.cancel()
         idleShutdownTask = nil
+
+        let startupTaskToCancel = startup?.task
+        startup = nil
+        startupTaskToCancel?.cancel()
 
         if let stoppingTask {
             await stoppingTask.value
