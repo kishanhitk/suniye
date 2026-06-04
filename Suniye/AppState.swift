@@ -134,45 +134,6 @@ struct MagicFormatSetupTestResult: Equatable {
     let severity: Severity
 }
 
-enum OnboardingStep: Int, CaseIterable {
-    case welcome
-    case setup
-    case magicFormat
-    case practice
-
-    var title: String {
-        switch self {
-        case .welcome:
-            return "Welcome"
-        case .setup:
-            return "Set Up"
-        case .magicFormat:
-            return "Magic Format"
-        case .practice:
-            return "Try It"
-        }
-    }
-}
-
-struct OnboardingPracticeResult: Equatable {
-    enum Severity: Equatable {
-        case success
-        case error
-
-        var color: Color {
-            switch self {
-            case .success:
-                .green
-            case .error:
-                .red
-            }
-        }
-    }
-
-    let message: String
-    let severity: Severity
-}
-
 struct ASRModelBannerState: Equatable {
     enum Tone: Equatable {
         case info
@@ -1122,9 +1083,9 @@ final class AppState {
         }
 
         switch localGemmaInstallState {
-        case .downloading, .verifying, .failed:
+        case .downloading, .verifying, .failed, .unavailable:
             return localGemmaInstallStatusText
-        case .unavailable, .notInstalled, .installed:
+        case .notInstalled, .installed:
             return nil
         }
     }
@@ -1485,25 +1446,25 @@ final class AppState {
         activeOnboardingStep = .welcome
     }
 
-    func useLocalModelDuringOnboarding() {
-        guard activeOnboardingStep == .magicFormat,
-              isLocalGemmaProviderSelectable else {
+    func confirmMagicFormatDuringOnboarding(_ provider: OnboardingMagicFormatProvider) {
+        guard activeOnboardingStep == .magicFormat else {
             return
         }
 
-        llmProvider = .localGemma
-        llmEnabled = true
-        startLocalGemmaDownload()
-        completeCoreOnboarding()
-    }
-
-    func useAppleIntelligenceDuringOnboarding() {
-        guard activeOnboardingStep == .magicFormat,
-              appleMagicFormatAvailability.isAvailable else {
-            return
+        switch provider {
+        case .localModel:
+            guard isLocalGemmaProviderSelectable else {
+                return
+            }
+            llmProvider = provider.magicFormatProvider
+            startLocalGemmaDownload()
+        case .appleIntelligence:
+            guard appleMagicFormatAvailability.isAvailable else {
+                return
+            }
+            llmProvider = provider.magicFormatProvider
         }
 
-        llmProvider = .appleFoundationModels
         llmEnabled = true
         completeCoreOnboarding()
     }

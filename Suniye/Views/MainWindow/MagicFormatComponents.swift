@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct StylePageStatusPill: View {
@@ -75,6 +76,59 @@ struct StylePageRadioIndicator: View {
             return .accentColor
         }
         return isEnabled ? MainWindowPalette.tertiaryText : MainWindowPalette.divider
+    }
+}
+
+struct StylePageProviderIcon: View {
+    let provider: MagicFormatProvider
+
+    var body: some View {
+        if provider == .appleFoundationModels && symbolName == "apple.intelligence" {
+            Image(systemName: symbolName)
+                .symbolRenderingMode(.multicolor)
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 30, height: 30)
+                .background(iconBackground(MainWindowPalette.selectedFill.opacity(0.75)))
+        } else {
+            Image(systemName: symbolName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 30, height: 30)
+                .background(iconBackground(color.opacity(0.12)))
+        }
+    }
+
+    private func iconBackground(_ color: Color) -> some View {
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(color)
+    }
+
+    private var symbolName: String {
+        switch provider {
+        case .automatic:
+            return "wand.and.stars"
+        case .appleFoundationModels:
+            return NSImage(systemSymbolName: "apple.intelligence", accessibilityDescription: nil) == nil
+                ? "sparkles"
+                : "apple.intelligence"
+        case .localGemma:
+            return "cpu"
+        case .openAICompatible:
+            return "key.horizontal"
+        }
+    }
+
+    private var color: Color {
+        switch provider {
+        case .automatic:
+            return .purple
+        case .appleFoundationModels:
+            return .blue
+        case .localGemma:
+            return .green
+        case .openAICompatible:
+            return .orange
+        }
     }
 }
 

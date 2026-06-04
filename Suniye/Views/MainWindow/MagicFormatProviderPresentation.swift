@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct MagicFormatProviderStatus {
@@ -16,12 +15,6 @@ struct MagicFormatProviderPresenter {
 
     var displayedProviderSelection: MagicFormatProvider {
         appState.llmProvider
-    }
-
-    var appleIntelligenceSymbolName: String {
-        NSImage(systemSymbolName: "apple.intelligence", accessibilityDescription: nil) == nil
-            ? "sparkles"
-            : "apple.intelligence"
     }
 
     var topStatusText: String {
@@ -83,32 +76,6 @@ struct MagicFormatProviderPresenter {
             return appState.isLocalGemmaProviderSelectable
         case .automatic, .openAICompatible:
             return true
-        }
-    }
-
-    func iconName(for provider: MagicFormatProvider) -> String {
-        switch provider {
-        case .automatic:
-            return "wand.and.stars"
-        case .appleFoundationModels:
-            return appleIntelligenceSymbolName
-        case .localGemma:
-            return "cpu"
-        case .openAICompatible:
-            return "key.horizontal"
-        }
-    }
-
-    func iconColor(for provider: MagicFormatProvider) -> Color {
-        switch provider {
-        case .automatic:
-            return .purple
-        case .appleFoundationModels:
-            return .blue
-        case .localGemma:
-            return .green
-        case .openAICompatible:
-            return .orange
         }
     }
 

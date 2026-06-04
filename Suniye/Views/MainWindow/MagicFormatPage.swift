@@ -585,25 +585,7 @@ struct StylePage: View {
 
     @ViewBuilder
     private func providerIcon(for provider: MagicFormatProvider) -> some View {
-        if provider == .appleFoundationModels && providerPresenter.appleIntelligenceSymbolName == "apple.intelligence" {
-            Image(systemName: "apple.intelligence")
-                .symbolRenderingMode(.multicolor)
-                .font(.system(size: 17, weight: .medium))
-                .frame(width: 30, height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(MainWindowPalette.selectedFill.opacity(0.75))
-                )
-        } else {
-            Image(systemName: providerPresenter.iconName(for: provider))
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(providerPresenter.iconColor(for: provider))
-                .frame(width: 30, height: 30)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(providerPresenter.iconColor(for: provider).opacity(0.12))
-                )
-        }
+        StylePageProviderIcon(provider: provider)
     }
 
     private var promptBinding: Binding<String> {

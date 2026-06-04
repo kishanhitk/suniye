@@ -235,7 +235,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasCompletedCoreOnboarding = false
         appState.activeOnboardingStep = .magicFormat
 
-        appState.useLocalModelDuringOnboarding()
+        appState.confirmMagicFormatDuringOnboarding(.localModel)
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(localManager.downloadCallCount, 1)
@@ -252,7 +252,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasCompletedCoreOnboarding = false
         appState.activeOnboardingStep = .magicFormat
 
-        appState.useLocalModelDuringOnboarding()
+        appState.confirmMagicFormatDuringOnboarding(.localModel)
 
         XCTAssertEqual(localManager.downloadCallCount, 0)
         XCTAssertTrue(appState.llmEnabled)
@@ -266,7 +266,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasCompletedCoreOnboarding = false
         appState.activeOnboardingStep = .magicFormat
 
-        appState.useAppleIntelligenceDuringOnboarding()
+        appState.confirmMagicFormatDuringOnboarding(.appleIntelligence)
 
         XCTAssertTrue(appState.llmEnabled)
         XCTAssertEqual(appState.llmProvider, .appleFoundationModels)
@@ -280,7 +280,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasCompletedCoreOnboarding = false
         appState.activeOnboardingStep = .magicFormat
 
-        appState.useAppleIntelligenceDuringOnboarding()
+        appState.confirmMagicFormatDuringOnboarding(.appleIntelligence)
 
         XCTAssertFalse(appState.llmEnabled)
         XCTAssertEqual(appState.activeOnboardingStep, .magicFormat)
@@ -294,7 +294,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasCompletedCoreOnboarding = false
         appState.activeOnboardingStep = .magicFormat
 
-        appState.useLocalModelDuringOnboarding()
+        appState.confirmMagicFormatDuringOnboarding(.localModel)
 
         XCTAssertFalse(appState.llmEnabled)
         XCTAssertEqual(localManager.downloadCallCount, 0)
@@ -329,10 +329,20 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertNil(appState.activeOnboardingStep)
     }
 
+    func testUnavailableLocalModelStatusAppearsDuringPractice() {
+        let appState = makeTestAppState()
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        appState.localGemmaInstallState = .unavailable("Local runtime is missing.")
+        appState.activeOnboardingStep = .practice
+
+        XCTAssertEqual(appState.onboardingLocalModelStatusText, "Local runtime is missing.")
+    }
+
     func testOnboardingMagicFormatInitialChoicePrefersLocalModel() {
         let appState = makeTestAppState()
 
-        XCTAssertEqual(OnboardingMagicFormatStepView.initialChoice(for: appState), .localModel)
+        XCTAssertEqual(OnboardingMagicFormatPresenter(appState: appState).initialProvider, .localModel)
     }
 
     func testOnboardingMagicFormatInitialChoiceUsesAppleWhenLocalModelUnsupported() {
@@ -344,7 +354,7 @@ final class AppStateSettingsTests: XCTestCase {
             localLLMModelManager: localManager
         )
 
-        XCTAssertEqual(OnboardingMagicFormatStepView.initialChoice(for: appState), .appleIntelligence)
+        XCTAssertEqual(OnboardingMagicFormatPresenter(appState: appState).initialProvider, .appleIntelligence)
     }
 
     func testFinishOnboardingClearsActiveStep() {
