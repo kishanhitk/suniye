@@ -485,3 +485,14 @@ struct OnboardingView: View {
         }
     }
 }
+
+private extension OnboardingPracticeResult.Severity {
+    var color: Color {
+        switch self {
+        case .success:
+            .green
+        case .error:
+            .red
+        }
+    }
+}

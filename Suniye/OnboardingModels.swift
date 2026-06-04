@@ -1,5 +1,3 @@
-import SwiftUI
-
 enum OnboardingStep: Int, CaseIterable {
     case welcome
     case setup
@@ -38,15 +36,6 @@ struct OnboardingPracticeResult: Equatable {
     enum Severity: Equatable {
         case success
         case error
-
-        var color: Color {
-            switch self {
-            case .success:
-                .green
-            case .error:
-                .red
-            }
-        }
     }
 
     let message: String

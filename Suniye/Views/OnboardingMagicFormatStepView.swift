@@ -42,6 +42,7 @@ struct OnboardingMagicFormatStepView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(MainWindowPalette.secondaryText)
+                .accessibilityLabel("Not Now")
 
                 Spacer(minLength: 12)
 
@@ -51,6 +52,7 @@ struct OnboardingMagicFormatStepView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!selectedOption.isSelectable)
+                    .accessibilityLabel(selectedOption.primaryActionTitle)
                 }
             }
         }
@@ -71,6 +73,8 @@ struct OnboardingMagicFormatStepView: View {
                 providerRowContent(option)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(option.provider.magicFormatProvider.displayName)
+            .accessibilityHint(option.description)
         } else {
             providerRowContent(option)
         }
@@ -138,6 +142,7 @@ struct OnboardingMagicFormatStepView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel("Open Apple Intelligence Settings")
             }
         }
         .padding(.leading, 56)
