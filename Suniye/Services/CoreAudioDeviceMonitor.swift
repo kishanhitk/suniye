@@ -224,7 +224,7 @@ enum CoreAudioDeviceCatalog {
             inputTransport: inputTransport,
             outputTransport: outputTransport,
             nominalInputSampleRate: max(8_000, Int(nominalSampleRate(for: resolvedInputID).rounded())),
-            inputChannelCount: inputChannelCount(for: resolvedInputID),
+            inputChannelCount: inputChannelCount(for: resolvedInputID)
         )
         return CoreAudioRouteResolution(inputDeviceID: resolvedInputID, route: route)
     }
