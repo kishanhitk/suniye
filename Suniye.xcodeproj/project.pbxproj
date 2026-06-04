@@ -73,6 +73,7 @@
 		BF0B1BE62096AF43DD92C42F /* MainWindowSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C6F3D1EED6DBFE38C52EC9 /* MainWindowSection.swift */; };
 		C6D9D80335069A671A66A11A /* FloatingIndicatorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD363F5B6346BBC43B06E2E /* FloatingIndicatorState.swift */; };
 		D0A7C3187C25D92FED7DDEEB /* AppStateIssueReportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 897FC3AE1270CBE7E26BE606 /* AppStateIssueReportTests.swift */; };
+		D31733EEC8E6838ADA961197 /* OnboardingMagicFormatStepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0246650190A01AD8A26A7D0 /* OnboardingMagicFormatStepView.swift */; };
 		D4A9EDEA500C15F31FEB8CE1 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECD2622B5D49CEAF4D4736A /* KeychainService.swift */; };
 		D56981268DA6E6B631417822 /* LocalGemmaLlamaCppClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81C8980964221A020EBB979 /* LocalGemmaLlamaCppClient.swift */; };
 		D70B86338C771C5459B2AEC4 /* FloatingIndicatorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BFAD0B3FD93106BF02E29E5 /* FloatingIndicatorController.swift */; };
@@ -178,6 +179,7 @@
 		BAD363F5B6346BBC43B06E2E /* FloatingIndicatorState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorState.swift; sourceTree = "<group>"; };
 		BDD66CF413C1ACA8DB2719C4 /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
 		BF32A97362B13A4984C14FA6 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
+		C0246650190A01AD8A26A7D0 /* OnboardingMagicFormatStepView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingMagicFormatStepView.swift; sourceTree = "<group>"; };
 		C0ED09D876730BF3FA833FFE /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		C0F4C42B10B6C72669D9DBE4 /* LocalGemmaRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaRuntime.swift; sourceTree = "<group>"; };
 		C1EEF5DAFB9957AB9ADBF7E3 /* ASRModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASRModelCatalog.swift; sourceTree = "<group>"; };
@@ -375,6 +377,7 @@
 				D1FAF2B003307FDF0EBA9BA0 /* ListeningOverlay.swift */,
 				E69ACF4C1E158980EDDDA56F /* MenuBarView.swift */,
 				B090C348C7D6E3317FC06B66 /* ModelDownloadView.swift */,
+				C0246650190A01AD8A26A7D0 /* OnboardingMagicFormatStepView.swift */,
 				0F2DDA03B5269D9475CA06C9 /* OnboardingView.swift */,
 				C0ED09D876730BF3FA833FFE /* WelcomeView.swift */,
 				1D6CCCC695CE3C1A1ECFD563 /* MainWindow */,
@@ -539,6 +542,7 @@
 				D838D2BD8C4395C5E6DC4C7B /* MenuBarView.swift in Sources */,
 				5E5EF53C95B7F9CB9C00B459 /* ModelDownloadView.swift in Sources */,
 				B4C54A8C12A3F949CD83553C /* ModelManager.swift in Sources */,
+				D31733EEC8E6838ADA961197 /* OnboardingMagicFormatStepView.swift in Sources */,
 				86AC38418D4F76638222975C /* OnboardingView.swift in Sources */,
 				1D86CE52AD421422DC26FA71 /* OpenRouterPostProcessor.swift in Sources */,
 				E9210190CDD60F212008A02A /* SettingsModels.swift in Sources */,
