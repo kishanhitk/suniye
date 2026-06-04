@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct MagicFormatProviderStatus {
@@ -11,17 +10,20 @@ struct MagicFormatProviderPresenter {
     let appState: AppState
 
     var providerOptions: [MagicFormatProvider] {
-        [.localGemma, .appleFoundationModels, .automatic, .openAICompatible]
+        [.localGemma, .appleFoundationModels, .openAICompatible]
     }
 
     var displayedProviderSelection: MagicFormatProvider {
-        appState.llmProvider
-    }
-
-    var appleIntelligenceSymbolName: String {
-        NSImage(systemSymbolName: "apple.intelligence", accessibilityDescription: nil) == nil
-            ? "sparkles"
-            : "apple.intelligence"
+        guard appState.llmProvider == .automatic else {
+            return appState.llmProvider
+        }
+        if appState.usesAppleMagicFormatSettings {
+            return .appleFoundationModels
+        }
+        if appState.usesLocalGemmaMagicFormatSettings {
+            return .localGemma
+        }
+        return .openAICompatible
     }
 
     var topStatusText: String {
@@ -81,34 +83,10 @@ struct MagicFormatProviderPresenter {
             return appState.appleMagicFormatAvailability.isAvailable
         case .localGemma:
             return appState.isLocalGemmaProviderSelectable
-        case .automatic, .openAICompatible:
+        case .automatic:
+            return false
+        case .openAICompatible:
             return true
-        }
-    }
-
-    func iconName(for provider: MagicFormatProvider) -> String {
-        switch provider {
-        case .automatic:
-            return "wand.and.stars"
-        case .appleFoundationModels:
-            return appleIntelligenceSymbolName
-        case .localGemma:
-            return "cpu"
-        case .openAICompatible:
-            return "key.horizontal"
-        }
-    }
-
-    func iconColor(for provider: MagicFormatProvider) -> Color {
-        switch provider {
-        case .automatic:
-            return .purple
-        case .appleFoundationModels:
-            return .blue
-        case .localGemma:
-            return .green
-        case .openAICompatible:
-            return .orange
         }
     }
 

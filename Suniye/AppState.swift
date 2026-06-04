@@ -134,42 +134,6 @@ struct MagicFormatSetupTestResult: Equatable {
     let severity: Severity
 }
 
-enum OnboardingStep: Int, CaseIterable {
-    case welcome
-    case setup
-    case practice
-
-    var title: String {
-        switch self {
-        case .welcome:
-            return "Welcome"
-        case .setup:
-            return "Set Up"
-        case .practice:
-            return "Try It"
-        }
-    }
-}
-
-struct OnboardingPracticeResult: Equatable {
-    enum Severity: Equatable {
-        case success
-        case error
-
-        var color: Color {
-            switch self {
-            case .success:
-                .green
-            case .error:
-                .red
-            }
-        }
-    }
-
-    let message: String
-    let severity: Severity
-}
-
 struct ASRModelBannerState: Equatable {
     enum Tone: Equatable {
         case info
@@ -690,6 +654,11 @@ final class AppState {
         localLLMModelManager.isHardwareSupported
     }
 
+    var canSelectLocalGemmaDuringOnboarding: Bool {
+        isLocalGemmaProviderSelectable
+            && (!localGemmaInstallState.isInstalled || localGemmaMagicFormatAvailability.isAvailable)
+    }
+
     var localGemmaModelEntry: LocalLLMModelCatalogEntry {
         localGemmaCatalogEntry(for: localLLMModelManager.preferredModelID)
     }
@@ -1111,6 +1080,21 @@ final class AppState {
         activeOnboardingStep == .practice && phase == .transcribing
     }
 
+    var onboardingLocalModelStatusText: String? {
+        guard activeOnboardingStep == .practice,
+              llmEnabled,
+              llmProvider == .localGemma else {
+            return nil
+        }
+
+        switch localGemmaInstallState {
+        case .downloading, .verifying, .failed, .unavailable:
+            return localGemmaInstallStatusText
+        case .notInstalled, .installed:
+            return nil
+        }
+    }
+
     var attentionItems: [AttentionItem] {
         var items: [AttentionItem] = []
 
@@ -1430,7 +1414,7 @@ final class AppState {
         }
 
         if isOnboardingSetupComplete {
-            completeCoreOnboarding()
+            showMagicFormatOnboarding()
             return
         }
 
@@ -1442,7 +1426,7 @@ final class AppState {
         case .welcome:
             hasSeenOnboardingWelcome = true
             if isOnboardingSetupComplete {
-                completeCoreOnboarding()
+                showMagicFormatOnboarding()
             } else {
                 activeOnboardingStep = .setup
             }
@@ -1450,7 +1434,9 @@ final class AppState {
             guard isOnboardingSetupComplete else {
                 return
             }
-            completeCoreOnboarding()
+            showMagicFormatOnboarding()
+        case .magicFormat:
+            skipMagicFormatDuringOnboarding()
         case .practice:
             finishOnboarding()
         case nil:
@@ -1463,6 +1449,43 @@ final class AppState {
             return
         }
         activeOnboardingStep = .welcome
+    }
+
+    func confirmMagicFormatDuringOnboarding(_ provider: OnboardingMagicFormatProvider) {
+        guard activeOnboardingStep == .magicFormat else {
+            return
+        }
+
+        switch provider {
+        case .localModel:
+            guard canSelectLocalGemmaDuringOnboarding else {
+                return
+            }
+            llmProvider = provider.magicFormatProvider
+            startLocalGemmaDownload()
+        case .appleIntelligence:
+            guard appleMagicFormatAvailability.isAvailable else {
+                return
+            }
+            llmProvider = provider.magicFormatProvider
+        }
+
+        llmEnabled = true
+        completeCoreOnboarding()
+    }
+
+    func skipMagicFormatDuringOnboarding() {
+        guard activeOnboardingStep == .magicFormat else {
+            return
+        }
+
+        llmEnabled = false
+        completeCoreOnboarding()
+    }
+
+    private func showMagicFormatOnboarding() {
+        hasSeenOnboardingWelcome = true
+        activeOnboardingStep = .magicFormat
     }
 
     func completeCoreOnboarding() {
@@ -3129,7 +3152,9 @@ final class AppState {
     }
 
     private var isOnboardingBlockingRecordingStart: Bool {
-        activeOnboardingStep == .welcome || activeOnboardingStep == .setup
+        activeOnboardingStep == .welcome
+            || activeOnboardingStep == .setup
+            || activeOnboardingStep == .magicFormat
     }
 
     private var modelDownloadETAText: String? {
@@ -3169,7 +3194,7 @@ final class AppState {
               isOnboardingSetupComplete else {
             return
         }
-        completeCoreOnboarding()
+        showMagicFormatOnboarding()
     }
 
     private func handleAudioLevelsUpdate(_ levels: [Float]) {

@@ -329,20 +329,35 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(appState.localGemmaMagicFormatAvailability, .unsupportedHardware)
     }
 
-    func testMagicFormatProviderPresenterKeepsAutomaticSelectable() {
-        let appState = makeTestAppState()
-        appState.llmProvider = .automatic
+    func testMagicFormatProviderPresenterHidesAutomaticAndDisplaysEffectiveProvider() {
+        let appleAppState = makeTestAppState(
+            appleMagicFormatPostProcessor: NoopAppleMagicFormatPostProcessor(availability: .available)
+        )
+        appleAppState.llmProvider = .automatic
 
-        let presenter = MagicFormatProviderPresenter(appState: appState)
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let localAppState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: NoopLocalGemmaMagicFormatPostProcessor(availability: .available),
+            localLLMModelManager: localManager
+        )
+        localAppState.llmProvider = .automatic
+
+        let apiAppState = makeTestAppState()
+        apiAppState.llmProvider = .automatic
+
+        let presenter = MagicFormatProviderPresenter(appState: appleAppState)
 
         XCTAssertEqual(presenter.providerOptions, [
             .localGemma,
             .appleFoundationModels,
-            .automatic,
             .openAICompatible
         ])
-        XCTAssertEqual(presenter.displayedProviderSelection, .automatic)
-        XCTAssertTrue(presenter.isSelectable(.automatic))
+        XCTAssertFalse(presenter.providerOptions.contains(.automatic))
+        XCTAssertFalse(presenter.isSelectable(.automatic))
+        XCTAssertEqual(presenter.displayedProviderSelection, .appleFoundationModels)
+        XCTAssertEqual(MagicFormatProviderPresenter(appState: localAppState).displayedProviderSelection, .localGemma)
+        XCTAssertEqual(MagicFormatProviderPresenter(appState: apiAppState).displayedProviderSelection, .openAICompatible)
     }
 
     func testLocalGemmaSetupTestDoesNotRequireAPIKey() async {

@@ -28,7 +28,7 @@ Requires **macOS 14 (Sonoma)** or later.
    - **Microphone** — to hear you
    - **Accessibility** — to type text into other apps
 5. Suniye will help you install a local speech model on first launch. The onboarding flow defaults to **Parakeet TDT 0.6B v3**, and you can switch to another supported offline model later from the `ASR Model` page.
-6. On first launch, Suniye walks you through a short onboarding flow: welcome, setup, and an optional practice dictation.
+6. On first launch, Suniye walks you through welcome, required setup, an optional Magic Format choice, and a practice dictation. The recommended Local Model download is optional and continues in the background while you try dictation.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed steps.
 

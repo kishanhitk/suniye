@@ -29,6 +29,11 @@ xattr -dr com.apple.quarantine /Applications/Suniye.app
 - Install the model you want, then click `Use Model`.
 - The onboarding flow downloads whichever ASR model is currently selected. Fresh installs default to `Parakeet TDT 0.6B v3`.
 
+## Local Model download failed during onboarding
+- You can finish onboarding and keep dictating without Magic Format.
+- Open `Magic Format`, select `Local Model`, and retry the download.
+- The Local Model is optional and separate from the speech model used for transcription.
+
 ## Model is installed but won’t load
 - Open `ASR Model` and try switching to another installed model.
 - If the current model still fails, delete it from the model library and download it again.

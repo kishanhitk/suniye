@@ -33,11 +33,13 @@ Grant permissions when prompted:
 
 If you are updating from an older ad hoc-signed Suniye release, macOS may ask for these permissions one more time. Future self-signed updates should preserve the grants.
 
-After that, Suniye shows a short first-run onboarding flow that covers setup and an optional practice dictation.
+After that, Suniye shows a short first-run onboarding flow that covers setup, an optional Magic Format choice, and a practice dictation.
 
 During setup:
 - Suniye downloads the currently selected speech model.
 - Fresh installs default to `Parakeet TDT 0.6B v3`.
+- After required setup, you can optionally enable Magic Format with Apple Intelligence or download the recommended Local Model.
+- The Local Model download is optional and continues while you try dictation; it never blocks finishing onboarding.
 - After onboarding, you can open `ASR Model` in settings to install or switch to another supported local model.
 
 ## 6) Update flow

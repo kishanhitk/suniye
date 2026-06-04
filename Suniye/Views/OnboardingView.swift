@@ -18,7 +18,7 @@ struct OnboardingView: View {
             onboardingBrandHeader
 
             stepContent
-                .frame(maxWidth: 380)
+                .frame(maxWidth: step == .magicFormat ? 460 : 380)
                 .padding(.top, 20)
                 .id(step)
                 .transition(.asymmetric(
@@ -30,7 +30,7 @@ struct OnboardingView: View {
             Spacer()
 
             navigationButtons
-                .frame(maxWidth: 380)
+                .frame(maxWidth: step == .magicFormat ? 460 : 380)
                 .padding(.bottom, 36)
         }
         .padding(.horizontal, 40)
@@ -73,6 +73,8 @@ struct OnboardingView: View {
                 WelcomeView()
             case .setup:
                 setupContent
+            case .magicFormat:
+                OnboardingMagicFormatStepView(appState: appState)
             case .practice:
                 practiceContent
             }
@@ -308,8 +310,45 @@ struct OnboardingView: View {
             } else if let result = appState.onboardingPracticeResult {
                 practiceStatusLabel(result.message, color: result.severity.color)
             }
+
+            if let status = appState.onboardingLocalModelStatusText {
+                localModelDownloadStatus(status)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func localModelDownloadStatus(_ status: String) -> some View {
+        SurfaceCard(padding: 10) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "cpu")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.green)
+
+                    Text(status)
+                        .font(AppTypography.codeCaption)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 8)
+
+                    if case .failed = appState.localGemmaInstallState {
+                        Button("Retry") {
+                            appState.startLocalGemmaDownload()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(!appState.canStartLocalGemmaDownload)
+                    }
+                }
+
+                if let progress = appState.localGemmaInstallProgress {
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                }
+            }
+        }
     }
 
     private var practiceTextArea: some View {
@@ -423,6 +462,9 @@ struct OnboardingView: View {
                 .disabled(!appState.isOnboardingSetupComplete)
             }
 
+        case .magicFormat:
+            EmptyView()
+
         case .practice:
             HStack {
                 Spacer()
@@ -440,6 +482,17 @@ struct OnboardingView: View {
                     .disabled(appState.phase == .recording || appState.phase == .transcribing)
                 }
             }
+        }
+    }
+}
+
+private extension OnboardingPracticeResult.Severity {
+    var color: Color {
+        switch self {
+        case .success:
+            .green
+        case .error:
+            .red
         }
     }
 }
