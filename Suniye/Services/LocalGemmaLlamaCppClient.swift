@@ -25,6 +25,13 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         }
     }
 
+    func isRuntimeWarm() async -> Bool {
+        guard case let .success(runtime) = locator.resolve() else {
+            return false
+        }
+        return await server.isWarm(for: runtime)
+    }
+
     func generate(
         instructions: String,
         prompt: String,
@@ -127,8 +134,12 @@ actor LocalGemmaLlamaServer {
         self.healthSession = healthSession
     }
 
+    func isWarm(for runtime: LocalGemmaRuntime) -> Bool {
+        process?.isRunning == true && self.runtime == runtime && endpoint != nil
+    }
+
     func endpoint(for runtime: LocalGemmaRuntime, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> LocalGemmaServerEndpoint {
-        if let process, process.isRunning, self.runtime == runtime, let endpoint {
+        if isWarm(for: runtime), let endpoint {
             scheduleIdleShutdown(after: idleTimeoutSeconds)
             return endpoint
         }
@@ -159,7 +170,6 @@ actor LocalGemmaLlamaServer {
 
         self.process = process
         self.runtime = runtime
-        self.endpoint = endpoint
 
         do {
             try await waitUntilHealthy(
@@ -172,6 +182,11 @@ actor LocalGemmaLlamaServer {
             await stop()
             throw error
         }
+        guard self.process === process, process.isRunning, self.runtime == runtime else {
+            await stop()
+            throw LLMPostProcessorError.provider("server_stopped_during_startup")
+        }
+        self.endpoint = endpoint
         scheduleIdleShutdown(after: idleTimeoutSeconds)
         return endpoint
     }

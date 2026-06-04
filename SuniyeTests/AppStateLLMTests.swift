@@ -203,6 +203,49 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(appState.magicFormatSetupState, .ready)
     }
 
+    func testColdLocalGemmaRequestShowsStartingIndicator() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            runtimeWarm: false,
+            result: .success("gemma polished")
+        )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        appState.floatingIndicatorState = .processing()
+
+        _ = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Starting local model..."))
+    }
+
+    func testWarmLocalGemmaRequestKeepsNormalProcessingIndicator() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            runtimeWarm: true,
+            result: .success("gemma polished")
+        )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        appState.floatingIndicatorState = .processing()
+
+        _ = await appState.postProcessTextIfEnabled("raw text")
+
+        XCTAssertEqual(appState.floatingIndicatorState, .processing())
+        XCTAssertEqual(appState.statusText, "Polishing...")
+    }
+
     func testExplicitLocalGemmaProviderUnavailableFallsBackToRaw() async {
         let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
             availability: .modelNotInstalled,

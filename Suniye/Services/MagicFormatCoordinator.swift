@@ -208,8 +208,13 @@ final class MagicFormatCoordinator {
         let config = Self.makeLocalGemmaConfig(settings: request.settings)
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
-        request.setStatusText("Starting local model...")
-        request.setProcessingMessage("Starting local model...")
+        let isRuntimeWarm = await localGemmaPostProcessor.isRuntimeWarm()
+        if isRuntimeWarm {
+            request.setStatusText("Polishing...")
+        } else {
+            request.setStatusText("Starting local model...")
+            request.setProcessingMessage("Starting local model...")
+        }
         defer {
             slowWarningTask.cancel()
         }

@@ -31,6 +31,7 @@ enum LocalGemmaDefaults {
 
 protocol LocalGemmaClient {
     var availability: LocalGemmaAvailability { get }
+    func isRuntimeWarm() async -> Bool
     func generate(
         instructions: String,
         prompt: String,
@@ -42,6 +43,7 @@ protocol LocalGemmaClient {
 }
 
 extension LocalGemmaClient {
+    func isRuntimeWarm() async -> Bool { false }
     func stopRuntime() async {}
 }
 
@@ -54,6 +56,10 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
 
     var availability: LocalGemmaAvailability {
         client.availability
+    }
+
+    func isRuntimeWarm() async -> Bool {
+        await client.isRuntimeWarm()
     }
 
     func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String {

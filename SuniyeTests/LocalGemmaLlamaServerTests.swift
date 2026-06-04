@@ -56,13 +56,19 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
         )
         let server = LocalGemmaLlamaServer()
 
+        let isWarmBeforeStart = await server.isWarm(for: runtime)
+        XCTAssertFalse(isWarmBeforeStart)
         _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
+        let isWarmAfterStart = await server.isWarm(for: runtime)
+        XCTAssertTrue(isWarmAfterStart)
         _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
 
         XCTAssertEqual(startCount(at: logURL), 1)
 
         await server.scheduleIdleShutdown(after: 0.05)
         try? await Task.sleep(nanoseconds: 200_000_000)
+        let isWarmAfterIdleShutdown = await server.isWarm(for: runtime)
+        XCTAssertFalse(isWarmAfterIdleShutdown)
         _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
 
         XCTAssertEqual(startCount(at: logURL), 2)
