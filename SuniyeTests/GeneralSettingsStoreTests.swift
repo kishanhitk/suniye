@@ -10,6 +10,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
 
         let settings = GeneralSettings(
             preferredInputDeviceID: "usb-mic",
+            preferredInputDeviceName: "USB Microphone",
             autoSubmitEnabled: true,
             hotkeyConfiguration: .keyCombo(keyCode: UInt32(kVK_Space), carbonModifiers: UInt32(optionKey)),
             soundFeedbackEnabled: true,
@@ -93,6 +94,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertFalse(settings.hideFloatingIndicatorWhenIdle)
         XCTAssertNil(settings.floatingIndicatorPlacement)
         XCTAssertFalse(settings.soundFeedbackEnabled)
+        XCTAssertNil(settings.preferredInputDeviceName)
         XCTAssertEqual(settings.updateChannel, .stable)
     }
 }

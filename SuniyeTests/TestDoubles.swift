@@ -362,7 +362,9 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     var loadModelErrorsByModelID: [ASRModelID: Error] = [:]
     var unloadCallCount = 0
     var loadCallCount = 0
+    var transcribeCallCount = 0
     var loadedConfigs: [RecognizerConfig] = []
+    var onTranscribe: (() -> Void)?
 
     func loadModel(config: RecognizerConfig) async throws {
         loadCallCount += 1
@@ -374,7 +376,9 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     }
 
     func transcribe(samples: [Float], sampleRate: Int) async throws -> String {
-        try transcribeResult.get()
+        transcribeCallCount += 1
+        onTranscribe?()
+        return try transcribeResult.get()
     }
 
     func unloadModel() async {
@@ -383,30 +387,112 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
 }
 
 final class StubAudioCaptureService: AudioCaptureServiceProtocol {
-    var onLevelsUpdate: (([Float]) -> Void)?
+    var onEvent: ((AudioCaptureEvent) -> Void)?
     var startCaptureCallCount = 0
+    var stopCaptureCallCount = 0
+    var cancelCaptureCallCount = 0
+    var handleSystemSleepCallCount = 0
+    var handleSystemWakeCallCount = 0
     var lastPreferredInputDeviceID: String?
     var lastEchoCancellationEnabled: Bool?
+    var lastStartedSessionID: UUID?
+    var lastStoppedSessionID: UUID?
+    var lastCanceledSessionID: UUID?
+    var startCaptureDelayNanoseconds: UInt64 = 0
     var stopCaptureResult = CapturedAudio(samples: [], sampleRate: 16_000)
     var availableDevices: [AudioInputDevice] = []
     var startCaptureError: Error?
+    var routeSnapshotError: Error?
+    var suspendsStartCapture = false
+    var onStartCapture: ((UUID) -> Void)?
+    var onStopCapture: ((UUID) -> Void)?
+    var onCancelCapture: ((UUID) -> Void)?
+    var onSystemSleep: (() -> Void)?
+    var onSystemWake: (() -> Void)?
+    private var startCaptureContinuation: CheckedContinuation<Void, Never>?
+    var route = AudioRouteSnapshot(
+        preferredInputDeviceID: nil,
+        effectiveInputDeviceID: "default-device",
+        effectiveInputName: "System Microphone",
+        inputTransport: .builtIn,
+        outputTransport: .builtIn,
+        inputSampleRate: 16_000,
+        inputChannelCount: 1,
+        requestedEchoCancellation: false,
+        effectiveEchoCancellation: false,
+        backend: .inputOnlyHAL,
+        fallbackReason: nil
+    )
 
-    func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws {
+    func startCapture(
+        sessionID: UUID,
+        preferredInputDeviceID: String?,
+        echoCancellationEnabled: Bool
+    ) async throws -> AudioCaptureSession {
         startCaptureCallCount += 1
+        lastStartedSessionID = sessionID
         lastPreferredInputDeviceID = preferredInputDeviceID
         lastEchoCancellationEnabled = echoCancellationEnabled
+        onStartCapture?(sessionID)
+        if suspendsStartCapture {
+            await withCheckedContinuation { continuation in
+                startCaptureContinuation = continuation
+            }
+        }
+        if startCaptureDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: startCaptureDelayNanoseconds)
+        }
         if let startCaptureError {
             throw startCaptureError
         }
+        return AudioCaptureSession(id: sessionID, route: route)
     }
 
-    func stopCapture() -> CapturedAudio {
-        stopCaptureResult
+    func stopCapture(sessionID: UUID) async -> CapturedAudio {
+        stopCaptureCallCount += 1
+        lastStoppedSessionID = sessionID
+        onStopCapture?(sessionID)
+        return stopCaptureResult
+    }
+
+    func cancelCapture(sessionID: UUID, reason: AudioCaptureInterruption?) async {
+        cancelCaptureCallCount += 1
+        lastCanceledSessionID = sessionID
+        onCancelCapture?(sessionID)
     }
 
     func availableInputDevices() -> [AudioInputDevice] {
         availableDevices
     }
+
+    func routeSnapshot(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws -> AudioRouteSnapshot {
+        if let routeSnapshotError {
+            throw routeSnapshotError
+        }
+        return route
+    }
+
+    func handleSystemSleep() async {
+        handleSystemSleepCallCount += 1
+        onSystemSleep?()
+    }
+
+    func handleSystemWake() {
+        handleSystemWakeCallCount += 1
+        onSystemWake?()
+    }
+
+    func resumeStartCapture() {
+        startCaptureContinuation?.resume()
+        startCaptureContinuation = nil
+    }
+}
+
+func makeValidCapturedAudio(sampleRate: Int = 16_000) -> CapturedAudio {
+    CapturedAudio(
+        samples: Array(repeating: 0.2, count: sampleRate / 10),
+        sampleRate: sampleRate
+    )
 }
 
 final class StubHotkeyService: HotkeyServiceProtocol {

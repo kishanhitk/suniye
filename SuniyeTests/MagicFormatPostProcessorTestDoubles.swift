@@ -66,14 +66,24 @@ final class CapturingAppleMagicFormatPostProcessor: AppleMagicFormatPostProcesso
 
 final class CapturingLocalGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor {
     var availability: LocalGemmaAvailability
+    var runtimeWarm: Bool
     private let result: Result<String, Error>
     private(set) var callCount = 0
     private(set) var lastConfig: LocalGemmaMagicFormatConfig?
     private(set) var stopRuntimeCallCount = 0
 
-    init(availability: LocalGemmaAvailability, result: Result<String, Error>) {
+    init(
+        availability: LocalGemmaAvailability,
+        runtimeWarm: Bool = false,
+        result: Result<String, Error>
+    ) {
         self.availability = availability
+        self.runtimeWarm = runtimeWarm
         self.result = result
+    }
+
+    func isRuntimeWarm() async -> Bool {
+        runtimeWarm
     }
 
     func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String {

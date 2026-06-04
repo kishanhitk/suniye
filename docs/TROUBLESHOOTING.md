@@ -54,5 +54,14 @@ Grant and re-check:
 If this happened immediately after updating from an older ad hoc-signed build, grant the permissions once more. Suniye releases now use one stable self-signed identity so future updates should preserve those grants.
 
 ## Bluetooth audio drops to call quality while dictating
-- Leave **Echo Cancellation** off unless you need speaker/audio playback removal from the mic signal.
-- When Echo Cancellation is off, Suniye now captures from the selected microphone via an input-only Core Audio path so Bluetooth headphone playback can stay on the high-quality output profile.
+- Bluetooth headphones switch to their call-quality profile whenever their microphone is used. This is a Bluetooth limitation, not an audio-quality setting Suniye can override.
+- To keep high-quality headphone playback, choose the built-in Mac microphone or a USB microphone while continuing to use the Bluetooth headphones for output. Suniye shows the current route and offers a recommended local microphone when one is available.
+- Echo Cancellation uses Apple's Voice Processing only when both the input and output route support it. Suniye bypasses it for Bluetooth routes.
+
+## Selected microphone is unavailable
+- Suniye preserves an explicitly selected microphone when it is disconnected instead of silently recording from a different device.
+- Reconnect the microphone or choose another input device in **General > Microphone**. The unavailable device remains visible in the picker until you make a different choice.
+
+## Dictation stops after an audio-device change
+- Suniye stops the current dictation if the active microphone changes, becomes unavailable, changes format, is muted, or Core Audio restarts.
+- Check the current route in **General > Microphone**, then start the dictation again.

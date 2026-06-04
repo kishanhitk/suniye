@@ -1,812 +1,511 @@
 import AudioToolbox
-import AVFoundation
 import CoreAudio
 import Foundation
 import QuartzCore
 
-struct CapturedAudio {
-    let samples: [Float]
-    let sampleRate: Int
+enum AudioCaptureServiceError: LocalizedError, Equatable {
+    case noInputDevice
+    case preferredDeviceUnavailable
+    case invalidInputFormat
+    case failedToSelectInput(Int32)
+    case ringBufferUnavailable
+    case operationFailed(String, Int32)
+
+    var errorDescription: String? {
+        switch self {
+        case .noInputDevice:
+            return "No microphone is available."
+        case .preferredDeviceUnavailable:
+            return "The selected microphone is unavailable."
+        case .invalidInputFormat:
+            return "The selected microphone has an invalid audio format."
+        case let .failedToSelectInput(status):
+            return "Could not select the microphone (Core Audio \(status))."
+        case .ringBufferUnavailable:
+            return "Could not prepare the audio buffer."
+        case let .operationFailed(operation, status):
+            return "\(operation) failed (Core Audio \(status))."
+        }
+    }
 }
 
 protocol AudioCaptureServiceProtocol: AnyObject {
-    var onLevelsUpdate: (([Float]) -> Void)? { get set }
-    func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws
-    func stopCapture() -> CapturedAudio
+    var onEvent: ((AudioCaptureEvent) -> Void)? { get set }
+
+    func startCapture(
+        sessionID: UUID,
+        preferredInputDeviceID: String?,
+        echoCancellationEnabled: Bool
+    ) async throws -> AudioCaptureSession
+    func stopCapture(sessionID: UUID) async -> CapturedAudio
+    func cancelCapture(sessionID: UUID, reason: AudioCaptureInterruption?) async
     func availableInputDevices() -> [AudioInputDevice]
+    func routeSnapshot(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws -> AudioRouteSnapshot
+    func handleSystemSleep() async
+    func handleSystemWake()
 }
 
-private func audioCaptureHALInputCallback(
-    inRefCon: UnsafeMutableRawPointer,
-    ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
-    inTimeStamp: UnsafePointer<AudioTimeStamp>,
-    inBusNumber: UInt32,
-    inNumberFrames: UInt32,
-    ioData: UnsafeMutablePointer<AudioBufferList>?
-) -> OSStatus {
-    let service = Unmanaged<AudioCaptureService>.fromOpaque(inRefCon).takeUnretainedValue()
-    return service.handleHALInput(
-        ioActionFlags: ioActionFlags,
-        inTimeStamp: inTimeStamp,
-        inNumberFrames: inNumberFrames,
-        inBusNumber: inBusNumber
-    )
-}
-
-final class AudioCaptureService: AudioCaptureServiceProtocol {
-    var onLevelsUpdate: (([Float]) -> Void)?
-
-    private enum CaptureBackend {
-        case standardEngine
-        case halInput
-        case voiceProcessingEngine
+final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendable {
+    var onEvent: ((AudioCaptureEvent) -> Void)? {
+        get { withCallbackLock { eventCallback } }
+        set { withCallbackLock { eventCallback = newValue } }
     }
 
-    private let engine = AVAudioEngine()
-    private var halInputUnit: AudioUnit?
-    private var converter: AVAudioConverter?
-    private var inputFormat: AVAudioFormat?
-    private var targetFormat: AVAudioFormat?
-    private var captureSampleRate: Int = 16_000
-    private var samples: [Float] = []
-    // Audio taps run off the main thread, while start/stop are driven by AppState.
-    // Keep buffered samples and meter state behind one lock to avoid Swift array races.
-    private let lock = NSLock()
-    private var activeBackend: CaptureBackend?
-    private let meterBarCount = 12
-    private var smoothedLevels: [Float] = Array(repeating: 0, count: 12)
-    private var lastLevelEmissionTime: CFTimeInterval = 0
+    private final class ActiveCapture {
+        let id: UUID
+        let preferredInputDeviceID: String?
+        let requestedEchoCancellation: Bool
+        let inputDeviceID: AudioObjectID
+        let deviceRoute: AudioDeviceRoute
+        let ring: OpaquePointer
+        var route: AudioRouteSnapshot
+        var driver: AudioCaptureDriver?
+        var samples: [Float] = []
+        var interruption: AudioCaptureInterruption?
+        var fallbackAttempted = false
+        var firstFrameSeen = false
+        var smoothedLevels = Array(repeating: Float(0), count: 12)
+        var lastLevelEmissionTime: CFTimeInterval = 0
+        var drainTimer: DispatchSourceTimer?
 
-    deinit {
-        stopActiveCapture()
+        init(
+            id: UUID,
+            preferredInputDeviceID: String?,
+            requestedEchoCancellation: Bool,
+            inputDeviceID: AudioObjectID,
+            deviceRoute: AudioDeviceRoute,
+            route: AudioRouteSnapshot,
+            ring: OpaquePointer
+        ) {
+            self.id = id
+            self.preferredInputDeviceID = preferredInputDeviceID
+            self.requestedEchoCancellation = requestedEchoCancellation
+            self.inputDeviceID = inputDeviceID
+            self.deviceRoute = deviceRoute
+            self.route = route
+            self.ring = ring
+        }
+
+        deinit {
+            SuniyeAudioRingBufferDestroy(ring)
+        }
     }
 
-    func startCapture(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws {
-        stopActiveCapture()
+    private let controlQueue = DispatchQueue(label: "dev.suniye.audio.capture", qos: .userInitiated)
+    private let controlQueueKey = DispatchSpecificKey<Void>()
+    private let deviceMonitor: AudioDeviceMonitorProtocol
+    private let hardwareCatalog: AudioCaptureHardwareCatalogProtocol
+    private let driverFactory: AudioCaptureDriverFactoryProtocol
+    private let callbackLock = NSLock()
+    private let ringCapacity = 1_048_576
+    private let drainCapacity = 32_768
+    private let maximumDurationSeconds: Double
+    private let firstFrameDeadlineSeconds: Double
+    private let drainScratch: UnsafeMutablePointer<Float>
 
-        let resetLevels = Array(repeating: Float(0), count: meterBarCount)
-        lock.lock()
-        samples.removeAll(keepingCapacity: true)
-        smoothedLevels = resetLevels
-        lastLevelEmissionTime = 0
-        lock.unlock()
-        emitLevels(resetLevels)
+    private var eventCallback: ((AudioCaptureEvent) -> Void)?
+    private var activeCapture: ActiveCapture?
 
-        var backend = Self.captureBackendValue(
-            echoCancellationEnabled: echoCancellationEnabled,
-            inputDeviceUsesBluetooth: Self.inputDeviceUsesBluetoothTransport(forUID: preferredInputDeviceID)
-        )
+    init(
+        deviceMonitor: AudioDeviceMonitorProtocol = CoreAudioDeviceMonitor(),
+        hardwareCatalog: AudioCaptureHardwareCatalogProtocol = CoreAudioCaptureHardwareCatalog(),
+        driverFactory: AudioCaptureDriverFactoryProtocol = DefaultAudioCaptureDriverFactory(),
+        maximumDurationSeconds: Double = 10 * 60,
+        firstFrameDeadlineSeconds: Double = 1.5
+    ) {
+        self.deviceMonitor = deviceMonitor
+        self.hardwareCatalog = hardwareCatalog
+        self.driverFactory = driverFactory
+        self.maximumDurationSeconds = maximumDurationSeconds
+        self.firstFrameDeadlineSeconds = firstFrameDeadlineSeconds
+        self.drainScratch = .allocate(capacity: drainCapacity)
+        controlQueue.setSpecific(key: controlQueueKey, value: ())
 
-        switch backend {
-        case .standardEngine:
-            try startStandardCapture(preferredInputDeviceID: preferredInputDeviceID)
-        case .halInput:
-            try startHALCapture(preferredInputDeviceID: preferredInputDeviceID)
-        case .voiceProcessingEngine:
-            do {
-                try startVoiceProcessingCapture(preferredInputDeviceID: preferredInputDeviceID)
-            } catch {
-                AppLogger.shared.log(.warning, "voice processing capture unavailable; falling back to standard engine")
-                try startStandardCapture(preferredInputDeviceID: preferredInputDeviceID)
-                backend = .standardEngine
+        deviceMonitor.onChange = { [weak self] reason in
+            self?.controlQueue.async {
+                self?.handleDeviceChange(reason)
             }
         }
-        activeBackend = backend
+        deviceMonitor.start()
+    }
+
+    deinit {
+        deviceMonitor.stop()
+        let cleanup = {
+            self.stopHardware(for: self.activeCapture)
+            self.activeCapture?.drainTimer?.cancel()
+            self.activeCapture = nil
+        }
+        if DispatchQueue.getSpecific(key: controlQueueKey) != nil {
+            cleanup()
+        } else {
+            controlQueue.sync(execute: cleanup)
+        }
+        drainScratch.deallocate()
+    }
+
+    func startCapture(
+        sessionID: UUID,
+        preferredInputDeviceID: String?,
+        echoCancellationEnabled: Bool
+    ) async throws -> AudioCaptureSession {
+        try await withCheckedThrowingContinuation { continuation in
+            controlQueue.async {
+                do {
+                    self.discardActiveCapture()
+                    let resolution = try self.hardwareCatalog.resolveDeviceRoute(
+                        preferredInputDeviceID: preferredInputDeviceID
+                    )
+                    let plan = AudioCapturePolicy.primaryPlan(
+                        for: resolution.route,
+                        echoCancellationEnabled: echoCancellationEnabled
+                    )
+                    guard let ring = SuniyeAudioRingBufferCreate(self.ringCapacity) else {
+                        throw AudioCaptureServiceError.ringBufferUnavailable
+                    }
+
+                    let active = ActiveCapture(
+                        id: sessionID,
+                        preferredInputDeviceID: preferredInputDeviceID,
+                        requestedEchoCancellation: echoCancellationEnabled,
+                        inputDeviceID: resolution.inputDeviceID,
+                        deviceRoute: resolution.route,
+                        route: plan.snapshot(),
+                        ring: ring
+                    )
+                    self.activeCapture = active
+                    self.startDrainTimer(for: active)
+
+                    do {
+                        try self.startDriver(for: plan, active: active)
+                    } catch {
+                        try self.fallbackToStandardEngine(active: active, originalError: error)
+                    }
+
+                    self.deviceMonitor.watch(
+                        deviceID: self.hardwareCatalog.deviceID(forUID: active.route.effectiveInputDeviceID)
+                    )
+                    self.scheduleFirstFrameDeadline(for: active)
+                    AppLogger.shared.log(.info, "audio capture start session=\(sessionID.uuidString) \(active.route.privacySafeLogValue)")
+                    continuation.resume(returning: AudioCaptureSession(id: sessionID, route: active.route))
+                } catch {
+                    self.discardActiveCapture()
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    func stopCapture(sessionID: UUID) async -> CapturedAudio {
+        await withCheckedContinuation { continuation in
+            controlQueue.async {
+                guard let active = self.activeCapture, active.id == sessionID else {
+                    continuation.resume(returning: CapturedAudio.interrupted(
+                        sessionID: sessionID,
+                        reason: .ioStoppedAbnormally
+                    ))
+                    return
+                }
+                let captured = self.finalize(active: active, discard: false)
+                continuation.resume(returning: captured)
+            }
+        }
+    }
+
+    func cancelCapture(sessionID: UUID, reason: AudioCaptureInterruption?) async {
+        await withCheckedContinuation { continuation in
+            controlQueue.async {
+                guard let active = self.activeCapture, active.id == sessionID else {
+                    continuation.resume()
+                    return
+                }
+                if let reason {
+                    active.interruption = reason
+                }
+                _ = self.finalize(active: active, discard: true)
+                continuation.resume()
+            }
+        }
     }
 
     func availableInputDevices() -> [AudioInputDevice] {
-        let defaultInputDeviceID = Self.defaultInputDeviceID()
-        return Self.allDeviceIDs()
-            .filter { Self.inputChannelCount(for: $0) > 0 }
-            .compactMap { deviceID in
-                guard let uid = Self.deviceUID(for: deviceID),
-                      let name = Self.deviceName(for: deviceID) else {
-                    return nil
-                }
-                return AudioInputDevice(
-                    id: uid,
-                    name: name,
-                    isDefault: defaultInputDeviceID == deviceID
-                )
-            }
-            .sorted {
-                if $0.isDefault != $1.isDefault {
-                    return $0.isDefault
-                }
-                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
+        hardwareCatalog.availableInputDevices()
     }
 
-    func stopCapture() -> CapturedAudio {
-        stopActiveCapture()
+    func routeSnapshot(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws -> AudioRouteSnapshot {
+        let resolution = try hardwareCatalog.resolveDeviceRoute(preferredInputDeviceID: preferredInputDeviceID)
+        return AudioCapturePolicy.primaryPlan(
+            for: resolution.route,
+            echoCancellationEnabled: echoCancellationEnabled
+        ).snapshot()
+    }
 
-        let resetLevels = Array(repeating: Float(0), count: meterBarCount)
-        lock.lock()
-        let out = samples
-        samples.removeAll(keepingCapacity: false)
-        smoothedLevels = resetLevels
-        lastLevelEmissionTime = 0
-        let sampleRate = captureSampleRate
-        lock.unlock()
-        emitLevels(resetLevels)
+    func handleSystemSleep() async {
+        await withCheckedContinuation { continuation in
+            controlQueue.async {
+                self.interruptActiveCapture(.systemSleep)
+                continuation.resume()
+            }
+        }
+    }
 
-        let rms = Self.rms(of: out)
-        let peak = out.reduce(0) { max($0, abs($1)) }
-        let seconds = out.isEmpty ? 0 : Double(out.count) / Double(sampleRate)
+    func handleSystemWake() {
+        controlQueue.async {
+            self.deviceMonitor.stop()
+            self.deviceMonitor.start()
+            self.onEvent?(.devicesChanged(self.hardwareCatalog.availableInputDevices()))
+        }
+    }
+
+    private func fallbackToStandardEngine(active: ActiveCapture, originalError: Error) throws {
+        stopHardware(for: active)
+        active.fallbackAttempted = true
+        SuniyeAudioRingBufferReset(active.ring)
+        let plan = AudioCapturePolicy.fallbackPlan(
+            for: active.deviceRoute,
+            echoCancellationEnabled: active.requestedEchoCancellation,
+            reason: .backendStartFailed
+        )
+        try startDriver(for: plan, active: active)
+        onEvent?(.routeChanged(sessionID: active.id, route: active.route))
+        AppLogger.shared.log(.warning, "audio backend fallback session=\(active.id.uuidString) reason=\(originalError.localizedDescription) \(active.route.privacySafeLogValue)")
+    }
+
+    private func startDriver(for plan: AudioCapturePlan, active: ActiveCapture) throws {
+        let started = try driverFactory.startDriver(
+            for: plan,
+            inputDeviceID: active.inputDeviceID,
+            ring: active.ring
+        ) { [weak self, weak active] in
+            self?.controlQueue.async {
+                guard let self, let active, self.activeCapture === active else { return }
+                self.interruptActiveCapture(.engineConfigurationChanged)
+            }
+        }
+        active.driver = started.driver
+        active.route = plan.snapshot(format: started.format)
+    }
+
+    private func startDrainTimer(for active: ActiveCapture) {
+        let timer = DispatchSource.makeTimerSource(queue: controlQueue)
+        timer.schedule(deadline: .now() + .milliseconds(20), repeating: .milliseconds(20), leeway: .milliseconds(4))
+        timer.setEventHandler { [weak self, weak active] in
+            guard let self, let active, self.activeCapture === active else { return }
+            self.drain(active)
+        }
+        active.drainTimer = timer
+        timer.resume()
+    }
+
+    private func drain(_ active: ActiveCapture) {
+        var count = SuniyeAudioRingBufferRead(active.ring, drainScratch, drainCapacity)
+        while count > 0 {
+            active.firstFrameSeen = true
+            let remainingCapacity = max(0, maximumSampleCount(for: active) - active.samples.count)
+            let accepted = min(count, remainingCapacity)
+            if accepted > 0 {
+                active.samples.append(contentsOf: UnsafeBufferPointer(start: drainScratch, count: accepted))
+                updateLevels(active: active, values: UnsafeBufferPointer(start: drainScratch, count: accepted))
+            }
+            if accepted < count || active.samples.count >= maximumSampleCount(for: active) {
+                interruptActiveCapture(.maximumDurationReached)
+                return
+            }
+            count = SuniyeAudioRingBufferRead(active.ring, drainScratch, drainCapacity)
+        }
+    }
+
+    private func updateLevels(active: ActiveCapture, values: UnsafeBufferPointer<Float>) {
+        guard !values.isEmpty else { return }
+        let chunkSize = max(1, values.count / active.smoothedLevels.count)
+        var next = Array(repeating: Float(0), count: active.smoothedLevels.count)
+        for index in next.indices {
+            let start = index * chunkSize
+            let end = index == next.count - 1 ? values.count : min(values.count, start + chunkSize)
+            guard start < end else { continue }
+            var sum: Double = 0
+            for sampleIndex in start ..< end {
+                let value = Double(values[sampleIndex])
+                sum += value * value
+            }
+            let rms = Float((sum / Double(end - start)).squareRoot())
+            next[index] = min(max(rms * 12, 0), 1)
+        }
+        for index in next.indices {
+            active.smoothedLevels[index] = active.smoothedLevels[index] * 0.62 + next[index] * 0.38
+        }
+        let now = CACurrentMediaTime()
+        guard now - active.lastLevelEmissionTime >= 1.0 / 30.0 else { return }
+        active.lastLevelEmissionTime = now
+        onEvent?(.levelsUpdated(sessionID: active.id, levels: active.smoothedLevels))
+    }
+
+    private func maximumSampleCount(for active: ActiveCapture) -> Int {
+        Int(Double(max(8_000, active.route.inputSampleRate)) * maximumDurationSeconds)
+    }
+
+    private func scheduleFirstFrameDeadline(for active: ActiveCapture) {
+        controlQueue.asyncAfter(deadline: .now() + firstFrameDeadlineSeconds) { [weak self, weak active] in
+            guard let self,
+                  let active,
+                  self.activeCapture === active,
+                  active.interruption == nil,
+                  !active.firstFrameSeen else {
+                return
+            }
+            if active.route.backend != .standardEngine, !active.fallbackAttempted {
+                do {
+                    try self.fallbackToStandardEngine(
+                        active: active,
+                        originalError: AudioCaptureServiceError.operationFailed("No first audio buffer", kAudio_ParamError)
+                    )
+                    self.scheduleFirstFrameDeadline(for: active)
+                } catch {
+                    self.interruptActiveCapture(.noAudioArriving)
+                }
+            } else {
+                self.interruptActiveCapture(.noAudioArriving)
+            }
+        }
+    }
+
+    private func handleDeviceChange(_ reason: AudioDeviceChangeReason) {
+        if reason == .serviceRestarted {
+            deviceMonitor.stop()
+            deviceMonitor.start()
+        }
+        onEvent?(.devicesChanged(hardwareCatalog.availableInputDevices()))
+
+        guard let active else { return }
+        let interruption: AudioCaptureInterruption?
+        switch reason {
+        case .defaultInput:
+            interruption = active.preferredInputDeviceID == nil ? .deviceChanged : nil
+        case .defaultOutput:
+            interruption = active.route.backend == .voiceProcessingEngine ? .deviceChanged : nil
+        case .devices, .selectedDeviceAlive:
+            interruption = resolvedRouteChangeInterruption(for: active)
+        case .selectedDeviceFormat:
+            interruption = .formatChanged
+        case .selectedDeviceChanged:
+            interruption = .deviceChanged
+        case .serviceRestarted:
+            interruption = .serviceRestarted
+        case .inputMuted:
+            interruption = hardwareCatalog.processInputIsMuted() == true ? .inputMuted : nil
+        case .ioStoppedAbnormally:
+            interruption = .ioStoppedAbnormally
+        case .processorOverload:
+            AppLogger.shared.log(.warning, "audio processor overload session=\(active.id.uuidString) \(active.route.privacySafeLogValue)")
+            interruption = nil
+        }
+        if let interruption {
+            interruptActiveCapture(interruption)
+        }
+    }
+
+    private var active: ActiveCapture? {
+        activeCapture
+    }
+
+    private func resolvedRouteChangeInterruption(for active: ActiveCapture) -> AudioCaptureInterruption? {
+        do {
+            let resolution = try hardwareCatalog.resolveDeviceRoute(
+                preferredInputDeviceID: active.preferredInputDeviceID
+            )
+            return resolution.route.effectiveInputDeviceID == active.route.effectiveInputDeviceID
+                ? nil
+                : .deviceChanged
+        } catch {
+            return .deviceUnavailable
+        }
+    }
+
+    private func interruptActiveCapture(_ reason: AudioCaptureInterruption) {
+        guard let active = activeCapture, active.interruption == nil else {
+            return
+        }
+        active.interruption = reason
+        stopHardware(for: active)
+        drain(active)
+        active.drainTimer?.cancel()
+        active.drainTimer = nil
+        AppLogger.shared.log(.warning, "audio capture interrupted session=\(active.id.uuidString) reason=\(reason.rawValue) \(active.route.privacySafeLogValue)")
+        onEvent?(.interrupted(sessionID: active.id, reason: reason))
+    }
+
+    private func finalize(active: ActiveCapture, discard: Bool) -> CapturedAudio {
+        stopHardware(for: active)
+        drain(active)
+        active.drainTimer?.cancel()
+        active.drainTimer = nil
+        let samples = discard ? [] : active.samples
+        let captured: CapturedAudio
+        if let interruption = active.interruption, interruption != .maximumDurationReached {
+            captured = .interrupted(sessionID: active.id, reason: interruption, route: active.route)
+        } else {
+            captured = CapturedAudio(
+                sessionID: active.id,
+                samples: samples,
+                sampleRate: active.route.inputSampleRate,
+                route: active.route,
+                droppedSampleCount: SuniyeAudioRingBufferDroppedSamples(active.ring)
+            )
+        }
+        activeCapture = nil
+        deviceMonitor.watch(deviceID: nil)
+        onEvent?(.levelsUpdated(sessionID: active.id, levels: Array(repeating: 0, count: 12)))
+        logFinalCapture(captured, discarded: discard)
+        scheduleReleaseCheck(sessionID: active.id)
+        return captured
+    }
+
+    private func discardActiveCapture() {
+        guard let active = activeCapture else {
+            return
+        }
+        _ = finalize(active: active, discard: true)
+    }
+
+    private func stopHardware(for active: ActiveCapture?) {
+        active?.driver?.stop()
+        active?.driver = nil
+    }
+
+    private func scheduleReleaseCheck(sessionID: UUID) {
+        controlQueue.asyncAfter(deadline: .now() + .milliseconds(300)) {
+            let released = self.hardwareCatalog.processIsRunningInput().map { !$0 }
+            AppLogger.shared.log(
+                released == false ? .warning : .info,
+                "audio input release session=\(sessionID.uuidString) released=\(released.map(String.init) ?? "unknown")"
+            )
+        }
+    }
+
+    private func logFinalCapture(_ captured: CapturedAudio, discarded: Bool) {
+        let health = captured.health
         AppLogger.shared.log(
             .info,
             String(
-                format: "audio capture stop samples=%d sr=%d duration=%.2fs rms=%.5f peak=%.5f",
-                out.count,
-                sampleRate,
-                seconds,
-                rms,
-                peak
+                format: "audio capture stop session=%@ outcome=%@ discarded=%@ frames=%d sr=%d duration=%.2fs rms=%.5f peak=%.5f clipped=%d invalid=%d dropped=%llu",
+                captured.sessionID?.uuidString ?? "unknown",
+                String(describing: captured.outcome),
+                String(discarded),
+                health.frameCount,
+                captured.sampleRate,
+                health.durationSeconds,
+                health.rms,
+                health.peak,
+                health.clippedSampleCount,
+                health.nonFiniteSampleCount,
+                health.droppedSampleCount
             )
         )
-        return CapturedAudio(samples: out, sampleRate: sampleRate)
     }
 
-    static func captureBackend(
-        echoCancellationEnabled: Bool,
-        inputDeviceUsesBluetooth: Bool? = nil
-    ) -> String {
-        switch captureBackendValue(
-            echoCancellationEnabled: echoCancellationEnabled,
-            inputDeviceUsesBluetooth: inputDeviceUsesBluetooth
-        ) {
-        case .standardEngine:
-            return "standardEngine"
-        case .halInput:
-            return "halInput"
-        case .voiceProcessingEngine:
-            return "voiceProcessingEngine"
-        }
-    }
-
-    private static func captureBackendValue(
-        echoCancellationEnabled: Bool,
-        inputDeviceUsesBluetooth: Bool?
-    ) -> CaptureBackend {
-        guard echoCancellationEnabled else {
-            return .standardEngine
-        }
-
-        if inputDeviceUsesBluetooth == true {
-            return .standardEngine
-        }
-
-        return .voiceProcessingEngine
-    }
-
-    private func startStandardCapture(preferredInputDeviceID: String?) throws {
-        let inputNode = engine.inputNode
-        inputNode.removeTap(onBus: 0)
-        engine.stop()
-
-        if inputNode.isVoiceProcessingEnabled {
-            try inputNode.setVoiceProcessingEnabled(false)
-        }
-
-        if let preferredInputDeviceID,
-           let audioUnit = inputNode.audioUnit,
-           let deviceID = Self.audioDeviceID(forUID: preferredInputDeviceID) {
-            var currentDevice = deviceID
-            let status = AudioUnitSetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global,
-                0,
-                &currentDevice,
-                UInt32(MemoryLayout<AudioObjectID>.size)
-            )
-            if status != noErr {
-                AppLogger.shared.log(.warning, "audio input device selection failed status=\(status)")
-            }
-        }
-
-        let nativeFormat = inputNode.outputFormat(forBus: 0)
-        let sampleRate = max(8_000, Int(nativeFormat.sampleRate.rounded()))
-        setCaptureSampleRate(sampleRate)
-
-        let tapFormat: AVAudioFormat
-        if nativeFormat.channelCount > 1 {
-            tapFormat = AVAudioFormat(
-                commonFormat: .pcmFormatFloat32,
-                sampleRate: nativeFormat.sampleRate,
-                channels: 1,
-                interleaved: false
-            )!
-        } else {
-            tapFormat = nativeFormat
-        }
-
-        inputFormat = tapFormat
-        targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: nativeFormat.sampleRate,
-            channels: 1,
-            interleaved: false
-        )
-        if let targetFormat {
-            converter = AVAudioConverter(from: tapFormat, to: targetFormat)
-        } else {
-            converter = nil
-        }
-
-        AppLogger.shared.log(
-            .info,
-            "audio capture start backend=standardEngine sr=\(sampleRate) channels=\(nativeFormat.channelCount) tapChannels=1 aec=false"
-        )
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
-            self?.consume(buffer: buffer)
-        }
-
-        try engine.start()
-    }
-
-    private func startVoiceProcessingCapture(preferredInputDeviceID: String?) throws {
-        let inputNode = engine.inputNode
-        inputNode.removeTap(onBus: 0)
-        engine.stop()
-
-        // VP must be toggled before reading format or setting device — it replaces the audio unit.
-        if !inputNode.isVoiceProcessingEnabled {
-            try inputNode.setVoiceProcessingEnabled(true)
-        }
-
-        // Disable ducking so system audio volume isn't reduced during recording.
-        // Layer 1: AU property 2012 — minimizes the initial volume dip.
-        if let au = inputNode.audioUnit {
-            var duck: UInt32 = 0
-            AudioUnitSetProperty(au, 2012, kAudioUnitScope_Global, 0,
-                                 &duck, UInt32(MemoryLayout<UInt32>.size))
-        }
-        // Layer 2: high-level lifecycle control (macOS 14+).
-        if #available(macOS 14.0, *) {
-            inputNode.voiceProcessingOtherAudioDuckingConfiguration =
-                AVAudioVoiceProcessingOtherAudioDuckingConfiguration(
-                    enableAdvancedDucking: false, duckingLevel: .min)
-        }
-
-        // Set input device — must be after VP toggle since VP replaces the audio unit.
-        if let preferredInputDeviceID,
-           let audioUnit = inputNode.audioUnit,
-           let deviceID = Self.audioDeviceID(forUID: preferredInputDeviceID) {
-            var currentDevice = deviceID
-            let status = AudioUnitSetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global,
-                0,
-                &currentDevice,
-                UInt32(MemoryLayout<AudioObjectID>.size)
-            )
-            if status != noErr {
-                AppLogger.shared.log(.warning, "audio input device selection failed status=\(status)")
-            }
-        }
-
-        // Read format after VP enable — VP changes the node to a multi-channel aggregate.
-        let nativeFormat = inputNode.outputFormat(forBus: 0)
-        let sampleRate = max(8_000, Int(nativeFormat.sampleRate.rounded()))
-        setCaptureSampleRate(sampleRate)
-
-        // VP on Apple Silicon reports 5ch (3-mic array + 2-ch speaker ref).
-        // AVAudioConverter can't downmix VP multi-channel correctly (produces zeros).
-        // The VP unit handles channel extraction internally — just tap mono.
-        let tapFormat: AVAudioFormat
-        if nativeFormat.channelCount > 1 {
-            tapFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                     sampleRate: nativeFormat.sampleRate,
-                                     channels: 1, interleaved: false)!
-        } else {
-            tapFormat = nativeFormat
-        }
-
-        inputFormat = tapFormat
-        targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: nativeFormat.sampleRate,
-            channels: 1,
-            interleaved: false
-        )
-        if let targetFormat {
-            converter = AVAudioConverter(from: tapFormat, to: targetFormat)
-        } else {
-            converter = nil
-        }
-        AppLogger.shared.log(
-            .info,
-            "audio capture start backend=voiceProcessingEngine sr=\(sampleRate) channels=\(nativeFormat.channelCount) tapChannels=1 aec=true"
-        )
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
-            self?.consume(buffer: buffer)
-        }
-
-        try engine.start()
-    }
-
-    private func startHALCapture(preferredInputDeviceID: String?) throws {
-        guard let inputDeviceID = Self.inputDeviceID(forUID: preferredInputDeviceID) else {
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(kAudio_ParamError))
-        }
-
-        var componentDescription = AudioComponentDescription(
-            componentType: kAudioUnitType_Output,
-            componentSubType: kAudioUnitSubType_HALOutput,
-            componentManufacturer: kAudioUnitManufacturer_Apple,
-            componentFlags: 0,
-            componentFlagsMask: 0
-        )
-        guard let component = AudioComponentFindNext(nil, &componentDescription) else {
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(kAudio_ParamError))
-        }
-
-        var maybeUnit: AudioUnit?
-        try Self.checkStatus(
-            AudioComponentInstanceNew(component, &maybeUnit),
-            operation: "create HAL input unit"
-        )
-        guard let unit = maybeUnit else {
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(kAudio_ParamError))
-        }
-
-        do {
-            var enableIO: UInt32 = 1
-            try Self.checkStatus(
-                AudioUnitSetProperty(
-                    unit,
-                    kAudioOutputUnitProperty_EnableIO,
-                    kAudioUnitScope_Input,
-                    1,
-                    &enableIO,
-                    UInt32(MemoryLayout<UInt32>.size)
-                ),
-                operation: "enable HAL input"
-            )
-
-            var disableOutput: UInt32 = 0
-            try Self.checkStatus(
-                AudioUnitSetProperty(
-                    unit,
-                    kAudioOutputUnitProperty_EnableIO,
-                    kAudioUnitScope_Output,
-                    0,
-                    &disableOutput,
-                    UInt32(MemoryLayout<UInt32>.size)
-                ),
-                operation: "disable HAL output"
-            )
-
-            var currentDevice = inputDeviceID
-            try Self.checkStatus(
-                AudioUnitSetProperty(
-                    unit,
-                    kAudioOutputUnitProperty_CurrentDevice,
-                    kAudioUnitScope_Global,
-                    0,
-                    &currentDevice,
-                    UInt32(MemoryLayout<AudioObjectID>.size)
-                ),
-                operation: "select HAL input device"
-            )
-
-            var deviceFormat = AudioStreamBasicDescription()
-            var deviceFormatSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-            try Self.checkStatus(
-                AudioUnitGetProperty(
-                    unit,
-                    kAudioUnitProperty_StreamFormat,
-                    kAudioUnitScope_Output,
-                    1,
-                    &deviceFormat,
-                    &deviceFormatSize
-                ),
-                operation: "read HAL device format"
-            )
-
-            var clientFormat = AudioStreamBasicDescription(
-                mSampleRate: deviceFormat.mSampleRate,
-                mFormatID: kAudioFormatLinearPCM,
-                mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,
-                mBytesPerPacket: UInt32(MemoryLayout<Float>.size),
-                mFramesPerPacket: 1,
-                mBytesPerFrame: UInt32(MemoryLayout<Float>.size),
-                mChannelsPerFrame: 1,
-                mBitsPerChannel: UInt32(MemoryLayout<Float>.size * 8),
-                mReserved: 0
-            )
-            try Self.checkStatus(
-                AudioUnitSetProperty(
-                    unit,
-                    kAudioUnitProperty_StreamFormat,
-                    kAudioUnitScope_Output,
-                    1,
-                    &clientFormat,
-                    UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-                ),
-                operation: "set HAL client format"
-            )
-
-            var callback = AURenderCallbackStruct(
-                inputProc: audioCaptureHALInputCallback,
-                inputProcRefCon: Unmanaged.passUnretained(self).toOpaque()
-            )
-            try Self.checkStatus(
-                AudioUnitSetProperty(
-                    unit,
-                    kAudioOutputUnitProperty_SetInputCallback,
-                    kAudioUnitScope_Global,
-                    0,
-                    &callback,
-                    UInt32(MemoryLayout<AURenderCallbackStruct>.size)
-                ),
-                operation: "install HAL input callback"
-            )
-
-            halInputUnit = unit
-            try Self.checkStatus(AudioUnitInitialize(unit), operation: "initialize HAL input")
-            try Self.checkStatus(AudioOutputUnitStart(unit), operation: "start HAL input")
-            let sampleRate = max(8_000, Int(deviceFormat.mSampleRate.rounded()))
-            setCaptureSampleRate(sampleRate)
-            inputFormat = nil
-            targetFormat = nil
-            converter = nil
-            AppLogger.shared.log(
-                .info,
-                "audio capture start backend=halInput sr=\(sampleRate) channels=1 tapChannels=1 aec=false"
-            )
-        } catch {
-            halInputUnit = nil
-            AudioComponentInstanceDispose(unit)
-            throw error
-        }
-    }
-
-    private func stopActiveCapture() {
-        switch activeBackend {
-        case .standardEngine, .voiceProcessingEngine:
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-            if engine.inputNode.isVoiceProcessingEnabled {
-                try? engine.inputNode.setVoiceProcessingEnabled(false)
-            }
-        case .halInput:
-            if let halInputUnit {
-                AudioOutputUnitStop(halInputUnit)
-                AudioUnitUninitialize(halInputUnit)
-                AudioComponentInstanceDispose(halInputUnit)
-                self.halInputUnit = nil
-            }
-        case nil:
-            break
-        }
-        activeBackend = nil
-    }
-
-    private func consume(buffer: AVAudioPCMBuffer) {
-        if let converted = convertToFloatMono(buffer: buffer),
-           let channelData = converted.floatChannelData {
-            let frameCount = Int(converted.frameLength)
-            let ptr = channelData[0]
-            let chunk = Array(UnsafeBufferPointer(start: ptr, count: frameCount))
-            if let levels = appendCapturedSamples(chunk) {
-                emitLevels(levels)
-            }
-            return
-        }
-
-        appendFloatSamplesDirectly(buffer: buffer)
-    }
-
-    private func convertToFloatMono(buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
-        guard let converter,
-              let inputFormat,
-              let targetFormat else {
-            return nil
-        }
-
-        let ratio = targetFormat.sampleRate / inputFormat.sampleRate
-        let targetCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 256
-
-        guard let output = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: max(512, targetCapacity)) else {
-            return nil
-        }
-
-        var error: NSError?
-        var didProvideInput = false
-
-        let status = converter.convert(to: output, error: &error) { _, outStatus in
-            if didProvideInput {
-                outStatus.pointee = .noDataNow
-                return nil
-            }
-            didProvideInput = true
-            outStatus.pointee = .haveData
-            return buffer
-        }
-
-        if status == .error || error != nil {
-            return nil
-        }
-        return output
-    }
-
-    private func appendFloatSamplesDirectly(buffer: AVAudioPCMBuffer) {
-        guard let channelData = buffer.floatChannelData else {
-            return
-        }
-
-        let frameCount = Int(buffer.frameLength)
-        let channels = Int(buffer.format.channelCount)
-        if frameCount == 0 || channels == 0 {
-            return
-        }
-
-        if channels == 1 {
-            let chunk = Array(UnsafeBufferPointer(start: channelData[0], count: frameCount))
-            if let levels = appendCapturedSamples(chunk) {
-                emitLevels(levels)
-            }
-            return
-        }
-
-        var mixed = Array(repeating: Float(0), count: frameCount)
-        for channel in 0 ..< channels {
-            let ptr = channelData[channel]
-            for i in 0 ..< frameCount {
-                mixed[i] += ptr[i]
-            }
-        }
-        let scale = Float(1.0 / Double(channels))
-        for i in 0 ..< frameCount {
-            mixed[i] *= scale
-        }
-        if let levels = appendCapturedSamples(mixed) {
-            emitLevels(levels)
-        }
-    }
-
-    private func appendCapturedSamples(_ chunk: [Float]) -> [Float]? {
-        guard !chunk.isEmpty else {
-            return nil
-        }
-
-        lock.lock()
-        samples.append(contentsOf: chunk)
-        let levelsToEmit = updateLevelLocked(from: chunk)
-        lock.unlock()
-        return levelsToEmit
-    }
-
-    private func updateLevelLocked(from values: [Float]) -> [Float]? {
-        let chunkSize = max(1, values.count / meterBarCount)
-        var nextLevels = Array(repeating: Float(0), count: meterBarCount)
-
-        for index in 0 ..< meterBarCount {
-            let start = index * chunkSize
-            let end = index == meterBarCount - 1 ? values.count : min(values.count, start + chunkSize)
-            guard start < end else { continue }
-            let rms = Self.rms(of: values, in: start ..< end)
-            let normalized = min(max(rms * 12, 0), 1)
-            nextLevels[index] = normalized
-        }
-
-        if smoothedLevels.count != meterBarCount {
-            smoothedLevels = Array(repeating: 0, count: meterBarCount)
-        }
-        for index in 0 ..< meterBarCount {
-            smoothedLevels[index] = (smoothedLevels[index] * 0.62) + (nextLevels[index] * 0.38)
-        }
-
-        let now = CACurrentMediaTime()
-        guard now - lastLevelEmissionTime >= 1.0 / 30.0 else { return nil }
-        lastLevelEmissionTime = now
-        return smoothedLevels
-    }
-
-    private func emitLevels(_ levels: [Float]) {
-        guard let onLevelsUpdate else { return }
-        DispatchQueue.main.async {
-            onLevelsUpdate(levels)
-        }
-    }
-
-    private func setCaptureSampleRate(_ sampleRate: Int) {
-        lock.lock()
-        captureSampleRate = sampleRate
-        lock.unlock()
-    }
-
-    private static func rms(of values: [Float]) -> Float {
-        guard !values.isEmpty else { return 0 }
-        return rms(of: values, in: values.indices)
-    }
-
-    private static func rms(of values: [Float], in range: Range<Int>) -> Float {
-        guard !range.isEmpty else { return 0 }
-        var sum: Double = 0
-        for index in range {
-            let sample = values[index]
-            let v = Double(sample)
-            sum += v * v
-        }
-        return Float((sum / Double(range.count)).squareRoot())
-    }
-
-    private static func allDeviceIDs() -> [AudioObjectID] {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var dataSize: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize) == noErr else {
-            return []
-        }
-
-        let count = Int(dataSize) / MemoryLayout<AudioObjectID>.size
-        var deviceIDs = Array(repeating: AudioObjectID(), count: count)
-        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize, &deviceIDs) == noErr else {
-            return []
-        }
-        return deviceIDs
-    }
-
-    private static func defaultInputDeviceID() -> AudioObjectID? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var deviceID = AudioObjectID()
-        var dataSize = UInt32(MemoryLayout<AudioObjectID>.size)
-        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &dataSize, &deviceID) == noErr else {
-            return nil
-        }
-        return deviceID
-    }
-
-    private static func audioDeviceID(forUID uid: String) -> AudioObjectID? {
-        for deviceID in allDeviceIDs() {
-            if deviceUID(for: deviceID) == uid {
-                return deviceID
-            }
-        }
-        return nil
-    }
-
-    private static func deviceUID(for deviceID: AudioObjectID) -> String? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceUID,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var cfString: CFString = "" as CFString
-        var dataSize = UInt32(MemoryLayout<CFString>.size)
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &dataSize, &cfString) == noErr else {
-            return nil
-        }
-        return cfString as String
-    }
-
-    private static func deviceName(for deviceID: AudioObjectID) -> String? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioObjectPropertyName,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var cfString: CFString = "" as CFString
-        var dataSize = UInt32(MemoryLayout<CFString>.size)
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &dataSize, &cfString) == noErr else {
-            return nil
-        }
-        return cfString as String
-    }
-
-    private static func inputChannelCount(for deviceID: AudioObjectID) -> Int {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyStreamConfiguration,
-            mScope: kAudioDevicePropertyScopeInput,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var dataSize: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &dataSize) == noErr else {
-            return 0
-        }
-
-        let rawPointer = UnsafeMutableRawPointer.allocate(byteCount: Int(dataSize), alignment: MemoryLayout<AudioBufferList>.alignment)
-        defer { rawPointer.deallocate() }
-
-        let bufferListPointer = rawPointer.bindMemory(to: AudioBufferList.self, capacity: 1)
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &dataSize, bufferListPointer) == noErr else {
-            return 0
-        }
-
-        let buffers = UnsafeMutableAudioBufferListPointer(bufferListPointer)
-        return buffers.reduce(0) { $0 + Int($1.mNumberChannels) }
-    }
-
-    private static func inputDeviceID(forUID uid: String?) -> AudioObjectID? {
-        if let uid, let device = audioDeviceID(forUID: uid) {
-            return device
-        }
-        return defaultInputDeviceID()
-    }
-
-    private static func inputDeviceUsesBluetoothTransport(forUID uid: String?) -> Bool? {
-        guard let deviceID = inputDeviceID(forUID: uid) else {
-            return nil
-        }
-        guard inputChannelCount(for: deviceID) > 0 else {
-            return nil
-        }
-        guard let transportType = deviceTransportType(for: deviceID) else {
-            return nil
-        }
-        return transportType == kAudioDeviceTransportTypeBluetooth
-            || transportType == kAudioDeviceTransportTypeBluetoothLE
-    }
-
-    private static func deviceTransportType(for deviceID: AudioObjectID) -> UInt32? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyTransportType,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        var transportType: UInt32 = 0
-        var dataSize = UInt32(MemoryLayout<UInt32>.size)
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &dataSize, &transportType) == noErr else {
-            return nil
-        }
-        return transportType
-    }
-
-    fileprivate func handleHALInput(
-        ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
-        inTimeStamp: UnsafePointer<AudioTimeStamp>,
-        inNumberFrames: UInt32,
-        inBusNumber: UInt32
-    ) -> OSStatus {
-        guard let halInputUnit else {
-            return noErr
-        }
-
-        let byteCount = Int(inNumberFrames) * MemoryLayout<Float>.size
-        let data = UnsafeMutableRawPointer.allocate(byteCount: byteCount, alignment: MemoryLayout<Float>.alignment)
-        defer { data.deallocate() }
-
-        var buffer = AudioBuffer(
-            mNumberChannels: 1,
-            mDataByteSize: UInt32(byteCount),
-            mData: data
-        )
-        var bufferList = AudioBufferList(mNumberBuffers: 1, mBuffers: buffer)
-        let status = AudioUnitRender(
-            halInputUnit,
-            ioActionFlags,
-            inTimeStamp,
-            inBusNumber,
-            inNumberFrames,
-            &bufferList
-        )
-        guard status == noErr else {
-            return status
-        }
-
-        let floatPointer = data.bindMemory(to: Float.self, capacity: Int(inNumberFrames))
-        let chunk = Array(UnsafeBufferPointer(start: floatPointer, count: Int(inNumberFrames)))
-        if let levels = appendCapturedSamples(chunk) {
-            emitLevels(levels)
-        }
-        return noErr
-    }
-
-    private static func checkStatus(_ status: OSStatus, operation: String) throws {
-        guard status == noErr else {
-            AppLogger.shared.log(.error, "\(operation) failed status=\(status)")
-            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
-        }
+    private func withCallbackLock<T>(_ work: () -> T) -> T {
+        callbackLock.lock()
+        defer { callbackLock.unlock() }
+        return work()
     }
 }

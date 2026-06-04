@@ -79,11 +79,19 @@ struct MainWindowRootView: View {
 @MainActor
 final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
+    private var workspaceObservers: [NSObjectProtocol] = []
+
+    deinit {
+        for observer in workspaceObservers {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger(subsystem: "dev.suniye.app", category: "window").notice("applicationDidFinishLaunching")
         AppLogger.shared.log(.info, "applicationDidFinishLaunching")
         statusItemController = StatusItemController(appState: sharedAppState)
+        observeWorkspaceLifecycle()
         MainWindowController.shared.show(appState: sharedAppState)
         if ProcessInfo.processInfo.shouldStartUpdateController {
             sharedAppState.startUpdateController()
@@ -109,5 +117,24 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
     func applicationDidBecomeActive(_ notification: Notification) {
         AppLogger.shared.log(.info, "applicationDidBecomeActive; refreshing permission status")
         sharedAppState.refreshPermissionStatus()
+        sharedAppState.refreshInputDevices()
+    }
+
+    private func observeWorkspaceLifecycle() {
+        let center = NSWorkspace.shared.notificationCenter
+        workspaceObservers = [
+            center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { _ in
+                Task { @MainActor in
+                    AppLogger.shared.log(.info, "system will sleep")
+                    await sharedAppState.handleSystemWillSleep()
+                }
+            },
+            center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
+                Task { @MainActor in
+                    AppLogger.shared.log(.info, "system did wake")
+                    sharedAppState.handleSystemDidWake()
+                }
+            },
+        ]
     }
 }
