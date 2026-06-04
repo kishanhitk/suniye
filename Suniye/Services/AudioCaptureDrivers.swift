@@ -311,7 +311,7 @@ private final class HALCaptureDriver: AudioCaptureDriver {
             try checkAudioStatus(AudioUnitGetProperty(
                 unit,
                 kAudioUnitProperty_StreamFormat,
-                kAudioUnitScope_Input,
+                kAudioUnitScope_Output,
                 1,
                 &deviceFormat,
                 &formatSize
