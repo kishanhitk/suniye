@@ -31,21 +31,31 @@ struct OnboardingMagicFormatPresenter {
     private var localModelOption: OnboardingMagicFormatProviderOption {
         let isInstalled = appState.localGemmaInstallState.isInstalled
         let isActive = appState.localGemmaInstallState.isActive
-        let isSelectable = appState.isLocalGemmaProviderSelectable
+        let isReady = isInstalled && appState.localGemmaMagicFormatAvailability.isAvailable
+        let isSelectable = appState.canSelectLocalGemmaDuringOnboarding
         let sizeText = appState.localGemmaModelEntry.expectedSizeText
+        let description: String
+        let primaryActionTitle: String
+
+        if isReady {
+            description = "Runs entirely on your Mac. Already installed and ready to use."
+            primaryActionTitle = "Use Local Model & Continue"
+        } else if isInstalled {
+            description = "Runs entirely on your Mac. Installed, but setup needs attention."
+            primaryActionTitle = "Local Model Unavailable"
+        } else {
+            description = "Runs entirely on your Mac. Requires a one-time \(sizeText) download."
+            primaryActionTitle = isActive ? "Continue" : "Download \(sizeText) & Continue"
+        }
 
         return OnboardingMagicFormatProviderOption(
             provider: .localModel,
-            description: isInstalled
-                ? "Runs entirely on your Mac. Already installed and ready to use."
-                : "Runs entirely on your Mac. Requires a one-time \(sizeText) download.",
+            description: description,
             capabilityTags: ["Recommended", "Private", "Best formatting"],
             isSelectable: isSelectable,
-            unavailableHelpText: isSelectable ? nil : "Local Model requires Apple Silicon.",
+            unavailableHelpText: isSelectable ? nil : appState.localGemmaMagicFormatAvailability.statusText,
             canOpenSettings: false,
-            primaryActionTitle: isInstalled
-                ? "Use Local Model & Continue"
-                : (isActive ? "Continue" : "Download \(sizeText) & Continue")
+            primaryActionTitle: primaryActionTitle
         )
     }
 

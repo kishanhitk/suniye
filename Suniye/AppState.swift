@@ -654,6 +654,11 @@ final class AppState {
         localLLMModelManager.isHardwareSupported
     }
 
+    var canSelectLocalGemmaDuringOnboarding: Bool {
+        isLocalGemmaProviderSelectable
+            && (!localGemmaInstallState.isInstalled || localGemmaMagicFormatAvailability.isAvailable)
+    }
+
     var localGemmaModelEntry: LocalLLMModelCatalogEntry {
         localGemmaCatalogEntry(for: localLLMModelManager.preferredModelID)
     }
@@ -1453,7 +1458,7 @@ final class AppState {
 
         switch provider {
         case .localModel:
-            guard isLocalGemmaProviderSelectable else {
+            guard canSelectLocalGemmaDuringOnboarding else {
                 return
             }
             llmProvider = provider.magicFormatProvider

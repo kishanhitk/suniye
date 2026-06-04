@@ -248,7 +248,11 @@ final class AppStateSettingsTests: XCTestCase {
     func testOnboardingInstalledLocalModelDoesNotDownloadAgain() {
         let localManager = StubLocalLLMModelManager()
         localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
-        let appState = makeTestAppState(localLLMModelManager: localManager)
+        let localGemma = NoopLocalGemmaMagicFormatPostProcessor(availability: .available)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: localGemma,
+            localLLMModelManager: localManager
+        )
         appState.hasCompletedCoreOnboarding = false
         appState.activeOnboardingStep = .magicFormat
 
@@ -258,6 +262,25 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertTrue(appState.llmEnabled)
         XCTAssertEqual(appState.llmProvider, .localGemma)
         XCTAssertEqual(appState.activeOnboardingStep, .practice)
+    }
+
+    func testOnboardingInstalledLocalModelWithMissingRuntimeDoesNotAdvance() {
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let localGemma = NoopLocalGemmaMagicFormatPostProcessor(availability: .runtimeUnavailable)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: localGemma,
+            localLLMModelManager: localManager
+        )
+        appState.hasCompletedCoreOnboarding = false
+        appState.activeOnboardingStep = .magicFormat
+
+        appState.confirmMagicFormatDuringOnboarding(.localModel)
+
+        XCTAssertFalse(appState.llmEnabled)
+        XCTAssertEqual(localManager.downloadCallCount, 0)
+        XCTAssertEqual(appState.activeOnboardingStep, .magicFormat)
+        XCTAssertFalse(appState.hasCompletedCoreOnboarding)
     }
 
     func testOnboardingAppleIntelligenceChoiceEnablesProvider() {
@@ -355,6 +378,25 @@ final class AppStateSettingsTests: XCTestCase {
         )
 
         XCTAssertEqual(OnboardingMagicFormatPresenter(appState: appState).initialProvider, .appleIntelligence)
+    }
+
+    func testOnboardingMagicFormatUsesAppleWhenInstalledLocalRuntimeIsMissing() throws {
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let localGemma = NoopLocalGemmaMagicFormatPostProcessor(availability: .runtimeUnavailable)
+        let apple = NoopAppleMagicFormatPostProcessor(availability: .available)
+        let appState = makeTestAppState(
+            appleMagicFormatPostProcessor: apple,
+            localGemmaMagicFormatPostProcessor: localGemma,
+            localLLMModelManager: localManager
+        )
+        let presenter = OnboardingMagicFormatPresenter(appState: appState)
+        let localOption = try XCTUnwrap(presenter.option(for: .localModel))
+
+        XCTAssertFalse(localOption.isSelectable)
+        XCTAssertEqual(localOption.unavailableHelpText, "Local model runtime is not available.")
+        XCTAssertEqual(localOption.primaryActionTitle, "Local Model Unavailable")
+        XCTAssertEqual(presenter.initialProvider, .appleIntelligence)
     }
 
     func testFinishOnboardingClearsActiveStep() {
