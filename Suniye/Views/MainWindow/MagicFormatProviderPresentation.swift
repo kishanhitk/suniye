@@ -10,11 +10,20 @@ struct MagicFormatProviderPresenter {
     let appState: AppState
 
     var providerOptions: [MagicFormatProvider] {
-        [.localGemma, .appleFoundationModels, .automatic, .openAICompatible]
+        [.localGemma, .appleFoundationModels, .openAICompatible]
     }
 
     var displayedProviderSelection: MagicFormatProvider {
-        appState.llmProvider
+        guard appState.llmProvider == .automatic else {
+            return appState.llmProvider
+        }
+        if appState.usesAppleMagicFormatSettings {
+            return .appleFoundationModels
+        }
+        if appState.usesLocalGemmaMagicFormatSettings {
+            return .localGemma
+        }
+        return .openAICompatible
     }
 
     var topStatusText: String {
@@ -74,7 +83,9 @@ struct MagicFormatProviderPresenter {
             return appState.appleMagicFormatAvailability.isAvailable
         case .localGemma:
             return appState.isLocalGemmaProviderSelectable
-        case .automatic, .openAICompatible:
+        case .automatic:
+            return false
+        case .openAICompatible:
             return true
         }
     }
