@@ -308,10 +308,15 @@ private final class HALCaptureDriver: AudioCaptureDriver {
 
             var deviceFormat = AudioStreamBasicDescription()
             var formatSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+            // The device's true hardware format lives on the INPUT scope of element 1 (TN2091).
+            // The OUTPUT scope of element 1 is the *client* format we set below, and reading it
+            // here (before it is configured) returns AUHAL's default (e.g. 44.1kHz), not the real
+            // device rate (e.g. 48kHz). A mismatched client rate makes the input callback never
+            // fire, so no audio is captured (KIS-141). Read the hardware format from the input scope.
             try checkAudioStatus(AudioUnitGetProperty(
                 unit,
                 kAudioUnitProperty_StreamFormat,
-                kAudioUnitScope_Output,
+                kAudioUnitScope_Input,
                 1,
                 &deviceFormat,
                 &formatSize
