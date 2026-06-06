@@ -1,14 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
   handleIssueReportRequest,
+  issueReportConfigFromEnv,
   makeLinearIssueDescription,
   type IssueReportEndpointConfig,
   type IssueReportPayload,
 } from "../src/lib/issueReports";
-import {
-  issueReportConfigFromPagesEnv,
-  onRequest as handlePagesIssueReportRequest,
-} from "../functions/api/issue-reports";
 
 const validPayload: IssueReportPayload = {
   schemaVersion: 1,
@@ -50,24 +47,8 @@ const validPayload: IssueReportPayload = {
 };
 
 describe("issue report endpoint", () => {
-  test("Cloudflare Pages function rejects non-POST requests through the shared handler", async () => {
-    const response = await handlePagesIssueReportRequest({
-      request: new Request("https://suniye.test/api/issue-reports"),
-      env: {
-        LINEAR_API_KEY: "linear",
-        LINEAR_TEAM_ID: "team",
-      },
-    });
-
-    expect(response.status).toBe(405);
-    expect(await response.json()).toMatchObject({
-      success: false,
-      error: { code: "method_not_allowed" },
-    });
-  });
-
-  test("Cloudflare Pages function maps Linear bindings from context env", () => {
-    expect(issueReportConfigFromPagesEnv({
+  test("maps Linear bindings from the Worker env", () => {
+    expect(issueReportConfigFromEnv({
       LINEAR_API_KEY: "linear",
       LINEAR_TEAM_ID: "team",
       LINEAR_REPORT_LABEL_ID: "label",

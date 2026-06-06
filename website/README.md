@@ -19,6 +19,33 @@ cd website
 npm run build
 ```
 
+## Deploy
+
+The site runs on **Cloudflare Workers** (Workers Static Assets + Astro on-demand
+rendering via `@astrojs/cloudflare`). It auto-deploys on every push to `main`
+through the Workers Builds Git integration; pushes to other branches get preview
+URLs.
+
+- **Build command:** `npm run build`
+- **Deploy command:** `npx wrangler deploy --config ./dist/server/wrangler.json`
+- **Root directory:** `website`
+
+The adapter generates the full Worker config at `dist/server/wrangler.json` during
+the build; `wrangler.jsonc` in this folder only injects the bits the adapter
+leaves out (`nodejs_compat`, the Worker `name`). The `SESSION` KV namespace that
+Astro's session store needs is auto-provisioned by `wrangler deploy` on first
+deploy — no manual KV setup.
+
+To deploy manually from your machine (after `wrangler login`):
+
+```bash
+cd website
+npm run deploy
+```
+
+The `LINEAR_*` values below and any other secrets are configured as Worker secrets
+in the Cloudflare dashboard (or via `wrangler secret put`), not committed here.
+
 ## Issue report endpoint
 
 The Cloudflare deployment hosts `POST /api/issue-reports`, which creates Linear issues from Suniye's in-app reporter. Configure these Cloudflare values before enabling the feature in production:
