@@ -1,0 +1,15 @@
+{
+  // Cloudflare Workers config for the Suniye marketing site (Astro SSR + static assets).
+  // The @astrojs/cloudflare adapter MERGES this into the generated dist/server/wrangler.json
+  // at build time (it owns `main`, `assets`, the SESSION KV binding, `no_bundle`, and module
+  // `rules`). We only inject the bits the adapter leaves out.
+  // Deploy with: astro build && wrangler deploy --config ./dist/server/wrangler.json
+  //
+  // Note: Astro's adapter wires a KV-backed session store under the SESSION binding with no id;
+  // `wrangler deploy` auto-provisions that namespace on first deploy, so no manual KV setup is
+  // needed. Do NOT add a kv_namespaces id here — it would defeat auto-provisioning.
+  "name": "suniye-website",
+  "compatibility_date": "2026-04-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true }
+}
