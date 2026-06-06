@@ -8,7 +8,7 @@
   // Note: Astro's adapter wires a KV-backed session store under the SESSION binding with no id;
   // `wrangler deploy` auto-provisions that namespace on first deploy, so no manual KV setup is
   // needed. Do NOT add a kv_namespaces id here — it would defeat auto-provisioning.
-  "name": "suniye-website",
+  "name": "suniye",
   "compatibility_date": "2026-04-15",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true }
