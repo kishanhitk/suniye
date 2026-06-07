@@ -195,17 +195,21 @@ final class AudioCaptureServiceTests: XCTestCase {
                 interruptedReason = reason
             }
         }
+        // The benign change must restart in place: inputOnlyHAL fails -> standardEngine ->
+        // (restart) standardEngine, i.e. a 3rd successful start. Await that, not a sleep.
+        let restarted = expectation(description: "engine restarted in place")
+        factory.onStartDriver = { startCount in
+            if startCount == 3 { restarted.fulfill() }
+        }
         let sessionID = UUID()
         _ = try await service.startCapture(
             sessionID: sessionID,
             preferredInputDeviceID: nil,
             echoCancellationEnabled: false
         )
-        // Let the drain timer mark the first frame as seen before the config change.
-        try await Task.sleep(nanoseconds: 80_000_000)
 
         factory.triggerConfigurationChange()
-        try await Task.sleep(nanoseconds: 80_000_000)
+        await fulfillment(of: [restarted], timeout: 2)
 
         let captured = await service.stopCapture(sessionID: sessionID)
 
@@ -240,14 +244,13 @@ final class AudioCaptureServiceTests: XCTestCase {
             preferredInputDeviceID: nil,
             echoCancellationEnabled: false
         )
-        try await Task.sleep(nanoseconds: 80_000_000)
 
         // The active input device is swapped out from under us before the engine
         // reports its configuration change.
         catalog.route = makeDeviceRoute(effectiveInputDeviceID: "different-device")
         factory.triggerConfigurationChange()
 
-        await fulfillment(of: [interrupted], timeout: 1)
+        await fulfillment(of: [interrupted], timeout: 2)
         await service.cancelCapture(sessionID: sessionID, reason: .deviceChanged)
     }
 
@@ -270,6 +273,11 @@ final class AudioCaptureServiceTests: XCTestCase {
                 interruptedReason = reason
             }
         }
+        // voiceProcessingEngine starts, then restarts on the same backend: a 2nd successful start.
+        let restarted = expectation(description: "voice-processing engine restarted in place")
+        factory.onStartDriver = { startCount in
+            if startCount == 2 { restarted.fulfill() }
+        }
         let sessionID = UUID()
         let session = try await service.startCapture(
             sessionID: sessionID,
@@ -277,10 +285,9 @@ final class AudioCaptureServiceTests: XCTestCase {
             echoCancellationEnabled: true
         )
         XCTAssertEqual(session.route.backend, .voiceProcessingEngine)
-        try await Task.sleep(nanoseconds: 80_000_000)
 
         factory.triggerConfigurationChange()
-        try await Task.sleep(nanoseconds: 80_000_000)
+        await fulfillment(of: [restarted], timeout: 2)
 
         let captured = await service.stopCapture(sessionID: sessionID)
 
@@ -304,10 +311,18 @@ final class AudioCaptureServiceTests: XCTestCase {
             driverFactory: factory,
             firstFrameDeadlineSeconds: 10
         )
+        let firstRestart = expectation(description: "first restart")
+        let secondRestart = expectation(description: "second restart")
+        factory.onStartDriver = { startCount in
+            if startCount == 3 { firstRestart.fulfill() }
+            if startCount == 4 { secondRestart.fulfill() }
+        }
+        let interrupted = expectation(description: "interrupted after restart cap")
         var interruptedReason: AudioCaptureInterruption?
         service.onEvent = { event in
             if case let .interrupted(_, reason) = event {
                 interruptedReason = reason
+                interrupted.fulfill()
             }
         }
         let sessionID = UUID()
@@ -316,15 +331,15 @@ final class AudioCaptureServiceTests: XCTestCase {
             preferredInputDeviceID: nil,
             echoCancellationEnabled: false
         )
-        try await Task.sleep(nanoseconds: 80_000_000)
 
-        // Two changes restart in place; the third exceeds the cap and interrupts.
+        // Two changes restart in place; the third exceeds the cap and interrupts. Each step waits on
+        // the resulting state transition (restart start / interruption), never a fixed delay.
         factory.triggerConfigurationChange()
-        try await Task.sleep(nanoseconds: 60_000_000)
+        await fulfillment(of: [firstRestart], timeout: 2)
         factory.triggerConfigurationChange()
-        try await Task.sleep(nanoseconds: 60_000_000)
+        await fulfillment(of: [secondRestart], timeout: 2)
         factory.triggerConfigurationChange()
-        try await Task.sleep(nanoseconds: 60_000_000)
+        await fulfillment(of: [interrupted], timeout: 2)
 
         XCTAssertEqual(interruptedReason, .engineConfigurationChanged)
         XCTAssertEqual(
@@ -567,6 +582,9 @@ private final class StubAudioCaptureDriverFactory: AudioCaptureDriverFactoryProt
     private(set) var startedBackends: [AudioCaptureBackend] = []
     private(set) var drivers: [StubAudioCaptureDriver] = []
     private(set) var configurationChangeHandlers: [() -> Void] = []
+    /// Called after each *successful* start with the cumulative count in `startedBackends`,
+    /// letting tests await a restart deterministically instead of sleeping.
+    var onStartDriver: ((Int) -> Void)?
 
     init(
         format: AudioCaptureFormat,
@@ -596,6 +614,7 @@ private final class StubAudioCaptureDriverFactory: AudioCaptureDriverFactoryProt
         let driver = StubAudioCaptureDriver(backend: plan.backend, format: format)
         drivers.append(driver)
         configurationChangeHandlers.append(onConfigurationChange)
+        onStartDriver?(startedBackends.count)
         return AudioCaptureDriverStart(driver: driver, format: format)
     }
 
