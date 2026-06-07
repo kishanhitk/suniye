@@ -251,6 +251,89 @@ final class AudioCaptureServiceTests: XCTestCase {
         await service.cancelCapture(sessionID: sessionID, reason: .deviceChanged)
     }
 
+    func testBenignConfigChangePreservesVoiceProcessingBackend() async throws {
+        // A benign reconfig on a voiceProcessingEngine (echo-cancellation) session must restart on the
+        // SAME backend via currentPlan, never silently downgrade to standardEngine (dropping AEC).
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 48_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 4_800)
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        var interruptedReason: AudioCaptureInterruption?
+        service.onEvent = { event in
+            if case let .interrupted(_, reason) = event {
+                interruptedReason = reason
+            }
+        }
+        let sessionID = UUID()
+        let session = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: true
+        )
+        XCTAssertEqual(session.route.backend, .voiceProcessingEngine)
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        factory.triggerConfigurationChange()
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        let captured = await service.stopCapture(sessionID: sessionID)
+
+        XCTAssertNil(interruptedReason)
+        XCTAssertEqual(factory.startedBackends, [.voiceProcessingEngine, .voiceProcessingEngine])
+        XCTAssertEqual(captured.route?.backend, .voiceProcessingEngine)
+        XCTAssertEqual(captured.route?.effectiveEchoCancellation, true)
+    }
+
+    func testRepeatedBenignConfigChangesInterruptAfterRestartCap() async throws {
+        // The restart budget is bounded: after maximumEngineRestarts benign changes we stop restarting
+        // and surface the interruption instead of looping forever.
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 48_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 4_800),
+            failingBackends: [.inputOnlyHAL]
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        var interruptedReason: AudioCaptureInterruption?
+        service.onEvent = { event in
+            if case let .interrupted(_, reason) = event {
+                interruptedReason = reason
+            }
+        }
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        // Two changes restart in place; the third exceeds the cap and interrupts.
+        factory.triggerConfigurationChange()
+        try await Task.sleep(nanoseconds: 60_000_000)
+        factory.triggerConfigurationChange()
+        try await Task.sleep(nanoseconds: 60_000_000)
+        factory.triggerConfigurationChange()
+        try await Task.sleep(nanoseconds: 60_000_000)
+
+        XCTAssertEqual(interruptedReason, .engineConfigurationChanged)
+        XCTAssertEqual(
+            factory.startedBackends,
+            [.inputOnlyHAL, .standardEngine, .standardEngine, .standardEngine]
+        )
+        await service.cancelCapture(sessionID: sessionID, reason: .engineConfigurationChanged)
+    }
+
     func testMaximumDurationDoesNotOverrideUnsafeAudioOutcome() async throws {
         let service = AudioCaptureService(
             deviceMonitor: StubAudioDeviceMonitor(),
