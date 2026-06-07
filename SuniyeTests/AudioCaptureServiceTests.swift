@@ -173,6 +173,182 @@ final class AudioCaptureServiceTests: XCTestCase {
         await service.cancelCapture(sessionID: sessionID, reason: .noAudioArriving)
     }
 
+    func testSpuriousEngineConfigChangeForSameDeviceRestartsInsteadOfInterrupting() async throws {
+        // Reproduces KIS-141: the standardEngine fallback emits one benign
+        // AVAudioEngineConfigurationChange right after start. It must NOT surface
+        // "Microphone changed"; the engine should be restarted in place so audio
+        // keeps flowing on the same device.
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 48_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 4_800),
+            failingBackends: [.inputOnlyHAL]
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        var interruptedReason: AudioCaptureInterruption?
+        service.onEvent = { event in
+            if case let .interrupted(_, reason) = event {
+                interruptedReason = reason
+            }
+        }
+        // The benign change must restart in place: inputOnlyHAL fails -> standardEngine ->
+        // (restart) standardEngine, i.e. a 3rd successful start. Await that, not a sleep.
+        let restarted = expectation(description: "engine restarted in place")
+        factory.onStartDriver = { startCount in
+            if startCount == 3 { restarted.fulfill() }
+        }
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+
+        factory.triggerConfigurationChange()
+        await fulfillment(of: [restarted], timeout: 2)
+
+        let captured = await service.stopCapture(sessionID: sessionID)
+
+        XCTAssertNil(interruptedReason, "benign same-device config change must not interrupt")
+        XCTAssertEqual(captured.outcome, .complete)
+        XCTAssertEqual(factory.startedBackends, [.inputOnlyHAL, .standardEngine, .standardEngine])
+    }
+
+    func testEngineConfigChangeAfterRealDeviceSwitchInterrupts() async throws {
+        let catalog = StubAudioCaptureHardwareCatalog(route: makeDeviceRoute())
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 48_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 4_800),
+            failingBackends: [.inputOnlyHAL]
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: catalog,
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        let interrupted = expectation(description: "interrupted on real device change")
+        service.onEvent = { event in
+            if case let .interrupted(_, reason) = event {
+                XCTAssertEqual(reason, .deviceChanged)
+                interrupted.fulfill()
+            }
+        }
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+
+        // The active input device is swapped out from under us before the engine
+        // reports its configuration change.
+        catalog.route = makeDeviceRoute(effectiveInputDeviceID: "different-device")
+        factory.triggerConfigurationChange()
+
+        await fulfillment(of: [interrupted], timeout: 2)
+        await service.cancelCapture(sessionID: sessionID, reason: .deviceChanged)
+    }
+
+    func testBenignConfigChangePreservesVoiceProcessingBackend() async throws {
+        // A benign reconfig on a voiceProcessingEngine (echo-cancellation) session must restart on the
+        // SAME backend via currentPlan, never silently downgrade to standardEngine (dropping AEC).
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 48_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 4_800)
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        var interruptedReason: AudioCaptureInterruption?
+        service.onEvent = { event in
+            if case let .interrupted(_, reason) = event {
+                interruptedReason = reason
+            }
+        }
+        // voiceProcessingEngine starts, then restarts on the same backend: a 2nd successful start.
+        let restarted = expectation(description: "voice-processing engine restarted in place")
+        factory.onStartDriver = { startCount in
+            if startCount == 2 { restarted.fulfill() }
+        }
+        let sessionID = UUID()
+        let session = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: true
+        )
+        XCTAssertEqual(session.route.backend, .voiceProcessingEngine)
+
+        factory.triggerConfigurationChange()
+        await fulfillment(of: [restarted], timeout: 2)
+
+        let captured = await service.stopCapture(sessionID: sessionID)
+
+        XCTAssertNil(interruptedReason)
+        XCTAssertEqual(factory.startedBackends, [.voiceProcessingEngine, .voiceProcessingEngine])
+        XCTAssertEqual(captured.route?.backend, .voiceProcessingEngine)
+        XCTAssertEqual(captured.route?.effectiveEchoCancellation, true)
+    }
+
+    func testRepeatedBenignConfigChangesInterruptAfterRestartCap() async throws {
+        // The restart budget is bounded: after maximumEngineRestarts benign changes we stop restarting
+        // and surface the interruption instead of looping forever.
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 48_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 4_800),
+            failingBackends: [.inputOnlyHAL]
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        let firstRestart = expectation(description: "first restart")
+        let secondRestart = expectation(description: "second restart")
+        factory.onStartDriver = { startCount in
+            if startCount == 3 { firstRestart.fulfill() }
+            if startCount == 4 { secondRestart.fulfill() }
+        }
+        let interrupted = expectation(description: "interrupted after restart cap")
+        var interruptedReason: AudioCaptureInterruption?
+        service.onEvent = { event in
+            if case let .interrupted(_, reason) = event {
+                interruptedReason = reason
+                interrupted.fulfill()
+            }
+        }
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+
+        // Two changes restart in place; the third exceeds the cap and interrupts. Each step waits on
+        // the resulting state transition (restart start / interruption), never a fixed delay.
+        factory.triggerConfigurationChange()
+        await fulfillment(of: [firstRestart], timeout: 2)
+        factory.triggerConfigurationChange()
+        await fulfillment(of: [secondRestart], timeout: 2)
+        factory.triggerConfigurationChange()
+        await fulfillment(of: [interrupted], timeout: 2)
+
+        XCTAssertEqual(interruptedReason, .engineConfigurationChanged)
+        XCTAssertEqual(
+            factory.startedBackends,
+            [.inputOnlyHAL, .standardEngine, .standardEngine, .standardEngine]
+        )
+        await service.cancelCapture(sessionID: sessionID, reason: .engineConfigurationChanged)
+    }
+
     func testMaximumDurationDoesNotOverrideUnsafeAudioOutcome() async throws {
         let service = AudioCaptureService(
             deviceMonitor: StubAudioDeviceMonitor(),
@@ -323,12 +499,13 @@ final class AudioCaptureServiceTests: XCTestCase {
     }
 
     private func makeDeviceRoute(
+        effectiveInputDeviceID: String = "test-device",
         inputTransport: AudioDeviceTransport = .builtIn,
         outputTransport: AudioDeviceTransport = .builtIn
     ) -> AudioDeviceRoute {
         AudioDeviceRoute(
             preferredInputDeviceID: nil,
-            effectiveInputDeviceID: "test-device",
+            effectiveInputDeviceID: effectiveInputDeviceID,
             effectiveInputName: "Test Microphone",
             inputTransport: inputTransport,
             outputTransport: outputTransport,
@@ -404,6 +581,10 @@ private final class StubAudioCaptureDriverFactory: AudioCaptureDriverFactoryProt
     let failingBackends: [AudioCaptureBackend]
     private(set) var startedBackends: [AudioCaptureBackend] = []
     private(set) var drivers: [StubAudioCaptureDriver] = []
+    private(set) var configurationChangeHandlers: [() -> Void] = []
+    /// Called after each *successful* start with the cumulative count in `startedBackends`,
+    /// letting tests await a restart deterministically instead of sleeping.
+    var onStartDriver: ((Int) -> Void)?
 
     init(
         format: AudioCaptureFormat,
@@ -432,6 +613,14 @@ private final class StubAudioCaptureDriverFactory: AudioCaptureDriverFactoryProt
         }
         let driver = StubAudioCaptureDriver(backend: plan.backend, format: format)
         drivers.append(driver)
+        configurationChangeHandlers.append(onConfigurationChange)
+        onStartDriver?(startedBackends.count)
         return AudioCaptureDriverStart(driver: driver, format: format)
+    }
+
+    /// Simulates the engine emitting an `AVAudioEngineConfigurationChange` for the
+    /// currently running driver (the closure the service registered most recently).
+    func triggerConfigurationChange() {
+        configurationChangeHandlers.last?()
     }
 }

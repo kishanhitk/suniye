@@ -60,10 +60,13 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         let ring: OpaquePointer
         var route: AudioRouteSnapshot
         var driver: AudioCaptureDriver?
+        var currentPlan: AudioCapturePlan?
         var samples: [Float] = []
         var interruption: AudioCaptureInterruption?
         var fallbackAttempted = false
         var firstFrameSeen = false
+        var engineRestartCount = 0
+        var firstFrameDeadlineGeneration = 0
         var smoothedLevels = Array(repeating: Float(0), count: 12)
         var lastLevelEmissionTime: CFTimeInterval = 0
         var drainTimer: DispatchSourceTimer?
@@ -101,6 +104,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     private let drainCapacity = 32_768
     private let maximumDurationSeconds: Double
     private let firstFrameDeadlineSeconds: Double
+    private let maximumEngineRestarts = 2
     private let drainScratch: UnsafeMutablePointer<Float>
 
     private var eventCallback: ((AudioCaptureEvent) -> Void)?
@@ -279,11 +283,70 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         ) { [weak self, weak active] in
             self?.controlQueue.async {
                 guard let self, let active, self.activeCapture === active else { return }
-                self.interruptActiveCapture(.engineConfigurationChanged)
+                self.handleEngineConfigurationChange(active)
             }
         }
         active.driver = started.driver
+        active.currentPlan = plan
         active.route = plan.snapshot(format: started.format)
+    }
+
+    /// Handles an `AVAudioEngineConfigurationChange` reported by an active engine driver.
+    ///
+    /// The engine emits a benign configuration change immediately after `start()` (e.g. just after the
+    /// standardEngine fallback re-acquires the input device). Treating that as fatal is what surfaced
+    /// "Microphone changed. Try again." with no audio (KIS-141). We only interrupt when the input
+    /// device actually changed; otherwise we restart the engine in place (up to `maximumEngineRestarts`
+    /// times) so capture continues, because the engine stops itself on a configuration change. Beyond
+    /// that cap we surface the interruption.
+    private func handleEngineConfigurationChange(_ active: ActiveCapture) {
+        guard activeCapture === active, active.interruption == nil else { return }
+
+        if let interruption = resolvedRouteChangeInterruption(for: active) {
+            interruptActiveCapture(interruption)
+            return
+        }
+
+        guard active.engineRestartCount < maximumEngineRestarts else {
+            AppLogger.shared.log(
+                .error,
+                "audio engine restart cap reached; giving up session=\(active.id.uuidString) attempts=\(active.engineRestartCount) \(active.route.privacySafeLogValue)"
+            )
+            interruptActiveCapture(.engineConfigurationChanged)
+            return
+        }
+        active.engineRestartCount += 1
+        do {
+            try restartActiveDriver(active)
+            AppLogger.shared.log(
+                .warning,
+                "audio engine reconfigured; restarted in place session=\(active.id.uuidString) attempt=\(active.engineRestartCount) \(active.route.privacySafeLogValue)"
+            )
+        } catch {
+            AppLogger.shared.log(
+                .error,
+                "audio engine restart failed session=\(active.id.uuidString) attempt=\(active.engineRestartCount) error=\(error.localizedDescription) \(active.route.privacySafeLogValue)"
+            )
+            interruptActiveCapture(.engineConfigurationChanged)
+        }
+    }
+
+    /// Rebuilds the current driver on the same ring after a benign engine reconfiguration.
+    /// Preserves already-captured audio; only resets the ring and re-arms the first-frame deadline
+    /// when no frame has arrived yet.
+    private func restartActiveDriver(_ active: ActiveCapture) throws {
+        guard let plan = active.currentPlan else {
+            assertionFailure("restartActiveDriver called with no active plan")
+            throw AudioCaptureServiceError.operationFailed("Restart audio driver: no active plan", kAudio_ParamError)
+        }
+        stopHardware(for: active)
+        if !active.firstFrameSeen {
+            SuniyeAudioRingBufferReset(active.ring)
+        }
+        try startDriver(for: plan, active: active)
+        if !active.firstFrameSeen {
+            scheduleFirstFrameDeadline(for: active)
+        }
     }
 
     private func startDrainTimer(for active: ActiveCapture) {
@@ -345,12 +408,18 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     }
 
     private func scheduleFirstFrameDeadline(for active: ActiveCapture) {
+        // An in-place engine restart re-arms this deadline. Tag each scheduling with a
+        // generation so a superseded deadline closure (from before the restart) no longer
+        // fires a spurious fallback/interrupt against the now-restarted driver.
+        active.firstFrameDeadlineGeneration += 1
+        let generation = active.firstFrameDeadlineGeneration
         controlQueue.asyncAfter(deadline: .now() + firstFrameDeadlineSeconds) { [weak self, weak active] in
             guard let self,
                   let active,
                   self.activeCapture === active,
                   active.interruption == nil,
-                  !active.firstFrameSeen else {
+                  !active.firstFrameSeen,
+                  active.firstFrameDeadlineGeneration == generation else {
                 return
             }
             if active.route.backend != .standardEngine, !active.fallbackAttempted {

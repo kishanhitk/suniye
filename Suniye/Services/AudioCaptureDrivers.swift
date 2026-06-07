@@ -308,10 +308,16 @@ private final class HALCaptureDriver: AudioCaptureDriver {
 
             var deviceFormat = AudioStreamBasicDescription()
             var formatSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+            // AUHAL element 1: the INPUT scope carries the device's true hardware format; the OUTPUT
+            // scope carries the *client* format we set below (TN2091). Reading the output scope before
+            // it is configured returns AUHAL's default ASBD (often 44.1kHz), not the real device rate
+            // (e.g. 48kHz). Empirically (KIS-141), deriving the client format from that stale default
+            // left the input callback silent with no error and no audio. Read the hardware format from
+            // the input scope.
             try checkAudioStatus(AudioUnitGetProperty(
                 unit,
                 kAudioUnitProperty_StreamFormat,
-                kAudioUnitScope_Output,
+                kAudioUnitScope_Input,
                 1,
                 &deviceFormat,
                 &formatSize
