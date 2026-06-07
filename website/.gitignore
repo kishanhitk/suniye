@@ -1,0 +1,6 @@
+# Local secrets — never commit. Used for `wrangler dev` and `wrangler secret bulk`.
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+*.secrets.env

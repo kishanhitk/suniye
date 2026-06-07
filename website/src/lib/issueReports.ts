@@ -60,6 +60,26 @@ export interface IssueReportEndpointConfig {
   rateLimit?: IssueReportRateLimitConfig | false;
 }
 
+/** The Cloudflare environment bindings the issue-report endpoint reads. */
+export interface IssueReportEnv {
+  LINEAR_API_KEY?: string;
+  LINEAR_TEAM_ID?: string;
+  LINEAR_REPORT_LABEL_ID?: string;
+  LINEAR_REPORT_PROJECT_ID?: string;
+  LINEAR_REPORT_STATE_ID?: string;
+}
+
+/** Maps Cloudflare env bindings to the endpoint config. Pure, so it's unit-testable. */
+export function issueReportConfigFromEnv(env: IssueReportEnv): IssueReportEndpointConfig {
+  return {
+    linearApiKey: env.LINEAR_API_KEY,
+    linearTeamId: env.LINEAR_TEAM_ID,
+    linearReportLabelId: env.LINEAR_REPORT_LABEL_ID,
+    linearReportProjectId: env.LINEAR_REPORT_PROJECT_ID,
+    linearReportStateId: env.LINEAR_REPORT_STATE_ID,
+  };
+}
+
 export interface IssueReportRateLimitConfig {
   store?: IssueReportRateLimitStore;
   maxRequests?: number;
