@@ -3427,7 +3427,7 @@ final class AppState {
         setFloatingIndicatorState(.listening(levels: levels, source: source))
     }
 
-    private static func defaultIndicatorLevels(level: Float, count: Int = 12) -> [Float] {
+    private static func defaultIndicatorLevels(level: Float, count: Int = 22) -> [Float] {
         Array(repeating: max(0, min(level, 1)), count: count)
     }
 

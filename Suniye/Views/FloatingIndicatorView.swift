@@ -171,7 +171,7 @@ struct FloatingIndicatorView: View {
         case .hover:
             return 152
         case .listening:
-            return 116
+            return 124
         case let .processing(message):
             guard let message else {
                 return 128
@@ -225,12 +225,12 @@ private struct ListeningMeterView: View {
     let levels: [Float]
 
     var body: some View {
-        HStack(alignment: .center, spacing: 3) {
+        HStack(alignment: .center, spacing: 2) {
             ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
                 Capsule(style: .continuous)
                     .fill(Color.white.opacity(0.95))
-                    .frame(width: 3, height: barHeight(for: index, level: level))
-                    .animation(.easeOut(duration: 0.08), value: level)
+                    .frame(width: 2, height: barHeight(for: index, level: level))
+                    .animation(.easeOut(duration: 0.05), value: level)
             }
         }
         .frame(maxHeight: .infinity)
@@ -240,6 +240,6 @@ private struct ListeningMeterView: View {
         let normalized = max(0, min(CGFloat(level), 1))
         let centerDistance = abs(CGFloat(index) - CGFloat(max(levels.count - 1, 0)) / 2)
         let envelope = max(0.35, 1 - centerDistance / max(CGFloat(levels.count) / 2, 1))
-        return 6 + (normalized * 22 * envelope) + (normalized * 6)
+        return 4 + (normalized * 25 * envelope) + (normalized * 8)
     }
 }

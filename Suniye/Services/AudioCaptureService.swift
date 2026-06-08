@@ -67,7 +67,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         var firstFrameSeen = false
         var engineRestartCount = 0
         var firstFrameDeadlineGeneration = 0
-        var smoothedLevels = Array(repeating: Float(0), count: 12)
+        var smoothedLevels = Array(repeating: Float(0), count: 22)
         var lastLevelEmissionTime: CFTimeInterval = 0
         var drainTimer: DispatchSourceTimer?
 
@@ -392,13 +392,15 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                 sum += value * value
             }
             let rms = Float((sum / Double(end - start)).squareRoot())
-            next[index] = min(max(rms * 12, 0), 1)
+            next[index] = min(max(rms * 14, 0), 1)
         }
         for index in next.indices {
-            active.smoothedLevels[index] = active.smoothedLevels[index] * 0.62 + next[index] * 0.38
+            // Weight the freshly measured level more heavily so the meter tracks
+            // speech transients quickly instead of lagging behind.
+            active.smoothedLevels[index] = active.smoothedLevels[index] * 0.42 + next[index] * 0.58
         }
         let now = CACurrentMediaTime()
-        guard now - active.lastLevelEmissionTime >= 1.0 / 30.0 else { return }
+        guard now - active.lastLevelEmissionTime >= 1.0 / 60.0 else { return }
         active.lastLevelEmissionTime = now
         onEvent?(.levelsUpdated(sessionID: active.id, levels: active.smoothedLevels))
     }
@@ -523,7 +525,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         }
         activeCapture = nil
         deviceMonitor.watch(deviceID: nil)
-        onEvent?(.levelsUpdated(sessionID: active.id, levels: Array(repeating: 0, count: 12)))
+        onEvent?(.levelsUpdated(sessionID: active.id, levels: Array(repeating: 0, count: 22)))
         logFinalCapture(captured, discarded: discard)
         scheduleReleaseCheck(sessionID: active.id)
         return captured
