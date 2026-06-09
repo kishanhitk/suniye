@@ -37,6 +37,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         prompt: String,
         maxTokens: Int,
         startupTimeoutSeconds: Double,
+        idleTimeoutSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> String {
         let runtime: LocalGemmaRuntime
@@ -50,11 +51,11 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         let endpoint = try await server.endpoint(
             for: runtime,
             startupTimeoutSeconds: startupTimeoutSeconds,
-            idleTimeoutSeconds: LocalGemmaDefaults.idleTimeoutSeconds
+            idleTimeoutSeconds: idleTimeoutSeconds
         )
         defer {
             Task {
-                await server.scheduleIdleShutdown(after: LocalGemmaDefaults.idleTimeoutSeconds)
+                await server.scheduleIdleShutdown(after: idleTimeoutSeconds)
             }
         }
 

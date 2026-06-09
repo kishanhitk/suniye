@@ -199,6 +199,8 @@ struct StylePage: View {
                 CardDivider()
                 localGemmaControls
                 CardDivider()
+                localGemmaKeepAlivePicker
+                CardDivider()
                 providerPromptDisclosure(isExpanded: $isLocalGemmaPromptExpanded)
             }
         case .openAICompatible:
@@ -319,6 +321,24 @@ struct StylePage: View {
             return ("Install", appState.localGemmaInstallStatusText)
         case .failed:
             return ("Error", appState.localGemmaInstallStatusText)
+        }
+    }
+
+    private var localGemmaKeepAlivePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Keep model loaded for")
+                .font(AppTypography.subheadlineSemibold)
+
+            NativePopupPicker(
+                items: LocalLLMKeepAlive.allCases,
+                selection: $appState.localModelKeepAlive,
+                title: { $0.displayName }
+            )
+            .frame(maxWidth: 320)
+
+            Text("Longer keeps repeat formatting fast but holds memory while idle.")
+                .font(AppTypography.caption)
+                .foregroundStyle(MainWindowPalette.secondaryText)
         }
     }
 

@@ -33,6 +33,7 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
                 prompt: "Connection test.",
                 maxTokens: 8,
                 startupTimeoutSeconds: 8,
+                idleTimeoutSeconds: 600,
                 timeoutSeconds: 5
             )
         } catch {

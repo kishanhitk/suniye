@@ -57,6 +57,38 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(loaded, settings)
     }
 
+    func testKeepAliveDurationRoundTrips() {
+        let suite = "dev.suniye.tests.llmsettings.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
+
+        var settings = LLMSettings()
+        settings.localModelKeepAlive = .oneHour
+        store.save(settings)
+
+        XCTAssertEqual(store.load().localModelKeepAlive, .oneHour)
+    }
+
+    func testMissingKeepAliveDecodesToTenMinutes() throws {
+        let data = """
+        {
+          "isEnabled": true,
+          "selectedModelPreset": "gpt41Mini",
+          "customModelId": "",
+          "endpointURLString": "\(LLMDefaults.defaultEndpointURLString)",
+          "baseSystemPrompt": "api prompt",
+          "systemPrompt": "",
+          "keywordsRaw": "",
+          "timeoutSeconds": 12,
+          "maxTokens": 128
+        }
+        """.data(using: .utf8)!
+
+        let settings = try JSONDecoder().decode(LLMSettings.self, from: data)
+
+        XCTAssertEqual(settings.localModelKeepAlive, .tenMinutes)
+    }
+
     func testMissingProviderAndLocalPromptsDecodeToDefaults() throws {
         let data = """
         {
