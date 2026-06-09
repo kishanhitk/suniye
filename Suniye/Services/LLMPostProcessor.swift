@@ -21,6 +21,7 @@ struct LocalGemmaMagicFormatConfig: Equatable {
     let keywords: [String]
     let startupTimeoutSeconds: Double
     let generationTimeoutSeconds: Double
+    let idleTimeoutSeconds: Double
     let maxTokens: Int
 }
 

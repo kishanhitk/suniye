@@ -266,6 +266,7 @@ final class MagicFormatCoordinator {
             keywords: settings.keywords,
             startupTimeoutSeconds: LocalGemmaDefaults.startupTimeoutSeconds,
             generationTimeoutSeconds: LocalGemmaDefaults.generationTimeoutSeconds,
+            idleTimeoutSeconds: settings.localModelKeepAlive.seconds,
             maxTokens: LocalGemmaDefaults.maxTokens
         )
     }

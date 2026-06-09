@@ -83,6 +83,7 @@
 		D31733EEC8E6838ADA961197 /* OnboardingMagicFormatStepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0246650190A01AD8A26A7D0 /* OnboardingMagicFormatStepView.swift */; };
 		D4A9EDEA500C15F31FEB8CE1 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECD2622B5D49CEAF4D4736A /* KeychainService.swift */; };
 		D56981268DA6E6B631417822 /* LocalGemmaLlamaCppClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81C8980964221A020EBB979 /* LocalGemmaLlamaCppClient.swift */; };
+		D592C6064881A1E36EA9E234 /* LocalLLMKeepAliveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F0FD9A7C5E4966A5579DE8 /* LocalLLMKeepAliveTests.swift */; };
 		D70B86338C771C5459B2AEC4 /* FloatingIndicatorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BFAD0B3FD93106BF02E29E5 /* FloatingIndicatorController.swift */; };
 		D7DEF12DA8F4CFDA5B62F554 /* LLMSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9102217BDA1AFAF69837DE /* LLMSettings.swift */; };
 		D838D2BD8C4395C5E6DC4C7B /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E69ACF4C1E158980EDDDA56F /* MenuBarView.swift */; };
@@ -171,6 +172,7 @@
 		82E6C7AA7DADED73D5C382DA /* FragmentMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "FragmentMono-Regular.ttf"; sourceTree = "<group>"; };
 		85BCA4A71724B17FDD57DFAD /* Suniye-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Suniye-Bridging-Header.h"; sourceTree = "<group>"; };
 		865C597BBA404F5F6A049278 /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
+		86F0FD9A7C5E4966A5579DE8 /* LocalLLMKeepAliveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMKeepAliveTests.swift; sourceTree = "<group>"; };
 		87C71E72DD0A95818F74F8C5 /* MagicFormatPostProcessorTestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatPostProcessorTestDoubles.swift; sourceTree = "<group>"; };
 		897FC3AE1270CBE7E26BE606 /* AppStateIssueReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateIssueReportTests.swift; sourceTree = "<group>"; };
 		8A16E593550418D25E53DADE /* AppleFoundationModelsPostProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessorTests.swift; sourceTree = "<group>"; };
@@ -302,6 +304,7 @@
 				A2C954DD9B2466B271CC6A1D /* LLMSettingsStoreTests.swift */,
 				E002F2ED2661905D8B147320 /* LocalGemmaLlamaServerTests.swift */,
 				CA71D523EC88C51E2E911E4B /* LocalGemmaPostProcessorTests.swift */,
+				86F0FD9A7C5E4966A5579DE8 /* LocalLLMKeepAliveTests.swift */,
 				316F29545ABA85276127E522 /* LocalLLMModelManagerTests.swift */,
 				87C71E72DD0A95818F74F8C5 /* MagicFormatPostProcessorTestDoubles.swift */,
 				13D4CAFD2439B222AD68BE12 /* MainWindowSectionTests.swift */,
@@ -609,6 +612,7 @@
 				7EB9B5550B0A955CDFC3FC17 /* LLMSettingsStoreTests.swift in Sources */,
 				A450DED6405BD9A57EEB5F5D /* LocalGemmaLlamaServerTests.swift in Sources */,
 				63B5E0D3334CB7E08AF7D5EA /* LocalGemmaPostProcessorTests.swift in Sources */,
+				D592C6064881A1E36EA9E234 /* LocalLLMKeepAliveTests.swift in Sources */,
 				EEBF448E040909CCFCADF515 /* LocalLLMModelManagerTests.swift in Sources */,
 				E877D4D7A206AF5389A998FE /* MagicFormatPostProcessorTestDoubles.swift in Sources */,
 				460A066A38DD8822D3A8D8C5 /* MainWindowSectionTests.swift in Sources */,

@@ -498,6 +498,9 @@ final class AppState {
     var llmSelectedModelPreset: LLMModelPreset = .gemini25Flash {
         didSet { persistLLMSettings() }
     }
+    var localModelKeepAlive: LocalLLMKeepAlive = .tenMinutes {
+        didSet { persistLLMSettings() }
+    }
     var llmCustomModelId = "" {
         didSet { persistLLMSettings() }
     }
@@ -3036,6 +3039,7 @@ final class AppState {
         llmEnabled = settings.isEnabled
         llmProvider = settings.provider
         llmSelectedModelPreset = settings.selectedModelPreset
+        localModelKeepAlive = settings.localModelKeepAlive
         llmCustomModelId = settings.customModelId
         llmEndpointURLString = settings.endpointURLString
         llmBaseSystemPrompt = mergedPrompt
@@ -3084,7 +3088,8 @@ final class AppState {
             systemPrompt: "",
             keywordsRaw: llmKeywordsRaw,
             timeoutSeconds: LLMDefaults.defaultTimeoutSeconds,
-            maxTokens: LLMDefaults.defaultMaxTokens
+            maxTokens: LLMDefaults.defaultMaxTokens,
+            localModelKeepAlive: localModelKeepAlive
         )
     }
 

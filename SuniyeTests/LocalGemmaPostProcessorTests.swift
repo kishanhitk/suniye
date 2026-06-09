@@ -137,12 +137,25 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:51234/v1/chat/completions")
     }
 
-    private func makeConfig() -> LocalGemmaMagicFormatConfig {
+    func testPolishPassesConfiguredIdleTimeoutToClient() async throws {
+        let client = FakeLocalGemmaClient(outputs: ["polished text"])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        _ = try await processor.polish(
+            text: "raw text",
+            config: makeConfig(idleTimeoutSeconds: 900)
+        )
+
+        XCTAssertEqual(client.idleTimeouts.first, 900)
+    }
+
+    private func makeConfig(idleTimeoutSeconds: Double = 600) -> LocalGemmaMagicFormatConfig {
         LocalGemmaMagicFormatConfig(
             systemPrompt: LLMDefaults.defaultGemmaMagicFormatPrompt,
             keywords: [],
             startupTimeoutSeconds: 0.1,
             generationTimeoutSeconds: 0.1,
+            idleTimeoutSeconds: idleTimeoutSeconds,
             maxTokens: 128
         )
     }
@@ -154,6 +167,7 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
     private(set) var callCount = 0
     private(set) var instructions: [String] = []
     private(set) var prompts: [String] = []
+    private(set) var idleTimeouts: [Double] = []
 
     init(availability: LocalGemmaAvailability = .available, outputs: [String]) {
         self.availability = availability
@@ -165,10 +179,12 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         prompt: String,
         maxTokens: Int,
         startupTimeoutSeconds: Double,
+        idleTimeoutSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> String {
         self.instructions.append(instructions)
         prompts.append(prompt)
+        idleTimeouts.append(idleTimeoutSeconds)
         let index = callCount
         callCount += 1
         guard index < outputs.count else {

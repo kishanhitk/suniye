@@ -113,6 +113,39 @@ enum LLMEndpointProvider {
     case generic
 }
 
+enum LocalLLMKeepAlive: String, CaseIterable, Codable {
+    case threeMinutes
+    case tenMinutes
+    case fifteenMinutes
+    case oneHour
+
+    var seconds: Double {
+        switch self {
+        case .threeMinutes:
+            return 180
+        case .tenMinutes:
+            return 600
+        case .fifteenMinutes:
+            return 900
+        case .oneHour:
+            return 3600
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .threeMinutes:
+            return "3 minutes"
+        case .tenMinutes:
+            return "10 minutes"
+        case .fifteenMinutes:
+            return "15 minutes"
+        case .oneHour:
+            return "1 hour"
+        }
+    }
+}
+
 struct LLMSettings: Codable, Equatable {
     var isEnabled: Bool = false
     var provider: MagicFormatProvider = .automatic
@@ -128,6 +161,7 @@ struct LLMSettings: Codable, Equatable {
     var keywordsRaw: String = ""
     var timeoutSeconds: Double = LLMDefaults.defaultTimeoutSeconds
     var maxTokens: Int = LLMDefaults.defaultMaxTokens
+    var localModelKeepAlive: LocalLLMKeepAlive = .tenMinutes
 
     enum CodingKeys: String, CodingKey {
         case isEnabled
@@ -142,6 +176,7 @@ struct LLMSettings: Codable, Equatable {
         case keywordsRaw
         case timeoutSeconds
         case maxTokens
+        case localModelKeepAlive
     }
 
     init() {}
@@ -158,7 +193,8 @@ struct LLMSettings: Codable, Equatable {
         systemPrompt: String = "",
         keywordsRaw: String = "",
         timeoutSeconds: Double = LLMDefaults.defaultTimeoutSeconds,
-        maxTokens: Int = LLMDefaults.defaultMaxTokens
+        maxTokens: Int = LLMDefaults.defaultMaxTokens,
+        localModelKeepAlive: LocalLLMKeepAlive = .tenMinutes
     ) {
         self.isEnabled = isEnabled
         self.provider = provider
@@ -172,6 +208,7 @@ struct LLMSettings: Codable, Equatable {
         self.keywordsRaw = keywordsRaw
         self.timeoutSeconds = LLMDefaults.clampTimeout(timeoutSeconds)
         self.maxTokens = LLMDefaults.clampMaxTokens(maxTokens)
+        self.localModelKeepAlive = localModelKeepAlive
     }
 
     init(from decoder: Decoder) throws {
@@ -192,6 +229,7 @@ struct LLMSettings: Codable, Equatable {
         keywordsRaw = try container.decodeIfPresent(String.self, forKey: .keywordsRaw) ?? ""
         timeoutSeconds = LLMDefaults.clampTimeout(try container.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? LLMDefaults.defaultTimeoutSeconds)
         maxTokens = LLMDefaults.clampMaxTokens(try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? LLMDefaults.defaultMaxTokens)
+        localModelKeepAlive = try container.decodeIfPresent(LocalLLMKeepAlive.self, forKey: .localModelKeepAlive) ?? .tenMinutes
     }
 
     func encode(to encoder: Encoder) throws {
@@ -208,6 +246,7 @@ struct LLMSettings: Codable, Equatable {
         try container.encode(keywordsRaw, forKey: .keywordsRaw)
         try container.encode(timeoutSeconds, forKey: .timeoutSeconds)
         try container.encode(maxTokens, forKey: .maxTokens)
+        try container.encode(localModelKeepAlive, forKey: .localModelKeepAlive)
     }
 
     var keywords: [String] {

@@ -10,7 +10,7 @@ enum LocalGemmaDefaults {
     static let expectedSizeText = modelEntry.expectedSizeText
     static let startupTimeoutSeconds = 90.0
     static let generationTimeoutSeconds = 15.0
-    static let idleTimeoutSeconds = 180.0
+    static let idleTimeoutSeconds = 600.0
     static let shutdownTimeoutSeconds = 2.0
     static let maxTokens = 256
 
@@ -37,6 +37,7 @@ protocol LocalGemmaClient {
         prompt: String,
         maxTokens: Int,
         startupTimeoutSeconds: Double,
+        idleTimeoutSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> String
     func stopRuntime() async
@@ -80,6 +81,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
                     prompt: request.prompt,
                     maxTokens: request.maxTokens ?? config.maxTokens,
                     startupTimeoutSeconds: config.startupTimeoutSeconds,
+                    idleTimeoutSeconds: config.idleTimeoutSeconds,
                     timeoutSeconds: config.generationTimeoutSeconds
                 )
             } catch let error as LLMPostProcessorError {
@@ -100,6 +102,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             prompt: "Connection test.",
             maxTokens: 8,
             startupTimeoutSeconds: config.startupTimeoutSeconds,
+            idleTimeoutSeconds: config.idleTimeoutSeconds,
             timeoutSeconds: config.generationTimeoutSeconds
         )
         guard !sanitizeGemmaOutput(output).isEmpty else {
