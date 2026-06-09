@@ -3,6 +3,13 @@ import CoreAudio
 import Foundation
 import QuartzCore
 
+/// Shared configuration for the recording level meter. The capture service is the
+/// authority on band granularity; the indicator fallback and tests must agree with it.
+enum AudioLevelMeter {
+    /// Number of frequency bands the level meter renders.
+    static let bandCount = 22
+}
+
 enum AudioCaptureServiceError: LocalizedError, Equatable {
     case noInputDevice
     case preferredDeviceUnavailable
@@ -67,7 +74,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         var firstFrameSeen = false
         var engineRestartCount = 0
         var firstFrameDeadlineGeneration = 0
-        var smoothedLevels = Array(repeating: Float(0), count: 22)
+        var smoothedLevels = Array(repeating: Float(0), count: AudioLevelMeter.bandCount)
         var lastLevelEmissionTime: CFTimeInterval = 0
         var drainTimer: DispatchSourceTimer?
 
@@ -525,7 +532,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         }
         activeCapture = nil
         deviceMonitor.watch(deviceID: nil)
-        onEvent?(.levelsUpdated(sessionID: active.id, levels: Array(repeating: 0, count: 22)))
+        onEvent?(.levelsUpdated(sessionID: active.id, levels: Array(repeating: 0, count: AudioLevelMeter.bandCount)))
         logFinalCapture(captured, discarded: discard)
         scheduleReleaseCheck(sessionID: active.id)
         return captured

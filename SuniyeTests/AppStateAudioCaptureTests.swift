@@ -234,13 +234,13 @@ final class AppStateAudioCaptureTests: XCTestCase {
         let sessionID = try XCTUnwrap(audioCapture.lastStartedSessionID)
         audioCapture.onEvent?(.levelsUpdated(
             sessionID: sessionID,
-            levels: Array(repeating: 0.42, count: 12)
+            levels: Array(repeating: 0.42, count: AudioLevelMeter.bandCount)
         ))
         await drainScheduledTasks()
 
         XCTAssertEqual(
             appState.floatingIndicatorState,
-            .listening(levels: Array(repeating: 0.42, count: 12), source: .manual)
+            .listening(levels: Array(repeating: 0.42, count: AudioLevelMeter.bandCount), source: .manual)
         )
     }
 

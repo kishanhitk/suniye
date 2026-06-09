@@ -526,7 +526,7 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.phase, .recording)
         XCTAssertEqual(
             appState.floatingIndicatorState,
-            .listening(levels: Array(repeating: 0, count: 22), source: .manual)
+            .listening(levels: Array(repeating: 0, count: AudioLevelMeter.bandCount), source: .manual)
         )
     }
 
@@ -892,7 +892,7 @@ final class AppStateSettingsTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertEqual(
             appState.floatingIndicatorState,
-            .listening(levels: Array(repeating: 0, count: 22), source: .hotkey)
+            .listening(levels: Array(repeating: 0, count: AudioLevelMeter.bandCount), source: .hotkey)
         )
 
         hotkeyService.onHotkeyUp?()
