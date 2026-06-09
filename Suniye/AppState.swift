@@ -1137,7 +1137,7 @@ final class AppState {
         case let .listening(levels, _):
             return levels
         default:
-            return Array(repeating: 0.08, count: 12)
+            return Self.defaultIndicatorLevels(level: 0.08)
         }
     }
 
