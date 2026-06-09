@@ -386,7 +386,7 @@ final class FloatingIndicatorController {
         case .hover:
             return NSSize(width: 272, height: 84)
         case .listening:
-            return NSSize(width: 116, height: 40)
+            return NSSize(width: 124, height: 40)
         case let .processing(message):
             guard let message else {
                 return NSSize(width: 128, height: 40)

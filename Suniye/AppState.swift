@@ -1137,7 +1137,7 @@ final class AppState {
         case let .listening(levels, _):
             return levels
         default:
-            return Array(repeating: 0.08, count: 12)
+            return Self.defaultIndicatorLevels(level: 0.08)
         }
     }
 
@@ -3427,7 +3427,7 @@ final class AppState {
         setFloatingIndicatorState(.listening(levels: levels, source: source))
     }
 
-    private static func defaultIndicatorLevels(level: Float, count: Int = 12) -> [Float] {
+    private static func defaultIndicatorLevels(level: Float, count: Int = AudioLevelMeter.bandCount) -> [Float] {
         Array(repeating: max(0, min(level, 1)), count: count)
     }
 
