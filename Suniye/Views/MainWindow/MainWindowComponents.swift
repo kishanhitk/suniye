@@ -487,31 +487,6 @@ struct AttentionTile: View {
     }
 }
 
-struct TranscriptSummaryRow: View {
-    let result: RecentResult
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(result.text)
-                .font(AppTypography.calloutMedium)
-                .foregroundStyle(Color.primary)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text("\(result.createdAt.relativeTimestamp)  •  \(result.durationSeconds.shortSecondsString)")
-                .font(AppTypography.subheadline)
-                .foregroundStyle(MainWindowPalette.secondaryText)
-        }
-        .padding(.vertical, AppMetrics.listRowVerticalPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(MainWindowPalette.divider)
-                .frame(height: 1)
-        }
-    }
-}
-
 struct TranscriptHistoryRow: View {
     let result: RecentResult
     let onCopy: () -> Void

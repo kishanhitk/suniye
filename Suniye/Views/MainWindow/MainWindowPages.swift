@@ -41,7 +41,11 @@ struct DashboardPage: View {
                 } else {
                     VStack(spacing: 0) {
                         ForEach(appState.recentResultsPreview) { result in
-                            TranscriptSummaryRow(result: result)
+                            TranscriptHistoryRow(
+                                result: result,
+                                onCopy: { appState.copyRecentResult(result) },
+                                onDelete: { appState.deleteRecentResult(result) }
+                            )
                         }
                     }
                 }
