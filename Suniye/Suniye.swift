@@ -12,6 +12,13 @@ struct SuniyeApp: App {
             EmptyView()
         }
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    sharedAppState.checkForUpdates()
+                }
+                .disabled(!sharedAppState.canCheckForUpdates)
+            }
+
             CommandGroup(after: .help) {
                 Button("Report a Problem...") {
                     sharedAppState.openIssueReportWindow()
