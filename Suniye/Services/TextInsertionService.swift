@@ -4,8 +4,17 @@ import Carbon.HIToolbox
 import Foundation
 
 protocol TextInsertionServiceProtocol {
+    func captureInsertionContext() -> TextInsertionContext?
     func insertText(_ text: String) throws
     func submitActiveInput() throws
+}
+
+struct TextInsertionContext: Equatable {
+    let value: String
+    let selectedRange: NSRange
+    let selectedText: String?
+    let previousCharacter: Character?
+    let nextCharacter: Character?
 }
 
 final class TextInsertionService: TextInsertionServiceProtocol {
@@ -31,6 +40,31 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     var keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)?
     var pasteKeyCodeProvider: (() -> CGKeyCode?)?
     var clipboardRestoreDelay: TimeInterval = 0.45
+
+    func captureInsertionContext() -> TextInsertionContext? {
+        guard let focusedElement = getFocusedTextElement(),
+              let state = captureFocusedTextState(for: focusedElement),
+              let value = state.value,
+              let selectedRange = state.selectedRange,
+              let stringRange = Range(selectedRange, in: value) else {
+            return nil
+        }
+
+        let previousCharacter = stringRange.lowerBound > value.startIndex
+            ? value[value.index(before: stringRange.lowerBound)]
+            : nil
+        let nextCharacter = stringRange.upperBound < value.endIndex
+            ? value[stringRange.upperBound]
+            : nil
+
+        return TextInsertionContext(
+            value: value,
+            selectedRange: selectedRange,
+            selectedText: state.selectedText,
+            previousCharacter: previousCharacter,
+            nextCharacter: nextCharacter
+        )
+    }
 
     func insertText(_ text: String) throws {
         if insertDirectlyIntoFocusedTextElement(text) {
@@ -246,5 +280,157 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         }
 
         return nil
+    }
+}
+
+enum DictationInsertionTextFormatter {
+    static func textForInsertion(
+        _ text: String,
+        insertionContext: TextInsertionContext?
+    ) -> String {
+        guard let insertionContext else {
+            return text
+        }
+
+        var result = text
+        if isHighConfidenceMidSentenceInsertion(insertionContext) {
+            result = lowercasingFirstWordIfSafe(result)
+        }
+        if shouldStripFinalPeriod(insertionContext) {
+            result = strippingSingleFinalPeriod(result)
+        }
+
+        if let previous = insertionContext.previousCharacter,
+           let first = result.first,
+           shouldInsertSpace(between: previous, and: first) {
+            result = " " + result
+        }
+
+        if let next = insertionContext.nextCharacter,
+           let last = result.last,
+           shouldInsertSpace(between: last, and: next) {
+            result += " "
+        }
+
+        return result
+    }
+
+    private static func isHighConfidenceMidSentenceInsertion(_ context: TextInsertionContext) -> Bool {
+        guard let previous = context.previousCharacter else { return false }
+        return isWordLike(previous)
+    }
+
+    private static func shouldStripFinalPeriod(_ context: TextInsertionContext) -> Bool {
+        guard isHighConfidenceMidSentenceInsertion(context),
+              let next = context.nextCharacter else {
+            return false
+        }
+        return isWordLike(next)
+    }
+
+    private static func lowercasingFirstWordIfSafe(_ text: String) -> String {
+        var result = text
+        guard let wordRange = firstWordRange(in: result),
+              shouldLowercaseFirstWord(String(result[wordRange])) else {
+            return result
+        }
+
+        let firstIndex = wordRange.lowerBound
+        let nextIndex = result.index(after: firstIndex)
+        result.replaceSubrange(firstIndex..<nextIndex, with: String(result[firstIndex]).lowercased())
+        return result
+    }
+
+    private static func firstWordRange(in text: String) -> Range<String.Index>? {
+        var start = text.startIndex
+        while start < text.endIndex, isWhitespace(text[start]) {
+            start = text.index(after: start)
+        }
+        guard start < text.endIndex, isWordLike(text[start]) else {
+            return nil
+        }
+
+        var end = text.index(after: start)
+        while end < text.endIndex, isWordLike(text[end]) {
+            end = text.index(after: end)
+        }
+        return start..<end
+    }
+
+    private static func shouldLowercaseFirstWord(_ word: String) -> Bool {
+        guard word.count > 1,
+              let first = word.first,
+              isUppercaseLetter(first) else {
+            return false
+        }
+
+        let remainder = word.dropFirst()
+        guard remainder.contains(where: isLowercaseLetter) else {
+            return false
+        }
+        return !remainder.contains(where: isUppercaseLetter)
+    }
+
+    private static func strippingSingleFinalPeriod(_ text: String) -> String {
+        var result = text
+        var currentIndex = result.endIndex
+
+        while currentIndex > result.startIndex {
+            let previousIndex = result.index(before: currentIndex)
+            if isWhitespace(result[previousIndex]) {
+                currentIndex = previousIndex
+                continue
+            }
+
+            guard result[previousIndex] == "." else {
+                return result
+            }
+            if previousIndex > result.startIndex {
+                let beforePeriod = result.index(before: previousIndex)
+                guard result[beforePeriod] != "." else {
+                    return result
+                }
+            }
+            result.removeSubrange(previousIndex..<currentIndex)
+            return result
+        }
+
+        return result
+    }
+
+    private static func shouldInsertSpace(between left: Character, and right: Character) -> Bool {
+        if isWhitespace(left) || isWhitespace(right) {
+            return false
+        }
+        if closingPunctuation.contains(right) || openingPunctuation.contains(left) {
+            return false
+        }
+        if isWordLike(left) && isWordLike(right) {
+            return true
+        }
+        if isWordLike(right) && punctuationThatTakesFollowingSpace.contains(left) {
+            return true
+        }
+        return false
+    }
+
+    private static let openingPunctuation: Set<Character> = ["(", "[", "{", "\"", "'"]
+    private static let closingPunctuation: Set<Character> = [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'"]
+    private static let punctuationThatTakesFollowingSpace: Set<Character> = [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'"]
+
+    private static func isWordLike(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) }
+    }
+
+    private static func isWhitespace(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
+    }
+
+    private static func isUppercaseLetter(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { CharacterSet.uppercaseLetters.contains($0) }
+    }
+
+    private static func isLowercaseLetter(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { CharacterSet.lowercaseLetters.contains($0) }
     }
 }

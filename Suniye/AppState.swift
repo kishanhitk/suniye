@@ -2823,7 +2823,11 @@ final class AppState {
             switch destination {
             case .systemInsertion:
                 if !finalText.isEmpty {
-                    try textInsertionService.insertText(finalText)
+                    let insertionText = DictationInsertionTextFormatter.textForInsertion(
+                        finalText,
+                        insertionContext: textInsertionService.captureInsertionContext()
+                    )
+                    try textInsertionService.insertText(insertionText)
                     recentResults.insert(
                         RecentResult(
                             id: UUID(),
