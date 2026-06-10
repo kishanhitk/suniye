@@ -126,7 +126,7 @@ final class LLMSettingsStoreTests: XCTestCase {
 
     func testDefaultGemmaPromptIsTunedSeparatelyFromApplePrompt() {
         XCTAssertNotEqual(LLMDefaults.defaultGemmaMagicFormatPrompt, LLMDefaults.defaultAppleMagicFormatPrompt)
-        XCTAssertTrue(LLMDefaults.defaultGemmaMagicFormatPrompt.contains("Do not infer a list from ordinary use"))
+        XCTAssertTrue(LLMDefaults.defaultGemmaMagicFormatPrompt.contains("Ordinary \"and\" alone does not make a list"))
         XCTAssertTrue(LLMDefaults.defaultAppleMagicFormatPrompt.contains("Use one line by default"))
     }
 
@@ -135,8 +135,10 @@ final class LLMSettingsStoreTests: XCTestCase {
             LLMDefaults.defaultAppleMagicFormatPrompt,
             LLMDefaults.defaultGemmaMagicFormatPrompt,
         ]
+        // "<transcript>" is intentionally allowed: the wrapper tag is part of the
+        // generation contract (MagicFormatPipeline wraps input in it) and the tuned
+        // prompt references it to stop the model from echoing the tags.
         let appSpecificTerms = [
-            "<transcript>",
             "Suniye",
             "Magic Format",
             "Apple Intelligence",
