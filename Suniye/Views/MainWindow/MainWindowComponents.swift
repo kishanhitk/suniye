@@ -492,6 +492,16 @@ struct TranscriptHistoryRow: View {
     let onCopy: () -> Void
     let onDelete: () -> Void
     @State private var isHovered = false
+    @FocusState private var focusedAction: TranscriptAction?
+
+    private enum TranscriptAction: Hashable {
+        case copy
+        case delete
+    }
+
+    private var areActionsVisible: Bool {
+        isHovered || focusedAction != nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -507,12 +517,13 @@ struct TranscriptHistoryRow: View {
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {
                     ActionIconButton(systemName: "doc.on.doc", accessibilityLabel: "Copy result", action: onCopy)
+                        .focused($focusedAction, equals: .copy)
                     ActionIconButton(systemName: "trash", accessibilityLabel: "Delete result", tint: MainWindowPalette.destructive, action: onDelete)
+                        .focused($focusedAction, equals: .delete)
                 }
                 .frame(height: AppMetrics.iconButtonSize)
-                .opacity(isHovered ? 1 : 0)
-                .allowsHitTesting(isHovered)
-                .animation(.easeOut(duration: 0.16), value: isHovered)
+                .opacity(areActionsVisible ? 1 : 0)
+                .animation(.easeOut(duration: 0.16), value: areActionsVisible)
             }
 
             Text(result.text)
