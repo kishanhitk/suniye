@@ -25,13 +25,15 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Suniye needs microphone access to capture dictation.</string>
 	<key>SUAutomaticallyUpdate</key>
-	<false/>
+	<true/>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
 	<string>https://suniye.kishans.in/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>u4x493+uxEBa64/ypY9EWf5GZfVgA67NwXswhnKNaaw=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>18000</integer>
 	<key>SUShowReleaseNotes</key>
 	<true/>
 	<key>SUVerifyUpdateBeforeExtraction</key>
