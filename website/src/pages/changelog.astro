@@ -103,13 +103,13 @@ function parseFullChangelogUrl(body: string | null): string | undefined {
 }
 
 const releases = githubReleases
-  .filter((release) => !release.draft)
+  .filter((release) => !release.draft && !release.prerelease)
   .map((release, index) => ({
     version: release.name || release.tag_name,
     date: release.published_at
       ? releaseDateFormatter.format(new Date(release.published_at))
       : "Unpublished",
-    status: index === 0 ? "Latest" : release.prerelease ? "Prerelease" : undefined,
+    status: index === 0 ? "Latest" : undefined,
     href: release.html_url,
     items: parseReleaseItems(release.body),
     fullChangelogUrl: parseFullChangelogUrl(release.body),
