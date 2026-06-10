@@ -40,8 +40,13 @@ final class TestGeneralSettingsStore: GeneralSettingsStoreProtocol {
 final class SpyTextInsertionService: TextInsertionServiceProtocol {
     private(set) var insertedTexts: [String] = []
     private(set) var submitCallCount = 0
+    var insertionContext: TextInsertionContext?
     var insertError: Error?
     var submitError: Error?
+
+    func captureInsertionContext() -> TextInsertionContext? {
+        insertionContext
+    }
 
     func insertText(_ text: String) throws {
         if let insertError {

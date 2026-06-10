@@ -575,6 +575,37 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.phase, .ready)
     }
 
+    func testSystemInsertionFormatsTextForCursorContext() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("Strong.")
+        let textInsertionService = SpyTextInsertionService()
+        textInsertionService.insertionContext = TextInsertionContext(
+            value: "coffeemachine",
+            selectedRange: NSRange(location: 6, length: 0),
+            selectedText: nil,
+            previousCharacter: "e",
+            nextCharacter: "m"
+        )
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            textInsertionService: textInsertionService
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(textInsertionService.insertedTexts, [" strong "])
+        XCTAssertEqual(appState.recentResults.first?.text, "Strong.")
+    }
+
     func testSoundFeedbackEnabledPlaysSuccessForCompletedDictation() async {
         let audioCapture = StubAudioCaptureService()
         audioCapture.stopCaptureResult = makeValidCapturedAudio()
