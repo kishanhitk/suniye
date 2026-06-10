@@ -42,7 +42,8 @@ targets:
         SUFeedURL: https://suniye.kishans.in/appcast.xml
         SUPublicEDKey: u4x493+uxEBa64/ypY9EWf5GZfVgA67NwXswhnKNaaw=
         SUEnableAutomaticChecks: true
-        SUAutomaticallyUpdate: false
+        SUAutomaticallyUpdate: true
+        SUScheduledCheckInterval: 18000
         SUShowReleaseNotes: true
         SUVerifyUpdateBeforeExtraction: true
     settings:

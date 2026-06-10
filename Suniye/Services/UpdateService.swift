@@ -55,6 +55,14 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
         updaterController.updater.canCheckForUpdates
     }
 
+    var automaticallyDownloadsUpdates: Bool {
+        updaterController.updater.automaticallyDownloadsUpdates
+    }
+
+    var updateCheckInterval: TimeInterval {
+        updaterController.updater.updateCheckInterval
+    }
+
     var automaticallyChecksForUpdates: Bool {
         get {
             updaterController.updater.automaticallyChecksForUpdates

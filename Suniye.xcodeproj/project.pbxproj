@@ -17,6 +17,7 @@
 		189B9BFB7463476C1FB70AD8 /* LocalGemmaPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F38DC2A495AF93A16B002372 /* LocalGemmaPostProcessor.swift */; };
 		1C1DC32CFF5C5C55DE937923 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E4B536164381A9A3E3C653 /* AudioCaptureService.swift */; };
 		1D86CE52AD421422DC26FA71 /* OpenRouterPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9D8487CCDF6CB1A7023E095 /* OpenRouterPostProcessor.swift */; };
+		203AA795ED77F387E951BC34 /* UpdateConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2288214EF71C974822410431 /* UpdateConfigurationTests.swift */; };
 		20FDAD6376F63CC79E0931E0 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0ED09D876730BF3FA833FFE /* WelcomeView.swift */; };
 		215839A463DC27CA04A3ADB6 /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34CC65DD3994740D7F4B27AB /* HotkeyService.swift */; };
 		2FD2254875BF111D3522E161 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2ECDB4CFB11C5B9831460F /* HistoryStore.swift */; };
@@ -142,6 +143,7 @@
 		1B6F2EB76CF32A101E8454D9 /* AudioCaptureServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureServiceTests.swift; sourceTree = "<group>"; };
 		1BFAD0B3FD93106BF02E29E5 /* FloatingIndicatorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorController.swift; sourceTree = "<group>"; };
 		1D833B22A455551351698DF5 /* MagicFormatCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatCoordinator.swift; sourceTree = "<group>"; };
+		2288214EF71C974822410431 /* UpdateConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateConfigurationTests.swift; sourceTree = "<group>"; };
 		2A40680D7D6D6D80DF33509F /* IssueReportWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueReportWindowController.swift; sourceTree = "<group>"; };
 		2B2D87825E1C649DC7A33115 /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
 		316F29545ABA85276127E522 /* LocalLLMModelManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMModelManagerTests.swift; sourceTree = "<group>"; };
@@ -313,6 +315,7 @@
 				11558F5387C6D3FFC7B1B354 /* TestDoubles.swift */,
 				E0C52C50D2C18B69DD4C775D /* TextInsertionServiceTests.swift */,
 				626CB9CE980C310ED49F770F /* TranscriptionServiceE2ETests.swift */,
+				2288214EF71C974822410431 /* UpdateConfigurationTests.swift */,
 			);
 			path = SuniyeTests;
 			sourceTree = "<group>";
@@ -621,6 +624,7 @@
 				466BB47E9E296D2806E03780 /* TestDoubles.swift in Sources */,
 				B5ECA34FCC355C3A8DC68EAD /* TextInsertionServiceTests.swift in Sources */,
 				E435A53080A9CFFB863EB188 /* TranscriptionServiceE2ETests.swift in Sources */,
+				203AA795ED77F387E951BC34 /* UpdateConfigurationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
