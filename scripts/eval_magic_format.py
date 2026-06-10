@@ -33,7 +33,7 @@ DEFAULT_MODEL = (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", type=Path, default=Path("evals/magic_format_cases.json"))
-    parser.add_argument("--prompt", type=Path, default=Path("evals/prompts/gemma_magic_format_v4.txt"))
+    parser.add_argument("--prompt", type=Path, default=Path("evals/prompts/gemma_magic_format_v5.txt"))
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--server", default=shutil.which("llama-server") or "/opt/homebrew/bin/llama-server")
     parser.add_argument("--threshold", type=float, default=0.92)
