@@ -38,6 +38,7 @@ final class LearningToastPresenter: LearningToastPresenting {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .transient]
 
+        hosting.view.layoutSubtreeIfNeeded()
         panel.setContentSize(hosting.view.fittingSize)
         if let screen = NSScreen.main {
             panel.setFrameOrigin(NSPoint(
