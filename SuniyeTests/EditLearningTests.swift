@@ -101,6 +101,22 @@ final class TranscriptionEditDiffTests: XCTestCase {
         ])
     }
 
+    func testOversizedFieldsAreSkipped() {
+        // Keeps checkpoint work on the main actor bounded: huge documents
+        // (e.g. dictating into a long Pages doc) are not diffed at all.
+        let filler = Array(repeating: "word", count: TranscriptionEditDiff.maximumWordCount).joined(separator: " ")
+        let baseline = filler + " Lunch with Keshawn at noon."
+        let current = filler + " Lunch with Kishan at noon."
+
+        let substitutions = TranscriptionEditDiff.substitutions(
+            insertedText: "Lunch with Keshawn at noon.",
+            baseline: baseline,
+            current: current
+        )
+
+        XCTAssertEqual(substitutions, [])
+    }
+
     func testSubstitutionDetectedEvenWhenSurroundingTextAdded() {
         let inserted = "Lunch with Keshawn at noon."
         let baseline = "Lunch with Keshawn at noon."

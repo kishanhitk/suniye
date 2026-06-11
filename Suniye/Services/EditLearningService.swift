@@ -84,48 +84,53 @@ final class EditLearningService: EditLearningServiceProtocol {
         guard var active = activeSession else {
             return
         }
-        defer {
-            if terminal {
-                tearDown(active)
-                activeSession = nil
-            } else {
-                activeSession = active
-            }
-        }
 
-        guard let currentValue = active.session.readCurrentFieldValue() else {
-            return
-        }
-
-        guard let baseline = active.baseline else {
-            // Clipboard paste lands asynchronously; adopt the first read that
-            // contains the inserted text as the diff baseline.
-            if currentValue.contains(active.session.insertedText) {
+        var learnedNow: [String] = []
+        if let currentValue = active.session.readCurrentFieldValue() {
+            if let baseline = active.baseline {
+                learnedNow = newlyLearnedTerms(in: active, baseline: baseline, currentValue: currentValue)
+                active.learnedTerms.append(contentsOf: learnedNow)
+            } else if currentValue.contains(active.session.insertedText) {
+                // Clipboard paste lands asynchronously; adopt the first read
+                // that contains the inserted text as the diff baseline.
                 active.baseline = currentValue
             }
-            return
         }
 
+        // Commit session state before emitting the callback so a reentrant
+        // beginTracking/finalizeActiveSession sees consistent state.
+        if terminal {
+            tearDown(active)
+            activeSession = nil
+        } else {
+            activeSession = active
+        }
+
+        if !learnedNow.isEmpty {
+            onLearnedTerms?(learnedNow)
+        }
+    }
+
+    private func newlyLearnedTerms(
+        in active: ActiveSession,
+        baseline: String,
+        currentValue: String
+    ) -> [String] {
+        let remainingCapacity = CorrectionClassifier.maximumTermsPerSession - active.learnedTerms.count
+        guard remainingCapacity > 0 else {
+            return []
+        }
         let substitutions = TranscriptionEditDiff.substitutions(
             insertedText: active.session.insertedText,
             baseline: baseline,
             current: currentValue
         )
-        let remainingCapacity = CorrectionClassifier.maximumTermsPerSession - active.learnedTerms.count
-        guard remainingCapacity > 0 else {
-            return
-        }
-        let terms = CorrectionClassifier.learnableTerms(
+        return CorrectionClassifier.learnableTerms(
             from: substitutions,
             existingVocabulary: active.session.existingVocabulary + active.learnedTerms,
             isKnownWord: isKnownWord,
             maxTerms: remainingCapacity
         )
-        guard !terms.isEmpty else {
-            return
-        }
-        active.learnedTerms.append(contentsOf: terms)
-        onLearnedTerms?(terms)
     }
 
     private func tearDown(_ active: ActiveSession) {

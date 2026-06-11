@@ -68,7 +68,7 @@ Extensions to existing types:
 
 ## Data flow
 
-```
+```text
 insertText() succeeds
   → AppState builds InsertionSnapshot
       (inserted text, post-insertion field value, insertion range location,

@@ -8,6 +8,11 @@ struct WordSubstitution: Equatable {
 /// Word-level diff between the field value captured right after insertion and a
 /// later re-read, scoped to words that came from the inserted transcription.
 enum TranscriptionEditDiff {
+    /// Upper bound on field size we will diff. The LCS table is O(words²) in
+    /// time and memory and runs on the main actor, so huge fields (long
+    /// documents) are skipped rather than diffed.
+    static let maximumWordCount = 800
+
     static func substitutions(
         insertedText: String,
         baseline: String,
@@ -19,6 +24,9 @@ enum TranscriptionEditDiff {
 
         let baselineWords = tokenize(baseline)
         let currentWords = tokenize(current)
+        guard baselineWords.count <= maximumWordCount, currentWords.count <= maximumWordCount else {
+            return []
+        }
         let insertedWords = Set(tokenize(insertedText))
 
         var substitutions: [WordSubstitution] = []
