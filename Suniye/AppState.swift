@@ -522,6 +522,12 @@ final class AppState {
     var llmKeywordsRaw = "" {
         didSet { persistLLMSettings() }
     }
+    var llmAutoLearnedKeywordsRaw = "" {
+        didSet { persistLLMSettings() }
+    }
+    var learnFromEditsEnabled = true {
+        didSet { persistLLMSettings() }
+    }
     var llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds {
         didSet {
             let clamped = LLMDefaults.clampTimeout(llmTimeoutSeconds)
@@ -1308,6 +1314,8 @@ final class AppState {
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
     private let diagnosticBundleService: DiagnosticBundleServiceProtocol
     private let issueReportUploadService: IssueReportUploadServiceProtocol
+    private let editLearningService: EditLearningServiceProtocol
+    private let learningToastPresenter: LearningToastPresenting
     private let currentAppVersionProvider: () -> AppVersion?
     private let nowProvider: () -> Date
     private let fileOpener: (URL) -> Bool
@@ -1372,6 +1380,8 @@ final class AppState {
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
         diagnosticBundleService: DiagnosticBundleServiceProtocol = DiagnosticBundleService(),
         issueReportUploadService: IssueReportUploadServiceProtocol = IssueReportUploadService(),
+        editLearningService: EditLearningServiceProtocol? = nil,
+        learningToastPresenter: LearningToastPresenting? = nil,
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
         nowProvider: @escaping () -> Date = Date.init,
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
@@ -1419,6 +1429,8 @@ final class AppState {
         self.launchAtLoginService = launchAtLoginService
         self.diagnosticBundleService = diagnosticBundleService
         self.issueReportUploadService = issueReportUploadService
+        self.editLearningService = editLearningService ?? EditLearningService()
+        self.learningToastPresenter = learningToastPresenter ?? LearningToastPresenter()
         self.currentAppVersionProvider = currentAppVersionProvider
         self.nowProvider = nowProvider
         self.fileOpener = fileOpener
@@ -1430,6 +1442,9 @@ final class AppState {
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
         self.appUpdateController.onStateChange = { [weak self] in
             self?.refreshUpdateControllerState()
+        }
+        self.editLearningService.onLearnedTerms = { [weak self] terms in
+            self?.handleLearnedVocabularyTerms(terms)
         }
         self.audioCaptureService.onEvent = { [weak self] event in
             Task { @MainActor [weak self] in
@@ -1868,13 +1883,68 @@ final class AppState {
         guard !trimmed.isEmpty else {
             return
         }
-        let combined = vocabularyTerms + [trimmed]
+        let combined = LLMDefaults.parseKeywords(from: llmKeywordsRaw) + [trimmed]
         llmKeywordsRaw = LLMDefaults.parseKeywords(from: combined.joined(separator: "\n")).joined(separator: "\n")
     }
 
     func removeVocabularyTerm(_ value: String) {
-        let filtered = vocabularyTerms.filter { $0.caseInsensitiveCompare(value) != .orderedSame }
+        let filtered = LLMDefaults.parseKeywords(from: llmKeywordsRaw)
+            .filter { $0.caseInsensitiveCompare(value) != .orderedSame }
         llmKeywordsRaw = filtered.joined(separator: "\n")
+        removeAutoLearnedVocabularyTerms([value])
+    }
+
+    var autoLearnedVocabularyTerms: [String] {
+        currentLLMSettings().autoLearnedKeywords
+    }
+
+    func isAutoLearnedVocabularyTerm(_ term: String) -> Bool {
+        autoLearnedVocabularyTerms.contains { $0.caseInsensitiveCompare(term) == .orderedSame }
+    }
+
+    @discardableResult
+    func addAutoLearnedVocabularyTerms(_ terms: [String]) -> [String] {
+        let existing = vocabularyTerms
+        let newTerms = terms.filter { term in
+            !existing.contains { $0.caseInsensitiveCompare(term) == .orderedSame }
+        }
+        guard !newTerms.isEmpty else {
+            return []
+        }
+        let combined = LLMDefaults.parseKeywords(from: llmAutoLearnedKeywordsRaw) + newTerms
+        llmAutoLearnedKeywordsRaw = LLMDefaults.parseKeywords(from: combined.joined(separator: "\n")).joined(separator: "\n")
+        return newTerms
+    }
+
+    func removeAutoLearnedVocabularyTerms(_ terms: [String]) {
+        let remaining = LLMDefaults.parseKeywords(from: llmAutoLearnedKeywordsRaw).filter { existing in
+            !terms.contains { $0.caseInsensitiveCompare(existing) == .orderedSame }
+        }
+        llmAutoLearnedKeywordsRaw = remaining.joined(separator: "\n")
+    }
+
+    private func handleLearnedVocabularyTerms(_ terms: [String]) {
+        let added = addAutoLearnedVocabularyTerms(terms)
+        guard !added.isEmpty else {
+            return
+        }
+        AppLogger.shared.log(.info, "edit learning added vocabulary terms count=\(added.count)")
+        learningToastPresenter.showLearnedTerms(added) { [weak self] in
+            self?.removeAutoLearnedVocabularyTerms(added)
+        }
+    }
+
+    private func beginEditLearningTracking(insertedText: String) {
+        guard learnFromEditsEnabled,
+              let readFieldValue = textInsertionService.makeFocusedFieldValueProvider() else {
+            return
+        }
+        editLearningService.beginTracking(EditLearningSession(
+            insertedText: insertedText,
+            fieldValueAfterInsertion: readFieldValue(),
+            existingVocabulary: vocabularyTerms,
+            readCurrentFieldValue: readFieldValue
+        ))
     }
 
     func resetAppleMagicFormatPrompt() {
@@ -2823,11 +2893,13 @@ final class AppState {
             switch destination {
             case .systemInsertion:
                 if !finalText.isEmpty {
+                    editLearningService.finalizeActiveSession()
                     let insertionText = DictationInsertionTextFormatter.textForInsertion(
                         finalText,
                         insertionContext: textInsertionService.captureInsertionContext()
                     )
                     try textInsertionService.insertText(insertionText)
+                    beginEditLearningTracking(insertedText: insertionText)
                     recentResults.insert(
                         RecentResult(
                             id: UUID(),
@@ -3061,6 +3133,8 @@ final class AppState {
         )
         llmSystemPrompt = ""
         llmKeywordsRaw = settings.keywordsRaw
+        llmAutoLearnedKeywordsRaw = settings.autoLearnedKeywordsRaw
+        learnFromEditsEnabled = settings.learnFromEditsEnabled
         llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
         llmMaxTokens = LLMDefaults.defaultMaxTokens
         isHydratingLLMSettings = false
@@ -3091,6 +3165,8 @@ final class AppState {
             gemmaSystemPrompt: llmGemmaSystemPrompt,
             systemPrompt: "",
             keywordsRaw: llmKeywordsRaw,
+            autoLearnedKeywordsRaw: llmAutoLearnedKeywordsRaw,
+            learnFromEditsEnabled: learnFromEditsEnabled,
             timeoutSeconds: LLMDefaults.defaultTimeoutSeconds,
             maxTokens: LLMDefaults.defaultMaxTokens,
             localModelKeepAlive: localModelKeepAlive

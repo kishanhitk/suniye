@@ -159,6 +159,8 @@ struct LLMSettings: Codable, Equatable {
     var hasExplicitGemmaSystemPrompt = true
     var systemPrompt: String = ""
     var keywordsRaw: String = ""
+    var autoLearnedKeywordsRaw: String = ""
+    var learnFromEditsEnabled: Bool = true
     var timeoutSeconds: Double = LLMDefaults.defaultTimeoutSeconds
     var maxTokens: Int = LLMDefaults.defaultMaxTokens
     var localModelKeepAlive: LocalLLMKeepAlive = .tenMinutes
@@ -174,6 +176,8 @@ struct LLMSettings: Codable, Equatable {
         case gemmaSystemPrompt
         case systemPrompt
         case keywordsRaw
+        case autoLearnedKeywordsRaw
+        case learnFromEditsEnabled
         case timeoutSeconds
         case maxTokens
         case localModelKeepAlive
@@ -192,6 +196,8 @@ struct LLMSettings: Codable, Equatable {
         gemmaSystemPrompt: String = LLMDefaults.defaultGemmaMagicFormatPrompt,
         systemPrompt: String = "",
         keywordsRaw: String = "",
+        autoLearnedKeywordsRaw: String = "",
+        learnFromEditsEnabled: Bool = true,
         timeoutSeconds: Double = LLMDefaults.defaultTimeoutSeconds,
         maxTokens: Int = LLMDefaults.defaultMaxTokens,
         localModelKeepAlive: LocalLLMKeepAlive = .tenMinutes
@@ -206,6 +212,8 @@ struct LLMSettings: Codable, Equatable {
         self.gemmaSystemPrompt = gemmaSystemPrompt
         self.systemPrompt = systemPrompt
         self.keywordsRaw = keywordsRaw
+        self.autoLearnedKeywordsRaw = autoLearnedKeywordsRaw
+        self.learnFromEditsEnabled = learnFromEditsEnabled
         self.timeoutSeconds = LLMDefaults.clampTimeout(timeoutSeconds)
         self.maxTokens = LLMDefaults.clampMaxTokens(maxTokens)
         self.localModelKeepAlive = localModelKeepAlive
@@ -227,6 +235,8 @@ struct LLMSettings: Codable, Equatable {
         gemmaSystemPrompt = decodedGemmaSystemPrompt ?? LLMDefaults.defaultGemmaMagicFormatPrompt
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         keywordsRaw = try container.decodeIfPresent(String.self, forKey: .keywordsRaw) ?? ""
+        autoLearnedKeywordsRaw = try container.decodeIfPresent(String.self, forKey: .autoLearnedKeywordsRaw) ?? ""
+        learnFromEditsEnabled = try container.decodeIfPresent(Bool.self, forKey: .learnFromEditsEnabled) ?? true
         timeoutSeconds = LLMDefaults.clampTimeout(try container.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? LLMDefaults.defaultTimeoutSeconds)
         maxTokens = LLMDefaults.clampMaxTokens(try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? LLMDefaults.defaultMaxTokens)
         localModelKeepAlive = try container.decodeIfPresent(LocalLLMKeepAlive.self, forKey: .localModelKeepAlive) ?? .tenMinutes
@@ -244,13 +254,20 @@ struct LLMSettings: Codable, Equatable {
         try container.encode(gemmaSystemPrompt, forKey: .gemmaSystemPrompt)
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(keywordsRaw, forKey: .keywordsRaw)
+        try container.encode(autoLearnedKeywordsRaw, forKey: .autoLearnedKeywordsRaw)
+        try container.encode(learnFromEditsEnabled, forKey: .learnFromEditsEnabled)
         try container.encode(timeoutSeconds, forKey: .timeoutSeconds)
         try container.encode(maxTokens, forKey: .maxTokens)
         try container.encode(localModelKeepAlive, forKey: .localModelKeepAlive)
     }
 
+    /// User-entered terms first so their casing wins the case-insensitive dedupe.
     var keywords: [String] {
-        LLMDefaults.parseKeywords(from: keywordsRaw)
+        LLMDefaults.parseKeywords(from: keywordsRaw + "\n" + autoLearnedKeywordsRaw)
+    }
+
+    var autoLearnedKeywords: [String] {
+        LLMDefaults.parseKeywords(from: autoLearnedKeywordsRaw)
     }
 
     var composedSystemPrompt: String {

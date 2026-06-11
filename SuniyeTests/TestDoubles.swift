@@ -43,9 +43,14 @@ final class SpyTextInsertionService: TextInsertionServiceProtocol {
     var insertionContext: TextInsertionContext?
     var insertError: Error?
     var submitError: Error?
+    var fieldValueProvider: (() -> String?)?
 
     func captureInsertionContext() -> TextInsertionContext? {
         insertionContext
+    }
+
+    func makeFocusedFieldValueProvider() -> (() -> String?)? {
+        fieldValueProvider
     }
 
     func insertText(_ text: String) throws {
@@ -540,6 +545,38 @@ struct FakeError: LocalizedError, Equatable {
 }
 
 @MainActor
+final class SpyEditLearningService: EditLearningServiceProtocol {
+    enum Event: Equatable {
+        case finalize
+        case begin(insertedText: String)
+    }
+
+    var onLearnedTerms: (([String]) -> Void)?
+    private(set) var events: [Event] = []
+    private(set) var beganSessions: [EditLearningSession] = []
+
+    func beginTracking(_ session: EditLearningSession) {
+        events.append(.begin(insertedText: session.insertedText))
+        beganSessions.append(session)
+    }
+
+    func finalizeActiveSession() {
+        events.append(.finalize)
+    }
+}
+
+@MainActor
+final class SpyLearningToastPresenter: LearningToastPresenting {
+    private(set) var shownTermBatches: [[String]] = []
+    private(set) var lastUndo: (() -> Void)?
+
+    func showLearnedTerms(_ terms: [String], onUndo: @escaping () -> Void) {
+        shownTermBatches.append(terms)
+        lastUndo = onUndo
+    }
+}
+
+@MainActor
 func makeTestAppState(
     modelManager: ModelManagerProtocol = StubModelManager(),
     transcriptionService: TranscriptionServiceProtocol = StubTranscriptionService(),
@@ -559,6 +596,8 @@ func makeTestAppState(
     launchAtLoginService: LaunchAtLoginServiceProtocol = StubLaunchAtLoginService(),
     diagnosticBundleService: DiagnosticBundleServiceProtocol = StubDiagnosticBundleService(),
     issueReportUploadService: IssueReportUploadServiceProtocol = StubIssueReportUploadService(),
+    editLearningService: EditLearningServiceProtocol? = nil,
+    learningToastPresenter: LearningToastPresenting? = nil,
     currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
     nowProvider: @escaping () -> Date = Date.init,
     fileOpener: @escaping (URL) -> Bool = { _ in true },
@@ -587,6 +626,8 @@ func makeTestAppState(
         launchAtLoginService: launchAtLoginService,
         diagnosticBundleService: diagnosticBundleService,
         issueReportUploadService: issueReportUploadService,
+        editLearningService: editLearningService ?? SpyEditLearningService(),
+        learningToastPresenter: learningToastPresenter ?? SpyLearningToastPresenter(),
         currentAppVersionProvider: currentAppVersionProvider,
         nowProvider: nowProvider,
         fileOpener: fileOpener,

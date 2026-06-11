@@ -7,6 +7,7 @@ protocol TextInsertionServiceProtocol {
     func captureInsertionContext() -> TextInsertionContext?
     func insertText(_ text: String) throws
     func submitActiveInput() throws
+    func makeFocusedFieldValueProvider() -> (() -> String?)?
 }
 
 struct TextInsertionContext: Equatable {
@@ -64,6 +65,18 @@ final class TextInsertionService: TextInsertionServiceProtocol {
             previousCharacter: previousCharacter,
             nextCharacter: nextCharacter
         )
+    }
+
+    /// Captures the currently focused text element and returns a closure that
+    /// re-reads its value later, so edit learning can diff the same field the
+    /// dictation was inserted into. Returns nil when no AX-readable field is focused.
+    func makeFocusedFieldValueProvider() -> (() -> String?)? {
+        guard let focusedElement = getFocusedTextElement() else {
+            return nil
+        }
+        return { [weak self] in
+            self?.captureFocusedTextState(for: focusedElement)?.value
+        }
     }
 
     func insertText(_ text: String) throws {

@@ -134,10 +134,18 @@ struct StylePageProviderIcon: View {
 
 struct StylePageVocabularyTag: View {
     let term: String
+    var isAutoLearned = false
     let onRemove: () -> Void
 
     var body: some View {
         HStack(spacing: 4) {
+            if isAutoLearned {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 9))
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                    .help("Learned from your edits")
+            }
+
             Text(term)
                 .font(AppTypography.callout)
 
