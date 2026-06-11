@@ -119,6 +119,10 @@ const moreFeatures = [
     title: "Safe insertion",
     desc: "Your text lands at the cursor and your clipboard is kept intact. Optionally press Return to send automatically.",
   },
+  {
+    title: "Learns from your edits",
+    desc: "Correct a misheard name right after dictating and Suniye quietly adds it to your vocabulary — undoable, marked with a ✨, and easy to switch off.",
+  },
 ];
 
 // Capability matrix. Columns are categories, not named products, so every
@@ -129,7 +133,6 @@ const compareRows = [
   { label: "Choice of speech models", values: ["yes", "no", "no"] },
   { label: "Works in many languages", values: ["yes", "yes", "yes"] },
   { label: "AI cleanup that can run on your Mac", values: ["yes", "cloud", "no"] },
-  { label: "Learns your words from your edits", values: ["yes", "some", "no"] },
   { label: "Inserts into any app", values: ["yes", "some", "yes"] },
   { label: "Open source", values: ["yes", "no", "no"] },
   { label: "No tracking", values: ["yes", "varies", "varies"] },
@@ -144,10 +147,6 @@ const faqs = [
   {
     q: "Does the optional AI cleanup see my audio?",
     a: "Never. Cleanup only works on the text, never the audio. By default it runs right on your Mac, using Apple's built-in AI or a local model. Only if you turn on the online option does your text get sent to the provider you choose — and it's off by default.",
-  },
-  {
-    q: "What happens when it mishears a name?",
-    a: "Fix it right where it landed. Suniye notices the correction, adds the word to your vocabulary, and shows a small toast with an undo. Learned words wear a ✨ badge in settings so you can remove them anytime, and the whole feature is a single switch — \"Learn from my edits\" — if you'd rather it didn't. Like everything else, it happens entirely on your Mac.",
   },
   {
     q: "What languages can it understand?",
@@ -558,97 +557,6 @@ const faqs = [
       </div>
     </section>
 
-    <!-- ── Learns from your edits ───────────── -->
-    <section id="learning" class="scroll-mt-20 border-t border-border/60 py-24 md:py-32">
-      <div class="mx-auto max-w-6xl px-6">
-        <div class="grid items-center gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-20">
-          <!-- Copy -->
-          <div class="reveal">
-            <h2 class="font-display text-sm uppercase tracking-widest text-muted">
-              Learns from your edits
-            </h2>
-            <p class="mt-5 text-2xl leading-snug tracking-tight md:text-3xl">
-              Fix a name once.
-              <span class="text-accent">It remembers.</span>
-            </p>
-            <p class="mt-4 leading-relaxed text-muted">
-              Dictation always trips over the words that matter most — names,
-              products, jargon. Correct one right after dictating and Suniye
-              notices, adds it to your vocabulary, and gets it right the next
-              time you say it.
-            </p>
-
-            <ul class="mt-9 space-y-6">
-              <li class="border-l-2 border-accent/20 pl-5">
-                <h3 class="font-display text-base tracking-tight">Only the words that matter</h3>
-                <p class="mt-1.5 text-[15px] leading-relaxed text-muted">
-                  It learns proper nouns and rare terms — not every stray edit.
-                  A sounds-alike check separates real corrections from simply
-                  changing your mind.
-                </p>
-              </li>
-              <li class="border-l-2 border-accent/20 pl-5">
-                <h3 class="font-display text-base tracking-tight">Undo anything</h3>
-                <p class="mt-1.5 text-[15px] leading-relaxed text-muted">
-                  Every learned word announces itself with a one-tap undo, wears
-                  a ✨ badge in your vocabulary, and the whole thing is a single
-                  switch if you'd rather it didn't.
-                </p>
-              </li>
-              <li class="border-l-2 border-accent/20 pl-5">
-                <h3 class="font-display text-base tracking-tight">Private, like everything else</h3>
-                <p class="mt-1.5 text-[15px] leading-relaxed text-muted">
-                  Learning happens on your Mac, in the field you typed in. Your
-                  growing vocabulary also guides Magic Format — locally.
-                </p>
-              </li>
-            </ul>
-          </div>
-
-          <!-- Demo — stylised correction → toast → next dictation -->
-          <div class="reveal" style="transition-delay: 0.1s">
-            <div class="learn-demo rounded-2xl border border-border bg-bg p-6 shadow-sm">
-              <div class="mb-4 flex items-center gap-1.5" aria-hidden="true">
-                <span class="h-2.5 w-2.5 rounded-full bg-border"></span>
-                <span class="h-2.5 w-2.5 rounded-full bg-border"></span>
-                <span class="h-2.5 w-2.5 rounded-full bg-border"></span>
-                <span class="ml-2 font-display text-[11px] text-muted/60">Messages</span>
-              </div>
-
-              <p class="font-body text-sm leading-relaxed text-ink">
-                Lunch with
-                <span class="learn-wrong" aria-hidden="true">Keshawn</span>
-                <span class="learn-fixed font-medium text-accent">Kishan</span>
-                at noon?<span class="caret ml-0.5 align-middle text-accent">|</span>
-              </p>
-              <p class="mt-2 font-display text-[11px] text-muted/60">
-                You fixed it once, right in the text field.
-              </p>
-
-              <div class="learn-toast mx-auto mt-7 flex w-fit items-center gap-2.5 rounded-full border border-border bg-surface px-4 py-2 shadow-md">
-                <span class="learn-sparkle text-sm leading-none text-accent" aria-hidden="true">✨</span>
-                <span class="font-display text-xs text-ink">Learned “Kishan”</span>
-                <span class="h-3 w-px bg-border" aria-hidden="true"></span>
-                <span class="font-display text-xs text-muted">Undo</span>
-              </div>
-
-              <div class="learn-after mt-7 border-t border-border/60 pt-5">
-                <p class="font-display text-[11px] uppercase tracking-widest text-muted/60">
-                  Next dictation
-                </p>
-                <p class="mt-2.5 font-body text-sm leading-relaxed text-ink">
-                  Tell <span class="font-medium text-accent">Kishan</span> the demo is ready.
-                </p>
-                <p class="mt-1.5 font-display text-[11px] text-muted/70">
-                  Right the first time — no fixing needed.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <!-- ── Privacy ──────────────────────────── -->
     <section class="border-t border-border/60 py-24 md:py-32">
       <div class="mx-auto max-w-6xl px-6">
@@ -927,9 +835,7 @@ const faqs = [
       { threshold: 0.4 }
     );
 
-    document
-      .querySelectorAll(".demo-line, .learn-demo")
-      .forEach((el) => demoObserver.observe(el));
+    document.querySelectorAll(".demo-line").forEach((el) => demoObserver.observe(el));
 
     // Copy quarantine command to clipboard
     document.querySelectorAll(".copy-btn").forEach((btn) => {
