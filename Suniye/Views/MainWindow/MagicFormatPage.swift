@@ -426,11 +426,33 @@ struct StylePage: View {
 
                         FlowLayout(spacing: 6) {
                             ForEach(appState.vocabularyTerms, id: \.self) { term in
-                                StylePageVocabularyTag(term: term) {
+                                StylePageVocabularyTag(
+                                    term: term,
+                                    isAutoLearned: appState.isAutoLearnedVocabularyTerm(term)
+                                ) {
                                     appState.removeVocabularyTerm(term)
                                 }
                             }
                         }
+                    }
+
+                    CardDivider()
+
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Learn from my edits")
+                                .font(AppTypography.body)
+                            Text("When you correct a name or term right after dictating, Suniye adds it here automatically.")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        Toggle("", isOn: $appState.learnFromEditsEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .controlSize(.small)
                     }
                 }
             }

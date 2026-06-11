@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		01989238B5D7396C7DB8C856 /* AppStateEditLearningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 667CD8D078A7298D136D4BC5 /* AppStateEditLearningTests.swift */; };
 		020967A2000D318C6A9ECE23 /* AudioRecognitionPreprocessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5AF8B0C31B3D3BC319A700 /* AudioRecognitionPreprocessorTests.swift */; };
 		06E62A9DB81ED2EA8E9F0330 /* LLMPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C803DEDF9EAE9D4E8C14C7E /* LLMPostProcessor.swift */; };
 		087B92BAEB91B2A23153DA41 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABAF17E14062BC73F65CF7FD /* UpdateService.swift */; };
@@ -89,6 +90,7 @@
 		D4A9EDEA500C15F31FEB8CE1 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECD2622B5D49CEAF4D4736A /* KeychainService.swift */; };
 		D56981268DA6E6B631417822 /* LocalGemmaLlamaCppClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81C8980964221A020EBB979 /* LocalGemmaLlamaCppClient.swift */; };
 		D592C6064881A1E36EA9E234 /* LocalLLMKeepAliveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F0FD9A7C5E4966A5579DE8 /* LocalLLMKeepAliveTests.swift */; };
+		D5A7F21227246CAF8E15737F /* LearningToastPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CD4592FDE5BC46F045F28BB /* LearningToastPresenter.swift */; };
 		D70B86338C771C5459B2AEC4 /* FloatingIndicatorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BFAD0B3FD93106BF02E29E5 /* FloatingIndicatorController.swift */; };
 		D7DEF12DA8F4CFDA5B62F554 /* LLMSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9102217BDA1AFAF69837DE /* LLMSettings.swift */; };
 		D838D2BD8C4395C5E6DC4C7B /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E69ACF4C1E158980EDDDA56F /* MenuBarView.swift */; };
@@ -161,9 +163,11 @@
 		4D5AF8B0C31B3D3BC319A700 /* AudioRecognitionPreprocessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecognitionPreprocessorTests.swift; sourceTree = "<group>"; };
 		547A58E2F28180249AF7E769 /* c-api.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "c-api.h"; sourceTree = "<group>"; };
 		5599BFF26E7C9256D7B0F4A8 /* AppStateAudioCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateAudioCaptureTests.swift; sourceTree = "<group>"; };
+		5CD4592FDE5BC46F045F28BB /* LearningToastPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningToastPresenter.swift; sourceTree = "<group>"; };
 		612ADA3D26971DBD5CC4369B /* EditLearning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditLearning.swift; sourceTree = "<group>"; };
 		626CB9CE980C310ED49F770F /* TranscriptionServiceE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionServiceE2ETests.swift; sourceTree = "<group>"; };
 		633F09E2901A308614E595B1 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
+		667CD8D078A7298D136D4BC5 /* AppStateEditLearningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateEditLearningTests.swift; sourceTree = "<group>"; };
 		66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStoreTests.swift; sourceTree = "<group>"; };
 		6A3F45C96538887F8FF79E57 /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
 		6E03421F785ED24BFBF7A030 /* LLMSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettingsStore.swift; sourceTree = "<group>"; };
@@ -298,6 +302,7 @@
 			children = (
 				8A16E593550418D25E53DADE /* AppleFoundationModelsPostProcessorTests.swift */,
 				5599BFF26E7C9256D7B0F4A8 /* AppStateAudioCaptureTests.swift */,
+				667CD8D078A7298D136D4BC5 /* AppStateEditLearningTests.swift */,
 				897FC3AE1270CBE7E26BE606 /* AppStateIssueReportTests.swift */,
 				9D89C1656C10C1E6D3921D81 /* AppStateLLMTests.swift */,
 				DDBA8DA30905F29C03B8A36D /* AppStateSettingsTests.swift */,
@@ -390,6 +395,7 @@
 				104370E76CFD4D8D685CEAC7 /* IssueReportService.swift */,
 				3ECD2622B5D49CEAF4D4736A /* KeychainService.swift */,
 				7EEDE3A134D7940680E98B65 /* LaunchAtLoginService.swift */,
+				5CD4592FDE5BC46F045F28BB /* LearningToastPresenter.swift */,
 				7C803DEDF9EAE9D4E8C14C7E /* LLMPostProcessor.swift */,
 				0B9102217BDA1AFAF69837DE /* LLMSettings.swift */,
 				6E03421F785ED24BFBF7A030 /* LLMSettingsStore.swift */,
@@ -571,6 +577,7 @@
 				D7DEF12DA8F4CFDA5B62F554 /* LLMSettings.swift in Sources */,
 				3F99795CBF268592F921BD0E /* LLMSettingsStore.swift in Sources */,
 				0BB11537C982C731E8A9C06D /* LaunchAtLoginService.swift in Sources */,
+				D5A7F21227246CAF8E15737F /* LearningToastPresenter.swift in Sources */,
 				DB41AE744EEE09C11E39DB1C /* ListeningOverlay.swift in Sources */,
 				D56981268DA6E6B631417822 /* LocalGemmaLlamaCppClient.swift in Sources */,
 				189B9BFB7463476C1FB70AD8 /* LocalGemmaPostProcessor.swift in Sources */,
@@ -612,6 +619,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AD87116EBACBA4A58B56D11A /* AppStateAudioCaptureTests.swift in Sources */,
+				01989238B5D7396C7DB8C856 /* AppStateEditLearningTests.swift in Sources */,
 				D0A7C3187C25D92FED7DDEEB /* AppStateIssueReportTests.swift in Sources */,
 				6BADE038613593570D9E1F5F /* AppStateLLMTests.swift in Sources */,
 				33659F330869ED86EC4C95FD /* AppStateSettingsTests.swift in Sources */,

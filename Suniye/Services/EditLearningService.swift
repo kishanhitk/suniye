@@ -39,7 +39,7 @@ final class EditLearningService: EditLearningServiceProtocol {
 
     private var activeSession: ActiveSession?
 
-    init(
+    nonisolated init(
         isKnownWord: @escaping (String) -> Bool = EditLearningService.spellCheckerKnowsWord,
         scheduleTimer: @escaping (TimeInterval, @escaping @MainActor () -> Void) -> () -> Void = EditLearningService.scheduleMainRunLoopTimer,
         workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
@@ -138,13 +138,13 @@ final class EditLearningService: EditLearningServiceProtocol {
         }
     }
 
-    static func spellCheckerKnowsWord(_ word: String) -> Bool {
+    nonisolated static func spellCheckerKnowsWord(_ word: String) -> Bool {
         let checker = NSSpellChecker.shared
         let missRange = checker.checkSpelling(of: word, startingAt: 0)
         return missRange.location == NSNotFound
     }
 
-    static func scheduleMainRunLoopTimer(
+    nonisolated static func scheduleMainRunLoopTimer(
         after delay: TimeInterval,
         _ handler: @escaping @MainActor () -> Void
     ) -> () -> Void {
