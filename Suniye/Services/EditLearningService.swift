@@ -61,20 +61,19 @@ final class EditLearningService: EditLearningServiceProtocol {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            // queue: .main delivers on the main queue — the MainActor's executor —
+            // regardless of the posting thread, so this cannot trap.
             MainActor.assumeIsolated {
                 self?.finalizeActiveSession()
             }
         }
-        activeSession = active
-
-        let lastDelay = Self.checkpointDelays.last
-        for delay in Self.checkpointDelays {
-            let isTerminal = delay == lastDelay
-            let cancel = scheduleTimer(delay) { [weak self] in
+        for (index, delay) in Self.checkpointDelays.enumerated() {
+            let isTerminal = index == Self.checkpointDelays.count - 1
+            active.cancelTimers.append(scheduleTimer(delay) { [weak self] in
                 self?.processRead(terminal: isTerminal)
-            }
-            activeSession?.cancelTimers.append(cancel)
+            })
         }
+        activeSession = active
     }
 
     func finalizeActiveSession() {
@@ -138,6 +137,8 @@ final class EditLearningService: EditLearningServiceProtocol {
         }
     }
 
+    /// NSSpellChecker is main-thread-only. This is nonisolated solely so it can
+    /// serve as a default argument; all callers run on the main actor.
     nonisolated static func spellCheckerKnowsWord(_ word: String) -> Bool {
         let checker = NSSpellChecker.shared
         let missRange = checker.checkSpelling(of: word, startingAt: 0)

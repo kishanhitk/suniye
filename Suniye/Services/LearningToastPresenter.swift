@@ -49,8 +49,11 @@ final class LearningToastPresenter: LearningToastPresenting {
         self.panel = panel
 
         dismissTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.displayDuration * 1_000_000_000))
-            guard !Task.isCancelled else { return }
+            do {
+                try await Task.sleep(nanoseconds: UInt64(Self.displayDuration * 1_000_000_000))
+            } catch {
+                return
+            }
             self?.dismiss()
         }
     }
