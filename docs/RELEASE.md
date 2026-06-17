@@ -97,6 +97,22 @@ Do not rotate or recreate this self-signed identity unless there is no alternati
 
 Users moving from the current ad hoc-signed releases to the first self-signed release may need to grant Microphone and Accessibility permissions one more time. A later migration to Apple Developer ID signing will likely cause one more permission regrant, then should stabilize under the Apple Team ID.
 
+## Homebrew tap
+Stable releases publish a Homebrew Cask to the custom tap `kishanhitk/homebrew-tap`, so users can `brew install --cask kishanhitk/tap/suniye`.
+
+`release.yml` runs `scripts/update_homebrew_tap.sh` after creating the GitHub release. It renders `packaging/homebrew/suniye.rb.tmpl` (injecting the tag version and the `Suniye.dmg` checksum from `SHA256SUMS.txt`) and pushes `Casks/suniye.rb` to the tap. The cask strips the download quarantine in a `postflight` so the self-signed app launches without a Gatekeeper prompt.
+
+One-time setup:
+1. Create the public repo `kishanhitk/homebrew-tap` (casks live under `Casks/`). Seed the first cask by running this from a checkout with `dist/` populated by a local `package_release.sh`:
+```bash
+HOMEBREW_TAP_TOKEN=<token> ./scripts/update_homebrew_tap.sh --version vX.Y.Z --dist-dir dist
+```
+2. Create a fine-grained personal access token with **Contents: Read and write** on `kishanhitk/homebrew-tap`, then add it as the GitHub Actions secret `HOMEBREW_TAP_TOKEN`.
+
+If `HOMEBREW_TAP_TOKEN` is unset, the release step logs a warning and exits successfully, so the rest of the release is unaffected.
+
+Official `homebrew-cask` is intentionally not targeted yet: it requires notarization (Suniye is self-signed) and higher repository notability. Revisit after moving to Apple Developer ID signing.
+
 ## Update contract
 Sparkle updater behavior depends on release artifact names and signed appcast metadata:
 - Preferred install artifact: `Suniye.dmg`

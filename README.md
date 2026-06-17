@@ -18,17 +18,30 @@ Open-source, local-first dictation for macOS. Hold a key, speak, and your words 
 
 Requires **macOS 14 (Sonoma)** or later.
 
+### Homebrew (recommended)
+
+```bash
+brew install --cask kishanhitk/tap/suniye
+```
+
+The cask taps [`kishanhitk/homebrew-tap`](https://github.com/kishanhitk/homebrew-tap) and installs the latest release. Suniye is self-signed (not yet notarized), so the cask clears the Gatekeeper quarantine for you on install — no manual `xattr` step. Run `brew upgrade --cask suniye` to update, though Suniye also updates itself in the background via Sparkle.
+
+### Direct download
+
 1. Download **Suniye.dmg** from the [latest GitHub Release](../../releases/latest).
 2. Open the DMG and drag **Suniye.app** into `/Applications`.
 3. If macOS blocks the app on first launch, remove quarantine and try again:
    ```bash
    xattr -dr com.apple.quarantine /Applications/Suniye.app
    ```
-4. Grant the permissions Suniye asks for:
+
+### First launch (either method)
+
+1. Grant the permissions Suniye asks for:
    - **Microphone** — to hear you
    - **Accessibility** — to type text into other apps
-5. Suniye will help you install a local speech model on first launch. The onboarding flow defaults to **Parakeet TDT 0.6B v3**, and you can switch to another supported offline model later from the `ASR Model` page.
-6. On first launch, Suniye walks you through welcome, required setup, an optional Magic Format choice, and a practice dictation. The recommended Local Model download is optional and continues in the background while you try dictation.
+2. Suniye will help you install a local speech model on first launch. The onboarding flow defaults to **Parakeet TDT 0.6B v3**, and you can switch to another supported offline model later from the `ASR Model` page.
+3. On first launch, Suniye walks you through welcome, required setup, an optional Magic Format choice, and a practice dictation. The recommended Local Model download is optional and continues in the background while you try dictation.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed steps.
 
