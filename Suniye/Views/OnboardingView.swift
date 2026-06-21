@@ -115,7 +115,9 @@ struct OnboardingView: View {
                         icon: "hand.raised",
                         title: "Accessibility",
                         isGranted: appState.hasAccessibilityPermission,
-                        action: { appState.beginAccessibilityOnboarding() }
+                        action: { appState.beginAccessibilityOnboarding() },
+                        secondaryActionTitle: "Open Settings",
+                        secondaryAction: { appState.openAccessibilityPrivacySettings() }
                     )
 
                     CardDivider()
@@ -142,7 +144,9 @@ struct OnboardingView: View {
         icon: String,
         title: String,
         isGranted: Bool,
-        action: @escaping () -> Void
+        action: @escaping () -> Void,
+        secondaryActionTitle: String? = nil,
+        secondaryAction: (() -> Void)? = nil
     ) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
@@ -160,11 +164,23 @@ struct OnboardingView: View {
                     .foregroundStyle(.green)
                     .font(.system(size: 15))
             } else {
-                Button("Enable") {
-                    action()
+                HStack(spacing: 8) {
+                    // Direct deep-link escape hatch in case the drag overlay can't
+                    // position itself (e.g. a future System Settings redesign).
+                    if let secondaryActionTitle, let secondaryAction {
+                        Button(secondaryActionTitle) {
+                            secondaryAction()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    Button("Enable") {
+                        action()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
             }
         }
         .padding(.horizontal, 14)
