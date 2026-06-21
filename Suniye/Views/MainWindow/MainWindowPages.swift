@@ -364,7 +364,7 @@ struct GeneralPage: View {
                                     isGranted: false,
                                     primaryTitle: "Request Access",
                                     primaryAction: {
-                                        appState.requestAccessibilityPermission()
+                                        appState.beginAccessibilityOnboarding()
                                     },
                                     secondaryTitle: "Open Settings",
                                     secondaryAction: {

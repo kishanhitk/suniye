@@ -115,7 +115,7 @@ struct OnboardingView: View {
                         icon: "hand.raised",
                         title: "Accessibility",
                         isGranted: appState.hasAccessibilityPermission,
-                        action: { appState.requestAccessibilityPermission() }
+                        action: { appState.beginAccessibilityOnboarding() }
                     )
 
                     CardDivider()

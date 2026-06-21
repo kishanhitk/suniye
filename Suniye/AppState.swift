@@ -346,6 +346,20 @@ final class AppState {
             onStateChange?()
         }
     }
+    /// Kill switch for the Permiso drag-to-grant Accessibility overlay.
+    /// When false, the Accessibility buttons fall back to the System Settings deep-link.
+    var accessibilityDragHelperEnabled = true {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            guard oldValue != accessibilityDragHelperEnabled else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
     var floatingIndicatorPlacement: FloatingIndicatorPlacement? {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -1319,6 +1333,7 @@ final class AppState {
     private let currentAppVersionProvider: () -> AppVersion?
     private let nowProvider: () -> Date
     private let fileOpener: (URL) -> Bool
+    private let accessibilityOnboarding: AccessibilityOnboardingPresenting
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
     private let temporaryFileCleanupScheduler: (URL) -> Void
     private let magicFormatSlowWarningDelaySeconds: TimeInterval
@@ -1385,6 +1400,7 @@ final class AppState {
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
         nowProvider: @escaping () -> Date = Date.init,
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
+        accessibilityOnboarding: AccessibilityOnboardingPresenting? = nil,
         issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { defaultName in
             let panel = NSSavePanel()
             panel.nameFieldStringValue = defaultName
@@ -1434,6 +1450,7 @@ final class AppState {
         self.currentAppVersionProvider = currentAppVersionProvider
         self.nowProvider = nowProvider
         self.fileOpener = fileOpener
+        self.accessibilityOnboarding = accessibilityOnboarding ?? PermisoAccessibilityOnboarding()
         self.issueReportDiagnosticsDestinationPicker = issueReportDiagnosticsDestinationPicker
         self.temporaryFileCleanupScheduler = temporaryFileCleanupScheduler
         self.magicFormatSlowWarningDelaySeconds = magicFormatSlowWarningDelaySeconds
@@ -1648,6 +1665,30 @@ final class AppState {
         }
     }
 
+    /// Entry point for the Accessibility "Enable" / "Request Access" buttons.
+    /// When the drag helper is enabled, presents the Permiso overlay and auto-advances
+    /// once the user drags Suniye into the Accessibility list; otherwise falls back to the
+    /// plain System Settings deep-link.
+    func beginAccessibilityOnboarding() {
+        guard accessibilityDragHelperEnabled else {
+            openAccessibilityPrivacySettings()
+            return
+        }
+
+        accessibilityOnboarding.present(onGranted: { [weak self] in
+            guard let self else {
+                return
+            }
+            self.hasAccessibilityPermission = true
+            self.refreshOnboardingProgressIfNeeded()
+            self.onStateChange?()
+            // Authoritative re-read of all permission state.
+            Task {
+                await self.refreshPermissions()
+            }
+        })
+    }
+
     func requestMicrophonePermission() {
         Task {
             await refreshPermissions(requestMicrophone: true)
@@ -1659,7 +1700,7 @@ final class AppState {
         case .requestMicrophonePermission:
             requestMicrophonePermission()
         case .requestAccessibilityPermission:
-            requestAccessibilityPermission()
+            beginAccessibilityOnboarding()
         }
     }
 
@@ -3038,6 +3079,7 @@ final class AppState {
         floatingIndicatorPlacement = settings.floatingIndicatorPlacement
         selectedASRModelID = settings.selectedASRModelID
         updateChannel = settings.updateChannel
+        accessibilityDragHelperEnabled = settings.accessibilityDragHelperEnabled
         hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
         hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
         isHydratingGeneralSettings = false
@@ -3062,7 +3104,8 @@ final class AppState {
             hasSeenOnboardingWelcome: hasSeenOnboardingWelcome,
             hasCompletedCoreOnboarding: hasCompletedCoreOnboarding,
             selectedASRModelID: selectedASRModelID,
-            updateChannel: updateChannel
+            updateChannel: updateChannel,
+            accessibilityDragHelperEnabled: accessibilityDragHelperEnabled
         )
     }
 

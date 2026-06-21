@@ -29,6 +29,7 @@ targets:
         excludes:
           - Frameworks/**
           - LocalLLM/**
+          - Vendor/Permiso/PERMISO_UPSTREAM.md
     info:
       path: Suniye/Info.plist
       properties:
