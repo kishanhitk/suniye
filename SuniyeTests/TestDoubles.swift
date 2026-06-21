@@ -577,6 +577,34 @@ final class SpyLearningToastPresenter: LearningToastPresenting {
 }
 
 @MainActor
+final class SpyAccessibilityOnboarding: AccessibilityOnboardingPresenting {
+    private(set) var presentCallCount = 0
+    private(set) var dismissCallCount = 0
+    private(set) var isPresenting = false
+    private var pendingOnGranted: (() -> Void)?
+
+    func present(onGranted: @escaping () -> Void) {
+        presentCallCount += 1
+        isPresenting = true
+        pendingOnGranted = onGranted
+    }
+
+    func dismiss() {
+        dismissCallCount += 1
+        isPresenting = false
+        pendingOnGranted = nil
+    }
+
+    /// Simulate the user dragging the app in and the poller detecting the grant.
+    func simulateGrant() {
+        isPresenting = false
+        let onGranted = pendingOnGranted
+        pendingOnGranted = nil
+        onGranted?()
+    }
+}
+
+@MainActor
 func makeTestAppState(
     modelManager: ModelManagerProtocol = StubModelManager(),
     transcriptionService: TranscriptionServiceProtocol = StubTranscriptionService(),
@@ -601,6 +629,7 @@ func makeTestAppState(
     currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
     nowProvider: @escaping () -> Date = Date.init,
     fileOpener: @escaping (URL) -> Bool = { _ in true },
+    accessibilityOnboarding: AccessibilityOnboardingPresenting? = nil,
     issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
     magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
@@ -631,6 +660,7 @@ func makeTestAppState(
         currentAppVersionProvider: currentAppVersionProvider,
         nowProvider: nowProvider,
         fileOpener: fileOpener,
+        accessibilityOnboarding: accessibilityOnboarding ?? SpyAccessibilityOnboarding(),
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
         magicFormatSlowWarningDelaySeconds: magicFormatSlowWarningDelaySeconds,

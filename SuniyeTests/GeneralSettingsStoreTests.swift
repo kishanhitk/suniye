@@ -56,6 +56,33 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertEqual(loaded.updateChannel, .stable)
     }
 
+    func testAccessibilityDragHelperFlagRoundTrips() {
+        let suite = "dev.suniye.tests.general.dragHelper.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+
+        let settings = GeneralSettings(accessibilityDragHelperEnabled: false)
+        store.save(settings)
+
+        XCTAssertFalse(store.load().accessibilityDragHelperEnabled)
+    }
+
+    func testAccessibilityDragHelperDefaultsTrueForLegacyBlob() {
+        let suite = "dev.suniye.tests.general.dragHelper.legacy.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        // Blob saved before the key existed must decode the flag as the default (true).
+        let legacyJSON = """
+        {
+          "preferredInputDeviceID": "usb-mic",
+          "autoSubmitEnabled": true
+        }
+        """
+        defaults.set(Data(legacyJSON.utf8), forKey: "general")
+
+        XCTAssertTrue(store.load().accessibilityDragHelperEnabled)
+    }
+
     func testHotkeyDisplayStringsMatchUIExamples() {
         XCTAssertEqual(HotkeyConfiguration.globe.displayString, "Globe")
         XCTAssertEqual(
