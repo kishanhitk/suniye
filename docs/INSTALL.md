@@ -8,6 +8,8 @@ brew install --cask kishanhitk/tap/suniye
 
 This taps [`kishanhitk/homebrew-tap`](https://github.com/kishanhitk/homebrew-tap) and installs the latest release. Because Suniye is self-signed but not notarized, the cask clears the Gatekeeper quarantine automatically on install, so you can skip the manual `xattr` step. Updates are delivered in-app by Sparkle; `brew upgrade --cask suniye` works too.
 
+Homebrew 6.0+ requires third-party taps to be trusted before their code runs. Using the fully-qualified name above grants trust to just this cask (you may be asked to confirm on first install). To pre-trust it — for example in scripted or CI installs — run `brew trust --cask kishanhitk/tap/suniye` first, or read the cask before trusting it with `brew cat kishanhitk/tap/suniye`.
+
 To uninstall, including app data and downloaded models:
 
 ```bash

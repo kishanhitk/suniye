@@ -171,6 +171,10 @@ const faqs = [
     a: "Yes — it's the easiest way. Run brew install --cask kishanhitk/tap/suniye. Homebrew downloads the latest release, moves Suniye into your Applications folder, and clears the macOS quarantine for you, so there's nothing extra to do on first launch. Updates still arrive automatically inside the app.",
   },
   {
+    q: "Homebrew asks me to trust the tap — is that expected?",
+    a: "Yes. Homebrew 6 asks you to approve any third-party tap before it runs, because a tap can run code on your Mac. Running the full command — brew install --cask kishanhitk/tap/suniye — trusts just this one cask. If you'd like to read it first, run brew cat kishanhitk/tap/suniye.",
+  },
+  {
     q: "Why does macOS say the app is damaged?",
     a: "This only affects the direct .dmg download. Suniye isn't signed with a paid Apple developer certificate, so macOS quarantines it the first time. Run the command shown above to allow it — or install with Homebrew, which clears the quarantine for you. You can also build it yourself from the source on GitHub.",
   },
