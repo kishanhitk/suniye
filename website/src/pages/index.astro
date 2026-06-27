@@ -900,9 +900,13 @@ const faqs = [
           btn.parentElement?.querySelector("code")?.textContent?.trim() ||
           "";
         if (!text) return;
-        await navigator.clipboard.writeText(text);
-        btn.classList.add("copied");
-        setTimeout(() => btn.classList.remove("copied"), 2000);
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.classList.add("copied");
+          setTimeout(() => btn.classList.remove("copied"), 2000);
+        } catch {
+          // Clipboard API unavailable (e.g. insecure context) — fail silently.
+        }
       });
     });
 

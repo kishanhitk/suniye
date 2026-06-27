@@ -38,14 +38,24 @@ Environment:
 USAGE
 }
 
+# Fail clearly when a value-taking flag is given without a value, instead of
+# tripping `set -u`'s opaque "$2: unbound variable".
+require_arg() {
+  if [[ -z "${2-}" || "${2-}" == --* ]]; then
+    echo "Missing value for ${1}" >&2
+    usage >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --version) VERSION="$2"; shift 2 ;;
-    --dist-dir) DIST_DIR="$2"; shift 2 ;;
-    --sha256) SHA256_OVERRIDE="$2"; shift 2 ;;
-    --tap-repo) TAP_REPO="$2"; shift 2 ;;
-    --template) TEMPLATE="$2"; shift 2 ;;
-    --cask-path) CASK_PATH="$2"; shift 2 ;;
+    --version) require_arg "$1" "${2-}"; VERSION="$2"; shift 2 ;;
+    --dist-dir) require_arg "$1" "${2-}"; DIST_DIR="$2"; shift 2 ;;
+    --sha256) require_arg "$1" "${2-}"; SHA256_OVERRIDE="$2"; shift 2 ;;
+    --tap-repo) require_arg "$1" "${2-}"; TAP_REPO="$2"; shift 2 ;;
+    --template) require_arg "$1" "${2-}"; TEMPLATE="$2"; shift 2 ;;
+    --cask-path) require_arg "$1" "${2-}"; CASK_PATH="$2"; shift 2 ;;
     --no-push) PUSH="false"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 1 ;;
@@ -102,7 +112,7 @@ fi
 
 if [[ -z "${HOMEBREW_TAP_TOKEN:-}" ]]; then
   echo "HOMEBREW_TAP_TOKEN is not set; skipping Homebrew tap update for ${CASK_VERSION}." >&2
-  echo "Configure the secret to enable automatic cask bumps (see docs/INSTALL.md)." >&2
+  echo "Configure the secret to enable automatic cask bumps (see docs/RELEASE.md)." >&2
   exit 0
 fi
 
