@@ -6,7 +6,7 @@
 brew install --cask kishanhitk/tap/suniye
 ```
 
-This taps [`kishanhitk/homebrew-tap`](https://github.com/kishanhitk/homebrew-tap) and installs the latest signed release. Because Suniye is self-signed but not notarized, the cask clears the Gatekeeper quarantine automatically on install, so you can skip the manual `xattr` step. Updates are delivered in-app by Sparkle; `brew upgrade --cask suniye` works too.
+This taps [`kishanhitk/homebrew-tap`](https://github.com/kishanhitk/homebrew-tap) and installs the latest release. Because Suniye is self-signed but not notarized, the cask clears the Gatekeeper quarantine automatically on install, so you can skip the manual `xattr` step. Updates are delivered in-app by Sparkle; `brew upgrade --cask suniye` works too.
 
 To uninstall, including app data and downloaded models:
 

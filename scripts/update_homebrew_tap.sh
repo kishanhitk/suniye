@@ -59,9 +59,11 @@ if [[ -z "${VERSION}" ]]; then
 fi
 
 # Strip a single leading "v" so the cask version is bare (e.g. v0.0.41 -> 0.0.41).
+# The tap only ever publishes stable releases, which are strictly 3-part semver
+# (vMAJOR.MINOR.PATCH per docs/RELEASE.md), so reject anything else explicitly.
 CASK_VERSION="${VERSION#v}"
-if [[ ! "${CASK_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-  echo "Version does not look like a release version: ${VERSION}" >&2
+if [[ ! "${CASK_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Version must be a stable 3-part release (vMAJOR.MINOR.PATCH): ${VERSION}" >&2
   exit 1
 fi
 
