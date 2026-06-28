@@ -342,6 +342,10 @@ struct GeneralSettings: Codable, Equatable {
     var hasCompletedCoreOnboarding: Bool? = nil
     var selectedASRModelID: ASRModelID = .parakeetV3
     var updateChannel: UpdateChannel = .stable
+    /// Gates the Permiso drag-to-grant overlay for Accessibility onboarding.
+    /// Kill switch: when false, the Accessibility buttons fall back to the plain
+    /// System Settings deep-link.
+    var accessibilityDragHelperEnabled: Bool = true
 
     init(
         preferredInputDeviceID: String? = nil,
@@ -355,7 +359,8 @@ struct GeneralSettings: Codable, Equatable {
         hasSeenOnboardingWelcome: Bool? = nil,
         hasCompletedCoreOnboarding: Bool? = nil,
         selectedASRModelID: ASRModelID = .parakeetV3,
-        updateChannel: UpdateChannel = .stable
+        updateChannel: UpdateChannel = .stable,
+        accessibilityDragHelperEnabled: Bool = true
     ) {
         self.preferredInputDeviceID = preferredInputDeviceID
         self.preferredInputDeviceName = preferredInputDeviceName
@@ -369,6 +374,7 @@ struct GeneralSettings: Codable, Equatable {
         self.hasCompletedCoreOnboarding = hasCompletedCoreOnboarding
         self.selectedASRModelID = selectedASRModelID
         self.updateChannel = updateChannel
+        self.accessibilityDragHelperEnabled = accessibilityDragHelperEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -384,6 +390,7 @@ struct GeneralSettings: Codable, Equatable {
         case hasCompletedCoreOnboarding
         case selectedASRModelID
         case updateChannel
+        case accessibilityDragHelperEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -402,6 +409,7 @@ struct GeneralSettings: Codable, Equatable {
         selectedASRModelID = storedASRModelID.flatMap(ASRModelID.init(rawValue:)) ?? .parakeetV3
         let storedUpdateChannel = try container.decodeIfPresent(String.self, forKey: .updateChannel)
         updateChannel = storedUpdateChannel.flatMap(UpdateChannel.init(rawValue:)) ?? .stable
+        accessibilityDragHelperEnabled = try container.decodeIfPresent(Bool.self, forKey: .accessibilityDragHelperEnabled) ?? true
     }
 }
 
