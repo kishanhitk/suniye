@@ -1,23 +1,41 @@
-# Install Suniye (GitHub Release DMG)
+# Install Suniye
 
-## 1) Download
+## Homebrew (recommended)
+
+```bash
+brew install --cask kishanhitk/tap/suniye
+```
+
+This taps [`kishanhitk/homebrew-tap`](https://github.com/kishanhitk/homebrew-tap) and installs the latest release. Because Suniye is self-signed but not notarized, the cask clears the Gatekeeper quarantine automatically on install, so you can skip the manual `xattr` step. Updates are delivered in-app by Sparkle; `brew upgrade --cask suniye` works too.
+
+Homebrew 6.0+ requires third-party taps to be trusted before their code runs. Using the fully-qualified name above grants trust to just this cask (you may be asked to confirm on first install). To pre-trust it — for example in scripted or CI installs — run `brew trust --cask kishanhitk/tap/suniye` first, or read the cask before trusting it with `brew cat kishanhitk/tap/suniye`.
+
+To uninstall, including app data and downloaded models:
+
+```bash
+brew uninstall --zap --cask suniye
+```
+
+## Manual install (GitHub Release DMG)
+
+### 1) Download
 1. Open the latest GitHub Release.
 2. Download:
    - `Suniye.dmg`
    - `SHA256SUMS.txt`
 
-## 2) Verify checksum
+### 2) Verify checksum
 From your Downloads folder:
 ```bash
 shasum -a 256 Suniye.dmg
 ```
 Match the output against `SHA256SUMS.txt`.
 
-## 3) Install
+### 3) Install
 1. Open `Suniye.dmg`.
 2. Drag `Suniye.app` into `/Applications`.
 
-## 4) First launch (self-signed app)
+### 4) First launch (self-signed app)
 Suniye is self-signed but not notarized, so macOS may block first launch.
 
 If that happens, remove quarantine and try again:
@@ -26,7 +44,7 @@ If that happens, remove quarantine and try again:
 xattr -dr com.apple.quarantine /Applications/Suniye.app
 ```
 
-## 5) Permissions
+### 5) Permissions
 Grant permissions when prompted:
 - Microphone
 - Accessibility (for text insertion)
@@ -42,7 +60,7 @@ During setup:
 - The Local Model download is optional and continues while you try dictation; it never blocks finishing onboarding.
 - After onboarding, you can open `ASR Model` in settings to install or switch to another supported local model.
 
-## 6) Update flow
+### 6) Update flow
 Suniye checks for updates in the background. The default update channel is `Stable`.
 
 To test the latest `main` branch build, open `General` settings and switch `Update Channel` to `Tip`. Switching back to `Stable` changes future checks, but Sparkle will not downgrade an installed tip build.

@@ -81,6 +81,11 @@ jobs:
             dist/appcast.xml
           generate_release_notes: true
 
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: ./scripts/update_homebrew_tap.sh --version "${GITHUB_REF_NAME}" --dist-dir dist
+
       - name: Cleanup code signing identity
         if: always()
         run: ./scripts/import_codesign_identity.sh cleanup

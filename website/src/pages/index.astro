@@ -4,6 +4,8 @@ import Layout from "../layouts/Layout.astro";
 const heroWords = "Your voice. Your machine. Your text.".split(" ");
 const githubUrl = "https://github.com/kishanhitk/suniye";
 const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/download/Suniye.dmg";
+const brewInstall = "brew install --cask kishanhitk/tap/suniye";
+const quarantineCmd = "xattr -rd com.apple.quarantine /Applications/Suniye.app";
 
 
 
@@ -165,8 +167,16 @@ const faqs = [
     a: "A speech model is anywhere from about 118 MB to 1.7 GB, so you can pick one that fits. The optional on-Mac cleanup model adds about 3.4 GB.",
   },
   {
+    q: "Can I install with Homebrew?",
+    a: "Yes — it's the easiest way. Run brew install --cask kishanhitk/tap/suniye. Homebrew downloads the latest release, moves Suniye into your Applications folder, and clears the macOS quarantine for you, so there's nothing extra to do on first launch. Updates still arrive automatically inside the app.",
+  },
+  {
+    q: "Homebrew asks me to trust the tap — is that expected?",
+    a: "Yes. Homebrew 6 asks you to approve any third-party tap before it runs, because a tap can run code on your Mac. Running the full command — brew install --cask kishanhitk/tap/suniye — trusts just this one cask. If you'd like to read it first, run brew cat kishanhitk/tap/suniye.",
+  },
+  {
     q: "Why does macOS say the app is damaged?",
-    a: "Suniye isn't signed with a paid Apple developer certificate, so macOS blocks it the first time. Run the command shown above to allow it — or build it yourself from the source on GitHub.",
+    a: "This only affects the direct .dmg download. Suniye isn't signed with a paid Apple developer certificate, so macOS quarantines it the first time. Run the command shown above to allow it — or install with Homebrew, which clears the quarantine for you. You can also build it yourself from the source on GitHub.",
   },
   {
     q: "Is it free?",
@@ -246,15 +256,40 @@ const faqs = [
             locally — nothing leaves your machine. Hold one key, speak, release.
           </p>
 
-          <div class="fade-in mt-10 flex flex-wrap items-center gap-4">
+          <!-- Recommended install: Homebrew -->
+          <div class="fade-in mt-10 max-w-lg">
+            <div class="mb-2 flex items-center gap-2">
+              <span class="font-display text-xs uppercase tracking-widest text-muted">Install with Homebrew</span>
+              <span class="rounded-full border border-accent/25 bg-accent/5 px-2 py-0.5 font-display text-[10px] uppercase tracking-wide text-accent">Recommended</span>
+            </div>
+            <div class="flex items-center rounded-lg border border-border/80 bg-ink/[0.03]">
+              <code class="flex-1 overflow-x-auto px-4 py-2.5 font-display text-[13px] text-ink/80">{brewInstall}</code>
+              <button
+                id="copy-brew-hero"
+                class="copy-btn flex-none border-l border-border/60 px-3 py-2.5 text-muted/60 transition-colors hover:text-ink"
+                data-copy={brewInstall}
+                aria-label="Copy install command"
+              >
+                <svg class="copy-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                </svg>
+                <svg class="check-icon h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="fade-in mt-4 flex flex-wrap items-center gap-4">
             <a
               href={downloadUrl}
-              class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 font-display text-sm text-white transition-colors hover:bg-accent-hover"
+              class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 font-display text-sm text-ink transition-colors hover:bg-surface"
             >
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
               </svg>
-              Download for macOS
+              Download .dmg
             </a>
             <a
               href={githubUrl}
@@ -271,24 +306,23 @@ const faqs = [
 
           <div class="fade-in mt-5 max-w-lg">
             <p class="flex items-center gap-1 font-display text-[10px] text-muted/50">
-              If macOS says "App is damaged", run this command
+              Downloading the .dmg directly? Clear quarantine if macOS blocks it
               <span class="group relative cursor-help">
                 <svg class="h-2.5 w-2.5 text-muted/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M12 16v-4M12 8h.01" />
                 </svg>
                 <span class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-56 -translate-x-1/2 rounded-lg border border-border bg-surface px-3 py-2 text-left font-body text-xs leading-relaxed text-muted opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                  Suniye is not signed with an Apple Developer Certificate ($99/year), so the app is unsigned. macOS quarantines unsigned apps by default. This command removes the quarantine attribute.
+                  Only needed for the direct .dmg download. Suniye isn't signed with a paid Apple Developer Certificate, so macOS quarantines it; this command removes the quarantine attribute. Homebrew does this for you.
                 </span>
               </span>
             </p>
             <div class="mt-1.5 inline-flex items-center rounded-md border border-border/40 bg-ink/[0.02]">
-              <code class="flex-1 overflow-x-auto px-3 py-1.5 font-display text-[10px] text-ink/50">
-                xattr -rd com.apple.quarantine /Applications/Suniye.app
-              </code>
+              <code class="flex-1 overflow-x-auto px-3 py-1.5 font-display text-[10px] text-ink/50">{quarantineCmd}</code>
               <button
                 id="copy-hero-cmd"
                 class="copy-btn flex-none border-l border-border/30 px-2 py-1.5 text-muted/30 transition-colors hover:text-ink"
+                data-copy={quarantineCmd}
                 aria-label="Copy command"
               >
                 <svg class="copy-icon h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -713,20 +747,45 @@ const faqs = [
             Try Suniye
           </h2>
           <p class="mt-4 leading-relaxed text-muted">
-            Download the latest release or build from source. Requires macOS 14
-            (Sonoma) or later. Pick a speech model from the built-in library on
-            first launch.
+            Install with Homebrew, download the latest release, or build from
+            source. Requires macOS 14 (Sonoma) or later. Pick a speech model from
+            the built-in library on first launch.
           </p>
 
-          <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+          <!-- Recommended install: Homebrew -->
+          <div class="mt-8 mx-auto max-w-md">
+            <div class="mb-2 flex items-center justify-center gap-2">
+              <span class="font-display text-xs uppercase tracking-widest text-muted">Install with Homebrew</span>
+              <span class="rounded-full border border-accent/25 bg-accent/5 px-2 py-0.5 font-display text-[10px] uppercase tracking-wide text-accent">Recommended</span>
+            </div>
+            <div class="flex items-center rounded-lg border border-border/80 bg-ink/[0.03] text-left">
+              <code class="flex-1 overflow-x-auto px-4 py-2.5 font-display text-[13px] text-ink/80">{brewInstall}</code>
+              <button
+                id="copy-brew-cta"
+                class="copy-btn flex-none border-l border-border/60 px-3 py-2.5 text-muted/60 transition-colors hover:text-ink"
+                data-copy={brewInstall}
+                aria-label="Copy install command"
+              >
+                <svg class="copy-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                </svg>
+                <svg class="check-icon h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="mt-4 flex flex-wrap items-center justify-center gap-4">
             <a
               href={downloadUrl}
-              class="inline-flex items-center gap-2 rounded-lg bg-accent px-7 py-3.5 font-display text-sm text-white transition-colors hover:bg-accent-hover"
+              class="inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 font-display text-sm text-ink transition-colors hover:bg-surface"
             >
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
               </svg>
-              Download Latest Release
+              Download .dmg
             </a>
             <a
               href={`${githubUrl}#build-from-source`}
@@ -741,24 +800,23 @@ const faqs = [
           <!-- Quarantine fix note -->
           <div class="mt-8 mx-auto">
             <p class="flex items-center justify-center gap-1.5 font-display text-xs text-muted/70">
-              If macOS says "App is damaged", run this command
+              Downloading the .dmg directly? Clear quarantine if macOS blocks it
               <span class="group relative cursor-help">
                 <svg class="h-3.5 w-3.5 text-muted/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M12 16v-4M12 8h.01" />
                 </svg>
                 <span class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-56 -translate-x-1/2 rounded-lg border border-border bg-surface px-3 py-2 text-left font-body text-xs leading-relaxed text-muted opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                  Suniye is not signed with an Apple Developer Certificate ($99/year), so the app is unsigned. macOS quarantines unsigned apps by default. This command removes the quarantine attribute.
+                  Only needed for the direct .dmg download. Suniye isn't signed with a paid Apple Developer Certificate, so macOS quarantines it; this command removes the quarantine attribute. Homebrew does this for you.
                 </span>
               </span>
             </p>
             <div class="mt-2.5 flex items-center rounded-lg border border-border/80 bg-ink/[0.03]">
-              <code class="flex-1 overflow-x-auto px-4 py-2.5 font-display text-[13px] text-ink/80">
-                xattr -rd com.apple.quarantine /Applications/Suniye.app
-              </code>
+              <code class="flex-1 overflow-x-auto px-4 py-2.5 font-display text-[13px] text-ink/80">{quarantineCmd}</code>
               <button
                 id="copy-quarantine-cmd"
                 class="copy-btn flex-none border-l border-border/60 px-3 py-2.5 text-muted/60 transition-colors hover:text-ink"
+                data-copy={quarantineCmd}
                 aria-label="Copy command"
               >
                 <svg class="copy-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -837,14 +895,22 @@ const faqs = [
 
     document.querySelectorAll(".demo-line").forEach((el) => demoObserver.observe(el));
 
-    // Copy quarantine command to clipboard
+    // Copy the command associated with each copy button to the clipboard.
+    // Prefer the button's data-copy; fall back to the adjacent <code> text.
     document.querySelectorAll(".copy-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        await navigator.clipboard.writeText(
-          "xattr -rd com.apple.quarantine /Applications/Suniye.app"
-        );
-        btn.classList.add("copied");
-        setTimeout(() => btn.classList.remove("copied"), 2000);
+        const text =
+          btn.getAttribute("data-copy") ||
+          btn.parentElement?.querySelector("code")?.textContent?.trim() ||
+          "";
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.classList.add("copied");
+          setTimeout(() => btn.classList.remove("copied"), 2000);
+        } catch {
+          // Clipboard API unavailable (e.g. insecure context) — fail silently.
+        }
       });
     });
 
