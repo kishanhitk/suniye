@@ -35,3 +35,18 @@ Tune a v10 that adds these while protecting the three existing gates:
 39-case suite (currently 38/39, injection 2/2), the 24-case referential probe (12/12, 0 misfire),
 and this 4-case advanced probe. Expect #2 to be the hardest (injection tradeoff) and to need
 the sharpest own-content-vs-embedded-command boundary.
+
+## Outcome (v10 → v11)
+
+**3 of 4 capabilities added cleanly, zero regression on any gate** (39-suite 38/39, injection 2/2,
+referential probe 24/24 / 0 misfire held across v10 and v11).
+
+| capability | v9 | v11 | note |
+|------------|----|-----|------|
+| spoken formatting command ("put a hyphen between these" → `1-2-3`) | ❌ | ✅ | did **not** hurt injection resistance — framed as "formatting the speaker's own words", distinct from commands to the AI / third parties |
+| "new paragraph" + signature block | ⚠️ partial | ✅ | full `Best,\nJane` signature now retained |
+| emoji from speech (`"X emoji"` → 🏞️) | ❌ | ✅* | emoji inserted correctly; *exact-match still blocked by a kept leading "And" and `.` vs `!` — cosmetic, capability works |
+| multi-attempt self-correction collapse (flowers/roses → lilies) | ❌ | ❌ | **2B capacity limit** — model edits the last item locally (`Get flowers on Monday, buy lilies`) instead of collapsing the whole re-decided run. The aggressive "discard everything before the trigger" rule that would fix it also over-deletes on referential cases, so it's not safe to adopt wholesale. Deferred. |
+
+Shipped as prompt **v11** (runner default + app constant). The multi-attempt case remains the one
+open gap; revisit if/when a larger cleanup model is available (see selectable-cleanup-model work).
