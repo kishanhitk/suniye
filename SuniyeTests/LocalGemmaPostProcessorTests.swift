@@ -156,7 +156,7 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         await processor.prewarm(config: makeConfig(idleTimeoutSeconds: 900))
 
         XCTAssertEqual(client.callCount, 1)
-        XCTAssertEqual(client.maxTokens.first, LocalGemmaDefaults.prewarmMaxTokens)
+        XCTAssertEqual(client.maxTokens.first, LocalGemmaDefaults.probeMaxTokens)
         XCTAssertEqual(client.idleTimeouts.first, 900)
     }
 

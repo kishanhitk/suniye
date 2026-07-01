@@ -2622,14 +2622,15 @@ final class AppState {
                 startSlowWarning: { [weak self] in
                     self?.startMagicFormatSlowWarningTask() ?? Task {}
                 },
-                setStatusText: { [weak self] text in
-                    self?.statusText = text
-                },
-                setProcessingMessage: { [weak self] message in
-                    guard let self, case .processing = self.floatingIndicatorState else {
+                setStage: { [weak self] text in
+                    guard let self else {
                         return
                     }
-                    self.setFloatingIndicatorState(.processing(message: message))
+                    self.statusText = text
+                    guard case .processing = self.floatingIndicatorState else {
+                        return
+                    }
+                    self.setFloatingIndicatorState(.processing(message: text))
                 }
             )
         )
@@ -2820,22 +2821,18 @@ final class AppState {
     }
 
     /// Warm the local Gemma runtime iff Magic Format is enabled and will actually
-    /// resolve to the local provider. No-op otherwise (feature off, Apple/API
-    /// provider, or model unavailable) so we never spawn the server needlessly.
+    /// resolve to the local provider. Provider resolution + config assembly live in
+    /// the coordinator so this can never drift from the polish path.
     func prewarmLocalLLMIfEligible() async {
         guard llmEnabled else {
             return
         }
-        let resolved = MagicFormatCoordinator.resolvedProvider(
+        await magicFormatCoordinator.prewarmLocalIfEligible(
             requestedProvider: llmProvider,
+            settings: currentLLMSettings(),
             appleAvailability: appleMagicFormatAvailability,
             localGemmaAvailability: localGemmaMagicFormatAvailability
         )
-        guard case .localGemma = resolved else {
-            return
-        }
-        let config = MagicFormatCoordinator.makeLocalGemmaConfig(settings: currentLLMSettings())
-        await localGemmaMagicFormatPostProcessor.prewarm(config: config)
     }
 
     private func startRecording(trigger: RecordingSource) async {
@@ -2902,7 +2899,7 @@ final class AppState {
         activeDictationSession = .transcribing(context)
         phase = .transcribing
         statusText = "Transcribing..."
-        setFloatingIndicatorState(.processing(message: "Transcribing..."))
+        setFloatingIndicatorState(Self.transcribingIndicatorState)
 
         let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
         guard let context = activeDictationSession?.context, context.id == sessionID else {
@@ -3510,7 +3507,7 @@ final class AppState {
                 source: activeRecordingSource ?? .manual
             )
         case .transcribing:
-            return .processing()
+            return Self.transcribingIndicatorState
         case .needsModel, .downloadingModel, .loading, .ready, .error:
             return .idle
         }
@@ -3583,6 +3580,10 @@ final class AppState {
     private static func defaultIndicatorLevels(level: Float, count: Int = AudioLevelMeter.bandCount) -> [Float] {
         Array(repeating: max(0, min(level, 1)), count: count)
     }
+
+    /// Single source for the pill's transcribing state so the transcribe transition
+    /// and the blocked-start restore path can never render it differently.
+    private static let transcribingIndicatorState: FloatingIndicatorState = .processing(message: "Transcribing...")
 
     private func startBlockedMessage(for phase: Phase) -> String {
         switch phase {

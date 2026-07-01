@@ -13,7 +13,7 @@ enum LocalGemmaDefaults {
     static let idleTimeoutSeconds = 600.0
     static let shutdownTimeoutSeconds = 2.0
     static let maxTokens = 256
-    static let prewarmMaxTokens = 8
+    static let probeMaxTokens = 8
 
     static func serverArguments(modelPath: String, port: Int, apiKey: String) -> [String] {
         return [
@@ -76,19 +76,25 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             return
         }
         do {
-            _ = try await client.generate(
-                instructions: "Reply with OK.",
-                prompt: "Warm up.",
-                maxTokens: LocalGemmaDefaults.prewarmMaxTokens,
-                startupTimeoutSeconds: config.startupTimeoutSeconds,
-                idleTimeoutSeconds: config.idleTimeoutSeconds,
-                timeoutSeconds: config.generationTimeoutSeconds
-            )
+            _ = try await runProbe(prompt: "Warm up.", config: config)
             AppLogger.shared.log(.info, "local gemma prewarm complete")
         } catch {
             let reason = (error as? LLMPostProcessorError)?.logValue ?? "unknown"
             AppLogger.shared.log(.debug, "local gemma prewarm skipped reason=\(reason)")
         }
+    }
+
+    /// Tiny generation used to load the model and compile its kernels. Callers apply
+    /// their own tail policy (prewarm swallows failures; testSetup validates output).
+    private func runProbe(prompt: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
+        try await client.generate(
+            instructions: "Reply with OK.",
+            prompt: prompt,
+            maxTokens: LocalGemmaDefaults.probeMaxTokens,
+            startupTimeoutSeconds: config.startupTimeoutSeconds,
+            idleTimeoutSeconds: config.idleTimeoutSeconds,
+            timeoutSeconds: config.generationTimeoutSeconds
+        )
     }
 
     func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
@@ -125,14 +131,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
         }
 
-        let output = try await client.generate(
-            instructions: "Reply with OK.",
-            prompt: "Connection test.",
-            maxTokens: 8,
-            startupTimeoutSeconds: config.startupTimeoutSeconds,
-            idleTimeoutSeconds: config.idleTimeoutSeconds,
-            timeoutSeconds: config.generationTimeoutSeconds
-        )
+        let output = try await runProbe(prompt: "Connection test.", config: config)
         guard !sanitizeGemmaOutput(output).isEmpty else {
             throw LLMPostProcessorError.emptyOutput
         }

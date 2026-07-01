@@ -8,6 +8,13 @@ enum EffectiveMagicFormatProvider {
 
 @MainActor
 final class MagicFormatCoordinator {
+    /// User-facing labels for each polish stage, shown in the status text and the
+    /// floating pill. Kept in one place so the two sinks never drift.
+    enum Stage {
+        static let polishing = "Polishing..."
+        static let startingLocalModel = "Starting local model..."
+    }
+
     struct PolishRequest {
         let requestedProvider: MagicFormatProvider
         let settings: LLMSettings
@@ -17,8 +24,8 @@ final class MagicFormatCoordinator {
         let readAPIKey: () -> String?
         let onAPIKeyReadFailed: () -> Void
         let startSlowWarning: () -> Task<Void, Never>
-        let setStatusText: (String) -> Void
-        let setProcessingMessage: (String) -> Void
+        /// Advertise the current stage to both the status text and the pill.
+        let setStage: (String) -> Void
     }
 
     private let apiPostProcessor: LLMPostProcessor
@@ -102,6 +109,26 @@ final class MagicFormatCoordinator {
         }
     }
 
+    /// Speculatively warm the local runtime iff the request will actually resolve to
+    /// the local Gemma provider. No-op for every other provider or when unavailable.
+    /// Owns provider resolution + config assembly so it can never drift from `polish`.
+    func prewarmLocalIfEligible(
+        requestedProvider: MagicFormatProvider,
+        settings: LLMSettings,
+        appleAvailability: AppleFoundationModelsAvailability,
+        localGemmaAvailability: LocalGemmaAvailability
+    ) async {
+        let resolved = Self.resolvedProvider(
+            requestedProvider: requestedProvider,
+            appleAvailability: appleAvailability,
+            localGemmaAvailability: localGemmaAvailability
+        )
+        guard case .localGemma = resolved else {
+            return
+        }
+        await localGemmaPostProcessor.prewarm(config: Self.makeLocalGemmaConfig(settings: settings))
+    }
+
     func polish(input: String, rawText: String, request: PolishRequest) async -> String {
         guard let provider = Self.resolvedProvider(
             requestedProvider: request.requestedProvider,
@@ -148,8 +175,7 @@ final class MagicFormatCoordinator {
         let config = Self.makeAPIConfig(settings: request.settings, apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
-        request.setStatusText("Polishing...")
-        request.setProcessingMessage("Polishing...")
+        request.setStage(Stage.polishing)
         defer {
             slowWarningTask.cancel()
         }
@@ -179,8 +205,7 @@ final class MagicFormatCoordinator {
         let config = Self.makeAppleConfig(settings: request.settings)
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
-        request.setStatusText("Polishing...")
-        request.setProcessingMessage("Polishing...")
+        request.setStage(Stage.polishing)
         defer {
             slowWarningTask.cancel()
         }
@@ -211,13 +236,7 @@ final class MagicFormatCoordinator {
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
         let isRuntimeWarm = await localGemmaPostProcessor.isRuntimeWarm()
-        if isRuntimeWarm {
-            request.setStatusText("Polishing...")
-            request.setProcessingMessage("Polishing...")
-        } else {
-            request.setStatusText("Starting local model...")
-            request.setProcessingMessage("Starting local model...")
-        }
+        request.setStage(isRuntimeWarm ? Stage.polishing : Stage.startingLocalModel)
         defer {
             slowWarningTask.cancel()
         }

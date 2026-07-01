@@ -868,14 +868,15 @@ final class AppStateSettingsTests: XCTestCase {
     func testBlockedIndicatorToggleDuringTranscribingRestoresProcessingState() async {
         let appState = makeTestAppState()
         appState.phase = .transcribing
-        appState.floatingIndicatorState = .processing()
+        appState.floatingIndicatorState = .processing(message: "Transcribing...")
 
         appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Still processing previous clip"))
         try? await Task.sleep(nanoseconds: 1_300_000_000)
-        XCTAssertEqual(appState.floatingIndicatorState, .processing())
+        // Restore path now matches the transcribe transition's labeled pill.
+        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Transcribing..."))
     }
 
 
