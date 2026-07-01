@@ -224,7 +224,7 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Starting local model..."))
     }
 
-    func testWarmLocalGemmaRequestKeepsNormalProcessingIndicator() async {
+    func testWarmLocalGemmaRequestShowsPolishingIndicator() async {
         let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
             availability: .available,
             runtimeWarm: true,
@@ -242,8 +242,80 @@ final class AppStateLLMTests: XCTestCase {
 
         _ = await appState.postProcessTextIfEnabled("raw text")
 
-        XCTAssertEqual(appState.floatingIndicatorState, .processing())
+        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Polishing..."))
         XCTAssertEqual(appState.statusText, "Polishing...")
+    }
+
+    func testPrewarmEligibleForLocalGemmaTriggersPrewarm() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+
+        await appState.prewarmLocalLLMIfEligible()
+
+        XCTAssertEqual(fakeGemma.prewarmCallCount, 1)
+        XCTAssertEqual(fakeGemma.lastPrewarmConfig?.idleTimeoutSeconds, appState.localModelKeepAlive.seconds)
+    }
+
+    func testPrewarmSkippedWhenMagicFormatDisabled() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager
+        )
+        appState.llmEnabled = false
+        appState.llmProvider = .localGemma
+
+        await appState.prewarmLocalLLMIfEligible()
+
+        XCTAssertEqual(fakeGemma.prewarmCallCount, 0)
+    }
+
+    func testPrewarmSkippedWhenProviderNotLocal() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .openAICompatible
+
+        await appState.prewarmLocalLLMIfEligible()
+
+        XCTAssertEqual(fakeGemma.prewarmCallCount, 0)
+    }
+
+    func testPrewarmSkippedWhenLocalModelUnavailable() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .modelNotInstalled,
+            result: .success("gemma polished")
+        )
+        let appState = makeTestAppState(localGemmaMagicFormatPostProcessor: fakeGemma)
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+
+        await appState.prewarmLocalLLMIfEligible()
+
+        XCTAssertEqual(fakeGemma.prewarmCallCount, 0)
     }
 
     func testExplicitLocalGemmaProviderUnavailableFallsBackToRaw() async {
@@ -746,7 +818,9 @@ final class AppStateLLMTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 120_000_000)
 
         XCTAssertEqual(output, "polished")
-        XCTAssertEqual(appState.floatingIndicatorState, .processing())
+        // Fast success cancels the slow warning; the pill settles on the polishing
+        // stage label (no "taking longer than usual" upgrade).
+        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Polishing..."))
     }
 
     func testTestMagicFormatSetupTracksProgressAndSuccessResult() async {

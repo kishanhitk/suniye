@@ -149,6 +149,45 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         XCTAssertEqual(client.idleTimeouts.first, 900)
     }
 
+    func testPrewarmOnColdRuntimeTriggersGeneration() async {
+        let client = FakeLocalGemmaClient(runtimeWarm: false, outputs: ["OK"])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        await processor.prewarm(config: makeConfig(idleTimeoutSeconds: 900))
+
+        XCTAssertEqual(client.callCount, 1)
+        XCTAssertEqual(client.maxTokens.first, LocalGemmaDefaults.prewarmMaxTokens)
+        XCTAssertEqual(client.idleTimeouts.first, 900)
+    }
+
+    func testPrewarmSkipsWhenRuntimeAlreadyWarm() async {
+        let client = FakeLocalGemmaClient(runtimeWarm: true, outputs: ["OK"])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        await processor.prewarm(config: makeConfig())
+
+        XCTAssertEqual(client.callCount, 0)
+    }
+
+    func testPrewarmSkipsWhenUnavailable() async {
+        let client = FakeLocalGemmaClient(availability: .modelNotInstalled, outputs: ["OK"])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        await processor.prewarm(config: makeConfig())
+
+        XCTAssertEqual(client.callCount, 0)
+    }
+
+    func testPrewarmSwallowsGenerationErrors() async {
+        let client = FakeLocalGemmaClient(runtimeWarm: false, outputs: [])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        // No output configured -> generate throws; prewarm must not propagate it.
+        await processor.prewarm(config: makeConfig())
+
+        XCTAssertEqual(client.callCount, 1)
+    }
+
     private func makeConfig(idleTimeoutSeconds: Double = 600) -> LocalGemmaMagicFormatConfig {
         LocalGemmaMagicFormatConfig(
             systemPrompt: LLMDefaults.defaultGemmaMagicFormatPrompt,
@@ -163,15 +202,22 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
 
 private final class FakeLocalGemmaClient: LocalGemmaClient {
     var availability: LocalGemmaAvailability
+    var runtimeWarm: Bool
     private let outputs: [String]
     private(set) var callCount = 0
     private(set) var instructions: [String] = []
     private(set) var prompts: [String] = []
+    private(set) var maxTokens: [Int] = []
     private(set) var idleTimeouts: [Double] = []
 
-    init(availability: LocalGemmaAvailability = .available, outputs: [String]) {
+    init(availability: LocalGemmaAvailability = .available, runtimeWarm: Bool = false, outputs: [String]) {
         self.availability = availability
+        self.runtimeWarm = runtimeWarm
         self.outputs = outputs
+    }
+
+    func isRuntimeWarm() async -> Bool {
+        runtimeWarm
     }
 
     func generate(
@@ -184,6 +230,7 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
     ) async throws -> String {
         self.instructions.append(instructions)
         prompts.append(prompt)
+        self.maxTokens.append(maxTokens)
         idleTimeouts.append(idleTimeoutSeconds)
         let index = callCount
         callCount += 1

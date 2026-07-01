@@ -13,6 +13,7 @@ enum LocalGemmaDefaults {
     static let idleTimeoutSeconds = 600.0
     static let shutdownTimeoutSeconds = 2.0
     static let maxTokens = 256
+    static let prewarmMaxTokens = 8
 
     static func serverArguments(modelPath: String, port: Int, apiKey: String) -> [String] {
         return [
@@ -61,6 +62,33 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
 
     func isRuntimeWarm() async -> Bool {
         await client.isRuntimeWarm()
+    }
+
+    /// Best-effort warm-up so the model is resident (and its Metal/KV kernels compiled)
+    /// before the first real polish request. Safe to call speculatively on dictation
+    /// start: it no-ops when the runtime is already warm or unavailable, shares any
+    /// in-flight startup, and never throws into the caller.
+    func prewarm(config: LocalGemmaMagicFormatConfig) async {
+        guard availability.isAvailable else {
+            return
+        }
+        if await isRuntimeWarm() {
+            return
+        }
+        do {
+            _ = try await client.generate(
+                instructions: "Reply with OK.",
+                prompt: "Warm up.",
+                maxTokens: LocalGemmaDefaults.prewarmMaxTokens,
+                startupTimeoutSeconds: config.startupTimeoutSeconds,
+                idleTimeoutSeconds: config.idleTimeoutSeconds,
+                timeoutSeconds: config.generationTimeoutSeconds
+            )
+            AppLogger.shared.log(.info, "local gemma prewarm complete")
+        } catch {
+            let reason = (error as? LLMPostProcessorError)?.logValue ?? "unknown"
+            AppLogger.shared.log(.debug, "local gemma prewarm skipped reason=\(reason)")
+        }
     }
 
     func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String {

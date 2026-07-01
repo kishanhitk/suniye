@@ -149,6 +149,7 @@ final class MagicFormatCoordinator {
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
         request.setStatusText("Polishing...")
+        request.setProcessingMessage("Polishing...")
         defer {
             slowWarningTask.cancel()
         }
@@ -179,6 +180,7 @@ final class MagicFormatCoordinator {
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
         request.setStatusText("Polishing...")
+        request.setProcessingMessage("Polishing...")
         defer {
             slowWarningTask.cancel()
         }
@@ -211,6 +213,7 @@ final class MagicFormatCoordinator {
         let isRuntimeWarm = await localGemmaPostProcessor.isRuntimeWarm()
         if isRuntimeWarm {
             request.setStatusText("Polishing...")
+            request.setProcessingMessage("Polishing...")
         } else {
             request.setStatusText("Starting local model...")
             request.setProcessingMessage("Starting local model...")

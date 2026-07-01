@@ -71,6 +71,8 @@ final class CapturingLocalGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPo
     private(set) var callCount = 0
     private(set) var lastConfig: LocalGemmaMagicFormatConfig?
     private(set) var stopRuntimeCallCount = 0
+    private(set) var prewarmCallCount = 0
+    private(set) var lastPrewarmConfig: LocalGemmaMagicFormatConfig?
 
     init(
         availability: LocalGemmaAvailability,
@@ -84,6 +86,11 @@ final class CapturingLocalGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPo
 
     func isRuntimeWarm() async -> Bool {
         runtimeWarm
+    }
+
+    func prewarm(config: LocalGemmaMagicFormatConfig) async {
+        prewarmCallCount += 1
+        lastPrewarmConfig = config
     }
 
     func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String {

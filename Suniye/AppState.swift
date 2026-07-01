@@ -2810,7 +2810,32 @@ final class AppState {
             showTransientIndicatorError("Enable Accessibility for dictation")
             return
         }
+        // Speculatively warm the local LLM while the user speaks, so cleanup runs
+        // against an already-loaded model instead of paying the cold start on the
+        // critical path. Fire-and-forget; idempotent and self-evicting.
+        Task { [weak self] in
+            await self?.prewarmLocalLLMIfEligible()
+        }
         await startRecording(trigger: trigger)
+    }
+
+    /// Warm the local Gemma runtime iff Magic Format is enabled and will actually
+    /// resolve to the local provider. No-op otherwise (feature off, Apple/API
+    /// provider, or model unavailable) so we never spawn the server needlessly.
+    func prewarmLocalLLMIfEligible() async {
+        guard llmEnabled else {
+            return
+        }
+        let resolved = MagicFormatCoordinator.resolvedProvider(
+            requestedProvider: llmProvider,
+            appleAvailability: appleMagicFormatAvailability,
+            localGemmaAvailability: localGemmaMagicFormatAvailability
+        )
+        guard case .localGemma = resolved else {
+            return
+        }
+        let config = MagicFormatCoordinator.makeLocalGemmaConfig(settings: currentLLMSettings())
+        await localGemmaMagicFormatPostProcessor.prewarm(config: config)
     }
 
     private func startRecording(trigger: RecordingSource) async {
@@ -2877,7 +2902,7 @@ final class AppState {
         activeDictationSession = .transcribing(context)
         phase = .transcribing
         statusText = "Transcribing..."
-        setFloatingIndicatorState(.processing())
+        setFloatingIndicatorState(.processing(message: "Transcribing..."))
 
         let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
         guard let context = activeDictationSession?.context, context.id == sessionID else {
