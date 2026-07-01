@@ -1,0 +1,26 @@
+[
+  {
+    "id": "fv_selfcorrect_collapse",
+    "category": "multi_attempt_correction",
+    "input": "get flowers on monday buy roses no no wait actually get lilies",
+    "expected": "Get lilies on Monday."
+  },
+  {
+    "id": "fv_emoji_insert",
+    "category": "emoji",
+    "input": "and let's go to yosemite yosemite emoji",
+    "expected": "Let's go to Yosemite! 🏞️"
+  },
+  {
+    "id": "fv_format_command_hyphen",
+    "category": "spoken_format_command",
+    "input": "let's show them how smart you are one two three put a hyphen between these",
+    "expected": "Let's show them how smart you are. 1-2-3."
+  },
+  {
+    "id": "fv_email_paragraphs_signature",
+    "category": "paragraphs_signature",
+    "input": "hi jane comma new paragraph i'm trying to write this email to show you how well this model works with different types of punctuations and additions new paragraph best comma new line jane",
+    "expected": "Hi Jane,\n\nI'm trying to write this email to show you how well this model works with different types of punctuations and additions.\n\nBest,\nJane."
+  }
+]
