@@ -1,0 +1,29 @@
+---
+// A read-only command field with a copy-to-clipboard button.
+// Copy behaviour is handled globally by the `.copy-btn` listener in index.astro,
+// which reads `data-copy` (falling back to the adjacent <code>).
+interface Props {
+  value: string;
+  label?: string;
+  class?: string;
+}
+
+const { value, label = "Copy", class: className = "" } = Astro.props;
+---
+
+<div class:list={["flex items-center rounded-lg border border-border/80 bg-ink/[0.03]", className]}>
+  <code class="flex-1 overflow-x-auto px-4 py-2.5 font-display text-[13px] text-ink/80">{value}</code>
+  <button
+    class="copy-btn flex-none border-l border-border/60 px-3 py-2.5 text-muted/60 transition-colors hover:text-ink"
+    data-copy={value}
+    aria-label={label}
+  >
+    <svg class="copy-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+    </svg>
+    <svg class="check-icon h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+    </svg>
+  </button>
+</div>
