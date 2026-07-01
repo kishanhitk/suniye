@@ -153,6 +153,118 @@ final class TextInsertionServiceTests: XCTestCase {
         XCTAssertEqual(posted[0].1, [])
     }
 
+    func testInsertTextPrefersVerifiedAXOverTypeOut() throws {
+        let service = TextInsertionService()
+        let element = AXUIElementCreateSystemWide()
+        var state = TextInsertionService.FocusedTextSnapshot(value: "hi", selectedText: nil, selectedRange: NSRange(location: 2, length: 0))
+
+        service.secureFieldDetector = { false }
+        service.focusedTextElementProvider = { element }
+        service.focusedTextSnapshotProvider = { _ in state }
+        service.selectedTextSetter = { _, text in
+            state = (value: "hi \(text)", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+            return true
+        }
+        service.insertionStrategyProvider = { .keyboardTypeOut }
+        service.unicodeTyper = { _ in XCTFail("Type-out must not run when AX insertion is verified") }
+        service.keyPoster = { _, _ in XCTFail("Paste must not run when AX insertion is verified") }
+
+        try service.insertText("there")
+    }
+
+    func testTypeOutFiresWhenAXFailsAndStrategyIsTypeOut() throws {
+        let service = TextInsertionService()
+        var typed: [String] = []
+
+        service.secureFieldDetector = { false }
+        service.focusedTextElementProvider = { nil }
+        service.insertionStrategyProvider = { .keyboardTypeOut }
+        service.unicodeTyper = { typed.append($0) }
+        service.keyPoster = { _, _ in XCTFail("Paste must not run under the type-out strategy") }
+
+        try service.insertText("héllo 👍")
+
+        XCTAssertEqual(typed, ["héllo 👍"])
+    }
+
+    func testUnicodeChunksDoNotSplitSurrogatePairs() {
+        let input = "Hi 👍!"
+        let chunks = TextInsertionService.unicodeChunks(for: input, maxChunkUTF16: 2)
+
+        // A split surrogate pair would decode to U+FFFD, so exact reconstruction proves no split.
+        let reconstructed = chunks.map { String(utf16CodeUnits: $0, count: $0.count) }.joined()
+        XCTAssertEqual(reconstructed, input, "chunking must not split a grapheme / surrogate pair")
+        XCTAssertTrue(chunks.contains { String(utf16CodeUnits: $0, count: $0.count).contains("👍") })
+    }
+
+    func testClipboardRestoreSkippedWhenUserChangedClipboard() throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setString("previous", forType: .string)
+
+        service.secureFieldDetector = { false }
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementProvider = { nil }
+        service.pasteKeyCodeProvider = { 42 }
+        service.clipboardRestoreDelay = 0.1
+        service.keyPoster = { _, _ in }
+
+        try service.insertText("fallback")
+        // User copies during the restore window → changeCount bumps → restore must skip.
+        pasteboard.clearContents()
+        pasteboard.setString("user copied this", forType: .string)
+
+        let checked = expectation(description: "restore window elapsed")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            XCTAssertEqual(pasteboard.string(forType: .string), "user copied this")
+            checked.fulfill()
+        }
+        wait(for: [checked], timeout: 1)
+    }
+
+    func testClipboardRestoreProceedsWhenChangeCountUnchanged() throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setString("previous", forType: .string)
+
+        service.secureFieldDetector = { false }
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementProvider = { nil }
+        service.pasteKeyCodeProvider = { 42 }
+        service.clipboardRestoreDelay = 0.05
+        service.keyPoster = { _, _ in } // paste only reads; no changeCount bump
+
+        try service.insertText("fallback")
+
+        let restored = expectation(description: "clipboard restored")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            XCTAssertEqual(pasteboard.string(forType: .string), "previous")
+            restored.fulfill()
+        }
+        wait(for: [restored], timeout: 1)
+    }
+
+    func testSecureFieldIsNeverTypedOrPasted() throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setString("previous", forType: .string)
+
+        service.secureFieldDetector = { true }
+        service.pasteboardProvider = { pasteboard }
+        service.insertionStrategyProvider = { .keyboardTypeOut }
+        service.unicodeTyper = { _ in XCTFail("Must not type into a secure field") }
+        service.selectedTextSetter = { _, _ in XCTFail("Must not AX-write into a secure field"); return false }
+        service.keyPoster = { _, _ in XCTFail("Must not paste into a secure field") }
+
+        XCTAssertThrowsError(try service.insertText("hunter2")) { error in
+            XCTAssertEqual(error as? TextInsertionService.InsertError, .secureFieldUnsupported)
+        }
+        XCTAssertEqual(pasteboard.string(forType: .string), "previous")
+    }
+
     func testFormatterWithoutContextKeepsTextUnchanged() {
         XCTAssertEqual(
             DictationInsertionTextFormatter.textForInsertion("Hello", insertionContext: nil),

@@ -346,6 +346,10 @@ struct GeneralSettings: Codable, Equatable {
     /// Kill switch: when false, the Accessibility buttons fall back to the plain
     /// System Settings deep-link.
     var accessibilityDragHelperEnabled: Bool = true
+    /// When enabled, apps on the keyboard-simulation allowlist receive dictation via
+    /// synthesized keystrokes instead of Accessibility/clipboard paste — for remote
+    /// desktops, virtualization, and other apps where normal insertion fails.
+    var keyboardSimulationEnabled: Bool = true
 
     init(
         preferredInputDeviceID: String? = nil,
@@ -360,7 +364,8 @@ struct GeneralSettings: Codable, Equatable {
         hasCompletedCoreOnboarding: Bool? = nil,
         selectedASRModelID: ASRModelID = .parakeetV3,
         updateChannel: UpdateChannel = .stable,
-        accessibilityDragHelperEnabled: Bool = true
+        accessibilityDragHelperEnabled: Bool = true,
+        keyboardSimulationEnabled: Bool = true
     ) {
         self.preferredInputDeviceID = preferredInputDeviceID
         self.preferredInputDeviceName = preferredInputDeviceName
@@ -375,6 +380,7 @@ struct GeneralSettings: Codable, Equatable {
         self.selectedASRModelID = selectedASRModelID
         self.updateChannel = updateChannel
         self.accessibilityDragHelperEnabled = accessibilityDragHelperEnabled
+        self.keyboardSimulationEnabled = keyboardSimulationEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -391,6 +397,7 @@ struct GeneralSettings: Codable, Equatable {
         case selectedASRModelID
         case updateChannel
         case accessibilityDragHelperEnabled
+        case keyboardSimulationEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -410,6 +417,7 @@ struct GeneralSettings: Codable, Equatable {
         let storedUpdateChannel = try container.decodeIfPresent(String.self, forKey: .updateChannel)
         updateChannel = storedUpdateChannel.flatMap(UpdateChannel.init(rawValue:)) ?? .stable
         accessibilityDragHelperEnabled = try container.decodeIfPresent(Bool.self, forKey: .accessibilityDragHelperEnabled) ?? true
+        keyboardSimulationEnabled = try container.decodeIfPresent(Bool.self, forKey: .keyboardSimulationEnabled) ?? true
     }
 }
 

@@ -23,15 +23,28 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     typealias ClipboardSnapshot = [ClipboardItemSnapshot]
     typealias FocusedTextSnapshot = (value: String?, selectedText: String?, selectedRange: NSRange?)
 
-    enum InsertError: LocalizedError {
+    enum InsertError: LocalizedError, Equatable {
         case cannotCreateEvent
+        case secureFieldUnsupported
 
         var errorDescription: String? {
             switch self {
             case .cannotCreateEvent:
                 return "Unable to generate keyboard event"
+            case .secureFieldUnsupported:
+                return "Cannot insert dictated text into a secure field"
             }
         }
+    }
+
+    /// Fallback used when verified Accessibility insertion is not available.
+    enum InsertionStrategy: Equatable {
+        /// Stage text on the clipboard and paste with Cmd+V. Default.
+        case clipboardPaste
+        /// Synthesize the text as keyboard input via CGEvent Unicode. Never touches
+        /// the clipboard; for apps where AX and paste are unreliable (remote
+        /// desktops, terminals, some Electron/web areas).
+        case keyboardTypeOut
     }
 
     var pasteboardProvider: () -> NSPasteboard = { .general }
@@ -41,6 +54,15 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     var keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)?
     var pasteKeyCodeProvider: (() -> CGKeyCode?)?
     var clipboardRestoreDelay: TimeInterval = 0.45
+    /// Resolves the fallback strategy per insertion (e.g. from the frontmost app).
+    /// Defaults to `.clipboardPaste` when unset, preserving prior behavior.
+    var insertionStrategyProvider: (() -> InsertionStrategy)?
+    /// Injection seam for keyboard type-out (mirrors `keyPoster`).
+    var unicodeTyper: ((String) throws -> Void)?
+    /// Injection seam for reading a pasteboard's change count (default reads live).
+    var clipboardChangeCountProvider: ((NSPasteboard) -> Int)?
+    /// Injection seam for secure-field detection (default reads the focused element).
+    var secureFieldDetector: (() -> Bool)?
 
     func captureInsertionContext() -> TextInsertionContext? {
         guard let focusedElement = getFocusedTextElement(),
@@ -80,26 +102,105 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     }
 
     func insertText(_ text: String) throws {
+        // Tier 0: never stage or type a transcription into a secure (password) field.
+        if isFocusedFieldSecure() {
+            AppLogger.shared.log(.warning, "text insertion skipped: focused field is secure")
+            throw InsertError.secureFieldUnsupported
+        }
+
+        // Tier 1: verified Accessibility value insertion (clipboard-free, preferred).
         if insertDirectlyIntoFocusedTextElement(text) {
             return
         }
 
+        // Tier 2/3: fallback chosen per app.
+        switch insertionStrategyProvider?() ?? .clipboardPaste {
+        case .clipboardPaste:
+            try pasteViaClipboard(text)
+        case .keyboardTypeOut:
+            try typeOut(text)
+        }
+    }
+
+    private func pasteViaClipboard(_ text: String) throws {
         let pasteboard = pasteboardProvider()
         let previousItems = Self.clipboardSnapshot(from: pasteboard.pasteboardItems ?? [])
 
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        let stampedChangeCount = changeCount(of: pasteboard)
 
-        scheduleClipboardRestore(previousItems, to: pasteboard)
+        // Scheduled before posting the paste key so a throw from postKey still restores.
+        scheduleClipboardRestore(previousItems, to: pasteboard, expectedChangeCount: stampedChangeCount)
 
         try postKey(pasteKeyCode(), flags: .maskCommand)
     }
 
-    private func scheduleClipboardRestore(_ previousItems: ClipboardSnapshot, to pasteboard: NSPasteboard) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + clipboardRestoreDelay) {
+    private func changeCount(of pasteboard: NSPasteboard) -> Int {
+        clipboardChangeCountProvider?(pasteboard) ?? pasteboard.changeCount
+    }
+
+    private func scheduleClipboardRestore(
+        _ previousItems: ClipboardSnapshot,
+        to pasteboard: NSPasteboard,
+        expectedChangeCount: Int
+    ) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + clipboardRestoreDelay) { [weak self] in
+            guard let self else { return }
+            // Cmd+V reads the pasteboard (no changeCount bump); a user Cmd+C writes to
+            // it (bump). If the count moved, someone else owns the clipboard now — do
+            // not clobber their copy.
+            let current = self.changeCount(of: pasteboard)
+            guard current == expectedChangeCount else {
+                AppLogger.shared.log(.info, "clipboard restore skipped: changeCount \(expectedChangeCount)->\(current)")
+                return
+            }
             pasteboard.clearContents()
             pasteboard.writeObjects(Self.pasteboardItems(from: previousItems))
         }
+    }
+
+    private func typeOut(_ text: String) throws {
+        if let unicodeTyper {
+            try unicodeTyper(text)
+            return
+        }
+        for chunk in Self.unicodeChunks(for: text, maxChunkUTF16: 20) {
+            try postUnicodeChunk(chunk)
+        }
+    }
+
+    private func postUnicodeChunk(_ chunk: [UniChar]) throws {
+        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) else {
+            throw InsertError.cannotCreateEvent
+        }
+        chunk.withUnsafeBufferPointer { buffer in
+            down.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+            up.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+        }
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+    }
+
+    /// Splits `text` into UTF-16 chunks no larger than `maxChunkUTF16`, never
+    /// splitting a Swift `Character`, so a surrogate pair / grapheme cluster is never
+    /// broken across CGEvent buffers.
+    static func unicodeChunks(for text: String, maxChunkUTF16: Int) -> [[UniChar]] {
+        var chunks: [[UniChar]] = []
+        var current: [UniChar] = []
+        for character in text {
+            let units = Array(String(character).utf16)
+            if !current.isEmpty, current.count + units.count > maxChunkUTF16 {
+                chunks.append(current)
+                current = []
+            }
+            current.append(contentsOf: units)
+        }
+        if !current.isEmpty {
+            chunks.append(current)
+        }
+        return chunks
     }
 
     func submitActiveInput() throws {
@@ -123,6 +224,16 @@ final class TextInsertionService: TextInsertionServiceProtocol {
             return focusedTextElementProvider()
         }
 
+        guard let element = copyFocusedElement(), Self.isTextInputElement(element) else {
+            return nil
+        }
+        return element
+    }
+
+    /// Copies the system-wide focused UI element of any role, or nil when
+    /// Accessibility is untrusted or nothing focused. The force-cast is guarded by
+    /// an explicit `AXUIElement` type-ID check (the idiomatic pattern for CF types).
+    private func copyFocusedElement() -> AXUIElement? {
         guard AXIsProcessTrusted() else {
             return nil
         }
@@ -130,19 +241,45 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         let systemWide = AXUIElementCreateSystemWide()
         var focusedElement: AnyObject?
         guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement) == .success,
-              let focusedElement else {
+              let focusedElement,
+              CFGetTypeID(focusedElement) == AXUIElementGetTypeID() else {
             return nil
         }
+        return (focusedElement as! AXUIElement)
+    }
 
-        let element = focusedElement as! AXUIElement
-        guard Self.isTextInputElement(element) else {
-            return nil
+    /// True when the focused field is a secure/password field. Uses the injected
+    /// detector when present, otherwise reads the focused element's role/subrole.
+    private func isFocusedFieldSecure() -> Bool {
+        if let secureFieldDetector {
+            return secureFieldDetector()
         }
+        guard let element = copyFocusedElement() else {
+            return false
+        }
+        return Self.isSecureTextElement(element)
+    }
 
-        return element
+    private static func isSecureTextElement(_ element: AXUIElement) -> Bool {
+        var roleValue: AnyObject?
+        if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
+           (roleValue as? String) == "AXSecureTextField" {
+            return true
+        }
+        var subroleValue: AnyObject?
+        if AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subroleValue) == .success,
+           (subroleValue as? String) == (kAXSecureTextFieldSubrole as String) {
+            return true
+        }
+        return false
     }
 
     private static func isTextInputElement(_ element: AXUIElement) -> Bool {
+        // Never AX-write into a secure field, even if a new editable role slips in below.
+        if isSecureTextElement(element) {
+            return false
+        }
+
         var roleValue: AnyObject?
         guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
               let role = roleValue as? String else {

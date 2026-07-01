@@ -314,6 +314,15 @@ final class AppState {
             onStateChange?()
         }
     }
+    var keyboardSimulationEnabled = true {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
     var echoCancellationEnabled = false {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -2939,6 +2948,10 @@ final class AppState {
                         finalText,
                         insertionContext: textInsertionService.captureInsertionContext()
                     )
+                    // Resolve the per-app fallback strategy on the MainActor and hand the
+                    // service a value-capturing closure (no actor-isolation crossing).
+                    let insertionStrategy = resolveInsertionStrategy()
+                    (textInsertionService as? TextInsertionService)?.insertionStrategyProvider = { insertionStrategy }
                     try textInsertionService.insertText(insertionText)
                     beginEditLearningTracking(insertedText: insertionText)
                     recentResults.insert(
@@ -2996,7 +3009,13 @@ final class AppState {
             setFloatingIndicatorState(.idle)
         } catch {
             clearActiveDictationSession(sessionID: sessionID)
-            lastError = "Transcription failed: \(error.localizedDescription)"
+            if let insertError = error as? TextInsertionService.InsertError, insertError == .secureFieldUnsupported {
+                // Dictation succeeded; we intentionally never type/paste into password fields.
+                lastError = "Dictation isn't inserted into password fields."
+                playSoundFeedback(.error)
+            } else {
+                lastError = "Transcription failed: \(error.localizedDescription)"
+            }
             if destination == .onboardingPractice {
                 onboardingPracticeText = ""
                 onboardingPracticeResult = OnboardingPracticeResult(
@@ -3080,6 +3099,7 @@ final class AppState {
         selectedASRModelID = settings.selectedASRModelID
         updateChannel = settings.updateChannel
         accessibilityDragHelperEnabled = settings.accessibilityDragHelperEnabled
+        keyboardSimulationEnabled = settings.keyboardSimulationEnabled
         hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
         hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
         isHydratingGeneralSettings = false
@@ -3105,7 +3125,44 @@ final class AppState {
             hasCompletedCoreOnboarding: hasCompletedCoreOnboarding,
             selectedASRModelID: selectedASRModelID,
             updateChannel: updateChannel,
-            accessibilityDragHelperEnabled: accessibilityDragHelperEnabled
+            accessibilityDragHelperEnabled: accessibilityDragHelperEnabled,
+            keyboardSimulationEnabled: keyboardSimulationEnabled
+        )
+    }
+
+    // MARK: - Keyboard-simulation insertion strategy
+
+    /// Apps where Accessibility insertion and clipboard paste are unreliable, so
+    /// dictation is typed out as synthesized keystrokes instead. Remote desktops and
+    /// virtualization forward keystrokes to a guest where the clipboard/AX don't bridge.
+    nonisolated static let keyboardSimulationDefaultBundleIDs: Set<String> = [
+        "com.parsecgaming.parsec",        // Parsec
+        "com.microsoft.rdc.macos",        // Microsoft Remote Desktop
+        "com.teamviewer.TeamViewer",      // TeamViewer
+        "com.realvnc.vncviewer",          // RealVNC Viewer
+        "com.jumpdesktop.viewer",         // Jump Desktop
+        "com.parallels.desktop.console",  // Parallels Desktop
+        "com.vmware.fusion",              // VMware Fusion
+        "com.utmapp.UTM",                 // UTM
+    ]
+
+    /// Pure resolution of the fallback insertion strategy (unit-testable).
+    nonisolated static func keyboardSimulationStrategy(
+        enabled: Bool,
+        frontmostBundleID: String?,
+        allowlist: Set<String>
+    ) -> TextInsertionService.InsertionStrategy {
+        guard enabled, let bundleID = frontmostBundleID, allowlist.contains(bundleID) else {
+            return .clipboardPaste
+        }
+        return .keyboardTypeOut
+    }
+
+    private func resolveInsertionStrategy() -> TextInsertionService.InsertionStrategy {
+        Self.keyboardSimulationStrategy(
+            enabled: keyboardSimulationEnabled,
+            frontmostBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            allowlist: Self.keyboardSimulationDefaultBundleIDs
         )
     }
 

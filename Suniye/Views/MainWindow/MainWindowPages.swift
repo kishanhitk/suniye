@@ -515,6 +515,18 @@ struct GeneralPage: View {
             }
 
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Text Insertion")
+
+                SurfaceCard {
+                    SettingsToggleRow(
+                        title: "Keyboard simulation for incompatible apps",
+                        detail: "For apps where normal insertion fails — remote desktops (Parsec, VNC), virtualization, and similar — type dictation as simulated keystrokes instead of pasting. Never uses the clipboard; other apps are unaffected.",
+                        isOn: $appState.keyboardSimulationEnabled
+                    )
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
                 SectionHeading(title: "Startup")
 
                 SurfaceCard {
