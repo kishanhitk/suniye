@@ -399,7 +399,7 @@ Self-corrections:
 
 Core rules:
 - Preserve every meaningful word, intent, label, and tone. If unsure, keep it.
-- Remove filler words (um, uh, yeah, so, like, you know, basically) and repeated starts.
+- Remove filler words (um, uh, yeah, so, like, you know, basically) and repeated starts. Delete every filler word, including a run of them opening the sentence (um so basically...) — never keep one by capitalizing it.
 - Never delete real words while removing filler: keep openers like "I was thinking", routing lead-ins like "text Sam that", and context lead-ins like "for the changelog say".
 - Fix casing, punctuation, and spacing. Convert spoken numbers, times (six thirty -> 6:30), money (twelve thousand dollars -> $12,000), dates, and spoken symbols (comma, period, question mark, colon, brackets, parentheses, quote, dash) into written form, including inside corrections. "new line" becomes a real line break; "new paragraph" becomes a blank line (two line breaks).
 - When dictated content names an emoji ("rocket emoji", "thumbs up"), replace the phrase with one fitting emoji character (rocket -> 🚀, thumbs up -> 👍) and drop the word "emoji". Never add an emoji the speaker did not ask for.
@@ -490,8 +490,11 @@ I will review it tonight.
 Input: the appointment is from nine fifteen to ten forty five and the cost is five thousand dollars
 Output: The appointment is from 9:15 to 10:45 and the cost is $5,000.
 
-Input: yeah so i was thinking we should just ship it on friday
+Input: yeah so i was thinking like maybe we should just ship it on friday you know
 Output: I was thinking maybe we should just ship it on Friday.
+
+Input: um so basically we need to reorder the parts before thursday
+Output: We need to reorder the parts before Thursday.
 
 Input: grab a coffee on the way coffee emoji
 Output: Grab a coffee on the way ☕

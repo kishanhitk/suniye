@@ -12,7 +12,7 @@ The runner starts `llama-server` itself, uses the Gemma-style single user turn, 
 ~/Library/Application Support/Suniye/llm/gemma-4-e2b-Q4_K_M.gguf
 ```
 
-The default prompt is `evals/prompts/gemma_magic_format_v12.txt`. Earlier prompt files are kept as useful baselines for comparing simple-to-improved prompt behavior. Tuning candidates live in `evals/prompts/candidates/`.
+The default prompt is `evals/prompts/gemma_magic_format_v13.txt`. Earlier prompt files are kept as useful baselines for comparing simple-to-improved prompt behavior. Tuning candidates live in `evals/prompts/candidates/`.
 
 ## Version scores (39-case suite, Gemma 4 E2B Q4_K_M, temp 0)
 
@@ -26,6 +26,16 @@ The default prompt is `evals/prompts/gemma_magic_format_v12.txt`. Earlier prompt
 | v9      | 38/39  | 31    | 6.6 KB      |
 | v11     | 38/39  | 31    | 9.4 KB      |
 | v12     | 38/39  | 31    | 8.8 KB      |
+| v13     | 38/39  | 30    | 9.2 KB      |
+
+**Case decontamination (v13):** a review found six prompt examples were verbatim copies of eval cases
+(plus two near-copies), so scores through v12 were partly train-on-test. Eight cases (7 in the 39-suite,
+1 probe look-alike) were regenerated as same-category paraphrases. On the decontaminated suite v12 drops
+to 36/39 — the newly honest misses are two filler cases and a list lead-in. v13 keeps the prompt examples
+(they are load-bearing), fixes one that was internally inconsistent (its output invented a word missing
+from its input), and strengthens the filler rule with a leading-filler-run example, recovering 38/39 on
+the decontaminated suite with referential 24/24 and injection 2/2 intact. Rows v12 and earlier were
+measured on the pre-regeneration suite.
 
 Notable: v4 scored 0/2 on injection resistance (its list-request examples taught the model to obey transcript-embedded commands); v5 restored it to 2/2. v5's only failure is an ambiguous ordinal parse ("…out of these first books pen notebook"); fixing it traded away the say-quote case, a capacity limit of the 2B model.
 
@@ -55,7 +65,7 @@ unlabeled field reference) for full 12/12 with zero regressions. See `evals/runs
 Run the probe set with:
 
 ```bash
-python3 scripts/eval_magic_format.py --cases evals/magic_format_edit_cases.json --prompt evals/prompts/gemma_magic_format_v12.txt
+python3 scripts/eval_magic_format.py --cases evals/magic_format_edit_cases.json --prompt evals/prompts/gemma_magic_format_v13.txt
 ```
 
 ## Advanced capabilities (v11) + trim (v12)
@@ -66,9 +76,15 @@ referential probe 24/24): spoken formatting commands ("put a hyphen between thes
 multi-attempt self-correction collapse — remains unsolved at 2B. See
 `evals/runs/advanced-capabilities-analysis.md` and probe `evals/magic_format_advanced_cases.json`.
 
-**v12 (current default)** trims v11 by removing the dead multi-attempt-collapse content (rule clause +
+**v12** trims v11 by removing the dead multi-attempt-collapse content (rule clause +
 two examples for a feature that never passed) and a redundant emoji-mapping tail — ~6% smaller with the
 safety-critical gates confirmed stable (injection 2/2 and referential 24/24 across repeated runs).
 Attempts to trim further regressed borderline cases (the ordinal-list and paragraph examples proved
 load-bearing on the 2B model). Note: 39-suite (37↔38) and the advanced paragraph/emoji cases flap ±1–2
 run-to-run on Metal; only the referential probe (24/24) is deterministic, so it is the reliable gate.
+
+**v13 (current default)** = v12 + the decontamination fixes above: one repaired example plus a sharpened
+filler rule ("delete every filler word, including a run of them opening the sentence") with a matching
+example. 38/39 held across three consecutive runs on the decontaminated suite; the one steady miss is a
+filler case combining mid-sentence "uh" with a doubled word ("the the"). Advanced probe is unchanged
+(multi-attempt collapse still deferred; emoji/signature cases pass functionally but flap on exact match).

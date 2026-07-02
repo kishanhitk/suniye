@@ -71,7 +71,6 @@
     "input": "let's do lunch at the cafe actually change the place to the rooftop",
     "expected": "Let's do lunch at the rooftop."
   },
-
   {
     "id": "edit_lookalike_route_001",
     "category": "edit_lookalike_content",
@@ -105,8 +104,8 @@
   {
     "id": "edit_lookalike_reported_006",
     "category": "edit_lookalike_content",
-    "input": "she said change the amount to sixty thousand",
-    "expected": "She said change the amount to sixty thousand."
+    "input": "he said change the budget to forty thousand",
+    "expected": "He said change the budget to forty thousand."
   },
   {
     "id": "edit_lookalike_reported_007",
