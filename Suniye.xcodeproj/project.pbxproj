@@ -61,6 +61,7 @@
 		6BADE038613593570D9E1F5F /* AppStateLLMTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D89C1656C10C1E6D3921D81 /* AppStateLLMTests.swift */; };
 		6CED932755ECE82560241EC0 /* IssueReportServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90D5B82089314B9767C0F6D /* IssueReportServiceTests.swift */; };
 		70911BA331D12E52A95C209F /* AppVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62E23E5D4CD3C127DD7F39C /* AppVersionTests.swift */; };
+		754F27F059617786F9E079B1 /* EditModeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 653DD6CC674F7EC21C812AC6 /* EditModeService.swift */; };
 		7739558005EE588E176936C5 /* MagicFormatPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A43576952A870136E63581 /* MagicFormatPage.swift */; };
 		775525A23D0120E0D562F6DE /* IssueReportWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A40680D7D6D6D80DF33509F /* IssueReportWindowController.swift */; };
 		7EB9B5550B0A955CDFC3FC17 /* LLMSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2C954DD9B2466B271CC6A1D /* LLMSettingsStoreTests.swift */; };
@@ -189,6 +190,7 @@
 		612ADA3D26971DBD5CC4369B /* EditLearning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditLearning.swift; sourceTree = "<group>"; };
 		626CB9CE980C310ED49F770F /* TranscriptionServiceE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionServiceE2ETests.swift; sourceTree = "<group>"; };
 		633F09E2901A308614E595B1 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
+		653DD6CC674F7EC21C812AC6 /* EditModeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditModeService.swift; sourceTree = "<group>"; };
 		667CD8D078A7298D136D4BC5 /* AppStateEditLearningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateEditLearningTests.swift; sourceTree = "<group>"; };
 		66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStoreTests.swift; sourceTree = "<group>"; };
 		6A3F45C96538887F8FF79E57 /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
@@ -448,6 +450,7 @@
 				74358CCAA04D28E170CC02C2 /* CoreAudioDeviceMonitor.swift */,
 				612ADA3D26971DBD5CC4369B /* EditLearning.swift */,
 				A99390B0C1FFE4B2791DA2BC /* EditLearningService.swift */,
+				653DD6CC674F7EC21C812AC6 /* EditModeService.swift */,
 				D3161CA1497B7EEA0FB2CE36 /* GeneralSettingsStore.swift */,
 				9E2ECDB4CFB11C5B9831460F /* HistoryStore.swift */,
 				34CC65DD3994740D7F4B27AB /* HotkeyService.swift */,
@@ -627,6 +630,7 @@
 				4F37908DEC15B105CAD05C4F /* CoreAudioDeviceMonitor.swift in Sources */,
 				0A63B97243811A96C593B4B7 /* EditLearning.swift in Sources */,
 				928A4D6D164E3C5432A6FBD0 /* EditLearningService.swift in Sources */,
+				754F27F059617786F9E079B1 /* EditModeService.swift in Sources */,
 				D70B86338C771C5459B2AEC4 /* FloatingIndicatorController.swift in Sources */,
 				C6D9D80335069A671A66A11A /* FloatingIndicatorState.swift in Sources */,
 				F9F0D01CE511EF8AE268DC8A /* FloatingIndicatorView.swift in Sources */,

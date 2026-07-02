@@ -4,6 +4,7 @@ enum FloatingIndicatorState: Equatable {
     enum Source: String, Equatable {
         case hotkey
         case manual
+        case editHotkey
     }
 
     case idle

@@ -508,15 +508,34 @@ func makeValidCapturedAudio(sampleRate: Int = 16_000) -> CapturedAudio {
 final class StubHotkeyService: HotkeyServiceProtocol {
     var onHotkeyDown: (() -> Void)?
     var onHotkeyUp: (() -> Void)?
+    var onEditModeHotkeyDown: (() -> Void)?
+    var onEditModeHotkeyUp: (() -> Void)?
     private(set) var startMonitoringCallCount = 0
     private(set) var lastConfiguration: HotkeyConfiguration?
+    private(set) var lastEditModeConfiguration: HotkeyConfiguration?
 
-    func startMonitoring(configuration: HotkeyConfiguration) {
+    func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?) {
         startMonitoringCallCount += 1
         lastConfiguration = configuration
+        lastEditModeConfiguration = editModeConfiguration
     }
 
     func stopMonitoring() {}
+}
+
+@MainActor
+final class StubEditModeSelectionProvider: EditModeSelectionProviding {
+    var selection: String?
+    private(set) var captureCallCount = 0
+
+    init(selection: String? = nil) {
+        self.selection = selection
+    }
+
+    func captureSelectedText() async -> String? {
+        captureCallCount += 1
+        return selection
+    }
 }
 
 final class StubLaunchAtLoginService: LaunchAtLoginServiceProtocol {
@@ -610,6 +629,7 @@ func makeTestAppState(
     transcriptionService: TranscriptionServiceProtocol = StubTranscriptionService(),
     audioCaptureService: AudioCaptureServiceProtocol = StubAudioCaptureService(),
     textInsertionService: TextInsertionServiceProtocol = SpyTextInsertionService(),
+    editModeSelectionProvider: EditModeSelectionProviding? = nil,
     hotkeyService: HotkeyServiceProtocol = StubHotkeyService(),
     soundFeedbackService: SoundFeedbackServiceProtocol = SpySoundFeedbackService(),
     llmPostProcessor: LLMPostProcessor = NoopLLMPostProcessor(),
@@ -645,6 +665,7 @@ func makeTestAppState(
         transcriptionService: transcriptionService,
         audioCaptureService: audioCaptureService,
         textInsertionService: textInsertionService,
+        editModeSelectionProvider: editModeSelectionProvider ?? StubEditModeSelectionProvider(),
         hotkeyService: hotkeyService,
         soundFeedbackService: soundFeedbackService,
         llmPostProcessor: llmPostProcessor,

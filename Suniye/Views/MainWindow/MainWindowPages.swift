@@ -464,6 +464,20 @@ struct GeneralPage: View {
                         Text("Works from any app. Hold the shortcut to record, release to transcribe.")
                             .font(AppTypography.subheadline)
                             .foregroundStyle(MainWindowPalette.secondaryText)
+                        CardDivider()
+                        HStack(spacing: 12) {
+                            Text("Hold to Edit Selection")
+                                .font(AppTypography.body)
+                            Spacer(minLength: 12)
+                            EditModeHotkeyRecorderButton(
+                                configuration: $appState.editModeHotkeyConfiguration,
+                                reservedConfiguration: appState.hotkeyConfiguration
+                            )
+                        }
+                        CardDivider()
+                        Text("Select text in any app, hold the shortcut, and speak an instruction like \"make this formal\". With nothing selected, the spoken instruction generates text at the cursor. Requires Magic Format.")
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
                     }
                 }
             }
@@ -691,6 +705,88 @@ private struct HotkeyRecorderButton: View {
             }
 
             if let captured = HotkeyConfiguration.from(event: event) {
+                configuration = captured
+                stopCapturing()
+                return nil
+            }
+
+            return event
+        }
+    }
+
+    private func stopCapturing() {
+        if let localMonitor {
+            NSEvent.removeMonitor(localMonitor)
+            self.localMonitor = nil
+        }
+        isCapturing = false
+    }
+}
+
+private struct EditModeHotkeyRecorderButton: View {
+    @Binding var configuration: HotkeyConfiguration?
+    let reservedConfiguration: HotkeyConfiguration
+    @State private var isCapturing = false
+    @State private var localMonitor: Any?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                toggleCapture()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isCapturing ? "record.circle" : "pencil.line")
+                        .font(.headline.weight(.medium))
+                    Text(isCapturing ? "Press shortcut" : (configuration?.displayString ?? "Not Set"))
+                        .font(AppTypography.codeBodyMedium)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(MainWindowPalette.cardBackground)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(isCapturing ? Color.accentColor.opacity(0.5) : MainWindowPalette.cardStroke, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            if configuration != nil && !isCapturing {
+                Button {
+                    configuration = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .help("Remove the Edit Mode shortcut")
+            }
+        }
+        .onDisappear {
+            stopCapturing()
+        }
+    }
+
+    private func toggleCapture() {
+        if isCapturing {
+            stopCapturing()
+        } else {
+            startCapturing()
+        }
+    }
+
+    private func startCapturing() {
+        isCapturing = true
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+            if event.keyCode == UInt16(kVK_Escape) {
+                stopCapturing()
+                return nil
+            }
+
+            // Reject the dictation shortcut so the two slots can't collide.
+            if let captured = HotkeyConfiguration.from(event: event), captured != reservedConfiguration {
                 configuration = captured
                 stopCapturing()
                 return nil
