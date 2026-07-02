@@ -1,0 +1,198 @@
+import XCTest
+@testable import Suniye
+
+@MainActor
+final class AppStateLivePreviewTests: XCTestCase {
+    func testPartialTranscriptsPublishInOrderWhileRecording() async throws {
+        // A huge interval keeps the loop quiet so ticks are driven deterministically.
+        let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
+        let audioCapture = StubAudioCaptureService()
+        let transcription = StubTranscriptionService()
+        transcription.scriptedTranscribeResults = [.success("hello"), .success("hello world")]
+        let started = expectation(description: "capture started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcription: transcription,
+            scheduler: scheduler
+        )
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [started], timeout: 1)
+        await drainScheduledTasks()
+        XCTAssertTrue(scheduler.isActive)
+
+        await scheduler.tickNow()
+        XCTAssertEqual(appState.livePartialTranscript, "hello")
+
+        await scheduler.tickNow()
+        XCTAssertEqual(appState.livePartialTranscript, "hello world")
+        XCTAssertEqual(audioCapture.lastSnapshotMaxDurationSeconds, PartialTranscriptionScheduler.maxWindowSeconds)
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .listening(
+                levels: Array(repeating: 0, count: AudioLevelMeter.bandCount),
+                source: .manual,
+                preview: "hello world"
+            )
+        )
+    }
+
+    func testLatePartialAfterStopDoesNotClobberFinalTranscript() async throws {
+        let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcription = StubTranscriptionService()
+        transcription.scriptedTranscribeResults = [.success("stale partial"), .success("final text")]
+        let gate = AsyncGate()
+        let partialDecodeStarted = expectation(description: "partial decode started")
+        transcription.onTranscribeAwait = { callNumber in
+            guard callNumber == 1 else { return }
+            partialDecodeStarted.fulfill()
+            await gate.wait()
+        }
+        let textInsertion = SpyTextInsertionService()
+        let started = expectation(description: "capture started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcription: transcription,
+            textInsertion: textInsertion,
+            scheduler: scheduler
+        )
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [started], timeout: 1)
+        await drainScheduledTasks()
+
+        // A partial decode is in flight when the user stops.
+        let blockedTick = Task { await scheduler.tickNow() }
+        await fulfillment(of: [partialDecodeStarted], timeout: 1)
+
+        appState.stopRecordingFromUI()
+        try await waitUntil { appState.phase == .ready }
+        XCTAssertEqual(textInsertion.insertedTexts.count, 1)
+        XCTAssertTrue(try XCTUnwrap(textInsertion.insertedTexts.first).contains("final text"))
+
+        // The stale partial finishes only now; it must be dropped entirely.
+        gate.open()
+        await blockedTick.value
+        await drainScheduledTasks()
+
+        XCTAssertNil(appState.livePartialTranscript)
+        XCTAssertEqual(appState.floatingIndicatorState, .idle)
+        XCTAssertEqual(textInsertion.insertedTexts.count, 1)
+        XCTAssertFalse(scheduler.isActive)
+    }
+
+    func testPreviewDisabledLeavesFinalTranscriptionPathUnchanged() async throws {
+        let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcription = StubTranscriptionService()
+        transcription.transcribeResult = .success("final text")
+        let textInsertion = SpyTextInsertionService()
+        let started = expectation(description: "capture started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcription: transcription,
+            textInsertion: textInsertion,
+            scheduler: scheduler
+        )
+        appState.liveTranscriptionPreviewEnabled = false
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [started], timeout: 1)
+        await drainScheduledTasks()
+        XCTAssertFalse(scheduler.isActive)
+        await scheduler.tickNow()
+        XCTAssertEqual(transcription.transcribeCallCount, 0)
+        XCTAssertNil(appState.livePartialTranscript)
+
+        appState.stopRecordingFromUI()
+        try await waitUntil { appState.phase == .ready }
+
+        XCTAssertEqual(transcription.transcribeCallCount, 1)
+        XCTAssertEqual(audioCapture.snapshotCallCount, 0)
+        XCTAssertEqual(textInsertion.insertedTexts.count, 1)
+        XCTAssertTrue(try XCTUnwrap(textInsertion.insertedTexts.first).contains("final text"))
+    }
+
+    func testCaptureInterruptionClearsPartialTranscript() async throws {
+        let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
+        let audioCapture = StubAudioCaptureService()
+        let transcription = StubTranscriptionService()
+        transcription.transcribeResult = .success("partial words")
+        let started = expectation(description: "capture started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcription: transcription,
+            scheduler: scheduler
+        )
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [started], timeout: 1)
+        await drainScheduledTasks()
+        await scheduler.tickNow()
+        XCTAssertEqual(appState.livePartialTranscript, "partial words")
+
+        let sessionID = try XCTUnwrap(audioCapture.lastStartedSessionID)
+        audioCapture.onEvent?(.interrupted(sessionID: sessionID, reason: .inputMuted))
+        try await waitUntil { appState.phase == .ready }
+
+        XCTAssertNil(appState.livePartialTranscript)
+        XCTAssertFalse(scheduler.isActive)
+    }
+
+    func testLiveTranscriptionPreviewSettingPersistsAndDefaultsOn() {
+        let settingsStore = TestGeneralSettingsStore()
+        let appState = makeTestAppState(generalSettingsStore: settingsStore)
+
+        XCTAssertTrue(appState.liveTranscriptionPreviewEnabled)
+
+        appState.liveTranscriptionPreviewEnabled = false
+        XCTAssertFalse(settingsStore.latest.liveTranscriptionPreviewEnabled)
+
+        appState.liveTranscriptionPreviewEnabled = true
+        XCTAssertTrue(settingsStore.latest.liveTranscriptionPreviewEnabled)
+    }
+
+    private func readyAppState(
+        audioCapture: StubAudioCaptureService,
+        transcription: StubTranscriptionService,
+        textInsertion: SpyTextInsertionService = SpyTextInsertionService(),
+        scheduler: PartialTranscriptionScheduler
+    ) -> AppState {
+        let appState = makeTestAppState(
+            transcriptionService: transcription,
+            audioCaptureService: audioCapture,
+            textInsertionService: textInsertion,
+            partialTranscriptionScheduler: scheduler
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        return appState
+    }
+
+    private func drainScheduledTasks() async {
+        for _ in 0 ..< 8 {
+            await Task.yield()
+        }
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 2,
+        _ condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            guard Date() < deadline else {
+                throw FakeError(message: "condition not met within \(timeout)s")
+            }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+}

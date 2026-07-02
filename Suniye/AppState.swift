@@ -346,6 +346,18 @@ final class AppState {
             onStateChange?()
         }
     }
+    var liveTranscriptionPreviewEnabled = true {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            guard oldValue != liveTranscriptionPreviewEnabled else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
     /// Kill switch for the Permiso drag-to-grant Accessibility overlay.
     /// When false, the Accessibility buttons fall back to the System Settings deep-link.
     var accessibilityDragHelperEnabled = true {
@@ -1193,7 +1205,7 @@ final class AppState {
 
     var onboardingPracticeLevels: [Float] {
         switch floatingIndicatorState {
-        case let .listening(levels, _):
+        case let .listening(levels, _, _):
             return levels
         default:
             return Self.defaultIndicatorLevels(level: 0.08)
@@ -1343,6 +1355,9 @@ final class AppState {
 
     var onStateChange: (() -> Void)?
     var floatingIndicatorState: FloatingIndicatorState = .idle
+    /// Tail of the in-progress transcript shown in the floating indicator while
+    /// recording. Cleared on stop, insert, and every error path.
+    private(set) var livePartialTranscript: String?
 
     private let modelManager: ModelManagerProtocol
     private let transcriptionService: TranscriptionServiceProtocol
@@ -1351,6 +1366,7 @@ final class AppState {
     private let editModeSelectionProvider: EditModeSelectionProviding
     private let hotkeyService: HotkeyServiceProtocol
     private let soundFeedbackService: SoundFeedbackServiceProtocol
+    private let partialTranscriptionScheduler: PartialTranscriptionScheduler
     private let floatingIndicatorController = FloatingIndicatorController()
     private let llmPostProcessor: LLMPostProcessor
     private let appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
@@ -1426,6 +1442,7 @@ final class AppState {
         editModeSelectionProvider: EditModeSelectionProviding? = nil,
         hotkeyService: HotkeyServiceProtocol = HotkeyService(),
         soundFeedbackService: SoundFeedbackServiceProtocol = SoundFeedbackService(),
+        partialTranscriptionScheduler: PartialTranscriptionScheduler? = nil,
         llmPostProcessor: LLMPostProcessor = OpenRouterPostProcessor(),
         appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor = AppleFoundationModelsPostProcessor(),
         localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor? = nil,
@@ -1469,6 +1486,7 @@ final class AppState {
         self.editModeSelectionProvider = editModeSelectionProvider ?? EditModeService()
         self.hotkeyService = hotkeyService
         self.soundFeedbackService = soundFeedbackService
+        self.partialTranscriptionScheduler = partialTranscriptionScheduler ?? PartialTranscriptionScheduler()
         self.llmPostProcessor = llmPostProcessor
         self.appleMagicFormatPostProcessor = appleMagicFormatPostProcessor
         self.localLLMModelManager = localLLMModelManager
@@ -3047,6 +3065,7 @@ final class AppState {
                 activeDictationSession = .recording(context)
             }
             audioRouteSnapshot = session.route
+            startLivePreview(sessionID: sessionID)
             AppLogger.shared.log(.info, "recording started session=\(sessionID.uuidString) \(session.route.privacySafeLogValue)")
         } catch {
             guard activeAudioCaptureSessionID == sessionID else {
@@ -3070,6 +3089,7 @@ final class AppState {
         }
         let sessionID = context.id
 
+        stopLivePreview()
         activeDictationSession = .transcribing(context)
         phase = .transcribing
         statusText = "Transcribing..."
@@ -3374,6 +3394,7 @@ final class AppState {
         echoCancellationEnabled = settings.echoCancellationEnabled
         soundFeedbackEnabled = settings.soundFeedbackEnabled
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
+        liveTranscriptionPreviewEnabled = settings.liveTranscriptionPreviewEnabled
         floatingIndicatorPlacement = settings.floatingIndicatorPlacement
         selectedASRModelID = settings.selectedASRModelID
         updateChannel = settings.updateChannel
@@ -3403,6 +3424,7 @@ final class AppState {
             echoCancellationEnabled: echoCancellationEnabled,
             soundFeedbackEnabled: soundFeedbackEnabled,
             hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,
+            liveTranscriptionPreviewEnabled: liveTranscriptionPreviewEnabled,
             floatingIndicatorPlacement: floatingIndicatorPlacement,
             hasSeenOnboardingWelcome: hasSeenOnboardingWelcome,
             hasCompletedCoreOnboarding: hasCompletedCoreOnboarding,
@@ -3735,8 +3757,8 @@ final class AppState {
     private func blockedStartRestoreIndicatorState() -> FloatingIndicatorState {
         switch phase {
         case .recording:
-            if case let .listening(levels, source) = floatingIndicatorState {
-                return .listening(levels: levels, source: source)
+            if case let .listening(levels, source, preview) = floatingIndicatorState {
+                return .listening(levels: levels, source: source, preview: preview)
             }
             return .listening(
                 levels: Self.defaultIndicatorLevels(level: 0.72),
@@ -3764,6 +3786,48 @@ final class AppState {
             return
         }
         activeDictationSession = nil
+        stopLivePreview()
+    }
+
+    private func startLivePreview(sessionID: UUID) {
+        guard liveTranscriptionPreviewEnabled, phase == .recording, activeAudioCaptureSessionID == sessionID else {
+            return
+        }
+        let audioCaptureService = audioCaptureService
+        let transcriptionService = transcriptionService
+        partialTranscriptionScheduler.start(
+            snapshotProvider: {
+                guard let snapshot = await audioCaptureService.snapshotSamples(
+                    sessionID: sessionID,
+                    maxDurationSeconds: PartialTranscriptionScheduler.maxWindowSeconds
+                ) else {
+                    return nil
+                }
+                return (snapshot.samples, snapshot.sampleRate)
+            },
+            decode: { samples, sampleRate in
+                try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
+            },
+            onPartial: { [weak self] text in
+                self?.publishLivePartialTranscript(text, sessionID: sessionID)
+            }
+        )
+    }
+
+    private func stopLivePreview() {
+        partialTranscriptionScheduler.stop()
+        livePartialTranscript = nil
+    }
+
+    private func publishLivePartialTranscript(_ text: String, sessionID: UUID) {
+        guard phase == .recording, activeAudioCaptureSessionID == sessionID else {
+            return
+        }
+        let preview = PartialTranscriptionScheduler.previewTail(text)
+        livePartialTranscript = preview.isEmpty ? nil : preview
+        if case let .listening(levels, source, _) = floatingIndicatorState {
+            setFloatingIndicatorState(.listening(levels: levels, source: source, preview: livePartialTranscript))
+        }
     }
 
     private var isOnboardingBlockingRecordingStart: Bool {
@@ -3813,10 +3877,10 @@ final class AppState {
     }
 
     private func handleAudioLevelsUpdate(_ levels: [Float]) {
-        guard case let .listening(_, source) = floatingIndicatorState else {
+        guard case let .listening(_, source, preview) = floatingIndicatorState else {
             return
         }
-        setFloatingIndicatorState(.listening(levels: levels, source: source))
+        setFloatingIndicatorState(.listening(levels: levels, source: source, preview: preview))
     }
 
     private static func defaultIndicatorLevels(level: Float, count: Int = AudioLevelMeter.bandCount) -> [Float] {

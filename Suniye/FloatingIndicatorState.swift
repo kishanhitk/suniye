@@ -9,7 +9,7 @@ enum FloatingIndicatorState: Equatable {
 
     case idle
     case hover
-    case listening(levels: [Float], source: Source)
+    case listening(levels: [Float], source: Source, preview: String? = nil)
     case processing(message: String? = nil)
     case error(message: String)
 

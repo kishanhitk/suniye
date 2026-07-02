@@ -70,13 +70,20 @@ struct FloatingIndicatorView: View {
             EmptyView()
         case .hover:
             hoverContent
-        case let .listening(levels, source):
+        case let .listening(levels, source, preview):
             if source == .editHotkey {
                 Image(systemName: "pencil.line")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(FloatingIndicatorView.editModeTint)
             }
             ListeningMeterView(levels: levels)
+            if let preview {
+                Text(preview)
+                    .font(AppTypography.subheadlineSemibold)
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
         case let .processing(message):
             processingContent(message: message)
         case let .error(message):
@@ -126,7 +133,7 @@ struct FloatingIndicatorView: View {
         switch state {
         case .hover:
             return true
-        case let .listening(_, source):
+        case let .listening(_, source, _):
             return source == .manual
         default:
             return false
@@ -155,7 +162,7 @@ struct FloatingIndicatorView: View {
         switch state {
         case .idle:
             return Color.white.opacity(0.34)
-        case .listening(_, .editHotkey):
+        case .listening(_, .editHotkey, _):
             return FloatingIndicatorView.editModeTint.opacity(0.7)
         default:
             return Color.white.opacity(0.14)
@@ -179,10 +186,11 @@ struct FloatingIndicatorView: View {
             return 74
         case .hover:
             return 152
-        case .listening(_, .editHotkey):
-            return 150
-        case .listening:
-            return 124
+        case let .listening(_, source, preview):
+            guard let preview else {
+                return source == .editHotkey ? 150 : 124
+            }
+            return min(max(CGFloat(preview.count) * 6.5 + 96, 220), 460)
         case let .processing(message):
             guard let message else {
                 return 128

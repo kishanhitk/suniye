@@ -499,6 +499,14 @@ struct GeneralPage: View {
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
                         SettingsToggleRow(
+                            title: "Live Transcription Preview",
+                            detail: "Show the transcript in the floating indicator while you dictate. Decoding stays fully local.",
+                            isOn: $appState.liveTranscriptionPreviewEnabled
+                        )
+
+                        CardDivider()
+
+                        SettingsToggleRow(
                             title: "Hide While Idle",
                             detail: "Hide the floating indicator when Suniye is ready but not actively dictating. When hidden, floating click-to-start is unavailable until the indicator appears again for recording, processing, or errors.",
                             isOn: $appState.hideFloatingIndicatorWhenIdle
