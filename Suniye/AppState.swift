@@ -542,6 +542,9 @@ final class AppState {
     var learnFromEditsEnabled = true {
         didSet { persistLLMSettings() }
     }
+    var llmAppPromptBindings: [AppPromptBinding] = [] {
+        didSet { persistLLMSettings() }
+    }
     var llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds {
         didSet {
             let clamped = LLMDefaults.clampTimeout(llmTimeoutSeconds)
@@ -1345,6 +1348,8 @@ final class AppState {
         let source: RecordingSource
         let startedAt: Date
         let destination: DictationDestination
+        /// Bundle ID of the app the user was in when recording started, for per-app prompt routing.
+        let frontmostAppBundleID: String?
     }
 
     private enum ActiveDictationSession {
@@ -1933,6 +1938,79 @@ final class AppState {
             .filter { $0.caseInsensitiveCompare(value) != .orderedSame }
         llmKeywordsRaw = filtered.joined(separator: "\n")
         removeAutoLearnedVocabularyTerms([value])
+    }
+
+    /// Prompt used as the starting point for a new per-app binding, matching the active provider.
+    var activeMagicFormatPrompt: String {
+        if usesAppleMagicFormatSettings {
+            return llmAppleSystemPrompt
+        }
+        if usesLocalGemmaMagicFormatSettings {
+            return llmGemmaSystemPrompt
+        }
+        return llmBaseSystemPrompt
+    }
+
+    func addAppPromptBinding(bundleID: String, appDisplayName: String, prompt: String? = nil) {
+        guard let normalizedID = AppPromptResolver.normalizedBundleID(bundleID) else {
+            return
+        }
+        let trimmedBundleID = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = appDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let index = llmAppPromptBindings.firstIndex(where: { AppPromptResolver.normalizedBundleID($0.bundleID) == normalizedID }) {
+            llmAppPromptBindings[index].appDisplayName = trimmedName.isEmpty ? llmAppPromptBindings[index].appDisplayName : trimmedName
+            if let prompt {
+                llmAppPromptBindings[index].prompt = prompt
+            }
+            return
+        }
+        llmAppPromptBindings.append(
+            AppPromptBinding(
+                bundleID: trimmedBundleID,
+                appDisplayName: trimmedName.isEmpty ? trimmedBundleID : trimmedName,
+                prompt: prompt ?? activeMagicFormatPrompt
+            )
+        )
+    }
+
+    func updateAppPromptBinding(id: UUID, prompt: String) {
+        guard let index = llmAppPromptBindings.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        llmAppPromptBindings[index].prompt = prompt
+    }
+
+    func removeAppPromptBinding(id: UUID) {
+        llmAppPromptBindings.removeAll { $0.id == id }
+    }
+
+    /// Running regular apps not yet bound, offered by the per-app prompt picker.
+    func runningAppPromptBindingCandidates() -> [AppPromptBindingCandidate] {
+        let boundIDs = Set(llmAppPromptBindings.compactMap { AppPromptResolver.normalizedBundleID($0.bundleID) })
+        let ownBundleID = AppPromptResolver.normalizedBundleID(Bundle.main.bundleIdentifier)
+        var seen = Set<String>()
+        var candidates: [AppPromptBindingCandidate] = []
+        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
+            guard let bundleID = app.bundleIdentifier,
+                  let normalizedID = AppPromptResolver.normalizedBundleID(bundleID),
+                  normalizedID != ownBundleID,
+                  !boundIDs.contains(normalizedID),
+                  seen.insert(normalizedID).inserted else {
+                continue
+            }
+            candidates.append(AppPromptBindingCandidate(bundleID: bundleID, appDisplayName: app.localizedName ?? bundleID))
+        }
+        return candidates.sorted { $0.appDisplayName.localizedCaseInsensitiveCompare($1.appDisplayName) == .orderedAscending }
+    }
+
+    func appPromptBindingCandidate(forApplicationAt url: URL) -> AppPromptBindingCandidate? {
+        guard let bundle = Bundle(url: url), let bundleID = bundle.bundleIdentifier else {
+            return nil
+        }
+        let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? url.deletingPathExtension().lastPathComponent
+        return AppPromptBindingCandidate(bundleID: bundleID, appDisplayName: name)
     }
 
     var autoLearnedVocabularyTerms: [String] {
@@ -2583,7 +2661,7 @@ final class AppState {
         appUpdateController.updateChannel = updateChannel
     }
 
-    func postProcessTextIfEnabled(_ rawText: String) async -> String {
+    func postProcessTextIfEnabled(_ rawText: String, frontmostAppBundleID: String? = nil) async -> String {
         let input = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else {
             return rawText
@@ -2604,12 +2682,18 @@ final class AppState {
             return rawText
         }
 
+        let systemPromptOverride = AppPromptResolver.overridePrompt(for: frontmostAppBundleID, bindings: llmAppPromptBindings)
+        if systemPromptOverride != nil, let bundleID = frontmostAppBundleID {
+            AppLogger.shared.log(.info, "llm per-app prompt override bundle=\(bundleID)")
+        }
+
         return await magicFormatCoordinator.polish(
             input: input,
             rawText: rawText,
             request: MagicFormatCoordinator.PolishRequest(
                 requestedProvider: llmProvider,
                 settings: currentLLMSettings(),
+                systemPromptOverride: systemPromptOverride,
                 hasAPIKey: hasLLMAPIKey,
                 appleAvailability: appleMagicFormatAvailability,
                 localGemmaAvailability: localGemmaMagicFormatAvailability,
@@ -2841,11 +2925,13 @@ final class AppState {
         }
 
         let sessionID = UUID()
+        // Capture the target app before any Suniye UI can steal focus.
         let context = DictationSessionContext(
             id: sessionID,
             source: trigger,
             startedAt: Date(),
-            destination: currentDictationDestination
+            destination: currentDictationDestination,
+            frontmostAppBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         )
         activeDictationSession = .starting(context)
         phase = .recording
@@ -2926,7 +3012,7 @@ final class AppState {
             var finalText = llmInputText
 
             if !finalText.isEmpty {
-                llmOutputText = await postProcessTextIfEnabled(llmInputText)
+                llmOutputText = await postProcessTextIfEnabled(llmInputText, frontmostAppBundleID: context.frontmostAppBundleID)
                 if destination == .systemInsertion {
                     let polishedParse = AppState.parseSubmitCommand(from: llmOutputText)
                     finalText = polishedParse.text
@@ -3200,6 +3286,7 @@ final class AppState {
         llmKeywordsRaw = settings.keywordsRaw
         llmAutoLearnedKeywordsRaw = settings.autoLearnedKeywordsRaw
         learnFromEditsEnabled = settings.learnFromEditsEnabled
+        llmAppPromptBindings = settings.appPromptBindings
         llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
         llmMaxTokens = LLMDefaults.defaultMaxTokens
         isHydratingLLMSettings = false
@@ -3234,7 +3321,8 @@ final class AppState {
             learnFromEditsEnabled: learnFromEditsEnabled,
             timeoutSeconds: LLMDefaults.defaultTimeoutSeconds,
             maxTokens: LLMDefaults.defaultMaxTokens,
-            localModelKeepAlive: localModelKeepAlive
+            localModelKeepAlive: localModelKeepAlive,
+            appPromptBindings: llmAppPromptBindings
         )
     }
 
