@@ -28,12 +28,27 @@ struct LocalGemmaMagicFormatConfig: Equatable {
 protocol LLMPostProcessor {
     func polish(text: String, config: LLMConfig) async throws -> String
     func testSetup(config: LLMConfig) async throws
+    /// Freeform generation used by Edit Mode; bypasses Magic Format output validation.
+    func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String
+}
+
+extension LLMPostProcessor {
+    func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String {
+        try await polish(text: userText, config: config)
+    }
 }
 
 protocol AppleMagicFormatPostProcessor {
     var availability: AppleFoundationModelsAvailability { get }
     func polish(text: String, config: AppleMagicFormatConfig) async throws -> String
     func testSetup(config: AppleMagicFormatConfig) async throws
+    func generate(instructions: String, userText: String, config: AppleMagicFormatConfig) async throws -> String
+}
+
+extension AppleMagicFormatPostProcessor {
+    func generate(instructions: String, userText: String, config: AppleMagicFormatConfig) async throws -> String {
+        try await polish(text: userText, config: config)
+    }
 }
 
 protocol LocalGemmaMagicFormatPostProcessor {
@@ -42,6 +57,7 @@ protocol LocalGemmaMagicFormatPostProcessor {
     func prewarm(config: LocalGemmaMagicFormatConfig) async
     func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String
     func testSetup(config: LocalGemmaMagicFormatConfig) async throws
+    func generate(instructions: String, userText: String, config: LocalGemmaMagicFormatConfig) async throws -> String
     func stopRuntime() async
 }
 
@@ -49,6 +65,9 @@ extension LocalGemmaMagicFormatPostProcessor {
     func isRuntimeWarm() async -> Bool { false }
     func prewarm(config: LocalGemmaMagicFormatConfig) async {}
     func stopRuntime() async {}
+    func generate(instructions: String, userText: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
+        try await polish(text: userText, config: config)
+    }
 }
 
 enum AppleFoundationModelsAvailability: Equatable {

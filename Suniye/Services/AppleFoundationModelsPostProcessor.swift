@@ -49,6 +49,33 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
         }
     }
 
+    func generate(instructions: String, userText: String, config: AppleMagicFormatConfig) async throws -> String {
+        guard availability.isAvailable else {
+            throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
+        }
+
+        do {
+            let raw = try await withTimeout(seconds: config.timeoutSeconds) {
+                try await self.client.generate(
+                    instructions: instructions,
+                    prompt: userText,
+                    maxTokens: config.maxTokens
+                )
+            }
+            let sanitized = MagicFormatOutputSanitizer.sanitize(raw)
+            guard !sanitized.isEmpty else {
+                throw LLMPostProcessorError.emptyOutput
+            }
+            return sanitized
+        } catch let error as LLMPostProcessorError {
+            throw error
+        } catch is TimeoutError {
+            throw LLMPostProcessorError.timeout
+        } catch {
+            throw LLMPostProcessorError.provider(error.localizedDescription)
+        }
+    }
+
     func testSetup(config: AppleMagicFormatConfig) async throws {
         guard availability.isAvailable else {
             throw LLMPostProcessorError.invalidConfiguration(availability.logValue)

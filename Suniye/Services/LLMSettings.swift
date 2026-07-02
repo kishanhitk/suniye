@@ -366,6 +366,7 @@ enum LLMDefaults {
     static let defaultTimeoutSeconds = 12.0
     static let defaultMaxTokens = 128
     static let appleMaxTokens = 256
+    static let editModeMaxTokens = 512
     static let minTimeoutSeconds = 1.0
     static let maxTimeoutSeconds = 15.0
     static let minMaxTokens = 32

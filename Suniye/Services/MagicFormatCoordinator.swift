@@ -6,6 +6,14 @@ enum EffectiveMagicFormatProvider {
     case openAICompatible
 }
 
+enum MagicFormatRewriteError: LocalizedError, Equatable {
+    case providerNotConfigured
+
+    var errorDescription: String? {
+        "Magic Format provider is not ready"
+    }
+}
+
 @MainActor
 final class MagicFormatCoordinator {
     /// User-facing labels for each polish stage, shown in the status text and the
@@ -280,6 +288,77 @@ final class MagicFormatCoordinator {
         }
     }
 
+    /// Edit Mode: run a freeform instruction + user text through the selected provider.
+    /// Unlike `polish`, failures throw instead of falling back to raw text.
+    func rewrite(instructions: String, userText: String, request: PolishRequest) async throws -> String {
+        guard let provider = Self.resolvedProvider(
+            requestedProvider: request.requestedProvider,
+            appleAvailability: request.appleAvailability,
+            localGemmaAvailability: request.localGemmaAvailability
+        ) else {
+            AppLogger.shared.log(.warning, "edit mode rewrite blocked reason=local_provider_unavailable")
+            throw MagicFormatRewriteError.providerNotConfigured
+        }
+
+        let startTime = Date()
+        let slowWarningTask = request.startSlowWarning()
+        defer {
+            slowWarningTask.cancel()
+        }
+
+        do {
+            let output: String
+            switch provider {
+            case .appleFoundationModels:
+                output = try await applePostProcessor.generate(
+                    instructions: instructions,
+                    userText: userText,
+                    config: Self.makeEditModeAppleConfig(settings: request.settings)
+                )
+            case .localGemma:
+                if await !localGemmaPostProcessor.isRuntimeWarm() {
+                    request.setProcessingMessage("Starting local model...")
+                }
+                output = try await localGemmaPostProcessor.generate(
+                    instructions: instructions,
+                    userText: userText,
+                    config: Self.makeEditModeLocalGemmaConfig(settings: request.settings)
+                )
+            case .openAICompatible:
+                guard let endpointURL = request.settings.validatedEndpointURL,
+                      let modelId = request.settings.validatedModelId,
+                      request.hasAPIKey else {
+                    AppLogger.shared.log(.warning, "edit mode rewrite blocked reason=api_not_configured")
+                    throw MagicFormatRewriteError.providerNotConfigured
+                }
+                guard let apiKey = request.readAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !apiKey.isEmpty else {
+                    AppLogger.shared.log(.warning, "edit mode rewrite blocked reason=key_read_failed")
+                    request.onAPIKeyReadFailed()
+                    throw MagicFormatRewriteError.providerNotConfigured
+                }
+                output = try await apiPostProcessor.generate(
+                    instructions: instructions,
+                    userText: userText,
+                    config: Self.makeAPIConfig(settings: request.settings, apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
+                )
+            }
+
+            let normalized = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else {
+                throw LLMPostProcessorError.emptyOutput
+            }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AppLogger.shared.log(.info, "edit mode rewrite success provider=\(provider) latency_ms=\(latencyMs)")
+            return normalized
+        } catch {
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            let reason = (error as? LLMPostProcessorError)?.logValue ?? "unknown"
+            AppLogger.shared.log(.warning, "edit mode rewrite failed provider=\(provider) reason=\(reason) latency_ms=\(latencyMs)")
+            throw error
+        }
+    }
+
     static func makeAPIConfig(settings: LLMSettings, apiKey: String, endpointURL: URL, modelId: String) -> LLMConfig {
         LLMConfig(
             modelId: modelId,
@@ -308,6 +387,26 @@ final class MagicFormatCoordinator {
             generationTimeoutSeconds: LocalGemmaDefaults.generationTimeoutSeconds,
             idleTimeoutSeconds: settings.localModelKeepAlive.seconds,
             maxTokens: LocalGemmaDefaults.maxTokens
+        )
+    }
+
+    static func makeEditModeAppleConfig(settings: LLMSettings) -> AppleMagicFormatConfig {
+        AppleMagicFormatConfig(
+            systemPrompt: "",
+            keywords: [],
+            timeoutSeconds: settings.timeoutSeconds,
+            maxTokens: LLMDefaults.editModeMaxTokens
+        )
+    }
+
+    static func makeEditModeLocalGemmaConfig(settings: LLMSettings) -> LocalGemmaMagicFormatConfig {
+        LocalGemmaMagicFormatConfig(
+            systemPrompt: "",
+            keywords: [],
+            startupTimeoutSeconds: LocalGemmaDefaults.startupTimeoutSeconds,
+            generationTimeoutSeconds: LocalGemmaDefaults.editModeGenerationTimeoutSeconds,
+            idleTimeoutSeconds: settings.localModelKeepAlive.seconds,
+            maxTokens: LLMDefaults.editModeMaxTokens
         )
     }
 

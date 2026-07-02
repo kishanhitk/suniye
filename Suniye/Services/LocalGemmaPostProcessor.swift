@@ -10,6 +10,7 @@ enum LocalGemmaDefaults {
     static let expectedSizeText = modelEntry.expectedSizeText
     static let startupTimeoutSeconds = 90.0
     static let generationTimeoutSeconds = 15.0
+    static let editModeGenerationTimeoutSeconds = 30.0
     static let idleTimeoutSeconds = 600.0
     static let shutdownTimeoutSeconds = 2.0
     static let maxTokens = 256
@@ -126,6 +127,32 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             } catch {
                 throw LLMPostProcessorError.provider(error.localizedDescription)
             }
+        }
+    }
+
+    func generate(instructions: String, userText: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
+        guard availability.isAvailable else {
+            throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
+        }
+
+        do {
+            let raw = try await client.generate(
+                instructions: instructions,
+                prompt: userText,
+                maxTokens: config.maxTokens,
+                startupTimeoutSeconds: config.startupTimeoutSeconds,
+                idleTimeoutSeconds: config.idleTimeoutSeconds,
+                timeoutSeconds: config.generationTimeoutSeconds
+            )
+            let sanitized = sanitizeGemmaOutput(raw)
+            guard !sanitized.isEmpty else {
+                throw LLMPostProcessorError.emptyOutput
+            }
+            return sanitized
+        } catch let error as LLMPostProcessorError {
+            throw error
+        } catch {
+            throw LLMPostProcessorError.provider(error.localizedDescription)
         }
     }
 
