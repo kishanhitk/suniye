@@ -18,8 +18,6 @@ final class MagicFormatCoordinator {
     struct PolishRequest {
         let requestedProvider: MagicFormatProvider
         let settings: LLMSettings
-        /// Per-app prompt that replaces the provider's composed system prompt when set.
-        var systemPromptOverride: String? = nil
         let hasAPIKey: Bool
         let appleAvailability: AppleFoundationModelsAvailability
         let localGemmaAvailability: LocalGemmaAvailability
@@ -192,13 +190,7 @@ final class MagicFormatCoordinator {
             return rawText
         }
 
-        let config = Self.makeAPIConfig(
-            settings: request.settings,
-            apiKey: apiKey,
-            endpointURL: endpointURL,
-            modelId: modelId,
-            systemPromptOverride: request.systemPromptOverride
-        )
+        let config = Self.makeAPIConfig(settings: request.settings, apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
         request.setStage(Stage.polishing)
@@ -228,7 +220,7 @@ final class MagicFormatCoordinator {
     }
 
     private func polishWithApple(input: String, rawText: String, request: PolishRequest) async -> String {
-        let config = Self.makeAppleConfig(settings: request.settings, systemPromptOverride: request.systemPromptOverride)
+        let config = Self.makeAppleConfig(settings: request.settings)
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
         request.setStage(Stage.polishing)
@@ -258,7 +250,7 @@ final class MagicFormatCoordinator {
     }
 
     private func polishWithLocalGemma(input: String, rawText: String, request: PolishRequest) async -> String {
-        let config = Self.makeLocalGemmaConfig(settings: request.settings, systemPromptOverride: request.systemPromptOverride)
+        let config = Self.makeLocalGemmaConfig(settings: request.settings)
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
         let isRuntimeWarm = await localGemmaPostProcessor.isRuntimeWarm()
@@ -288,29 +280,29 @@ final class MagicFormatCoordinator {
         }
     }
 
-    static func makeAPIConfig(settings: LLMSettings, apiKey: String, endpointURL: URL, modelId: String, systemPromptOverride: String? = nil) -> LLMConfig {
+    static func makeAPIConfig(settings: LLMSettings, apiKey: String, endpointURL: URL, modelId: String) -> LLMConfig {
         LLMConfig(
             modelId: modelId,
             endpointURL: endpointURL,
-            systemPrompt: systemPromptOverride ?? settings.composedSystemPrompt,
+            systemPrompt: settings.composedSystemPrompt,
             keywords: settings.keywords,
             timeoutSeconds: settings.timeoutSeconds,
             apiKey: apiKey
         )
     }
 
-    static func makeAppleConfig(settings: LLMSettings, systemPromptOverride: String? = nil) -> AppleMagicFormatConfig {
+    static func makeAppleConfig(settings: LLMSettings) -> AppleMagicFormatConfig {
         AppleMagicFormatConfig(
-            systemPrompt: systemPromptOverride ?? settings.composedAppleSystemPrompt,
+            systemPrompt: settings.composedAppleSystemPrompt,
             keywords: settings.keywords,
             timeoutSeconds: settings.timeoutSeconds,
             maxTokens: LLMDefaults.appleMaxTokens
         )
     }
 
-    static func makeLocalGemmaConfig(settings: LLMSettings, systemPromptOverride: String? = nil) -> LocalGemmaMagicFormatConfig {
+    static func makeLocalGemmaConfig(settings: LLMSettings) -> LocalGemmaMagicFormatConfig {
         LocalGemmaMagicFormatConfig(
-            systemPrompt: systemPromptOverride ?? settings.composedGemmaSystemPrompt,
+            systemPrompt: settings.composedGemmaSystemPrompt,
             keywords: settings.keywords,
             startupTimeoutSeconds: LocalGemmaDefaults.startupTimeoutSeconds,
             generationTimeoutSeconds: LocalGemmaDefaults.generationTimeoutSeconds,

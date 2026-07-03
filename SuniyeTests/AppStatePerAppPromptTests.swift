@@ -5,56 +5,58 @@ import XCTest
 final class AppStatePerAppPromptTests: XCTestCase {
     private let slackBundleID = "com.tinyspeck.slackmacgap"
 
-    func testAddAppPromptBindingAppendsAndPersists() {
+    private func addSlackBinding(to appState: AppState, prompt: String) {
+        let binding = appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack")
+        XCTAssertNotNil(binding)
+        if let binding {
+            appState.updateAppPromptBinding(id: binding.id, prompt: prompt)
+        }
+    }
+
+    func testAddAppPromptBindingAppendsSeedsFromActiveProviderAndPersists() {
         let store = TestLLMSettingsStore()
         let appState = makeTestAppState(llmSettingsStore: store)
+        appState.llmProvider = .openAICompatible
 
-        appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack", prompt: "Keep it terse.")
+        let binding = appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack")
 
         XCTAssertEqual(appState.llmAppPromptBindings.count, 1)
-        XCTAssertEqual(appState.llmAppPromptBindings.first?.bundleID, slackBundleID)
-        XCTAssertEqual(appState.llmAppPromptBindings.first?.prompt, "Keep it terse.")
+        XCTAssertEqual(binding?.bundleID, slackBundleID)
+        XCTAssertEqual(binding?.prompt, appState.llmBaseSystemPrompt)
         XCTAssertEqual(store.latest.appPromptBindings, appState.llmAppPromptBindings)
     }
 
-    func testAddAppPromptBindingSeedsPromptFromActiveProvider() {
+    func testAddDuplicateBundleIDReturnsExistingBindingAndPreservesPrompt() {
         let appState = makeTestAppState()
-        appState.llmProvider = .openAICompatible
+        addSlackBinding(to: appState, prompt: "Keep it terse.")
+        let originalID = appState.llmAppPromptBindings[0].id
 
-        appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack")
-
-        XCTAssertEqual(appState.llmAppPromptBindings.first?.prompt, appState.llmBaseSystemPrompt)
-    }
-
-    func testAddDuplicateBundleIDUpdatesExistingBinding() {
-        let appState = makeTestAppState()
-        appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack", prompt: "first")
-
-        appState.addAppPromptBinding(bundleID: " COM.TINYSPECK.SLACKMACGAP ", appDisplayName: "Slack Beta", prompt: "second")
+        let duplicate = appState.addAppPromptBinding(bundleID: " COM.TINYSPECK.SLACKMACGAP ", appDisplayName: "Slack Beta")
 
         XCTAssertEqual(appState.llmAppPromptBindings.count, 1)
+        XCTAssertEqual(duplicate?.id, originalID)
         XCTAssertEqual(appState.llmAppPromptBindings.first?.appDisplayName, "Slack Beta")
-        XCTAssertEqual(appState.llmAppPromptBindings.first?.prompt, "second")
+        XCTAssertEqual(appState.llmAppPromptBindings.first?.prompt, "Keep it terse.")
     }
 
     func testAddAppPromptBindingIgnoresEmptyBundleID() {
         let appState = makeTestAppState()
 
-        appState.addAppPromptBinding(bundleID: "  ", appDisplayName: "Mystery", prompt: "x")
-
+        XCTAssertNil(appState.addAppPromptBinding(bundleID: "  ", appDisplayName: "Mystery"))
         XCTAssertTrue(appState.llmAppPromptBindings.isEmpty)
     }
 
     func testUpdateAndRemoveAppPromptBinding() {
         let store = TestLLMSettingsStore()
         let appState = makeTestAppState(llmSettingsStore: store)
-        appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack", prompt: "old")
-        let id = appState.llmAppPromptBindings[0].id
+        guard let binding = appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack") else {
+            return XCTFail("binding not created")
+        }
 
-        appState.updateAppPromptBinding(id: id, prompt: "new")
+        appState.updateAppPromptBinding(id: binding.id, prompt: "new")
         XCTAssertEqual(appState.llmAppPromptBindings.first?.prompt, "new")
 
-        appState.removeAppPromptBinding(id: id)
+        appState.removeAppPromptBinding(id: binding.id)
         XCTAssertTrue(appState.llmAppPromptBindings.isEmpty)
         XCTAssertTrue(store.latest.appPromptBindings.isEmpty)
     }
@@ -76,15 +78,14 @@ final class AppStatePerAppPromptTests: XCTestCase {
 
     func testPostProcessingUsesPerAppPromptForBoundApp() async {
         let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
-        let keychain = TestKeychainService(value: "api-key")
         let appState = makeTestAppState(
             llmPostProcessor: capturingLLM,
-            keychainService: keychain
+            keychainService: TestKeychainService(value: "api-key")
         )
         appState.llmEnabled = true
         appState.llmProvider = .openAICompatible
         appState.refreshLLMKeyStatus()
-        appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack", prompt: "Keep it terse.")
+        addSlackBinding(to: appState, prompt: "Keep it terse.")
 
         let output = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
 
@@ -94,15 +95,14 @@ final class AppStatePerAppPromptTests: XCTestCase {
 
     func testPostProcessingUsesDefaultPromptForUnboundApp() async {
         let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
-        let keychain = TestKeychainService(value: "api-key")
         let appState = makeTestAppState(
             llmPostProcessor: capturingLLM,
-            keychainService: keychain
+            keychainService: TestKeychainService(value: "api-key")
         )
         appState.llmEnabled = true
         appState.llmProvider = .openAICompatible
         appState.refreshLLMKeyStatus()
-        appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack", prompt: "Keep it terse.")
+        addSlackBinding(to: appState, prompt: "Keep it terse.")
 
         _ = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: "com.apple.mail")
 
@@ -111,15 +111,14 @@ final class AppStatePerAppPromptTests: XCTestCase {
 
     func testPostProcessingUsesDefaultPromptWhenNoAppCaptured() async {
         let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
-        let keychain = TestKeychainService(value: "api-key")
         let appState = makeTestAppState(
             llmPostProcessor: capturingLLM,
-            keychainService: keychain
+            keychainService: TestKeychainService(value: "api-key")
         )
         appState.llmEnabled = true
         appState.llmProvider = .openAICompatible
         appState.refreshLLMKeyStatus()
-        appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack", prompt: "Keep it terse.")
+        addSlackBinding(to: appState, prompt: "Keep it terse.")
 
         _ = await appState.postProcessTextIfEnabled("raw text")
 
@@ -134,7 +133,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
         let appState = makeTestAppState(appleMagicFormatPostProcessor: fakeApple)
         appState.llmEnabled = true
         appState.llmProvider = .appleFoundationModels
-        appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack", prompt: "Keep it terse.")
+        addSlackBinding(to: appState, prompt: "Keep it terse.")
 
         let output = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
 
@@ -142,20 +141,81 @@ final class AppStatePerAppPromptTests: XCTestCase {
         XCTAssertEqual(fakeApple.lastConfig?.systemPrompt, "Keep it terse.")
     }
 
+    func testPostProcessingAppliesPerAppPromptToLocalGemmaProvider() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        addSlackBinding(to: appState, prompt: "Keep it terse.")
+
+        let output = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
+
+        XCTAssertEqual(output, "gemma polished")
+        XCTAssertEqual(fakeGemma.lastConfig?.systemPrompt, "Keep it terse.")
+    }
+
     func testPostProcessingIgnoresBlankPerAppPrompt() async {
         let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
-        let keychain = TestKeychainService(value: "api-key")
         let appState = makeTestAppState(
             llmPostProcessor: capturingLLM,
-            keychainService: keychain
+            keychainService: TestKeychainService(value: "api-key")
         )
         appState.llmEnabled = true
         appState.llmProvider = .openAICompatible
         appState.refreshLLMKeyStatus()
-        appState.addAppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack", prompt: "   \n ")
+        addSlackBinding(to: appState, prompt: "   \n ")
 
         _ = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
 
         XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, LLMDefaults.defaultBaseSystemPrompt)
+    }
+
+    // MARK: - Full dictation pipeline
+
+    func testDictationPipelineRoutesPerAppPromptFromCapturedFrontmostApp() async {
+        let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcription = StubTranscriptionService()
+        transcription.transcribeResult = .success("raw text")
+        let insertion = SpyTextInsertionService()
+        let started = expectation(description: "capture started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let frontmostBundleID = slackBundleID
+
+        let appState = makeTestAppState(
+            transcriptionService: transcription,
+            audioCaptureService: audioCapture,
+            textInsertionService: insertion,
+            llmPostProcessor: capturingLLM,
+            keychainService: TestKeychainService(value: "api-key"),
+            frontmostAppBundleIDProvider: { frontmostBundleID }
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.llmEnabled = true
+        appState.llmProvider = .openAICompatible
+        appState.refreshLLMKeyStatus()
+        addSlackBinding(to: appState, prompt: "Keep it terse.")
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [started], timeout: 1)
+        appState.stopRecordingFromUI()
+        for _ in 0 ..< 500 where appState.phase != .ready {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, "Keep it terse.")
+        XCTAssertEqual(insertion.insertedTexts, ["polished"])
+        XCTAssertEqual(appState.phase, .ready)
     }
 }

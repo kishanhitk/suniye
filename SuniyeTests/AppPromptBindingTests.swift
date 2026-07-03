@@ -26,24 +26,9 @@ final class AppPromptBindingTests: XCTestCase {
         XCTAssertEqual(prompt, "Write full prose.")
     }
 
-    func testOverridePromptIgnoresWhitespaceOnlyBindingPrompt() {
+    func testOverridePromptIsNilForWhitespaceOnlyBindingPrompt() {
         let blank = [AppPromptBinding(bundleID: "com.apple.Notes", appDisplayName: "Notes", prompt: "  \n ")]
         XCTAssertNil(AppPromptResolver.overridePrompt(for: "com.apple.Notes", bindings: blank))
-        XCTAssertEqual(
-            AppPromptResolver.resolvedPrompt(for: "com.apple.Notes", bindings: blank, defaultPrompt: "default"),
-            "default"
-        )
-    }
-
-    func testResolvedPromptPrefersBindingOverDefault() {
-        XCTAssertEqual(
-            AppPromptResolver.resolvedPrompt(for: "com.tinyspeck.slackmacgap", bindings: bindings, defaultPrompt: "default"),
-            "Keep it terse."
-        )
-        XCTAssertEqual(
-            AppPromptResolver.resolvedPrompt(for: "com.apple.mail", bindings: bindings, defaultPrompt: "default"),
-            "default"
-        )
     }
 
     func testBindingCodableRoundTrip() throws {
@@ -78,5 +63,61 @@ final class AppPromptBindingTests: XCTestCase {
         store.save(settings)
 
         XCTAssertEqual(store.load().appPromptBindings, bindings)
+    }
+
+    func testOverridingSystemPromptsReplacesAllProviderPrompts() {
+        let settings = LLMSettings(systemPrompt: "user extras")
+        let overridden = settings.overridingSystemPrompts(with: "Keep it terse.")
+
+        XCTAssertEqual(overridden.composedSystemPrompt, "Keep it terse.")
+        XCTAssertEqual(overridden.composedAppleSystemPrompt, "Keep it terse.")
+        XCTAssertEqual(overridden.composedGemmaSystemPrompt, "Keep it terse.")
+    }
+
+    // MARK: - Candidate discovery
+
+    func testCandidatesExcludeBoundOwnUnidentifiedAndDuplicateApps() {
+        let apps: [(bundleID: String?, name: String?)] = [
+            ("com.tinyspeck.slackmacgap", "Slack"),
+            ("com.apple.mail", "Mail"),
+            ("com.apple.mail", "Mail"),
+            ("dev.suniye.app", "Suniye"),
+            (nil, "Anonymous"),
+            ("  ", "Blank")
+        ]
+
+        let candidates = AppPromptBindingCandidates.candidates(
+            from: apps,
+            excluding: bindings,
+            ownBundleID: "dev.suniye.app"
+        )
+
+        XCTAssertEqual(candidates, [AppPromptBindingCandidate(bundleID: "com.apple.mail", appDisplayName: "Mail")])
+    }
+
+    func testCandidatesSortByDisplayNameAndFallBackToBundleID() {
+        let apps: [(bundleID: String?, name: String?)] = [
+            ("com.z.app", "Zed"),
+            ("com.a.app", nil),
+            ("com.m.app", "Mail")
+        ]
+
+        let candidates = AppPromptBindingCandidates.candidates(from: apps, excluding: [], ownBundleID: nil)
+
+        XCTAssertEqual(candidates.map(\.appDisplayName), ["com.a.app", "Mail", "Zed"])
+    }
+
+    func testForApplicationExcludesOwnBundle() {
+        XCTAssertNil(AppPromptBindingCandidates.forApplication(at: Bundle.main.bundleURL, ownBundleID: Bundle.main.bundleIdentifier))
+    }
+
+    func testForApplicationResolvesBundleIDAndName() throws {
+        let url = URL(fileURLWithPath: "/System/Applications/Calculator.app")
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: url.path))
+
+        let candidate = AppPromptBindingCandidates.forApplication(at: url, ownBundleID: "dev.suniye.app")
+
+        XCTAssertEqual(candidate?.bundleID.lowercased(), "com.apple.calculator")
+        XCTAssertFalse(candidate?.appDisplayName.isEmpty ?? true)
     }
 }

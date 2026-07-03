@@ -290,6 +290,16 @@ struct LLMSettings: Codable, Equatable {
         return sections.joined(separator: "\n\n")
     }
 
+    /// Copy of these settings with every provider's composed prompt replaced by a per-app override.
+    func overridingSystemPrompts(with prompt: String) -> LLMSettings {
+        var copy = self
+        copy.baseSystemPrompt = prompt
+        copy.appleSystemPrompt = prompt
+        copy.gemmaSystemPrompt = prompt
+        copy.systemPrompt = ""
+        return copy
+    }
+
     var composedAppleSystemPrompt: String {
         let normalized = appleSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         return normalized.isEmpty ? LLMDefaults.defaultAppleMagicFormatPrompt : normalized

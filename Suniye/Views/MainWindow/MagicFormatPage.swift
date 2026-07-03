@@ -412,7 +412,7 @@ struct StylePage: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("App-specific prompts")
                                 .font(AppTypography.body)
-                            Text("Use a different Magic Format prompt when dictating into these apps. All other apps use the formatter prompt above.")
+                            Text("Use a different Magic Format prompt when dictating into these apps. All other apps use the formatter prompt above. A per-app prompt applies as written, whichever formatter runs.")
                                 .font(AppTypography.caption)
                                 .foregroundStyle(MainWindowPalette.secondaryText)
                         }
@@ -440,7 +440,7 @@ struct StylePage: View {
 
     private var addAppPromptBindingMenu: some View {
         Menu {
-            ForEach(appState.runningAppPromptBindingCandidates()) { candidate in
+            ForEach(AppPromptBindingCandidates.running(excluding: appState.llmAppPromptBindings)) { candidate in
                 Button(candidate.appDisplayName) {
                     addAppPromptBinding(for: candidate)
                 }
@@ -518,9 +518,8 @@ struct StylePage: View {
     }
 
     private func addAppPromptBinding(for candidate: AppPromptBindingCandidate) {
-        appState.addAppPromptBinding(bundleID: candidate.bundleID, appDisplayName: candidate.appDisplayName)
-        if let added = AppPromptResolver.binding(for: candidate.bundleID, in: appState.llmAppPromptBindings) {
-            expandedAppPromptBindingIDs.insert(added.id)
+        if let binding = appState.addAppPromptBinding(bundleID: candidate.bundleID, appDisplayName: candidate.appDisplayName) {
+            expandedAppPromptBindingIDs.insert(binding.id)
         }
     }
 
@@ -532,7 +531,7 @@ struct StylePage: View {
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK,
               let url = panel.url,
-              let candidate = appState.appPromptBindingCandidate(forApplicationAt: url) else {
+              let candidate = AppPromptBindingCandidates.forApplication(at: url) else {
             return
         }
         addAppPromptBinding(for: candidate)

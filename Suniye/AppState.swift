@@ -1335,6 +1335,7 @@ final class AppState {
     private let learningToastPresenter: LearningToastPresenting
     private let currentAppVersionProvider: () -> AppVersion?
     private let nowProvider: () -> Date
+    private let frontmostAppBundleIDProvider: () -> String?
     private let fileOpener: (URL) -> Bool
     private let accessibilityOnboarding: AccessibilityOnboardingPresenting
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
@@ -1404,6 +1405,7 @@ final class AppState {
         learningToastPresenter: LearningToastPresenting? = nil,
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
         nowProvider: @escaping () -> Date = Date.init,
+        frontmostAppBundleIDProvider: @escaping () -> String? = { NSWorkspace.shared.frontmostApplication?.bundleIdentifier },
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         accessibilityOnboarding: AccessibilityOnboardingPresenting? = nil,
         issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { defaultName in
@@ -1454,6 +1456,7 @@ final class AppState {
         self.learningToastPresenter = learningToastPresenter ?? LearningToastPresenter()
         self.currentAppVersionProvider = currentAppVersionProvider
         self.nowProvider = nowProvider
+        self.frontmostAppBundleIDProvider = frontmostAppBundleIDProvider
         self.fileOpener = fileOpener
         self.accessibilityOnboarding = accessibilityOnboarding ?? PermisoAccessibilityOnboarding()
         self.issueReportDiagnosticsDestinationPicker = issueReportDiagnosticsDestinationPicker
@@ -1951,26 +1954,27 @@ final class AppState {
         return llmBaseSystemPrompt
     }
 
-    func addAppPromptBinding(bundleID: String, appDisplayName: String, prompt: String? = nil) {
-        guard let normalizedID = AppPromptResolver.normalizedBundleID(bundleID) else {
-            return
+    /// Adds a binding for the app, or refreshes the display name of an existing one.
+    /// New bindings start from the active provider's prompt. Returns the affected binding.
+    @discardableResult
+    func addAppPromptBinding(bundleID: String, appDisplayName: String) -> AppPromptBinding? {
+        guard let trimmedBundleID = AppPromptResolver.normalizedBundleID(bundleID) else {
+            return nil
         }
-        let trimmedBundleID = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedName = appDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let index = llmAppPromptBindings.firstIndex(where: { AppPromptResolver.normalizedBundleID($0.bundleID) == normalizedID }) {
-            llmAppPromptBindings[index].appDisplayName = trimmedName.isEmpty ? llmAppPromptBindings[index].appDisplayName : trimmedName
-            if let prompt {
-                llmAppPromptBindings[index].prompt = prompt
+        if let index = llmAppPromptBindings.firstIndex(where: { AppPromptResolver.matches($0.bundleID, trimmedBundleID) }) {
+            if !trimmedName.isEmpty {
+                llmAppPromptBindings[index].appDisplayName = trimmedName
             }
-            return
+            return llmAppPromptBindings[index]
         }
-        llmAppPromptBindings.append(
-            AppPromptBinding(
-                bundleID: trimmedBundleID,
-                appDisplayName: trimmedName.isEmpty ? trimmedBundleID : trimmedName,
-                prompt: prompt ?? activeMagicFormatPrompt
-            )
+        let binding = AppPromptBinding(
+            bundleID: trimmedBundleID,
+            appDisplayName: trimmedName.isEmpty ? trimmedBundleID : trimmedName,
+            prompt: activeMagicFormatPrompt
         )
+        llmAppPromptBindings.append(binding)
+        return binding
     }
 
     func updateAppPromptBinding(id: UUID, prompt: String) {
@@ -1982,35 +1986,6 @@ final class AppState {
 
     func removeAppPromptBinding(id: UUID) {
         llmAppPromptBindings.removeAll { $0.id == id }
-    }
-
-    /// Running regular apps not yet bound, offered by the per-app prompt picker.
-    func runningAppPromptBindingCandidates() -> [AppPromptBindingCandidate] {
-        let boundIDs = Set(llmAppPromptBindings.compactMap { AppPromptResolver.normalizedBundleID($0.bundleID) })
-        let ownBundleID = AppPromptResolver.normalizedBundleID(Bundle.main.bundleIdentifier)
-        var seen = Set<String>()
-        var candidates: [AppPromptBindingCandidate] = []
-        for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
-            guard let bundleID = app.bundleIdentifier,
-                  let normalizedID = AppPromptResolver.normalizedBundleID(bundleID),
-                  normalizedID != ownBundleID,
-                  !boundIDs.contains(normalizedID),
-                  seen.insert(normalizedID).inserted else {
-                continue
-            }
-            candidates.append(AppPromptBindingCandidate(bundleID: bundleID, appDisplayName: app.localizedName ?? bundleID))
-        }
-        return candidates.sorted { $0.appDisplayName.localizedCaseInsensitiveCompare($1.appDisplayName) == .orderedAscending }
-    }
-
-    func appPromptBindingCandidate(forApplicationAt url: URL) -> AppPromptBindingCandidate? {
-        guard let bundle = Bundle(url: url), let bundleID = bundle.bundleIdentifier else {
-            return nil
-        }
-        let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
-            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
-            ?? url.deletingPathExtension().lastPathComponent
-        return AppPromptBindingCandidate(bundleID: bundleID, appDisplayName: name)
     }
 
     var autoLearnedVocabularyTerms: [String] {
@@ -2682,9 +2657,10 @@ final class AppState {
             return rawText
         }
 
-        let systemPromptOverride = AppPromptResolver.overridePrompt(for: frontmostAppBundleID, bindings: llmAppPromptBindings)
-        if systemPromptOverride != nil, let bundleID = frontmostAppBundleID {
-            AppLogger.shared.log(.info, "llm per-app prompt override bundle=\(bundleID)")
+        var settings = currentLLMSettings()
+        if let overridePrompt = AppPromptResolver.overridePrompt(for: frontmostAppBundleID, bindings: llmAppPromptBindings) {
+            settings = settings.overridingSystemPrompts(with: overridePrompt)
+            AppLogger.shared.log(.info, "llm per-app prompt override bundle=\(frontmostAppBundleID ?? "")")
         }
 
         return await magicFormatCoordinator.polish(
@@ -2692,8 +2668,7 @@ final class AppState {
             rawText: rawText,
             request: MagicFormatCoordinator.PolishRequest(
                 requestedProvider: llmProvider,
-                settings: currentLLMSettings(),
-                systemPromptOverride: systemPromptOverride,
+                settings: settings,
                 hasAPIKey: hasLLMAPIKey,
                 appleAvailability: appleMagicFormatAvailability,
                 localGemmaAvailability: localGemmaMagicFormatAvailability,
@@ -2931,7 +2906,7 @@ final class AppState {
             source: trigger,
             startedAt: Date(),
             destination: currentDictationDestination,
-            frontmostAppBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            frontmostAppBundleID: frontmostAppBundleIDProvider()
         )
         activeDictationSession = .starting(context)
         phase = .recording

@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// Binds a Magic Format system prompt to a specific app, keyed by bundle ID.
 struct AppPromptBinding: Identifiable, Codable, Equatable, Sendable {
@@ -6,28 +6,6 @@ struct AppPromptBinding: Identifiable, Codable, Equatable, Sendable {
     var bundleID: String
     var appDisplayName: String
     var prompt: String
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case bundleID
-        case appDisplayName
-        case prompt
-    }
-
-    init(id: UUID = UUID(), bundleID: String, appDisplayName: String, prompt: String) {
-        self.id = id
-        self.bundleID = bundleID
-        self.appDisplayName = appDisplayName
-        self.prompt = prompt
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        bundleID = try container.decodeIfPresent(String.self, forKey: .bundleID) ?? ""
-        appDisplayName = try container.decodeIfPresent(String.self, forKey: .appDisplayName) ?? ""
-        prompt = try container.decodeIfPresent(String.self, forKey: .prompt) ?? ""
-    }
 }
 
 /// Candidate app offered in the per-app prompt picker.
@@ -38,12 +16,24 @@ struct AppPromptBindingCandidate: Identifiable, Equatable {
 }
 
 enum AppPromptResolver {
-    /// Returns the binding matching the bundle ID, ignoring case and surrounding whitespace.
-    static func binding(for bundleID: String?, in bindings: [AppPromptBinding]) -> AppPromptBinding? {
-        guard let normalized = normalizedBundleID(bundleID) else {
+    /// Trimmed bundle ID, or nil when empty. Bindings store this normalized form.
+    static func normalizedBundleID(_ bundleID: String?) -> String? {
+        guard let trimmed = bundleID?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
             return nil
         }
-        return bindings.first { normalizedBundleID($0.bundleID) == normalized }
+        return trimmed
+    }
+
+    /// Single matching rule for bundle IDs everywhere: trimmed, case-insensitive.
+    static func matches(_ lhs: String?, _ rhs: String?) -> Bool {
+        guard let lhs = normalizedBundleID(lhs), let rhs = normalizedBundleID(rhs) else {
+            return false
+        }
+        return lhs.caseInsensitiveCompare(rhs) == .orderedSame
+    }
+
+    static func binding(for bundleID: String?, in bindings: [AppPromptBinding]) -> AppPromptBinding? {
+        bindings.first { matches($0.bundleID, bundleID) }
     }
 
     /// Returns the per-app prompt override, or nil when the app is unbound or its prompt is blank.
@@ -54,15 +44,47 @@ enum AppPromptResolver {
         let prompt = binding.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         return prompt.isEmpty ? nil : prompt
     }
+}
 
-    static func resolvedPrompt(for bundleID: String?, bindings: [AppPromptBinding], defaultPrompt: String) -> String {
-        overridePrompt(for: bundleID, bindings: bindings) ?? defaultPrompt
+/// Discovers apps offered by the per-app prompt picker.
+enum AppPromptBindingCandidates {
+    @MainActor
+    static func running(excluding bindings: [AppPromptBinding]) -> [AppPromptBindingCandidate] {
+        let apps = NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .map { (bundleID: $0.bundleIdentifier, name: $0.localizedName) }
+        return candidates(from: apps, excluding: bindings, ownBundleID: Bundle.main.bundleIdentifier)
     }
 
-    static func normalizedBundleID(_ bundleID: String?) -> String? {
-        guard let trimmed = bundleID?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+    static func forApplication(at url: URL, ownBundleID: String? = Bundle.main.bundleIdentifier) -> AppPromptBindingCandidate? {
+        guard let bundle = Bundle(url: url),
+              let bundleID = AppPromptResolver.normalizedBundleID(bundle.bundleIdentifier),
+              !AppPromptResolver.matches(bundleID, ownBundleID) else {
             return nil
         }
-        return trimmed.lowercased()
+        let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? url.deletingPathExtension().lastPathComponent
+        return AppPromptBindingCandidate(bundleID: bundleID, appDisplayName: name)
+    }
+
+    /// Pure filter over (bundleID, name) pairs so candidate discovery is unit-testable.
+    static func candidates(
+        from apps: [(bundleID: String?, name: String?)],
+        excluding bindings: [AppPromptBinding],
+        ownBundleID: String?
+    ) -> [AppPromptBindingCandidate] {
+        var seen = Set<String>()
+        var result: [AppPromptBindingCandidate] = []
+        for app in apps {
+            guard let bundleID = AppPromptResolver.normalizedBundleID(app.bundleID),
+                  !AppPromptResolver.matches(bundleID, ownBundleID),
+                  AppPromptResolver.binding(for: bundleID, in: bindings) == nil,
+                  seen.insert(bundleID).inserted else {
+                continue
+            }
+            result.append(AppPromptBindingCandidate(bundleID: bundleID, appDisplayName: app.name ?? bundleID))
+        }
+        return result.sorted { $0.appDisplayName.localizedCaseInsensitiveCompare($1.appDisplayName) == .orderedAscending }
     }
 }
