@@ -1,0 +1,54 @@
+[
+  {
+    "id": "fv_selfcorrect_collapse",
+    "category": "multi_attempt_correction",
+    "input": "get flowers on monday buy roses no no wait actually get lilies",
+    "expected": "Get lilies on Monday.",
+    "actual": "Get flowers on Monday, buy lilies.",
+    "latency_ms": 1353,
+    "exact": false,
+    "similarity": 0.655,
+    "structure_matches": true,
+    "passed": false,
+    "error": null
+  },
+  {
+    "id": "fv_emoji_insert",
+    "category": "emoji",
+    "input": "and let's go to yosemite yosemite emoji",
+    "expected": "Let's go to Yosemite! \ud83c\udfde\ufe0f",
+    "actual": "And let's go to Yosemite \ud83c\udfde\ufe0f",
+    "latency_ms": 245,
+    "exact": false,
+    "similarity": 0.902,
+    "structure_matches": true,
+    "passed": false,
+    "error": null
+  },
+  {
+    "id": "fv_format_command_hyphen",
+    "category": "spoken_format_command",
+    "input": "let's show them how smart you are one two three put a hyphen between these",
+    "expected": "Let's show them how smart you are. 1-2-3.",
+    "actual": "Let's show them how smart you are: 1-2-3.",
+    "latency_ms": 354,
+    "exact": false,
+    "similarity": 0.976,
+    "structure_matches": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "id": "fv_email_paragraphs_signature",
+    "category": "paragraphs_signature",
+    "input": "hi jane comma new paragraph i'm trying to write this email to show you how well this model works with different types of punctuations and additions new paragraph best comma new line jane",
+    "expected": "Hi Jane,\n\nI'm trying to write this email to show you how well this model works with different types of punctuations and additions.\n\nBest,\nJane.",
+    "actual": "Hi Jane,\n\nI'm trying to write this email to show you how well this model works with different types of punctuations and additions.\n\nBest,\nJane",
+    "latency_ms": 662,
+    "exact": false,
+    "similarity": 0.996,
+    "structure_matches": true,
+    "passed": true,
+    "error": null
+  }
+]
