@@ -3,7 +3,7 @@
     "id": "ref_edit_demo_001",
     "category": "referential_edit",
     "input": "hi joe comma new line can we meet at eight a m tomorrow actually change the name to jane and change the time to ten a m",
-    "expected": "Hi Jane,\nCan we meet at 10:00 AM tomorrow?"
+    "expected": "Hi Jane,\nCan we meet at 10 AM tomorrow?"
   },
   {
     "id": "ref_edit_name_002",

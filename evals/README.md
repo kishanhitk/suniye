@@ -12,7 +12,7 @@ The runner starts `llama-server` itself, uses the Gemma-style single user turn, 
 ~/Library/Application Support/Suniye/llm/gemma-4-e2b-Q4_K_M.gguf
 ```
 
-The default prompt is `evals/prompts/gemma_magic_format_v13.txt`. Earlier prompt files are kept as useful baselines for comparing simple-to-improved prompt behavior. Tuning candidates live in `evals/prompts/candidates/`.
+The default prompt is `evals/prompts/gemma_magic_format_v14.txt`. Earlier prompt files are kept as useful baselines for comparing simple-to-improved prompt behavior. Tuning candidates live in `evals/prompts/candidates/`.
 
 ## Version scores (39-case suite, Gemma 4 E2B Q4_K_M, temp 0)
 
@@ -27,6 +27,7 @@ The default prompt is `evals/prompts/gemma_magic_format_v13.txt`. Earlier prompt
 | v11     | 38/39  | 31    | 9.4 KB      |
 | v12     | 38/39  | 31    | 8.8 KB      |
 | v13     | 38/39  | 30    | 9.2 KB      |
+| v14     | 39/39  | 32    | 9.9 KB      |
 
 **Case decontamination (v13):** a review found six prompt examples were verbatim copies of eval cases
 (plus two near-copies), so scores through v12 were partly train-on-test. Eight cases (7 in the 39-suite,
@@ -65,7 +66,7 @@ unlabeled field reference) for full 12/12 with zero regressions. See `evals/runs
 Run the probe set with:
 
 ```bash
-python3 scripts/eval_magic_format.py --cases evals/magic_format_edit_cases.json --prompt evals/prompts/gemma_magic_format_v13.txt
+python3 scripts/eval_magic_format.py --cases evals/magic_format_edit_cases.json --prompt evals/prompts/gemma_magic_format_v14.txt
 ```
 
 ## Advanced capabilities (v11) + trim (v12)
@@ -73,7 +74,7 @@ python3 scripts/eval_magic_format.py --cases evals/magic_format_edit_cases.json 
 v11 adds three capabilities on top of v9 with no regression (39-suite 38/39, injection 2/2,
 referential probe 24/24): spoken formatting commands ("put a hyphen between these" → `1-2-3`),
 `new paragraph` + signature blocks, and emoji-from-speech (`"X emoji"` → emoji). One target case —
-multi-attempt self-correction collapse — remains unsolved at 2B. See
+multi-attempt self-correction collapse — remained unsolved at 2B until v14 (see below). See
 `evals/runs/advanced-capabilities-analysis.md` and probe `evals/magic_format_advanced_cases.json`.
 
 **v12** trims v11 by removing the dead multi-attempt-collapse content (rule clause +
@@ -83,8 +84,33 @@ Attempts to trim further regressed borderline cases (the ordinal-list and paragr
 load-bearing on the 2B model). Note: 39-suite (37↔38) and the advanced paragraph/emoji cases flap ±1–2
 run-to-run on Metal; only the referential probe (24/24) is deterministic, so it is the reliable gate.
 
-**v13 (current default)** = v12 + the decontamination fixes above: one repaired example plus a sharpened
+**v13** = v12 + the decontamination fixes above: one repaired example plus a sharpened
 filler rule ("delete every filler word, including a run of them opening the sentence") with a matching
-example. 38/39 held across three consecutive runs on the decontaminated suite; the one steady miss is a
-filler case combining mid-sentence "uh" with a doubled word ("the the"). Advanced probe is unchanged
-(multi-attempt collapse still deferred; emoji/signature cases pass functionally but flap on exact match).
+example. 38/39 held across three consecutive runs on the decontaminated suite; the one steady miss was a
+filler case combining mid-sentence "uh" with a doubled word ("the the").
+
+## v14 (current default): 100% on all three gates
+
+A second audit fixed remaining eval-set mistakes: two byte-identical duplicate cases and one
+near-duplicate replaced with fresh cases; two advanced expecteds corrected where they contradicted the
+prompt's own rules (an emoji case that editorialized the sentence, a signature case that invented a
+trailing period); and the bare-hour time convention pinned ("ten a m" -> "10 AM") after the two probe
+cases disagreed with each other.
+
+v14 then closed every remaining model gap:
+
+- **Multi-attempt collapse solved** ("get flowers... buy roses... no no wait actually get lilies" ->
+  "Get lilies on Monday.") via a last-version-replaces-all-attempts clause plus a structurally matched
+  example — the capability previously written off as a 2B ceiling.
+- **Filler removal fixed by position, not content**: rule- and example-level fixes failed repeatedly;
+  moving the filler directive into the end-of-prompt final check (recency dominates on this model) fixed
+  both filler cases at once. Every deletion clause needs a preservation counterweight in the same breath
+  ("but every real word stays — never shorten a lead-in"), or lead-ins get truncated.
+- **Example-collision bleed-through**: the suite's "these are the items we should have laptop bag phone
+  charger" case kept losing its lead-in because the prompt example "the things we need are laptop bag
+  phone and charger" shared the exact item set — the model pattern-matched the items and reproduced the
+  example's template. Swapping the example's items (helmet/gloves/rope/chalk) fixed it. Prompt examples
+  must not share content words with eval cases, not just avoid verbatim copies.
+
+Result: **39/39, 24/24 referential probe, 4/4 advanced, injection 2/2 — five consecutive all-green
+rounds** (the previously flappy cases included). Run artifacts: `evals/runs/v14_*.json`.

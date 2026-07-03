@@ -110,20 +110,20 @@
   {
     "id": "text_intent_preserved_002",
     "category": "intent_preservation",
-    "input": "text maya that i am running ten minutes late and don't wait for me",
-    "expected": "Text Maya that I am running ten minutes late and don't wait for me."
+    "input": "email vikram that the contract is signed and the invoice is on its way",
+    "expected": "Email Vikram that the contract is signed and the invoice is on its way."
   },
   {
     "id": "readme_context_preserved_002",
     "category": "technical_formatting",
-    "input": "for the readme say run npm install and then npm test before opening a pr",
-    "expected": "For the README, say: run npm install and then npm test before opening a PR."
+    "input": "for the changelog say fixed crash on resume and improved pairing speed",
+    "expected": "For the changelog, say: fixed crash on resume and improved pairing speed."
   },
   {
     "id": "csv_header_002",
     "category": "technical_formatting",
-    "input": "the csv header is user id comma created at comma plan id comma trial ends at",
-    "expected": "The CSV header is: user_id, created_at, plan_id, trial_ends_at."
+    "input": "the table columns are order id comma item name comma unit price",
+    "expected": "The table columns are: order_id, item_name, unit_price."
   },
   {
     "id": "filler_removal_001",
