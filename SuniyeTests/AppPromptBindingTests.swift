@@ -114,15 +114,16 @@ final class AppPromptBindingTests: XCTestCase {
         XCTAssertEqual(candidates.map(\.appDisplayName), ["com.a.app", "Mail", "Zed"])
     }
 
-    func testForApplicationExcludesOwnBundle() {
-        XCTAssertNil(AppPromptBindingCandidates.forApplication(at: Bundle.main.bundleURL, ownBundleID: Bundle.main.bundleIdentifier))
+    func testForApplicationExcludesOwnBundle() async {
+        let candidate = await AppPromptBindingCandidates.forApplication(at: Bundle.main.bundleURL, ownBundleID: Bundle.main.bundleIdentifier)
+        XCTAssertNil(candidate)
     }
 
-    func testForApplicationResolvesBundleIDAndName() throws {
+    func testForApplicationResolvesBundleIDAndName() async throws {
         let url = URL(fileURLWithPath: "/System/Applications/Calculator.app")
         try XCTSkipUnless(FileManager.default.fileExists(atPath: url.path))
 
-        let candidate = AppPromptBindingCandidates.forApplication(at: url, ownBundleID: "dev.suniye.app")
+        let candidate = await AppPromptBindingCandidates.forApplication(at: url, ownBundleID: "dev.suniye.app")
 
         XCTAssertEqual(candidate?.bundleID.lowercased(), "com.apple.calculator")
         XCTAssertFalse(candidate?.appDisplayName.isEmpty ?? true)

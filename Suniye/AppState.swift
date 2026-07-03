@@ -2660,7 +2660,8 @@ final class AppState {
         var settings = currentLLMSettings()
         if let overridePrompt = AppPromptResolver.overridePrompt(for: frontmostAppBundleID, bindings: llmAppPromptBindings) {
             settings = settings.overridingSystemPrompts(with: overridePrompt)
-            AppLogger.shared.log(.info, "llm per-app prompt override bundle=\(frontmostAppBundleID ?? "")")
+            // No bundle ID here: app.log ships in diagnostic reports.
+            AppLogger.shared.log(.info, "llm per-app prompt override applied")
         }
 
         return await magicFormatCoordinator.polish(

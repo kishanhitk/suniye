@@ -9,7 +9,7 @@ struct AppPromptBinding: Identifiable, Codable, Equatable, Sendable {
 }
 
 /// Candidate app offered in the per-app prompt picker.
-struct AppPromptBindingCandidate: Identifiable, Equatable {
+struct AppPromptBindingCandidate: Identifiable, Equatable, Sendable {
     var id: String { bundleID }
     let bundleID: String
     let appDisplayName: String
@@ -56,7 +56,14 @@ enum AppPromptBindingCandidates {
         return candidates(from: apps, excluding: bindings, ownBundleID: Bundle.main.bundleIdentifier)
     }
 
-    static func forApplication(at url: URL, ownBundleID: String? = Bundle.main.bundleIdentifier) -> AppPromptBindingCandidate? {
+    /// Reads the app bundle off the main thread; Bundle lookups touch disk.
+    static func forApplication(at url: URL, ownBundleID: String? = Bundle.main.bundleIdentifier) async -> AppPromptBindingCandidate? {
+        await Task.detached(priority: .userInitiated) {
+            resolveApplication(at: url, ownBundleID: ownBundleID)
+        }.value
+    }
+
+    private static func resolveApplication(at url: URL, ownBundleID: String?) -> AppPromptBindingCandidate? {
         guard let bundle = Bundle(url: url),
               let bundleID = AppPromptResolver.normalizedBundleID(bundle.bundleIdentifier),
               !AppPromptResolver.matches(bundleID, ownBundleID) else {

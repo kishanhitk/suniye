@@ -529,12 +529,15 @@ struct StylePage: View {
         panel.allowedContentTypes = [.applicationBundle]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        guard panel.runModal() == .OK,
-              let url = panel.url,
-              let candidate = AppPromptBindingCandidates.forApplication(at: url) else {
+        guard panel.runModal() == .OK, let url = panel.url else {
             return
         }
-        addAppPromptBinding(for: candidate)
+        Task {
+            guard let candidate = await AppPromptBindingCandidates.forApplication(at: url) else {
+                return
+            }
+            addAppPromptBinding(for: candidate)
+        }
     }
 
     // MARK: - Vocabulary
