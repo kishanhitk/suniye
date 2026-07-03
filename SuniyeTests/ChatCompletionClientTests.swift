@@ -28,12 +28,16 @@ final class ChatCompletionClientTests: XCTestCase {
             }
         }
 
-        await HangingURLProtocol.waitUntilLoading()
+        let started = await HangingURLProtocol.waitUntilLoading()
+        XCTAssertTrue(started, "URLProtocol never began loading the request")
         request.cancel()
         let error = await request.value
 
         XCTAssertTrue(error is CancellationError, "expected CancellationError, got \(String(describing: error))")
-        XCTAssertTrue(HangingURLProtocol.stopLoadingCalled, "cancellation must abort the underlying URL request")
+        // URLSession tears the request down asynchronously after cancellation, so
+        // poll for stopLoading rather than asserting it synchronously (CI races).
+        let stopped = await HangingURLProtocol.waitUntilStopped()
+        XCTAssertTrue(stopped, "cancellation must abort the underlying URL request")
     }
 
     func testTimeoutWithoutCallerCancellationSurfacesAsTimeout() async {
@@ -88,16 +92,28 @@ private final class HangingURLProtocol: URLProtocol {
         _stopLoadingCalled = false
     }
 
-    static func waitUntilLoading() async {
-        for _ in 0 ..< 500 {
+    @discardableResult
+    static func waitUntilLoading() async -> Bool {
+        await poll { _loadingStarted }
+    }
+
+    @discardableResult
+    static func waitUntilStopped() async -> Bool {
+        await poll { _stopLoadingCalled }
+    }
+
+    /// Polls a lock-guarded flag for up to ~10s (generous for slow CI runners).
+    private static func poll(_ flag: @escaping () -> Bool) async -> Bool {
+        for _ in 0 ..< 1000 {
             lock.lock()
-            let started = _loadingStarted
+            let value = flag()
             lock.unlock()
-            if started {
-                return
+            if value {
+                return true
             }
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
+        return false
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
