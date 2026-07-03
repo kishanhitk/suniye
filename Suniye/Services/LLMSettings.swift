@@ -290,12 +290,18 @@ struct LLMSettings: Codable, Equatable {
         return sections.joined(separator: "\n\n")
     }
 
-    /// Copy of these settings with every provider's composed prompt replaced by a per-app override.
-    func overridingSystemPrompts(with prompt: String) -> LLMSettings {
+    /// Copy of these settings with app-specific instructions appended to every provider prompt.
+    func appendingAppInstructions(_ instructions: String) -> LLMSettings {
+        let normalizedInstructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedInstructions.isEmpty else {
+            return self
+        }
+
+        let appSection = "App-specific instructions:\n\(normalizedInstructions)"
         var copy = self
-        copy.baseSystemPrompt = prompt
-        copy.appleSystemPrompt = prompt
-        copy.gemmaSystemPrompt = prompt
+        copy.baseSystemPrompt = [composedSystemPrompt, appSection].joined(separator: "\n\n")
+        copy.appleSystemPrompt = [composedAppleSystemPrompt, appSection].joined(separator: "\n\n")
+        copy.gemmaSystemPrompt = [composedGemmaSystemPrompt, appSection].joined(separator: "\n\n")
         copy.systemPrompt = ""
         return copy
     }

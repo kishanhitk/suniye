@@ -1943,19 +1943,8 @@ final class AppState {
         removeAutoLearnedVocabularyTerms([value])
     }
 
-    /// Prompt used as the starting point for a new per-app binding, matching the active provider.
-    var activeMagicFormatPrompt: String {
-        if usesAppleMagicFormatSettings {
-            return llmAppleSystemPrompt
-        }
-        if usesLocalGemmaMagicFormatSettings {
-            return llmGemmaSystemPrompt
-        }
-        return llmBaseSystemPrompt
-    }
-
     /// Adds a binding for the app, or refreshes the display name of an existing one.
-    /// New bindings start from the active provider's prompt. Returns the affected binding.
+    /// New bindings start blank because the saved prompt is appended to the active provider prompt. Returns the affected binding.
     @discardableResult
     func addAppPromptBinding(bundleID: String, appDisplayName: String) -> AppPromptBinding? {
         guard let trimmedBundleID = AppPromptResolver.normalizedBundleID(bundleID) else {
@@ -1971,7 +1960,7 @@ final class AppState {
         let binding = AppPromptBinding(
             bundleID: trimmedBundleID,
             appDisplayName: trimmedName.isEmpty ? trimmedBundleID : trimmedName,
-            prompt: activeMagicFormatPrompt
+            prompt: ""
         )
         llmAppPromptBindings.append(binding)
         return binding
@@ -2658,10 +2647,10 @@ final class AppState {
         }
 
         var settings = currentLLMSettings()
-        if let overridePrompt = AppPromptResolver.overridePrompt(for: frontmostAppBundleID, bindings: llmAppPromptBindings) {
-            settings = settings.overridingSystemPrompts(with: overridePrompt)
+        if let appInstructions = AppPromptResolver.additionalInstructions(for: frontmostAppBundleID, bindings: llmAppPromptBindings) {
+            settings = settings.appendingAppInstructions(appInstructions)
             // No bundle ID here: app.log ships in diagnostic reports.
-            AppLogger.shared.log(.info, "llm per-app prompt override applied")
+            AppLogger.shared.log(.info, "llm per-app prompt instructions appended")
         }
 
         return await magicFormatCoordinator.polish(

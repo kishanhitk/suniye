@@ -13,7 +13,11 @@ final class AppStatePerAppPromptTests: XCTestCase {
         }
     }
 
-    func testAddAppPromptBindingAppendsSeedsFromActiveProviderAndPersists() {
+    private func appendedPrompt(base: String, instructions: String = "Keep it terse.") -> String {
+        "\(base)\n\nApp-specific instructions:\n\(instructions)"
+    }
+
+    func testAddAppPromptBindingStartsBlankAndPersists() {
         let store = TestLLMSettingsStore()
         let appState = makeTestAppState(llmSettingsStore: store)
         appState.llmProvider = .openAICompatible
@@ -22,7 +26,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
 
         XCTAssertEqual(appState.llmAppPromptBindings.count, 1)
         XCTAssertEqual(binding?.bundleID, slackBundleID)
-        XCTAssertEqual(binding?.prompt, appState.llmBaseSystemPrompt)
+        XCTAssertEqual(binding?.prompt, "")
         XCTAssertEqual(store.latest.appPromptBindings, appState.llmAppPromptBindings)
     }
 
@@ -76,7 +80,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
 
     // MARK: - Post-processing integration
 
-    func testPostProcessingUsesPerAppPromptForBoundApp() async {
+    func testPostProcessingAppendsPerAppPromptForBoundApp() async {
         let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
         let appState = makeTestAppState(
             llmPostProcessor: capturingLLM,
@@ -90,7 +94,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
         let output = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
 
         XCTAssertEqual(output, "polished")
-        XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, "Keep it terse.")
+        XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, appendedPrompt(base: LLMDefaults.defaultBaseSystemPrompt))
     }
 
     func testPostProcessingUsesDefaultPromptForUnboundApp() async {
@@ -125,7 +129,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
         XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, LLMDefaults.defaultBaseSystemPrompt)
     }
 
-    func testPostProcessingAppliesPerAppPromptToAppleProvider() async {
+    func testPostProcessingAppendsPerAppPromptToAppleProvider() async {
         let fakeApple = CapturingAppleMagicFormatPostProcessor(
             availability: .available,
             result: .success("apple polished")
@@ -138,10 +142,10 @@ final class AppStatePerAppPromptTests: XCTestCase {
         let output = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
 
         XCTAssertEqual(output, "apple polished")
-        XCTAssertEqual(fakeApple.lastConfig?.systemPrompt, "Keep it terse.")
+        XCTAssertEqual(fakeApple.lastConfig?.systemPrompt, appendedPrompt(base: LLMDefaults.defaultAppleMagicFormatPrompt))
     }
 
-    func testPostProcessingAppliesPerAppPromptToLocalGemmaProvider() async {
+    func testPostProcessingAppendsPerAppPromptToLocalGemmaProvider() async {
         let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
             availability: .available,
             result: .success("gemma polished")
@@ -159,11 +163,11 @@ final class AppStatePerAppPromptTests: XCTestCase {
         let output = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
 
         XCTAssertEqual(output, "gemma polished")
-        XCTAssertEqual(fakeGemma.lastConfig?.systemPrompt, "Keep it terse.")
+        XCTAssertEqual(fakeGemma.lastConfig?.systemPrompt, appendedPrompt(base: LLMDefaults.defaultGemmaMagicFormatPrompt))
     }
 
     /// With no matching binding, the local model must receive the shipped default
-    /// prompt untouched (guards the referential-edit prompt against override leaks).
+    /// prompt untouched (guards the referential-edit prompt against per-app append leaks).
     func testPostProcessingUsesDefaultGemmaPromptForUnboundApp() async {
         let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
             availability: .available,
@@ -236,7 +240,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
             await Task.yield()
         }
 
-        XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, "Keep it terse.")
+        XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, appendedPrompt(base: LLMDefaults.defaultBaseSystemPrompt))
         XCTAssertEqual(insertion.insertedTexts, ["polished"])
         XCTAssertEqual(appState.phase, .ready)
     }

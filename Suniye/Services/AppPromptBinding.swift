@@ -1,6 +1,6 @@
 import AppKit
 
-/// Binds a Magic Format system prompt to a specific app, keyed by bundle ID.
+/// Binds Magic Format app-specific instructions to an app, keyed by bundle ID.
 struct AppPromptBinding: Identifiable, Codable, Equatable, Sendable {
     var id = UUID()
     var bundleID: String
@@ -36,8 +36,8 @@ enum AppPromptResolver {
         bindings.first { matches($0.bundleID, bundleID) }
     }
 
-    /// Returns the per-app prompt override, or nil when the app is unbound or its prompt is blank.
-    static func overridePrompt(for bundleID: String?, bindings: [AppPromptBinding]) -> String? {
+    /// Returns the per-app additional instructions, or nil when the app is unbound or its prompt is blank.
+    static func additionalInstructions(for bundleID: String?, bindings: [AppPromptBinding]) -> String? {
         guard let binding = binding(for: bundleID, in: bindings) else {
             return nil
         }

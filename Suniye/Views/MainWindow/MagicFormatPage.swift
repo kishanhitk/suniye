@@ -412,7 +412,7 @@ struct StylePage: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("App-specific prompts")
                                 .font(AppTypography.body)
-                            Text("Use a different Magic Format prompt when dictating into these apps. All other apps use the formatter prompt above. A per-app prompt applies as written, whichever formatter runs.")
+                            Text("Append extra Magic Format instructions when dictating into these apps. All other apps use the formatter prompt above.")
                                 .font(AppTypography.caption)
                                 .foregroundStyle(MainWindowPalette.secondaryText)
                         }
@@ -441,8 +441,14 @@ struct StylePage: View {
     private var addAppPromptBindingMenu: some View {
         Menu {
             ForEach(AppPromptBindingCandidates.running(excluding: appState.llmAppPromptBindings)) { candidate in
-                Button(candidate.appDisplayName) {
+                Button {
                     addAppPromptBinding(for: candidate)
+                } label: {
+                    Label {
+                        Text(candidate.appDisplayName)
+                    } icon: {
+                        AppPromptIconView(bundleID: candidate.bundleID, size: 16)
+                    }
                 }
             }
 
@@ -474,7 +480,9 @@ struct StylePage: View {
                 )
                 .padding(.top, AppMetrics.disclosureContentTopPadding)
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                AppPromptIconView(bundleID: binding.bundleID, size: 28)
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(binding.appDisplayName)
                         .font(AppTypography.bodyMedium)
@@ -875,4 +883,34 @@ struct StylePage: View {
         .frame(maxWidth: .infinity, minHeight: 28)
     }
 
+}
+
+private struct AppPromptIconView: View {
+    let bundleID: String
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let icon = appIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(systemName: "app.dashed")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                    .padding(size * 0.18)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+
+    private var appIcon: NSImage? {
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        return NSWorkspace.shared.icon(forFile: appURL.path)
+    }
 }

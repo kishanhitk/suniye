@@ -7,28 +7,28 @@ final class AppPromptBindingTests: XCTestCase {
         AppPromptBinding(bundleID: "com.apple.Notes", appDisplayName: "Notes", prompt: "Write full prose.")
     ]
 
-    func testOverridePromptReturnsBoundPrompt() {
-        let prompt = AppPromptResolver.overridePrompt(for: "com.tinyspeck.slackmacgap", bindings: bindings)
+    func testAdditionalInstructionsReturnsBoundPrompt() {
+        let prompt = AppPromptResolver.additionalInstructions(for: "com.tinyspeck.slackmacgap", bindings: bindings)
         XCTAssertEqual(prompt, "Keep it terse.")
     }
 
-    func testOverridePromptIsNilForUnboundBundleID() {
-        XCTAssertNil(AppPromptResolver.overridePrompt(for: "com.apple.mail", bindings: bindings))
+    func testAdditionalInstructionsIsNilForUnboundBundleID() {
+        XCTAssertNil(AppPromptResolver.additionalInstructions(for: "com.apple.mail", bindings: bindings))
     }
 
-    func testOverridePromptIsNilForNilOrEmptyBundleID() {
-        XCTAssertNil(AppPromptResolver.overridePrompt(for: nil, bindings: bindings))
-        XCTAssertNil(AppPromptResolver.overridePrompt(for: "   ", bindings: bindings))
+    func testAdditionalInstructionsIsNilForNilOrEmptyBundleID() {
+        XCTAssertNil(AppPromptResolver.additionalInstructions(for: nil, bindings: bindings))
+        XCTAssertNil(AppPromptResolver.additionalInstructions(for: "   ", bindings: bindings))
     }
 
-    func testOverridePromptMatchesCaseInsensitivelyAndTrims() {
-        let prompt = AppPromptResolver.overridePrompt(for: "  COM.APPLE.NOTES ", bindings: bindings)
+    func testAdditionalInstructionsMatchesCaseInsensitivelyAndTrims() {
+        let prompt = AppPromptResolver.additionalInstructions(for: "  COM.APPLE.NOTES ", bindings: bindings)
         XCTAssertEqual(prompt, "Write full prose.")
     }
 
-    func testOverridePromptIsNilForWhitespaceOnlyBindingPrompt() {
+    func testAdditionalInstructionsIsNilForWhitespaceOnlyBindingPrompt() {
         let blank = [AppPromptBinding(bundleID: "com.apple.Notes", appDisplayName: "Notes", prompt: "  \n ")]
-        XCTAssertNil(AppPromptResolver.overridePrompt(for: "com.apple.Notes", bindings: blank))
+        XCTAssertNil(AppPromptResolver.additionalInstructions(for: "com.apple.Notes", bindings: blank))
     }
 
     func testBindingCodableRoundTrip() throws {
@@ -65,20 +65,29 @@ final class AppPromptBindingTests: XCTestCase {
         XCTAssertEqual(store.load().appPromptBindings, bindings)
     }
 
-    /// Pins the complete set of prompt surfaces that reach providers: the override
-    /// must fully replace the base, apple, and gemma prompts and the user suffix.
-    func testOverridingSystemPromptsReplacesAllProviderPrompts() {
+    /// Pins the complete set of prompt surfaces that reach providers: app-specific
+    /// instructions must append to the base, apple, and gemma prompts.
+    func testAppendingAppInstructionsAddsSectionToAllProviderPrompts() {
         let settings = LLMSettings(
             baseSystemPrompt: "BASE_SENTINEL",
             appleSystemPrompt: "APPLE_SENTINEL",
             gemmaSystemPrompt: "GEMMA_SENTINEL",
             systemPrompt: "USER_SENTINEL"
         )
-        let overridden = settings.overridingSystemPrompts(with: "Keep it terse.")
+        let appended = settings.appendingAppInstructions("Keep it terse.")
 
-        XCTAssertEqual(overridden.composedSystemPrompt, "Keep it terse.")
-        XCTAssertEqual(overridden.composedAppleSystemPrompt, "Keep it terse.")
-        XCTAssertEqual(overridden.composedGemmaSystemPrompt, "Keep it terse.")
+        XCTAssertEqual(
+            appended.composedSystemPrompt,
+            "BASE_SENTINEL\n\nUser customization:\nUSER_SENTINEL\n\nApp-specific instructions:\nKeep it terse."
+        )
+        XCTAssertEqual(
+            appended.composedAppleSystemPrompt,
+            "APPLE_SENTINEL\n\nApp-specific instructions:\nKeep it terse."
+        )
+        XCTAssertEqual(
+            appended.composedGemmaSystemPrompt,
+            "GEMMA_SENTINEL\n\nApp-specific instructions:\nKeep it terse."
+        )
     }
 
     // MARK: - Candidate discovery

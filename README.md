@@ -67,7 +67,7 @@ Use **Report a Problem** from the menu bar, the General page, or the Help menu. 
 | **Model** | Compare local ASR models by speed, quality, size, and language support; install supported options, switch the active model, or remove unused ones |
 | **Vocabulary** | Add domain-specific terms so the app gets your jargon right |
 | **Magic Format** | Optional AI cleanup — use Apple Intelligence locally when available, local Gemma 4 Q4 when installed, or an API model with your own key; customize prompts and vocabulary |
-| **Per-app prompts** | Bind a different Magic Format prompt to specific apps (e.g. terse for chat, prose for notes); other apps use the default prompt |
+| **Per-app prompts** | Append app-specific Magic Format instructions for specific apps (e.g. terse for chat, prose for notes); other apps use the default prompt |
 | **General** | Preferred mic, auto-paste, launch at login, diagnostics |
 
 ## Supported speech models
