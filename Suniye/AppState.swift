@@ -3793,20 +3793,25 @@ final class AppState {
         guard liveTranscriptionPreviewEnabled, phase == .recording, activeAudioCaptureSessionID == sessionID else {
             return
         }
+        // Partial decodes queue ahead of the final decode on the TranscriptionService
+        // actor, so live preview is limited to families whose decode cost scales with
+        // the audio window instead of a fixed full-window pass.
+        let activeModelID = loadedASRModelID ?? selectedASRModelID
+        guard ASRModelCatalog.entry(for: activeModelID).family.supportsLivePreview else {
+            AppLogger.shared.log(.debug, "live preview disabled for model family id=\(activeModelID.rawValue)")
+            return
+        }
         let audioCaptureService = audioCaptureService
         let transcriptionService = transcriptionService
         partialTranscriptionScheduler.start(
             snapshotProvider: {
-                guard let snapshot = await audioCaptureService.snapshotSamples(
+                await audioCaptureService.snapshotSamples(
                     sessionID: sessionID,
                     maxDurationSeconds: PartialTranscriptionScheduler.maxWindowSeconds
-                ) else {
-                    return nil
-                }
-                return (snapshot.samples, snapshot.sampleRate)
+                )
             },
             decode: { samples, sampleRate in
-                try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
+                try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate, purpose: .partial)
             },
             onPartial: { [weak self] text in
                 self?.publishLivePartialTranscript(text, sessionID: sessionID)
@@ -3820,10 +3825,13 @@ final class AppState {
     }
 
     private func publishLivePartialTranscript(_ text: String, sessionID: UUID) {
+        // Belt-and-braces: the scheduler's generation guard already suppresses late
+        // partials (every path that leaves .recording stops the preview first); this
+        // re-check additionally protects any future path that forgets to.
         guard phase == .recording, activeAudioCaptureSessionID == sessionID else {
             return
         }
-        let preview = PartialTranscriptionScheduler.previewTail(text)
+        let preview = FloatingIndicatorMetrics.previewTail(text)
         livePartialTranscript = preview.isEmpty ? nil : preview
         if case let .listening(levels, source, _) = floatingIndicatorState {
             setFloatingIndicatorState(.listening(levels: levels, source: source, preview: livePartialTranscript))

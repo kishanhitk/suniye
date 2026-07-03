@@ -28,6 +28,7 @@ final class AppStateLivePreviewTests: XCTestCase {
         await scheduler.tickNow()
         XCTAssertEqual(appState.livePartialTranscript, "hello world")
         XCTAssertEqual(audioCapture.lastSnapshotMaxDurationSeconds, PartialTranscriptionScheduler.maxWindowSeconds)
+        XCTAssertEqual(transcription.transcribePurposes, [.partial, .partial])
         XCTAssertEqual(
             appState.floatingIndicatorState,
             .listening(
@@ -36,6 +37,60 @@ final class AppStateLivePreviewTests: XCTestCase {
                 preview: "hello world"
             )
         )
+    }
+
+    func testAudioLevelUpdateKeepsPartialPreview() async throws {
+        let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
+        let audioCapture = StubAudioCaptureService()
+        let transcription = StubTranscriptionService()
+        transcription.transcribeResult = .success("partial words")
+        let started = expectation(description: "capture started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcription: transcription,
+            scheduler: scheduler
+        )
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [started], timeout: 1)
+        await drainScheduledTasks()
+        await scheduler.tickNow()
+        XCTAssertEqual(appState.livePartialTranscript, "partial words")
+
+        let sessionID = try XCTUnwrap(audioCapture.lastStartedSessionID)
+        let levels = Array(repeating: Float(0.42), count: AudioLevelMeter.bandCount)
+        audioCapture.onEvent?(.levelsUpdated(sessionID: sessionID, levels: levels))
+        await drainScheduledTasks()
+
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .listening(levels: levels, source: .manual, preview: "partial words")
+        )
+    }
+
+    func testWhisperModelFamilyDisablesLivePreview() async throws {
+        let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
+        let audioCapture = StubAudioCaptureService()
+        let transcription = StubTranscriptionService()
+        let started = expectation(description: "capture started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcription: transcription,
+            scheduler: scheduler
+        )
+        appState.loadedASRModelID = .whisperLargeV3
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [started], timeout: 1)
+        await drainScheduledTasks()
+
+        XCTAssertFalse(scheduler.isActive)
+        await scheduler.tickNow()
+        XCTAssertEqual(transcription.transcribeCallCount, 0)
+        XCTAssertEqual(audioCapture.snapshotCallCount, 0)
+        XCTAssertNil(appState.livePartialTranscript)
     }
 
     func testLatePartialAfterStopDoesNotClobberFinalTranscript() async throws {
@@ -82,6 +137,7 @@ final class AppStateLivePreviewTests: XCTestCase {
         XCTAssertNil(appState.livePartialTranscript)
         XCTAssertEqual(appState.floatingIndicatorState, .idle)
         XCTAssertEqual(textInsertion.insertedTexts.count, 1)
+        XCTAssertEqual(transcription.transcribePurposes, [.partial, .final])
         XCTAssertFalse(scheduler.isActive)
     }
 
@@ -114,6 +170,7 @@ final class AppStateLivePreviewTests: XCTestCase {
         try await waitUntil { appState.phase == .ready }
 
         XCTAssertEqual(transcription.transcribeCallCount, 1)
+        XCTAssertEqual(transcription.transcribePurposes, [.final])
         XCTAssertEqual(audioCapture.snapshotCallCount, 0)
         XCTAssertEqual(textInsertion.insertedTexts.count, 1)
         XCTAssertTrue(try XCTUnwrap(textInsertion.insertedTexts.first).contains("final text"))

@@ -5,6 +5,20 @@ enum ASRModelFamily: String, Codable {
     case moonshine
     case senseVoice
     case whisper
+
+    /// Whether repeated partial decodes for the live transcription preview are
+    /// affordable. Whisper decodes a fixed 30s mel window regardless of input
+    /// length, so every ~700ms partial tick would cost a full-window decode and
+    /// delay the final decode behind an in-flight partial; the other families
+    /// decode roughly proportional to the snapshot length.
+    var supportsLivePreview: Bool {
+        switch self {
+        case .nemoTransducer, .moonshine, .senseVoice:
+            return true
+        case .whisper:
+            return false
+        }
+    }
 }
 
 enum ASRModelID: String, Codable, CaseIterable, Identifiable {

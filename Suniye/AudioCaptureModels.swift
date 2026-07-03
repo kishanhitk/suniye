@@ -143,7 +143,6 @@ struct AudioCaptureSession: Equatable, Sendable {
 /// Mid-recording copy of the tail of the accumulated sample buffer, used for
 /// live transcription preview decodes.
 struct AudioSampleSnapshot: Equatable, Sendable {
-    let sessionID: UUID
     let samples: [Float]
     let sampleRate: Int
 }

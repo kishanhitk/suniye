@@ -237,7 +237,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                 let sampleRate = max(8_000, active.route.inputSampleRate)
                 let maxCount = Int(Double(sampleRate) * max(0, maxDurationSeconds))
                 continuation.resume(returning: AudioSampleSnapshot(
-                    sessionID: sessionID,
                     samples: Array(active.samples.suffix(maxCount)),
                     sampleRate: sampleRate
                 ))

@@ -8,7 +8,7 @@ final class PartialTranscriptionSchedulerTests: XCTestCase {
         let counter = DecodeCounter()
 
         scheduler.start(
-            snapshotProvider: { (Self.samples, 16_000) },
+            snapshotProvider: { Self.snapshot },
             decode: { _, _ in
                 counter.increment()
                 return "partial"
@@ -30,7 +30,7 @@ final class PartialTranscriptionSchedulerTests: XCTestCase {
         let decodeStarted = expectation(description: "decode started")
 
         scheduler.start(
-            snapshotProvider: { (Self.samples, 16_000) },
+            snapshotProvider: { Self.snapshot },
             decode: { _, _ in
                 counter.increment()
                 decodeStarted.fulfill()
@@ -60,7 +60,7 @@ final class PartialTranscriptionSchedulerTests: XCTestCase {
         let counter = DecodeCounter()
 
         scheduler.start(
-            snapshotProvider: { (Self.samples, 16_000) },
+            snapshotProvider: { Self.snapshot },
             decode: { _, _ in
                 counter.increment()
                 return "partial"
@@ -83,7 +83,7 @@ final class PartialTranscriptionSchedulerTests: XCTestCase {
         var publishedPartials: [String] = []
 
         scheduler.start(
-            snapshotProvider: { (Self.samples, 16_000) },
+            snapshotProvider: { Self.snapshot },
             decode: { _, _ in
                 decodeStarted.fulfill()
                 await gate.wait()
@@ -101,10 +101,49 @@ final class PartialTranscriptionSchedulerTests: XCTestCase {
         XCTAssertEqual(publishedPartials, [])
     }
 
+    func testRestartIsNotBlockedByPriorSessionDecode() async {
+        let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
+        let gate = AsyncGate()
+        let staleDecodeStarted = expectation(description: "stale decode started")
+        let counter = DecodeCounter()
+        var publishedPartials: [String] = []
+
+        scheduler.start(
+            snapshotProvider: { Self.snapshot },
+            decode: { _, _ in
+                staleDecodeStarted.fulfill()
+                await gate.wait()
+                return "stale partial"
+            },
+            onPartial: { publishedPartials.append($0) }
+        )
+        let blockedTick = Task { await scheduler.tickNow() }
+        await fulfillment(of: [staleDecodeStarted], timeout: 1)
+
+        // Restart while the old session's decode is still in flight: the new
+        // session's first tick must not be blocked by the stale decode.
+        scheduler.start(
+            snapshotProvider: { Self.snapshot },
+            decode: { _, _ in
+                counter.increment()
+                return "fresh partial"
+            },
+            onPartial: { publishedPartials.append($0) }
+        )
+        await scheduler.tickNow()
+        XCTAssertEqual(counter.value, 1)
+        XCTAssertEqual(publishedPartials, ["fresh partial"])
+
+        gate.open()
+        await blockedTick.value
+        XCTAssertEqual(publishedPartials, ["fresh partial"])
+        scheduler.stop()
+    }
+
     func testTickWithoutSamplesSkipsDecode() async {
         let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
         let counter = DecodeCounter()
-        var snapshots: [(samples: [Float], sampleRate: Int)?] = [nil, ([], 16_000)]
+        var snapshots: [AudioSampleSnapshot?] = [nil, AudioSampleSnapshot(samples: [], sampleRate: 16_000)]
 
         scheduler.start(
             snapshotProvider: { snapshots.isEmpty ? nil : snapshots.removeFirst() },
@@ -126,7 +165,7 @@ final class PartialTranscriptionSchedulerTests: XCTestCase {
         let counter = DecodeCounter()
 
         scheduler.start(
-            snapshotProvider: { (Self.samples, 16_000) },
+            snapshotProvider: { Self.snapshot },
             decode: { _, _ in
                 counter.increment()
                 return "partial"
@@ -139,21 +178,10 @@ final class PartialTranscriptionSchedulerTests: XCTestCase {
         XCTAssertEqual(counter.value, 0)
     }
 
-    func testPreviewTailKeepsShortTextIntact() {
-        XCTAssertEqual(PartialTranscriptionScheduler.previewTail("hello world"), "hello world")
-        XCTAssertEqual(PartialTranscriptionScheduler.previewTail("  padded  "), "padded")
-        XCTAssertEqual(PartialTranscriptionScheduler.previewTail(""), "")
-    }
-
-    func testPreviewTailTruncatesLongTextToSuffix() {
-        let text = String(repeating: "a", count: 120) + String(repeating: "b", count: 80)
-        let tail = PartialTranscriptionScheduler.previewTail(text)
-
-        XCTAssertEqual(tail, "…" + String(repeating: "b", count: 80))
-        XCTAssertEqual(tail.count, PartialTranscriptionScheduler.previewTailMaxCharacters + 1)
-    }
-
-    private static let samples = Array(repeating: Float(0.2), count: 1_600)
+    private static let snapshot = AudioSampleSnapshot(
+        samples: Array(repeating: Float(0.2), count: 1_600),
+        sampleRate: 16_000
+    )
 }
 
 /// Thread-safe counter; scheduler decode closures may hop executors.

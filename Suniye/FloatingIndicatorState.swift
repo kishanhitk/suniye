@@ -1,4 +1,27 @@
+import CoreGraphics
 import Foundation
+
+/// Presentation metrics shared by `FloatingIndicatorView` (pill) and
+/// `FloatingIndicatorController` (hosting panel) so the two cannot drift.
+enum FloatingIndicatorMetrics {
+    static let previewTailMaxCharacters = 80
+
+    static func listeningPillWidth(preview: String?) -> CGFloat {
+        guard let preview else {
+            return 124
+        }
+        return min(max(CGFloat(preview.count) * 6.5 + 96, 220), 460)
+    }
+
+    /// Tail of a partial transcript that fits the live-preview capsule.
+    static func previewTail(_ text: String, maxCharacters: Int = previewTailMaxCharacters) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > maxCharacters else {
+            return trimmed
+        }
+        return "…" + String(trimmed.suffix(maxCharacters))
+    }
+}
 
 enum FloatingIndicatorState: Equatable {
     enum Source: String, Equatable {

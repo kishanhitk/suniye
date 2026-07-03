@@ -52,10 +52,23 @@ struct RecognizerConfig {
     }
 }
 
+/// Distinguishes the one-shot final decode from repeated live-preview decodes,
+/// which log at `.debug` so they do not flood app.log at ~1 line/s.
+enum TranscriptionPurpose: String {
+    case final
+    case partial
+}
+
 protocol TranscriptionServiceProtocol {
     func loadModel(config: RecognizerConfig) async throws
-    func transcribe(samples: [Float], sampleRate: Int) async throws -> String
+    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String
     func unloadModel() async
+}
+
+extension TranscriptionServiceProtocol {
+    func transcribe(samples: [Float], sampleRate: Int) async throws -> String {
+        try await transcribe(samples: samples, sampleRate: sampleRate, purpose: .final)
+    }
 }
 
 struct AudioRecognitionPreprocessor {
@@ -189,7 +202,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         loadedConfig = config
     }
 
-    func transcribe(samples: [Float], sampleRate: Int = 16_000) async throws -> String {
+    func transcribe(samples: [Float], sampleRate: Int = 16_000, purpose: TranscriptionPurpose = .final) async throws -> String {
         guard let recognizer else {
             throw ServiceError.recognizerNotLoaded
         }
@@ -198,13 +211,15 @@ actor TranscriptionService: TranscriptionServiceProtocol {
             throw ServiceError.emptyAudio
         }
 
+        let logLevel: AppLogger.Level = purpose == .partial ? .debug : .info
         let effectiveSampleRate = max(8_000, sampleRate)
         let inputDuration = Double(samples.count) / Double(effectiveSampleRate)
         let preparedAudio = AudioRecognitionPreprocessor.prepareForRecognition(samples)
         AppLogger.shared.log(
-            .info,
+            logLevel,
             String(
-                format: "transcribe start samples=%d sr=%d duration=%.2fs",
+                format: "transcribe start purpose=%@ samples=%d sr=%d duration=%.2fs",
+                purpose.rawValue,
                 samples.count,
                 effectiveSampleRate,
                 inputDuration
@@ -212,7 +227,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         )
         if preparedAudio.didNormalize {
             AppLogger.shared.log(
-                .info,
+                logLevel,
                 String(
                     format: "transcribe audio normalized gain=%.2f inputRMS=%.5f inputPeak=%.5f outputRMS=%.5f outputPeak=%.5f",
                     preparedAudio.gain,
@@ -252,7 +267,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
             return ""
         }
         let text = String(cString: cText).trimmingCharacters(in: .whitespacesAndNewlines)
-        AppLogger.shared.log(.info, "transcribe done chars=\(text.count)")
+        AppLogger.shared.log(logLevel, "transcribe done purpose=\(purpose.rawValue) chars=\(text.count)")
         return text
     }
 

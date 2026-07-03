@@ -375,6 +375,7 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     var unloadCallCount = 0
     var loadCallCount = 0
     var transcribeCallCount = 0
+    var transcribePurposes: [TranscriptionPurpose] = []
     var loadedConfigs: [RecognizerConfig] = []
     var onTranscribe: (() -> Void)?
     /// Awaited after the scripted result is claimed; receives the 1-based call number.
@@ -389,8 +390,9 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
         try loadModelResult.get()
     }
 
-    func transcribe(samples: [Float], sampleRate: Int) async throws -> String {
+    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String {
         transcribeCallCount += 1
+        transcribePurposes.append(purpose)
         let callNumber = transcribeCallCount
         onTranscribe?()
         let result = scriptedTranscribeResults.isEmpty
@@ -486,7 +488,6 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
             return nil
         }
         return AudioSampleSnapshot(
-            sessionID: sessionID,
             samples: snapshotSamplesResult,
             sampleRate: route.inputSampleRate
         )

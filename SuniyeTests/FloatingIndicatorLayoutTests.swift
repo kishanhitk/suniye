@@ -48,4 +48,27 @@ final class FloatingIndicatorLayoutTests: XCTestCase {
         XCTAssertLessThanOrEqual(frame.maxX, visibleFrame.maxX)
         XCTAssertLessThanOrEqual(frame.maxY, visibleFrame.maxY)
     }
+
+    func testListeningPillWidthMatchesBaselineWithoutPreviewAndClampsWithOne() {
+        XCTAssertEqual(FloatingIndicatorMetrics.listeningPillWidth(preview: nil), 124)
+        XCTAssertEqual(FloatingIndicatorMetrics.listeningPillWidth(preview: "hi"), 220)
+        XCTAssertEqual(
+            FloatingIndicatorMetrics.listeningPillWidth(preview: String(repeating: "x", count: 200)),
+            460
+        )
+    }
+
+    func testPreviewTailKeepsShortTextIntact() {
+        XCTAssertEqual(FloatingIndicatorMetrics.previewTail("hello world"), "hello world")
+        XCTAssertEqual(FloatingIndicatorMetrics.previewTail("  padded  "), "padded")
+        XCTAssertEqual(FloatingIndicatorMetrics.previewTail(""), "")
+    }
+
+    func testPreviewTailTruncatesLongTextToSuffix() {
+        let text = String(repeating: "a", count: 120) + String(repeating: "b", count: 80)
+        let tail = FloatingIndicatorMetrics.previewTail(text)
+
+        XCTAssertEqual(tail, "…" + String(repeating: "b", count: 80))
+        XCTAssertEqual(tail.count, FloatingIndicatorMetrics.previewTailMaxCharacters + 1)
+    }
 }

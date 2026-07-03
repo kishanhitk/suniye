@@ -2,25 +2,30 @@ import Foundation
 
 /// Drives the live transcription preview while recording: ticks on a fixed interval,
 /// snapshots the accumulated audio, and decodes it into a partial transcript.
-/// A tick is skipped (never queued) while a decode is in flight, and `stop()`
-/// suppresses results from any decode still running so a stale partial can never
-/// surface after recording ends.
+/// A tick is skipped (never queued) while a decode for the same session is in flight.
+/// `stop()` suppresses the *result* of any decode still running — the decode work
+/// itself is not cancelled, so on the TranscriptionService actor a final decode
+/// requested right after stop can queue behind at most one partial decode. AppState
+/// bounds that cost by only enabling partials for model families whose decode time
+/// scales with input length (see `ASRModelFamily.supportsLivePreview`).
 @MainActor
 final class PartialTranscriptionScheduler {
     /// Partial decodes only cover the most recent window of audio. This keeps the
     /// per-tick decode cost bounded for arbitrarily long dictations; the indicator
     /// shows the transcript tail, so older audio adds nothing visible.
-    static let maxWindowSeconds: Double = 30
-    static let defaultTickInterval: TimeInterval = 0.7
-    static let previewTailMaxCharacters = 80
+    nonisolated static let maxWindowSeconds: Double = 30
+    nonisolated static let defaultTickInterval: TimeInterval = 0.7
 
     private let tickInterval: TimeInterval
-    private var snapshotProvider: (() async -> (samples: [Float], sampleRate: Int)?)?
+    private var snapshotProvider: (() async -> AudioSampleSnapshot?)?
     private var decode: (([Float], Int) async throws -> String)?
     private var onPartial: ((String) -> Void)?
     private var tickTask: Task<Void, Never>?
     private var generation = 0
-    private(set) var isDecodeInFlight = false
+    /// Generation of the decode currently in flight, if any. Scoped per generation
+    /// so a decode left over from a stopped session never blocks the first ticks of
+    /// a quickly restarted one.
+    private var inFlightGeneration: Int?
 
     init(tickInterval: TimeInterval = PartialTranscriptionScheduler.defaultTickInterval) {
         self.tickInterval = tickInterval
@@ -30,8 +35,12 @@ final class PartialTranscriptionScheduler {
         tickTask != nil
     }
 
+    var isDecodeInFlight: Bool {
+        inFlightGeneration != nil
+    }
+
     func start(
-        snapshotProvider: @escaping () async -> (samples: [Float], sampleRate: Int)?,
+        snapshotProvider: @escaping () async -> AudioSampleSnapshot?,
         decode: @escaping ([Float], Int) async throws -> String,
         onPartial: @escaping (String) -> Void
     ) {
@@ -65,23 +74,19 @@ final class PartialTranscriptionScheduler {
         await performTick(generation: generation)
     }
 
-    static func previewTail(_ text: String, maxCharacters: Int = previewTailMaxCharacters) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count > maxCharacters else {
-            return trimmed
-        }
-        return "…" + String(trimmed.suffix(maxCharacters))
-    }
-
     private func performTick(generation: Int) async {
-        guard generation == self.generation, !isDecodeInFlight else {
+        guard generation == self.generation, inFlightGeneration != generation else {
             return
         }
         guard let snapshotProvider, let decode else {
             return
         }
-        isDecodeInFlight = true
-        defer { isDecodeInFlight = false }
+        inFlightGeneration = generation
+        defer {
+            if inFlightGeneration == generation {
+                inFlightGeneration = nil
+            }
+        }
 
         guard let snapshot = await snapshotProvider(), !snapshot.samples.isEmpty else {
             return

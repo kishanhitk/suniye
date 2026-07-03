@@ -187,10 +187,10 @@ struct FloatingIndicatorView: View {
         case .hover:
             return 152
         case let .listening(_, source, preview):
-            guard let preview else {
-                return source == .editHotkey ? 150 : 124
+            if preview == nil, source == .editHotkey {
+                return 150
             }
-            return min(max(CGFloat(preview.count) * 6.5 + 96, 220), 460)
+            return FloatingIndicatorMetrics.listeningPillWidth(preview: preview)
         case let .processing(message):
             guard let message else {
                 return 128
