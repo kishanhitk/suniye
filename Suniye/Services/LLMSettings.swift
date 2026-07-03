@@ -164,6 +164,7 @@ struct LLMSettings: Codable, Equatable {
     var timeoutSeconds: Double = LLMDefaults.defaultTimeoutSeconds
     var maxTokens: Int = LLMDefaults.defaultMaxTokens
     var localModelKeepAlive: LocalLLMKeepAlive = .tenMinutes
+    var appPromptBindings: [AppPromptBinding] = []
 
     enum CodingKeys: String, CodingKey {
         case isEnabled
@@ -181,6 +182,7 @@ struct LLMSettings: Codable, Equatable {
         case timeoutSeconds
         case maxTokens
         case localModelKeepAlive
+        case appPromptBindings
     }
 
     init() {}
@@ -200,7 +202,8 @@ struct LLMSettings: Codable, Equatable {
         learnFromEditsEnabled: Bool = true,
         timeoutSeconds: Double = LLMDefaults.defaultTimeoutSeconds,
         maxTokens: Int = LLMDefaults.defaultMaxTokens,
-        localModelKeepAlive: LocalLLMKeepAlive = .tenMinutes
+        localModelKeepAlive: LocalLLMKeepAlive = .tenMinutes,
+        appPromptBindings: [AppPromptBinding] = []
     ) {
         self.isEnabled = isEnabled
         self.provider = provider
@@ -217,6 +220,7 @@ struct LLMSettings: Codable, Equatable {
         self.timeoutSeconds = LLMDefaults.clampTimeout(timeoutSeconds)
         self.maxTokens = LLMDefaults.clampMaxTokens(maxTokens)
         self.localModelKeepAlive = localModelKeepAlive
+        self.appPromptBindings = appPromptBindings
     }
 
     init(from decoder: Decoder) throws {
@@ -240,6 +244,7 @@ struct LLMSettings: Codable, Equatable {
         timeoutSeconds = LLMDefaults.clampTimeout(try container.decodeIfPresent(Double.self, forKey: .timeoutSeconds) ?? LLMDefaults.defaultTimeoutSeconds)
         maxTokens = LLMDefaults.clampMaxTokens(try container.decodeIfPresent(Int.self, forKey: .maxTokens) ?? LLMDefaults.defaultMaxTokens)
         localModelKeepAlive = try container.decodeIfPresent(LocalLLMKeepAlive.self, forKey: .localModelKeepAlive) ?? .tenMinutes
+        appPromptBindings = try container.decodeIfPresent([AppPromptBinding].self, forKey: .appPromptBindings) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -259,6 +264,7 @@ struct LLMSettings: Codable, Equatable {
         try container.encode(timeoutSeconds, forKey: .timeoutSeconds)
         try container.encode(maxTokens, forKey: .maxTokens)
         try container.encode(localModelKeepAlive, forKey: .localModelKeepAlive)
+        try container.encode(appPromptBindings, forKey: .appPromptBindings)
     }
 
     /// User-entered terms first so their casing wins the case-insensitive dedupe.
@@ -282,6 +288,22 @@ struct LLMSettings: Codable, Equatable {
         }
 
         return sections.joined(separator: "\n\n")
+    }
+
+    /// Copy of these settings with app-specific instructions appended to every provider prompt.
+    func appendingAppInstructions(_ instructions: String) -> LLMSettings {
+        let normalizedInstructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedInstructions.isEmpty else {
+            return self
+        }
+
+        let appSection = "App-specific instructions:\n\(normalizedInstructions)"
+        var copy = self
+        copy.baseSystemPrompt = [composedSystemPrompt, appSection].joined(separator: "\n\n")
+        copy.appleSystemPrompt = [composedAppleSystemPrompt, appSection].joined(separator: "\n\n")
+        copy.gemmaSystemPrompt = [composedGemmaSystemPrompt, appSection].joined(separator: "\n\n")
+        copy.systemPrompt = ""
+        return copy
     }
 
     var composedAppleSystemPrompt: String {

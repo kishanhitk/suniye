@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct StylePage: View {
     @Bindable var appState: AppState
@@ -8,6 +9,7 @@ struct StylePage: View {
     @State private var isApplePromptExpanded = false
     @State private var isLocalGemmaPromptExpanded = false
     @State private var isAPIEndpointConfigurationExpanded = false
+    @State private var expandedAppPromptBindingIDs: Set<UUID> = []
 
     var body: some View {
         DetailScrollContainer {
@@ -19,6 +21,7 @@ struct StylePage: View {
 
             if appState.llmEnabled {
                 formatterSection
+                perAppPromptsSection
                 vocabularySection
             }
         }
@@ -397,6 +400,154 @@ struct StylePage: View {
         }
     }
 
+    // MARK: - Per-App Prompts
+
+    private var perAppPromptsSection: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+            SectionHeading(title: "Per-App Prompts")
+
+            SurfaceCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("App-specific prompts")
+                                .font(AppTypography.body)
+                            Text("Append extra Magic Format instructions when dictating into these apps. All other apps use the formatter prompt above.")
+                                .font(AppTypography.caption)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        addAppPromptBindingMenu
+                    }
+
+                    if !appState.llmAppPromptBindings.isEmpty {
+                        CardDivider()
+
+                        ForEach(appState.llmAppPromptBindings) { binding in
+                            appPromptBindingRow(for: binding)
+
+                            if binding.id != appState.llmAppPromptBindings.last?.id {
+                                CardDivider()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var addAppPromptBindingMenu: some View {
+        Menu {
+            ForEach(AppPromptBindingCandidates.running(excluding: appState.llmAppPromptBindings)) { candidate in
+                Button {
+                    addAppPromptBinding(for: candidate)
+                } label: {
+                    Label {
+                        Text(candidate.appDisplayName)
+                    } icon: {
+                        AppPromptIconView(bundleID: candidate.bundleID, size: 16)
+                    }
+                }
+            }
+
+            Divider()
+
+            Button("Choose from Applications\u{2026}") {
+                presentAppPromptBindingOpenPanel()
+            }
+        } label: {
+            Label("Add App", systemImage: "plus")
+        }
+        .controlSize(.small)
+        .fixedSize()
+    }
+
+    private func appPromptBindingRow(for binding: AppPromptBinding) -> some View {
+        DisclosureGroup(isExpanded: appPromptBindingExpansion(for: binding.id)) {
+            TextEditor(text: appPromptBindingPrompt(for: binding.id))
+                .font(AppTypography.body)
+                .frame(minHeight: 120)
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(MainWindowPalette.editorBackground)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
+                )
+                .padding(.top, AppMetrics.disclosureContentTopPadding)
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                AppPromptIconView(bundleID: binding.bundleID, size: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(binding.appDisplayName)
+                        .font(AppTypography.bodyMedium)
+                    Text(binding.bundleID)
+                        .font(AppTypography.caption)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                }
+
+                Spacer(minLength: 12)
+
+                Button {
+                    appState.removeAppPromptBinding(id: binding.id)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Remove prompt for \(binding.appDisplayName)")
+            }
+        }
+        .disclosureGroupStyle(.automatic)
+    }
+
+    private func appPromptBindingExpansion(for id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { expandedAppPromptBindingIDs.contains(id) },
+            set: { isExpanded in
+                if isExpanded {
+                    expandedAppPromptBindingIDs.insert(id)
+                } else {
+                    expandedAppPromptBindingIDs.remove(id)
+                }
+            }
+        )
+    }
+
+    private func appPromptBindingPrompt(for id: UUID) -> Binding<String> {
+        Binding(
+            get: { appState.llmAppPromptBindings.first { $0.id == id }?.prompt ?? "" },
+            set: { appState.updateAppPromptBinding(id: id, prompt: $0) }
+        )
+    }
+
+    private func addAppPromptBinding(for candidate: AppPromptBindingCandidate) {
+        if let binding = appState.addAppPromptBinding(bundleID: candidate.bundleID, appDisplayName: candidate.appDisplayName) {
+            expandedAppPromptBindingIDs.insert(binding.id)
+        }
+    }
+
+    private func presentAppPromptBindingOpenPanel() {
+        let panel = NSOpenPanel()
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+        Task {
+            guard let candidate = await AppPromptBindingCandidates.forApplication(at: url) else {
+                return
+            }
+            addAppPromptBinding(for: candidate)
+        }
+    }
+
     // MARK: - Vocabulary
 
     private var vocabularySection: some View {
@@ -732,4 +883,34 @@ struct StylePage: View {
         .frame(maxWidth: .infinity, minHeight: 28)
     }
 
+}
+
+private struct AppPromptIconView: View {
+    let bundleID: String
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let icon = appIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(systemName: "app.dashed")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                    .padding(size * 0.18)
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+
+    private var appIcon: NSImage? {
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        return NSWorkspace.shared.icon(forFile: appURL.path)
+    }
 }
