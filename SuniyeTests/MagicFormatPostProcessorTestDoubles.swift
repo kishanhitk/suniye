@@ -17,6 +17,11 @@ final class FakeLLMPostProcessor: LLMPostProcessor {
         return try result.get()
     }
 
+    func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String {
+        callCount += 1
+        return try result.get()
+    }
+
     func testSetup(config: LLMConfig) async throws {
         setupTestCallCount += 1
         try testSetupResult.get()
@@ -160,6 +165,10 @@ final class BlockingAppleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
         }
     }
 
+    func generate(instructions: String, userText: String, config: AppleMagicFormatConfig) async throws -> String {
+        try await polish(text: userText, config: config)
+    }
+
     func testSetup(config: AppleMagicFormatConfig) async throws {}
 
     func waitUntilStarted() async {
@@ -184,6 +193,10 @@ final class BlockingLLMPostProcessor: LLMPostProcessor {
 
     func polish(text: String, config: LLMConfig) async throws -> String {
         text
+    }
+
+    func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String {
+        userText
     }
 
     func testSetup(config: LLMConfig) async throws {

@@ -38,7 +38,7 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
                 modelId: config.modelId,
                 instructions: instructions,
                 inputText: userText,
-                maxTokens: nil
+                maxTokens: LLMDefaults.editModeMaxTokens
             ),
             timeoutSeconds: config.timeoutSeconds
         )

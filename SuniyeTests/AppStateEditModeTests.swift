@@ -41,6 +41,51 @@ final class AppStateEditModeTests: XCTestCase {
         XCTAssertEqual(appState.editModeHotkeyConfiguration, editHotkey)
     }
 
+    func testSettingDictationHotkeyClearsCollidingEditModeHotkey() {
+        let settingsStore = TestGeneralSettingsStore()
+        let appState = makeTestAppState(generalSettingsStore: settingsStore)
+
+        let combo = HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_E), carbonModifiers: UInt32(controlKey | optionKey))
+        appState.editModeHotkeyConfiguration = combo
+
+        appState.hotkeyConfiguration = combo
+
+        XCTAssertNil(appState.editModeHotkeyConfiguration)
+        XCTAssertNil(settingsStore.latest.editModeHotkeyConfiguration)
+        XCTAssertEqual(settingsStore.latest.hotkeyConfiguration, combo)
+        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Edit Mode shortcut cleared: it matched dictation"))
+    }
+
+    func testSettingEditModeHotkeyMatchingDictationIsRejected() {
+        let settingsStore = TestGeneralSettingsStore()
+        let appState = makeTestAppState(generalSettingsStore: settingsStore)
+
+        let previous = HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_E), carbonModifiers: UInt32(controlKey | optionKey))
+        appState.editModeHotkeyConfiguration = previous
+
+        appState.editModeHotkeyConfiguration = appState.hotkeyConfiguration
+
+        XCTAssertEqual(appState.editModeHotkeyConfiguration, previous)
+        XCTAssertEqual(settingsStore.latest.editModeHotkeyConfiguration, previous)
+        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Edit Mode shortcut must differ from dictation"))
+    }
+
+    func testLoadingCollidingEditModeHotkeyNormalizesToDisabled() {
+        let combo = HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_E), carbonModifiers: UInt32(cmdKey))
+        let settingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                hotkeyConfiguration: combo,
+                editModeHotkeyConfiguration: combo
+            )
+        )
+
+        let appState = makeTestAppState(generalSettingsStore: settingsStore)
+
+        XCTAssertNil(appState.editModeHotkeyConfiguration)
+        XCTAssertNil(settingsStore.latest.editModeHotkeyConfiguration)
+        XCTAssertEqual(appState.hotkeyConfiguration, combo)
+    }
+
     func testEditModeRewritesSelectionAndInsertsResult() async {
         let apple = CapturingAppleMagicFormatPostProcessor(
             availability: .available,
@@ -169,6 +214,27 @@ final class AppStateEditModeTests: XCTestCase {
         XCTAssertTrue(scenario.textInsertion.insertedTexts.isEmpty)
         XCTAssertEqual(scenario.appState.floatingIndicatorState, .error(message: "No instruction heard"))
         XCTAssertEqual(scenario.appState.phase, .ready)
+    }
+
+    func testEditModeSkipsSelectionCaptureWhenNotReady() async {
+        let selectionProvider = StubEditModeSelectionProvider(selection: "hello")
+        let audioCapture = StubAudioCaptureService()
+        let appState = makeTestAppState(
+            audioCaptureService: audioCapture,
+            editModeSelectionProvider: selectionProvider,
+            appleMagicFormatPostProcessor: NoopAppleMagicFormatPostProcessor(availability: .available)
+        )
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.llmEnabled = true
+        appState.llmProvider = .appleFoundationModels
+        appState.phase = .transcribing
+
+        await appState.beginEditModeRecordingFlow()
+
+        XCTAssertEqual(selectionProvider.captureCallCount, 0)
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
+        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Still processing previous clip"))
     }
 
     private struct EditModeScenario {

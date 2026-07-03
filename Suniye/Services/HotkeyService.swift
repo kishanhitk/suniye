@@ -31,9 +31,9 @@ final class HotkeyService: HotkeyServiceProtocol {
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    private var carbonHotKeyRefs: [UInt32: EventHotKeyRef] = [:]
+    private var carbonHotKeyRefs: [Slot: EventHotKeyRef] = [:]
     private var carbonEventHandlerRef: EventHandlerRef?
-    private var heldSlots: Set<UInt32> = []
+    private var heldSlots: Set<Slot> = []
     private var globeSlot: Slot?
 
     func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?) {
@@ -96,8 +96,11 @@ final class HotkeyService: HotkeyServiceProtocol {
             )
 
             if registerStatus == noErr, let hotKeyRef {
-                carbonHotKeyRefs[slot.rawValue] = hotKeyRef
+                carbonHotKeyRefs[slot] = hotKeyRef
             } else {
+                // Intentionally leave the other slot alive: one slot failing to
+                // register (e.g. combo taken by another app) must not tear down
+                // monitoring for the other.
                 AppLogger.shared.log(.error, "hotkey registration failed slot=\(slot.rawValue) status=\(registerStatus)")
             }
         }
@@ -153,12 +156,12 @@ final class HotkeyService: HotkeyServiceProtocol {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let fnDown = flags.contains(.function)
 
-        if fnDown && !heldSlots.contains(globeSlot.rawValue) {
-            heldSlots.insert(globeSlot.rawValue)
+        if fnDown && !heldSlots.contains(globeSlot) {
+            heldSlots.insert(globeSlot)
             AppLogger.shared.log(.debug, "hotkey fn down keyCode=\(event.keyCode) slot=\(globeSlot.rawValue)")
             downCallback(for: globeSlot)?()
-        } else if !fnDown && heldSlots.contains(globeSlot.rawValue) {
-            heldSlots.remove(globeSlot.rawValue)
+        } else if !fnDown && heldSlots.contains(globeSlot) {
+            heldSlots.remove(globeSlot)
             AppLogger.shared.log(.debug, "hotkey fn up keyCode=\(event.keyCode) slot=\(globeSlot.rawValue)")
             upCallback(for: globeSlot)?()
         }
@@ -185,13 +188,13 @@ final class HotkeyService: HotkeyServiceProtocol {
 
         switch GetEventKind(eventRef) {
         case UInt32(kEventHotKeyPressed):
-            guard !heldSlots.contains(slot.rawValue) else { return noErr }
-            heldSlots.insert(slot.rawValue)
+            guard !heldSlots.contains(slot) else { return noErr }
+            heldSlots.insert(slot)
             AppLogger.shared.log(.debug, "hotkey combo down slot=\(slot.rawValue)")
             downCallback(for: slot)?()
         case UInt32(kEventHotKeyReleased):
-            guard heldSlots.contains(slot.rawValue) else { return noErr }
-            heldSlots.remove(slot.rawValue)
+            guard heldSlots.contains(slot) else { return noErr }
+            heldSlots.remove(slot)
             AppLogger.shared.log(.debug, "hotkey combo up slot=\(slot.rawValue)")
             upCallback(for: slot)?()
         default:

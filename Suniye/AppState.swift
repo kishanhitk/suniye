@@ -378,6 +378,12 @@ final class AppState {
             guard !isHydratingGeneralSettings else {
                 return
             }
+            // Collision policy lives at this settings boundary: the Edit Mode slot always yields.
+            if editModeHotkeyConfiguration == hotkeyConfiguration {
+                editModeHotkeyConfiguration = nil
+                AppLogger.shared.log(.warning, "edit mode hotkey cleared: matched new dictation hotkey")
+                showTransientIndicatorError("Edit Mode shortcut cleared: it matched dictation")
+            }
             persistGeneralSettings()
             if runtimeServicesEnabled {
                 wireHotkey()
@@ -388,6 +394,12 @@ final class AppState {
     var editModeHotkeyConfiguration: HotkeyConfiguration? {
         didSet {
             guard !isHydratingGeneralSettings, oldValue != editModeHotkeyConfiguration else {
+                return
+            }
+            if editModeHotkeyConfiguration != nil, editModeHotkeyConfiguration == hotkeyConfiguration {
+                editModeHotkeyConfiguration = oldValue == hotkeyConfiguration ? nil : oldValue
+                AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches dictation hotkey")
+                showTransientIndicatorError("Edit Mode shortcut must differ from dictation")
                 return
             }
             persistGeneralSettings()
@@ -3035,13 +3047,12 @@ final class AppState {
             guard activeAudioCaptureSessionID == sessionID else {
                 return
             }
-            clearActiveDictationSession(sessionID: sessionID)
-            phase = .ready
-            lastError = "Audio start failed: \(error.localizedDescription)"
-            statusText = "Ready"
             AppLogger.shared.log(.error, "audio start failed: \(error.localizedDescription)")
-            playSoundFeedback(.error)
-            showTransientIndicatorError(error.localizedDescription)
+            failDictationSession(
+                sessionID: sessionID,
+                lastErrorMessage: "Audio start failed: \(error.localizedDescription)",
+                indicatorMessage: error.localizedDescription
+            )
         }
     }
 
@@ -3078,118 +3089,27 @@ final class AppState {
             let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
             let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 
-            if case let .editRewrite(selectedText) = destination {
+            switch destination {
+            case let .editRewrite(selectedText):
                 await finishEditModeSession(
                     instruction: rawText,
                     selectedText: selectedText,
                     sessionID: sessionID,
                     duration: duration
                 )
-                return
-            }
-
-            let rawParse = AppState.parseSubmitCommand(from: rawText)
-            let llmInputText = destination == .systemInsertion ? rawParse.text : rawText
-            var shouldSubmit = destination == .systemInsertion ? rawParse.shouldSubmit : false
-            var llmOutputText = llmInputText
-            var finalText = llmInputText
-
-            if !finalText.isEmpty {
-                llmOutputText = await postProcessTextIfEnabled(llmInputText, frontmostAppBundleID: context.frontmostAppBundleID)
-                if destination == .systemInsertion {
-                    let polishedParse = AppState.parseSubmitCommand(from: llmOutputText)
-                    finalText = polishedParse.text
-                    shouldSubmit = shouldSubmit || polishedParse.shouldSubmit
-                } else {
-                    finalText = llmOutputText.trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-            }
-
-            if destination == .systemInsertion && autoSubmitEnabled && !finalText.isEmpty {
-                shouldSubmit = true
-            }
-
-            let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
-            let wasLLMPolished = AppState.didLLMPolish(input: llmInputText, output: llmOutputText)
-            var didCompleteDictation = false
-
-            if destination == .systemInsertion && (!finalText.isEmpty || shouldSubmit) {
-                if !hasAccessibilityPermission {
-                    await refreshPermissions(promptAccessibility: true)
-                }
-                guard hasAccessibilityPermission else {
-                    throw NSError(domain: "Suniye", code: 1, userInfo: [NSLocalizedDescriptionKey: "Accessibility permission not granted"])
-                }
-            }
-
-            switch destination {
             case .systemInsertion:
-                if !finalText.isEmpty {
-                    editLearningService.finalizeActiveSession()
-                    let insertionText = DictationInsertionTextFormatter.textForInsertion(
-                        finalText,
-                        insertionContext: textInsertionService.captureInsertionContext()
-                    )
-                    try textInsertionService.insertText(insertionText)
-                    beginEditLearningTracking(insertedText: insertionText)
-                    recentResults.insert(
-                        RecentResult(
-                            id: UUID(),
-                            text: finalText,
-                            createdAt: Date(),
-                            durationSeconds: duration,
-                            wasLLMPolished: wasLLMPolished
-                        ),
-                        at: 0
-                    )
-                    AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
-                    didCompleteDictation = true
-                }
-
-                if shouldSubmit {
-                    if !finalText.isEmpty {
-                        try? await Task.sleep(nanoseconds: 120_000_000)
-                    }
-                    try textInsertionService.submitActiveInput()
-                    AppLogger.shared.log(.info, "submit command executed")
-                    didCompleteDictation = true
-                }
-
-                if finalText.isEmpty && !shouldSubmit {
-                    AppLogger.shared.log(.warning, "transcription returned empty text samples=\(samples.count) sr=\(sampleRate)")
-                    playSoundFeedback(.error)
-                }
+                try await completeSystemDictation(
+                    rawText: rawText,
+                    sessionID: sessionID,
+                    duration: duration,
+                    sampleCount: samples.count,
+                    sampleRate: sampleRate,
+                    frontmostAppBundleID: context.frontmostAppBundleID
+                )
             case .onboardingPractice:
-                onboardingPracticeText = finalText
-                if finalText.isEmpty {
-                    let message = rawText.isEmpty
-                        ? "No speech detected. Try a short phrase."
-                        : "Practice mode captured audio, but there was no text to preview."
-                    onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
-                    AppLogger.shared.log(.warning, "onboarding practice produced empty text")
-                    playSoundFeedback(.error)
-                } else {
-                    onboardingPracticeResult = OnboardingPracticeResult(
-                        message: "Captured locally. You can finish onboarding whenever you're ready.",
-                        severity: .success
-                    )
-                    AppLogger.shared.log(.info, "onboarding practice transcription complete words=\(wordCount)")
-                    didCompleteDictation = true
-                }
-            case .editRewrite:
-                break
+                await completeOnboardingPracticeDictation(rawText: rawText, sessionID: sessionID)
             }
-            if didCompleteDictation {
-                playSoundFeedback(.transcriptionSucceeded)
-            }
-            clearActiveDictationSession(sessionID: sessionID)
-            lastError = nil
-            phase = .ready
-            statusText = "Ready"
-            setFloatingIndicatorState(.idle)
         } catch {
-            clearActiveDictationSession(sessionID: sessionID)
-            lastError = "Transcription failed: \(error.localizedDescription)"
             if destination == .onboardingPractice {
                 onboardingPracticeText = ""
                 onboardingPracticeResult = OnboardingPracticeResult(
@@ -3197,12 +3117,111 @@ final class AppState {
                     severity: .error
                 )
             }
-            phase = .ready
-            statusText = "Ready"
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
-            playSoundFeedback(.error)
-            showTransientIndicatorError("Transcription failed")
+            failDictationSession(
+                sessionID: sessionID,
+                lastErrorMessage: "Transcription failed: \(error.localizedDescription)",
+                indicatorMessage: "Transcription failed"
+            )
         }
+    }
+
+    private func completeSystemDictation(
+        rawText: String,
+        sessionID: UUID,
+        duration: TimeInterval,
+        sampleCount: Int,
+        sampleRate: Int,
+        frontmostAppBundleID: String?
+    ) async throws {
+        let rawParse = AppState.parseSubmitCommand(from: rawText)
+        var shouldSubmit = rawParse.shouldSubmit
+        var llmOutputText = rawParse.text
+        var finalText = rawParse.text
+
+        if !finalText.isEmpty {
+            llmOutputText = await postProcessTextIfEnabled(rawParse.text, frontmostAppBundleID: frontmostAppBundleID)
+            let polishedParse = AppState.parseSubmitCommand(from: llmOutputText)
+            finalText = polishedParse.text
+            shouldSubmit = shouldSubmit || polishedParse.shouldSubmit
+        }
+
+        if autoSubmitEnabled && !finalText.isEmpty {
+            shouldSubmit = true
+        }
+
+        let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+        let wasLLMPolished = AppState.didLLMPolish(input: rawParse.text, output: llmOutputText)
+        var didCompleteDictation = false
+
+        if !finalText.isEmpty || shouldSubmit {
+            try await requireAccessibilityForInsertion()
+        }
+
+        if !finalText.isEmpty {
+            editLearningService.finalizeActiveSession()
+            let insertionText = DictationInsertionTextFormatter.textForInsertion(
+                finalText,
+                insertionContext: textInsertionService.captureInsertionContext()
+            )
+            try textInsertionService.insertText(insertionText)
+            beginEditLearningTracking(insertedText: insertionText)
+            recentResults.insert(
+                RecentResult(
+                    id: UUID(),
+                    text: finalText,
+                    createdAt: Date(),
+                    durationSeconds: duration,
+                    wasLLMPolished: wasLLMPolished
+                ),
+                at: 0
+            )
+            AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
+            didCompleteDictation = true
+        }
+
+        if shouldSubmit {
+            if !finalText.isEmpty {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+            }
+            try textInsertionService.submitActiveInput()
+            AppLogger.shared.log(.info, "submit command executed")
+            didCompleteDictation = true
+        }
+
+        if finalText.isEmpty && !shouldSubmit {
+            AppLogger.shared.log(.warning, "transcription returned empty text samples=\(sampleCount) sr=\(sampleRate)")
+            playSoundFeedback(.error)
+        }
+
+        completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation)
+    }
+
+    private func completeOnboardingPracticeDictation(rawText: String, sessionID: UUID) async {
+        var finalText = rawText
+        if !finalText.isEmpty {
+            finalText = await postProcessTextIfEnabled(rawText).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        onboardingPracticeText = finalText
+        var didCompleteDictation = false
+        if finalText.isEmpty {
+            let message = rawText.isEmpty
+                ? "No speech detected. Try a short phrase."
+                : "Practice mode captured audio, but there was no text to preview."
+            onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
+            AppLogger.shared.log(.warning, "onboarding practice produced empty text")
+            playSoundFeedback(.error)
+        } else {
+            onboardingPracticeResult = OnboardingPracticeResult(
+                message: "Captured locally. You can finish onboarding whenever you're ready.",
+                severity: .success
+            )
+            let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+            AppLogger.shared.log(.info, "onboarding practice transcription complete words=\(wordCount)")
+            didCompleteDictation = true
+        }
+        completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation)
     }
 
     /// Runs the Edit Mode LLM step: rewrite the selection per the spoken instruction,
@@ -3214,12 +3233,8 @@ final class AppState {
         duration: TimeInterval
     ) async {
         guard !instruction.isEmpty else {
-            clearActiveDictationSession(sessionID: sessionID)
-            phase = .ready
-            statusText = "Ready"
             AppLogger.shared.log(.warning, "edit mode produced empty instruction")
-            playSoundFeedback(.error)
-            showTransientIndicatorError("No instruction heard")
+            failDictationSession(sessionID: sessionID, lastErrorMessage: nil, indicatorMessage: "No instruction heard")
             return
         }
 
@@ -3233,13 +3248,7 @@ final class AppState {
                 request: makeMagicFormatRequest()
             )
 
-            if !hasAccessibilityPermission {
-                await refreshPermissions(promptAccessibility: true)
-            }
-            guard hasAccessibilityPermission else {
-                throw NSError(domain: "Suniye", code: 1, userInfo: [NSLocalizedDescriptionKey: "Accessibility permission not granted"])
-            }
-
+            try await requireAccessibilityForInsertion()
             try textInsertionService.insertText(rewritten)
             recentResults.insert(
                 RecentResult(
@@ -3252,20 +3261,47 @@ final class AppState {
                 at: 0
             )
             AppLogger.shared.log(.info, "edit mode complete words=\(rewritten.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count)")
-            playSoundFeedback(.transcriptionSucceeded)
-            clearActiveDictationSession(sessionID: sessionID)
-            lastError = nil
-            phase = .ready
-            statusText = "Ready"
-            setFloatingIndicatorState(.idle)
+            completeDictationSession(sessionID: sessionID, playSuccessSound: true)
         } catch {
-            clearActiveDictationSession(sessionID: sessionID)
-            lastError = "Edit Mode failed: \(error.localizedDescription)"
-            phase = .ready
-            statusText = "Ready"
             AppLogger.shared.log(.error, "edit mode failed: \(error.localizedDescription)")
-            playSoundFeedback(.error)
-            showTransientIndicatorError("Rewrite failed")
+            failDictationSession(
+                sessionID: sessionID,
+                lastErrorMessage: "Edit Mode failed: \(error.localizedDescription)",
+                indicatorMessage: "Rewrite failed"
+            )
+        }
+    }
+
+    /// Shared success epilogue for every dictation/edit session.
+    private func completeDictationSession(sessionID: UUID, playSuccessSound: Bool) {
+        if playSuccessSound {
+            playSoundFeedback(.transcriptionSucceeded)
+        }
+        clearActiveDictationSession(sessionID: sessionID)
+        lastError = nil
+        phase = .ready
+        statusText = "Ready"
+        setFloatingIndicatorState(.idle)
+    }
+
+    /// Shared failure epilogue; pass nil to leave the current lastError untouched.
+    private func failDictationSession(sessionID: UUID?, lastErrorMessage: String?, indicatorMessage: String) {
+        clearActiveDictationSession(sessionID: sessionID)
+        if let lastErrorMessage {
+            lastError = lastErrorMessage
+        }
+        phase = .ready
+        statusText = "Ready"
+        playSoundFeedback(.error)
+        showTransientIndicatorError(indicatorMessage)
+    }
+
+    private func requireAccessibilityForInsertion() async throws {
+        if !hasAccessibilityPermission {
+            await refreshPermissions(promptAccessibility: true)
+        }
+        guard hasAccessibilityPermission else {
+            throw NSError(domain: "Suniye", code: 1, userInfo: [NSLocalizedDescriptionKey: "Accessibility permission not granted"])
         }
     }
 
@@ -3292,17 +3328,16 @@ final class AppState {
         destination: DictationDestination
     ) {
         let message = outcome.userMessage ?? "Audio capture was interrupted. Try again."
-        clearActiveDictationSession()
-        lastError = "Audio capture failed: \(message)"
         if destination == .onboardingPractice {
             onboardingPracticeText = ""
             onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
         }
-        phase = .ready
-        statusText = "Ready"
         AppLogger.shared.log(.warning, "audio capture rejected outcome=\(String(describing: outcome))")
-        playSoundFeedback(.error)
-        showTransientIndicatorError(message)
+        failDictationSession(
+            sessionID: nil,
+            lastErrorMessage: "Audio capture failed: \(message)",
+            indicatorMessage: message
+        )
     }
 
     private func loadHistory() {
@@ -3341,6 +3376,10 @@ final class AppState {
         hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
         hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
         isHydratingGeneralSettings = false
+        // A persisted collision (e.g. hand-edited settings) would silently kill Edit Mode.
+        if editModeHotkeyConfiguration != nil, editModeHotkeyConfiguration == hotkeyConfiguration {
+            editModeHotkeyConfiguration = nil
+        }
         applyUpdateChannelToController()
         normalizeOnboardingSettingsIfNeeded(loadedSettings: settings)
     }

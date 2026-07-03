@@ -87,6 +87,7 @@
 		A450DED6405BD9A57EEB5F5D /* LocalGemmaLlamaServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E002F2ED2661905D8B147320 /* LocalGemmaLlamaServerTests.swift */; };
 		AA7DAE1D8BC31737F5640A1B /* FragmentMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 82E6C7AA7DADED73D5C382DA /* FragmentMono-Regular.ttf */; };
 		AD87116EBACBA4A58B56D11A /* AppStateAudioCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5599BFF26E7C9256D7B0F4A8 /* AppStateAudioCaptureTests.swift */; };
+		AEF626BF4CAC618107C1C6D3 /* MagicFormatCoordinatorRewriteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34A7FAC27F72E55BD574498 /* MagicFormatCoordinatorRewriteTests.swift */; };
 		B251595E3A3080BF2437F31F /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 633F09E2901A308614E595B1 /* TranscriptionService.swift */; };
 		B3CAE7A22B0509E160C8127D /* EditLearningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB37B94E17F7F98AC28DE3B4 /* EditLearningTests.swift */; };
 		B4C54A8C12A3F949CD83553C /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 865C597BBA404F5F6A049278 /* ModelManager.swift */; };
@@ -269,6 +270,7 @@
 		EB37B94E17F7F98AC28DE3B4 /* EditLearningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditLearningTests.swift; sourceTree = "<group>"; };
 		EFA746307D9443BD6CC0A15D /* AppPromptBindingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPromptBindingTests.swift; sourceTree = "<group>"; };
 		F198C419B5376572D7185A29 /* AppStateUpdateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateUpdateTests.swift; sourceTree = "<group>"; };
+		F34A7FAC27F72E55BD574498 /* MagicFormatCoordinatorRewriteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatCoordinatorRewriteTests.swift; sourceTree = "<group>"; };
 		F38DC2A495AF93A16B002372 /* LocalGemmaPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaPostProcessor.swift; sourceTree = "<group>"; };
 		F41BA6275400494E6FAD024A /* AudioCaptureModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureModels.swift; sourceTree = "<group>"; };
 		F51B3DBFA1B6B9385FA63197 /* MainWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowController.swift; sourceTree = "<group>"; };
@@ -360,6 +362,7 @@
 				CA71D523EC88C51E2E911E4B /* LocalGemmaPostProcessorTests.swift */,
 				86F0FD9A7C5E4966A5579DE8 /* LocalLLMKeepAliveTests.swift */,
 				316F29545ABA85276127E522 /* LocalLLMModelManagerTests.swift */,
+				F34A7FAC27F72E55BD574498 /* MagicFormatCoordinatorRewriteTests.swift */,
 				87C71E72DD0A95818F74F8C5 /* MagicFormatPostProcessorTestDoubles.swift */,
 				F730F7A2C1E5C20D574C01FA /* MagicFormatPromptFileStoreTests.swift */,
 				13D4CAFD2439B222AD68BE12 /* MainWindowSectionTests.swift */,
@@ -720,6 +723,7 @@
 				63B5E0D3334CB7E08AF7D5EA /* LocalGemmaPostProcessorTests.swift in Sources */,
 				D592C6064881A1E36EA9E234 /* LocalLLMKeepAliveTests.swift in Sources */,
 				EEBF448E040909CCFCADF515 /* LocalLLMModelManagerTests.swift in Sources */,
+				AEF626BF4CAC618107C1C6D3 /* MagicFormatCoordinatorRewriteTests.swift in Sources */,
 				E877D4D7A206AF5389A998FE /* MagicFormatPostProcessorTestDoubles.swift in Sources */,
 				18A6F8A0A11A67ED12CED57E /* MagicFormatPromptFileStoreTests.swift in Sources */,
 				460A066A38DD8822D3A8D8C5 /* MainWindowSectionTests.swift in Sources */,

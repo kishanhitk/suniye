@@ -23,37 +23,56 @@ final class EditModeService: EditModeSelectionProviding {
         }
     }
 
-    var accessibilityTrustProvider: () -> Bool = { AXIsProcessTrusted() }
-    var axSelectedTextProvider: (() -> String?)?
-    var pasteboardProvider: () -> NSPasteboard = { .general }
-    var keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)?
-    var copyKeyCodeProvider: (() -> CGKeyCode?)?
-    var copyWaitPollNanoseconds: UInt64 = 30_000_000
-    var copyWaitMaxPolls = 10
+    private let accessibilityTrustProvider: () -> Bool
+    private let focusedElementProvider: () -> AXUIElement?
+    private let selectedTextReader: (AXUIElement) -> String?
+    private let pasteboardProvider: () -> NSPasteboard
+    private let keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)?
+    private let copyWaitPollNanoseconds: UInt64
+    private let copyWaitMaxPolls: Int
+
+    init(
+        accessibilityTrustProvider: @escaping () -> Bool = { AXIsProcessTrusted() },
+        focusedElementProvider: @escaping () -> AXUIElement? = EditModeService.systemFocusedElement,
+        selectedTextReader: @escaping (AXUIElement) -> String? = EditModeService.selectedTextAttribute,
+        pasteboardProvider: @escaping () -> NSPasteboard = { .general },
+        keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)? = nil,
+        copyWaitPollNanoseconds: UInt64 = 30_000_000,
+        copyWaitMaxPolls: Int = 10
+    ) {
+        self.accessibilityTrustProvider = accessibilityTrustProvider
+        self.focusedElementProvider = focusedElementProvider
+        self.selectedTextReader = selectedTextReader
+        self.pasteboardProvider = pasteboardProvider
+        self.keyPoster = keyPoster
+        self.copyWaitPollNanoseconds = copyWaitPollNanoseconds
+        self.copyWaitMaxPolls = copyWaitMaxPolls
+    }
 
     func captureSelectedText() async -> String? {
         guard accessibilityTrustProvider() else {
             return nil
         }
-        if let selection = axSelectedText(), !selection.isEmpty {
+        if let focusedElement = focusedElementProvider(),
+           let selection = selectedTextReader(focusedElement),
+           !selection.isEmpty {
             return selection
         }
         return await captureSelectionViaClipboard()
     }
 
-    private func axSelectedText() -> String? {
-        if let axSelectedTextProvider {
-            return axSelectedTextProvider()
-        }
-
+    nonisolated static func systemFocusedElement() -> AXUIElement? {
         let systemWide = AXUIElementCreateSystemWide()
         var focusedElement: AnyObject?
         guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement) == .success,
-              let focusedElement else {
+              let focusedElement,
+              CFGetTypeID(focusedElement) == AXUIElementGetTypeID() else {
             return nil
         }
+        return (focusedElement as! AXUIElement)
+    }
 
-        let element = focusedElement as! AXUIElement
+    nonisolated static func selectedTextAttribute(of element: AXUIElement) -> String? {
         var value: AnyObject?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &value) == .success else {
             return nil
@@ -68,7 +87,7 @@ final class EditModeService: EditModeSelectionProviding {
 
         var copiedText: String?
         do {
-            try postKey(copyKeyCode(), flags: .maskCommand)
+            try postKey(Self.copyKeyCode, flags: .maskCommand)
             for _ in 0 ..< copyWaitMaxPolls {
                 try? await Task.sleep(nanoseconds: copyWaitPollNanoseconds)
                 if pasteboard.changeCount != changeCountBefore {
@@ -93,11 +112,7 @@ final class EditModeService: EditModeSelectionProviding {
         return copiedText
     }
 
-    private func copyKeyCode() -> CGKeyCode {
-        copyKeyCodeProvider?()
-            ?? TextInsertionService.virtualKeyCode(for: "c")
-            ?? 8
-    }
+    private static let copyKeyCode: CGKeyCode = TextInsertionService.virtualKeyCode(for: "c") ?? 8
 
     private func postKey(_ keyCode: CGKeyCode, flags: CGEventFlags) throws {
         if let keyPoster {

@@ -66,12 +66,16 @@ final class EditModeServiceTests: XCTestCase {
     // MARK: - Selection capture
 
     func testCaptureReturnsNilWithoutAccessibilityTrust() async {
-        let service = EditModeService()
-        service.accessibilityTrustProvider = { false }
-        service.axSelectedTextProvider = { "should not be used" }
-        service.keyPoster = { _, _ in
-            XCTFail("No key events should be posted without accessibility trust")
-        }
+        let service = EditModeService(
+            accessibilityTrustProvider: { false },
+            focusedElementProvider: {
+                XCTFail("AX lookup should not run without accessibility trust")
+                return nil
+            },
+            keyPoster: { _, _ in
+                XCTFail("No key events should be posted without accessibility trust")
+            }
+        )
 
         let selection = await service.captureSelectedText()
 
@@ -79,16 +83,45 @@ final class EditModeServiceTests: XCTestCase {
     }
 
     func testCapturePrefersAccessibilitySelectionOverClipboard() async {
-        let service = EditModeService()
-        service.accessibilityTrustProvider = { true }
-        service.axSelectedTextProvider = { "selected via ax" }
-        service.keyPoster = { _, _ in
-            XCTFail("Clipboard fallback should not run when AX selection is available")
-        }
+        let element = AXUIElementCreateSystemWide()
+        var readElement: AXUIElement?
+        let service = EditModeService(
+            accessibilityTrustProvider: { true },
+            focusedElementProvider: { element },
+            selectedTextReader: { element in
+                readElement = element
+                return "selected via ax"
+            },
+            keyPoster: { _, _ in
+                XCTFail("Clipboard fallback should not run when AX selection is available")
+            }
+        )
 
         let selection = await service.captureSelectedText()
 
         XCTAssertEqual(selection, "selected via ax")
+        XCTAssertTrue(readElement.map { CFEqual($0, element) } == true)
+    }
+
+    func testEmptyAccessibilitySelectionFallsThroughToClipboard() async {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+
+        var keyPosted = false
+        let service = EditModeService(
+            accessibilityTrustProvider: { true },
+            focusedElementProvider: { AXUIElementCreateSystemWide() },
+            selectedTextReader: { _ in "" },
+            pasteboardProvider: { pasteboard },
+            keyPoster: { _, _ in keyPosted = true },
+            copyWaitPollNanoseconds: 1_000_000,
+            copyWaitMaxPolls: 2
+        )
+
+        let selection = await service.captureSelectedText()
+
+        XCTAssertNil(selection)
+        XCTAssertTrue(keyPosted)
     }
 
     func testClipboardFallbackRestoresPreviousClipboard() async {
@@ -96,25 +129,25 @@ final class EditModeServiceTests: XCTestCase {
         pasteboard.clearContents()
         pasteboard.setString("previous clipboard", forType: .string)
 
-        let service = EditModeService()
-        service.accessibilityTrustProvider = { true }
-        service.axSelectedTextProvider = { nil }
-        service.pasteboardProvider = { pasteboard }
-        service.copyKeyCodeProvider = { 8 }
-        service.copyWaitPollNanoseconds = 1_000_000
         var postedKeys: [(CGKeyCode, CGEventFlags)] = []
-        service.keyPoster = { keyCode, flags in
-            postedKeys.append((keyCode, flags))
-            // Simulate the frontmost app answering Cmd+C.
-            pasteboard.clearContents()
-            pasteboard.setString("copied selection", forType: .string)
-        }
+        let service = EditModeService(
+            accessibilityTrustProvider: { true },
+            focusedElementProvider: { nil },
+            pasteboardProvider: { pasteboard },
+            keyPoster: { keyCode, flags in
+                postedKeys.append((keyCode, flags))
+                // Simulate the frontmost app answering Cmd+C.
+                pasteboard.clearContents()
+                pasteboard.setString("copied selection", forType: .string)
+            },
+            copyWaitPollNanoseconds: 1_000_000
+        )
 
         let selection = await service.captureSelectedText()
 
         XCTAssertEqual(selection, "copied selection")
         XCTAssertEqual(postedKeys.count, 1)
-        XCTAssertEqual(postedKeys[0].0, 8)
+        XCTAssertEqual(postedKeys[0].0, TextInsertionService.virtualKeyCode(for: "c") ?? 8)
         XCTAssertEqual(postedKeys[0].1, .maskCommand)
         XCTAssertEqual(pasteboard.string(forType: .string), "previous clipboard")
     }
@@ -125,13 +158,14 @@ final class EditModeServiceTests: XCTestCase {
         pasteboard.setString("previous clipboard", forType: .string)
         let changeCountBefore = pasteboard.changeCount
 
-        let service = EditModeService()
-        service.accessibilityTrustProvider = { true }
-        service.axSelectedTextProvider = { nil }
-        service.pasteboardProvider = { pasteboard }
-        service.copyWaitPollNanoseconds = 1_000_000
-        service.copyWaitMaxPolls = 2
-        service.keyPoster = { _, _ in }
+        let service = EditModeService(
+            accessibilityTrustProvider: { true },
+            focusedElementProvider: { nil },
+            pasteboardProvider: { pasteboard },
+            keyPoster: { _, _ in },
+            copyWaitPollNanoseconds: 1_000_000,
+            copyWaitMaxPolls: 2
+        )
 
         let selection = await service.captureSelectedText()
 
@@ -145,13 +179,14 @@ final class EditModeServiceTests: XCTestCase {
         pasteboard.clearContents()
         pasteboard.setString("previous clipboard", forType: .string)
 
-        let service = EditModeService()
-        service.accessibilityTrustProvider = { true }
-        service.axSelectedTextProvider = { nil }
-        service.pasteboardProvider = { pasteboard }
-        service.keyPoster = { _, _ in
-            throw TestError.keyPostFailed
-        }
+        let service = EditModeService(
+            accessibilityTrustProvider: { true },
+            focusedElementProvider: { nil },
+            pasteboardProvider: { pasteboard },
+            keyPoster: { _, _ in
+                throw TestError.keyPostFailed
+            }
+        )
 
         let selection = await service.captureSelectedText()
 

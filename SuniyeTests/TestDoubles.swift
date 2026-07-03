@@ -701,6 +701,10 @@ private final class NoopLLMPostProcessor: LLMPostProcessor {
         text
     }
 
+    func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String {
+        userText
+    }
+
     func testSetup(config: LLMConfig) async throws {}
 }
 
@@ -715,6 +719,10 @@ final class NoopAppleMagicFormatPostProcessor: AppleMagicFormatPostProcessor {
         text
     }
 
+    func generate(instructions: String, userText: String, config: AppleMagicFormatConfig) async throws -> String {
+        userText
+    }
+
     func testSetup(config: AppleMagicFormatConfig) async throws {}
 }
 
@@ -727,6 +735,10 @@ final class NoopLocalGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostPro
 
     func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
         text
+    }
+
+    func generate(instructions: String, userText: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
+        userText
     }
 
     func testSetup(config: LocalGemmaMagicFormatConfig) async throws {}
