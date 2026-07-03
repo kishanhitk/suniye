@@ -28,7 +28,8 @@ final class PartialTranscriptionScheduler {
     private var inFlightGeneration: Int?
 
     init(tickInterval: TimeInterval = PartialTranscriptionScheduler.defaultTickInterval) {
-        self.tickInterval = tickInterval
+        // Floor prevents a zero/negative interval from busy-spinning the main actor.
+        self.tickInterval = max(0.01, tickInterval)
     }
 
     var isActive: Bool {
@@ -52,7 +53,7 @@ final class PartialTranscriptionScheduler {
         let interval = tickInterval
         tickTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(max(0, interval) * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 guard !Task.isCancelled else { return }
                 await self?.performTick(generation: startedGeneration)
             }

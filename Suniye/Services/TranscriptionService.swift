@@ -52,8 +52,10 @@ struct RecognizerConfig {
     }
 }
 
-/// Distinguishes the one-shot final decode from repeated live-preview decodes,
-/// which log at `.debug` so they do not flood app.log at ~1 line/s.
+/// Distinguishes the one-shot final decode from repeated live-preview decodes.
+/// Partial decodes skip the per-decode log lines entirely (AppLogger persists
+/// every level, so even debug lines would flood app.log at ~1 line/s); partial
+/// failures are logged by the caller instead.
 enum TranscriptionPurpose: String {
     case final
     case partial
@@ -211,32 +213,32 @@ actor TranscriptionService: TranscriptionServiceProtocol {
             throw ServiceError.emptyAudio
         }
 
-        let logLevel: AppLogger.Level = purpose == .partial ? .debug : .info
         let effectiveSampleRate = max(8_000, sampleRate)
         let inputDuration = Double(samples.count) / Double(effectiveSampleRate)
         let preparedAudio = AudioRecognitionPreprocessor.prepareForRecognition(samples)
-        AppLogger.shared.log(
-            logLevel,
-            String(
-                format: "transcribe start purpose=%@ samples=%d sr=%d duration=%.2fs",
-                purpose.rawValue,
-                samples.count,
-                effectiveSampleRate,
-                inputDuration
-            )
-        )
-        if preparedAudio.didNormalize {
+        if purpose == .final {
             AppLogger.shared.log(
-                logLevel,
+                .info,
                 String(
-                    format: "transcribe audio normalized gain=%.2f inputRMS=%.5f inputPeak=%.5f outputRMS=%.5f outputPeak=%.5f",
-                    preparedAudio.gain,
-                    preparedAudio.inputStats.rms,
-                    preparedAudio.inputStats.peak,
-                    preparedAudio.outputStats.rms,
-                    preparedAudio.outputStats.peak
+                    format: "transcribe start samples=%d sr=%d duration=%.2fs",
+                    samples.count,
+                    effectiveSampleRate,
+                    inputDuration
                 )
             )
+            if preparedAudio.didNormalize {
+                AppLogger.shared.log(
+                    .info,
+                    String(
+                        format: "transcribe audio normalized gain=%.2f inputRMS=%.5f inputPeak=%.5f outputRMS=%.5f outputPeak=%.5f",
+                        preparedAudio.gain,
+                        preparedAudio.inputStats.rms,
+                        preparedAudio.inputStats.peak,
+                        preparedAudio.outputStats.rms,
+                        preparedAudio.outputStats.peak
+                    )
+                )
+            }
         }
 
         guard let stream = SherpaOnnxCreateOfflineStream(recognizer) else {
@@ -267,7 +269,9 @@ actor TranscriptionService: TranscriptionServiceProtocol {
             return ""
         }
         let text = String(cString: cText).trimmingCharacters(in: .whitespacesAndNewlines)
-        AppLogger.shared.log(logLevel, "transcribe done purpose=\(purpose.rawValue) chars=\(text.count)")
+        if purpose == .final {
+            AppLogger.shared.log(.info, "transcribe done chars=\(text.count)")
+        }
         return text
     }
 

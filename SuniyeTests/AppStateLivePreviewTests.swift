@@ -203,6 +203,42 @@ final class AppStateLivePreviewTests: XCTestCase {
         XCTAssertFalse(scheduler.isActive)
     }
 
+    func testTogglingPreviewOffMidRecordingStopsPartialsImmediately() async throws {
+        let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
+        let audioCapture = StubAudioCaptureService()
+        let transcription = StubTranscriptionService()
+        transcription.transcribeResult = .success("partial words")
+        let started = expectation(description: "capture started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcription: transcription,
+            scheduler: scheduler
+        )
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [started], timeout: 1)
+        await drainScheduledTasks()
+        await scheduler.tickNow()
+        XCTAssertEqual(appState.livePartialTranscript, "partial words")
+
+        appState.liveTranscriptionPreviewEnabled = false
+
+        XCTAssertFalse(scheduler.isActive)
+        XCTAssertNil(appState.livePartialTranscript)
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .listening(
+                levels: Array(repeating: 0, count: AudioLevelMeter.bandCount),
+                source: .manual,
+                preview: nil
+            )
+        )
+        let decodeCountAfterToggle = transcription.transcribeCallCount
+        await scheduler.tickNow()
+        XCTAssertEqual(transcription.transcribeCallCount, decodeCountAfterToggle)
+    }
+
     func testLiveTranscriptionPreviewSettingPersistsAndDefaultsOn() {
         let settingsStore = TestGeneralSettingsStore()
         let appState = makeTestAppState(generalSettingsStore: settingsStore)

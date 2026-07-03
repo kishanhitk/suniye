@@ -354,6 +354,11 @@ final class AppState {
             guard oldValue != liveTranscriptionPreviewEnabled else {
                 return
             }
+            if !liveTranscriptionPreviewEnabled {
+                // Take effect immediately when toggled off mid-recording;
+                // re-enabling applies from the next recording.
+                stopLivePreview()
+            }
             persistGeneralSettings()
             onStateChange?()
         }
@@ -3811,7 +3816,14 @@ final class AppState {
                 )
             },
             decode: { samples, sampleRate in
-                try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate, purpose: .partial)
+                do {
+                    return try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate, purpose: .partial)
+                } catch {
+                    // Partial decodes skip TranscriptionService's per-decode logging;
+                    // failures are the one thing worth a line.
+                    AppLogger.shared.log(.warning, "partial decode failed: \(error.localizedDescription)")
+                    throw error
+                }
             },
             onPartial: { [weak self] text in
                 self?.publishLivePartialTranscript(text, sessionID: sessionID)
@@ -3822,6 +3834,11 @@ final class AppState {
     private func stopLivePreview() {
         partialTranscriptionScheduler.stop()
         livePartialTranscript = nil
+        // Strip a preview that is still visible (e.g. toggled off mid-recording);
+        // level updates would otherwise keep carrying it forward.
+        if case let .listening(levels, source, preview) = floatingIndicatorState, preview != nil {
+            setFloatingIndicatorState(.listening(levels: levels, source: source, preview: nil))
+        }
     }
 
     private func publishLivePartialTranscript(_ text: String, sessionID: UUID) {
