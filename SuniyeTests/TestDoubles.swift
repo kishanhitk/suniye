@@ -617,6 +617,9 @@ func makeTestAppState(
     localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor = NoopLocalGemmaMagicFormatPostProcessor(),
     localLLMModelManager: LocalLLMModelManagerProtocol = StubLocalLLMModelManager(),
     llmSettingsStore: LLMSettingsStoreProtocol = TestLLMSettingsStore(),
+    magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol = MagicFormatPromptFileStore(
+        promptsDirectoryURL: FileManager.default.temporaryDirectory.appendingPathComponent("suniye-prompt-tests-\(UUID().uuidString)", isDirectory: true)
+    ),
     generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
     historyStore: HistoryStoreProtocol = TestHistoryStore(),
     keychainService: KeychainServiceProtocol = TestKeychainService(value: nil),
@@ -649,6 +652,7 @@ func makeTestAppState(
         localGemmaMagicFormatPostProcessor: localGemmaMagicFormatPostProcessor,
         localLLMModelManager: localLLMModelManager,
         llmSettingsStore: llmSettingsStore,
+        magicFormatPromptFileStore: magicFormatPromptFileStore,
         generalSettingsStore: generalSettingsStore,
         historyStore: historyStore,
         keychainService: keychainService,
