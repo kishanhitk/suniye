@@ -117,36 +117,24 @@ final class ChatCompletionClient {
 
     private struct TimeoutError: Error {}
 
-    private func withTimeout<T>(seconds: Double, operation: @escaping () async throws -> T) async throws -> T {
-        // workTask is unstructured, so the caller's cancellation does not reach it on
-        // its own; the cancellation handler below forwards it, aborting the underlying
-        // URLSession request instead of letting it run to completion.
-        let workTask = Task { try await operation() }
-        let timeoutTask = Task {
-            let nanoseconds = UInt64(max(0, seconds) * 1_000_000_000)
-            try await Task.sleep(nanoseconds: nanoseconds)
-            workTask.cancel()
-        }
-
-        defer {
-            timeoutTask.cancel()
-        }
-
-        do {
-            return try await withTaskCancellationHandler {
-                try await workTask.value
-            } onCancel: {
-                workTask.cancel()
+    /// Races the operation against a deadline inside a task group, so the caller's
+    /// cancellation propagates structurally into the URLSession request (aborting it)
+    /// and a timeout deterministically surfaces as TimeoutError — never as the
+    /// URLError(.cancelled) that canceling the losing child produces.
+    private func withTimeout<T: Sendable>(seconds: Double, operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
             }
-        } catch is CancellationError {
-            // workTask is canceled by exactly two parties: the timeout task, or the
-            // caller's cancellation forwarded above. Disambiguate via our own state.
-            if Task.isCancelled {
-                throw CancellationError()
+            group.addTask {
+                let nanoseconds = UInt64(max(0, seconds) * 1_000_000_000)
+                try await Task.sleep(nanoseconds: nanoseconds)
+                throw TimeoutError()
             }
-            throw TimeoutError()
-        } catch {
-            throw error
+            defer {
+                group.cancelAll()
+            }
+            return try await group.next()!
         }
     }
 }
