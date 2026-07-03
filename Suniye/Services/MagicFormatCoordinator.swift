@@ -8,6 +8,13 @@ enum EffectiveMagicFormatProvider {
 
 @MainActor
 final class MagicFormatCoordinator {
+    /// User-facing labels for each polish stage, shown in the status text and the
+    /// floating pill. Kept in one place so the two sinks never drift.
+    enum Stage {
+        static let polishing = "Polishing..."
+        static let startingLocalModel = "Starting local model..."
+    }
+
     struct PolishRequest {
         let requestedProvider: MagicFormatProvider
         let settings: LLMSettings
@@ -17,8 +24,8 @@ final class MagicFormatCoordinator {
         let readAPIKey: () -> String?
         let onAPIKeyReadFailed: () -> Void
         let startSlowWarning: () -> Task<Void, Never>
-        let setStatusText: (String) -> Void
-        let setProcessingMessage: (String) -> Void
+        /// Advertise the current stage to both the status text and the pill.
+        let setStage: (String) -> Void
     }
 
     private let apiPostProcessor: LLMPostProcessor
@@ -102,7 +109,45 @@ final class MagicFormatCoordinator {
         }
     }
 
+    /// In-flight speculative warm-up. Canceled when a real polish request arrives so
+    /// the probe never occupies the server's single generation slot ahead of the user.
+    private var prewarmTask: Task<Void, Never>?
+
+    /// Speculatively warm the local runtime iff the request will actually resolve to
+    /// the local Gemma provider. No-op for every other provider or when unavailable.
+    /// Owns provider resolution + config assembly so it can never drift from `polish`.
+    /// Fire-and-forget by design: returns the spawned task (for tests) without
+    /// awaiting it, and cancels any prior probe so at most one is ever in flight.
+    @discardableResult
+    func prewarmLocalIfEligible(
+        requestedProvider: MagicFormatProvider,
+        settings: LLMSettings,
+        appleAvailability: AppleFoundationModelsAvailability,
+        localGemmaAvailability: LocalGemmaAvailability
+    ) -> Task<Void, Never>? {
+        let resolved = Self.resolvedProvider(
+            requestedProvider: requestedProvider,
+            appleAvailability: appleAvailability,
+            localGemmaAvailability: localGemmaAvailability
+        )
+        guard case .localGemma = resolved else {
+            return nil
+        }
+        let config = Self.makeLocalGemmaConfig(settings: settings)
+        prewarmTask?.cancel()
+        let task = Task { [localGemmaPostProcessor] in
+            await localGemmaPostProcessor.prewarm(config: config)
+        }
+        prewarmTask = task
+        return task
+    }
+
     func polish(input: String, rawText: String, request: PolishRequest) async -> String {
+        // Real work takes priority: free the generation slot if the probe still holds it.
+        // (Server startup is a separate shared task; canceling the probe does not cancel it.)
+        prewarmTask?.cancel()
+        prewarmTask = nil
+
         guard let provider = Self.resolvedProvider(
             requestedProvider: request.requestedProvider,
             appleAvailability: request.appleAvailability,
@@ -148,7 +193,7 @@ final class MagicFormatCoordinator {
         let config = Self.makeAPIConfig(settings: request.settings, apiKey: apiKey, endpointURL: endpointURL, modelId: modelId)
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
-        request.setStatusText("Polishing...")
+        request.setStage(Stage.polishing)
         defer {
             slowWarningTask.cancel()
         }
@@ -178,7 +223,7 @@ final class MagicFormatCoordinator {
         let config = Self.makeAppleConfig(settings: request.settings)
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
-        request.setStatusText("Polishing...")
+        request.setStage(Stage.polishing)
         defer {
             slowWarningTask.cancel()
         }
@@ -209,12 +254,7 @@ final class MagicFormatCoordinator {
         let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
         let isRuntimeWarm = await localGemmaPostProcessor.isRuntimeWarm()
-        if isRuntimeWarm {
-            request.setStatusText("Polishing...")
-        } else {
-            request.setStatusText("Starting local model...")
-            request.setProcessingMessage("Starting local model...")
-        }
+        request.setStage(isRuntimeWarm ? Stage.polishing : Stage.startingLocalModel)
         defer {
             slowWarningTask.cancel()
         }

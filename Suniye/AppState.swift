@@ -551,6 +551,9 @@ final class AppState {
     var learnFromEditsEnabled = true {
         didSet { persistLLMSettings() }
     }
+    var llmAppPromptBindings: [AppPromptBinding] = [] {
+        didSet { persistLLMSettings() }
+    }
     var llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds {
         didSet {
             let clamped = LLMDefaults.clampTimeout(llmTimeoutSeconds)
@@ -1341,6 +1344,7 @@ final class AppState {
     private let learningToastPresenter: LearningToastPresenting
     private let currentAppVersionProvider: () -> AppVersion?
     private let nowProvider: () -> Date
+    private let frontmostAppBundleIDProvider: () -> String?
     private let fileOpener: (URL) -> Bool
     private let accessibilityOnboarding: AccessibilityOnboardingPresenting
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
@@ -1354,6 +1358,8 @@ final class AppState {
         let source: RecordingSource
         let startedAt: Date
         let destination: DictationDestination
+        /// Bundle ID of the app the user was in when recording started, for per-app prompt routing.
+        let frontmostAppBundleID: String?
     }
 
     private enum ActiveDictationSession {
@@ -1408,6 +1414,7 @@ final class AppState {
         learningToastPresenter: LearningToastPresenting? = nil,
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
         nowProvider: @escaping () -> Date = Date.init,
+        frontmostAppBundleIDProvider: @escaping () -> String? = { NSWorkspace.shared.frontmostApplication?.bundleIdentifier },
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         accessibilityOnboarding: AccessibilityOnboardingPresenting? = nil,
         issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { defaultName in
@@ -1458,6 +1465,7 @@ final class AppState {
         self.learningToastPresenter = learningToastPresenter ?? LearningToastPresenter()
         self.currentAppVersionProvider = currentAppVersionProvider
         self.nowProvider = nowProvider
+        self.frontmostAppBundleIDProvider = frontmostAppBundleIDProvider
         self.fileOpener = fileOpener
         self.accessibilityOnboarding = accessibilityOnboarding ?? PermisoAccessibilityOnboarding()
         self.issueReportDiagnosticsDestinationPicker = issueReportDiagnosticsDestinationPicker
@@ -1942,6 +1950,40 @@ final class AppState {
             .filter { $0.caseInsensitiveCompare(value) != .orderedSame }
         llmKeywordsRaw = filtered.joined(separator: "\n")
         removeAutoLearnedVocabularyTerms([value])
+    }
+
+    /// Adds a binding for the app, or refreshes the display name of an existing one.
+    /// New bindings start blank because the saved prompt is appended to the active provider prompt. Returns the affected binding.
+    @discardableResult
+    func addAppPromptBinding(bundleID: String, appDisplayName: String) -> AppPromptBinding? {
+        guard let trimmedBundleID = AppPromptResolver.normalizedBundleID(bundleID) else {
+            return nil
+        }
+        let trimmedName = appDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let index = llmAppPromptBindings.firstIndex(where: { AppPromptResolver.matches($0.bundleID, trimmedBundleID) }) {
+            if !trimmedName.isEmpty {
+                llmAppPromptBindings[index].appDisplayName = trimmedName
+            }
+            return llmAppPromptBindings[index]
+        }
+        let binding = AppPromptBinding(
+            bundleID: trimmedBundleID,
+            appDisplayName: trimmedName.isEmpty ? trimmedBundleID : trimmedName,
+            prompt: ""
+        )
+        llmAppPromptBindings.append(binding)
+        return binding
+    }
+
+    func updateAppPromptBinding(id: UUID, prompt: String) {
+        guard let index = llmAppPromptBindings.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        llmAppPromptBindings[index].prompt = prompt
+    }
+
+    func removeAppPromptBinding(id: UUID) {
+        llmAppPromptBindings.removeAll { $0.id == id }
     }
 
     var autoLearnedVocabularyTerms: [String] {
@@ -2592,7 +2634,7 @@ final class AppState {
         appUpdateController.updateChannel = updateChannel
     }
 
-    func postProcessTextIfEnabled(_ rawText: String) async -> String {
+    func postProcessTextIfEnabled(_ rawText: String, frontmostAppBundleID: String? = nil) async -> String {
         let input = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else {
             return rawText
@@ -2613,12 +2655,19 @@ final class AppState {
             return rawText
         }
 
+        var settings = currentLLMSettings()
+        if let appInstructions = AppPromptResolver.additionalInstructions(for: frontmostAppBundleID, bindings: llmAppPromptBindings) {
+            settings = settings.appendingAppInstructions(appInstructions)
+            // No bundle ID here: app.log ships in diagnostic reports.
+            AppLogger.shared.log(.info, "llm per-app prompt instructions appended")
+        }
+
         return await magicFormatCoordinator.polish(
             input: input,
             rawText: rawText,
             request: MagicFormatCoordinator.PolishRequest(
                 requestedProvider: llmProvider,
-                settings: currentLLMSettings(),
+                settings: settings,
                 hasAPIKey: hasLLMAPIKey,
                 appleAvailability: appleMagicFormatAvailability,
                 localGemmaAvailability: localGemmaMagicFormatAvailability,
@@ -2631,14 +2680,15 @@ final class AppState {
                 startSlowWarning: { [weak self] in
                     self?.startMagicFormatSlowWarningTask() ?? Task {}
                 },
-                setStatusText: { [weak self] text in
-                    self?.statusText = text
-                },
-                setProcessingMessage: { [weak self] message in
-                    guard let self, case .processing = self.floatingIndicatorState else {
+                setStage: { [weak self] text in
+                    guard let self else {
                         return
                     }
-                    self.setFloatingIndicatorState(.processing(message: message))
+                    self.statusText = text
+                    guard case .processing = self.floatingIndicatorState else {
+                        return
+                    }
+                    self.setFloatingIndicatorState(.processing(message: text))
                 }
             )
         )
@@ -2819,7 +2869,28 @@ final class AppState {
             showTransientIndicatorError("Enable Accessibility for dictation")
             return
         }
+        // Speculatively warm the local LLM while the user speaks, so cleanup runs
+        // against an already-loaded model instead of paying the cold start on the
+        // critical path. Fire-and-forget; idempotent and self-evicting.
+        prewarmLocalLLMIfEligible()
         await startRecording(trigger: trigger)
+    }
+
+    /// Warm the local Gemma runtime iff Magic Format is enabled and will actually
+    /// resolve to the local provider. Provider resolution + config assembly live in
+    /// the coordinator so this can never drift from the polish path. Returns the
+    /// spawned probe task (for tests); nil when ineligible.
+    @discardableResult
+    func prewarmLocalLLMIfEligible() -> Task<Void, Never>? {
+        guard llmEnabled else {
+            return nil
+        }
+        return magicFormatCoordinator.prewarmLocalIfEligible(
+            requestedProvider: llmProvider,
+            settings: currentLLMSettings(),
+            appleAvailability: appleMagicFormatAvailability,
+            localGemmaAvailability: localGemmaMagicFormatAvailability
+        )
     }
 
     private func startRecording(trigger: RecordingSource) async {
@@ -2828,11 +2899,13 @@ final class AppState {
         }
 
         let sessionID = UUID()
+        // Capture the target app before any Suniye UI can steal focus.
         let context = DictationSessionContext(
             id: sessionID,
             source: trigger,
             startedAt: Date(),
-            destination: currentDictationDestination
+            destination: currentDictationDestination,
+            frontmostAppBundleID: frontmostAppBundleIDProvider()
         )
         activeDictationSession = .starting(context)
         phase = .recording
@@ -2886,7 +2959,7 @@ final class AppState {
         activeDictationSession = .transcribing(context)
         phase = .transcribing
         statusText = "Transcribing..."
-        setFloatingIndicatorState(.processing())
+        setFloatingIndicatorState(Self.transcribingIndicatorState)
 
         let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
         guard let context = activeDictationSession?.context, context.id == sessionID else {
@@ -2913,7 +2986,7 @@ final class AppState {
             var finalText = llmInputText
 
             if !finalText.isEmpty {
-                llmOutputText = await postProcessTextIfEnabled(llmInputText)
+                llmOutputText = await postProcessTextIfEnabled(llmInputText, frontmostAppBundleID: context.frontmostAppBundleID)
                 if destination == .systemInsertion {
                     let polishedParse = AppState.parseSubmitCommand(from: llmOutputText)
                     finalText = polishedParse.text
@@ -3235,6 +3308,7 @@ final class AppState {
         llmKeywordsRaw = settings.keywordsRaw
         llmAutoLearnedKeywordsRaw = settings.autoLearnedKeywordsRaw
         learnFromEditsEnabled = settings.learnFromEditsEnabled
+        llmAppPromptBindings = settings.appPromptBindings
         llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
         llmMaxTokens = LLMDefaults.defaultMaxTokens
         isHydratingLLMSettings = false
@@ -3269,7 +3343,8 @@ final class AppState {
             learnFromEditsEnabled: learnFromEditsEnabled,
             timeoutSeconds: LLMDefaults.defaultTimeoutSeconds,
             maxTokens: LLMDefaults.defaultMaxTokens,
-            localModelKeepAlive: localModelKeepAlive
+            localModelKeepAlive: localModelKeepAlive,
+            appPromptBindings: llmAppPromptBindings
         )
     }
 
@@ -3542,7 +3617,13 @@ final class AppState {
                 source: activeRecordingSource ?? .manual
             )
         case .transcribing:
-            return .processing()
+            // Preserve whatever processing stage the pill has advanced to
+            // ("Starting local model...", "Polishing..."); the phase stays
+            // .transcribing through the whole post-stop pipeline.
+            if case .processing = floatingIndicatorState {
+                return floatingIndicatorState
+            }
+            return Self.transcribingIndicatorState
         case .needsModel, .downloadingModel, .loading, .ready, .error:
             return .idle
         }
@@ -3615,6 +3696,10 @@ final class AppState {
     private static func defaultIndicatorLevels(level: Float, count: Int = AudioLevelMeter.bandCount) -> [Float] {
         Array(repeating: max(0, min(level, 1)), count: count)
     }
+
+    /// Single source for the pill's transcribing state so the transcribe transition
+    /// and the blocked-start restore path can never render it differently.
+    private static let transcribingIndicatorState: FloatingIndicatorState = .processing(message: "Transcribing...")
 
     private func startBlockedMessage(for phase: Phase) -> String {
         switch phase {

@@ -149,6 +149,63 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         XCTAssertEqual(client.idleTimeouts.first, 900)
     }
 
+    func testPrewarmOnColdRuntimeTriggersGeneration() async {
+        let client = FakeLocalGemmaClient(runtimeWarm: false, outputs: ["OK"])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        await processor.prewarm(config: makeConfig(idleTimeoutSeconds: 900))
+
+        XCTAssertEqual(client.callCount, 1)
+        XCTAssertEqual(client.maxTokens.first, LocalGemmaDefaults.probeMaxTokens)
+        XCTAssertEqual(client.idleTimeouts.first, 900)
+    }
+
+    func testPrewarmSkipsWhenRuntimeAlreadyWarm() async {
+        let client = FakeLocalGemmaClient(runtimeWarm: true, outputs: ["OK"])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        await processor.prewarm(config: makeConfig())
+
+        XCTAssertEqual(client.callCount, 0)
+    }
+
+    func testPrewarmSkipsWhenUnavailable() async {
+        let client = FakeLocalGemmaClient(availability: .modelNotInstalled, outputs: ["OK"])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        await processor.prewarm(config: makeConfig())
+
+        XCTAssertEqual(client.callCount, 0)
+    }
+
+    func testPrewarmSwallowsGenerationErrors() async {
+        let client = FakeLocalGemmaClient(runtimeWarm: false, outputs: [])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        // No output configured -> generate throws; prewarm must not propagate it.
+        await processor.prewarm(config: makeConfig())
+
+        XCTAssertEqual(client.callCount, 1)
+    }
+
+    func testPrewarmAbortsPromptlyWhenCanceled() async {
+        let client = FakeLocalGemmaClient(runtimeWarm: false, blocksUntilCanceled: true, outputs: ["OK"])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        let prewarm = Task {
+            await processor.prewarm(config: makeConfig())
+        }
+        await client.waitUntilGenerateStarted()
+        prewarm.cancel()
+
+        // Must unblock without hanging or throwing into the caller — and the
+        // cancellation must actually reach the in-flight generation, not just
+        // let it run to completion.
+        await prewarm.value
+        XCTAssertEqual(client.callCount, 1)
+        XCTAssertTrue(client.generateWasCanceled)
+    }
+
     private func makeConfig(idleTimeoutSeconds: Double = 600) -> LocalGemmaMagicFormatConfig {
         LocalGemmaMagicFormatConfig(
             systemPrompt: LLMDefaults.defaultGemmaMagicFormatPrompt,
@@ -163,15 +220,38 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
 
 private final class FakeLocalGemmaClient: LocalGemmaClient {
     var availability: LocalGemmaAvailability
+    var runtimeWarm: Bool
+    private let blocksUntilCanceled: Bool
     private let outputs: [String]
     private(set) var callCount = 0
     private(set) var instructions: [String] = []
     private(set) var prompts: [String] = []
+    private(set) var maxTokens: [Int] = []
     private(set) var idleTimeouts: [Double] = []
+    private(set) var generateWasCanceled = false
 
-    init(availability: LocalGemmaAvailability = .available, outputs: [String]) {
+    init(
+        availability: LocalGemmaAvailability = .available,
+        runtimeWarm: Bool = false,
+        blocksUntilCanceled: Bool = false,
+        outputs: [String]
+    ) {
         self.availability = availability
+        self.runtimeWarm = runtimeWarm
+        self.blocksUntilCanceled = blocksUntilCanceled
         self.outputs = outputs
+    }
+
+    func isRuntimeWarm() async -> Bool {
+        runtimeWarm
+    }
+
+    func waitUntilGenerateStarted() async {
+        // Bounded poll: a hang here fails the test at its assertion instead of
+        // suspending the suite on an unresumed continuation.
+        for _ in 0 ..< 500 where callCount == 0 {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 
     func generate(
@@ -184,9 +264,19 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
     ) async throws -> String {
         self.instructions.append(instructions)
         prompts.append(prompt)
+        self.maxTokens.append(maxTokens)
         idleTimeouts.append(idleTimeoutSeconds)
         let index = callCount
         callCount += 1
+        if blocksUntilCanceled {
+            // Mirrors the real client's cooperative cancellation: throws when canceled.
+            do {
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+            } catch {
+                generateWasCanceled = true
+                throw error
+            }
+        }
         guard index < outputs.count else {
             throw LLMPostProcessorError.emptyOutput
         }

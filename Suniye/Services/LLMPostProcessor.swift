@@ -39,6 +39,7 @@ protocol AppleMagicFormatPostProcessor {
 protocol LocalGemmaMagicFormatPostProcessor {
     var availability: LocalGemmaAvailability { get }
     func isRuntimeWarm() async -> Bool
+    func prewarm(config: LocalGemmaMagicFormatConfig) async
     func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String
     func testSetup(config: LocalGemmaMagicFormatConfig) async throws
     func stopRuntime() async
@@ -46,6 +47,7 @@ protocol LocalGemmaMagicFormatPostProcessor {
 
 extension LocalGemmaMagicFormatPostProcessor {
     func isRuntimeWarm() async -> Bool { false }
+    func prewarm(config: LocalGemmaMagicFormatConfig) async {}
     func stopRuntime() async {}
 }
 

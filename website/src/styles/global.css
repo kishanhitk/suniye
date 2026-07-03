@@ -147,52 +147,52 @@ html {
   transform: scale(1);
 }
 
-/* ── Step connector line ───────────────────── */
+/* ── Demo video play overlay ───────────────── */
 
-.step-line {
-  background: repeating-linear-gradient(
-    90deg,
-    var(--color-border) 0,
-    var(--color-border) 6px,
-    transparent 6px,
-    transparent 12px
-  );
-  height: 2px;
+.demo-play {
+  cursor: pointer;
 }
 
-/* ── Hold-to-talk demo: equalizer + caret ──── */
-
-@keyframes eq {
-  0%, 100% { transform: scaleY(0.22); }
-  50%      { transform: scaleY(1); }
-}
-
-.eq-bar {
-  transform-origin: center bottom;
-  animation: eq 0.9s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes caret-blink {
-  0%, 49%  { opacity: 1; }
-  50%, 100% { opacity: 0; }
-}
-
-.caret {
-  display: inline-block;
-  width: 2px;
-  animation: caret-blink 1.05s step-end infinite;
-}
-
-/* The transcript fades/slides in once, when the demo scrolls into view */
-.demo-line {
+.demo-play.is-playing {
   opacity: 0;
-  transform: translateY(6px);
-  transition: opacity 0.5s ease, transform 0.5s ease;
+  pointer-events: none;
 }
 
-.demo-line.visible {
+/* ── Quarantine dialog (post-download) ──────── */
+
+.dmg-modal {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+}
+
+.dmg-modal.is-open {
   opacity: 1;
-  transform: translateY(0);
+  visibility: visible;
+  transition: opacity 0.25s ease;
+}
+
+.dmg-modal .dmg-card {
+  transform: translateY(10px) scale(0.98);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dmg-modal.is-open .dmg-card {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmg-modal {
+    transition: opacity 0.15s ease, visibility 0s linear 0.15s;
+  }
+  .dmg-modal.is-open {
+    transition: opacity 0.15s ease;
+  }
+  .dmg-modal .dmg-card,
+  .dmg-modal.is-open .dmg-card {
+    transform: none;
+    transition: none;
+  }
 }
 
 /* ── FAQ disclosure ────────────────────────── */
@@ -219,9 +219,7 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .hero-word,
   .waveform-path,
-  .fade-in,
-  .eq-bar,
-  .caret {
+  .fade-in {
     animation: none;
   }
 
@@ -230,12 +228,7 @@ html {
     opacity: 1;
   }
 
-  .eq-bar {
-    transform: scaleY(0.6);
-  }
-
-  .reveal,
-  .demo-line {
+  .reveal {
     opacity: 1;
     transform: none;
     transition: none;
