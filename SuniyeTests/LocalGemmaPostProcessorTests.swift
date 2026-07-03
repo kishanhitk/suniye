@@ -188,6 +188,21 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         XCTAssertEqual(client.callCount, 1)
     }
 
+    func testPrewarmAbortsPromptlyWhenCanceled() async {
+        let client = FakeLocalGemmaClient(runtimeWarm: false, blocksUntilCanceled: true, outputs: ["OK"])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        let prewarm = Task {
+            await processor.prewarm(config: makeConfig())
+        }
+        await client.waitUntilGenerateStarted()
+        prewarm.cancel()
+
+        // Must unblock without hanging or throwing into the caller.
+        await prewarm.value
+        XCTAssertEqual(client.callCount, 1)
+    }
+
     private func makeConfig(idleTimeoutSeconds: Double = 600) -> LocalGemmaMagicFormatConfig {
         LocalGemmaMagicFormatConfig(
             systemPrompt: LLMDefaults.defaultGemmaMagicFormatPrompt,
@@ -203,21 +218,38 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
 private final class FakeLocalGemmaClient: LocalGemmaClient {
     var availability: LocalGemmaAvailability
     var runtimeWarm: Bool
+    private let blocksUntilCanceled: Bool
     private let outputs: [String]
     private(set) var callCount = 0
     private(set) var instructions: [String] = []
     private(set) var prompts: [String] = []
     private(set) var maxTokens: [Int] = []
     private(set) var idleTimeouts: [Double] = []
+    private var generateStartedContinuation: CheckedContinuation<Void, Never>?
 
-    init(availability: LocalGemmaAvailability = .available, runtimeWarm: Bool = false, outputs: [String]) {
+    init(
+        availability: LocalGemmaAvailability = .available,
+        runtimeWarm: Bool = false,
+        blocksUntilCanceled: Bool = false,
+        outputs: [String]
+    ) {
         self.availability = availability
         self.runtimeWarm = runtimeWarm
+        self.blocksUntilCanceled = blocksUntilCanceled
         self.outputs = outputs
     }
 
     func isRuntimeWarm() async -> Bool {
         runtimeWarm
+    }
+
+    func waitUntilGenerateStarted() async {
+        if callCount > 0 {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            generateStartedContinuation = continuation
+        }
     }
 
     func generate(
@@ -234,6 +266,12 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         idleTimeouts.append(idleTimeoutSeconds)
         let index = callCount
         callCount += 1
+        generateStartedContinuation?.resume()
+        generateStartedContinuation = nil
+        if blocksUntilCanceled {
+            // Mirrors URLSession's cooperative cancellation: throws when canceled.
+            try await Task.sleep(nanoseconds: 10_000_000_000)
+        }
         guard index < outputs.count else {
             throw LLMPostProcessorError.emptyOutput
         }

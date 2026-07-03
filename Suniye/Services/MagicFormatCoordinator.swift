@@ -109,6 +109,10 @@ final class MagicFormatCoordinator {
         }
     }
 
+    /// In-flight speculative warm-up. Canceled when a real polish request arrives so
+    /// the probe never occupies the server's single generation slot ahead of the user.
+    private var prewarmTask: Task<Void, Never>?
+
     /// Speculatively warm the local runtime iff the request will actually resolve to
     /// the local Gemma provider. No-op for every other provider or when unavailable.
     /// Owns provider resolution + config assembly so it can never drift from `polish`.
@@ -126,10 +130,20 @@ final class MagicFormatCoordinator {
         guard case .localGemma = resolved else {
             return
         }
-        await localGemmaPostProcessor.prewarm(config: Self.makeLocalGemmaConfig(settings: settings))
+        let config = Self.makeLocalGemmaConfig(settings: settings)
+        let task = Task { [localGemmaPostProcessor] in
+            await localGemmaPostProcessor.prewarm(config: config)
+        }
+        prewarmTask = task
+        await task.value
     }
 
     func polish(input: String, rawText: String, request: PolishRequest) async -> String {
+        // Real work takes priority: free the generation slot if the probe still holds it.
+        // (Server startup is a separate shared task; canceling the probe does not cancel it.)
+        prewarmTask?.cancel()
+        prewarmTask = nil
+
         guard let provider = Self.resolvedProvider(
             requestedProvider: request.requestedProvider,
             appleAvailability: request.appleAvailability,

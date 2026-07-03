@@ -67,9 +67,10 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
     /// Best-effort warm-up so the model is resident (and its Metal/KV kernels compiled)
     /// before the first real polish request. Safe to call speculatively on dictation
     /// start: it no-ops when the runtime is already warm or unavailable, shares any
-    /// in-flight startup, and never throws into the caller.
+    /// in-flight startup, never throws into the caller, and aborts promptly when the
+    /// caller cancels it (freeing the generation slot for the real request).
     func prewarm(config: LocalGemmaMagicFormatConfig) async {
-        guard availability.isAvailable else {
+        guard availability.isAvailable, !Task.isCancelled else {
             return
         }
         if await isRuntimeWarm() {
@@ -78,6 +79,8 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
         do {
             _ = try await runProbe(prompt: "Warm up.", config: config)
             AppLogger.shared.log(.info, "local gemma prewarm complete")
+        } catch is CancellationError {
+            AppLogger.shared.log(.debug, "local gemma prewarm canceled by real request")
         } catch {
             let reason = (error as? LLMPostProcessorError)?.logValue ?? "unknown"
             AppLogger.shared.log(.debug, "local gemma prewarm skipped reason=\(reason)")
