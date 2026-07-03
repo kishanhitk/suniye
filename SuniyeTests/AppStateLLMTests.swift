@@ -260,7 +260,7 @@ final class AppStateLLMTests: XCTestCase {
         appState.llmEnabled = true
         appState.llmProvider = .localGemma
 
-        await appState.prewarmLocalLLMIfEligible()
+        await appState.prewarmLocalLLMIfEligible()?.value
 
         XCTAssertEqual(fakeGemma.prewarmCallCount, 1)
         XCTAssertEqual(fakeGemma.lastPrewarmConfig?.idleTimeoutSeconds, appState.localModelKeepAlive.seconds)
@@ -280,8 +280,7 @@ final class AppStateLLMTests: XCTestCase {
         appState.llmEnabled = false
         appState.llmProvider = .localGemma
 
-        await appState.prewarmLocalLLMIfEligible()
-
+        XCTAssertNil(appState.prewarmLocalLLMIfEligible())
         XCTAssertEqual(fakeGemma.prewarmCallCount, 0)
     }
 
@@ -299,8 +298,7 @@ final class AppStateLLMTests: XCTestCase {
         appState.llmEnabled = true
         appState.llmProvider = .openAICompatible
 
-        await appState.prewarmLocalLLMIfEligible()
-
+        XCTAssertNil(appState.prewarmLocalLLMIfEligible())
         XCTAssertEqual(fakeGemma.prewarmCallCount, 0)
     }
 
@@ -320,18 +318,44 @@ final class AppStateLLMTests: XCTestCase {
         appState.llmEnabled = true
         appState.llmProvider = .localGemma
 
-        let prewarm = Task {
-            await appState.prewarmLocalLLMIfEligible()
-        }
-        while fakeGemma.prewarmCallCount == 0 {
-            try? await Task.sleep(nanoseconds: 5_000_000)
-        }
+        let prewarm = appState.prewarmLocalLLMIfEligible()
+        XCTAssertNotNil(prewarm)
+        await waitUntil(timeoutSeconds: 2) { fakeGemma.prewarmCallCount == 1 }
 
         let output = await appState.postProcessTextIfEnabled("raw text")
-        await prewarm.value
+        await prewarm?.value
 
         XCTAssertEqual(output, "gemma polished")
         XCTAssertTrue(fakeGemma.prewarmWasCanceled)
+    }
+
+    func testNewPrewarmCancelsPriorInFlightPrewarm() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        fakeGemma.prewarmBlocksUntilCanceled = true
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+
+        // First dictation is abandoned (no polish ever runs); its probe must not
+        // survive into the next dictation's prewarm.
+        let first = appState.prewarmLocalLLMIfEligible()
+        await waitUntil(timeoutSeconds: 2) { fakeGemma.prewarmCallCount == 1 }
+
+        let second = appState.prewarmLocalLLMIfEligible()
+        await first?.value
+        XCTAssertTrue(fakeGemma.prewarmWasCanceled)
+
+        await waitUntil(timeoutSeconds: 2) { fakeGemma.prewarmCallCount == 2 }
+        second?.cancel()
+        await second?.value
     }
 
     func testPrewarmSkippedWhenLocalModelUnavailable() async {
@@ -343,8 +367,7 @@ final class AppStateLLMTests: XCTestCase {
         appState.llmEnabled = true
         appState.llmProvider = .localGemma
 
-        await appState.prewarmLocalLLMIfEligible()
-
+        XCTAssertNil(appState.prewarmLocalLLMIfEligible())
         XCTAssertEqual(fakeGemma.prewarmCallCount, 0)
     }
 

@@ -116,26 +116,30 @@ final class MagicFormatCoordinator {
     /// Speculatively warm the local runtime iff the request will actually resolve to
     /// the local Gemma provider. No-op for every other provider or when unavailable.
     /// Owns provider resolution + config assembly so it can never drift from `polish`.
+    /// Fire-and-forget by design: returns the spawned task (for tests) without
+    /// awaiting it, and cancels any prior probe so at most one is ever in flight.
+    @discardableResult
     func prewarmLocalIfEligible(
         requestedProvider: MagicFormatProvider,
         settings: LLMSettings,
         appleAvailability: AppleFoundationModelsAvailability,
         localGemmaAvailability: LocalGemmaAvailability
-    ) async {
+    ) -> Task<Void, Never>? {
         let resolved = Self.resolvedProvider(
             requestedProvider: requestedProvider,
             appleAvailability: appleAvailability,
             localGemmaAvailability: localGemmaAvailability
         )
         guard case .localGemma = resolved else {
-            return
+            return nil
         }
         let config = Self.makeLocalGemmaConfig(settings: settings)
+        prewarmTask?.cancel()
         let task = Task { [localGemmaPostProcessor] in
             await localGemmaPostProcessor.prewarm(config: config)
         }
         prewarmTask = task
-        await task.value
+        return task
     }
 
     func polish(input: String, rawText: String, request: PolishRequest) async -> String {

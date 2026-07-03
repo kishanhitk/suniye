@@ -198,9 +198,12 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         await client.waitUntilGenerateStarted()
         prewarm.cancel()
 
-        // Must unblock without hanging or throwing into the caller.
+        // Must unblock without hanging or throwing into the caller — and the
+        // cancellation must actually reach the in-flight generation, not just
+        // let it run to completion.
         await prewarm.value
         XCTAssertEqual(client.callCount, 1)
+        XCTAssertTrue(client.generateWasCanceled)
     }
 
     private func makeConfig(idleTimeoutSeconds: Double = 600) -> LocalGemmaMagicFormatConfig {
@@ -225,7 +228,7 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
     private(set) var prompts: [String] = []
     private(set) var maxTokens: [Int] = []
     private(set) var idleTimeouts: [Double] = []
-    private var generateStartedContinuation: CheckedContinuation<Void, Never>?
+    private(set) var generateWasCanceled = false
 
     init(
         availability: LocalGemmaAvailability = .available,
@@ -244,11 +247,10 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
     }
 
     func waitUntilGenerateStarted() async {
-        if callCount > 0 {
-            return
-        }
-        await withCheckedContinuation { continuation in
-            generateStartedContinuation = continuation
+        // Bounded poll: a hang here fails the test at its assertion instead of
+        // suspending the suite on an unresumed continuation.
+        for _ in 0 ..< 500 where callCount == 0 {
+            try? await Task.sleep(nanoseconds: 10_000_000)
         }
     }
 
@@ -266,11 +268,14 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         idleTimeouts.append(idleTimeoutSeconds)
         let index = callCount
         callCount += 1
-        generateStartedContinuation?.resume()
-        generateStartedContinuation = nil
         if blocksUntilCanceled {
-            // Mirrors URLSession's cooperative cancellation: throws when canceled.
-            try await Task.sleep(nanoseconds: 10_000_000_000)
+            // Mirrors the real client's cooperative cancellation: throws when canceled.
+            do {
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+            } catch {
+                generateWasCanceled = true
+                throw error
+            }
         }
         guard index < outputs.count else {
             throw LLMPostProcessorError.emptyOutput

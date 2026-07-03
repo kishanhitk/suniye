@@ -102,6 +102,12 @@ final class ChatCompletionClient {
         } catch let error as LLMPostProcessorError {
             throw error
         } catch {
+            // Caller canceled (e.g. a prewarm probe preempted by a real request):
+            // surface it as cancellation, not as a timeout/network failure. URLSession
+            // reports this as URLError(.cancelled) rather than CancellationError.
+            if Task.isCancelled {
+                throw CancellationError()
+            }
             if (error as NSError).code == NSURLErrorTimedOut || error is TimeoutError {
                 throw LLMPostProcessorError.timeout
             }
@@ -112,6 +118,9 @@ final class ChatCompletionClient {
     private struct TimeoutError: Error {}
 
     private func withTimeout<T>(seconds: Double, operation: @escaping () async throws -> T) async throws -> T {
+        // workTask is unstructured, so the caller's cancellation does not reach it on
+        // its own; the cancellation handler below forwards it, aborting the underlying
+        // URLSession request instead of letting it run to completion.
         let workTask = Task { try await operation() }
         let timeoutTask = Task {
             let nanoseconds = UInt64(max(0, seconds) * 1_000_000_000)
@@ -124,8 +133,17 @@ final class ChatCompletionClient {
         }
 
         do {
-            return try await workTask.value
+            return try await withTaskCancellationHandler {
+                try await workTask.value
+            } onCancel: {
+                workTask.cancel()
+            }
         } catch is CancellationError {
+            // workTask is canceled by exactly two parties: the timeout task, or the
+            // caller's cancellation forwarded above. Disambiguate via our own state.
+            if Task.isCancelled {
+                throw CancellationError()
+            }
             throw TimeoutError()
         } catch {
             throw error

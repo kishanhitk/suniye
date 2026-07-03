@@ -2814,20 +2814,20 @@ final class AppState {
         // Speculatively warm the local LLM while the user speaks, so cleanup runs
         // against an already-loaded model instead of paying the cold start on the
         // critical path. Fire-and-forget; idempotent and self-evicting.
-        Task { [weak self] in
-            await self?.prewarmLocalLLMIfEligible()
-        }
+        prewarmLocalLLMIfEligible()
         await startRecording(trigger: trigger)
     }
 
     /// Warm the local Gemma runtime iff Magic Format is enabled and will actually
     /// resolve to the local provider. Provider resolution + config assembly live in
-    /// the coordinator so this can never drift from the polish path.
-    func prewarmLocalLLMIfEligible() async {
+    /// the coordinator so this can never drift from the polish path. Returns the
+    /// spawned probe task (for tests); nil when ineligible.
+    @discardableResult
+    func prewarmLocalLLMIfEligible() -> Task<Void, Never>? {
         guard llmEnabled else {
-            return
+            return nil
         }
-        await magicFormatCoordinator.prewarmLocalIfEligible(
+        return magicFormatCoordinator.prewarmLocalIfEligible(
             requestedProvider: llmProvider,
             settings: currentLLMSettings(),
             appleAvailability: appleMagicFormatAvailability,
@@ -3507,6 +3507,12 @@ final class AppState {
                 source: activeRecordingSource ?? .manual
             )
         case .transcribing:
+            // Preserve whatever processing stage the pill has advanced to
+            // ("Starting local model...", "Polishing..."); the phase stays
+            // .transcribing through the whole post-stop pipeline.
+            if case .processing = floatingIndicatorState {
+                return floatingIndicatorState
+            }
             return Self.transcribingIndicatorState
         case .needsModel, .downloadingModel, .loading, .ready, .error:
             return .idle

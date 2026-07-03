@@ -59,6 +59,11 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
             }
         }
 
+        // A canceled caller (prewarm probe preempted by a real request) must not
+        // occupy the server's single generation slot; startup above is a shared
+        // task and completes for the real caller regardless.
+        try Task.checkCancellation()
+
         return try await completionClient.complete(
             endpointURL: endpoint.baseURL.appendingPathComponent("v1/chat/completions"),
             apiKey: endpoint.apiKey,
