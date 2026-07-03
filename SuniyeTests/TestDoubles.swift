@@ -366,6 +366,10 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
     }
 }
 
+/// MainActor-isolated so overlapping decodes in tests (e.g. a gated partial plus
+/// a concurrent final) serialize their mutations instead of racing on the
+/// cooperative pool. All consuming tests already run on the main actor.
+@MainActor
 final class StubTranscriptionService: TranscriptionServiceProtocol {
     var transcribeResult: Result<String, Error> = .success("")
     /// Consumed in order before falling back to `transcribeResult`.
@@ -380,6 +384,9 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     var onTranscribe: (() -> Void)?
     /// Awaited after the scripted result is claimed; receives the 1-based call number.
     var onTranscribeAwait: ((Int) async -> Void)?
+
+    /// Nonisolated so it can serve as a default argument (evaluated outside the main actor).
+    nonisolated init() {}
 
     func loadModel(config: RecognizerConfig) async throws {
         loadCallCount += 1
