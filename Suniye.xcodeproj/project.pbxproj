@@ -47,6 +47,7 @@
 		51EA5FB28162D4F0372B5ADD /* EditLearningServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4B11A27F20609007582902C /* EditLearningServiceTests.swift */; };
 		5281C912B2528C33773C008C /* MainWindowComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E769F836704229B962F80C /* MainWindowComponents.swift */; };
 		538CCC22F273225E882F7463 /* HistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */; };
+		5422B0807DE999952FC8C3F0 /* KeyboardSimulationStrategyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DD2EB67D7D235FE871E1FDC /* KeyboardSimulationStrategyTests.swift */; };
 		56F6C83F84D44FC17F6C1AE2 /* AudioCaptureServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6F2EB76CF32A101E8454D9 /* AudioCaptureServiceTests.swift */; };
 		58BD775AF83F95F70DC21BF5 /* libonnxruntime.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 1215194BCE451924E1C06FDD /* libonnxruntime.dylib */; };
 		5A172A62C4ACEA67EACEE936 /* AppDragSourceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 563202BED31686A904F6B9CC /* AppDragSourceView.swift */; };
@@ -177,6 +178,7 @@
 		46CB08DB3B0815DC0E822412 /* SoundFeedbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundFeedbackService.swift; sourceTree = "<group>"; };
 		49C6F3D1EED6DBFE38C52EC9 /* MainWindowSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowSection.swift; sourceTree = "<group>"; };
 		4D5AF8B0C31B3D3BC319A700 /* AudioRecognitionPreprocessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecognitionPreprocessorTests.swift; sourceTree = "<group>"; };
+		4DD2EB67D7D235FE871E1FDC /* KeyboardSimulationStrategyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardSimulationStrategyTests.swift; sourceTree = "<group>"; };
 		547A58E2F28180249AF7E769 /* c-api.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "c-api.h"; sourceTree = "<group>"; };
 		5599BFF26E7C9256D7B0F4A8 /* AppStateAudioCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateAudioCaptureTests.swift; sourceTree = "<group>"; };
 		563202BED31686A904F6B9CC /* AppDragSourceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDragSourceView.swift; sourceTree = "<group>"; };
@@ -346,6 +348,7 @@
 				730EF6DDF61D565A9D49DFCA /* GeneralSettingsStoreTests.swift */,
 				66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */,
 				A90D5B82089314B9767C0F6D /* IssueReportServiceTests.swift */,
+				4DD2EB67D7D235FE871E1FDC /* KeyboardSimulationStrategyTests.swift */,
 				BDD66CF413C1ACA8DB2719C4 /* KeychainServiceTests.swift */,
 				A2C954DD9B2466B271CC6A1D /* LLMSettingsStoreTests.swift */,
 				E002F2ED2661905D8B147320 /* LocalGemmaLlamaServerTests.swift */,
@@ -699,6 +702,7 @@
 				898E0CC20B6C61DE45A0BC0B /* GeneralSettingsStoreTests.swift in Sources */,
 				538CCC22F273225E882F7463 /* HistoryStoreTests.swift in Sources */,
 				6CED932755ECE82560241EC0 /* IssueReportServiceTests.swift in Sources */,
+				5422B0807DE999952FC8C3F0 /* KeyboardSimulationStrategyTests.swift in Sources */,
 				B6E82EB100F0460A6BBF520D /* KeychainServiceTests.swift in Sources */,
 				7EB9B5550B0A955CDFC3FC17 /* LLMSettingsStoreTests.swift in Sources */,
 				A450DED6405BD9A57EEB5F5D /* LocalGemmaLlamaServerTests.swift in Sources */,
