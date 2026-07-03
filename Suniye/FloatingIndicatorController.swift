@@ -389,7 +389,10 @@ final class FloatingIndicatorController {
             if preview == nil, source == .editHotkey {
                 return NSSize(width: 150, height: 40)
             }
-            return NSSize(width: FloatingIndicatorMetrics.listeningPillWidth(preview: preview), height: 40)
+            return NSSize(
+                width: FloatingIndicatorMetrics.listeningPillWidth(preview: preview),
+                height: FloatingIndicatorMetrics.listeningPillHeight(preview: preview)
+            )
         case let .processing(message):
             guard let message else {
                 return NSSize(width: 128, height: 40)

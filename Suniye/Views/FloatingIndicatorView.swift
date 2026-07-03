@@ -78,11 +78,16 @@ struct FloatingIndicatorView: View {
             }
             ListeningMeterView(levels: levels)
             if let preview {
+                // Head truncation keeps the newest words visible; the capsule's
+                // geometry is fixed (see FloatingIndicatorMetrics), so only the
+                // text content changes per tick.
                 Text(preview)
                     .font(AppTypography.subheadlineSemibold)
                     .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .truncationMode(.head)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         case let .processing(message):
             processingContent(message: message)
@@ -207,7 +212,9 @@ struct FloatingIndicatorView: View {
             return 7
         case .hover:
             return 32
-        case .listening, .processing:
+        case let .listening(_, _, preview):
+            return FloatingIndicatorMetrics.listeningPillHeight(preview: preview)
+        case .processing:
             return 40
         case .error:
             return 52

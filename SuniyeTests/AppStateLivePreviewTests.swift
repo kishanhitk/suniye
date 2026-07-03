@@ -39,6 +39,72 @@ final class AppStateLivePreviewTests: XCTestCase {
         )
     }
 
+    func testPartialsAreStabilizedAgainstPreviouslyShownText() async throws {
+        let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
+        let audioCapture = StubAudioCaptureService()
+        let transcription = StubTranscriptionService()
+        // The re-decode rewrites casing/punctuation of already-shown words; the
+        // shown prefix must stay put and only the tail may extend.
+        transcription.scriptedTranscribeResults = [
+            .success("Okay, so we"),
+            .success("okay so we begin now")
+        ]
+        let started = expectation(description: "capture started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcription: transcription,
+            scheduler: scheduler
+        )
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [started], timeout: 1)
+        await drainScheduledTasks()
+
+        await scheduler.tickNow()
+        XCTAssertEqual(appState.livePartialTranscript, "Okay, so we")
+
+        await scheduler.tickNow()
+        XCTAssertEqual(appState.livePartialTranscript, "Okay, so we begin now")
+    }
+
+    func testStabilizerAnchorResetsBetweenSessions() async throws {
+        let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcription = StubTranscriptionService()
+        transcription.scriptedTranscribeResults = [
+            .success("Alpha, beta"), // session 1 partial
+            .success("done"), // session 1 final
+            .success("alpha beta gamma") // session 2 partial
+        ]
+        var captureStarted = expectation(description: "capture 1 started")
+        audioCapture.onStartCapture = { _ in captureStarted.fulfill() }
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcription: transcription,
+            scheduler: scheduler
+        )
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [captureStarted], timeout: 1)
+        await drainScheduledTasks()
+        await scheduler.tickNow()
+        XCTAssertEqual(appState.livePartialTranscript, "Alpha, beta")
+
+        appState.stopRecordingFromUI()
+        try await waitUntil { appState.phase == .ready }
+
+        captureStarted = expectation(description: "capture 2 started")
+        appState.startRecordingFromUI()
+        await fulfillment(of: [captureStarted], timeout: 1)
+        await drainScheduledTasks()
+        await scheduler.tickNow()
+
+        // A stale anchor would resurrect session 1's "Alpha, beta" forms.
+        XCTAssertEqual(appState.livePartialTranscript, "alpha beta gamma")
+    }
+
     func testAudioLevelUpdateKeepsPartialPreview() async throws {
         let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
         let audioCapture = StubAudioCaptureService()

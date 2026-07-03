@@ -4,13 +4,20 @@ import Foundation
 /// Presentation metrics shared by `FloatingIndicatorView` (pill) and
 /// `FloatingIndicatorController` (hosting panel) so the two cannot drift.
 enum FloatingIndicatorMetrics {
-    static let previewTailMaxCharacters = 80
+    /// Two wrapped lines' worth of tail text in the fixed-width capsule.
+    static let previewTailMaxCharacters = 160
+    /// The preview capsule uses fixed geometry: it expands once when the first
+    /// partial appears and never resizes per tick, so text length cannot jitter
+    /// the pill. Height reserves two wrapped lines up front.
+    static let previewCapsuleWidth: CGFloat = 380
+    static let previewCapsuleHeight: CGFloat = 64
 
     static func listeningPillWidth(preview: String?) -> CGFloat {
-        guard let preview else {
-            return 124
-        }
-        return min(max(CGFloat(preview.count) * 6.5 + 96, 220), 460)
+        preview == nil ? 124 : previewCapsuleWidth
+    }
+
+    static func listeningPillHeight(preview: String?) -> CGFloat {
+        preview == nil ? 40 : previewCapsuleHeight
     }
 
     /// Tail of a partial transcript that fits the live-preview capsule.

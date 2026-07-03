@@ -49,13 +49,22 @@ final class FloatingIndicatorLayoutTests: XCTestCase {
         XCTAssertLessThanOrEqual(frame.maxY, visibleFrame.maxY)
     }
 
-    func testListeningPillWidthMatchesBaselineWithoutPreviewAndClampsWithOne() {
+    func testListeningPillUsesFixedGeometryWheneverPreviewIsActive() {
         XCTAssertEqual(FloatingIndicatorMetrics.listeningPillWidth(preview: nil), 124)
-        XCTAssertEqual(FloatingIndicatorMetrics.listeningPillWidth(preview: "hi"), 220)
-        XCTAssertEqual(
-            FloatingIndicatorMetrics.listeningPillWidth(preview: String(repeating: "x", count: 200)),
-            460
-        )
+        XCTAssertEqual(FloatingIndicatorMetrics.listeningPillHeight(preview: nil), 40)
+
+        // Fixed capsule: any preview text yields identical geometry, so the pill
+        // cannot jitter as the transcript grows tick to tick.
+        for preview in ["hi", String(repeating: "x", count: 200)] {
+            XCTAssertEqual(
+                FloatingIndicatorMetrics.listeningPillWidth(preview: preview),
+                FloatingIndicatorMetrics.previewCapsuleWidth
+            )
+            XCTAssertEqual(
+                FloatingIndicatorMetrics.listeningPillHeight(preview: preview),
+                FloatingIndicatorMetrics.previewCapsuleHeight
+            )
+        }
     }
 
     func testPreviewTailKeepsShortTextIntact() {
@@ -65,10 +74,11 @@ final class FloatingIndicatorLayoutTests: XCTestCase {
     }
 
     func testPreviewTailTruncatesLongTextToSuffix() {
-        let text = String(repeating: "a", count: 120) + String(repeating: "b", count: 80)
+        let maxCharacters = FloatingIndicatorMetrics.previewTailMaxCharacters
+        let text = String(repeating: "a", count: 40) + String(repeating: "b", count: maxCharacters)
         let tail = FloatingIndicatorMetrics.previewTail(text)
 
-        XCTAssertEqual(tail, "…" + String(repeating: "b", count: 80))
-        XCTAssertEqual(tail.count, FloatingIndicatorMetrics.previewTailMaxCharacters + 1)
+        XCTAssertEqual(tail, "…" + String(repeating: "b", count: maxCharacters))
+        XCTAssertEqual(tail.count, maxCharacters + 1)
     }
 }

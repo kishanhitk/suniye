@@ -1363,6 +1363,9 @@ final class AppState {
     /// Tail of the in-progress transcript shown in the floating indicator while
     /// recording. Cleared on stop, insert, and every error path.
     private(set) var livePartialTranscript: String?
+    /// Last full stabilized partial (pre-tail-truncation); the stabilizer anchors
+    /// new decodes against it. Reset on preview start/stop so sessions never bleed.
+    private var lastPublishedPartialTranscript = ""
 
     private let modelManager: ModelManagerProtocol
     private let transcriptionService: TranscriptionServiceProtocol
@@ -3808,6 +3811,7 @@ final class AppState {
         }
         let audioCaptureService = audioCaptureService
         let transcriptionService = transcriptionService
+        lastPublishedPartialTranscript = ""
         partialTranscriptionScheduler.start(
             snapshotProvider: {
                 await audioCaptureService.snapshotSamples(
@@ -3834,6 +3838,7 @@ final class AppState {
     private func stopLivePreview() {
         partialTranscriptionScheduler.stop()
         livePartialTranscript = nil
+        lastPublishedPartialTranscript = ""
         // Strip a preview that is still visible (e.g. toggled off mid-recording);
         // level updates would otherwise keep carrying it forward.
         if case let .listening(levels, source, preview) = floatingIndicatorState, preview != nil {
@@ -3848,7 +3853,13 @@ final class AppState {
         guard phase == .recording, activeAudioCaptureSessionID == sessionID else {
             return
         }
-        let preview = FloatingIndicatorMetrics.previewTail(text)
+        // Keep already-shown words stable across re-decodes; only the tail may change.
+        let stabilized = PartialTranscriptStabilizer.stabilize(
+            previous: lastPublishedPartialTranscript,
+            current: text
+        )
+        lastPublishedPartialTranscript = stabilized
+        let preview = FloatingIndicatorMetrics.previewTail(stabilized)
         livePartialTranscript = preview.isEmpty ? nil : preview
         if case let .listening(levels, source, _) = floatingIndicatorState {
             setFloatingIndicatorState(.listening(levels: levels, source: source, preview: livePartialTranscript))
