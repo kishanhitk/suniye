@@ -162,6 +162,28 @@ final class AppStatePerAppPromptTests: XCTestCase {
         XCTAssertEqual(fakeGemma.lastConfig?.systemPrompt, "Keep it terse.")
     }
 
+    /// With no matching binding, the local model must receive the shipped default
+    /// prompt untouched (guards the referential-edit prompt against override leaks).
+    func testPostProcessingUsesDefaultGemmaPromptForUnboundApp() async {
+        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .success("gemma polished")
+        )
+        let localManager = StubLocalLLMModelManager()
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        let appState = makeTestAppState(
+            localGemmaMagicFormatPostProcessor: fakeGemma,
+            localLLMModelManager: localManager
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+        addSlackBinding(to: appState, prompt: "Keep it terse.")
+
+        _ = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: "com.apple.mail")
+
+        XCTAssertEqual(fakeGemma.lastConfig?.systemPrompt, LLMDefaults.defaultGemmaMagicFormatPrompt)
+    }
+
     func testPostProcessingIgnoresBlankPerAppPrompt() async {
         let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
         let appState = makeTestAppState(

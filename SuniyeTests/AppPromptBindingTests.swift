@@ -65,8 +65,15 @@ final class AppPromptBindingTests: XCTestCase {
         XCTAssertEqual(store.load().appPromptBindings, bindings)
     }
 
+    /// Pins the complete set of prompt surfaces that reach providers: the override
+    /// must fully replace the base, apple, and gemma prompts and the user suffix.
     func testOverridingSystemPromptsReplacesAllProviderPrompts() {
-        let settings = LLMSettings(systemPrompt: "user extras")
+        let settings = LLMSettings(
+            baseSystemPrompt: "BASE_SENTINEL",
+            appleSystemPrompt: "APPLE_SENTINEL",
+            gemmaSystemPrompt: "GEMMA_SENTINEL",
+            systemPrompt: "USER_SENTINEL"
+        )
         let overridden = settings.overridingSystemPrompts(with: "Keep it terse.")
 
         XCTAssertEqual(overridden.composedSystemPrompt, "Keep it terse.")
