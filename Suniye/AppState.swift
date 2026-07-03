@@ -2622,14 +2622,15 @@ final class AppState {
                 startSlowWarning: { [weak self] in
                     self?.startMagicFormatSlowWarningTask() ?? Task {}
                 },
-                setStatusText: { [weak self] text in
-                    self?.statusText = text
-                },
-                setProcessingMessage: { [weak self] message in
-                    guard let self, case .processing = self.floatingIndicatorState else {
+                setStage: { [weak self] text in
+                    guard let self else {
                         return
                     }
-                    self.setFloatingIndicatorState(.processing(message: message))
+                    self.statusText = text
+                    guard case .processing = self.floatingIndicatorState else {
+                        return
+                    }
+                    self.setFloatingIndicatorState(.processing(message: text))
                 }
             )
         )
@@ -2810,7 +2811,28 @@ final class AppState {
             showTransientIndicatorError("Enable Accessibility for dictation")
             return
         }
+        // Speculatively warm the local LLM while the user speaks, so cleanup runs
+        // against an already-loaded model instead of paying the cold start on the
+        // critical path. Fire-and-forget; idempotent and self-evicting.
+        prewarmLocalLLMIfEligible()
         await startRecording(trigger: trigger)
+    }
+
+    /// Warm the local Gemma runtime iff Magic Format is enabled and will actually
+    /// resolve to the local provider. Provider resolution + config assembly live in
+    /// the coordinator so this can never drift from the polish path. Returns the
+    /// spawned probe task (for tests); nil when ineligible.
+    @discardableResult
+    func prewarmLocalLLMIfEligible() -> Task<Void, Never>? {
+        guard llmEnabled else {
+            return nil
+        }
+        return magicFormatCoordinator.prewarmLocalIfEligible(
+            requestedProvider: llmProvider,
+            settings: currentLLMSettings(),
+            appleAvailability: appleMagicFormatAvailability,
+            localGemmaAvailability: localGemmaMagicFormatAvailability
+        )
     }
 
     private func startRecording(trigger: RecordingSource) async {
@@ -2877,7 +2899,7 @@ final class AppState {
         activeDictationSession = .transcribing(context)
         phase = .transcribing
         statusText = "Transcribing..."
-        setFloatingIndicatorState(.processing())
+        setFloatingIndicatorState(Self.transcribingIndicatorState)
 
         let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
         guard let context = activeDictationSession?.context, context.id == sessionID else {
@@ -3485,7 +3507,13 @@ final class AppState {
                 source: activeRecordingSource ?? .manual
             )
         case .transcribing:
-            return .processing()
+            // Preserve whatever processing stage the pill has advanced to
+            // ("Starting local model...", "Polishing..."); the phase stays
+            // .transcribing through the whole post-stop pipeline.
+            if case .processing = floatingIndicatorState {
+                return floatingIndicatorState
+            }
+            return Self.transcribingIndicatorState
         case .needsModel, .downloadingModel, .loading, .ready, .error:
             return .idle
         }
@@ -3558,6 +3586,10 @@ final class AppState {
     private static func defaultIndicatorLevels(level: Float, count: Int = AudioLevelMeter.bandCount) -> [Float] {
         Array(repeating: max(0, min(level, 1)), count: count)
     }
+
+    /// Single source for the pill's transcribing state so the transcribe transition
+    /// and the blocked-start restore path can never render it differently.
+    private static let transcribingIndicatorState: FloatingIndicatorState = .processing(message: "Transcribing...")
 
     private func startBlockedMessage(for phase: Phase) -> String {
         switch phase {

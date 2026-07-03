@@ -102,6 +102,12 @@ final class ChatCompletionClient {
         } catch let error as LLMPostProcessorError {
             throw error
         } catch {
+            // Caller canceled (e.g. a prewarm probe preempted by a real request):
+            // surface it as cancellation, not as a timeout/network failure. URLSession
+            // reports this as URLError(.cancelled) rather than CancellationError.
+            if Task.isCancelled {
+                throw CancellationError()
+            }
             if (error as NSError).code == NSURLErrorTimedOut || error is TimeoutError {
                 throw LLMPostProcessorError.timeout
             }
@@ -111,24 +117,24 @@ final class ChatCompletionClient {
 
     private struct TimeoutError: Error {}
 
-    private func withTimeout<T>(seconds: Double, operation: @escaping () async throws -> T) async throws -> T {
-        let workTask = Task { try await operation() }
-        let timeoutTask = Task {
-            let nanoseconds = UInt64(max(0, seconds) * 1_000_000_000)
-            try await Task.sleep(nanoseconds: nanoseconds)
-            workTask.cancel()
-        }
-
-        defer {
-            timeoutTask.cancel()
-        }
-
-        do {
-            return try await workTask.value
-        } catch is CancellationError {
-            throw TimeoutError()
-        } catch {
-            throw error
+    /// Races the operation against a deadline inside a task group, so the caller's
+    /// cancellation propagates structurally into the URLSession request (aborting it)
+    /// and a timeout deterministically surfaces as TimeoutError — never as the
+    /// URLError(.cancelled) that canceling the losing child produces.
+    private func withTimeout<T: Sendable>(seconds: Double, operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                let nanoseconds = UInt64(max(0, seconds) * 1_000_000_000)
+                try await Task.sleep(nanoseconds: nanoseconds)
+                throw TimeoutError()
+            }
+            defer {
+                group.cancelAll()
+            }
+            return try await group.next()!
         }
     }
 }
