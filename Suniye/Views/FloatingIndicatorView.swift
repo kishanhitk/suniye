@@ -8,7 +8,7 @@ struct FloatingIndicatorView: View {
     let onDragEnded: () -> Void
 
     var body: some View {
-        VStack(spacing: helperText == nil ? 0 : 8) {
+        VStack(spacing: topAccessorySpacing) {
             if let helperText {
                 Text(helperText)
                     .font(AppTypography.bodyMedium)
@@ -24,6 +24,10 @@ struct FloatingIndicatorView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
             }
 
+            if let previewText {
+                previewBubble(previewText)
+            }
+
             capsule
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -31,6 +35,46 @@ struct FloatingIndicatorView: View {
         .contentShape(Rectangle())
         .onHover(perform: onHoverChanged)
         .animation(.spring(response: 0.28, dampingFraction: 0.84), value: state)
+    }
+
+    /// Detached live-preview bubble above the pill. Fixed geometry (see
+    /// FloatingIndicatorMetrics) so only the text content changes per tick, and
+    /// non-interactive so the pill keeps all click/drag behavior.
+    private func previewBubble(_ text: String) -> some View {
+        Text(text)
+            .font(AppTypography.subheadline)
+            .foregroundStyle(.white.opacity(0.92))
+            .lineLimit(2)
+            .truncationMode(.head)
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal, 14)
+            .frame(
+                width: FloatingIndicatorMetrics.previewBubbleSize.width,
+                height: FloatingIndicatorMetrics.previewBubbleSize.height,
+                alignment: .leading
+            )
+            .background(capsuleFill)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(capsuleStroke, lineWidth: capsuleBorderWidth)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .allowsHitTesting(false)
+            .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
+    }
+
+    private var previewText: String? {
+        if case let .listening(_, _, preview) = state {
+            return preview
+        }
+        return nil
+    }
+
+    private var topAccessorySpacing: CGFloat {
+        if helperText != nil {
+            return 8
+        }
+        return previewText == nil ? 0 : FloatingIndicatorMetrics.previewBubbleGap
     }
 
     private var capsule: some View {
@@ -70,25 +114,13 @@ struct FloatingIndicatorView: View {
             EmptyView()
         case .hover:
             hoverContent
-        case let .listening(levels, source, preview):
+        case let .listening(levels, source, _):
             if source == .editHotkey {
                 Image(systemName: "pencil.line")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(FloatingIndicatorView.editModeTint)
             }
             ListeningMeterView(levels: levels)
-            if let preview {
-                // Head truncation keeps the newest words visible; the capsule's
-                // geometry is fixed (see FloatingIndicatorMetrics), so only the
-                // text content changes per tick.
-                Text(preview)
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(2)
-                    .truncationMode(.head)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
         case let .processing(message):
             processingContent(message: message)
         case let .error(message):
@@ -191,11 +223,8 @@ struct FloatingIndicatorView: View {
             return 74
         case .hover:
             return 152
-        case let .listening(_, source, preview):
-            if preview == nil, source == .editHotkey {
-                return 150
-            }
-            return FloatingIndicatorMetrics.listeningPillWidth(preview: preview)
+        case let .listening(_, source, _):
+            return FloatingIndicatorMetrics.pillSize(source: source).width
         case let .processing(message):
             guard let message else {
                 return 128
@@ -212,8 +241,8 @@ struct FloatingIndicatorView: View {
             return 7
         case .hover:
             return 32
-        case let .listening(_, _, preview):
-            return FloatingIndicatorMetrics.listeningPillHeight(preview: preview)
+        case .listening:
+            return FloatingIndicatorMetrics.listeningPillSize.height
         case .processing:
             return 40
         case .error:

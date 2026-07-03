@@ -386,13 +386,8 @@ final class FloatingIndicatorController {
         case .hover:
             return NSSize(width: 272, height: 84)
         case let .listening(_, source, preview):
-            if preview == nil, source == .editHotkey {
-                return NSSize(width: 150, height: 40)
-            }
-            return NSSize(
-                width: FloatingIndicatorMetrics.listeningPillWidth(preview: preview),
-                height: FloatingIndicatorMetrics.listeningPillHeight(preview: preview)
-            )
+            let panelSize = FloatingIndicatorMetrics.listeningPanelSize(preview: preview, source: source)
+            return NSSize(width: panelSize.width, height: panelSize.height)
         case let .processing(message):
             guard let message else {
                 return NSSize(width: 128, height: 40)

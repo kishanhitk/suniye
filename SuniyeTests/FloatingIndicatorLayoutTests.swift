@@ -49,22 +49,56 @@ final class FloatingIndicatorLayoutTests: XCTestCase {
         XCTAssertLessThanOrEqual(frame.maxY, visibleFrame.maxY)
     }
 
-    func testListeningPillUsesFixedGeometryWheneverPreviewIsActive() {
-        XCTAssertEqual(FloatingIndicatorMetrics.listeningPillWidth(preview: nil), 124)
-        XCTAssertEqual(FloatingIndicatorMetrics.listeningPillHeight(preview: nil), 40)
+    func testListeningPanelMatchesPillWithoutPreviewAndBubbleGeometryIsFixed() {
+        XCTAssertEqual(
+            FloatingIndicatorMetrics.listeningPanelSize(preview: nil),
+            FloatingIndicatorMetrics.listeningPillSize
+        )
 
-        // Fixed capsule: any preview text yields identical geometry, so the pill
-        // cannot jitter as the transcript grows tick to tick.
+        // Fixed bubble: any preview text yields identical panel geometry, so the
+        // layout cannot jitter as the transcript grows tick to tick.
+        let expected = CGSize(
+            width: max(
+                FloatingIndicatorMetrics.listeningPillSize.width,
+                FloatingIndicatorMetrics.previewBubbleSize.width
+            ),
+            height: FloatingIndicatorMetrics.listeningPillSize.height
+                + FloatingIndicatorMetrics.previewBubbleGap
+                + FloatingIndicatorMetrics.previewBubbleSize.height
+        )
         for preview in ["hi", String(repeating: "x", count: 200)] {
-            XCTAssertEqual(
-                FloatingIndicatorMetrics.listeningPillWidth(preview: preview),
-                FloatingIndicatorMetrics.previewCapsuleWidth
-            )
-            XCTAssertEqual(
-                FloatingIndicatorMetrics.listeningPillHeight(preview: preview),
-                FloatingIndicatorMetrics.previewCapsuleHeight
-            )
+            XCTAssertEqual(FloatingIndicatorMetrics.listeningPanelSize(preview: preview), expected)
         }
+    }
+
+    func testPreviewBubbleGrowsPanelUpwardWithoutMovingThePill() {
+        let visibleFrame = NSRect(x: 0, y: 32, width: 1440, height: 900)
+        let placement = FloatingIndicatorPlacement(centerXRatio: 0.5, bottomYRatio: 0.1)
+        let pillOnly = FloatingIndicatorMetrics.listeningPanelSize(preview: nil)
+        let withBubble = FloatingIndicatorMetrics.listeningPanelSize(preview: "hello there")
+
+        let pillFrame = FloatingIndicatorLayout.frame(
+            for: NSSize(width: pillOnly.width, height: pillOnly.height),
+            in: visibleFrame,
+            placement: placement,
+            bottomMargin: 28
+        )
+        let bubbleFrame = FloatingIndicatorLayout.frame(
+            for: NSSize(width: withBubble.width, height: withBubble.height),
+            in: visibleFrame,
+            placement: placement,
+            bottomMargin: 28
+        )
+
+        // Bottom edge and horizontal center are anchored; only the top rises.
+        // The panel content is bottom-aligned, so the pill itself stays put.
+        XCTAssertEqual(bubbleFrame.minY, pillFrame.minY, accuracy: 0.001)
+        XCTAssertEqual(bubbleFrame.midX, pillFrame.midX, accuracy: 0.001)
+        XCTAssertEqual(
+            bubbleFrame.maxY - pillFrame.maxY,
+            FloatingIndicatorMetrics.previewBubbleGap + FloatingIndicatorMetrics.previewBubbleSize.height,
+            accuracy: 0.001
+        )
     }
 
     func testPreviewTailKeepsShortTextIntact() {
