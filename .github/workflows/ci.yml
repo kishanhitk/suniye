@@ -51,9 +51,14 @@ jobs:
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 120 \
             -maximum-test-execution-time-allowance 300 \
+            -enableCodeCoverage YES \
+            -resultBundlePath .derivedData/coverage.xcresult \
             test \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES
+
+      - name: Coverage report and gate
+        run: ./scripts/coverage_report.sh
 
       - name: Upload logs/artifacts on failure
         if: failure()
