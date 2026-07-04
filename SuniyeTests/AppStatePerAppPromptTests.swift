@@ -97,6 +97,64 @@ final class AppStatePerAppPromptTests: XCTestCase {
         XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, appendedPrompt(base: LLMDefaults.defaultBaseSystemPrompt))
     }
 
+    func testPostProcessingUsesFileBackedProviderAndPerAppPrompts() async throws {
+        let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
+        let settingsStore = TestLLMSettingsStore()
+        var settings = LLMSettings()
+        settings.isEnabled = true
+        settings.provider = .openAICompatible
+        settings.baseSystemPrompt = "settings API prompt"
+        settings.appPromptBindings = [
+            AppPromptBinding(bundleID: slackBundleID, appDisplayName: "Slack", prompt: "settings Slack prompt")
+        ]
+        settingsStore.save(settings)
+
+        let promptStoreBaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("suniye-appstate-prompt-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: promptStoreBaseURL) }
+        let promptStore = MagicFormatPromptFileStore(promptsDirectoryURL: promptStoreBaseURL)
+        try FileManager.default.createDirectory(at: promptStoreBaseURL, withIntermediateDirectories: true)
+        try "file API prompt".write(to: promptStore.providerPromptURL(.api), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: promptStoreBaseURL.appendingPathComponent("apps", isDirectory: true), withIntermediateDirectories: true)
+        try "file Slack prompt".write(to: promptStore.appPromptURL(bundleID: slackBundleID)!, atomically: true, encoding: .utf8)
+
+        let appState = makeTestAppState(
+            llmPostProcessor: capturingLLM,
+            llmSettingsStore: settingsStore,
+            magicFormatPromptFileStore: promptStore,
+            keychainService: TestKeychainService(value: "api-key")
+        )
+        appState.refreshLLMKeyStatus()
+
+        _ = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
+
+        XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, appendedPrompt(base: "file API prompt", instructions: "file Slack prompt"))
+        XCTAssertEqual(settingsStore.latest.baseSystemPrompt, "file API prompt")
+        XCTAssertEqual(settingsStore.latest.appPromptBindings.first?.prompt, "file Slack prompt")
+    }
+
+    func testUnrelatedSettingsChangeDoesNotOverwriteExternallyEditedPromptFile() throws {
+        let settingsStore = TestLLMSettingsStore()
+        var settings = LLMSettings()
+        settings.baseSystemPrompt = "settings API prompt"
+        settingsStore.save(settings)
+
+        let promptStoreBaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("suniye-appstate-prompt-clobber-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: promptStoreBaseURL) }
+        let promptStore = MagicFormatPromptFileStore(promptsDirectoryURL: promptStoreBaseURL)
+        let appState = makeTestAppState(
+            llmSettingsStore: settingsStore,
+            magicFormatPromptFileStore: promptStore
+        )
+
+        try "external API prompt".write(to: promptStore.providerPromptURL(.api), atomically: true, encoding: .utf8)
+        appState.llmEnabled = true
+
+        XCTAssertEqual(try String(contentsOf: promptStore.providerPromptURL(.api), encoding: .utf8), "external API prompt")
+        XCTAssertEqual(settingsStore.latest.baseSystemPrompt, "settings API prompt")
+    }
+
     func testPostProcessingUsesDefaultPromptForUnboundApp() async {
         let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
         let appState = makeTestAppState(

@@ -522,13 +522,22 @@ final class AppState {
         didSet { persistLLMSettings() }
     }
     var llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt {
-        didSet { persistLLMSettings() }
+        didSet {
+            persistLLMSettings()
+            saveProviderPromptFile(.api, content: llmBaseSystemPrompt)
+        }
     }
     var llmAppleSystemPrompt = LLMDefaults.defaultAppleMagicFormatPrompt {
-        didSet { persistLLMSettings() }
+        didSet {
+            persistLLMSettings()
+            saveProviderPromptFile(.apple, content: llmAppleSystemPrompt)
+        }
     }
     var llmGemmaSystemPrompt = LLMDefaults.defaultGemmaMagicFormatPrompt {
-        didSet { persistLLMSettings() }
+        didSet {
+            persistLLMSettings()
+            saveProviderPromptFile(.localGemma, content: llmGemmaSystemPrompt)
+        }
     }
     var llmSystemPrompt = "" {
         didSet { persistLLMSettings() }
@@ -1324,6 +1333,7 @@ final class AppState {
     private let magicFormatCoordinator: MagicFormatCoordinator
     private let localLLMModelManager: LocalLLMModelManagerProtocol
     private let llmSettingsStore: LLMSettingsStoreProtocol
+    private let magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol
     private let generalSettingsStore: GeneralSettingsStoreProtocol
     private let historyStore: HistoryStoreProtocol
     private let keychainService: KeychainServiceProtocol
@@ -1394,6 +1404,7 @@ final class AppState {
         localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor? = nil,
         localLLMModelManager: LocalLLMModelManagerProtocol = LocalLLMModelManager(),
         llmSettingsStore: LLMSettingsStoreProtocol = LLMSettingsStore(),
+        magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol = MagicFormatPromptFileStore(),
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
         historyStore: HistoryStoreProtocol = HistoryStore(),
         keychainService: KeychainServiceProtocol = KeychainService(),
@@ -1445,6 +1456,7 @@ final class AppState {
             localGemmaPostProcessor: resolvedLocalGemmaPostProcessor
         )
         self.llmSettingsStore = llmSettingsStore
+        self.magicFormatPromptFileStore = magicFormatPromptFileStore
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
         self.keychainService = keychainService
@@ -1960,7 +1972,7 @@ final class AppState {
         let binding = AppPromptBinding(
             bundleID: trimmedBundleID,
             appDisplayName: trimmedName.isEmpty ? trimmedBundleID : trimmedName,
-            prompt: ""
+            prompt: magicFormatPromptFileStore.syncAppPrompt(bundleID: trimmedBundleID, fallback: "")
         )
         llmAppPromptBindings.append(binding)
         return binding
@@ -1971,6 +1983,7 @@ final class AppState {
             return
         }
         llmAppPromptBindings[index].prompt = prompt
+        magicFormatPromptFileStore.saveAppPrompt(bundleID: llmAppPromptBindings[index].bundleID, content: prompt)
     }
 
     func removeAppPromptBinding(id: UUID) {
@@ -2040,6 +2053,33 @@ final class AppState {
 
     func resetBaseMagicFormatPrompt() {
         llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt
+    }
+
+    func openCurrentMagicFormatPromptInEditor() {
+        _ = fileOpener(currentMagicFormatPromptURL)
+    }
+
+    func reloadMagicFormatPromptsFromFiles() {
+        applyLLMSettings(magicFormatPromptFileStore.syncPrompts(settings: currentLLMSettings()))
+        persistLLMSettings()
+    }
+
+    func openAppPromptInEditor(id: UUID) {
+        guard let binding = llmAppPromptBindings.first(where: { $0.id == id }),
+              let url = magicFormatPromptFileStore.appPromptURL(bundleID: binding.bundleID) else {
+            return
+        }
+        _ = fileOpener(url)
+    }
+
+    var currentMagicFormatPromptURL: URL {
+        if usesAppleMagicFormatSettings {
+            return magicFormatPromptFileStore.providerPromptURL(.apple)
+        }
+        if usesLocalGemmaMagicFormatSettings {
+            return magicFormatPromptFileStore.providerPromptURL(.localGemma)
+        }
+        return magicFormatPromptFileStore.providerPromptURL(.api)
     }
 
     func refreshLocalGemmaInstallState() {
@@ -3212,51 +3252,12 @@ final class AppState {
     }
 
     private func loadLLMSettings() {
-        isHydratingLLMSettings = true
         let settings = llmSettingsStore.load()
-        let mergedPrompt = Self.mergedMagicFormatPrompt(
-            basePrompt: settings.baseSystemPrompt,
-            extraPrompt: settings.systemPrompt
-        )
-        let providerPromptMigration = Self.legacyProviderPromptMigration(
-            settings: settings,
-            mergedPrompt: mergedPrompt
-        )
-        let shouldMigrateProviderPrompts = providerPromptMigration != nil
-            && (!settings.hasExplicitAppleSystemPrompt || !settings.hasExplicitGemmaSystemPrompt)
-        let shouldNormalizeHiddenSettings = settings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            || settings.timeoutSeconds != LLMDefaults.defaultTimeoutSeconds
-            || settings.maxTokens != LLMDefaults.defaultMaxTokens
-            || shouldMigrateProviderPrompts
-        llmEnabled = settings.isEnabled
-        llmProvider = settings.provider
-        llmSelectedModelPreset = settings.selectedModelPreset
-        localModelKeepAlive = settings.localModelKeepAlive
-        llmCustomModelId = settings.customModelId
-        llmEndpointURLString = settings.endpointURLString
-        llmBaseSystemPrompt = mergedPrompt
-        llmAppleSystemPrompt = Self.loadedProviderPrompt(
-            explicitPrompt: settings.composedAppleSystemPrompt,
-            hasExplicitPrompt: settings.hasExplicitAppleSystemPrompt,
-            defaultPrompt: LLMDefaults.defaultAppleMagicFormatPrompt,
-            migrationPrompt: providerPromptMigration
-        )
-        llmGemmaSystemPrompt = Self.loadedProviderPrompt(
-            explicitPrompt: settings.composedGemmaSystemPrompt,
-            hasExplicitPrompt: settings.hasExplicitGemmaSystemPrompt,
-            defaultPrompt: LLMDefaults.defaultGemmaMagicFormatPrompt,
-            migrationPrompt: providerPromptMigration
-        )
-        llmSystemPrompt = ""
-        llmKeywordsRaw = settings.keywordsRaw
-        llmAutoLearnedKeywordsRaw = settings.autoLearnedKeywordsRaw
-        learnFromEditsEnabled = settings.learnFromEditsEnabled
-        llmAppPromptBindings = settings.appPromptBindings
-        llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
-        llmMaxTokens = LLMDefaults.defaultMaxTokens
-        isHydratingLLMSettings = false
+        let migration = settings.normalizedForCurrentPromptSchema()
+        let syncedSettings = magicFormatPromptFileStore.syncPrompts(settings: migration.settings)
+        applyLLMSettings(syncedSettings)
 
-        if shouldNormalizeHiddenSettings {
+        if migration.shouldPersist || syncedSettings != settings {
             persistLLMSettings()
         }
     }
@@ -3266,8 +3267,37 @@ final class AppState {
             return
         }
         clearMagicFormatSetupTestResult()
-        llmSettingsStore.save(currentLLMSettings())
+        let settings = currentLLMSettings()
+        llmSettingsStore.save(settings)
         onStateChange?()
+    }
+
+    private func saveProviderPromptFile(_ prompt: MagicFormatProviderPromptFile, content: String) {
+        guard !isHydratingLLMSettings else {
+            return
+        }
+        magicFormatPromptFileStore.saveProviderPrompt(prompt, content: content)
+    }
+
+    private func applyLLMSettings(_ settings: LLMSettings) {
+        isHydratingLLMSettings = true
+        llmEnabled = settings.isEnabled
+        llmProvider = settings.provider
+        llmSelectedModelPreset = settings.selectedModelPreset
+        localModelKeepAlive = settings.localModelKeepAlive
+        llmCustomModelId = settings.customModelId
+        llmEndpointURLString = settings.endpointURLString
+        llmBaseSystemPrompt = settings.baseSystemPrompt
+        llmAppleSystemPrompt = settings.appleSystemPrompt
+        llmGemmaSystemPrompt = settings.gemmaSystemPrompt
+        llmSystemPrompt = ""
+        llmKeywordsRaw = settings.keywordsRaw
+        llmAutoLearnedKeywordsRaw = settings.autoLearnedKeywordsRaw
+        learnFromEditsEnabled = settings.learnFromEditsEnabled
+        llmAppPromptBindings = settings.appPromptBindings
+        llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
+        llmMaxTokens = LLMDefaults.defaultMaxTokens
+        isHydratingLLMSettings = false
     }
 
     private func currentLLMSettings() -> LLMSettings {
@@ -3289,43 +3319,6 @@ final class AppState {
             localModelKeepAlive: localModelKeepAlive,
             appPromptBindings: llmAppPromptBindings
         )
-    }
-
-    private static func mergedMagicFormatPrompt(basePrompt: String, extraPrompt: String) -> String {
-        let normalizedBase = basePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedExtra = extraPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let visiblePrompt = normalizedBase.isEmpty ? LLMDefaults.defaultBaseSystemPrompt : normalizedBase
-
-        guard !normalizedExtra.isEmpty else {
-            return visiblePrompt
-        }
-
-        if visiblePrompt == normalizedExtra || visiblePrompt.hasSuffix("\n\n\(normalizedExtra)") {
-            return visiblePrompt
-        }
-
-        return "\(visiblePrompt)\n\n\(normalizedExtra)"
-    }
-
-    private static func legacyProviderPromptMigration(settings: LLMSettings, mergedPrompt: String) -> String? {
-        let normalizedBase = settings.baseSystemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let visiblePrompt = normalizedBase.isEmpty ? LLMDefaults.defaultBaseSystemPrompt : normalizedBase
-        let normalizedExtra = settings.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let legacyPromptWasCustomized = !normalizedExtra.isEmpty || visiblePrompt != LLMDefaults.defaultBaseSystemPrompt
-        return legacyPromptWasCustomized ? mergedPrompt : nil
-    }
-
-    private static func loadedProviderPrompt(
-        explicitPrompt: String,
-        hasExplicitPrompt: Bool,
-        defaultPrompt: String,
-        migrationPrompt: String?
-    ) -> String {
-        guard !hasExplicitPrompt else {
-            let normalized = explicitPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-            return normalized.isEmpty ? defaultPrompt : normalized
-        }
-        return migrationPrompt ?? defaultPrompt
     }
 
     private func localGemmaCatalogEntry(for modelID: LocalLLMModelID) -> LocalLLMModelCatalogEntry {

@@ -494,6 +494,15 @@ struct StylePage: View {
                 Spacer(minLength: 12)
 
                 Button {
+                    appState.openAppPromptInEditor(id: binding.id)
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .buttonStyle(.borderless)
+                .help("Open prompt in editor")
+                .accessibilityLabel("Open prompt for \(binding.appDisplayName) in editor")
+
+                Button {
                     appState.removeAppPromptBinding(id: binding.id)
                 } label: {
                     Image(systemName: "trash")
@@ -622,6 +631,26 @@ struct StylePage: View {
                 }
 
                 Spacer(minLength: 12)
+
+                Button {
+                    appState.reloadMagicFormatPromptsFromFiles()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Reload prompt files")
+                .accessibilityLabel("Reload prompt files")
+
+                Button {
+                    appState.openCurrentMagicFormatPromptInEditor()
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Open prompt in editor")
+                .accessibilityLabel("Open prompt in editor")
 
                 Button(promptResetTitle) {
                     resetPrompt()
