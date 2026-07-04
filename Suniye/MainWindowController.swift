@@ -38,7 +38,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Suniye"
+        window.title = AppIdentity.current.displayName
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.backgroundColor = MainWindowPalette.windowBackgroundNSColor

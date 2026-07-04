@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MenuBarView: View {
     @Bindable var appState: AppState
+    private let appIdentity = AppIdentity.current
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -40,7 +41,7 @@ struct MenuBarView: View {
                     .disabled(appState.phase != .recording)
             }
 
-            Button(appState.activeOnboardingStep == nil ? "Open Suniye" : "Continue Setup") {
+            Button(appState.activeOnboardingStep == nil ? "Open \(appIdentity.displayName)" : "Continue Setup") {
                 appState.openMainWindow()
             }
 
@@ -54,7 +55,7 @@ struct MenuBarView: View {
                 appState.openIssueReportWindow()
             }
 
-            Button("Quit Suniye") {
+            Button("Quit \(appIdentity.displayName)") {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: .command)
