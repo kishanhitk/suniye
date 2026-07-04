@@ -257,7 +257,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         }
     }
 
-    private static func virtualKeyCode(for character: String) -> CGKeyCode? {
+    static func virtualKeyCode(for character: String) -> CGKeyCode? {
         guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
               let layoutDataRef = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
             return nil

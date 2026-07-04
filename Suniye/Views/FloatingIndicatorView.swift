@@ -70,7 +70,12 @@ struct FloatingIndicatorView: View {
             EmptyView()
         case .hover:
             hoverContent
-        case let .listening(levels, _):
+        case let .listening(levels, source):
+            if source == .editHotkey {
+                Image(systemName: "pencil.line")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(FloatingIndicatorView.editModeTint)
+            }
             ListeningMeterView(levels: levels)
         case let .processing(message):
             processingContent(message: message)
@@ -150,10 +155,14 @@ struct FloatingIndicatorView: View {
         switch state {
         case .idle:
             return Color.white.opacity(0.34)
+        case .listening(_, .editHotkey):
+            return FloatingIndicatorView.editModeTint.opacity(0.7)
         default:
             return Color.white.opacity(0.14)
         }
     }
+
+    static let editModeTint = Color.purple
 
     private var capsuleBorderWidth: CGFloat {
         switch state {
@@ -170,6 +179,8 @@ struct FloatingIndicatorView: View {
             return 74
         case .hover:
             return 152
+        case .listening(_, .editHotkey):
+            return 150
         case .listening:
             return 124
         case let .processing(message):

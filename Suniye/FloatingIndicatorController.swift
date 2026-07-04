@@ -385,6 +385,8 @@ final class FloatingIndicatorController {
             return NSSize(width: 74, height: 7)
         case .hover:
             return NSSize(width: 272, height: 84)
+        case .listening(_, .editHotkey):
+            return NSSize(width: 150, height: 40)
         case .listening:
             return NSSize(width: 124, height: 40)
         case let .processing(message):

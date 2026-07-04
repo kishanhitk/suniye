@@ -17,6 +17,11 @@ final class FakeLLMPostProcessor: LLMPostProcessor {
         return try result.get()
     }
 
+    func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String {
+        callCount += 1
+        return try result.get()
+    }
+
     func testSetup(config: LLMConfig) async throws {
         setupTestCallCount += 1
         try testSetupResult.get()
@@ -27,6 +32,8 @@ final class CapturingLLMPostProcessor: LLMPostProcessor {
     private let result: Result<String, Error>
     private(set) var lastConfig: LLMConfig?
     private(set) var lastTestConfig: LLMConfig?
+    private(set) var lastGenerateInstructions: String?
+    private(set) var lastGenerateUserText: String?
 
     init(result: Result<String, Error>) {
         self.result = result
@@ -34,6 +41,13 @@ final class CapturingLLMPostProcessor: LLMPostProcessor {
 
     func polish(text: String, config: LLMConfig) async throws -> String {
         lastConfig = config
+        return try result.get()
+    }
+
+    func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String {
+        lastConfig = config
+        lastGenerateInstructions = instructions
+        lastGenerateUserText = userText
         return try result.get()
     }
 
@@ -47,6 +61,8 @@ final class CapturingAppleMagicFormatPostProcessor: AppleMagicFormatPostProcesso
     private let result: Result<String, Error>
     private(set) var callCount = 0
     private(set) var lastConfig: AppleMagicFormatConfig?
+    private(set) var lastGenerateInstructions: String?
+    private(set) var lastGenerateUserText: String?
 
     init(availability: AppleFoundationModelsAvailability, result: Result<String, Error>) {
         self.availability = availability
@@ -56,6 +72,14 @@ final class CapturingAppleMagicFormatPostProcessor: AppleMagicFormatPostProcesso
     func polish(text: String, config: AppleMagicFormatConfig) async throws -> String {
         callCount += 1
         lastConfig = config
+        return try result.get()
+    }
+
+    func generate(instructions: String, userText: String, config: AppleMagicFormatConfig) async throws -> String {
+        callCount += 1
+        lastConfig = config
+        lastGenerateInstructions = instructions
+        lastGenerateUserText = userText
         return try result.get()
     }
 
@@ -71,6 +95,8 @@ final class CapturingLocalGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPo
     private let result: Result<String, Error>
     private(set) var callCount = 0
     private(set) var lastConfig: LocalGemmaMagicFormatConfig?
+    private(set) var lastGenerateInstructions: String?
+    private(set) var lastGenerateUserText: String?
     private(set) var stopRuntimeCallCount = 0
     private(set) var prewarmCallCount = 0
     private(set) var prewarmWasCanceled = false
@@ -107,6 +133,14 @@ final class CapturingLocalGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPo
         return try result.get()
     }
 
+    func generate(instructions: String, userText: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
+        callCount += 1
+        lastConfig = config
+        lastGenerateInstructions = instructions
+        lastGenerateUserText = userText
+        return try result.get()
+    }
+
     func testSetup(config: LocalGemmaMagicFormatConfig) async throws {
         lastConfig = config
     }
@@ -129,6 +163,10 @@ final class BlockingAppleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
         return await withCheckedContinuation { continuation in
             resumeContinuation = continuation
         }
+    }
+
+    func generate(instructions: String, userText: String, config: AppleMagicFormatConfig) async throws -> String {
+        try await polish(text: userText, config: config)
     }
 
     func testSetup(config: AppleMagicFormatConfig) async throws {}
@@ -155,6 +193,10 @@ final class BlockingLLMPostProcessor: LLMPostProcessor {
 
     func polish(text: String, config: LLMConfig) async throws -> String {
         text
+    }
+
+    func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String {
+        userText
     }
 
     func testSetup(config: LLMConfig) async throws {

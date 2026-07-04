@@ -64,6 +64,7 @@ Use **Report a Problem** from the menu bar, the General page, or the Help menu. 
 | **Dashboard** | Session stats, today's word count, total dictation time, recent activity |
 | **History** | Searchable log of past transcriptions with copy and delete |
 | **Hotkey** | Configurable hold-to-talk shortcut (Fn/Globe, modifier combos, etc.) |
+| **Edit Mode** | Select text anywhere, hold a second shortcut, and speak an instruction ("make this formal") to rewrite it in place; with nothing selected it writes new text at the cursor (requires Magic Format) |
 | **Model** | Compare local ASR models by speed, quality, size, and language support; install supported options, switch the active model, or remove unused ones |
 | **Vocabulary** | Add domain-specific terms so the app gets your jargon right |
 | **Magic Format** | Optional AI cleanup — use Apple Intelligence locally when available, local Gemma 4 Q4 when installed, or an API model with your own key; customize editable prompt files and vocabulary |

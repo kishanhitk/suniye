@@ -458,10 +458,35 @@ struct GeneralPage: View {
                             Text("Hold to Dictate")
                                 .font(AppTypography.body)
                             Spacer(minLength: 12)
-                            HotkeyRecorderButton(configuration: $appState.hotkeyConfiguration)
+                            HotkeyRecorderButton(
+                                configuration: Binding(
+                                    get: { appState.hotkeyConfiguration },
+                                    set: { newValue in
+                                        if let newValue {
+                                            appState.hotkeyConfiguration = newValue
+                                        }
+                                    }
+                                )
+                            )
                         }
                         CardDivider()
                         Text("Works from any app. Hold the shortcut to record, release to transcribe.")
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+                        CardDivider()
+                        HStack(spacing: 12) {
+                            Text("Hold to Edit Selection")
+                                .font(AppTypography.body)
+                            Spacer(minLength: 12)
+                            HotkeyRecorderButton(
+                                configuration: $appState.editModeHotkeyConfiguration,
+                                idleIcon: "pencil.line",
+                                allowsClear: true,
+                                clearHelp: "Remove the Edit Mode shortcut"
+                            )
+                        }
+                        CardDivider()
+                        Text("Select text in any app, hold the shortcut, and speak an instruction like \"make this formal\". With nothing selected, the spoken instruction generates text at the cursor. Requires Magic Format.")
                             .font(AppTypography.subheadline)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                     }
@@ -643,32 +668,48 @@ private struct InputDeviceChoice: Hashable {
 }
 
 private struct HotkeyRecorderButton: View {
-    @Binding var configuration: HotkeyConfiguration
+    @Binding var configuration: HotkeyConfiguration?
+    var idleIcon = "globe"
+    var allowsClear = false
+    var clearHelp = "Remove the shortcut"
     @State private var isCapturing = false
     @State private var localMonitor: Any?
 
     var body: some View {
-        Button {
-            toggleCapture()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: isCapturing ? "record.circle" : "globe")
-                    .font(.headline.weight(.medium))
-                Text(isCapturing ? "Press shortcut" : configuration.displayString)
-                    .font(AppTypography.codeBodyMedium)
+        HStack(spacing: 8) {
+            Button {
+                toggleCapture()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isCapturing ? "record.circle" : idleIcon)
+                        .font(.headline.weight(.medium))
+                    Text(isCapturing ? "Press shortcut" : (configuration?.displayString ?? "Not Set"))
+                        .font(AppTypography.codeBodyMedium)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(MainWindowPalette.cardBackground)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(isCapturing ? Color.accentColor.opacity(0.5) : MainWindowPalette.cardStroke, lineWidth: 1)
+                )
             }
-            .padding(.horizontal, 12)
-            .frame(height: 34)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(MainWindowPalette.cardBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isCapturing ? Color.accentColor.opacity(0.5) : MainWindowPalette.cardStroke, lineWidth: 1)
-            )
+            .buttonStyle(.plain)
+
+            if allowsClear && configuration != nil && !isCapturing {
+                Button {
+                    configuration = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .help(clearHelp)
+            }
         }
-        .buttonStyle(.plain)
         .onDisappear {
             stopCapturing()
         }
@@ -690,6 +731,10 @@ private struct HotkeyRecorderButton: View {
                 return nil
             }
 
+            // Collision policy is owned by AppState's didSet observers: a colliding
+            // capture is written through the binding, rejected there (with the value
+            // reverted and a user-visible message), and this view re-renders the
+            // reverted configuration.
             if let captured = HotkeyConfiguration.from(event: event) {
                 configuration = captured
                 stopCapturing()

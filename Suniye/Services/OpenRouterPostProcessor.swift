@@ -29,6 +29,26 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
         }
     }
 
+    func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String {
+        try validateConfig(config)
+        let output = try await client.complete(
+            endpointURL: config.endpointURL,
+            apiKey: config.apiKey,
+            payload: makePayload(
+                modelId: config.modelId,
+                instructions: instructions,
+                inputText: userText,
+                maxTokens: LLMDefaults.editModeMaxTokens
+            ),
+            timeoutSeconds: config.timeoutSeconds
+        )
+        let sanitized = sanitizeOutput(output)
+        guard !sanitized.isEmpty else {
+            throw LLMPostProcessorError.emptyOutput
+        }
+        return sanitized
+    }
+
     func testSetup(config: LLMConfig) async throws {
         try validateConfig(config)
         let output = try await client.complete(
