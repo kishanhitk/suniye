@@ -35,6 +35,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     }
 
     var pasteboardProvider: () -> NSPasteboard = { .general }
+    var accessibilityTrustProvider: () -> Bool = { AXIsProcessTrusted() }
     var focusedTextElementProvider: (() -> AXUIElement?)?
     var focusedTextSnapshotProvider: ((AXUIElement) -> FocusedTextSnapshot?)?
     var selectedTextSetter: ((AXUIElement, String) -> Bool)?
@@ -123,7 +124,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
             return focusedTextElementProvider()
         }
 
-        guard AXIsProcessTrusted() else {
+        guard accessibilityTrustProvider() else {
             return nil
         }
 
@@ -142,7 +143,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         return element
     }
 
-    private static func isTextInputElement(_ element: AXUIElement) -> Bool {
+    static func isTextInputElement(_ element: AXUIElement) -> Bool {
         var roleValue: AnyObject?
         guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
               let role = roleValue as? String else {
@@ -158,7 +159,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         ].contains(role)
     }
 
-    private func setSelectedText(_ text: String, on element: AXUIElement) -> Bool {
+    func setSelectedText(_ text: String, on element: AXUIElement) -> Bool {
         if let selectedTextSetter {
             return selectedTextSetter(element, text)
         }
@@ -170,7 +171,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         ) == .success
     }
 
-    private func captureFocusedTextState(for element: AXUIElement) -> FocusedTextSnapshot? {
+    func captureFocusedTextState(for element: AXUIElement) -> FocusedTextSnapshot? {
         if let focusedTextSnapshotProvider {
             return focusedTextSnapshotProvider(element)
         }
@@ -182,7 +183,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         )
     }
 
-    private func stringAttribute(_ attribute: CFString, from element: AXUIElement) -> String? {
+    func stringAttribute(_ attribute: CFString, from element: AXUIElement) -> String? {
         var value: AnyObject?
         guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else {
             return nil
@@ -190,7 +191,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         return value as? String
     }
 
-    private func selectedRangeAttribute(from element: AXUIElement) -> NSRange? {
+    func selectedRangeAttribute(from element: AXUIElement) -> NSRange? {
         var value: AnyObject?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
               let rangeValue = value,
