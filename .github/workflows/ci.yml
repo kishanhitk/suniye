@@ -58,7 +58,7 @@ jobs:
             ONLY_ACTIVE_ARCH=YES
 
       - name: Coverage report and gate
-        run: ./scripts/coverage_report.sh
+        run: ./scripts/coverage_report.sh --threshold 95
 
       - name: Upload logs/artifacts on failure
         if: failure()
