@@ -1,0 +1,45 @@
+# Files excluded from the CI coverage gate (scripts/coverage_report.sh).
+# One repo-relative path per line. Every entry MUST have a reason comment.
+# Only code that genuinely cannot execute headless in CI belongs here —
+# extract logic into testable units instead of adding entries.
+
+# --- Vendored code ---
+Suniye/SherpaOnnx.swift                               # vendored sherpa-onnx C bindings; needs native lib + real ASR models
+Suniye/SuniyeNativeBridge.mm                          # ObjC++ bridge into native sherpa lib
+Suniye/Vendor/Permiso/AppDragSourceView.swift         # vendored; live drag session
+Suniye/Vendor/Permiso/OverlayWindowController.swift   # vendored; overlay window-server UI
+Suniye/Vendor/Permiso/PermisoAssistant.swift          # vendored; drives live Accessibility permission flow
+Suniye/Vendor/Permiso/PermisoHostApp.swift            # vendored; standalone host app entry
+Suniye/Vendor/Permiso/PermisoPanel.swift              # vendored; NSPanel UI
+Suniye/Vendor/Permiso/SettingsWindowLocator.swift     # vendored; inspects live System Settings windows
+
+# --- Hardware / OS-permission bound ---
+Suniye/Services/AudioCaptureDrivers.swift             # AVAudioEngine/HAL AudioUnit render callbacks; needs microphone
+Suniye/Services/CoreAudioDeviceMonitor.swift          # CoreAudio HAL property listeners; needs audio hardware
+Suniye/Services/HotkeyService.swift                   # Carbon hotkey registration + global NSEvent taps; needs input-monitoring
+Suniye/Services/AccessibilityOnboarding.swift         # drives live AXIsProcessTrusted permission flow
+Suniye/Services/SoundFeedbackService.swift            # NSSound playback wrapper
+Suniye/Services/LaunchAtLoginService.swift            # SMAppService registration; needs signed, installed app
+
+# --- Window-server bound UI shells (logic lives in state/services) ---
+Suniye/Services/LearningToastPresenter.swift          # transient NSPanel toast
+Suniye/FloatingIndicatorController.swift              # NSPanel + pointer tracking (pure layout math is tested via FloatingIndicatorLayoutTests)
+Suniye/IssueReportWindowController.swift              # NSWindow shell
+Suniye/MainWindowController.swift                     # NSWindow/app-lifecycle shell
+Suniye/StatusItemController.swift                     # NSStatusBar item shell
+
+# --- SwiftUI view bodies (render-only; business logic must stay out per AGENTS.md) ---
+Suniye/Views/FloatingIndicatorView.swift              # SwiftUI render only
+Suniye/Views/IssueReportView.swift                    # SwiftUI render only
+Suniye/Views/ListeningOverlay.swift                   # SwiftUI render only
+Suniye/Views/MenuBarView.swift                        # SwiftUI render only
+Suniye/Views/ModelDownloadView.swift                  # SwiftUI render only
+Suniye/Views/OnboardingMagicFormatStepView.swift      # SwiftUI render only
+Suniye/Views/OnboardingView.swift                     # SwiftUI render only
+Suniye/Views/WelcomeView.swift                        # SwiftUI render only
+Suniye/Views/MainWindow/MagicFormatComponents.swift   # SwiftUI render only
+Suniye/Views/MainWindow/MagicFormatPage.swift         # SwiftUI render only
+Suniye/Views/MainWindow/MainWindowComponents.swift    # SwiftUI render only
+Suniye/Views/MainWindow/MainWindowPages.swift         # SwiftUI render only
+Suniye/Views/MainWindow/MainWindowView.swift          # SwiftUI render only
+Suniye/Views/MainWindow/MagicFormatProviderPresentation.swift  # SwiftUI render only
