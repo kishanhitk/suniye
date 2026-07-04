@@ -289,8 +289,11 @@ final class DiagnosticBundleService: DiagnosticBundleServiceProtocol {
 
         guard process.terminationStatus == 0 else {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorText = String(data: errorData, encoding: .utf8) ?? "zip exited with status \(process.terminationStatus)"
-            throw IssueReportError.zipFailed(errorText.trimmingCharacters(in: .whitespacesAndNewlines))
+            let stderrText = String(data: errorData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            // zip reports most failures on stdout, so stderr can be empty.
+            let errorText = stderrText.isEmpty ? "zip exited with status \(process.terminationStatus)" : stderrText
+            throw IssueReportError.zipFailed(errorText)
         }
     }
 
