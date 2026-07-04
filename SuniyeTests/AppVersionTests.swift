@@ -45,4 +45,24 @@ final class AppVersionTests: XCTestCase {
 
         XCTAssertEqual(version.displayString, "v1.2.3 (456) Tip")
     }
+
+    func testAppIdentityLoadsPreviewDisplayNameFromBundle() throws {
+        let bundleURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SuniyeAppIdentityTests-\(UUID().uuidString).bundle")
+        defer { try? FileManager.default.removeItem(at: bundleURL) }
+
+        try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
+        let info: [String: Any] = [
+            "CFBundleIdentifier": "dev.suniye.app.preview",
+            "CFBundlePackageType": "BNDL",
+            "CFBundleDisplayName": "Suniye Preview"
+        ]
+        let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        try data.write(to: bundleURL.appendingPathComponent("Info.plist"))
+
+        let identity = AppIdentity.fromBundle(try XCTUnwrap(Bundle(url: bundleURL)))
+
+        XCTAssertEqual(identity.displayName, "Suniye Preview")
+        XCTAssertTrue(identity.isPreview)
+    }
 }

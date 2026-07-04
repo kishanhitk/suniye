@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let appState: AppState
+    private let appIdentity = AppIdentity.current
     private let statusItem: NSStatusItem
 
     private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openMainWindow), keyEquivalent: "o")
@@ -11,7 +12,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
     private let reportIssueItem = NSMenuItem(title: "Report a Problem...", action: #selector(reportIssue), keyEquivalent: "")
-    private let quitItem = NSMenuItem(title: "Quit Suniye", action: #selector(quitApp), keyEquivalent: "q")
+    private lazy var quitItem = NSMenuItem(title: "Quit \(appIdentity.displayName)", action: #selector(quitApp), keyEquivalent: "q")
 
     init(appState: AppState) {
         self.appState = appState
@@ -48,7 +49,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         if let button = statusItem.button {
             button.image = statusItemImage(for: appState.phase)
-            button.toolTip = "Suniye"
+            button.toolTip = appIdentity.displayName
         }
         statusItem.menu = menu
     }
@@ -77,14 +78,48 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private func statusItemImage(for phase: AppState.Phase) -> NSImage? {
-        if let image = NSImage(named: "StatusBarIcon") {
-            image.isTemplate = true
-            return image
+        let image: NSImage?
+        if let assetImage = NSImage(named: "StatusBarIcon") {
+            image = assetImage
+        } else {
+            let symbolName = phase == .recording ? "mic.fill" : "mic"
+            image = NSImage(systemSymbolName: symbolName, accessibilityDescription: appIdentity.displayName)
         }
 
-        let symbolName = phase == .recording ? "mic.fill" : "mic"
-        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Suniye")
-        image?.isTemplate = true
+        guard let image else {
+            return nil
+        }
+
+        if appIdentity.isPreview {
+            return previewBadgedStatusItemImage(from: image)
+        }
+
+        let stableImage = image.copy() as? NSImage ?? image
+        stableImage.isTemplate = true
+        return stableImage
+    }
+
+    private func previewBadgedStatusItemImage(from source: NSImage) -> NSImage {
+        let size = source.size.width > 0 && source.size.height > 0
+            ? source.size
+            : NSSize(width: 18, height: 18)
+
+        let image = NSImage(size: size)
+        image.lockFocus()
+        source.draw(in: NSRect(origin: .zero, size: size))
+
+        let badgeSize = max(5, min(size.width, size.height) * 0.38)
+        let badgeRect = NSRect(
+            x: size.width - badgeSize,
+            y: size.height - badgeSize,
+            width: badgeSize,
+            height: badgeSize
+        )
+        NSColor.black.setFill()
+        NSBezierPath(ovalIn: badgeRect).fill()
+        image.unlockFocus()
+
+        image.isTemplate = true
         return image
     }
 

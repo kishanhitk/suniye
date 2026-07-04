@@ -16,6 +16,16 @@ To uninstall, including app data and downloaded models:
 brew uninstall --zap --cask suniye
 ```
 
+## Local preview build
+
+To keep the official release installed while testing local work, build the preview variant:
+
+```bash
+./scripts/build_app.sh Debug --preview --install-user --open
+```
+
+Preview installs as `~/Applications/Suniye Preview.app` with bundle id `dev.suniye.app.preview`, so it does not replace `/Applications/Suniye.app` or `~/Applications/Suniye.app`. macOS treats it as a separate app, so grant Microphone and Accessibility permissions to Preview once. Preview builds disable Sparkle release updates, but they share the large ASR model cache at `~/Library/Application Support/Suniye/models`.
+
 ## Manual install (GitHub Release DMG)
 
 ### 1) Download

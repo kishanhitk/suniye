@@ -9,6 +9,8 @@ Stable uses channel rank `8`; Tip uses channel rank `1`. That makes a stable rel
 For local packaging, let `scripts/package_release.sh` compute the build number or pass `--build-number` / `SUNIYE_BUILD_NUMBER` for an explicit override.
 Do not manually bump app version metadata in `project.yml` just to cut a release tag.
 
+Release packaging always uses the default Stable app identity: `Suniye.app`, bundle id `dev.suniye.app`, and Sparkle release updates enabled. Local development builds that need to coexist with Stable should use `./scripts/build_app.sh Debug --preview --install-user --open`, which produces `Suniye Preview.app` with bundle id `dev.suniye.app.preview` and Sparkle release updates disabled. Do not publish Preview artifacts as official releases.
+
 ## Prerelease checklist
 1. PR description and commits reflect the release changes accurately.
 2. User-facing docs are updated for onboarding, settings, and supported model changes (`README.md`, `docs/*`).

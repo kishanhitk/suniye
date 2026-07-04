@@ -138,6 +138,14 @@ Keep that exported file in a password manager or other secret store, then delete
 open ./dist/Suniye.app
 ```
 
+For side-by-side local development, build the preview variant instead:
+
+```bash
+./scripts/build_app.sh Debug --preview --install-user --open
+```
+
+This installs `~/Applications/Suniye Preview.app` with bundle id `dev.suniye.app.preview`, so it can coexist with the official `Suniye.app` release. The preview variant disables Sparkle release updates and still shares the large local ASR model cache under `~/Library/Application Support/Suniye/models`.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and [CHANGELOG.md](CHANGELOG.md) for what's changed.
