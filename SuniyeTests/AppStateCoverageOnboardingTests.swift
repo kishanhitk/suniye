@@ -16,6 +16,16 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
         appState.phase = .ready
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
+        // Settings hydration auto-completes onboarding for legacy users
+        // (installed model + nil flags); reset to exercise the state machine.
+        appState.hasCompletedCoreOnboarding = false
+        return appState
+    }
+
+    private func freshOnboardingState() -> AppState {
+        let appState = makeTestAppState()
+        appState.hasCompletedCoreOnboarding = false
+        appState.hasSeenOnboardingWelcome = false
         return appState
     }
 
@@ -39,11 +49,11 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
     }
 
     func testStartOnboardingShowsWelcomeThenSetup() {
-        let appState = makeTestAppState()
+        let appState = freshOnboardingState()
         appState.startOnboardingIfNeeded()
         XCTAssertEqual(appState.activeOnboardingStep, .welcome)
 
-        let returning = makeTestAppState()
+        let returning = freshOnboardingState()
         returning.hasSeenOnboardingWelcome = true
         returning.startOnboardingIfNeeded()
         XCTAssertEqual(returning.activeOnboardingStep, .setup)
@@ -98,7 +108,7 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
     }
 
     func testAdvanceOnboardingFromNilRestartsOnboarding() {
-        let appState = makeTestAppState()
+        let appState = freshOnboardingState()
         appState.activeOnboardingStep = nil
 
         appState.advanceOnboarding()
