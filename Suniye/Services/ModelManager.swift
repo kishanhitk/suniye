@@ -61,6 +61,17 @@ final class ModelManager: ModelManagerProtocol {
         }
     }
 
+    private let applicationSupportDirectory: URL?
+    private let urlSessionConfiguration: URLSessionConfiguration
+
+    init(
+        applicationSupportDirectory: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
+        urlSessionConfiguration: URLSessionConfiguration = .default
+    ) {
+        self.applicationSupportDirectory = applicationSupportDirectory
+        self.urlSessionConfiguration = urlSessionConfiguration
+    }
+
     var catalog: [ASRModelCatalogEntry] {
         ASRModelCatalog.entries
     }
@@ -70,7 +81,7 @@ final class ModelManager: ModelManagerProtocol {
     }
 
     func modelsRootDirectoryURL() throws -> URL {
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+        guard let appSupport = applicationSupportDirectory else {
             throw ModelError.appSupportUnavailable
         }
 
@@ -149,7 +160,7 @@ final class ModelManager: ModelManagerProtocol {
                 fallbackExpectedSizeBytes: entry.estimatedSizeBytes,
                 temporaryFileBasename: entry.directoryName
             )
-            let session = URLSession(configuration: .default, delegate: downloader, delegateQueue: nil)
+            let session = URLSession(configuration: urlSessionConfiguration, delegate: downloader, delegateQueue: nil)
             defer {
                 session.finishTasksAndInvalidate()
             }
@@ -241,7 +252,7 @@ final class ModelManager: ModelManagerProtocol {
         }
     }
 
-    private func downloadRemoteFiles(
+    func downloadRemoteFiles(
         _ files: [ASRModelRemoteFile],
         into modelDirectory: URL,
         progress: @escaping @Sendable (Double) -> Void
@@ -277,7 +288,7 @@ final class ModelManager: ModelManagerProtocol {
                 fallbackExpectedSizeBytes: fallbackBytes,
                 temporaryFileBasename: "\(modelDirectory.lastPathComponent)-\(index)"
             )
-            let session = URLSession(configuration: .default, delegate: downloader, delegateQueue: nil)
+            let session = URLSession(configuration: urlSessionConfiguration, delegate: downloader, delegateQueue: nil)
             defer {
                 session.finishTasksAndInvalidate()
             }
