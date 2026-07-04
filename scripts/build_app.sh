@@ -18,11 +18,6 @@ BUILD_CHANNEL_EXPLICIT="0"
 LOCAL_CODESIGN_IDENTITY=""
 SHOULD_RELEASE_SIGN="0"
 APP_VARIANT="stable"
-APP_PRODUCT_NAME="Suniye"
-APP_DISPLAY_NAME="Suniye"
-APP_BUNDLE_IDENTIFIER="dev.suniye.app"
-UPDATES_ENABLED="YES"
-STABLE_APPCAST_URL="https://suniye.kishans.in/appcast.xml"
 
 usage() {
   cat <<'USAGE'
@@ -58,6 +53,35 @@ channel_rank() {
       return 1
       ;;
   esac
+}
+
+configure_app_variant() {
+  case "$1" in
+    stable)
+      APP_PRODUCT_NAME="Suniye"
+      APP_DISPLAY_NAME="Suniye"
+      APP_BUNDLE_IDENTIFIER="dev.suniye.app"
+      UPDATES_ENABLED="YES"
+      STABLE_APPCAST_URL="https://suniye.kishans.in/appcast.xml"
+      ;;
+    preview)
+      APP_PRODUCT_NAME="Suniye Preview"
+      APP_DISPLAY_NAME="Suniye Preview"
+      APP_BUNDLE_IDENTIFIER="dev.suniye.app.preview"
+      UPDATES_ENABLED="NO"
+      STABLE_APPCAST_URL=""
+      if [[ "${BUILD_CHANNEL_EXPLICIT}" != "1" ]]; then
+        BUILD_CHANNEL="tip"
+      fi
+      ;;
+    *)
+      echo "Unknown app variant: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+
+  APP_BUNDLE_NAME="${APP_PRODUCT_NAME}.app"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -127,27 +151,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-case "${APP_VARIANT}" in
-  stable)
-    ;;
-  preview)
-    APP_PRODUCT_NAME="Suniye Preview"
-    APP_DISPLAY_NAME="Suniye Preview"
-    APP_BUNDLE_IDENTIFIER="dev.suniye.app.preview"
-    UPDATES_ENABLED="NO"
-    STABLE_APPCAST_URL=""
-    if [[ "${BUILD_CHANNEL_EXPLICIT}" != "1" ]]; then
-      BUILD_CHANNEL="tip"
-    fi
-    ;;
-  *)
-    echo "Unknown app variant: ${APP_VARIANT}" >&2
-    usage >&2
-    exit 1
-    ;;
-esac
-
-APP_BUNDLE_NAME="${APP_PRODUCT_NAME}.app"
+configure_app_variant "${APP_VARIANT}"
 
 if [[ -z "${BUILD_DESTINATION}" ]]; then
   case "$(uname -m)" in
@@ -318,11 +322,7 @@ if [[ -n "${OUTPUT_DIR}" ]]; then
 fi
 
 if [[ "${SHOULD_CLEAN_DERIVED_APP}" == "1" ]]; then
-  rm -rf \
-    "${DERIVED_DATA_PATH}/Build/Products/Debug/Suniye.app" \
-    "${DERIVED_DATA_PATH}/Build/Products/Release/Suniye.app" \
-    "${DERIVED_DATA_PATH}/Build/Products/Debug/Suniye Preview.app" \
-    "${DERIVED_DATA_PATH}/Build/Products/Release/Suniye Preview.app"
+  rm -rf "${APP_PATH}"
 fi
 
 if [[ "${SHOULD_OPEN}" == "1" ]]; then
