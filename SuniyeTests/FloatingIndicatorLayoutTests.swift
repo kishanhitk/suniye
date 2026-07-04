@@ -113,44 +113,21 @@ final class FloatingIndicatorLayoutTests: XCTestCase {
         )
     }
 
-    func testPreviewSegmentsKeepShortTextFullyBright() {
-        let segments = FloatingIndicatorMetrics.previewSegments("short text")
-        XCTAssertEqual(segments.head, "")
-        XCTAssertEqual(segments.tail, "short text")
-    }
-
-    func testPreviewSegmentsSplitOnWordBoundary() {
-        let text = "the quick brown fox jumps over the lazy dog and keeps on running"
-        let segments = FloatingIndicatorMetrics.previewSegments(text)
-
-        XCTAssertEqual(segments.head + segments.tail, text)
-        XCTAssertFalse(segments.tail.isEmpty)
-        // The split never lands mid-word: the head ends on a boundary and the
-        // tail starts at a word start.
-        XCTAssertTrue(segments.head.isEmpty || segments.head.hasSuffix(" "))
-        XCTAssertFalse(segments.tail.hasPrefix(" "))
-    }
-
-    func testPreviewSegmentsWithoutSpacesStillSplit() {
-        let text = String(repeating: "a", count: 100)
-        let segments = FloatingIndicatorMetrics.previewSegments(text)
-
-        XCTAssertEqual(segments.head + segments.tail, text)
-        XCTAssertEqual(segments.tail.count, FloatingIndicatorMetrics.previewBrightTailCharacters)
-    }
-
     func testPreviewTailKeepsShortTextIntact() {
         XCTAssertEqual(FloatingIndicatorMetrics.previewTail("hello world"), "hello world")
         XCTAssertEqual(FloatingIndicatorMetrics.previewTail("  padded  "), "padded")
         XCTAssertEqual(FloatingIndicatorMetrics.previewTail(""), "")
     }
 
-    func testPreviewTailTruncatesLongTextToSuffix() {
+    func testPreviewTailTruncatesLongTextToSuffixWithoutEllipsis() {
         let maxCharacters = FloatingIndicatorMetrics.previewTailMaxCharacters
         let text = String(repeating: "a", count: 40) + String(repeating: "b", count: maxCharacters)
         let tail = FloatingIndicatorMetrics.previewTail(text)
 
-        XCTAssertEqual(tail, "…" + String(repeating: "b", count: maxCharacters))
-        XCTAssertEqual(tail.count, maxCharacters + 1)
+        // No leading ellipsis: the bubble fades older text out at the top, so a
+        // marker would only double up with the fade.
+        XCTAssertEqual(tail, String(repeating: "b", count: maxCharacters))
+        XCTAssertEqual(tail.count, maxCharacters)
+        XCTAssertFalse(tail.hasPrefix("…"))
     }
 }

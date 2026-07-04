@@ -4,11 +4,10 @@ import Foundation
 /// Presentation metrics shared by `FloatingIndicatorView` (pill + bubble) and
 /// `FloatingIndicatorController` (hosting panel) so the two cannot drift.
 enum FloatingIndicatorMetrics {
-    /// Two wrapped lines' worth of tail text in the fixed-width bubble.
+    /// A little more than two lines of tail text: the bubble shows the newest
+    /// two lines and the older remainder fades out at the top, so keeping a
+    /// third line's worth gives the fade something to act on.
     static let previewTailMaxCharacters = 160
-    /// The newest characters render brighter than the rest so the eye tracks
-    /// the growing tail, Apple-dictation style.
-    static let previewBrightTailCharacters = 40
     /// The listening pill never changes size; the live preview renders in a
     /// detached bubble floating above it.
     static let listeningPillSize = CGSize(width: 124, height: 40)
@@ -48,38 +47,15 @@ enum FloatingIndicatorMetrics {
         )
     }
 
-    /// Tail of a partial transcript that fits the live-preview bubble.
+    /// Tail of a partial transcript kept for the live-preview bubble. No
+    /// ellipsis marker: the bubble fades older text out at the top instead, so
+    /// a leading "…" would only double up with that fade.
     static func previewTail(_ text: String, maxCharacters: Int = previewTailMaxCharacters) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > maxCharacters else {
             return trimmed
         }
-        return "…" + String(trimmed.suffix(maxCharacters))
-    }
-
-    /// Splits preview text into a dimmed head and a bright tail (the newest
-    /// characters). The split never lands mid-word: it extends left to the
-    /// nearest word boundary so a word can't flicker between the two styles.
-    static func previewSegments(
-        _ text: String,
-        brightTailCharacters: Int = previewBrightTailCharacters
-    ) -> (head: String, tail: String) {
-        guard text.count > brightTailCharacters else {
-            return (head: "", tail: text)
-        }
-        var splitIndex = text.index(text.endIndex, offsetBy: -brightTailCharacters)
-        if text[splitIndex] == " " {
-            // Landed on a space: the tail starts at the next word.
-            while splitIndex < text.endIndex, text[splitIndex] == " " {
-                splitIndex = text.index(after: splitIndex)
-            }
-        } else {
-            let headRange = text.startIndex ..< splitIndex
-            if let boundary = text.range(of: " ", options: .backwards, range: headRange) {
-                splitIndex = text.index(after: boundary.lowerBound)
-            }
-        }
-        return (head: String(text[..<splitIndex]), tail: String(text[splitIndex...]))
+        return String(trimmed.suffix(maxCharacters))
     }
 }
 

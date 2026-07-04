@@ -47,40 +47,30 @@ struct FloatingIndicatorView: View {
     /// FloatingIndicatorMetrics) so only the text content changes per tick, and
     /// non-interactive so the pill keeps all click/drag behavior.
     private func previewBubble(_ text: String) -> some View {
-        let segments = FloatingIndicatorMetrics.previewSegments(text)
-        return (
-            Text(segments.head).foregroundStyle(.white.opacity(0.55))
-                + Text(segments.tail).foregroundStyle(.white.opacity(0.95))
-        )
-        .font(AppTypography.subheadline)
-        .lineLimit(2)
-        .truncationMode(.head)
-        .multilineTextAlignment(.leading)
-        .contentTransition(.interpolate)
-        .animation(.easeInOut(duration: 0.18), value: text)
-        .padding(.horizontal, 20)
-        .frame(
-            width: FloatingIndicatorMetrics.previewBubbleSize.width,
-            height: FloatingIndicatorMetrics.previewBubbleSize.height,
-            alignment: .leading
-        )
-        .background {
-            ZStack {
-                BehindWindowBlur(cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2)
-                Color.black.opacity(0.35)
+        LivePreviewText(text: text)
+            .padding(.horizontal, 20)
+            .frame(
+                width: FloatingIndicatorMetrics.previewBubbleSize.width,
+                height: FloatingIndicatorMetrics.previewBubbleSize.height,
+                alignment: .leading
+            )
+            .background {
+                ZStack {
+                    BehindWindowBlur(cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2)
+                    Color.black.opacity(0.35)
+                }
             }
-        }
-        .overlay(Self.previewBubbleShape.stroke(capsuleStroke, lineWidth: capsuleBorderWidth))
-        .clipShape(Self.previewBubbleShape)
-        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
-        .allowsHitTesting(false)
-        .transition(.asymmetric(
-            insertion: .opacity
-                .combined(with: .scale(scale: 0.96, anchor: .bottom))
-                .combined(with: .offset(y: 6))
-                .animation(.easeOut(duration: 0.25)),
-            removal: .opacity.animation(.easeOut(duration: 0.15))
-        ))
+            .overlay(Self.previewBubbleShape.stroke(capsuleStroke, lineWidth: capsuleBorderWidth))
+            .clipShape(Self.previewBubbleShape)
+            .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+            .allowsHitTesting(false)
+            .transition(.asymmetric(
+                insertion: .opacity
+                    .combined(with: .scale(scale: 0.96, anchor: .bottom))
+                    .combined(with: .offset(y: 6))
+                    .animation(.easeOut(duration: 0.25)),
+                removal: .opacity.animation(.easeOut(duration: 0.15))
+            ))
     }
 
     private var previewText: String? {
@@ -293,6 +283,84 @@ struct FloatingIndicatorView: View {
                     .frame(width: 3.2, height: 3.2)
             }
         }
+    }
+}
+
+/// Live-preview transcript text. Shows the newest two lines pinned to the
+/// bottom; when the transcript is longer, the older remainder scrolls up out of
+/// view and the top edge fades to transparent — no ellipsis. The fade engages
+/// only while the text actually overflows two lines, so a short partial renders
+/// fully solid with no phantom "cut off" marker.
+private struct LivePreviewText: View {
+    let text: String
+
+    /// Natural height of the full (unclamped) transcript at the bubble's width.
+    @State private var fullHeight: CGFloat = 0
+    /// Height of exactly two rendered lines, measured with the same font so the
+    /// overflow test matches real metrics regardless of the resolved typeface.
+    @State private var twoLineHeight: CGFloat = 0
+
+    private var isOverflowing: Bool {
+        twoLineHeight > 0 && fullHeight > twoLineHeight + 0.5
+    }
+
+    var body: some View {
+        Text(text)
+            .font(AppTypography.subheadline)
+            .foregroundStyle(.white.opacity(0.95))
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .bottomLeading)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(key: FullHeightKey.self, value: proxy.size.height)
+                }
+            )
+            .frame(height: twoLineHeight > 0 ? twoLineHeight : nil, alignment: .bottom)
+            .clipped()
+            .mask(alignment: .bottom) {
+                if isOverflowing {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.58)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                } else {
+                    Rectangle()
+                }
+            }
+            .background(
+                Text("Ag\nAg")
+                    .font(AppTypography.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .hidden()
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear.preference(key: TwoLineHeightKey.self, value: proxy.size.height)
+                        }
+                    )
+            )
+            .onPreferenceChange(FullHeightKey.self) { fullHeight = $0 }
+            .onPreferenceChange(TwoLineHeightKey.self) { twoLineHeight = $0 }
+            .contentTransition(.interpolate)
+            .animation(.easeInOut(duration: 0.18), value: text)
+    }
+}
+
+private struct FullHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct TwoLineHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 
