@@ -237,6 +237,27 @@ final class AppStateEditModeTests: XCTestCase {
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Still processing previous clip"))
     }
 
+    func testEditModeRecoversFromRetryableErrorState() async {
+        let scenario = makeEditModeScenario(
+            selection: "hello world",
+            instruction: "make this formal",
+            applePostProcessor: CapturingAppleMagicFormatPostProcessor(
+                availability: .available,
+                result: .success("unused")
+            )
+        )
+        // Same transient state the dictation hotkey self-heals from.
+        scenario.appState.phase = .error
+        scenario.appState.statusText = "Audio error"
+        scenario.appState.lastError = "Audio start failed: device disappeared"
+
+        await scenario.appState.beginEditModeRecordingFlow()
+
+        XCTAssertEqual(scenario.appState.phase, .recording)
+        XCTAssertEqual(scenario.selectionProvider.captureCallCount, 1)
+        XCTAssertNil(scenario.appState.lastError)
+    }
+
     private struct EditModeScenario {
         let appState: AppState
         let textInsertion: SpyTextInsertionService

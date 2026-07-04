@@ -2925,6 +2925,11 @@ final class AppState {
             showTransientIndicatorError("Set up Magic Format to use Edit Mode")
             return
         }
+        // Same self-heal as the dictation flow: a transient audio/transcription
+        // error must not leave the edit hotkey dead until a dictation clears it.
+        if phase == .error, canRetryRecordingAfterError {
+            clearRetryableRecordingError()
+        }
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "edit mode start ignored in phase=\(phase.rawValue)")
             showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)

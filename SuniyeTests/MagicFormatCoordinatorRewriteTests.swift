@@ -69,11 +69,77 @@ final class MagicFormatCoordinatorRewriteTests: XCTestCase {
         XCTAssertEqual(api.lastConfig?.apiKey, "sk-test-key")
     }
 
-    private func makeCoordinator(api: LLMPostProcessor) -> MagicFormatCoordinator {
+    func testRewriteUsesLocalGemmaWithEditModeConfig() async throws {
+        let gemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            runtimeWarm: true,
+            result: .success("rewritten output")
+        )
+        let coordinator = makeCoordinator(api: CapturingLLMPostProcessor(result: .success("unused")), gemma: gemma)
+        let request = makeRequest(
+            provider: .localGemma,
+            hasAPIKey: false,
+            readAPIKey: { nil },
+            localGemmaAvailability: .available
+        )
+        let userText = EditModePromptBuilder.userText(instruction: "make this formal", selectedText: "hey there")
+
+        let output = try await coordinator.rewrite(
+            instructions: EditModePromptBuilder.rewriteSystemPrompt,
+            userText: userText,
+            request: request
+        )
+
+        XCTAssertEqual(output, "rewritten output")
+        XCTAssertEqual(gemma.lastGenerateInstructions, EditModePromptBuilder.rewriteSystemPrompt)
+        XCTAssertEqual(gemma.lastGenerateUserText, userText)
+        // Edit-mode config: no Magic Format prompt or vocabulary leaks in, and the
+        // output budget/timeout are the edit-mode values.
+        XCTAssertEqual(gemma.lastConfig?.systemPrompt, "")
+        XCTAssertEqual(gemma.lastConfig?.keywords, [])
+        XCTAssertEqual(gemma.lastConfig?.maxTokens, LLMDefaults.editModeMaxTokens)
+        XCTAssertEqual(gemma.lastConfig?.generationTimeoutSeconds, LocalGemmaDefaults.editModeGenerationTimeoutSeconds)
+    }
+
+    func testRewriteCancelsInFlightPrewarm() async throws {
+        let gemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            runtimeWarm: true,
+            result: .success("rewritten output")
+        )
+        gemma.prewarmBlocksUntilCanceled = true
+        let coordinator = makeCoordinator(api: CapturingLLMPostProcessor(result: .success("unused")), gemma: gemma)
+        let request = makeRequest(
+            provider: .localGemma,
+            hasAPIKey: false,
+            readAPIKey: { nil },
+            localGemmaAvailability: .available
+        )
+
+        let prewarm = coordinator.prewarmLocalIfEligible(
+            requestedProvider: .localGemma,
+            settings: LLMSettings(),
+            appleAvailability: .deviceNotEligible,
+            localGemmaAvailability: .available
+        )
+        XCTAssertNotNil(prewarm)
+        try await waitUntil { gemma.prewarmCallCount == 1 }
+
+        let output = try await coordinator.rewrite(instructions: "sys", userText: "user", request: request)
+        await prewarm?.value
+
+        XCTAssertEqual(output, "rewritten output")
+        XCTAssertTrue(gemma.prewarmWasCanceled)
+    }
+
+    private func makeCoordinator(
+        api: LLMPostProcessor,
+        gemma: LocalGemmaMagicFormatPostProcessor = NoopLocalGemmaMagicFormatPostProcessor(availability: .modelNotInstalled)
+    ) -> MagicFormatCoordinator {
         MagicFormatCoordinator(
             apiPostProcessor: api,
             applePostProcessor: NoopAppleMagicFormatPostProcessor(availability: .deviceNotEligible),
-            localGemmaPostProcessor: NoopLocalGemmaMagicFormatPostProcessor(availability: .modelNotInstalled)
+            localGemmaPostProcessor: gemma
         )
     }
 
@@ -81,19 +147,33 @@ final class MagicFormatCoordinatorRewriteTests: XCTestCase {
         provider: MagicFormatProvider,
         hasAPIKey: Bool,
         readAPIKey: @escaping () -> String?,
-        onAPIKeyReadFailed: @escaping () -> Void = {}
+        onAPIKeyReadFailed: @escaping () -> Void = {},
+        localGemmaAvailability: LocalGemmaAvailability = .modelNotInstalled
     ) -> MagicFormatCoordinator.PolishRequest {
         MagicFormatCoordinator.PolishRequest(
             requestedProvider: provider,
             settings: LLMSettings(),
             hasAPIKey: hasAPIKey,
             appleAvailability: .deviceNotEligible,
-            localGemmaAvailability: .modelNotInstalled,
+            localGemmaAvailability: localGemmaAvailability,
             readAPIKey: readAPIKey,
             onAPIKeyReadFailed: onAPIKeyReadFailed,
             startSlowWarning: { Task {} },
             setStage: { _ in }
         )
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 2,
+        _ condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            guard Date() < deadline else {
+                throw FakeError(message: "condition not met within \(timeout)s")
+            }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 
     private func assertThrowsProviderNotConfigured(_ body: () async throws -> String) async {

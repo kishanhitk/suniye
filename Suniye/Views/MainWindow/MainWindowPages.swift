@@ -466,8 +466,7 @@ struct GeneralPage: View {
                                             appState.hotkeyConfiguration = newValue
                                         }
                                     }
-                                ),
-                                isAcceptable: { $0 != appState.editModeHotkeyConfiguration }
+                                )
                             )
                         }
                         CardDivider()
@@ -483,8 +482,7 @@ struct GeneralPage: View {
                                 configuration: $appState.editModeHotkeyConfiguration,
                                 idleIcon: "pencil.line",
                                 allowsClear: true,
-                                clearHelp: "Remove the Edit Mode shortcut",
-                                isAcceptable: { $0 != appState.hotkeyConfiguration }
+                                clearHelp: "Remove the Edit Mode shortcut"
                             )
                         }
                         CardDivider()
@@ -674,7 +672,6 @@ private struct HotkeyRecorderButton: View {
     var idleIcon = "globe"
     var allowsClear = false
     var clearHelp = "Remove the shortcut"
-    var isAcceptable: (HotkeyConfiguration) -> Bool = { _ in true }
     @State private var isCapturing = false
     @State private var localMonitor: Any?
 
@@ -734,7 +731,11 @@ private struct HotkeyRecorderButton: View {
                 return nil
             }
 
-            if let captured = HotkeyConfiguration.from(event: event), isAcceptable(captured) {
+            // Collision policy is owned by AppState's didSet observers: a colliding
+            // capture is written through the binding, rejected there (with the value
+            // reverted and a user-visible message), and this view re-renders the
+            // reverted configuration.
+            if let captured = HotkeyConfiguration.from(event: event) {
                 configuration = captured
                 stopCapturing()
                 return nil
