@@ -538,6 +538,7 @@ struct TranscriptHistoryRow: View {
                 .fill(MainWindowPalette.divider)
                 .frame(height: 1)
         }
+        .contentShape(Rectangle())
         .onHover { hovering in
             isHovered = hovering
         }
