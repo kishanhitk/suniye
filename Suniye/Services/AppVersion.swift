@@ -76,3 +76,29 @@ struct AppVersion {
         return AppVersion(marketing: marketing, build: build, channel: channel)
     }
 }
+
+struct AppIdentity: Equatable {
+    let displayName: String
+    let isPreview: Bool
+
+    static let fallbackDisplayName = "Suniye"
+
+    static var current: AppIdentity {
+        fromBundle()
+    }
+
+    static func fromBundle(_ bundle: Bundle = .main) -> AppIdentity {
+        let displayName = (
+            bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+                ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
+                ?? fallbackDisplayName
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let bundleIdentifier = bundle.bundleIdentifier ?? ""
+        return AppIdentity(
+            displayName: displayName.isEmpty ? fallbackDisplayName : displayName,
+            isPreview: bundleIdentifier == "dev.suniye.app.preview" || bundleIdentifier.hasSuffix(".preview")
+        )
+    }
+}

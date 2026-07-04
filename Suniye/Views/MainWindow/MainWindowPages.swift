@@ -99,7 +99,7 @@ struct ModelPage: View {
         DetailScrollContainer {
             VStack(alignment: .leading, spacing: 4) {
                 DetailPageTitle(title: "ASR Model")
-                Text("Choose the offline recognizer Suniye keeps on your Mac.")
+                Text("Choose the offline recognizer \(AppIdentity.current.displayName) keeps on your Mac.")
                     .font(AppTypography.body)
                     .foregroundStyle(MainWindowPalette.secondaryText)
             }
@@ -500,7 +500,7 @@ struct GeneralPage: View {
                     VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
                         SettingsToggleRow(
                             title: "Hide While Idle",
-                            detail: "Hide the floating indicator when Suniye is ready but not actively dictating. When hidden, floating click-to-start is unavailable until the indicator appears again for recording, processing, or errors.",
+                            detail: "Hide the floating indicator when \(AppIdentity.current.displayName) is ready but not actively dictating. When hidden, floating click-to-start is unavailable until the indicator appears again for recording, processing, or errors.",
                             isOn: $appState.hideFloatingIndicatorWhenIdle
                         )
 
@@ -568,7 +568,7 @@ struct GeneralPage: View {
                 SurfaceCard {
                     VStack(spacing: 12) {
                         HStack(spacing: 12) {
-                            Text("Suniye")
+                            Text(AppIdentity.current.displayName)
                                 .font(AppTypography.bodyMedium)
                             Spacer(minLength: 0)
                             Text(appState.appVersionText)
@@ -610,7 +610,7 @@ struct GeneralPage: View {
 
                         SettingsToggleRow(
                             title: "Automatically Check for Updates",
-                            detail: "Suniye checks in the background and asks before installing.",
+                            detail: "\(AppIdentity.current.displayName) checks in the background and asks before installing.",
                             isOn: Binding(
                                 get: { appState.automaticallyChecksForUpdates },
                                 set: { appState.setAutomaticallyChecksForUpdates($0) }

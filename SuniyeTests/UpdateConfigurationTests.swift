@@ -18,6 +18,18 @@ final class UpdateConfigurationTests: XCTestCase {
         XCTAssertEqual(info["SUScheduledCheckInterval"] as? Int, 18_000)
     }
 
+    func testAppBundleEnablesSuniyeUpdatesByDefault() {
+        XCTAssertTrue(Bundle.main.suniyeUpdatesEnabled)
+    }
+
+    func testFactoryCanReturnDisabledUpdateControllerForPreviewBuilds() {
+        let controller = AppUpdateControllerFactory.makeDefault(updatesEnabled: false)
+
+        XCTAssertTrue(controller is DisabledUpdateController)
+        XCTAssertFalse(controller.canCheckForUpdates)
+        XCTAssertFalse(controller.automaticallyChecksForUpdates)
+    }
+
     func testSparkleUpdaterResolvesAutomaticDownloadDefaultsFromBundle() {
         // Sparkle mirrors these keys into UserDefaults once a user expresses a
         // preference; clear them so the updater falls back to the bundle plist.

@@ -6,6 +6,8 @@
 	<string>.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>$(SUNIYE_DISPLAY_NAME)</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -29,7 +31,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://suniye.kishans.in/appcast.xml</string>
+	<string>$(SUNIYE_STABLE_APPCAST_URL)</string>
 	<key>SUPublicEDKey</key>
 	<string>u4x493+uxEBa64/ypY9EWf5GZfVgA67NwXswhnKNaaw=</string>
 	<key>SUScheduledCheckInterval</key>
@@ -42,5 +44,7 @@
 	<string>$(SUNIYE_BUILD_CHANNEL)</string>
 	<key>SuniyeIssueReportEndpointURL</key>
 	<string>https://suniye.kishans.in/api/issue-reports</string>
+	<key>SuniyeUpdatesEnabled</key>
+	<string>$(SUNIYE_UPDATES_ENABLED)</string>
 </dict>
 </plist>

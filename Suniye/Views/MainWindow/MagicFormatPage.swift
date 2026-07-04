@@ -302,7 +302,7 @@ struct StylePage: View {
         case .available:
             return "Apple Intelligence is ready."
         case .appleIntelligenceNotEnabled:
-            return "Turn on Apple Intelligence in System Settings, then come back to Suniye."
+            return "Turn on Apple Intelligence in System Settings, then come back to \(AppIdentity.current.displayName)."
         case .modelNotReady:
             return "Apple Intelligence is downloading or preparing its local model. Try again when it is ready."
         case .deviceNotEligible:
@@ -602,7 +602,7 @@ struct StylePage: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Learn from my edits")
                                 .font(AppTypography.body)
-                            Text("When you correct a name or term right after dictating, Suniye adds it here automatically.")
+                            Text("When you correct a name or term right after dictating, \(AppIdentity.current.displayName) adds it here automatically.")
                                 .font(AppTypography.caption)
                                 .foregroundStyle(MainWindowPalette.secondaryText)
                         }

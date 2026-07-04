@@ -19,7 +19,12 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: 14.0
     MARKETING_VERSION: 0.0.8
     CURRENT_PROJECT_VERSION: 8
+    SUNIYE_PRODUCT_NAME: Suniye
+    SUNIYE_DISPLAY_NAME: Suniye
+    SUNIYE_BUNDLE_IDENTIFIER: dev.suniye.app
     SUNIYE_BUILD_CHANNEL: stable
+    SUNIYE_UPDATES_ENABLED: YES
+    SUNIYE_STABLE_APPCAST_URL: https://suniye.kishans.in/appcast.xml
 targets:
   Suniye:
     type: application
@@ -35,12 +40,14 @@ targets:
       properties:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDisplayName: $(SUNIYE_DISPLAY_NAME)
         ATSApplicationFontsPath: "."
         LSUIElement: true
         NSMicrophoneUsageDescription: Suniye needs microphone access to capture dictation.
         SuniyeIssueReportEndpointURL: https://suniye.kishans.in/api/issue-reports
         SuniyeBuildChannel: $(SUNIYE_BUILD_CHANNEL)
-        SUFeedURL: https://suniye.kishans.in/appcast.xml
+        SuniyeUpdatesEnabled: $(SUNIYE_UPDATES_ENABLED)
+        SUFeedURL: $(SUNIYE_STABLE_APPCAST_URL)
         SUPublicEDKey: u4x493+uxEBa64/ypY9EWf5GZfVgA67NwXswhnKNaaw=
         SUEnableAutomaticChecks: true
         SUAutomaticallyUpdate: true
@@ -49,7 +56,8 @@ targets:
         SUVerifyUpdateBeforeExtraction: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.suniye.app
+        PRODUCT_NAME: $(SUNIYE_PRODUCT_NAME)
+        PRODUCT_BUNDLE_IDENTIFIER: $(SUNIYE_BUNDLE_IDENTIFIER)
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_OBJC_BRIDGING_HEADER: Suniye/Suniye-Bridging-Header.h
         OTHER_LDFLAGS:
