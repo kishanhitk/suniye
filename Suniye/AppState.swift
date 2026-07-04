@@ -3812,6 +3812,11 @@ final class AppState {
         let audioCaptureService = audioCaptureService
         let transcriptionService = transcriptionService
         lastPublishedPartialTranscript = ""
+        // Reserve the bubble's panel space now (`.pending`), before the first
+        // partial lands — the panel must never resize mid-recording.
+        if case let .listening(levels, source, _) = floatingIndicatorState {
+            setFloatingIndicatorState(.listening(levels: levels, source: source, preview: .pending))
+        }
         partialTranscriptionScheduler.start(
             snapshotProvider: {
                 await audioCaptureService.snapshotSamples(
@@ -3841,8 +3846,8 @@ final class AppState {
         lastPublishedPartialTranscript = ""
         // Strip a preview that is still visible (e.g. toggled off mid-recording);
         // level updates would otherwise keep carrying it forward.
-        if case let .listening(levels, source, preview) = floatingIndicatorState, preview != nil {
-            setFloatingIndicatorState(.listening(levels: levels, source: source, preview: nil))
+        if case let .listening(levels, source, preview) = floatingIndicatorState, preview != .off {
+            setFloatingIndicatorState(.listening(levels: levels, source: source, preview: .off))
         }
     }
 
@@ -3862,7 +3867,13 @@ final class AppState {
         let preview = FloatingIndicatorMetrics.previewTail(stabilized)
         livePartialTranscript = preview.isEmpty ? nil : preview
         if case let .listening(levels, source, _) = floatingIndicatorState {
-            setFloatingIndicatorState(.listening(levels: levels, source: source, preview: livePartialTranscript))
+            // An empty decode keeps `.pending` (space stays reserved), it does
+            // not fall back to `.off`.
+            setFloatingIndicatorState(.listening(
+                levels: levels,
+                source: source,
+                preview: preview.isEmpty ? .pending : .text(preview)
+            ))
         }
     }
 

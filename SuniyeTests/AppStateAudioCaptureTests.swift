@@ -240,7 +240,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
 
         XCTAssertEqual(
             appState.floatingIndicatorState,
-            .listening(levels: Array(repeating: 0.42, count: AudioLevelMeter.bandCount), source: .manual)
+            .listening(levels: Array(repeating: 0.42, count: AudioLevelMeter.bandCount), source: .manual, preview: .pending)
         )
     }
 

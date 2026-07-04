@@ -51,22 +51,32 @@ final class FloatingIndicatorLayoutTests: XCTestCase {
 
     func testListeningPanelMatchesPillWithoutPreviewAndBubbleGeometryIsFixed() {
         XCTAssertEqual(
-            FloatingIndicatorMetrics.listeningPanelSize(preview: nil),
+            FloatingIndicatorMetrics.listeningPanelSize(preview: .off),
             FloatingIndicatorMetrics.listeningPillSize
         )
 
-        // Fixed bubble: any preview text yields identical panel geometry, so the
-        // layout cannot jitter as the transcript grows tick to tick.
+        // Fixed reservation: `.pending` and any preview text yield identical
+        // panel geometry, so the panel never resizes mid-recording and the
+        // layout cannot jitter as the transcript grows tick to tick. The
+        // reservation includes room for the bubble's shadow so the window edge
+        // cannot clip it.
         let expected = CGSize(
             width: max(
                 FloatingIndicatorMetrics.listeningPillSize.width,
                 FloatingIndicatorMetrics.previewBubbleSize.width
+                    + FloatingIndicatorMetrics.previewShadowPadding * 2
             ),
             height: FloatingIndicatorMetrics.listeningPillSize.height
                 + FloatingIndicatorMetrics.previewBubbleGap
                 + FloatingIndicatorMetrics.previewBubbleSize.height
+                + FloatingIndicatorMetrics.previewShadowPadding
         )
-        for preview in ["hi", String(repeating: "x", count: 200)] {
+        let previews: [FloatingIndicatorState.PreviewState] = [
+            .pending,
+            .text("hi"),
+            .text(String(repeating: "x", count: 200))
+        ]
+        for preview in previews {
             XCTAssertEqual(FloatingIndicatorMetrics.listeningPanelSize(preview: preview), expected)
         }
     }
@@ -74,8 +84,8 @@ final class FloatingIndicatorLayoutTests: XCTestCase {
     func testPreviewBubbleGrowsPanelUpwardWithoutMovingThePill() {
         let visibleFrame = NSRect(x: 0, y: 32, width: 1440, height: 900)
         let placement = FloatingIndicatorPlacement(centerXRatio: 0.5, bottomYRatio: 0.1)
-        let pillOnly = FloatingIndicatorMetrics.listeningPanelSize(preview: nil)
-        let withBubble = FloatingIndicatorMetrics.listeningPanelSize(preview: "hello there")
+        let pillOnly = FloatingIndicatorMetrics.listeningPanelSize(preview: .off)
+        let withBubble = FloatingIndicatorMetrics.listeningPanelSize(preview: .pending)
 
         let pillFrame = FloatingIndicatorLayout.frame(
             for: NSSize(width: pillOnly.width, height: pillOnly.height),
@@ -96,9 +106,37 @@ final class FloatingIndicatorLayoutTests: XCTestCase {
         XCTAssertEqual(bubbleFrame.midX, pillFrame.midX, accuracy: 0.001)
         XCTAssertEqual(
             bubbleFrame.maxY - pillFrame.maxY,
-            FloatingIndicatorMetrics.previewBubbleGap + FloatingIndicatorMetrics.previewBubbleSize.height,
+            FloatingIndicatorMetrics.previewBubbleGap
+                + FloatingIndicatorMetrics.previewBubbleSize.height
+                + FloatingIndicatorMetrics.previewShadowPadding,
             accuracy: 0.001
         )
+    }
+
+    func testPreviewSegmentsKeepShortTextFullyBright() {
+        let segments = FloatingIndicatorMetrics.previewSegments("short text")
+        XCTAssertEqual(segments.head, "")
+        XCTAssertEqual(segments.tail, "short text")
+    }
+
+    func testPreviewSegmentsSplitOnWordBoundary() {
+        let text = "the quick brown fox jumps over the lazy dog and keeps on running"
+        let segments = FloatingIndicatorMetrics.previewSegments(text)
+
+        XCTAssertEqual(segments.head + segments.tail, text)
+        XCTAssertFalse(segments.tail.isEmpty)
+        // The split never lands mid-word: the head ends on a boundary and the
+        // tail starts at a word start.
+        XCTAssertTrue(segments.head.isEmpty || segments.head.hasSuffix(" "))
+        XCTAssertFalse(segments.tail.hasPrefix(" "))
+    }
+
+    func testPreviewSegmentsWithoutSpacesStillSplit() {
+        let text = String(repeating: "a", count: 100)
+        let segments = FloatingIndicatorMetrics.previewSegments(text)
+
+        XCTAssertEqual(segments.head + segments.tail, text)
+        XCTAssertEqual(segments.tail.count, FloatingIndicatorMetrics.previewBrightTailCharacters)
     }
 
     func testPreviewTailKeepsShortTextIntact() {

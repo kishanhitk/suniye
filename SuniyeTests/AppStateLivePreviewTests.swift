@@ -34,7 +34,7 @@ final class AppStateLivePreviewTests: XCTestCase {
             .listening(
                 levels: Array(repeating: 0, count: AudioLevelMeter.bandCount),
                 source: .manual,
-                preview: "hello world"
+                preview: .text("hello world")
             )
         )
     }
@@ -131,7 +131,36 @@ final class AppStateLivePreviewTests: XCTestCase {
 
         XCTAssertEqual(
             appState.floatingIndicatorState,
-            .listening(levels: levels, source: .manual, preview: "partial words")
+            .listening(levels: levels, source: .manual, preview: .text("partial words"))
+        )
+    }
+
+    func testIndicatorReservesBubbleSpaceBeforeFirstPartial() async throws {
+        let scheduler = PartialTranscriptionScheduler(tickInterval: 3_600)
+        let audioCapture = StubAudioCaptureService()
+        let transcription = StubTranscriptionService()
+        let started = expectation(description: "capture started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcription: transcription,
+            scheduler: scheduler
+        )
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [started], timeout: 1)
+        await drainScheduledTasks()
+
+        // Previews are active but nothing has decoded yet: the indicator must
+        // already be `.pending` so the panel reserves bubble space up front
+        // and never resizes mid-recording.
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .listening(
+                levels: Array(repeating: 0, count: AudioLevelMeter.bandCount),
+                source: .manual,
+                preview: .pending
+            )
         )
     }
 
@@ -157,6 +186,15 @@ final class AppStateLivePreviewTests: XCTestCase {
         XCTAssertEqual(transcription.transcribeCallCount, 0)
         XCTAssertEqual(audioCapture.snapshotCallCount, 0)
         XCTAssertNil(appState.livePartialTranscript)
+        // No reservation either: the panel stays pill-sized for whisper.
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .listening(
+                levels: Array(repeating: 0, count: AudioLevelMeter.bandCount),
+                source: .manual,
+                preview: .off
+            )
+        )
     }
 
     func testLatePartialAfterStopDoesNotClobberFinalTranscript() async throws {
@@ -297,7 +335,7 @@ final class AppStateLivePreviewTests: XCTestCase {
             .listening(
                 levels: Array(repeating: 0, count: AudioLevelMeter.bandCount),
                 source: .manual,
-                preview: nil
+                preview: .off
             )
         )
         let decodeCountAfterToggle = transcription.transcribeCallCount

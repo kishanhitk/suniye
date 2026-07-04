@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct FloatingIndicatorView: View {
@@ -34,38 +35,57 @@ struct FloatingIndicatorView: View {
         .padding(.bottom, helperText == nil ? 0 : 4)
         .contentShape(Rectangle())
         .onHover(perform: onHoverChanged)
-        .animation(.spring(response: 0.28, dampingFraction: 0.84), value: state)
+        .animation(.spring(response: 0.28, dampingFraction: 0.84), value: state.layoutAnimationKey)
     }
+
+    private static let previewBubbleShape = RoundedRectangle(
+        cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2,
+        style: .continuous
+    )
 
     /// Detached live-preview bubble above the pill. Fixed geometry (see
     /// FloatingIndicatorMetrics) so only the text content changes per tick, and
     /// non-interactive so the pill keeps all click/drag behavior.
     private func previewBubble(_ text: String) -> some View {
-        Text(text)
-            .font(AppTypography.subheadline)
-            .foregroundStyle(.white.opacity(0.92))
-            .lineLimit(2)
-            .truncationMode(.head)
-            .multilineTextAlignment(.leading)
-            .padding(.horizontal, 14)
-            .frame(
-                width: FloatingIndicatorMetrics.previewBubbleSize.width,
-                height: FloatingIndicatorMetrics.previewBubbleSize.height,
-                alignment: .leading
-            )
-            .background(capsuleFill)
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(capsuleStroke, lineWidth: capsuleBorderWidth)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .allowsHitTesting(false)
-            .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
+        let segments = FloatingIndicatorMetrics.previewSegments(text)
+        return (
+            Text(segments.head).foregroundStyle(.white.opacity(0.55))
+                + Text(segments.tail).foregroundStyle(.white.opacity(0.95))
+        )
+        .font(AppTypography.subheadline)
+        .lineLimit(2)
+        .truncationMode(.head)
+        .multilineTextAlignment(.leading)
+        .contentTransition(.interpolate)
+        .animation(.easeInOut(duration: 0.18), value: text)
+        .padding(.horizontal, 20)
+        .frame(
+            width: FloatingIndicatorMetrics.previewBubbleSize.width,
+            height: FloatingIndicatorMetrics.previewBubbleSize.height,
+            alignment: .leading
+        )
+        .background {
+            ZStack {
+                BehindWindowBlur(cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2)
+                Color.black.opacity(0.35)
+            }
+        }
+        .overlay(Self.previewBubbleShape.stroke(capsuleStroke, lineWidth: capsuleBorderWidth))
+        .clipShape(Self.previewBubbleShape)
+        .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+        .allowsHitTesting(false)
+        .transition(.asymmetric(
+            insertion: .opacity
+                .combined(with: .scale(scale: 0.96, anchor: .bottom))
+                .combined(with: .offset(y: 6))
+                .animation(.easeOut(duration: 0.25)),
+            removal: .opacity.animation(.easeOut(duration: 0.15))
+        ))
     }
 
     private var previewText: String? {
         if case let .listening(_, _, preview) = state {
-            return preview
+            return preview.text
         }
         return nil
     }
@@ -273,6 +293,40 @@ struct FloatingIndicatorView: View {
                     .frame(width: 3.2, height: 3.2)
             }
         }
+    }
+}
+
+/// Behind-window blur for the preview bubble. SwiftUI materials only blur
+/// content within the same window, and this panel is transparent — real blur
+/// of whatever is behind the panel needs NSVisualEffectView with
+/// `.behindWindow` blending. The blur region is masked via `maskImage`
+/// (a plain CALayer mask does not constrain behind-window blur).
+private struct BehindWindowBlur: NSViewRepresentable {
+    let cornerRadius: CGFloat
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.maskImage = .roundedRectMask(cornerRadius: cornerRadius)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
+
+private extension NSImage {
+    static func roundedRectMask(cornerRadius: CGFloat) -> NSImage {
+        let edge = cornerRadius * 2 + 1
+        let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: cornerRadius, left: cornerRadius, bottom: cornerRadius, right: cornerRadius)
+        image.resizingMode = .stretch
+        return image
     }
 }
 
