@@ -31,6 +31,10 @@ struct FloatingIndicatorView: View {
         .contentShape(Rectangle())
         .onHover(perform: onHoverChanged)
         .animation(.spring(response: 0.28, dampingFraction: 0.84), value: state.layoutAnimationKey)
+        // The indicator is dark chrome in both appearances: force the dark
+        // color scheme so Liquid Glass always renders its dark material and
+        // white content stays legible in Light Mode without an outline.
+        .environment(\.colorScheme, .dark)
     }
 
     private static let previewBubbleShape = RoundedRectangle(
@@ -285,7 +289,11 @@ private extension View {
         strokeWidth: CGFloat
     ) -> some View {
         if #available(macOS 26, *) {
-            glassEffect(.regular.tint(.black.opacity(0.22)), in: shape)
+            // `.regular` glass adapts to the backdrop and lightens over bright
+            // content; our text is fixed white, so tint the glass dark enough to
+            // stay legible everywhere (matching the always-dark hudWindow it
+            // replaces). The text also carries its own contrast halo.
+            glassEffect(.regular.tint(.black.opacity(0.5)), in: shape)
         } else {
             background {
                 ZStack {
