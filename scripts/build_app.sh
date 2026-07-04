@@ -14,16 +14,26 @@ BUILD_ARCH=""
 VERSION=""
 BUILD_NUMBER=""
 BUILD_CHANNEL="${SUNIYE_BUILD_CHANNEL:-stable}"
+BUILD_CHANNEL_EXPLICIT="0"
 LOCAL_CODESIGN_IDENTITY=""
 SHOULD_RELEASE_SIGN="0"
+APP_VARIANT="stable"
+APP_PRODUCT_NAME="Suniye"
+APP_DISPLAY_NAME="Suniye"
+APP_BUNDLE_IDENTIFIER="dev.suniye.app"
+UPDATES_ENABLED="YES"
+STABLE_APPCAST_URL="https://suniye.kishans.in/appcast.xml"
 
 usage() {
   cat <<'USAGE'
 Usage: scripts/build_app.sh [Debug|Release] [--install-user] [--install-system] [--open]
 
 Options:
-  --install-user    Copy app to ~/Applications/Suniye.app
-  --install-system  Copy app to /Applications/Suniye.app
+  --preview         Build as Suniye Preview for side-by-side local development
+  --variant <stable|preview>
+                    Select app identity variant (default: stable)
+  --install-user    Copy app to ~/Applications/<app-name>.app
+  --install-system  Copy app to /Applications/<app-name>.app
   --derived-data-path <path>  Override derived data path
   --output-dir <dir>          Copy built app to a deterministic output directory
   --version <vX.Y.Z>          Override MARKETING_VERSION in the build
@@ -79,6 +89,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --build-channel)
       BUILD_CHANNEL="$2"
+      BUILD_CHANNEL_EXPLICIT="1"
+      shift
+      ;;
+    --preview)
+      APP_VARIANT="preview"
+      ;;
+    --variant)
+      APP_VARIANT="$2"
       shift
       ;;
     --codesign-identity)
@@ -108,6 +126,28 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+case "${APP_VARIANT}" in
+  stable)
+    ;;
+  preview)
+    APP_PRODUCT_NAME="Suniye Preview"
+    APP_DISPLAY_NAME="Suniye Preview"
+    APP_BUNDLE_IDENTIFIER="dev.suniye.app.preview"
+    UPDATES_ENABLED="NO"
+    STABLE_APPCAST_URL=""
+    if [[ "${BUILD_CHANNEL_EXPLICIT}" != "1" ]]; then
+      BUILD_CHANNEL="tip"
+    fi
+    ;;
+  *)
+    echo "Unknown app variant: ${APP_VARIANT}" >&2
+    usage >&2
+    exit 1
+    ;;
+esac
+
+APP_BUNDLE_NAME="${APP_PRODUCT_NAME}.app"
 
 if [[ -z "${BUILD_DESTINATION}" ]]; then
   case "$(uname -m)" in
@@ -195,6 +235,13 @@ if [[ -n "${BUILD_NUMBER}" ]]; then
 fi
 
 xcodebuild_args+=(SUNIYE_BUILD_CHANNEL="${BUILD_CHANNEL}")
+xcodebuild_args+=(
+  SUNIYE_PRODUCT_NAME="${APP_PRODUCT_NAME}"
+  SUNIYE_DISPLAY_NAME="${APP_DISPLAY_NAME}"
+  SUNIYE_BUNDLE_IDENTIFIER="${APP_BUNDLE_IDENTIFIER}"
+  SUNIYE_UPDATES_ENABLED="${UPDATES_ENABLED}"
+  SUNIYE_STABLE_APPCAST_URL="${STABLE_APPCAST_URL}"
+)
 
 if [[ -n "${LOCAL_CODESIGN_IDENTITY}" ]]; then
   echo "Using local signing identity: ${LOCAL_CODESIGN_IDENTITY}"
@@ -219,7 +266,7 @@ fi
 
 xcodebuild "${xcodebuild_args[@]}"
 
-APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/Suniye.app"
+APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/${APP_BUNDLE_NAME}"
 SPARKLE_FRAMEWORK_PATH="${APP_PATH}/Contents/Frameworks/Sparkle.framework"
 if [[ -d "${SPARKLE_FRAMEWORK_PATH}" ]]; then
   SPARKLE_FRAMEWORK_VERSION="$(readlink "${SPARKLE_FRAMEWORK_PATH}/Versions/Current" 2>/dev/null || true)"
@@ -248,7 +295,7 @@ SHOULD_CLEAN_DERIVED_APP="0"
 
 if [[ -n "${INSTALL_TARGET}" ]]; then
   mkdir -p "${INSTALL_TARGET}"
-  DEST_APP_PATH="${INSTALL_TARGET}/Suniye.app"
+  DEST_APP_PATH="${INSTALL_TARGET}/${APP_BUNDLE_NAME}"
   rm -rf "${DEST_APP_PATH}"
   ditto "${APP_PATH}" "${DEST_APP_PATH}"
   LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
@@ -263,7 +310,7 @@ fi
 
 if [[ -n "${OUTPUT_DIR}" ]]; then
   mkdir -p "${OUTPUT_DIR}"
-  OUTPUT_APP_PATH="${OUTPUT_DIR}/Suniye.app"
+  OUTPUT_APP_PATH="${OUTPUT_DIR}/${APP_BUNDLE_NAME}"
   rm -rf "${OUTPUT_APP_PATH}"
   ditto "${APP_PATH}" "${OUTPUT_APP_PATH}"
   FINAL_APP_PATH="${OUTPUT_APP_PATH}"
@@ -273,7 +320,9 @@ fi
 if [[ "${SHOULD_CLEAN_DERIVED_APP}" == "1" ]]; then
   rm -rf \
     "${DERIVED_DATA_PATH}/Build/Products/Debug/Suniye.app" \
-    "${DERIVED_DATA_PATH}/Build/Products/Release/Suniye.app"
+    "${DERIVED_DATA_PATH}/Build/Products/Release/Suniye.app" \
+    "${DERIVED_DATA_PATH}/Build/Products/Debug/Suniye Preview.app" \
+    "${DERIVED_DATA_PATH}/Build/Products/Release/Suniye Preview.app"
 fi
 
 if [[ "${SHOULD_OPEN}" == "1" ]]; then

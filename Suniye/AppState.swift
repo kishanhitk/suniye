@@ -1488,7 +1488,7 @@ final class AppState {
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
         self.keychainService = keychainService
-        self.appUpdateController = appUpdateController ?? SparkleUpdateController()
+        self.appUpdateController = appUpdateController ?? AppUpdateControllerFactory.makeDefault()
         self.launchAtLoginService = launchAtLoginService
         self.diagnosticBundleService = diagnosticBundleService
         self.issueReportUploadService = issueReportUploadService
