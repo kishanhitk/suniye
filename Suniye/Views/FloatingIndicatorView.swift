@@ -32,8 +32,8 @@ struct FloatingIndicatorView: View {
         .onHover(perform: onHoverChanged)
         .animation(.spring(response: 0.28, dampingFraction: 0.84), value: state.layoutAnimationKey)
         // The indicator is dark chrome in both appearances: force the dark
-        // color scheme so Liquid Glass always renders its dark material and
-        // white content stays legible in Light Mode without an outline.
+        // color scheme so the pill's Liquid Glass renders its dark material in
+        // Light Mode too, keeping its white content legible.
         .environment(\.colorScheme, .dark)
     }
 
@@ -53,12 +53,15 @@ struct FloatingIndicatorView: View {
                 height: FloatingIndicatorMetrics.previewBubbleSize.height,
                 alignment: .leading
             )
-            .liquidGlassBubble(
-                shape: Self.previewBubbleShape,
-                cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2,
-                stroke: capsuleStroke,
-                strokeWidth: capsuleBorderWidth
-            )
+            .background {
+                ZStack {
+                    BehindWindowBlur(cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2)
+                    Color.black.opacity(0.35)
+                }
+            }
+            .overlay(Self.previewBubbleShape.stroke(capsuleStroke, lineWidth: capsuleBorderWidth))
+            .clipShape(Self.previewBubbleShape)
+            .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
             .allowsHitTesting(false)
             .transition(.asymmetric(
                 insertion: .opacity
@@ -278,35 +281,6 @@ struct FloatingIndicatorView: View {
 }
 
 private extension View {
-    /// Preview-bubble surface. Native Liquid Glass on macOS 26+ (edge
-    /// refraction, specular highlight and shadow come from the material);
-    /// behind-window vibrancy blur + tint + soft shadow on macOS 14/15.
-    @ViewBuilder
-    func liquidGlassBubble(
-        shape: RoundedRectangle,
-        cornerRadius: CGFloat,
-        stroke: Color,
-        strokeWidth: CGFloat
-    ) -> some View {
-        if #available(macOS 26, *) {
-            // `.regular` glass adapts to the backdrop and lightens over bright
-            // content; our text is fixed white, so tint the glass dark enough to
-            // stay legible everywhere (matching the always-dark hudWindow it
-            // replaces). The text also carries its own contrast halo.
-            glassEffect(.regular.tint(.black.opacity(0.5)), in: shape)
-        } else {
-            background {
-                ZStack {
-                    BehindWindowBlur(cornerRadius: cornerRadius)
-                    Color.black.opacity(0.35)
-                }
-            }
-            .overlay(shape.stroke(stroke, lineWidth: strokeWidth))
-            .clipShape(shape)
-            .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
-        }
-    }
-
     /// Pill / hover-hint surface. Liquid Glass tinted by the pill's own fill
     /// (so the dark identity is preserved) on macOS 26+; the solid capsule fill
     /// + stroke on macOS 14/15 — identical to the pre-glass rendering.
