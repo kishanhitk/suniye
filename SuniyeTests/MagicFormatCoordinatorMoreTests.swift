@@ -1,0 +1,171 @@
+import XCTest
+@testable import Suniye
+
+@MainActor
+final class MagicFormatCoordinatorMoreTests: XCTestCase {
+    func testRewriteErrorDescription() {
+        XCTAssertEqual(
+            MagicFormatRewriteError.providerNotConfigured.errorDescription,
+            "Magic Format provider is not ready"
+        )
+    }
+
+    // MARK: - polish fallbacks (API provider)
+
+    func testAPIPolishFallsBackToRawTextOnWhitespaceOutput() async {
+        let coordinator = makeCoordinator(api: FakeLLMPostProcessor(result: .success("   \n ")))
+        let request = makeRequest(provider: .openAICompatible)
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertEqual(output, "raw text")
+    }
+
+    func testAPIPolishFallsBackToRawTextOnUnknownError() async {
+        let coordinator = makeCoordinator(api: FakeLLMPostProcessor(result: .failure(FakeError(message: "surprise"))))
+        let request = makeRequest(provider: .openAICompatible)
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertEqual(output, "raw text")
+    }
+
+    // MARK: - polish fallbacks (Apple provider)
+
+    func testApplePolishFallsBackToRawTextOnWhitespaceOutput() async {
+        let apple = CapturingAppleMagicFormatPostProcessor(availability: .available, result: .success("  "))
+        let coordinator = makeCoordinator(apple: apple)
+        let request = makeRequest(provider: .appleFoundationModels, appleAvailability: .available)
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(apple.callCount, 1)
+    }
+
+    func testApplePolishFallsBackToRawTextOnUnknownError() async {
+        let apple = CapturingAppleMagicFormatPostProcessor(
+            availability: .available,
+            result: .failure(FakeError(message: "surprise"))
+        )
+        let coordinator = makeCoordinator(apple: apple)
+        let request = makeRequest(provider: .appleFoundationModels, appleAvailability: .available)
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertEqual(output, "raw text")
+    }
+
+    // MARK: - polish fallbacks (local Gemma provider)
+
+    func testGemmaPolishFallsBackToRawTextOnWhitespaceOutput() async {
+        let gemma = CapturingLocalGemmaMagicFormatPostProcessor(availability: .available, result: .success(" \n "))
+        let coordinator = makeCoordinator(gemma: gemma)
+        let request = makeRequest(provider: .localGemma, localGemmaAvailability: .available)
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(gemma.callCount, 1)
+    }
+
+    func testGemmaPolishFallsBackToRawTextOnLLMError() async {
+        let gemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .failure(LLMPostProcessorError.timeout)
+        )
+        let coordinator = makeCoordinator(gemma: gemma)
+        let request = makeRequest(provider: .localGemma, localGemmaAvailability: .available)
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertEqual(output, "raw text")
+    }
+
+    func testGemmaPolishFallsBackToRawTextOnUnknownError() async {
+        let gemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            result: .failure(FakeError(message: "surprise"))
+        )
+        let coordinator = makeCoordinator(gemma: gemma)
+        let request = makeRequest(provider: .localGemma, localGemmaAvailability: .available)
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertEqual(output, "raw text")
+    }
+
+    // MARK: - rewrite
+
+    func testRewriteAdvertisesLocalModelStartupWhenRuntimeCold() async throws {
+        let gemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            runtimeWarm: false,
+            result: .success("rewritten")
+        )
+        let coordinator = makeCoordinator(gemma: gemma)
+        var stages: [String] = []
+        let request = makeRequest(
+            provider: .localGemma,
+            localGemmaAvailability: .available,
+            setStage: { stages.append($0) }
+        )
+
+        let output = try await coordinator.rewrite(instructions: "sys", userText: "user", request: request)
+
+        XCTAssertEqual(output, "rewritten")
+        XCTAssertEqual(stages, [MagicFormatCoordinator.Stage.startingLocalModel])
+    }
+
+    func testRewriteThrowsEmptyOutputForWhitespaceResult() async {
+        let gemma = CapturingLocalGemmaMagicFormatPostProcessor(
+            availability: .available,
+            runtimeWarm: true,
+            result: .success("   ")
+        )
+        let coordinator = makeCoordinator(gemma: gemma)
+        let request = makeRequest(provider: .localGemma, localGemmaAvailability: .available)
+
+        do {
+            _ = try await coordinator.rewrite(instructions: "sys", userText: "user", request: request)
+            XCTFail("Expected empty output")
+        } catch let error as LLMPostProcessorError {
+            XCTAssertEqual(error.logValue, LLMPostProcessorError.emptyOutput.logValue)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func makeCoordinator(
+        api: LLMPostProcessor = FakeLLMPostProcessor(result: .success("unused")),
+        apple: AppleMagicFormatPostProcessor = NoopAppleMagicFormatPostProcessor(availability: .deviceNotEligible),
+        gemma: LocalGemmaMagicFormatPostProcessor = NoopLocalGemmaMagicFormatPostProcessor(availability: .modelNotInstalled)
+    ) -> MagicFormatCoordinator {
+        MagicFormatCoordinator(
+            apiPostProcessor: api,
+            applePostProcessor: apple,
+            localGemmaPostProcessor: gemma
+        )
+    }
+
+    private func makeRequest(
+        provider: MagicFormatProvider,
+        appleAvailability: AppleFoundationModelsAvailability = .deviceNotEligible,
+        localGemmaAvailability: LocalGemmaAvailability = .modelNotInstalled,
+        setStage: @escaping (String) -> Void = { _ in }
+    ) -> MagicFormatCoordinator.PolishRequest {
+        MagicFormatCoordinator.PolishRequest(
+            requestedProvider: provider,
+            settings: LLMSettings(),
+            hasAPIKey: true,
+            appleAvailability: appleAvailability,
+            localGemmaAvailability: localGemmaAvailability,
+            readAPIKey: { "sk-test-key" },
+            onAPIKeyReadFailed: {},
+            startSlowWarning: { Task {} },
+            setStage: setStage
+        )
+    }
+}

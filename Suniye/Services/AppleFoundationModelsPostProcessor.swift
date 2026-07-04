@@ -165,7 +165,7 @@ private final class TimeoutRace<T: Sendable>: @unchecked Sendable {
     }
 }
 
-private struct UnsupportedAppleFoundationModelsClient: AppleFoundationModelsClient {
+struct UnsupportedAppleFoundationModelsClient: AppleFoundationModelsClient {
     var availability: AppleFoundationModelsAvailability {
         .unsupportedSDKOrRuntime
     }
