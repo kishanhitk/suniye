@@ -16,12 +16,7 @@ struct FloatingIndicatorView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 12)
-                    .background(capsuleFill)
-                    .overlay(
-                        Capsule()
-                            .stroke(capsuleStroke, lineWidth: capsuleBorderWidth)
-                    )
-                    .clipShape(Capsule())
+                    .liquidGlassPill(fill: capsuleFill, stroke: capsuleStroke, strokeWidth: capsuleBorderWidth)
                     .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
             }
 
@@ -54,15 +49,12 @@ struct FloatingIndicatorView: View {
                 height: FloatingIndicatorMetrics.previewBubbleSize.height,
                 alignment: .leading
             )
-            .background {
-                ZStack {
-                    BehindWindowBlur(cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2)
-                    Color.black.opacity(0.35)
-                }
-            }
-            .overlay(Self.previewBubbleShape.stroke(capsuleStroke, lineWidth: capsuleBorderWidth))
-            .clipShape(Self.previewBubbleShape)
-            .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+            .liquidGlassBubble(
+                shape: Self.previewBubbleShape,
+                cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2,
+                stroke: capsuleStroke,
+                strokeWidth: capsuleBorderWidth
+            )
             .allowsHitTesting(false)
             .transition(.asymmetric(
                 insertion: .opacity
@@ -93,12 +85,7 @@ struct FloatingIndicatorView: View {
         }
         .padding(.horizontal, horizontalPadding)
         .frame(width: pillWidth, height: pillHeight)
-        .background(capsuleFill)
-        .overlay(
-            Capsule()
-                .stroke(capsuleStroke, lineWidth: capsuleBorderWidth)
-        )
-        .clipShape(Capsule())
+        .liquidGlassPill(fill: capsuleFill, stroke: capsuleStroke, strokeWidth: capsuleBorderWidth)
         .contentShape(Capsule())
         .onTapGesture {
             guard isInteractive else { return }
@@ -282,6 +269,47 @@ struct FloatingIndicatorView: View {
                     .fill(Color.white.opacity(0.78))
                     .frame(width: 3.2, height: 3.2)
             }
+        }
+    }
+}
+
+private extension View {
+    /// Preview-bubble surface. Native Liquid Glass on macOS 26+ (edge
+    /// refraction, specular highlight and shadow come from the material);
+    /// behind-window vibrancy blur + tint + soft shadow on macOS 14/15.
+    @ViewBuilder
+    func liquidGlassBubble(
+        shape: RoundedRectangle,
+        cornerRadius: CGFloat,
+        stroke: Color,
+        strokeWidth: CGFloat
+    ) -> some View {
+        if #available(macOS 26, *) {
+            glassEffect(.regular.tint(.black.opacity(0.22)), in: shape)
+        } else {
+            background {
+                ZStack {
+                    BehindWindowBlur(cornerRadius: cornerRadius)
+                    Color.black.opacity(0.35)
+                }
+            }
+            .overlay(shape.stroke(stroke, lineWidth: strokeWidth))
+            .clipShape(shape)
+            .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+        }
+    }
+
+    /// Pill / hover-hint surface. Liquid Glass tinted by the pill's own fill
+    /// (so the dark identity is preserved) on macOS 26+; the solid capsule fill
+    /// + stroke on macOS 14/15 — identical to the pre-glass rendering.
+    @ViewBuilder
+    func liquidGlassPill(fill: Color, stroke: Color, strokeWidth: CGFloat) -> some View {
+        if #available(macOS 26, *) {
+            glassEffect(.regular.tint(fill), in: Capsule())
+        } else {
+            background(fill)
+                .overlay(Capsule().stroke(stroke, lineWidth: strokeWidth))
+                .clipShape(Capsule())
         }
     }
 }
