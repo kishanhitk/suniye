@@ -21,7 +21,7 @@ enum LaunchAtLoginStatus: Equatable {
         case .disabled:
             return "Launch at login is off."
         case .enabled:
-            return "Suniye will open automatically when you log in."
+            return "\(AppIdentity.current.displayName) will open automatically when you log in."
         case .requiresApproval:
             return "macOS requires approval in Login Items before launch at login can take effect."
         case let .unsupported(message):

@@ -80,7 +80,7 @@ private extension AppleFoundationModelsAvailability {
         case .available:
             return nil
         case .appleIntelligenceNotEnabled:
-            return "Turn on Apple Intelligence in System Settings, then come back to Suniye."
+            return "Turn on Apple Intelligence in System Settings, then come back to \(AppIdentity.current.displayName)."
         case .modelNotReady:
             return "Apple Intelligence is downloading or preparing its local model."
         case .deviceNotEligible:

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct OnboardingView: View {
     @Bindable var appState: AppState
+    private let appIdentity = AppIdentity.current
 
     private var step: OnboardingStep {
         appState.activeOnboardingStep ?? .welcome
@@ -90,7 +91,7 @@ struct OnboardingView: View {
                 .interpolation(.high)
                 .frame(width: iconSize, height: iconSize)
 
-            Text("Suniye")
+            Text(appIdentity.displayName)
                 .font(AppTypography.bodyMedium)
                 .foregroundStyle(MainWindowPalette.secondaryText)
         }
@@ -102,7 +103,7 @@ struct OnboardingView: View {
     private var setupContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Set up Suniye")
+                Text("Set up \(appIdentity.displayName)")
                     .font(AppTypography.pageTitle)
                 Text("One-time setup. Takes about a minute.")
                     .font(AppTypography.body)

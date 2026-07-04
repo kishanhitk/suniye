@@ -93,3 +93,61 @@ final class SparkleUpdateController: NSObject, AppUpdateControllerProtocol, SPUU
         updateChannel.appcastURLString
     }
 }
+
+@MainActor
+final class DisabledUpdateController: AppUpdateControllerProtocol {
+    var canCheckForUpdates: Bool { false }
+    var automaticallyChecksForUpdates: Bool {
+        get { false }
+        set { onStateChange?() }
+    }
+    var updateChannel: UpdateChannel = .stable {
+        didSet {
+            guard oldValue != updateChannel else {
+                return
+            }
+            onStateChange?()
+        }
+    }
+    var onStateChange: (() -> Void)?
+
+    func start() {
+        onStateChange?()
+    }
+
+    func checkForUpdates() {
+        onStateChange?()
+    }
+}
+
+@MainActor
+enum AppUpdateControllerFactory {
+    static func makeDefault(updatesEnabled: Bool = Bundle.main.suniyeUpdatesEnabled) -> AppUpdateControllerProtocol {
+        updatesEnabled ? SparkleUpdateController() : DisabledUpdateController()
+    }
+}
+
+extension Bundle {
+    var suniyeUpdatesEnabled: Bool {
+        guard let value = object(forInfoDictionaryKey: "SuniyeUpdatesEnabled") else {
+            return true
+        }
+
+        if let enabled = value as? Bool {
+            return enabled
+        }
+
+        if let string = value as? String {
+            switch string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "1", "true", "yes":
+                return true
+            case "0", "false", "no":
+                return false
+            default:
+                return true
+            }
+        }
+
+        return true
+    }
+}

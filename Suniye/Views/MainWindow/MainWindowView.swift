@@ -3,6 +3,8 @@ import SwiftUI
 struct MainWindowView: View {
     @Bindable var appState: AppState
     @State private var selection: MainWindowSection = MainWindowSection.initialSelection(arguments: CommandLine.arguments)
+    private let appIdentity = AppIdentity.current
+
     var body: some View {
         HStack(spacing: 0) {
             sidebar
@@ -26,7 +28,7 @@ struct MainWindowView: View {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
                     .frame(width: 24, height: 24)
-                Text("Suniye")
+                Text(appIdentity.displayName)
                     .font(AppTypography.appTitle)
                     .foregroundStyle(MainWindowPalette.sidebarTitle)
             }

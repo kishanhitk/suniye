@@ -987,7 +987,7 @@ final class AppState {
             return "Stored locally for offline dictation. Delete it if you want to reclaim disk space."
         }
         if activeASRModelOperationID == selectedASRModelID {
-            return "Keep Suniye open while \(currentASRModelEntry.displayName) is downloaded, validated, and loaded."
+            return "Keep \(AppIdentity.current.displayName) open while \(currentASRModelEntry.displayName) is downloaded, validated, and loaded."
         }
         if lastFailedASRModelID == selectedASRModelID, let lastFailedASRModelError, !lastFailedASRModelError.isEmpty {
             return "Last attempt failed. Retry setup for \(currentASRModelEntry.displayName) to use it for dictation."
@@ -1006,7 +1006,7 @@ final class AppState {
             case .downloadingModel:
                 return ASRModelBannerState(
                     title: "Downloading Model",
-                    detail: "Installing \(entry.displayName) locally. Keep Suniye open until the files finish validating.",
+                    detail: "Installing \(entry.displayName) locally. Keep \(AppIdentity.current.displayName) open until the files finish validating.",
                     tone: .info,
                     progress: downloadProgress
                 )
@@ -1514,7 +1514,7 @@ final class AppState {
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
         self.keychainService = keychainService
-        self.appUpdateController = appUpdateController ?? SparkleUpdateController()
+        self.appUpdateController = appUpdateController ?? AppUpdateControllerFactory.makeDefault()
         self.launchAtLoginService = launchAtLoginService
         self.diagnosticBundleService = diagnosticBundleService
         self.issueReportUploadService = issueReportUploadService
