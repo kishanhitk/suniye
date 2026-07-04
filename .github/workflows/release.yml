@@ -36,6 +36,7 @@ jobs:
         run: ./scripts/e2e_smoke.sh
 
       - name: Unit tests
+        timeout-minutes: 25
         run: |
           xcodegen generate --spec project.yml
           xcodebuild \
@@ -43,6 +44,9 @@ jobs:
             -scheme Suniye \
             -destination 'platform=macOS' \
             -derivedDataPath .derivedData \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 120 \
+            -maximum-test-execution-time-allowance 300 \
             test
 
       - name: Import code signing identity
