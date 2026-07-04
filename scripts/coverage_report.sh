@@ -61,7 +61,8 @@ rows, gated_covered, gated_executable, unused_exclusions = [], 0, 0, set(exclusi
 for target in app_targets:
     for f in target["files"]:
         path = f["path"]
-        rel = path[len(root) + 1:] if path.startswith(root) else path
+        prefix = root + "/"
+        rel = path[len(prefix):] if path.startswith(prefix) else path
         excluded = rel in exclusions
         if excluded:
             unused_exclusions.discard(rel)

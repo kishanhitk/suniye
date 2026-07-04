@@ -483,9 +483,9 @@ private final class PreexistingStagingFileManager: FileManager {
         return super.fileExists(atPath: path)
     }
 
-    override func removeItem(at URL: URL) throws {
-        if super.fileExists(atPath: URL.path) {
-            try super.removeItem(at: URL)
+    override func removeItem(at url: URL) throws {
+        if super.fileExists(atPath: url.path) {
+            try super.removeItem(at: url)
         }
     }
 }
