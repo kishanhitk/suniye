@@ -1,0 +1,4 @@
+# Files excluded from the CI coverage gate (scripts/coverage_report.sh).
+# One repo-relative path per line. Every entry MUST have a reason comment.
+# Only code that genuinely cannot execute headless in CI belongs here —
+# extract logic into testable units instead of adding entries.
