@@ -61,6 +61,7 @@ final class FloatingIndicatorController {
 
     private var panel: NSPanel?
     private var hostingView: NSHostingView<FloatingIndicatorView>?
+    private let model = FloatingIndicatorModel()
     private var pointerTrackingTimer: Timer?
     private var hoverExitTask: Task<Void, Never>?
     private var baseState: FloatingIndicatorState = .idle
@@ -182,7 +183,7 @@ final class FloatingIndicatorController {
 
         let host = NSHostingView(
             rootView: FloatingIndicatorView(
-                state: .idle,
+                model: model,
                 onHoverChanged: { [weak self] isHovered in
                     self?.setHovered(isHovered)
                 },
@@ -237,26 +238,15 @@ final class FloatingIndicatorController {
     private func render() {
         ensurePanel()
 
-        guard let panel, let hostingView else { return }
+        guard let panel, hostingView != nil else { return }
         let state = effectiveState
         let size = size(for: state)
         let targetFrame = frame(for: size)
 
-        hostingView.rootView = FloatingIndicatorView(
-            state: state,
-            onHoverChanged: { [weak self] isHovered in
-                self?.setHovered(isHovered)
-            },
-            onAction: { [weak self] in
-                self?.onAction?()
-            },
-            onDragChanged: { [weak self] in
-                self?.handleDragChanged()
-            },
-            onDragEnded: { [weak self] in
-                self?.handleDragEnded()
-            }
-        )
+        // Mutate the observed model in place — SwiftUI diffs and animates the
+        // content itself. (Rebuilding rootView here would discard the animation
+        // and make every transition snap.)
+        model.state = state
 
         panel.ignoresMouseEvents = !panelShouldCaptureMouseEvents
         if !isDragging {
