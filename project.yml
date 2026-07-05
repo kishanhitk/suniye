@@ -5,6 +5,8 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     exactVersion: 2.9.2
+  SuniyeAnalytics:
+    path: SuniyeAnalytics
 schemes:
   Suniye:
     build:
@@ -70,6 +72,8 @@ targets:
           - $(PROJECT_DIR)/Suniye/Frameworks
     dependencies:
       - package: Sparkle
+      - package: SuniyeAnalytics
+        product: SuniyeAnalytics
       - framework: Suniye/Frameworks/libsherpa-onnx-c-api.dylib
       - framework: Suniye/Frameworks/libonnxruntime.dylib
     postBuildScripts:

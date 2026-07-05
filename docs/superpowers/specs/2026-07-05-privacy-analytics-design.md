@@ -183,7 +183,7 @@ Custom route on the Access-gated dashboard Worker — no Grafana, no third party
 - **`src/lib/stats.ts`** (pure, testable): builds SQL, POSTs to the AE SQL API (`.../analytics_engine/sql`, Bearer token), parses JSON, merges with D1 **in JS** (AE has no JOINs).
 - **`src/pages/api/stats.ts`** (SSR JSON, `prerender=false`): validates Access JWT, calls `stats.ts`.
 - **`src/pages/stats.astro`**: Access-gated page, Tailwind v4 cards + a Chart.js client island fetching `/api/stats`.
-- **Charts:** **Chart.js** (framework-agnostic; this repo has no React). uPlot if it turns heavily time-series.
+- **Charts / UI:** **React + Vite + Tailwind + shadcn/ui**, using **shadcn Charts (Recharts) area charts** (https://ui.shadcn.com/charts/area) for a clean, minimal design. Built to static assets and served by the dashboard Worker (Workers Assets) behind Access. Standalone gated app, so React/Recharts here is isolated from the marketing site and the secret-free ingest Worker.
 - **Auth:** **Cloudflare Access** (Zero Trust free tier, email allow-list) **+ Worker-side JWT validation** of `Cf-Access-Jwt-Assertion` against the team certs (origin is publicly routable → validate to prevent bypass).
 
 **Sampling + time correctness (queries this way from day one):** each AE row carries `_sample_interval`. Counts `SUM(_sample_interval)`; metric sums `SUM(doubleN * _sample_interval)`; exact installs `COUNT(DISTINCT index1)`. **Bucket time on the client `event_ts` double, not the ingestion `timestamp`** (offline-queued events ingest late). Example — words/day (`doubleN` = event_ts, `doubleM` = word_count):
