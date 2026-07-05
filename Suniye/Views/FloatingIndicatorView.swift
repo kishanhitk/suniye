@@ -9,22 +9,24 @@ struct FloatingIndicatorView: View {
     let onDragEnded: () -> Void
 
     var body: some View {
-        VStack(spacing: topAccessorySpacing) {
-            if let helperText {
-                Text(helperText)
-                    .font(AppTypography.bodyMedium)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 12)
-                    .liquidGlassPill(fill: capsuleFill, stroke: capsuleStroke, strokeWidth: capsuleBorderWidth)
-                    .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
-            }
+        glassGrouped {
+            VStack(spacing: topAccessorySpacing) {
+                if let helperText {
+                    Text(helperText)
+                        .font(AppTypography.bodyMedium)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .liquidGlassPill(fill: capsuleFill, stroke: capsuleStroke, strokeWidth: capsuleBorderWidth)
+                        .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
+                }
 
-            if let previewText {
-                previewBubble(previewText)
-            }
+                if let previewText {
+                    previewBubble(previewText)
+                }
 
-            capsule
+                capsule
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .padding(.bottom, helperText == nil ? 0 : 4)
@@ -35,6 +37,20 @@ struct FloatingIndicatorView: View {
         // color scheme so the pill's Liquid Glass renders its dark material in
         // Light Mode too, keeping its white content legible.
         .environment(\.colorScheme, .dark)
+    }
+
+    /// Groups the indicator's glass surfaces in a GlassEffectContainer on
+    /// macOS 26+ so the hover-hint capsule and the pill share one sampling
+    /// region (per Apple's guidance). No-op on the blur fallback.
+    @ViewBuilder
+    private func glassGrouped<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        if #available(macOS 26, *) {
+            GlassEffectContainer(spacing: FloatingIndicatorMetrics.previewBubbleGap) {
+                content()
+            }
+        } else {
+            content()
+        }
     }
 
     private static let previewBubbleShape = RoundedRectangle(
@@ -320,13 +336,19 @@ private struct LivePreviewText: View {
             .foregroundStyle(.white.opacity(0.95))
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .bottomLeading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 GeometryReader { proxy in
                     Color.clear.preference(key: FullHeightKey.self, value: proxy.size.height)
                 }
             )
-            .frame(height: twoLineHeight > 0 ? twoLineHeight : nil, alignment: .bottom)
+            // One or two lines sit centered in the bubble; only once the
+            // transcript overflows do we pin the newest line to the bottom and
+            // fade the older text out at the top.
+            .frame(
+                height: twoLineHeight > 0 ? twoLineHeight : nil,
+                alignment: isOverflowing ? .bottom : .center
+            )
             .clipped()
             .mask(alignment: .bottom) {
                 if isOverflowing {
