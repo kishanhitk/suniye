@@ -120,6 +120,13 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         sharedAppState.refreshInputDevices()
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        // Durably enqueue session_end. We do NOT await a flush here — the process
+        // may exit first; the atomic on-disk queue means the event (and any
+        // unsent events) ship on the next launch.
+        sharedAppState.recordAnalyticsSessionEnd()
+    }
+
     private func observeWorkspaceLifecycle() {
         let center = NSWorkspace.shared.notificationCenter
         workspaceObservers = [
@@ -127,6 +134,14 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
                 Task { @MainActor in
                     AppLogger.shared.log(.info, "system will sleep")
                     await sharedAppState.handleSystemWillSleep()
+                    await sharedAppState.flushAnalytics()
+                }
+            },
+            center.addObserver(forName: NSWorkspace.willPowerOffNotification, object: nil, queue: .main) { _ in
+                Task { @MainActor in
+                    AppLogger.shared.log(.info, "system will power off")
+                    sharedAppState.recordAnalyticsSessionEnd()
+                    await sharedAppState.flushAnalytics()
                 }
             },
             center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in

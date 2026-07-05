@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import Foundation
 import Observation
+import SuniyeAnalytics
 import SwiftUI
 
 enum LLME2EMode {
@@ -330,6 +331,20 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
+            onStateChange?()
+        }
+    }
+    /// Opt-out toggle for anonymous usage analytics (default on).
+    var shareAnalyticsEnabled = true {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            guard oldValue != shareAnalyticsEnabled else {
+                return
+            }
+            persistGeneralSettings()
+            analytics.setEnabled(shareAnalyticsEnabled)
             onStateChange?()
         }
     }
@@ -1366,6 +1381,7 @@ final class AppState {
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
     private let diagnosticBundleService: DiagnosticBundleServiceProtocol
     private let issueReportUploadService: IssueReportUploadServiceProtocol
+    private let analytics: Analytics
     private let editLearningService: EditLearningServiceProtocol
     private let learningToastPresenter: LearningToastPresenting
     private let currentAppVersionProvider: () -> AppVersion?
@@ -1439,6 +1455,7 @@ final class AppState {
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
         diagnosticBundleService: DiagnosticBundleServiceProtocol = DiagnosticBundleService(),
         issueReportUploadService: IssueReportUploadServiceProtocol = IssueReportUploadService(),
+        analytics: Analytics = AppAnalytics.makeDefault(),
         editLearningService: EditLearningServiceProtocol? = nil,
         learningToastPresenter: LearningToastPresenting? = nil,
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
@@ -1492,6 +1509,7 @@ final class AppState {
         self.launchAtLoginService = launchAtLoginService
         self.diagnosticBundleService = diagnosticBundleService
         self.issueReportUploadService = issueReportUploadService
+        self.analytics = analytics
         self.editLearningService = editLearningService ?? EditLearningService()
         self.learningToastPresenter = learningToastPresenter ?? LearningToastPresenter()
         self.currentAppVersionProvider = currentAppVersionProvider
@@ -1534,6 +1552,7 @@ final class AppState {
         loadHistory()
         loadGeneralSettings()
         loadLLMSettings()
+        analytics.setEnabled(shareAnalyticsEnabled)
         refreshUpdateControllerState()
         refreshInputDevices()
         refreshLaunchAtLoginStatus()
@@ -1551,10 +1570,29 @@ final class AppState {
         }
 
         if startServices {
+            analytics.start()
             wireHotkey()
             Task {
                 await bootstrap()
             }
+        }
+    }
+
+    /// Force-send queued analytics (called on sleep). Best-effort, never blocks.
+    func flushAnalytics() async {
+        await analytics.flush()
+    }
+
+    /// Durably enqueue a session_end without awaiting (safe on app termination;
+    /// the event ships on the next launch). Also usable on power-off.
+    func recordAnalyticsSessionEnd() {
+        analytics.recordSessionEnd(cleanExit: true)
+    }
+
+    /// Opens the public "what we collect" privacy page.
+    func openAnalyticsPrivacyInfo() {
+        if let url = URL(string: "https://suniye.kishans.in/privacy") {
+            _ = fileOpener(url)
         }
     }
 
@@ -3378,6 +3416,7 @@ final class AppState {
         selectedASRModelID = settings.selectedASRModelID
         updateChannel = settings.updateChannel
         accessibilityDragHelperEnabled = settings.accessibilityDragHelperEnabled
+        shareAnalyticsEnabled = settings.shareAnalyticsEnabled
         hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
         hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
         isHydratingGeneralSettings = false
@@ -3408,7 +3447,8 @@ final class AppState {
             hasCompletedCoreOnboarding: hasCompletedCoreOnboarding,
             selectedASRModelID: selectedASRModelID,
             updateChannel: updateChannel,
-            accessibilityDragHelperEnabled: accessibilityDragHelperEnabled
+            accessibilityDragHelperEnabled: accessibilityDragHelperEnabled,
+            shareAnalyticsEnabled: shareAnalyticsEnabled
         )
     }
 

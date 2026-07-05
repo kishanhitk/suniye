@@ -165,10 +165,15 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         timerTask = nil
     }
 
-    /// Emits a `session_end` event and flushes. Called on app quit / sleep.
-    public func endSession(cleanExit: Bool) async {
+    /// Synchronously enqueue `session_end` (durably persisted, no flush).
+    public func recordSessionEnd(cleanExit: Bool) {
         let (duration, eventCount) = sessionSummary()
         track(.sessionEnd(durationMs: duration, eventCount: eventCount, cleanExit: cleanExit))
+    }
+
+    /// Enqueue `session_end` and flush. Called where awaiting is possible.
+    public func endSession(cleanExit: Bool) async {
+        recordSessionEnd(cleanExit: cleanExit)
         await flush()
     }
 
