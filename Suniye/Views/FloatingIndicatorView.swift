@@ -40,7 +40,9 @@ struct FloatingIndicatorView: View {
         .padding(.bottom, helperText == nil ? 0 : 4)
         .contentShape(Rectangle())
         .onHover(perform: onHoverChanged)
-        .animation(.spring(response: 0.28, dampingFraction: 0.84), value: state.layoutAnimationKey)
+        // Non-overshooting so the growing pill/bubble never pokes past the
+        // (instantly-sized) window bounds mid-animation.
+        .animation(.smooth(duration: 0.3), value: state.layoutAnimationKey)
         // The indicator is dark chrome in both appearances: force the dark
         // color scheme so the pill's Liquid Glass renders its dark material in
         // Light Mode too, keeping its white content legible.
