@@ -17,7 +17,15 @@ struct FloatingIndicatorView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 18)
                         .padding(.vertical, 12)
-                        .liquidGlassPill(fill: capsuleFill, stroke: capsuleStroke, strokeWidth: capsuleBorderWidth)
+                        // Static hint text — no `.interactive()` (the tap lives
+                        // on the pill below, not here).
+                        .liquidGlassPill(
+                            fill: capsuleFill,
+                            glassTint: capsuleGlassTint,
+                            stroke: capsuleStroke,
+                            strokeWidth: capsuleBorderWidth,
+                            interactive: false
+                        )
                         .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
                 }
 
@@ -108,7 +116,13 @@ struct FloatingIndicatorView: View {
         }
         .padding(.horizontal, horizontalPadding)
         .frame(width: pillWidth, height: pillHeight)
-        .liquidGlassPill(fill: capsuleFill, stroke: capsuleStroke, strokeWidth: capsuleBorderWidth)
+        .liquidGlassPill(
+            fill: capsuleFill,
+            glassTint: capsuleGlassTint,
+            stroke: capsuleStroke,
+            strokeWidth: capsuleBorderWidth,
+            interactive: isInteractive
+        )
         .contentShape(Capsule())
         .onTapGesture {
             guard isInteractive else { return }
@@ -215,6 +229,18 @@ struct FloatingIndicatorView: View {
         }
     }
 
+    /// Tint for the Liquid Glass pill — much lighter than `capsuleFill` so the
+    /// glass material shows through instead of being smothered. Legibility of
+    /// the white content leans on the forced dark color scheme.
+    private var capsuleGlassTint: Color {
+        switch state {
+        case .idle:
+            return Color.black.opacity(0.35)
+        default:
+            return Color.black.opacity(0.55)
+        }
+    }
+
     private var capsuleStroke: Color {
         switch state {
         case .idle:
@@ -297,13 +323,24 @@ struct FloatingIndicatorView: View {
 }
 
 private extension View {
-    /// Pill / hover-hint surface. Liquid Glass tinted by the pill's own fill
-    /// (so the dark identity is preserved) on macOS 26+; the solid capsule fill
-    /// + stroke on macOS 14/15 — identical to the pre-glass rendering.
+    /// Pill / hover-hint surface. On macOS 26+ a Liquid Glass capsule with a
+    /// light tint so the material actually reads as glass (a near-opaque tint
+    /// would smother it); `.interactive()` only on tappable states, per Apple's
+    /// guidance. On macOS 14/15 the solid capsule `fill` + stroke — identical to
+    /// the pre-glass rendering.
     @ViewBuilder
-    func liquidGlassPill(fill: Color, stroke: Color, strokeWidth: CGFloat) -> some View {
+    func liquidGlassPill(
+        fill: Color,
+        glassTint: Color,
+        stroke: Color,
+        strokeWidth: CGFloat,
+        interactive: Bool
+    ) -> some View {
         if #available(macOS 26, *) {
-            glassEffect(.regular.tint(fill), in: Capsule())
+            glassEffect(
+                interactive ? .regular.tint(glassTint).interactive() : .regular.tint(glassTint),
+                in: Capsule()
+            )
         } else {
             background(fill)
                 .overlay(Capsule().stroke(stroke, lineWidth: strokeWidth))
