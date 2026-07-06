@@ -21,8 +21,8 @@
   ],
   "vars": {
     "AE_DATASET": "suniye_events",
-    "CF_ACCESS_TEAM_DOMAIN": "REPLACE_WITH_TEAM.cloudflareaccess.com",
-    "CF_ACCESS_AUD": "REPLACE_WITH_ACCESS_APP_AUD"
+    "CF_ACCESS_TEAM_DOMAIN": "overengineered-go.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "f911301c847063939c3fba32db11df7908239de6ebb99a184c92a15f78330860"
   }
   // Secrets (wrangler secret put): CF_ACCOUNT_ID, AE_API_TOKEN
 }
