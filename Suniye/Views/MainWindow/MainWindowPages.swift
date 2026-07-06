@@ -185,7 +185,7 @@ struct ModelPage: View {
                     rowMeta(title: "Speed", value: entry.speedLabel)
                     rowMeta(title: "Quality", value: entry.qualityLabel)
                     rowMeta(title: "Languages", value: entry.languageSummary)
-                    rowMeta(title: "Size", value: entry.estimatedSizeText)
+                    rowMeta(title: "Size", value: entry.sizeDisplayText)
                     rowMeta(title: "On disk", value: appState.asrModelInstalledSizeText(for: entry.id))
                 }
 
@@ -246,7 +246,7 @@ struct ModelPage: View {
                 }
 
                 LazyVGrid(columns: libraryModelColumns, alignment: .leading, spacing: 12) {
-                    rowMeta(title: "Size", value: entry.estimatedSizeText)
+                    rowMeta(title: "Size", value: entry.sizeDisplayText)
                     rowMeta(title: "Speed", value: entry.speedLabel)
                     rowMeta(title: "Quality", value: entry.qualityLabel)
                     rowMeta(title: "Languages", value: entry.languageSummary)

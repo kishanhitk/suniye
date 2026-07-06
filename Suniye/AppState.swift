@@ -1098,7 +1098,12 @@ final class AppState {
     }
 
     func asrModelSecondaryActionsEnabled(for modelID: ASRModelID) -> Bool {
-        modelManager.isInstalled(modelID) && activeASRModelOperationID == nil && phase != .recording && phase != .transcribing
+        // System-managed models (Apple Speech) have no on-disk folder to open and can't
+        // be deleted by us, so hide the folder/trash actions for them.
+        guard !ASRModelCatalog.entry(for: modelID).isSystemManaged else {
+            return false
+        }
+        return modelManager.isInstalled(modelID) && activeASRModelOperationID == nil && phase != .recording && phase != .transcribing
     }
 
     func asrModelProgressLabel(for modelID: ASRModelID) -> String? {
@@ -1117,7 +1122,10 @@ final class AppState {
     }
 
     func asrModelInstalledSizeText(for modelID: ASRModelID) -> String {
-        ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(for: modelID), countStyle: .file)
+        if ASRModelCatalog.entry(for: modelID).isSystemManaged {
+            return "Built into macOS"
+        }
+        return ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(for: modelID), countStyle: .file)
     }
 
     func asrModelLocationText(for modelID: ASRModelID) -> String {
@@ -1420,7 +1428,7 @@ final class AppState {
 
     init(
         modelManager: ModelManagerProtocol = ModelManager(),
-        transcriptionService: TranscriptionServiceProtocol = TranscriptionService(),
+        transcriptionService: TranscriptionServiceProtocol = RoutingTranscriptionService(),
         audioCaptureService: AudioCaptureServiceProtocol = AudioCaptureService(),
         textInsertionService: TextInsertionServiceProtocol = TextInsertionService(),
         editModeSelectionProvider: EditModeSelectionProviding? = nil,

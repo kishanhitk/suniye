@@ -73,7 +73,10 @@ final class ModelManager: ModelManagerProtocol {
     }
 
     var catalog: [ASRModelCatalogEntry] {
-        ASRModelCatalog.entries
+        // System-managed entries (Apple SpeechTranscriber) are filtered out on devices
+        // that don't support them, which cascades to installed-model discovery, fallback,
+        // and the UI — hiding the Apple option entirely on macOS < 26.
+        ASRModelCatalog.availableEntries
     }
 
     var fallbackOrder: [ASRModelID] {
@@ -94,13 +97,23 @@ final class ModelManager: ModelManagerProtocol {
     }
 
     func modelDirectoryURL(for modelID: ASRModelID) throws -> URL {
-        try modelsRootDirectoryURL()
-            .appendingPathComponent(catalogEntry(for: modelID).directoryName, isDirectory: true)
+        let entry = catalogEntry(for: modelID)
+        guard !entry.isSystemManaged else {
+            // System-managed models have no on-disk directory we control.
+            throw ModelError.unknownModel
+        }
+        return try modelsRootDirectoryURL()
+            .appendingPathComponent(entry.directoryName, isDirectory: true)
     }
 
     func isInstalled(_ modelID: ASRModelID) -> Bool {
+        let entry = catalogEntry(for: modelID)
+        if entry.isSystemManaged {
+            // "Installed" for a system-managed model means the OS can run it; the
+            // per-locale asset is ensured lazily at load time.
+            return entry.isAvailableOnThisDevice
+        }
         do {
-            let entry = try installedEntry(for: modelID)
             let dir = try modelDirectoryURL(for: modelID)
             return entry.manifest.requiredRelativePaths.allSatisfy {
                 FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path)
@@ -111,11 +124,34 @@ final class ModelManager: ModelManagerProtocol {
     }
 
     func installedModels() -> [ASRModelID] {
-        catalog.map(\.id).filter(isInstalled)
+        // System-managed models (Apple Speech) are opt-in: they are always "available"
+        // on a supported OS, but must not count as installed for onboarding or
+        // auto-fallback, or a fresh macOS 26 user would silently bypass the default
+        // Parakeet download. They remain selectable via the per-model isInstalled path.
+        catalog
+            .filter { !$0.isSystemManaged }
+            .map(\.id)
+            .filter(isInstalled)
     }
 
     func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig {
         let entry = try installedEntry(for: modelID)
+
+        if entry.isSystemManaged {
+            // No file paths: the routing service dispatches this to the Apple engine,
+            // which resolves the locale (empty hint → the user's current locale).
+            return RecognizerConfig(
+                modelID: modelID,
+                family: entry.family,
+                tokensPath: "",
+                numThreads: 4,
+                language: entry.languageHint,
+                task: entry.taskHint,
+                modelType: entry.recognizerModelType,
+                useInverseTextNormalization: entry.useInverseTextNormalization
+            )
+        }
+
         let dir = try modelDirectoryURL(for: modelID)
 
         func path(_ relativePath: String?) -> String? {
@@ -143,6 +179,14 @@ final class ModelManager: ModelManagerProtocol {
 
     func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {
         let entry = try installedEntry(for: modelID)
+
+        if entry.isSystemManaged {
+            // Nothing to download or extract; the OS provides the asset and it is
+            // ensured (installing on first use if needed) when the engine loads.
+            progress(1)
+            return
+        }
+
         let modelsRootDirectory = try modelsRootDirectoryURL()
         let stagingContainer = try makeStagingContainer(in: modelsRootDirectory, for: entry)
         defer {
@@ -179,6 +223,9 @@ final class ModelManager: ModelManagerProtocol {
             try extract(archive: archiveURL, into: stagingContainer)
         case let .remoteFiles(files):
             try await downloadRemoteFiles(files, into: stagedModelDirectory, progress: progress)
+        case .systemManaged:
+            // Unreachable: system-managed entries return early above. Kept for exhaustiveness.
+            return
         }
 
         try Self.validateInstall(entry, at: stagedModelDirectory)
@@ -192,6 +239,9 @@ final class ModelManager: ModelManagerProtocol {
     }
 
     func installedByteCount(for modelID: ASRModelID) -> Int64 {
+        if catalogEntry(for: modelID).isSystemManaged {
+            return 0
+        }
         guard let directoryURL = try? modelDirectoryURL(for: modelID),
               let enumerator = FileManager.default.enumerator(
                   at: directoryURL,
@@ -212,6 +262,11 @@ final class ModelManager: ModelManagerProtocol {
     }
 
     func deleteModel(_ modelID: ASRModelID) throws {
+        if catalogEntry(for: modelID).isSystemManaged {
+            // System-managed models are owned by the OS and cannot be deleted by us.
+            // The UI hides the delete action for these; this guard keeps callers safe.
+            return
+        }
         let modelDirectory = try modelDirectoryURL(for: modelID)
         if FileManager.default.fileExists(atPath: modelDirectory.path) {
             try FileManager.default.removeItem(at: modelDirectory)

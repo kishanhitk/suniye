@@ -330,6 +330,19 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         appState.openModelFolder()
         appState.openModelFolder(for: .moonshineBase)
     }
+
+    // MARK: - System-managed (Apple Speech) UI helpers
+
+    func testSystemManagedModelHidesSecondaryActionsAndShowsBuiltInSize() {
+        let appState = makeTestAppState()
+
+        XCTAssertEqual(appState.asrModelInstalledSizeText(for: .appleSpeech), "Built into macOS")
+        XCTAssertFalse(
+            appState.asrModelSecondaryActionsEnabled(for: .appleSpeech),
+            "System-managed models have no folder to open and can't be deleted"
+        )
+        XCTAssertNotEqual(appState.asrModelInstalledSizeText(for: .parakeetV3), "Built into macOS")
+    }
 }
 
 /// Model manager wrapper adding failure knobs on top of the shared stub.

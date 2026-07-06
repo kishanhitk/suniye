@@ -5,6 +5,10 @@ enum ASRModelFamily: String, Codable {
     case moonshine
     case senseVoice
     case whisper
+    // Apple's on-device SpeechAnalyzer/SpeechTranscriber stack (macOS 26+). Not a
+    // sherpa-onnx model family — it is routed to a separate engine and its model
+    // asset is managed by the OS rather than downloaded/extracted by us.
+    case appleSpeech
 }
 
 enum ASRModelID: String, Codable, CaseIterable, Identifiable {
@@ -18,6 +22,7 @@ enum ASRModelID: String, Codable, CaseIterable, Identifiable {
     case whisperLargeV3Turbo
     case whisperDistilLargeV3
     case whisperLargeV3
+    case appleSpeech
 
     var id: String {
         rawValue
@@ -41,6 +46,9 @@ struct ASRModelRemoteFile: Equatable {
 enum ASRModelDownloadSource: Equatable {
     case archive(URL)
     case remoteFiles([ASRModelRemoteFile])
+    // The model asset is provided and managed by the operating system (e.g. Apple
+    // SpeechTranscriber). There is nothing for us to download or extract.
+    case systemManaged
 }
 
 struct ASRModelFileManifest: Equatable {
@@ -100,6 +108,25 @@ struct ASRModelCatalogEntry: Identifiable, Equatable {
     var estimatedSizeText: String {
         "~" + ByteCountFormatter.string(fromByteCount: estimatedSizeBytes, countStyle: .file)
     }
+
+    /// Human-facing size label for the model library. System-managed models have no
+    /// download footprint, so they show that they ship with the OS instead of a size.
+    var sizeDisplayText: String {
+        isSystemManaged ? "Built into macOS" : estimatedSizeText
+    }
+
+    /// System-managed entries (Apple SpeechTranscriber) are not downloaded, extracted,
+    /// stored on disk, or deletable by us — the OS owns the model asset.
+    var isSystemManaged: Bool {
+        family == .appleSpeech
+    }
+
+    /// Whether this entry can be used on the current device. Sherpa models are always
+    /// available; system-managed entries require the OS to support them.
+    var isAvailableOnThisDevice: Bool {
+        guard isSystemManaged else { return true }
+        return AppleSpeechSupport.isAvailable
+    }
 }
 
 enum ASRModelCatalog {
@@ -115,6 +142,14 @@ enum ASRModelCatalog {
         .whisperBaseEnglish,
         .whisperTinyEnglish
     ]
+
+    /// Catalog entries usable on the current device. System-managed entries (Apple
+    /// SpeechTranscriber) are filtered out when the OS doesn't support them, which
+    /// cascades through installed-model discovery, fallback, and the UI — so the
+    /// Apple option is hidden entirely on macOS < 26.
+    static var availableEntries: [ASRModelCatalogEntry] {
+        entries.filter(\.isAvailableOnThisDevice)
+    }
 
     static let entries: [ASRModelCatalogEntry] = [
         ASRModelCatalogEntry(
@@ -207,6 +242,25 @@ enum ASRModelCatalog {
                 tokens: "tokens.txt",
                 model: "model.int8.onnx"
             )
+        ),
+        ASRModelCatalogEntry(
+            id: .appleSpeech,
+            displayName: "Apple Speech",
+            description: "Apple's built-in on-device transcription. Fast, private, and needs no download — the model ships with macOS 26.",
+            family: .appleSpeech,
+            badges: [.fast, .multilingual],
+            languageSummary: "Follows your system language",
+            speedLabel: "Fast",
+            qualityLabel: "Better",
+            estimatedSizeBytes: 0,
+            downloadSource: .systemManaged,
+            directoryName: "apple-speech",
+            recognizerModelType: "",
+            languageHint: "",
+            taskHint: "transcribe",
+            useInverseTextNormalization: false,
+            // Never read: system-managed entries bypass the manifest-based install/config path.
+            manifest: ASRModelFileManifest(tokens: "system-managed")
         ),
         whisperEntry(
             id: .whisperTinyEnglish,
