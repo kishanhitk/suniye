@@ -1,5 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import Navbar from "../components/Navbar.astro";
 
 const collected = [
   ["How much you dictate", "Word and character counts per dictation — never the words themselves."],
@@ -28,15 +29,7 @@ const neverCollected = [
   description="Suniye's analytics are pseudonymous and opt-out. No audio, no transcribed text, no names — just counts, timings, and coarse hardware that help improve the app."
   canonicalPath="/privacy"
 >
-  <nav class="fixed top-0 z-50 w-full border-b border-border/60 bg-bg/90 backdrop-blur">
-    <div class="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-      <a href="/" class="flex items-center gap-2.5">
-        <img src="/suniye-icon.png" alt="Suniye" class="h-7 w-7 rounded-[5px]" />
-        <span class="font-display text-base tracking-tight">Suniye</span>
-      </a>
-      <a href="/" class="font-display text-sm text-muted transition-colors hover:text-ink">Home</a>
-    </div>
-  </nav>
+  <Navbar variant="subpage" />
 
   <main class="mx-auto max-w-3xl px-6 pb-24 pt-28">
     <h1 class="font-display text-3xl tracking-tight sm:text-4xl">What Suniye collects</h1>
