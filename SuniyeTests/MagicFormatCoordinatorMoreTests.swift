@@ -18,7 +18,8 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
     }
 
     func testAPIPolishFallsBackToRawTextOnUnknownError() async {
@@ -27,7 +28,22 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
+    }
+
+    func testPolishReportsRanEvenWhenOutputEqualsInput() async {
+        // The exact "Magic Format 0%" bug: an idempotent polish (a provider runs
+        // but returns text identical to the input) still RAN, so it must count as
+        // polished — `ran` is not "did the text change".
+        let coordinator = makeCoordinator(api: FakeLLMPostProcessor(result: .success("polish me")))
+        let request = makeRequest(provider: .openAICompatible)
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertEqual(output.text, "polish me")
+        XCTAssertTrue(output.ran)
+        XCTAssertNotNil(output.provider) // provider recorded even on an idempotent polish
     }
 
     // MARK: - polish fallbacks (Apple provider)
@@ -39,7 +55,8 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
         XCTAssertEqual(apple.callCount, 1)
     }
 
@@ -53,7 +70,8 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
     }
 
     // MARK: - polish fallbacks (local Gemma provider)
@@ -65,7 +83,8 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
         XCTAssertEqual(gemma.callCount, 1)
     }
 
@@ -79,7 +98,8 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
     }
 
     func testGemmaPolishFallsBackToRawTextOnUnknownError() async {
@@ -92,7 +112,8 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
     }
 
     // MARK: - rewrite

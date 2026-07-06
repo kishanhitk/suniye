@@ -2859,24 +2859,34 @@ final class AppState {
     }
 
     func postProcessTextIfEnabled(_ rawText: String, frontmostAppBundleID: String? = nil) async -> String {
+        await polishOutcome(rawText, frontmostAppBundleID: frontmostAppBundleID).text
+    }
+
+    /// The full Magic Format outcome (polished text + whether a provider actually
+    /// ran + which provider/model + fallback reason). The dictation path needs
+    /// this for accurate `dictation_completed` analytics — `was_llm_polished`
+    /// must mean "a provider ran", not "the text changed". Other callers use
+    /// `postProcessTextIfEnabled`, which just returns `.text`.
+    func polishOutcome(_ rawText: String, frontmostAppBundleID: String? = nil) async -> MagicFormatPolishOutcome {
         let input = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else {
-            return rawText
+            return MagicFormatPolishOutcome(text: rawText, ran: false, provider: nil, model: nil, fallbackReason: nil)
         }
 
         switch llmE2EMode {
         case .forceSuccess:
             AppLogger.shared.log(.info, "llm e2e forced success")
-            return "\(input)."
+            return .polished("\(input).", provider: .openAICompatible, model: nil)
         case .forceFailure:
             AppLogger.shared.log(.warning, "llm e2e forced fallback")
-            return rawText
+            return .fellBack(rawText, provider: nil, reason: "forced_failure")
         case .none:
             break
         }
 
         guard llmEnabled else {
-            return rawText
+            // Magic Format is off — not a fallback, just not run.
+            return MagicFormatPolishOutcome(text: rawText, ran: false, provider: nil, model: nil, fallbackReason: nil)
         }
 
         var settings = currentLLMSettings()
@@ -3318,14 +3328,15 @@ final class AppState {
     ) async throws {
         let rawParse = AppState.parseSubmitCommand(from: rawText)
         var shouldSubmit = rawParse.shouldSubmit
-        var llmOutputText = rawParse.text
         var finalText = rawParse.text
+        var llmOutcome: MagicFormatPolishOutcome?
 
         if !finalText.isEmpty {
             dictationTiming.llmStart = .now()
-            llmOutputText = await postProcessTextIfEnabled(rawParse.text, frontmostAppBundleID: frontmostAppBundleID)
+            let outcome = await polishOutcome(rawParse.text, frontmostAppBundleID: frontmostAppBundleID)
             dictationTiming.llmEnd = .now()
-            let polishedParse = AppState.parseSubmitCommand(from: llmOutputText)
+            llmOutcome = outcome
+            let polishedParse = AppState.parseSubmitCommand(from: outcome.text)
             finalText = polishedParse.text
             shouldSubmit = shouldSubmit || polishedParse.shouldSubmit
         }
@@ -3335,7 +3346,9 @@ final class AppState {
         }
 
         let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
-        let wasLLMPolished = AppState.didLLMPolish(input: rawParse.text, output: llmOutputText)
+        // "Polished" = a provider actually ran (not "the text changed") — the
+        // honest Magic Format adoption signal.
+        let wasLLMPolished = llmOutcome?.ran ?? false
         var didCompleteDictation = false
 
         if !finalText.isEmpty || shouldSubmit {
@@ -3385,7 +3398,7 @@ final class AppState {
                 finalText: finalText,
                 wordCount: wordCount,
                 duration: duration,
-                wasLLMPolished: wasLLMPolished,
+                llmOutcome: llmOutcome,
                 source: source,
                 frontmostAppBundleID: frontmostAppBundleID
             )
@@ -3398,10 +3411,21 @@ final class AppState {
         finalText: String,
         wordCount: Int,
         duration: TimeInterval,
-        wasLLMPolished: Bool,
+        llmOutcome: MagicFormatPolishOutcome?,
         source: RecordingSource,
         frontmostAppBundleID: String?
     ) {
+        // Record the provider that ran (or was attempted) whenever Magic Format is
+        // on — NOT gated on whether the text changed — so the provider mix and
+        // fallback reasons are visible even when a polish is idempotent or falls
+        // back. `cleanup_model` reflects the actual model when the provider
+        // reported one, else the user's selected preset.
+        let ranProvider = llmOutcome?.provider.map { AnalyticsMapping.cleanupProvider(effective: $0) }
+        let cleanupProvider = llmEnabled ? (ranProvider ?? AnalyticsMapping.cleanupProvider(llmProvider)) : nil
+        let cleanupModel = cleanupProvider == nil
+            ? nil
+            : SafeLabel(llmOutcome?.model ?? llmSelectedModelPreset.rawValue)
+
         let metrics = DictationMetrics(
             wordCount: wordCount,
             charCount: finalText.count,
@@ -3413,10 +3437,10 @@ final class AppState {
             // The model's language coverage from the catalog (e.g. "english",
             // "multilingual") — the ASR layer doesn't return a detected language.
             language: SafeLabel(ASRModelCatalog.entry(for: selectedASRModelID).languageSummary),
-            wasLLMPolished: wasLLMPolished,
-            cleanupProvider: wasLLMPolished ? AnalyticsMapping.cleanupProvider(llmProvider) : nil,
-            cleanupModel: wasLLMPolished ? SafeLabel(llmSelectedModelPreset.rawValue) : nil,
-            cleanupFallbackReason: nil,
+            wasLLMPolished: llmOutcome?.ran ?? false,
+            cleanupProvider: cleanupProvider,
+            cleanupModel: cleanupModel,
+            cleanupFallbackReason: AnalyticsMapping.cleanupFallbackReason(llmOutcome?.fallbackReason),
             insertionMethod: .clipboard, // insertion is always clipboard+paste
             targetCategory: TargetCategoryMapper.category(for: frontmostAppBundleID),
             latency: dictationTiming.latency(),
@@ -4115,14 +4139,6 @@ final class AppState {
         cleaned = cleaned.replacingOccurrences(of: #"[,\s]+$"#, with: "", options: .regularExpression)
 
         return (cleaned, true)
-    }
-
-    nonisolated static func didLLMPolish(input: String, output: String) -> Bool {
-        let normalizedInput = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedInput.isEmpty else {
-            return false
-        }
-        return normalizedInput != output.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func detectLLME2EMode(arguments: [String]) -> LLME2EMode {
