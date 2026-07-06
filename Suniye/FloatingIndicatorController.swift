@@ -329,16 +329,28 @@ final class FloatingIndicatorController {
         let interim = (panel.isVisible && current.intersects(targetFrame))
             ? current.union(targetFrame)
             : targetFrame
-        panel.setFrame(interim, display: true)
+        setPanelFrameInstantly(interim)
 
         settleTask?.cancel()
         settleTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: self?.panelSettleDelay ?? 400_000_000)
             guard let self, !Task.isCancelled, self.resizeGeneration == generation else { return }
             guard !self.isDragging, self.shouldShowPanel else { return }
-            self.panel?.setFrame(targetFrame, display: true)
+            self.setPanelFrameInstantly(targetFrame)
             self.settleTask = nil
         }
+    }
+
+    /// Sets the panel frame with no animation at all — including suppressing the
+    /// implicit CoreAnimation on the layer-backed hosting view, which would
+    /// otherwise animate its bounds from a corner and make the SwiftUI content
+    /// look like it expands from the top-left instead of growing in place.
+    private func setPanelFrameInstantly(_ frame: NSRect) {
+        guard let panel else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        panel.setFrame(frame, display: true)
+        CATransaction.commit()
     }
 
     private func positionPanel(targetFrame: NSRect, animated: Bool) {
