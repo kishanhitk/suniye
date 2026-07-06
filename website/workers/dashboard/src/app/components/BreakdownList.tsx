@@ -14,14 +14,18 @@ export function BreakdownList({ items, emptyMessage = "No data in this window ye
   return (
     <ul className="space-y-2.5">
       {items.map((item) => (
-        <li key={item.label} className="grid grid-cols-[minmax(0,10rem)_1fr_3.5rem] items-center gap-3">
-          <span className="truncate font-mono text-xs text-ink" title={item.label || "unknown"}>
-            {item.label || "unknown"}
-          </span>
+        // Stacked (label+count over a full-width bar) so bars keep their
+        // proportion even inside 3- and 4-column grids.
+        <li key={item.label} className="space-y-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="truncate font-mono text-xs text-ink" title={item.label || "unknown"}>
+              {item.label || "unknown"}
+            </span>
+            <span className="font-mono text-xs tabular-nums text-muted">{formatNumber(item.value)}</span>
+          </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-surface">
             <div className="h-full rounded-full bg-ink/45" style={{ width: `${(item.value / max) * 100}%` }} />
           </div>
-          <span className="text-right font-mono text-xs tabular-nums text-muted">{formatNumber(item.value)}</span>
         </li>
       ))}
     </ul>

@@ -2,6 +2,9 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "rec
 import type { TimePoint } from "../types";
 import { prefersReducedMotion } from "../lib/utils";
 
+/** Ultra-short axis ticks ("6k", "450") so they fit the tight left gutter. */
+const axisTick = (value: number) => (value >= 1000 ? `${Math.round(value / 1000)}k` : String(value));
+
 /**
  * Ledger area chart: hairline axes, soft monochrome gradient, no chrome.
  * `tone="accent"` is reserved for the page's hero series (words/day).
@@ -30,6 +33,7 @@ export function AreaTrend({ data, tone = "ink", label }: { data: TimePoint[]; to
             minTickGap={24}
           />
           <YAxis
+            tickFormatter={axisTick}
             fontSize={10}
             fontFamily="var(--font-mono)"
             stroke="var(--color-muted)"
