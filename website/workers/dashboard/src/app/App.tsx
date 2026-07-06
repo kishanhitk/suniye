@@ -57,6 +57,10 @@ export default function App() {
     return () => controller.abort();
   }, [range, filters, retryNonce]);
 
+  // Defensive: a stale/cached response without `blocked` must degrade to
+  // "nothing blocked", never crash the whole dashboard.
+  const blocked = stats?.blocked ?? {};
+
   const totalWords = useMemo(
     () => stats?.wordsPerDay.reduce((sum, p) => sum + p.value, 0) ?? 0,
     [stats]
@@ -166,10 +170,10 @@ export default function App() {
                 />
                 <KeyFigure
                   label="Installs"
-                  value={stats.blocked.installs ? "—" : formatCount(stats.totalInstalls)}
+                  value={blocked.installs ? "—" : formatCount(stats.totalInstalls)}
                   detail={
-                    stats.blocked.installs
-                      ? notRecorded(stats.blocked.installs)
+                    blocked.installs
+                      ? notRecorded(blocked.installs)
                       : newInstalls > 0 ? `+${formatCount(newInstalls)} new in window` : "all-time"
                   }
                 />
@@ -180,8 +184,8 @@ export default function App() {
                 />
                 <KeyFigure
                   label="Crash-free"
-                  value={stats.blocked.crash ? "—" : formatPct(100 - stats.crashProxyRatePct, 1)}
-                  detail={stats.blocked.crash ? notRecorded(stats.blocked.crash) : "clean session proxy"}
+                  value={blocked.crash ? "—" : formatPct(100 - stats.crashProxyRatePct, 1)}
+                  detail={blocked.crash ? notRecorded(blocked.crash) : "clean session proxy"}
                 />
               </TotalsStrip>
             </div>
@@ -196,8 +200,8 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="mb-2 text-sm text-ink">Active installs / day</h3>
-                  {stats.blocked.activeInstalls ? (
-                    <EmptyState message={notRecorded(stats.blocked.activeInstalls)} className="min-h-[200px]" />
+                  {blocked.activeInstalls ? (
+                    <EmptyState message={notRecorded(blocked.activeInstalls)} className="min-h-[200px]" />
                   ) : stats.activeInstallsPerDay.length > 0 ? (
                     <AreaTrend data={stats.activeInstallsPerDay} label="Active installs per day" />
                   ) : (
@@ -206,8 +210,8 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="mb-2 text-sm text-ink">New installs / day</h3>
-                  {stats.blocked.installs ? (
-                    <EmptyState message={notRecorded(stats.blocked.installs)} className="min-h-[200px]" />
+                  {blocked.installs ? (
+                    <EmptyState message={notRecorded(blocked.installs)} className="min-h-[200px]" />
                   ) : stats.newInstallsPerDay.length > 0 ? (
                     <MiniBars data={stats.newInstallsPerDay} />
                   ) : (
@@ -220,8 +224,8 @@ export default function App() {
             <Section
               eyebrow="Pipeline latency"
               note={
-                stats.blocked.modelLoad
-                  ? `model load ${notRecorded(stats.blocked.modelLoad).toLowerCase()}`
+                blocked.modelLoad
+                  ? `model load ${notRecorded(blocked.modelLoad).toLowerCase()}`
                   : stats.keepAliveEvictions > 0
                     ? `${formatCount(stats.keepAliveEvictions)} keep-alive evictions`
                     : undefined
@@ -241,8 +245,8 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="mb-2 text-sm text-ink">Edits after insertion</h3>
-                  {stats.blocked.edits ? (
-                    <EmptyState message={notRecorded(stats.blocked.edits)} />
+                  {blocked.edits ? (
+                    <EmptyState message={notRecorded(blocked.edits)} />
                   ) : (
                     <>
                       <p className="font-mono text-2xl tabular-nums text-ink">{formatPct(stats.editedSharePct)}</p>
@@ -254,8 +258,8 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="mb-2 text-sm text-ink">Audio backend</h3>
-                  {stats.blocked.audio ? (
-                    <EmptyState message={notRecorded(stats.blocked.audio)} />
+                  {blocked.audio ? (
+                    <EmptyState message={notRecorded(blocked.audio)} />
                   ) : (
                     <>
                       <BreakdownList items={stats.audioBackends} emptyMessage="No capture data in this window." />
@@ -285,8 +289,8 @@ export default function App() {
                 ).map(([title, items]) => (
                   <div key={title}>
                     <h3 className="mb-2 text-sm text-ink">{title}</h3>
-                    {stats.blocked.installs
-                      ? <EmptyState message={notRecorded(stats.blocked.installs)} />
+                    {blocked.installs
+                      ? <EmptyState message={notRecorded(blocked.installs)} />
                       : <BreakdownList items={items} />}
                   </div>
                 ))}
@@ -294,8 +298,8 @@ export default function App() {
             </Section>
 
             <Section eyebrow="Reliability">
-              {stats.blocked.errors ? (
-                <EmptyState message={notRecorded(stats.blocked.errors)} />
+              {blocked.errors ? (
+                <EmptyState message={notRecorded(blocked.errors)} />
               ) : (
                 <BreakdownList items={stats.errorsByType} emptyMessage="No errors in this window." />
               )}
