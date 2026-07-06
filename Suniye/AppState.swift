@@ -979,7 +979,7 @@ final class AppState {
     }
 
     var modelLocationText: String {
-        (try? modelManager.modelDirectoryURL(for: selectedASRModelID).path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) ?? "~/Library/Application Support/Suniye/models"
+        asrModelLocationText(for: selectedASRModelID)
     }
 
     var asrModelBanner: ASRModelBannerState? {
@@ -1131,7 +1131,12 @@ final class AppState {
     }
 
     func asrModelLocationText(for modelID: ASRModelID) -> String {
-        (try? modelManager.modelDirectoryURL(for: modelID).path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) ?? "~/Library/Application Support/Suniye/models"
+        let entry = ASRModelCatalog.entry(for: modelID)
+        if entry.isSystemManaged {
+            // System-managed models have no on-disk folder; the OS owns the asset.
+            return entry.sizeDisplayText
+        }
+        return (try? modelManager.modelDirectoryURL(for: modelID).path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) ?? "~/Library/Application Support/Suniye/models"
     }
 
     var launchAtLoginDetailText: String {

@@ -381,8 +381,10 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         case .whisper:
             paths.append(contentsOf: [config.encoderPath, config.decoderPath].compactMap { $0 })
         case .appleSpeech:
-            // No on-disk files to validate; the OS manages the model asset.
-            break
+            // Apple's SpeechAnalyzer has no on-disk files and must never reach this
+            // sherpa-only path; reject it the same way makeRecognizerConfig does rather
+            // than falling through to validate the (empty) tokensPath.
+            throw ServiceError.invalidRecognizerConfiguration
         }
 
         for path in paths where !FileManager.default.fileExists(atPath: path) {

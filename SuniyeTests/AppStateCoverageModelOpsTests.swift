@@ -342,6 +342,12 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
             "System-managed models have no folder to open and can't be deleted"
         )
         XCTAssertNotEqual(appState.asrModelInstalledSizeText(for: .parakeetV3), "Built into macOS")
+
+        // Location label must not fabricate an on-disk path for a system-managed model.
+        XCTAssertEqual(appState.asrModelLocationText(for: .appleSpeech), "Built into macOS")
+        appState.selectedASRModelID = .appleSpeech
+        XCTAssertEqual(appState.modelLocationText, "Built into macOS")
+        XCTAssertTrue(appState.asrModelLocationText(for: .parakeetV3).contains("models"))
     }
 }
 
