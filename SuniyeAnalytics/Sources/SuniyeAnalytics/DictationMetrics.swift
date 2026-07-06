@@ -27,6 +27,46 @@ public struct DictationMetrics: Sendable, Equatable {
     /// didn't run (e.g. no Magic Format) is omitted rather than zeroed.
     public var latency: Latency
 
+    /// Coarse audio-capture characteristics (no audio, just settings/quality).
+    public var audio: AudioQuality
+
+    public struct AudioQuality: Sendable, Equatable {
+        public var backend: SafeLabel?
+        public var fallbackReason: SafeLabel?
+        public var inputTransport: SafeLabel?
+        public var inputSampleRate: Int?
+        public var inputChannels: Int?
+        public var echoCancellationRequested: Bool?
+        public var echoCancellationEffective: Bool?
+
+        public init(
+            backend: SafeLabel? = nil, fallbackReason: SafeLabel? = nil,
+            inputTransport: SafeLabel? = nil, inputSampleRate: Int? = nil,
+            inputChannels: Int? = nil, echoCancellationRequested: Bool? = nil,
+            echoCancellationEffective: Bool? = nil
+        ) {
+            self.backend = backend
+            self.fallbackReason = fallbackReason
+            self.inputTransport = inputTransport
+            self.inputSampleRate = inputSampleRate
+            self.inputChannels = inputChannels
+            self.echoCancellationRequested = echoCancellationRequested
+            self.echoCancellationEffective = echoCancellationEffective
+        }
+
+        var props: [String: AnalyticsValue] {
+            var out: [String: AnalyticsValue] = [:]
+            if let backend { out["audio_backend"] = .label(backend) }
+            if let fallbackReason { out["audio_fallback_reason"] = .label(fallbackReason) }
+            if let inputTransport { out["input_transport"] = .label(inputTransport) }
+            if let inputSampleRate { out["input_sample_rate"] = .int(inputSampleRate) }
+            if let inputChannels { out["input_channels"] = .int(inputChannels) }
+            if let echoCancellationRequested { out["aec_requested"] = .bool(echoCancellationRequested) }
+            if let echoCancellationEffective { out["aec_effective"] = .bool(echoCancellationEffective) }
+            return out
+        }
+    }
+
     public struct Latency: Sendable, Equatable {
         public var triggerToCaptureMs: Int?
         public var stopToAsrStartMs: Int?
@@ -80,7 +120,7 @@ public struct DictationMetrics: Sendable, Equatable {
         cleanupProvider: CleanupProvider? = nil, cleanupModel: SafeLabel? = nil,
         cleanupFallbackReason: CleanupFallbackReason? = nil,
         insertionMethod: InsertionMethod, targetCategory: TargetCategory,
-        latency: Latency
+        latency: Latency, audio: AudioQuality = AudioQuality()
     ) {
         self.wordCount = wordCount
         self.charCount = charCount
@@ -97,6 +137,7 @@ public struct DictationMetrics: Sendable, Equatable {
         self.insertionMethod = insertionMethod
         self.targetCategory = targetCategory
         self.latency = latency
+        self.audio = audio
     }
 
     var props: [String: AnalyticsValue] {
@@ -117,6 +158,7 @@ public struct DictationMetrics: Sendable, Equatable {
         if let cleanupModel { out["cleanup_model"] = .label(cleanupModel) }
         if let cleanupFallbackReason { out["cleanup_fallback_reason"] = .label(cleanupFallbackReason) }
         out.merge(latency.props) { current, _ in current }
+        out.merge(audio.props) { current, _ in current }
         return out
     }
 }

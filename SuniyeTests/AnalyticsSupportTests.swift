@@ -56,6 +56,22 @@ final class AnalyticsSupportTests: XCTestCase {
         XCTAssertEqual(AnalyticsMapping.interruptionReason(.engineConfigurationChanged), .engineConfigChanged)
     }
 
+    func testEditRateBucketUneditedIsZero() {
+        let text = "the quick brown fox jumps"
+        XCTAssertEqual(EditLearningService.editRateBucket(insertedText: text, baseline: text, current: text), 0)
+    }
+
+    func testEditRateBucketIsBoundedAndBucketed() {
+        let bucket = EditLearningService.editRateBucket(
+            insertedText: "the quick brown fox",
+            baseline: "the quick brown fox",
+            current: "the slow brown cat"
+        )
+        XCTAssertGreaterThanOrEqual(bucket, 0)
+        XCTAssertLessThanOrEqual(bucket, 100)
+        XCTAssertEqual(bucket % 10, 0) // rounded to a 10-point bucket
+    }
+
     func testDictationTimingComputesDeltas() {
         var timing = DictationTiming()
         let base = DispatchTime(uptimeNanoseconds: 1_000_000_000)

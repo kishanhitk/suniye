@@ -1535,6 +1535,9 @@ final class AppState {
         self.editLearningService.onLearnedTerms = { [weak self] terms in
             self?.handleLearnedVocabularyTerms(terms)
         }
+        self.editLearningService.onEditRate = { [weak self] bucket in
+            self?.analytics.track(.dictationEdited(editRateBucket: bucket))
+        }
         self.audioCaptureService.onEvent = { [weak self] event in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -3331,9 +3334,20 @@ final class AppState {
             cleanupProvider: wasLLMPolished ? AnalyticsMapping.cleanupProvider(llmProvider) : nil,
             cleanupModel: wasLLMPolished ? SafeLabel(llmSelectedModelPreset.rawValue) : nil,
             cleanupFallbackReason: nil,
-            insertionMethod: .unknown,
+            insertionMethod: .clipboard, // insertion is always clipboard+paste
             targetCategory: TargetCategoryMapper.category(for: frontmostAppBundleID),
-            latency: dictationTiming.latency()
+            latency: dictationTiming.latency(),
+            audio: audioRouteSnapshot.map { route in
+                DictationMetrics.AudioQuality(
+                    backend: SafeLabel(route.backend.rawValue),
+                    fallbackReason: route.fallbackReason.map { SafeLabel($0.rawValue) },
+                    inputTransport: SafeLabel(route.inputTransport.rawValue),
+                    inputSampleRate: route.inputSampleRate,
+                    inputChannels: route.inputChannelCount,
+                    echoCancellationRequested: route.requestedEchoCancellation,
+                    echoCancellationEffective: route.effectiveEchoCancellation
+                )
+            } ?? DictationMetrics.AudioQuality()
         )
         analytics.track(.dictationCompleted(metrics))
     }

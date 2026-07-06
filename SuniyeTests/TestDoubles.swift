@@ -591,6 +591,7 @@ final class SpyEditLearningService: EditLearningServiceProtocol {
     }
 
     var onLearnedTerms: (([String]) -> Void)?
+    var onEditRate: ((Int) -> Void)?
     private(set) var events: [Event] = []
     private(set) var beganSessions: [EditLearningSession] = []
 

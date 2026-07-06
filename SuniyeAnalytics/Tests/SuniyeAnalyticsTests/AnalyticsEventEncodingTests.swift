@@ -20,6 +20,27 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         XCTAssertNil(props["lat_asr_to_llm"])
     }
 
+    func testDictationEditedEvent() {
+        let event = AnalyticsEvent.dictationEdited(editRateBucket: 30)
+        XCTAssertEqual(event.name, "dictation_edited")
+        XCTAssertEqual(event.props["edit_rate_bucket"], .int(30))
+    }
+
+    func testAudioQualityMergedIntoDictationProps() {
+        var metrics = TestFixtures.sampleMetrics
+        metrics.audio = DictationMetrics.AudioQuality(
+            backend: SafeLabel("core_audio"), inputTransport: SafeLabel("usb"),
+            inputSampleRate: 48_000, inputChannels: 1, echoCancellationEffective: true
+        )
+        let props = AnalyticsEvent.dictationCompleted(metrics).props
+        XCTAssertEqual(props["audio_backend"], .label("core_audio"))
+        XCTAssertEqual(props["input_sample_rate"], .int(48_000))
+        XCTAssertEqual(props["input_channels"], .int(1))
+        XCTAssertEqual(props["aec_effective"], .bool(true))
+        // Unset audio fields are omitted, not zeroed.
+        XCTAssertNil(props["aec_requested"])
+    }
+
     func testAppLaunchMergesDeviceAndSettings() {
         let settings = SettingsSnapshot(["magic_format_enabled": .bool(true), "asr_model": .label("parakeet")])
         let props = AnalyticsEvent.appLaunch(device: device, settings: settings, firstLaunch: false).props

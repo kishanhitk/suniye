@@ -11,6 +11,10 @@ struct EditLearningSession {
 @MainActor
 protocol EditLearningServiceProtocol: AnyObject {
     var onLearnedTerms: (([String]) -> Void)? { get set }
+    /// Reports, once per finalized session, how much of the inserted dictation
+    /// the user corrected — a coarse 0...100 bucket (content-free), used as an
+    /// ASR/cleanup accuracy signal.
+    var onEditRate: ((Int) -> Void)? { get set }
     func beginTracking(_ session: EditLearningSession)
     func finalizeActiveSession()
 }
@@ -24,6 +28,7 @@ final class EditLearningService: EditLearningServiceProtocol {
     static let checkpointDelays: [TimeInterval] = [10, 30, 60]
 
     var onLearnedTerms: (([String]) -> Void)?
+    var onEditRate: ((Int) -> Void)?
 
     private let isKnownWord: (String) -> Bool
     private let scheduleTimer: (TimeInterval, @escaping @MainActor () -> Void) -> () -> Void
@@ -86,14 +91,19 @@ final class EditLearningService: EditLearningServiceProtocol {
         }
 
         var learnedNow: [String] = []
+        var editRateBucket: Int?
         if let currentValue = active.session.readCurrentFieldValue() {
             if let baseline = active.baseline {
                 learnedNow = newlyLearnedTerms(in: active, baseline: baseline, currentValue: currentValue)
                 active.learnedTerms.append(contentsOf: learnedNow)
+                if terminal {
+                    editRateBucket = Self.editRateBucket(insertedText: active.session.insertedText, baseline: baseline, current: currentValue)
+                }
             } else if currentValue.contains(active.session.insertedText) {
                 // Clipboard paste lands asynchronously; adopt the first read
                 // that contains the inserted text as the diff baseline.
                 active.baseline = currentValue
+                if terminal { editRateBucket = 0 } // still verbatim → unedited
             }
         }
 
@@ -109,6 +119,19 @@ final class EditLearningService: EditLearningServiceProtocol {
         if !learnedNow.isEmpty {
             onLearnedTerms?(learnedNow)
         }
+        if let editRateBucket {
+            onEditRate?(editRateBucket)
+        }
+    }
+
+    /// Coarse % of the inserted words that were substituted, rounded to a
+    /// 10-point bucket (0...100). Derived from word counts only — no text leaves.
+    nonisolated static func editRateBucket(insertedText: String, baseline: String, current: String) -> Int {
+        let insertedWords = insertedText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+        guard insertedWords > 0 else { return 0 }
+        let subs = TranscriptionEditDiff.substitutions(insertedText: insertedText, baseline: baseline, current: current)
+        let pct = min(100, subs.count * 100 / insertedWords)
+        return Int((Double(pct) / 10).rounded()) * 10
     }
 
     private func newlyLearnedTerms(

@@ -18,6 +18,10 @@ public enum AnalyticsEvent: Sendable {
     case dictationBlocked(reason: DictationBlockedReason)
     case dictationCancelled(stage: DictationCancelStage)
     case dictationEmpty
+    /// Emitted when an inserted dictation's edit-learning session finalizes. The
+    /// bucket is a coarse % of the dictation the user corrected (0..100, content-
+    /// free) — an ASR/cleanup accuracy proxy that arrives after `dictation_completed`.
+    case dictationEdited(editRateBucket: Int)
 
     case audioCaptureFailed(outcome: AudioOutcome)
     case audioCaptureInterrupted(reason: AudioInterruptionReason)
@@ -47,6 +51,7 @@ public enum AnalyticsEvent: Sendable {
         case .dictationBlocked: return "dictation_blocked"
         case .dictationCancelled: return "dictation_cancelled"
         case .dictationEmpty: return "dictation_empty"
+        case .dictationEdited: return "dictation_edited"
         case .audioCaptureFailed: return "audio_capture_failed"
         case .audioCaptureInterrupted: return "audio_capture_interrupted"
         case .audioBackendUsed: return "audio_backend_used"
@@ -82,6 +87,8 @@ public enum AnalyticsEvent: Sendable {
             return ["stage": .label(stage)]
         case .dictationEmpty:
             return [:]
+        case let .dictationEdited(editRateBucket):
+            return ["edit_rate_bucket": .int(editRateBucket)]
         case let .audioCaptureFailed(outcome):
             return ["outcome": .label(outcome)]
         case let .audioCaptureInterrupted(reason):

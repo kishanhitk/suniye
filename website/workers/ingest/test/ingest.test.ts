@@ -192,6 +192,19 @@ describe("buildDataPoint slot registry", () => {
     const dp = buildDataPoint(event("dictation_empty"), "i", "");
     expect(dp.doubles[0]).toBe(1_700_000_000_000);
   });
+
+  test("edit_rate_bucket maps to double20", () => {
+    const dp = buildDataPoint(event("dictation_edited", { edit_rate_bucket: 30 }), "i", "");
+    expect(dp.doubles).toHaveLength(20);
+    expect(dp.doubles[19]).toBe(30);
+  });
+
+  test("audio-quality fields survive in the props JSON backstop (blob20)", () => {
+    const dp = buildDataPoint(event("dictation_completed", { audio_backend: "core_audio", input_sample_rate: 48000 }), "i", "");
+    const backstop = JSON.parse(dp.blobs[19] as string);
+    expect(backstop.audio_backend).toBe("core_audio");
+    expect(backstop.input_sample_rate).toBe(48000);
+  });
 });
 
 describe("ingestConfigFromEnv", () => {

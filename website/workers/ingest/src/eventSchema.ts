@@ -87,7 +87,11 @@ const DOUBLE_FIELDS: NumPick[] = [
   boolNum("granted", "enabled", "clean_exit", "fallback_occurred", "first_launch"),     // double17
   num("rung"),                                    // double18
   num("ram_gb"),                                  // double19
+  num("edit_rate_bucket"),                        // double20 - post-insertion edit rate (dictation_edited)
 ];
+// NB: doubles are now full (20/20). Newer numeric fields must reuse a generic
+// slot or live in the blob20 props JSON. Audio-quality fields (audio_backend,
+// input_sample_rate, aec_effective, …) intentionally ride only in props JSON.
 
 export interface DataPoint {
   indexes: string[];
@@ -111,7 +115,7 @@ export function buildDataPoint(event: WireEvent, installId: string, country: str
   blobs[18] = country || null;                    // blob19 - server-derived country
   blobs[19] = JSON.stringify(p);                  // blob20 - full props backstop
 
-  const doubles: number[] = new Array(19).fill(0);
+  const doubles: number[] = new Array(20).fill(0);
   DOUBLE_FIELDS.forEach((pick, i) => {
     const value = pick(p);
     if (value !== undefined && Number.isFinite(value)) doubles[i] = value;
