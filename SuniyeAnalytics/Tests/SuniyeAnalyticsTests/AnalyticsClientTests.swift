@@ -7,13 +7,14 @@ final class AnalyticsClientTests: XCTestCase {
         outcome: UploadOutcome = .accepted(nil),
         config: AnalyticsClient.Config = .init(flushThreshold: 1000, maxBatchSize: 10),
         clock: TestClock = TestClock(),
-        ids: TestIDGenerator = TestIDGenerator()
+        ids: TestIDGenerator = TestIDGenerator(),
+        device: DeviceProfile? = nil
     ) -> (AnalyticsClient, MockUploader, EventQueue) {
         let uploader = MockUploader(outcome: outcome)
         let queue = EventQueue(fileURL: TestFixtures.tempQueueURL())
         let store = AnalyticsSettingsStore(userDefaults: TestFixtures.scratchDefaults(), storageKey: "k")
         let client = AnalyticsClient(
-            identity: TestFixtures.identity(isDebug: isDebug),
+            identity: TestFixtures.identity(isDebug: isDebug, device: device),
             store: store, queue: queue, uploader: uploader, config: config,
             now: clock.now, makeID: ids.next, sampler: { 0.0 },
             persist: { work in work() }   // run persistence inline so `count` is deterministic
@@ -119,5 +120,24 @@ final class AnalyticsClientTests: XCTestCase {
         let batch = uploader.batches.first
         XCTAssertEqual(batch?.installID, "install-1")
         XCTAssertEqual(batch?.schemaVersion, analyticsSchemaVersion)
+    }
+
+    func testBatchCarriesDeviceWhenPresent() async {
+        let (client, uploader, _) = makeClient(device: TestFixtures.sampleDevice)
+        client.track(.dictationEmpty)
+        await client.flush()
+        let device = uploader.batches.first?.device
+        XCTAssertEqual(device?["chip"], .label("apple-m3-pro"))
+        XCTAssertEqual(device?["ram_gb"], .int(36))
+        // Device `language` is excluded — it would collide with a dictation's own
+        // spoken-language key at blob7.
+        XCTAssertNil(device?["language"])
+    }
+
+    func testBatchOmitsDeviceWhenAbsent() async {
+        let (client, uploader, _) = makeClient()   // no device injected
+        client.track(.dictationEmpty)
+        await client.flush()
+        XCTAssertNil(uploader.batches.first?.device)
     }
 }

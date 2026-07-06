@@ -78,12 +78,29 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         let event = EncodedEvent(event: .dictationEmpty, eventID: "e", eventTS: 1, sessionID: "s")
         let batch = AnalyticsBatch(
             schemaVersion: analyticsSchemaVersion, installID: "i", appVersion: "0.0.8",
-            build: "8", channel: "stable", isDebug: false, sentAt: 123, events: [event]
+            build: "8", channel: "stable", isDebug: false, sentAt: 123, device: nil, events: [event]
         )
         let json = String(data: try JSONEncoder().encode(batch), encoding: .utf8)!
         for key in ["\"schema_version\"", "\"install_id\"", "\"app_version\"", "\"is_debug\"", "\"sent_at\"", "\"events\""] {
             XCTAssertTrue(json.contains(key), "missing \(key)")
         }
+        // Device is omitted from the wire when nil (non-breaking optional field).
+        XCTAssertFalse(json.contains("\"device\""))
+    }
+
+    func testBatchEncodesDeviceWhenPresent() throws {
+        let event = EncodedEvent(event: .dictationEmpty, eventID: "e", eventTS: 1, sessionID: "s")
+        let batch = AnalyticsBatch(
+            schemaVersion: analyticsSchemaVersion, installID: "i", appVersion: "0.0.8",
+            build: "8", channel: "stable", isDebug: false, sentAt: 123,
+            device: device.batchProps, events: [event]
+        )
+        let json = String(data: try JSONEncoder().encode(batch), encoding: .utf8)!
+        XCTAssertTrue(json.contains("\"device\""))
+        XCTAssertTrue(json.contains("\"chip\""))
+        XCTAssertTrue(json.contains("apple-m3-pro"))
+        // Device language excluded (would collide with dictation's blob7 language).
+        XCTAssertFalse(json.contains("\"language\""))
     }
 
     func testFreeTextCannotLeakThroughSafeLabel() {

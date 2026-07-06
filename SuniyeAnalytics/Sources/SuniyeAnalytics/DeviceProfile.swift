@@ -55,6 +55,16 @@ public struct DeviceProfile: Sendable, Equatable {
         if let effCores { out["eff_cores"] = .int(effCores) }
         return out
     }
+
+    /// Device props for the batch envelope, stamped onto EVERY event's AE row so
+    /// any metric can be sliced by hardware. Excludes `language` — it would
+    /// collide with a dictation's own spoken-language key (both map to blob7);
+    /// the full `props` (incl. `language`) still ships on `app_launch`.
+    var batchProps: [String: AnalyticsValue] {
+        var out = props
+        out.removeValue(forKey: "language")
+        return out
+    }
 }
 
 /// Snapshot of user-facing settings/toggles, sent on `app_launch`. Enums and
