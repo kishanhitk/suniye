@@ -93,6 +93,7 @@
 		823795E1243615DFFBBEDC9F /* RoutingTranscriptionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7C23F9B077871C0A935834 /* RoutingTranscriptionServiceTests.swift */; };
 		83681464B14AD92EBCFCD908 /* IssueReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 104370E76CFD4D8D685CEAC7 /* IssueReportService.swift */; };
 		84CB629AA94E239EEC0911F6 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4213B4B666CF5B60F3371019 /* AppLogger.swift */; };
+		8557A42A25A6F4F119B8788F /* ASRLatencyBenchmarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 635BB3CFFBC759E73B59157C /* ASRLatencyBenchmarkTests.swift */; };
 		8631A2258EE726CB987F5FDB /* EditLearningMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACB700EFAB40AF2BE0D05D2 /* EditLearningMoreTests.swift */; };
 		86AC38418D4F76638222975C /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F2DDA03B5269D9475CA06C9 /* OnboardingView.swift */; };
 		87C3C3800503F444EC84CB74 /* AppStateCoverageOnboardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83DBF264EA361B497944C9B3 /* AppStateCoverageOnboardingTests.swift */; };
@@ -252,6 +253,7 @@
 		612ADA3D26971DBD5CC4369B /* EditLearning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditLearning.swift; sourceTree = "<group>"; };
 		626CB9CE980C310ED49F770F /* TranscriptionServiceE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionServiceE2ETests.swift; sourceTree = "<group>"; };
 		633F09E2901A308614E595B1 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
+		635BB3CFFBC759E73B59157C /* ASRLatencyBenchmarkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASRLatencyBenchmarkTests.swift; sourceTree = "<group>"; };
 		653DD6CC674F7EC21C812AC6 /* EditModeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditModeService.swift; sourceTree = "<group>"; };
 		6630118CE32F73C5461F0700 /* GeneralSettingsStoreMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsStoreMoreTests.swift; sourceTree = "<group>"; };
 		665F43A799AF8C25D0302526 /* LocalLLMModelManagerMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMModelManagerMoreTests.swift; sourceTree = "<group>"; };
@@ -453,6 +455,7 @@
 				5F934A177DEC448B6268E7E5 /* AppVariantMoreTests.swift */,
 				C458ACBB3D8ABC559FB7C89C /* AppVersionMoreTests.swift */,
 				E62E23E5D4CD3C127DD7F39C /* AppVersionTests.swift */,
+				635BB3CFFBC759E73B59157C /* ASRLatencyBenchmarkTests.swift */,
 				19B3EE9E70828221B854F1BA /* AudioCaptureServiceMoreTests.swift */,
 				1B6F2EB76CF32A101E8454D9 /* AudioCaptureServiceTests.swift */,
 				4D5AF8B0C31B3D3BC319A700 /* AudioRecognitionPreprocessorTests.swift */,
@@ -836,6 +839,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8557A42A25A6F4F119B8788F /* ASRLatencyBenchmarkTests.swift in Sources */,
 				5C1C1BD251A821042F98AD34 /* AppLoggerMoreTests.swift in Sources */,
 				A1B715953B765F739CDAB880 /* AppPromptBindingMoreTests.swift in Sources */,
 				4668E54E9A442039AC6079C3 /* AppPromptBindingTests.swift in Sources */,
