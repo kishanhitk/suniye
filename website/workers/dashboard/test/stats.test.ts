@@ -4,10 +4,17 @@ import { buildStats, sql, type AeRunner, type D1Runner } from "../src/worker/sta
 describe("sql builders", () => {
   test("time-series bucket on client event_ts (double1), never ingestion timestamp", () => {
     const q = sql.wordsPerDay("suniye_events", 1000);
-    expect(q).toContain("intDiv(toUInt64(double1)");
-    expect(q).not.toContain("timestamp");
+    expect(q).toContain("toDateTime(double1"); // buckets on client event_ts
+    expect(q).not.toContain("ingestion");
+    expect(q).not.toContain("toUInt64"); // unsupported by the AE SQL API
     expect(q).toContain("SUM(double2 * _sample_interval)"); // sampling-correct
     expect(q).toContain("blob1 = 'dictation_completed'");
+  });
+
+  test("latency uses AE-supported quantileWeighted, not parametric quantile", () => {
+    const q = sql.latency("ds", 0);
+    expect(q).toContain("quantileWeighted(0.5, double5, _sample_interval)"); // level, value, weight
+    expect(q).not.toContain("quantile(0.5)(");
   });
 
   test("active installs uses COUNT(DISTINCT index1)", () => {
@@ -21,8 +28,8 @@ describe("sql builders", () => {
 
 describe("buildStats", () => {
   const ae: AeRunner = async (q) => {
-    if (q.includes("SUM(double2")) return [{ day_ms: 19_700, value: 100 }, { day_ms: 19_701, value: 150 }];
-    if (q.includes("COUNT(DISTINCT index1)")) return [{ day_ms: 19_700, value: 5 }];
+    if (q.includes("SUM(double2")) return [{ day: "2026-07-06 00:00:00", value: 100 }, { day: "2026-07-07 00:00:00", value: 150 }];
+    if (q.includes("COUNT(DISTINCT index1)")) return [{ day: "2026-07-06 00:00:00", value: 5 }];
     if (q.includes("blob5 AS label")) return [{ label: "parakeet-v3", value: 42 }];
     if (q.includes("blob10 AS label")) return [];
     if (q.includes("blob14 AS label")) return [{ label: "transcription", value: 3 }];

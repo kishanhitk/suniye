@@ -25,12 +25,12 @@ export type D1Runner = (sql: string, binds: unknown[]) => Promise<Array<Record<s
 
 export const sql = {
   wordsPerDay: (ds: string, cutoffMs: number) =>
-    `SELECT intDiv(toUInt64(double1), ${DAY_MS}) AS day_ms, SUM(double2 * _sample_interval) AS value ` +
-    `FROM ${ds} WHERE blob1 = 'dictation_completed' AND double1 >= ${cutoffMs} GROUP BY day_ms ORDER BY day_ms`,
+    `SELECT toStartOfInterval(toDateTime(double1 / 1000), INTERVAL '1' DAY) AS day, SUM(double2 * _sample_interval) AS value ` +
+    `FROM ${ds} WHERE blob1 = 'dictation_completed' AND double1 >= ${cutoffMs} GROUP BY day ORDER BY day`,
 
   activeInstallsPerDay: (ds: string, cutoffMs: number) =>
-    `SELECT intDiv(toUInt64(double1), ${DAY_MS}) AS day_ms, COUNT(DISTINCT index1) AS value ` +
-    `FROM ${ds} WHERE double1 >= ${cutoffMs} GROUP BY day_ms ORDER BY day_ms`,
+    `SELECT toStartOfInterval(toDateTime(double1 / 1000), INTERVAL '1' DAY) AS day, COUNT(DISTINCT index1) AS value ` +
+    `FROM ${ds} WHERE double1 >= ${cutoffMs} GROUP BY day ORDER BY day`,
 
   breakdown: (ds: string, col: string, whereEvent: string, cutoffMs: number) =>
     `SELECT ${col} AS label, SUM(_sample_interval) AS value FROM ${ds} ` +
@@ -42,9 +42,9 @@ export const sql = {
 
   latency: (ds: string, cutoffMs: number) =>
     `SELECT ` +
-    `quantile(0.5)(double5) AS e2e_p50, quantile(0.95)(double5) AS e2e_p95, ` +
-    `quantile(0.5)(double6) AS asr_p50, quantile(0.95)(double6) AS asr_p95, ` +
-    `quantile(0.5)(double7) AS llm_p50, quantile(0.95)(double7) AS llm_p95 ` +
+    `quantileWeighted(0.5, double5, _sample_interval) AS e2e_p50, quantileWeighted(0.95, double5, _sample_interval) AS e2e_p95, ` +
+    `quantileWeighted(0.5, double6, _sample_interval) AS asr_p50, quantileWeighted(0.95, double6, _sample_interval) AS asr_p95, ` +
+    `quantileWeighted(0.5, double7, _sample_interval) AS llm_p50, quantileWeighted(0.95, double7, _sample_interval) AS llm_p95 ` +
     `FROM ${ds} WHERE blob1 = 'dictation_completed' AND double5 > 0 AND double1 >= ${cutoffMs}`,
 
   eventCount: (ds: string, event: string, cutoffMs: number) =>
@@ -58,12 +58,9 @@ function num(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function dayMsToDate(dayMs: unknown): string {
-  return new Date(num(dayMs) * DAY_MS).toISOString().slice(0, 10);
-}
-
 function toTimePoints(rows: Array<Record<string, unknown>>): TimePoint[] {
-  return rows.map((r) => ({ day: dayMsToDate(r.day_ms), value: num(r.value) }));
+  // `day` comes back as a datetime string (e.g. "2026-07-06 00:00:00").
+  return rows.map((r) => ({ day: String(r.day ?? "").slice(0, 10), value: num(r.value) }));
 }
 
 function toBreakdown(rows: Array<Record<string, unknown>>): Breakdown[] {
@@ -81,29 +78,38 @@ export async function buildStats(
   const cutoffMs = opts.nowMs - opts.rangeDays * DAY_MS;
   const cutoffDay = new Date(cutoffMs).toISOString().slice(0, 10);
 
+  // Each query is isolated: one failing (bad SQL, empty dataset) degrades that
+  // one card to empty rather than blanking the whole dashboard, and logs why.
+  const safeAe: AeRunner = async (q) => {
+    try { return await ae(q); } catch (e) { console.error("ae query failed:", String(e).slice(0, 300)); return []; }
+  };
+  const safeD1: D1Runner = async (q, b) => {
+    try { return await d1(q, b); } catch (e) { console.error("d1 query failed:", String(e).slice(0, 300)); return []; }
+  };
+
   const [
     wordsRows, activeRows, asrRows, mfRows, latRows, fallbackRows, errorRows,
     launchRows, sessionEndRows,
   ] = await Promise.all([
-    ae(sql.wordsPerDay(ds, cutoffMs)),
-    ae(sql.activeInstallsPerDay(ds, cutoffMs)),
-    ae(sql.breakdown(ds, "blob5", "blob1 = 'dictation_completed'", cutoffMs)),
-    ae(sql.magicFormatAdoption(ds, cutoffMs)),
-    ae(sql.latency(ds, cutoffMs)),
-    ae(sql.breakdown(ds, "blob10", "blob1 = 'dictation_completed'", cutoffMs)),
-    ae(sql.breakdown(ds, "blob14", "blob1 = 'error'", cutoffMs)),
-    ae(sql.eventCount(ds, "app_launch", cutoffMs)),
-    ae(sql.eventCount(ds, "session_end", cutoffMs)),
+    safeAe(sql.wordsPerDay(ds, cutoffMs)),
+    safeAe(sql.activeInstallsPerDay(ds, cutoffMs)),
+    safeAe(sql.breakdown(ds, "blob5", "blob1 = 'dictation_completed'", cutoffMs)),
+    safeAe(sql.magicFormatAdoption(ds, cutoffMs)),
+    safeAe(sql.latency(ds, cutoffMs)),
+    safeAe(sql.breakdown(ds, "blob10", "blob1 = 'dictation_completed'", cutoffMs)),
+    safeAe(sql.breakdown(ds, "blob14", "blob1 = 'error'", cutoffMs)),
+    safeAe(sql.eventCount(ds, "app_launch", cutoffMs)),
+    safeAe(sql.eventCount(ds, "session_end", cutoffMs)),
   ]);
 
   // totalInstalls is all-time by definition; the breakdowns honor the selected
   // range (installs active in the window) so the range toggle affects every card.
   const [totalRow, newRows, chipRows, ramRows, countryRows] = await Promise.all([
-    d1("SELECT COUNT(*) AS n FROM installs", []),
-    d1("SELECT first_seen AS day, COUNT(*) AS value FROM installs WHERE first_seen >= ? GROUP BY first_seen ORDER BY first_seen", [cutoffDay]),
-    d1("SELECT chip AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ? GROUP BY chip ORDER BY value DESC LIMIT 20", [cutoffDay]),
-    d1("SELECT ram_gb AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ? GROUP BY ram_gb ORDER BY value DESC LIMIT 20", [cutoffDay]),
-    d1("SELECT country AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ? GROUP BY country ORDER BY value DESC LIMIT 20", [cutoffDay]),
+    safeD1("SELECT COUNT(*) AS n FROM installs", []),
+    safeD1("SELECT first_seen AS day, COUNT(*) AS value FROM installs WHERE first_seen >= ? GROUP BY first_seen ORDER BY first_seen", [cutoffDay]),
+    safeD1("SELECT chip AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ? GROUP BY chip ORDER BY value DESC LIMIT 20", [cutoffDay]),
+    safeD1("SELECT ram_gb AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ? GROUP BY ram_gb ORDER BY value DESC LIMIT 20", [cutoffDay]),
+    safeD1("SELECT country AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ? GROUP BY country ORDER BY value DESC LIMIT 20", [cutoffDay]),
   ]);
 
   const mf = mfRows[0] ?? {};
@@ -148,7 +154,10 @@ export function makeAeRunner(accountId: string, token: string, fetcher: typeof f
       headers: { Authorization: `Bearer ${token}` },
       body: query,
     });
-    if (!res.ok) throw new Error(`AE SQL ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`AE SQL ${res.status}: ${body.slice(0, 400)} :: ${query.slice(0, 200)}`);
+    }
     const json = (await res.json()) as { data?: Array<Record<string, unknown>> };
     return json.data ?? [];
   };
