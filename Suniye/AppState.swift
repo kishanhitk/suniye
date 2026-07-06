@@ -1122,8 +1122,10 @@ final class AppState {
     }
 
     func asrModelInstalledSizeText(for modelID: ASRModelID) -> String {
-        if ASRModelCatalog.entry(for: modelID).isSystemManaged {
-            return "Built into macOS"
+        let entry = ASRModelCatalog.entry(for: modelID)
+        if entry.isSystemManaged {
+            // Single source of truth for the system-managed label.
+            return entry.sizeDisplayText
         }
         return ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(for: modelID), countStyle: .file)
     }

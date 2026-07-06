@@ -51,6 +51,28 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
         XCTAssertEqual(apple.loadCallCount, 1)
     }
 
+    func testFailedCrossEngineLoadPreservesPreviousEngine() async throws {
+        let sherpa = StubTranscriptionService()
+        sherpa.transcribeResult = .success("sherpa-text")
+        let apple = StubTranscriptionService()
+        apple.loadModelResult = .failure(FakeError(message: "asset install failed"))
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: apple)
+
+        try await router.loadModel(config: config(family: .nemoTransducer, modelID: .parakeetV3))
+
+        // Switching to Apple fails to load; the working sherpa engine must survive.
+        do {
+            try await router.loadModel(config: config(family: .appleSpeech, modelID: .appleSpeech))
+            XCTFail("Expected the Apple load to fail")
+        } catch {
+            // Expected.
+        }
+
+        XCTAssertEqual(sherpa.unloadCallCount, 0, "the previously loaded engine must not be unloaded on a failed switch")
+        let text = try await router.transcribe(samples: [0.1], sampleRate: 16_000)
+        XCTAssertEqual(text, "sherpa-text", "still transcribing via the surviving sherpa engine")
+    }
+
     func testReloadingSameEngineDoesNotUnload() async throws {
         let sherpa = StubTranscriptionService()
         let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil)
