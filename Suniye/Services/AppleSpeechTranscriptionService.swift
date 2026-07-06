@@ -16,12 +16,92 @@ enum AppleSpeechSupport {
     }
 }
 
+/// Manages the on-device model asset for Apple's `SpeechTranscriber`: presence checks,
+/// install-with-progress, and locale reservation.
+///
+/// Kept separate from the transcription actor so `ModelManager` can drive a real
+/// download-progress UI for the first-run asset fetch. The OS shares the asset across
+/// apps, so most users never download anything; when they do, an unreserved asset can be
+/// reclaimed by the system, so we reserve it to avoid a surprise re-download later.
+@available(macOS 26, *)
+enum AppleSpeechAssetInstaller {
+    static func resolveSupportedLocale(_ requested: Locale = Locale.current) async -> Locale? {
+        await SpeechTranscriber.supportedLocale(equivalentTo: requested)
+    }
+
+    static func isInstalled(_ requested: Locale = Locale.current) async -> Bool {
+        guard let supported = await resolveSupportedLocale(requested) else { return false }
+        let target = supported.identifier(.bcp47)
+        return await SpeechTranscriber.installedLocales.contains { $0.identifier(.bcp47) == target }
+    }
+
+    /// Ensures the asset for the resolved locale is installed (reporting progress through
+    /// `progress`), then reserves it. Returns the resolved supported locale.
+    @discardableResult
+    static func ensureInstalled(
+        _ requested: Locale = Locale.current,
+        progress: @escaping @Sendable (Double) -> Void = { _ in }
+    ) async throws -> Locale {
+        guard let supported = await resolveSupportedLocale(requested) else {
+            throw AppleSpeechTranscriptionService.ServiceError.unsupportedLocale(requested.identifier(.bcp47))
+        }
+        let target = supported.identifier(.bcp47)
+
+        if await SpeechTranscriber.installedLocales.contains(where: { $0.identifier(.bcp47) == target }) {
+            progress(1)
+        } else {
+            let transcriber = SpeechTranscriber(
+                locale: supported,
+                transcriptionOptions: [],
+                reportingOptions: [],
+                attributeOptions: []
+            )
+            if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+                AppLogger.shared.log(.info, "apple speech installing asset locale=\(target)")
+                // Forward the OS download progress to the caller's UI while the install runs.
+                let poller = Task {
+                    while !Task.isCancelled {
+                        progress(request.progress.fractionCompleted)
+                        try? await Task.sleep(nanoseconds: 200_000_000)
+                    }
+                }
+                defer { poller.cancel() }
+                try await request.downloadAndInstall()
+            }
+            progress(1)
+        }
+
+        await reserve(supported)
+        return supported
+    }
+
+    /// Reserves the locale so its installed asset isn't reclaimed by the OS. Best-effort:
+    /// a failure or a full reservation slate must not fail the caller (the asset is already
+    /// installed and usable).
+    private static func reserve(_ locale: Locale) async {
+        let target = locale.identifier(.bcp47)
+        let reserved = await AssetInventory.reservedLocales
+        guard !reserved.contains(where: { $0.identifier(.bcp47) == target }) else {
+            return
+        }
+
+        if reserved.count >= AssetInventory.maximumReservedLocales, let evictable = reserved.last {
+            _ = await AssetInventory.release(reservedLocale: evictable)
+        }
+
+        do {
+            _ = try await AssetInventory.reserve(locale: locale)
+            AppLogger.shared.log(.info, "apple speech reserved locale=\(target)")
+        } catch {
+            AppLogger.shared.log(.warning, "apple speech reserve failed locale=\(target) error=\(error.localizedDescription)")
+        }
+    }
+}
+
 /// Transcription backed by Apple's on-device `SpeechAnalyzer` + `SpeechTranscriber`.
 ///
 /// Runs in *batch* mode to satisfy `TranscriptionServiceProtocol`: the full captured
-/// buffer is fed at once and only finalized results are collected (no volatile
-/// partials). The model asset is owned by the OS; `loadModel` ensures it is installed
-/// for the active locale, downloading on first use.
+/// buffer is fed at once and only finalized results are collected (no volatile partials).
 @available(macOS 26, *)
 actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
     enum ServiceError: LocalizedError {
@@ -45,17 +125,16 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
     }
 
     private var locale: Locale?
+    private var analyzerFormat: AVAudioFormat?
 
     func loadModel(config: RecognizerConfig) async throws {
-        let requested = Self.resolvedLocale(from: config)
-        guard let supported = await SpeechTranscriber.supportedLocale(equivalentTo: requested) else {
-            throw ServiceError.unsupportedLocale(requested.identifier(.bcp47))
-        }
-
-        // Ensure the model asset for this locale is installed. No-op once present;
-        // the OS shares the asset across apps, so most users never download anything.
-        try await Self.ensureModelInstalled(for: supported)
+        // Ensure the asset (no progress here — the progress-reporting fetch happens earlier
+        // via ModelManager.downloadAndExtractModel when the user sets the model up; this is
+        // a safety net) and reserve it.
+        let supported = try await AppleSpeechAssetInstaller.ensureInstalled(Self.resolvedLocale(from: config))
         locale = supported
+        // Preheat the model and cache the analyzer format so the first dictation isn't cold.
+        analyzerFormat = await Self.preheat(locale: supported)
         AppLogger.shared.log(.info, "apple speech loaded locale=\(supported.identifier(.bcp47))")
     }
 
@@ -75,15 +154,22 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
         )
         let analyzer = SpeechAnalyzer(modules: [transcriber])
 
-        guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
-            // A nil format means the module can't advertise one (not ready / unsupported);
-            // feeding an arbitrary format risks empty or garbage output, so fail cleanly.
+        // The analyzer format is stable for a given locale/options, so reuse the one cached
+        // at load; only recompute if it wasn't captured. A nil format means the module can't
+        // advertise one (not ready / unsupported), so fail cleanly rather than gamble.
+        let format: AVAudioFormat
+        if let cached = analyzerFormat {
+            format = cached
+        } else if let fresh = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) {
+            format = fresh
+        } else {
             throw ServiceError.bufferPreparationFailed
         }
+
         let inputBuffer = try Self.makeInputBuffer(
             samples: samples,
             sampleRate: max(8_000, sampleRate),
-            targetFormat: analyzerFormat
+            targetFormat: format
         )
 
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
@@ -112,6 +198,7 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
 
     func unloadModel() async {
         locale = nil
+        analyzerFormat = nil
     }
 
     // MARK: - Helpers
@@ -121,46 +208,21 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
         return hint.isEmpty ? Locale.current : Locale(identifier: hint)
     }
 
-    private static func ensureModelInstalled(for locale: Locale) async throws {
-        let target = locale.identifier(.bcp47)
-        let installed = await SpeechTranscriber.installedLocales
-        if !installed.contains(where: { $0.identifier(.bcp47) == target }) {
-            let transcriber = SpeechTranscriber(
-                locale: locale,
-                transcriptionOptions: [],
-                reportingOptions: [],
-                attributeOptions: []
-            )
-            if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-                AppLogger.shared.log(.info, "apple speech installing asset locale=\(target)")
-                try await request.downloadAndInstall()
-            }
+    /// Warms the model and returns the analyzer's preferred format so the first real
+    /// transcription doesn't pay cold-start latency. Best-effort.
+    private static func preheat(locale: Locale) async -> AVAudioFormat? {
+        let transcriber = SpeechTranscriber(
+            locale: locale,
+            transcriptionOptions: [],
+            reportingOptions: [],
+            attributeOptions: []
+        )
+        let analyzer = SpeechAnalyzer(modules: [transcriber])
+        let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
+        if let format {
+            try? await analyzer.prepareToAnalyze(in: format)
         }
-
-        await reserveLocaleIfNeeded(locale)
-    }
-
-    /// Reserves the locale so the OS won't purge its installed asset between sessions
-    /// (an unreserved asset can be reclaimed, forcing a surprise re-download). Reservation
-    /// is best-effort: a failure or a full reservation slate must not fail transcription,
-    /// since the asset is already installed and usable.
-    private static func reserveLocaleIfNeeded(_ locale: Locale) async {
-        let target = locale.identifier(.bcp47)
-        let reserved = await AssetInventory.reservedLocales
-        guard !reserved.contains(where: { $0.identifier(.bcp47) == target }) else {
-            return
-        }
-
-        if reserved.count >= AssetInventory.maximumReservedLocales, let evictable = reserved.last {
-            _ = await AssetInventory.release(reservedLocale: evictable)
-        }
-
-        do {
-            _ = try await AssetInventory.reserve(locale: locale)
-            AppLogger.shared.log(.info, "apple speech reserved locale=\(target)")
-        } catch {
-            AppLogger.shared.log(.warning, "apple speech reserve failed locale=\(target) error=\(error.localizedDescription)")
-        }
+        return format
     }
 
     /// Builds an `AVAudioPCMBuffer` from mono float samples, converting to the analyzer's

@@ -57,6 +57,20 @@ final class AppleSpeechProviderTests: XCTestCase {
         XCTAssertFalse(manager.installedModels().contains(.appleSpeech))
     }
 
+    func testIsSystemManagedAssetInstalledMirrorsIsInstalledForFileModels() async {
+        let manager = ModelManager()
+        let asyncValue = await manager.isSystemManagedAssetInstalled(.parakeetV3)
+        XCTAssertEqual(asyncValue, manager.isInstalled(.parakeetV3))
+    }
+
+    func testIsSystemManagedAssetInstalledForAppleReflectsAvailability() async {
+        let manager = ModelManager()
+        let result = await manager.isSystemManagedAssetInstalled(.appleSpeech)
+        if !AppleSpeechSupport.isAvailable {
+            XCTAssertFalse(result, "unavailable Apple Speech can't have an installed asset")
+        }
+    }
+
     func testInstalledByteCountForAppleIsZero() {
         let manager = ModelManager()
         XCTAssertEqual(manager.installedByteCount(for: .appleSpeech), 0)

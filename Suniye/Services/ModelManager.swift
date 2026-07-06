@@ -32,12 +32,22 @@ protocol ModelManagerProtocol {
     func modelsRootDirectoryURL() throws -> URL
     func modelDirectoryURL(for modelID: ASRModelID) throws -> URL
     func isInstalled(_ modelID: ASRModelID) -> Bool
+    /// Whether a system-managed model's actual on-device asset is present (async, since it
+    /// queries the OS). For file-based models this mirrors `isInstalled`.
+    func isSystemManagedAssetInstalled(_ modelID: ASRModelID) async -> Bool
     func installedModels() -> [ASRModelID]
     func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig
     func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws
     func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64
     func installedByteCount(for modelID: ASRModelID) -> Int64
     func deleteModel(_ modelID: ASRModelID) throws
+}
+
+extension ModelManagerProtocol {
+    /// Default: file-based conformers have no async asset, so mirror `isInstalled`.
+    func isSystemManagedAssetInstalled(_ modelID: ASRModelID) async -> Bool {
+        isInstalled(modelID)
+    }
 }
 
 final class ModelManager: ModelManagerProtocol {
@@ -123,6 +133,16 @@ final class ModelManager: ModelManagerProtocol {
         }
     }
 
+    func isSystemManagedAssetInstalled(_ modelID: ASRModelID) async -> Bool {
+        guard catalogEntry(for: modelID).isSystemManaged else {
+            return isInstalled(modelID)
+        }
+        if #available(macOS 26, *) {
+            return await AppleSpeechAssetInstaller.isInstalled()
+        }
+        return false
+    }
+
     func installedModels() -> [ASRModelID] {
         // System-managed models (Apple Speech) are opt-in: they are always "available"
         // on a supported OS, but must not count as installed for onboarding or
@@ -181,9 +201,15 @@ final class ModelManager: ModelManagerProtocol {
         let entry = try installedEntry(for: modelID)
 
         if entry.isSystemManaged {
-            // Nothing to download or extract; the OS provides the asset and it is
-            // ensured (installing on first use if needed) when the engine loads.
-            progress(1)
+            // The OS owns the asset, but the first fetch for an uncached locale can be a
+            // large download — run it here so it flows through the normal progress UI
+            // rather than stalling silently inside loadModel. On an OS/device where the
+            // provider isn't available there is nothing to fetch.
+            if #available(macOS 26, *), AppleSpeechSupport.isAvailable {
+                _ = try await AppleSpeechAssetInstaller.ensureInstalled(progress: progress)
+            } else {
+                progress(1)
+            }
             return
         }
 

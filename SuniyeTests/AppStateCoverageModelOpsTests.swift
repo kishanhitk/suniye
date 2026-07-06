@@ -349,6 +349,37 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         XCTAssertEqual(appState.modelLocationText, "Built into macOS")
         XCTAssertTrue(appState.asrModelLocationText(for: .parakeetV3).contains("models"))
     }
+
+    func testPrimaryActionForSystemManagedDownloadsAssetThenSelects() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3] // Apple asset NOT present → needs download
+        let transcription = StubTranscriptionService()
+        let appState = makeTestAppState(modelManager: modelManager, transcriptionService: transcription)
+        appState.phase = .ready
+
+        appState.performPrimaryASRAction(for: .appleSpeech)
+        await waitUntil { appState.selectedASRModelID == .appleSpeech && appState.phase == .ready }
+
+        XCTAssertEqual(appState.selectedASRModelID, .appleSpeech)
+        XCTAssertEqual(modelManager.lastDownloadedModelID, .appleSpeech, "an absent asset must be downloaded with progress")
+        XCTAssertEqual(transcription.loadCallCount, 1)
+        XCTAssertEqual(appState.phase, .ready)
+    }
+
+    func testPrimaryActionForSystemManagedSkipsDownloadWhenAssetPresent() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3, .appleSpeech] // asset already present
+        let transcription = StubTranscriptionService()
+        let appState = makeTestAppState(modelManager: modelManager, transcriptionService: transcription)
+        appState.phase = .ready
+
+        appState.performPrimaryASRAction(for: .appleSpeech)
+        await waitUntil { appState.selectedASRModelID == .appleSpeech && appState.phase == .ready }
+
+        XCTAssertNil(modelManager.lastDownloadedModelID, "a present asset must not trigger a download")
+        XCTAssertEqual(transcription.loadCallCount, 1)
+        XCTAssertEqual(appState.selectedASRModelID, .appleSpeech)
+    }
 }
 
 /// Model manager wrapper adding failure knobs on top of the shared stub.

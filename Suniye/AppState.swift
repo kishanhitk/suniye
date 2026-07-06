@@ -2304,10 +2304,70 @@ final class AppState {
             return
         }
 
-        if modelManager.isInstalled(modelID) {
+        if ASRModelCatalog.entry(for: modelID).isSystemManaged {
+            // Presence of the OS-managed asset can only be checked asynchronously, so this
+            // path decides download-with-progress vs. straight load inside its own Task.
+            prepareSystemManagedModel(modelID)
+        } else if modelManager.isInstalled(modelID) {
             selectASRModel(modelID)
         } else {
             downloadASRModel(modelID, autoSelect: true)
+        }
+    }
+
+    /// Sets up a system-managed model (Apple Speech): if its on-device asset isn't present
+    /// yet, download it with a real progress bar; otherwise load it straight away. Then
+    /// selects it. Avoids the silent, hung-looking first-run download inside `loadModel`.
+    private func prepareSystemManagedModel(_ modelID: ASRModelID) {
+        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+            return
+        }
+
+        let hadLoadedModel = loadedASRModelID != nil
+        activeASRModelOperationID = modelID
+        phase = .loading
+        statusText = "Loading model..."
+        lastError = nil
+        lastFailedASRModelID = nil
+        lastFailedASRModelError = nil
+
+        Task {
+            do {
+                let assetInstalled = await modelManager.isSystemManagedAssetInstalled(modelID)
+                if !assetInstalled {
+                    phase = .downloadingModel
+                    statusText = "Downloading model..."
+                    downloadProgress = 0
+                    modelDownloadStartedAt = nowProvider()
+                    try await modelManager.downloadAndExtractModel(modelID) { [weak self] progress in
+                        Task { @MainActor in
+                            self?.downloadProgress = progress
+                        }
+                    }
+                    modelDownloadStartedAt = nil
+                    phase = .loading
+                    statusText = "Loading model..."
+                }
+
+                try await loadRecognizer(for: modelID)
+                selectedASRModelID = modelID
+                phase = .ready
+                statusText = "Ready"
+                lastError = nil
+                lastFailedASRModelID = nil
+                lastFailedASRModelError = nil
+                refreshOnboardingProgressIfNeeded()
+                AppLogger.shared.log(.info, "system-managed model ready id=\(modelID.rawValue)")
+            } catch {
+                handleASRModelOperationFailure(
+                    for: modelID,
+                    error: error,
+                    fallbackToReadyState: hadLoadedModel
+                )
+            }
+
+            activeASRModelOperationID = nil
+            modelDownloadStartedAt = nil
         }
     }
 
