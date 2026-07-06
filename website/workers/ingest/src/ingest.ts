@@ -12,6 +12,8 @@ import type {
 
 const MAX_BODY_BYTES = 128 * 1024;
 const MAX_EVENTS_PER_BATCH = 250; // Analytics Engine allows 250 writeDataPoint/invocation
+const MAX_PROPS_KEYS = 40; // typed slots are ~18; a healthy event has well under this
+const MAX_PROPS_JSON_BYTES = 3 * 1024; // keeps blob20 backstop under AE's ~5 KB blob budget
 
 export function ingestConfigFromEnv(env: IngestEnv): IngestConfig {
   const sampleRate = env.ANALYTICS_SAMPLE_RATE ? Number(env.ANALYTICS_SAMPLE_RATE) : undefined;
@@ -161,11 +163,17 @@ function validateEvent(raw: unknown): string | undefined {
   if (!isNonEmptyString(raw.session_id, 100)) return "session_id is required.";
   if (!isNonEmptyString(raw.name, 64)) return "event name is required.";
   if (!isObject(raw.props)) return "props must be an object.";
+  const keys = Object.keys(raw.props);
+  if (keys.length > MAX_PROPS_KEYS) return "too many props.";
   for (const value of Object.values(raw.props)) {
     const t = typeof value;
     if (t !== "string" && t !== "number" && t !== "boolean") return "props values must be scalars.";
     if (t === "string" && (value as string).length > 512) return "prop value too long.";
   }
+  // blob20 carries JSON.stringify(props) as a backstop on top of ~18 typed blobs.
+  // AE caps total blob bytes (~5 KB); an oversized props object would make
+  // writeDataPoint throw and silently drop the ENTIRE event, typed slots included.
+  if (JSON.stringify(raw.props).length > MAX_PROPS_JSON_BYTES) return "props too large.";
   return undefined;
 }
 

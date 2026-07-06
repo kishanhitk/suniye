@@ -40,7 +40,7 @@ public enum AnalyticsEvent: Sendable {
     case error(type: AnalyticsErrorType, code: AnalyticsErrorCode)
 
     /// Self-observability of the analytics pipeline itself.
-    case analyticsHealth(queueDepth: Int, uploadFailures: Int, evictedByTTL: Int)
+    case analyticsHealth(queueDepth: Int, uploadFailures: Int, evictedByTTL: Int, evictedBySize: Int)
 
     /// The wire event name (Analytics Engine `blob1`, snake_case, stable).
     public var name: String {
@@ -120,8 +120,13 @@ public enum AnalyticsEvent: Sendable {
             return out
         case let .error(type, code):
             return ["type": .label(type), "code": .label(code)]
-        case let .analyticsHealth(queueDepth, uploadFailures, evictedByTTL):
-            return ["queue_depth": .int(queueDepth), "upload_failures": .int(uploadFailures), "evicted_by_ttl": .int(evictedByTTL)]
+        case let .analyticsHealth(queueDepth, uploadFailures, evictedByTTL, evictedBySize):
+            return [
+                "queue_depth": .int(queueDepth),
+                "upload_failures": .int(uploadFailures),
+                "evicted_by_ttl": .int(evictedByTTL),
+                "evicted_by_size": .int(evictedBySize),
+            ]
         }
     }
 }

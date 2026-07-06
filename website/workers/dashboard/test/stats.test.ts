@@ -17,6 +17,15 @@ describe("sql builders", () => {
     expect(q).not.toContain("quantile(0.5)(");
   });
 
+  test("LLM latency is scoped to polished dictations so non-polished zeros don't bias it", () => {
+    const q = sql.llmLatency("ds", 0);
+    expect(q).toContain("quantileWeighted(0.5, double7, _sample_interval)");
+    expect(q).toContain("double16 = 1"); // was_llm_polished only
+    expect(q).toContain("double7 > 0");
+    // e2e/asr live in their own query and must not be filtered by polishing.
+    expect(sql.latency("ds", 0)).not.toContain("double16");
+  });
+
   test("active installs uses COUNT(DISTINCT index1)", () => {
     expect(sql.activeInstallsPerDay("ds", 0)).toContain("COUNT(DISTINCT index1)");
   });
@@ -34,7 +43,8 @@ describe("buildStats", () => {
     if (q.includes("blob10 AS label")) return [];
     if (q.includes("blob14 AS label")) return [{ label: "transcription", value: 3 }];
     if (q.includes("AS polished")) return [{ polished: 30, total: 50 }];
-    if (q.includes("e2e_p50")) return [{ e2e_p50: 200, e2e_p95: 500, asr_p50: 150, asr_p95: 300, llm_p50: 100, llm_p95: 250 }];
+    if (q.includes("llm_p50")) return [{ llm_p50: 100, llm_p95: 250 }]; // separate polished-only query
+    if (q.includes("e2e_p50")) return [{ e2e_p50: 200, e2e_p95: 500, asr_p50: 150, asr_p95: 300 }];
     if (q.includes("'app_launch'")) return [{ value: 20 }];
     if (q.includes("'session_end'")) return [{ value: 16 }];
     return [];
@@ -62,6 +72,7 @@ describe("buildStats", () => {
     expect(stats.magicFormatAdoptionPct).toBe(60);
     expect(stats.crashProxyRatePct).toBeCloseTo(20, 5); // 1 - 16/20
     expect(stats.latency.find((l) => l.stage === "end_to_end")?.p50).toBe(200);
+    expect(stats.latency.find((l) => l.stage === "magic_format")?.p50).toBe(100);
     expect(stats.errorsByType[0].label).toBe("transcription");
   });
 

@@ -28,6 +28,9 @@ export const sql = {
     `SELECT toStartOfInterval(toDateTime(double1 / 1000), INTERVAL '1' DAY) AS day, SUM(double2 * _sample_interval) AS value ` +
     `FROM ${ds} WHERE blob1 = 'dictation_completed' AND double1 >= ${cutoffMs} GROUP BY day ORDER BY day`,
 
+  // COUNT(DISTINCT) is exact only at the default sample_rate = 1. Under sampling
+  // it counts distinct installs among sampled rows and undercounts the true
+  // population — unlike SUM counts, it can't be corrected via _sample_interval.
   activeInstallsPerDay: (ds: string, cutoffMs: number) =>
     `SELECT toStartOfInterval(toDateTime(double1 / 1000), INTERVAL '1' DAY) AS day, COUNT(DISTINCT index1) AS value ` +
     `FROM ${ds} WHERE double1 >= ${cutoffMs} GROUP BY day ORDER BY day`,
@@ -43,9 +46,16 @@ export const sql = {
   latency: (ds: string, cutoffMs: number) =>
     `SELECT ` +
     `quantileWeighted(0.5, double5, _sample_interval) AS e2e_p50, quantileWeighted(0.95, double5, _sample_interval) AS e2e_p95, ` +
-    `quantileWeighted(0.5, double6, _sample_interval) AS asr_p50, quantileWeighted(0.95, double6, _sample_interval) AS asr_p95, ` +
-    `quantileWeighted(0.5, double7, _sample_interval) AS llm_p50, quantileWeighted(0.95, double7, _sample_interval) AS llm_p95 ` +
+    `quantileWeighted(0.5, double6, _sample_interval) AS asr_p50, quantileWeighted(0.95, double6, _sample_interval) AS asr_p95 ` +
     `FROM ${ds} WHERE blob1 = 'dictation_completed' AND double5 > 0 AND double1 >= ${cutoffMs}`,
+
+  // LLM latency is measured only on polished dictations. Filtering on
+  // was_llm_polished (double16) + double7 > 0 keeps non-polished zero rows out of
+  // the quantile — otherwise p50/p95 are dragged toward zero whenever a large
+  // share of dictations skip Magic Format.
+  llmLatency: (ds: string, cutoffMs: number) =>
+    `SELECT quantileWeighted(0.5, double7, _sample_interval) AS llm_p50, quantileWeighted(0.95, double7, _sample_interval) AS llm_p95 ` +
+    `FROM ${ds} WHERE blob1 = 'dictation_completed' AND double16 = 1 AND double7 > 0 AND double1 >= ${cutoffMs}`,
 
   eventCount: (ds: string, event: string, cutoffMs: number) =>
     `SELECT SUM(_sample_interval) AS value FROM ${ds} WHERE blob1 = '${event}' AND double1 >= ${cutoffMs}`,
@@ -88,7 +98,7 @@ export async function buildStats(
   };
 
   const [
-    wordsRows, activeRows, asrRows, mfRows, latRows, fallbackRows, errorRows,
+    wordsRows, activeRows, asrRows, mfRows, latRows, llmLatRows, fallbackRows, errorRows,
     launchRows, sessionEndRows,
   ] = await Promise.all([
     safeAe(sql.wordsPerDay(ds, cutoffMs)),
@@ -96,6 +106,7 @@ export async function buildStats(
     safeAe(sql.breakdown(ds, "blob5", "blob1 = 'dictation_completed'", cutoffMs)),
     safeAe(sql.magicFormatAdoption(ds, cutoffMs)),
     safeAe(sql.latency(ds, cutoffMs)),
+    safeAe(sql.llmLatency(ds, cutoffMs)),
     safeAe(sql.breakdown(ds, "blob10", "blob1 = 'dictation_completed'", cutoffMs)),
     safeAe(sql.breakdown(ds, "blob14", "blob1 = 'error'", cutoffMs)),
     safeAe(sql.eventCount(ds, "app_launch", cutoffMs)),
@@ -117,10 +128,11 @@ export async function buildStats(
   const magicFormatAdoptionPct = mfTotal > 0 ? (num(mf.polished) / mfTotal) * 100 : 0;
 
   const lat = latRows[0] ?? {};
+  const llmLat = llmLatRows[0] ?? {};
   const latency: LatencySummary[] = [
     { stage: "end_to_end", p50: num(lat.e2e_p50), p95: num(lat.e2e_p95) },
     { stage: "asr", p50: num(lat.asr_p50), p95: num(lat.asr_p95) },
-    { stage: "magic_format", p50: num(lat.llm_p50), p95: num(lat.llm_p95) },
+    { stage: "magic_format", p50: num(llmLat.llm_p50), p95: num(llmLat.llm_p95) },
   ];
 
   const launches = num(launchRows[0]?.value);

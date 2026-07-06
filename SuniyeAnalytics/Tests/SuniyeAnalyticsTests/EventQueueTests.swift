@@ -40,8 +40,10 @@ final class EventQueueTests: XCTestCase {
         queue.append(event(id: "b", offsetMs: 1), now: base)
         queue.append(event(id: "c", offsetMs: 2), now: base)
         XCTAssertEqual(queue.peek(max: 10, now: base).map(\.eventID), ["b", "c"])
-        XCTAssertEqual(queue.takeEvictedCount(), 1)
-        XCTAssertEqual(queue.takeEvictedCount(), 0) // reset after read
+        XCTAssertEqual(queue.takeEvictedCounts().size, 1) // dropped by size cap, not TTL
+        let afterRead = queue.takeEvictedCounts()
+        XCTAssertEqual(afterRead.size, 0) // reset after read
+        XCTAssertEqual(afterRead.ttl, 0)
     }
 
     func testTTLEvictionDropsStale() {
@@ -51,7 +53,7 @@ final class EventQueueTests: XCTestCase {
         let later = base.addingTimeInterval(120)
         queue.append(EncodedEvent(event: .dictationEmpty, eventID: "new", eventTS: Int64(later.timeIntervalSince1970 * 1000), sessionID: "s"), now: later)
         XCTAssertEqual(queue.peek(max: 10, now: later).map(\.eventID), ["new"])
-        XCTAssertEqual(queue.takeEvictedCount(), 1)
+        XCTAssertEqual(queue.takeEvictedCounts().ttl, 1) // dropped by TTL, not size cap
     }
 
     func testRemoveAll() {

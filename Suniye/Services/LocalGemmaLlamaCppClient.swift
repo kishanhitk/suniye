@@ -5,20 +5,20 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
     private let locator: LocalGemmaRuntimeLocator
     private let server: LocalGemmaLlamaServer
     private let completionClient: ChatCompletionClient
-    /// Fired (model name, cold-start load ms) when a generation had to load the
-    /// model. Analytics-only; may be nil.
-    private let onModelLoad: ((String, Int) -> Void)?
 
     init(
         locator: LocalGemmaRuntimeLocator = LocalGemmaRuntimeLocator(),
         server: LocalGemmaLlamaServer? = nil,
         session: URLSession = .shared,
-        onModelLoad: ((String, Int) -> Void)? = nil,
+        onModelLoad: (@Sendable (String, Int) -> Void)? = nil,
         onKeepAliveEvicted: (@Sendable (String) -> Void)? = nil
     ) {
         self.locator = locator
-        self.onModelLoad = onModelLoad
-        self.server = server ?? LocalGemmaLlamaServer(healthSession: session, onKeepAliveEvicted: onKeepAliveEvicted)
+        self.server = server ?? LocalGemmaLlamaServer(
+            healthSession: session,
+            onModelLoad: onModelLoad,
+            onKeepAliveEvicted: onKeepAliveEvicted
+        )
         self.completionClient = ChatCompletionClient(session: session)
     }
 
@@ -54,17 +54,15 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
             throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
         }
 
-        let wasWarm = await server.isWarm(for: runtime)
-        let loadStart = DispatchTime.now()
+        // The cold-start `model_load` event is emitted inside the server actor's
+        // `start()` success path — the actor serializes startup, so a real load
+        // fires exactly one event with the true spawn+health latency, even when a
+        // prewarm probe and a real request race for the same (shared) startup.
         let endpoint = try await server.endpoint(
             for: runtime,
             startupTimeoutSeconds: startupTimeoutSeconds,
             idleTimeoutSeconds: idleTimeoutSeconds
         )
-        if !wasWarm {
-            let loadMs = Int((DispatchTime.now().uptimeNanoseconds - loadStart.uptimeNanoseconds) / 1_000_000)
-            onModelLoad?(runtime.model.displayName, loadMs)
-        }
         defer {
             Task {
                 await server.scheduleIdleShutdown(after: idleTimeoutSeconds)
@@ -148,6 +146,9 @@ actor LocalGemmaLlamaServer {
     }
 
     private let healthSession: URLSession
+    /// Fired (model name, cold-start load ms) once per real process start, from
+    /// `start()`'s success path. Analytics-only; may be nil.
+    private let onModelLoad: (@Sendable (String, Int) -> Void)?
     /// Fired (with the model name) when the keep-alive idle timeout evicts the
     /// loaded model. Analytics-only; may be nil.
     private let onKeepAliveEvicted: (@Sendable (String) -> Void)?
@@ -158,8 +159,13 @@ actor LocalGemmaLlamaServer {
     private var idleShutdownTask: Task<Void, Never>?
     private var stoppingTask: Task<Void, Never>?
 
-    init(healthSession: URLSession = .shared, onKeepAliveEvicted: (@Sendable (String) -> Void)? = nil) {
+    init(
+        healthSession: URLSession = .shared,
+        onModelLoad: (@Sendable (String, Int) -> Void)? = nil,
+        onKeepAliveEvicted: (@Sendable (String) -> Void)? = nil
+    ) {
         self.healthSession = healthSession
+        self.onModelLoad = onModelLoad
         self.onKeepAliveEvicted = onKeepAliveEvicted
     }
 
@@ -219,6 +225,7 @@ actor LocalGemmaLlamaServer {
             throw LLMPostProcessorError.provider("server_start_canceled")
         }
 
+        let loadStart = DispatchTime.now()
         let port = Int.random(in: 49_152 ... 65_535)
         let endpoint = LocalGemmaServerEndpoint(
             baseURL: URL(string: "http://127.0.0.1:\(port)")!,
@@ -262,6 +269,8 @@ actor LocalGemmaLlamaServer {
             throw LLMPostProcessorError.provider("server_stopped_during_startup")
         }
         self.endpoint = endpoint
+        let loadMs = Int((DispatchTime.now().uptimeNanoseconds - loadStart.uptimeNanoseconds) / 1_000_000)
+        onModelLoad?(runtime.model.displayName, loadMs)
         return endpoint
     }
 
@@ -343,7 +352,7 @@ actor LocalGemmaLlamaServer {
         AppLogger.shared.log(.info, "local gemma server idle shutdown")
         let evictedModel = runtime?.model.displayName // capture before stop() clears it
         await stop()
-        onKeepAliveEvicted?(evictedModel ?? "gemma")
+        if let evictedModel { onKeepAliveEvicted?(evictedModel) }
     }
 
     func stop() async {

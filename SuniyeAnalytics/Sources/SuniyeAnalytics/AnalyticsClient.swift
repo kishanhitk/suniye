@@ -229,13 +229,18 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
     }
 
     private func emitHealthIfNeeded() {
-        let evicted = queue.takeEvictedCount()
+        let evicted = queue.takeEvictedCounts()
         lock.lock()
         let failures = uploadFailures
         uploadFailures = 0
         let depth = queue.count
         lock.unlock()
-        guard evicted > 0 || failures > 0 else { return }
-        track(.analyticsHealth(queueDepth: depth, uploadFailures: failures, evictedByTTL: evicted))
+        guard evicted.ttl > 0 || evicted.size > 0 || failures > 0 else { return }
+        track(.analyticsHealth(
+            queueDepth: depth,
+            uploadFailures: failures,
+            evictedByTTL: evicted.ttl,
+            evictedBySize: evicted.size
+        ))
     }
 }

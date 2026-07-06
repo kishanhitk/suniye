@@ -123,6 +123,12 @@ function defaultGetJwks(teamDomain: string, fetcher: typeof fetch = fetch) {
       const res = await fetcher(`https://${teamDomain}/cdn-cgi/access/certs`, { signal: controller.signal });
       if (!res.ok) throw new Error(`JWKS ${res.status}`);
       const jwks = (await res.json()) as { keys: Jwk[] };
+      // Only cache a well-formed, non-empty key set. Caching `{keys: undefined}`
+      // or `[]` would hard-fail every request for the full TTL (a 200 with a bad
+      // body, or a momentarily-empty rotation) — treat those as a cache miss.
+      if (!Array.isArray(jwks.keys) || jwks.keys.length === 0) {
+        throw new Error("JWKS response has no keys");
+      }
       jwksCache.set(teamDomain, { keys: jwks.keys, fetchedAt: Date.now() });
       return jwks;
     } finally {

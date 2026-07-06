@@ -87,6 +87,19 @@ describe("handleIngestRequest", () => {
     expect(res.status).toBe(400);
   });
 
+  test("rejects props objects with too many keys", async () => {
+    const many: Record<string, number> = {};
+    for (let i = 0; i < 41; i++) many["k" + i] = i;
+    const res = await handleIngestRequest(request(batch([{ ...event("x"), props: many }])), {}, noRateLimit);
+    expect(res.status).toBe(400);
+  });
+
+  test("rejects props whose JSON backstop would blow the AE blob budget", async () => {
+    const big = { blob: "x".repeat(500), blob2: "y".repeat(500), blob3: "z".repeat(500), blob4: "w".repeat(500), blob5: "q".repeat(500), blob6: "r".repeat(500), blob7: "s".repeat(500) };
+    const res = await handleIngestRequest(request(batch([{ ...event("x"), props: big }])), {}, noRateLimit);
+    expect(res.status).toBe(400);
+  });
+
   test("writes one data point per event", async () => {
     const events = mockEvents();
     const env: IngestEnv = { EVENTS: events.binding };

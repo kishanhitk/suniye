@@ -59,4 +59,20 @@ describe("validateAccessJwt", () => {
     const result = await validateAccessJwt(token, { ...opts, getJwks: async () => ({ keys: [] }) });
     expect(result.reason).toBe("unknown_kid");
   });
+
+  test("a 200 JWKS with no keys is not cached and does not poison later fetches", async () => {
+    const teamDomain = "jwks-guard.cloudflareaccess.com"; // unique domain: module cache is keyed by it
+    const token = makeToken({ kid: "k1" }, { aud: "my-aud", exp: future });
+
+    const badFetch = (async () => new Response(JSON.stringify({}), { status: 200 })) as unknown as typeof fetch;
+    await expect(validateAccessJwt(token, { ...opts, teamDomain, fetcher: badFetch })).rejects.toThrow();
+
+    // A later fetch that returns real keys must be consulted — proving the bad
+    // body wasn't cached. (kid k1 isn't among them, so we land on unknown_kid.)
+    const goodFetch = (async () =>
+      new Response(JSON.stringify({ keys: [{ kid: "other", kty: "RSA", n: "x", e: "AQAB" }] }), { status: 200 })
+    ) as unknown as typeof fetch;
+    const result = await validateAccessJwt(token, { ...opts, teamDomain, fetcher: goodFetch });
+    expect(result.reason).toBe("unknown_kid");
+  });
 });

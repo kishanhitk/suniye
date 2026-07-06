@@ -25,8 +25,11 @@ public final class EventQueue: @unchecked Sendable {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    /// Events dropped by TTL/size eviction since the last read of this counter.
-    private var evictedCount = 0
+    /// Events dropped since the last read, split by cause: TTL aging (benign,
+    /// user was offline) vs size overflow (queue growing faster than it uploads —
+    /// the signal worth alerting on). Conflating them would hide the latter.
+    private var evictedByTTLCount = 0
+    private var evictedBySizeCount = 0
     /// In-memory line count so `count` and the flush-threshold check are O(1).
     private var cachedCount = 0
 
@@ -88,12 +91,13 @@ public final class EventQueue: @unchecked Sendable {
         return cachedCount
     }
 
-    /// Returns and resets the eviction counter.
-    public func takeEvictedCount() -> Int {
+    /// Returns and resets the eviction counters, split by cause.
+    public func takeEvictedCounts() -> (ttl: Int, size: Int) {
         lock.lock()
         defer { lock.unlock() }
-        let value = evictedCount
-        evictedCount = 0
+        let value = (ttl: evictedByTTLCount, size: evictedBySizeCount)
+        evictedByTTLCount = 0
+        evictedBySizeCount = 0
         return value
     }
 
@@ -130,17 +134,21 @@ public final class EventQueue: @unchecked Sendable {
     @discardableResult
     private func pruneLocked(now: Date) -> [(Data, Int64)] {
         var entries = readAllLocked()
-        let before = entries.count
 
         let cutoffMs = Int64((now.timeIntervalSince1970 - config.maxAgeSeconds) * 1000)
+        let beforeTTL = entries.count
         entries.removeAll { $0.1 < cutoffMs }
+        let ttlRemoved = beforeTTL - entries.count
+
+        var sizeRemoved = 0
         if entries.count > config.maxEvents {
-            entries.removeFirst(entries.count - config.maxEvents)
+            sizeRemoved = entries.count - config.maxEvents
+            entries.removeFirst(sizeRemoved)
         }
 
-        let removed = before - entries.count
-        if removed > 0 {
-            evictedCount += removed
+        if ttlRemoved > 0 || sizeRemoved > 0 {
+            evictedByTTLCount += ttlRemoved
+            evictedBySizeCount += sizeRemoved
             writeAllLocked(entries)
         }
         cachedCount = entries.count
