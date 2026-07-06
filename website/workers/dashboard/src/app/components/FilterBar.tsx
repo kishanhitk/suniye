@@ -44,6 +44,10 @@ export function FilterBar({
       <div className="flex flex-wrap items-center gap-2">
         {dims.map(([dim, label]) => {
           const value = filters[dim] ?? "";
+          const values = (options[dim] ?? []).map(String);
+          // An active value that fell out of the option list (range change,
+          // stale data) must stay visible — it still filters the queries.
+          if (value && !values.includes(value)) values.unshift(value);
           return (
             <select
               key={dim}
@@ -56,9 +60,9 @@ export function FilterBar({
               )}
             >
               <option value="">{label}: all</option>
-              {(options[dim] ?? []).map((option) => (
-                <option key={String(option)} value={String(option)}>
-                  {label}: {String(option)}
+              {values.map((option) => (
+                <option key={option} value={option}>
+                  {label}: {option}
                 </option>
               ))}
             </select>

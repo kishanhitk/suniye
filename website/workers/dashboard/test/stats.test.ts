@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  buildStats, safeInt, safeLabel, sql, whereFiltersAE, whereFiltersD1,
+  blockedDim, blockedDimD1, buildStats, safeLabel, safeNum, sql, whereFiltersAE, whereFiltersD1,
   type AeRunner, type D1Runner,
 } from "../src/worker/stats";
 import type { Filters } from "../src/worker/types";
@@ -71,11 +71,11 @@ describe("filter sanitization", () => {
     expect(safeLabel(42)).toBeNull();
   });
 
-  test("safeInt truncates and rejects non-finite", () => {
-    expect(safeInt("36")).toBe(36);
-    expect(safeInt("36.9")).toBe(36);
-    expect(safeInt("abc")).toBeNull();
-    expect(safeInt("Infinity")).toBeNull();
+  test("safeNum keeps fractional values and rejects non-finite", () => {
+    expect(safeNum("36")).toBe(36);
+    expect(safeNum("36.9")).toBe(36.9); // never truncate — a fractional option must still match its rows
+    expect(safeNum("abc")).toBeNull();
+    expect(safeNum("Infinity")).toBeNull();
   });
 });
 
@@ -117,6 +117,19 @@ describe("whereFiltersAE (event-aware)", () => {
   test("the event-unscoped query only accepts star-safe dims", () => {
     expect(whereFiltersAE({ chip: "apple-m3-pro" }, "*")).toBe(" AND blob16 = 'apple-m3-pro'");
     expect(whereFiltersAE({ mac_model: "mac15-3" }, "*")).toBe(" AND blob1 = ''");
+  });
+});
+
+describe("blocked-panel detection", () => {
+  test("reports the first dim a panel's event cannot honor", () => {
+    expect(blockedDim({ asr_model: "parakeet-v3" }, "app_launch")).toBe("asr_model");
+    expect(blockedDim({ arch: "arm64" }, "error")).toBe("arch");
+    expect(blockedDim({ mac_model: "mac15-3" }, "model_load")).toBe("mac_model");
+    expect(blockedDim({ chip: "apple-m3-pro" }, "dictation_completed")).toBeNull();
+    expect(blockedDimD1({ asr_model: "parakeet-v3" })).toBe("asr_model");
+    expect(blockedDimD1({ chip: "apple-m3-pro" })).toBeNull();
+    // Invalid values are dropped before the check — they never block.
+    expect(blockedDim({ asr_model: "bad value!!" }, "app_launch")).toBeNull();
   });
 });
 
@@ -211,6 +224,7 @@ describe("buildStats", () => {
     });
 
     expect(stats.appliedFilters).toEqual({ chip: "apple-m3-pro", version: "0.0.51" }); // invalid dropped
+    expect(stats.blocked).toEqual({}); // chip/version apply everywhere
     const words = aeQueries.find((q) => q.includes("SUM(double2"))!;
     expect(words).toContain("AND blob16 = 'apple-m3-pro'");
     expect(words).toContain("AND blob3 = '0.0.51'");
@@ -220,6 +234,23 @@ describe("buildStats", () => {
     expect(evict).toContain("AND blob16 = 'apple-m3-pro'");
     // D1 breakdowns received the filter as binds
     expect(d1Binds.some((b) => b.includes("apple-m3-pro") && b.includes("0.0.51"))).toBe(true);
+  });
+
+  test("dictation-only filters mark every non-dictation panel as blocked", async () => {
+    const stats = await buildStats(ae, d1, {
+      rangeDays: 30, nowMs: 1_700_000_000_000, filters: { asr_model: "parakeet-v3" },
+    });
+    // A blocked query returns zero rows; the response must say WHY so the FE
+    // never renders a fake "100% crash-free" or "0 installs".
+    expect(stats.blocked.crash).toBe("asr_model");
+    expect(stats.blocked.edits).toBe("asr_model");
+    expect(stats.blocked.installs).toBe("asr_model");
+    expect(stats.blocked.activeInstalls).toBe("asr_model");
+    expect(stats.blocked.audio).toBe("asr_model");
+    expect(stats.blocked.errors).toBe("asr_model");
+    expect(stats.blocked.modelLoad).toBe("asr_model");
+    // Dictation panels themselves stay live.
+    expect(stats.segmentEventCount).toBe(50);
   });
 
   test("option lists are range-scoped but never filter-scoped", async () => {

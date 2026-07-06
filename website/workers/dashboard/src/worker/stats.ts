@@ -22,7 +22,7 @@
 // or comment/statement characters, so it cannot escape a quoted literal).
 // D1 queries use bind params throughout.
 
-import type { Breakdown, FilterDim, Filters, LatencySummary, StatsResponse, TimePoint } from "./types";
+import type { BlockedPanels, Breakdown, FilterDim, Filters, LatencySummary, StatsResponse, TimePoint } from "./types";
 
 const DAY_MS = 86_400_000;
 
@@ -38,9 +38,14 @@ export function safeLabel(value: unknown): string | null {
   return typeof value === "string" && LABEL_RE.test(value) ? value : null;
 }
 
-export function safeInt(value: unknown): number | null {
+/**
+ * Any finite number is interpolation-safe (String(n) is digits/./-/e+), and we
+ * must NOT round: a fractional option value (D1 DISTINCT can offer one) would
+ * silently match zero rows if truncated.
+ */
+export function safeNum(value: unknown): number | null {
   const n = Number(value);
-  return Number.isFinite(n) ? Math.trunc(n) : null;
+  return Number.isFinite(n) ? n : null;
 }
 
 /**
@@ -84,28 +89,56 @@ const DIM_SPECS: Record<FilterDim, {
 const AE_NEVER = " AND blob1 = ''";
 
 /**
- * Builds the `AND …` fragment for one AE query. `event` is the blob1 value the
- * query is scoped to, or "*" for the event-unscoped active-installs query.
- * Invalid values drop the filter (a stale option must not blank the dashboard);
- * dims unavailable on this event yield AE_NEVER.
+ * The active filters that survive sanitization, with their specs. Invalid
+ * values are dropped entirely (a stale or malformed option must not blank the
+ * dashboard). Single source for the where-builders and blocked-panel checks.
  */
-export function whereFiltersAE(filters: Filters | undefined, event: string): string {
-  if (!filters) return "";
-  let out = "";
+function sanitizedEntries(
+  filters: Filters | undefined
+): Array<[FilterDim, (typeof DIM_SPECS)[FilterDim], string | number]> {
+  if (!filters) return [];
+  const out: Array<[FilterDim, (typeof DIM_SPECS)[FilterDim], string | number]> = [];
   for (const [dim, raw] of Object.entries(filters) as Array<[FilterDim, string]>) {
     const spec = DIM_SPECS[dim];
     if (!spec || raw === undefined || raw === "") continue;
+    const value = spec.numeric ? safeNum(raw) : safeLabel(raw);
+    if (value !== null) out.push([dim, spec, value]);
+  }
+  return out;
+}
 
-    // Sanitize FIRST: an invalid value drops the filter entirely (a stale or
-    // malformed option must not blank the dashboard via the never-guard).
-    const value = spec.numeric ? safeInt(raw) : safeLabel(raw);
-    if (value === null) continue;
-
+/**
+ * First active dim that can't apply to `event` ("*" = the event-unscoped
+ * active-installs query). The dashboard surfaces this as an explicit
+ * "not recorded under {dim}" state instead of a fake zero.
+ */
+export function blockedDim(filters: Filters | undefined, event: string): FilterDim | null {
+  for (const [dim, spec] of sanitizedEntries(filters)) {
     const unavailable =
       (spec.dictationOnly && event !== "dictation_completed") ||
       (event === "*" ? !spec.star : (spec.unavailableOn?.includes(event) ?? false));
-    if (unavailable) return AE_NEVER;
+    if (unavailable) return dim;
+  }
+  return null;
+}
 
+/** Same, for the D1 install registry (dims that aren't columns there). */
+export function blockedDimD1(filters: Filters | undefined): FilterDim | null {
+  for (const [dim, spec] of sanitizedEntries(filters)) {
+    if (!spec.d1) return dim;
+  }
+  return null;
+}
+
+/**
+ * Builds the `AND …` fragment for one AE query, scoped to `event`. A dim that
+ * can't apply to this event yields AE_NEVER (honest zero rows, reported to the
+ * FE via the response's `blocked` map).
+ */
+export function whereFiltersAE(filters: Filters | undefined, event: string): string {
+  if (blockedDim(filters, event)) return AE_NEVER;
+  let out = "";
+  for (const [, spec, value] of sanitizedEntries(filters)) {
     out += spec.numeric ? ` AND ${spec.ae} = ${value}` : ` AND ${spec.ae} = '${value}'`;
   }
   return out;
@@ -113,19 +146,10 @@ export function whereFiltersAE(filters: Filters | undefined, event: string): str
 
 /** D1 (installs) filter fragment — bind params, never interpolation. */
 export function whereFiltersD1(filters: Filters | undefined): { sql: string; binds: unknown[] } {
-  if (!filters) return { sql: "", binds: [] };
+  if (blockedDimD1(filters)) return { sql: " AND 1 = 0", binds: [] };
   let sql = "";
   const binds: unknown[] = [];
-  for (const [dim, raw] of Object.entries(filters) as Array<[FilterDim, string]>) {
-    const spec = DIM_SPECS[dim];
-    if (!spec || raw === undefined || raw === "") continue;
-    const value = spec.numeric ? safeInt(raw) : safeLabel(raw);
-    if (value === null) continue; // invalid → drop the filter (see whereFiltersAE)
-    if (!spec.d1) {
-      // Dim isn't a column of the install registry (asr_model, language, target,
-      // arch) — install cards can't honor it, so show an honest empty.
-      return { sql: " AND 1 = 0", binds: [] };
-    }
+  for (const [, spec, value] of sanitizedEntries(filters)) {
     sql += ` AND ${spec.d1} = ?`;
     binds.push(value);
   }
@@ -135,12 +159,8 @@ export function whereFiltersD1(filters: Filters | undefined): { sql: string; bin
 /** Sanitized copy of the incoming filters (what the response echoes back). */
 export function sanitizeFilters(filters: Filters | undefined): Filters {
   const out: Filters = {};
-  if (!filters) return out;
-  for (const [dim, raw] of Object.entries(filters) as Array<[FilterDim, string]>) {
-    const spec = DIM_SPECS[dim];
-    if (!spec || raw === undefined || raw === "") continue;
-    const value = spec.numeric ? safeInt(raw) : safeLabel(raw);
-    if (value !== null) out[dim] = String(value);
+  for (const [dim, , value] of sanitizedEntries(filters)) {
+    out[dim] = String(value);
   }
   return out;
 }
@@ -238,6 +258,15 @@ function toBreakdown(rows: Array<Record<string, unknown>>): Breakdown[] {
   return rows.map((r) => ({ label: String(r.label ?? "unknown") || "unknown", value: num(r.value) }));
 }
 
+/** Await a record of promises into a record of results — named, not positional. */
+async function allOf<T extends Record<string, Promise<unknown>>>(
+  promises: T
+): Promise<{ [K in keyof T]: Awaited<T[K]> }> {
+  const entries = Object.entries(promises);
+  const values = await Promise.all(entries.map(([, p]) => p));
+  return Object.fromEntries(entries.map(([key], i) => [key, values[i]])) as { [K in keyof T]: Awaited<T[K]> };
+}
+
 // ---- main ----
 
 export async function buildStats(
@@ -264,53 +293,50 @@ export async function buildStats(
     try { return await d1(q, b); } catch (e) { console.error("d1 query failed:", String(e).slice(0, 300)); return []; }
   };
 
-  const [
-    wordsRows, activeRows, asrRows, mfRows, latRows, asrLatRows, llmLatRows, fallbackRows, errorRows,
-    launchRows, sessionEndRows,
-    audioRows, audioRateRows, editRateRows, modelLoadRows, evictionRows,
-    dictCountRows, editedCountRows,
-  ] = await Promise.all([
-    safeAe(sql.wordsPerDay(ds, cutoffMs, w("dictation_completed"))),
-    safeAe(sql.activeInstallsPerDay(ds, cutoffMs, w("*"))),
-    safeAe(sql.breakdown(ds, "blob5", "blob1 = 'dictation_completed'", cutoffMs, w("dictation_completed"))),
-    safeAe(sql.magicFormatAdoption(ds, cutoffMs, w("dictation_completed"))),
-    safeAe(sql.latency(ds, cutoffMs, w("dictation_completed"))),
-    safeAe(sql.asrLatency(ds, cutoffMs, w("dictation_completed"))),
-    safeAe(sql.llmLatency(ds, cutoffMs, w("dictation_completed"))),
-    safeAe(sql.breakdown(ds, "blob10", "blob1 = 'dictation_completed'", cutoffMs, w("dictation_completed"))),
-    safeAe(sql.breakdown(ds, "blob14", "blob1 = 'error'", cutoffMs, w("error"))),
-    safeAe(sql.eventCount(ds, "app_launch", cutoffMs, w("app_launch"))),
-    safeAe(sql.eventCount(ds, "session_end", cutoffMs, w("session_end"))),
-    safeAe(sql.audioBackends(ds, cutoffMs, w("audio_backend_used"))),
-    safeAe(sql.audioFallbackRate(ds, cutoffMs, w("audio_backend_used"))),
-    safeAe(sql.editRate(ds, cutoffMs, w("dictation_edited"))),
-    safeAe(sql.modelLoadLatency(ds, cutoffMs, w("model_load"))),
-    safeAe(sql.keepAliveEvictions(ds, cutoffMs, w("model_load"))),
-    safeAe(sql.eventCount(ds, "dictation_completed", cutoffMs, w("dictation_completed"))),
-    safeAe(sql.eventCount(ds, "dictation_edited", cutoffMs, w("dictation_edited"))),
+  // One parallel wave — every query is independent; serial waves would triple
+  // the dashboard's load latency. Named results, not positional destructuring.
+  const [aeRows, d1Rows, filterOptions] = await Promise.all([
+    allOf({
+      words: safeAe(sql.wordsPerDay(ds, cutoffMs, w("dictation_completed"))),
+      active: safeAe(sql.activeInstallsPerDay(ds, cutoffMs, w("*"))),
+      asrModels: safeAe(sql.breakdown(ds, "blob5", "blob1 = 'dictation_completed'", cutoffMs, w("dictation_completed"))),
+      mf: safeAe(sql.magicFormatAdoption(ds, cutoffMs, w("dictation_completed"))),
+      lat: safeAe(sql.latency(ds, cutoffMs, w("dictation_completed"))),
+      asrLat: safeAe(sql.asrLatency(ds, cutoffMs, w("dictation_completed"))),
+      llmLat: safeAe(sql.llmLatency(ds, cutoffMs, w("dictation_completed"))),
+      fallbacks: safeAe(sql.breakdown(ds, "blob10", "blob1 = 'dictation_completed'", cutoffMs, w("dictation_completed"))),
+      errors: safeAe(sql.breakdown(ds, "blob14", "blob1 = 'error'", cutoffMs, w("error"))),
+      launches: safeAe(sql.eventCount(ds, "app_launch", cutoffMs, w("app_launch"))),
+      sessionEnds: safeAe(sql.eventCount(ds, "session_end", cutoffMs, w("session_end"))),
+      audio: safeAe(sql.audioBackends(ds, cutoffMs, w("audio_backend_used"))),
+      audioRate: safeAe(sql.audioFallbackRate(ds, cutoffMs, w("audio_backend_used"))),
+      editRate: safeAe(sql.editRate(ds, cutoffMs, w("dictation_edited"))),
+      modelLoad: safeAe(sql.modelLoadLatency(ds, cutoffMs, w("model_load"))),
+      evictions: safeAe(sql.keepAliveEvictions(ds, cutoffMs, w("model_load"))),
+      dictCount: safeAe(sql.eventCount(ds, "dictation_completed", cutoffMs, w("dictation_completed"))),
+      editedCount: safeAe(sql.eventCount(ds, "dictation_edited", cutoffMs, w("dictation_edited"))),
+    }),
+    // totalInstalls is all-time by definition; the breakdowns honor the selected
+    // range (installs active in the window) so the range toggle affects every
+    // card. All install queries honor the active filters (bind params).
+    allOf({
+      total: safeD1(`SELECT COUNT(*) AS n FROM installs WHERE 1 = 1${d1Filter.sql}`, d1Filter.binds),
+      newInstalls: safeD1(`SELECT first_seen AS day, COUNT(*) AS value FROM installs WHERE first_seen >= ?${d1Filter.sql} GROUP BY first_seen ORDER BY first_seen`, [cutoffDay, ...d1Filter.binds]),
+      chips: safeD1(`SELECT chip AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ?${d1Filter.sql} GROUP BY chip ORDER BY value DESC LIMIT 20`, [cutoffDay, ...d1Filter.binds]),
+      rams: safeD1(`SELECT ram_gb AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ?${d1Filter.sql} GROUP BY ram_gb ORDER BY value DESC LIMIT 20`, [cutoffDay, ...d1Filter.binds]),
+      countries: safeD1(`SELECT country AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ?${d1Filter.sql} GROUP BY country ORDER BY value DESC LIMIT 20`, [cutoffDay, ...d1Filter.binds]),
+    }),
+    loadFilterOptions(safeAe, safeD1, ds, cutoffMs, cutoffDay),
   ]);
 
-  // totalInstalls is all-time by definition; the breakdowns honor the selected
-  // range (installs active in the window) so the range toggle affects every card.
-  // All install queries honor the active filters (bind params).
-  const [totalRow, newRows, chipRows, ramRows, countryRows] = await Promise.all([
-    safeD1(`SELECT COUNT(*) AS n FROM installs WHERE 1 = 1${d1Filter.sql}`, d1Filter.binds),
-    safeD1(`SELECT first_seen AS day, COUNT(*) AS value FROM installs WHERE first_seen >= ?${d1Filter.sql} GROUP BY first_seen ORDER BY first_seen`, [cutoffDay, ...d1Filter.binds]),
-    safeD1(`SELECT chip AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ?${d1Filter.sql} GROUP BY chip ORDER BY value DESC LIMIT 20`, [cutoffDay, ...d1Filter.binds]),
-    safeD1(`SELECT ram_gb AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ?${d1Filter.sql} GROUP BY ram_gb ORDER BY value DESC LIMIT 20`, [cutoffDay, ...d1Filter.binds]),
-    safeD1(`SELECT country AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ?${d1Filter.sql} GROUP BY country ORDER BY value DESC LIMIT 20`, [cutoffDay, ...d1Filter.binds]),
-  ]);
-
-  const filterOptions = await loadFilterOptions(safeAe, safeD1, ds, cutoffMs, cutoffDay);
-
-  const mf = mfRows[0] ?? {};
+  const mf = aeRows.mf[0] ?? {};
   const mfTotal = num(mf.total);
   const magicFormatAdoptionPct = mfTotal > 0 ? (num(mf.polished) / mfTotal) * 100 : 0;
 
-  const lat = latRows[0] ?? {};
-  const asrLat = asrLatRows[0] ?? {};
-  const llmLat = llmLatRows[0] ?? {};
-  const modelLoad = modelLoadRows[0] ?? {};
+  const lat = aeRows.lat[0] ?? {};
+  const asrLat = aeRows.asrLat[0] ?? {};
+  const llmLat = aeRows.llmLat[0] ?? {};
+  const modelLoad = aeRows.modelLoad[0] ?? {};
   const latency: LatencySummary[] = [
     { stage: "end_to_end", p50: num(lat.e2e_p50), p95: num(lat.e2e_p95) },
     { stage: "asr", p50: num(asrLat.asr_p50), p95: num(asrLat.asr_p95) },
@@ -318,38 +344,55 @@ export async function buildStats(
     { stage: "model_load", p50: num(modelLoad.p50), p95: num(modelLoad.p95) },
   ];
 
-  const launches = num(launchRows[0]?.value);
-  const sessionEnds = num(sessionEndRows[0]?.value);
+  const launches = num(aeRows.launches[0]?.value);
+  const sessionEnds = num(aeRows.sessionEnds[0]?.value);
   const crashProxyRatePct = launches > 0 ? Math.max(0, (1 - sessionEnds / launches) * 100) : 0;
 
-  const audioRate = audioRateRows[0] ?? {};
+  const audioRate = aeRows.audioRate[0] ?? {};
   const audioTotal = num(audioRate.total);
   const audioFallbackRatePct = audioTotal > 0 ? (num(audioRate.fell_back) / audioTotal) * 100 : 0;
 
-  const dictCount = num(dictCountRows[0]?.value);
-  const editedCount = num(editedCountRows[0]?.value);
+  const dictCount = num(aeRows.dictCount[0]?.value);
+  const editedCount = num(aeRows.editedCount[0]?.value);
+
+  // Which panels the active filters can't honor. The FE renders explicit
+  // "not recorded under {dim}" states from this — a blocked query returns zero
+  // rows, and a zero must never masquerade as a healthy metric (e.g. a
+  // "100% crash-free" fleet under a dictation-only filter).
+  const blocked: BlockedPanels = {};
+  const block = (panel: keyof BlockedPanels, dim: FilterDim | null) => {
+    if (dim) blocked[panel] = dim;
+  };
+  block("activeInstalls", blockedDim(filters, "*"));
+  block("audio", blockedDim(filters, "audio_backend_used"));
+  block("errors", blockedDim(filters, "error"));
+  block("edits", blockedDim(filters, "dictation_edited"));
+  block("crash", blockedDim(filters, "app_launch") ?? blockedDim(filters, "session_end"));
+  block("modelLoad", blockedDim(filters, "model_load"));
+  block("installs", blockedDimD1(filters));
 
   return {
     rangeDays: opts.rangeDays,
     appliedFilters: sanitizeFilters(filters),
-    wordsPerDay: toTimePoints(wordsRows),
-    activeInstallsPerDay: toTimePoints(activeRows),
-    newInstallsPerDay: newRows.map((r) => ({ day: String(r.day), value: num(r.value) })),
-    totalInstalls: num(totalRow[0]?.n),
-    asrModelBreakdown: toBreakdown(asrRows),
-    chipBreakdown: toBreakdown(chipRows),
-    ramBreakdown: toBreakdown(ramRows),
-    countryBreakdown: toBreakdown(countryRows),
+    blocked,
+    wordsPerDay: toTimePoints(aeRows.words),
+    activeInstallsPerDay: toTimePoints(aeRows.active),
+    newInstallsPerDay: d1Rows.newInstalls.map((r) => ({ day: String(r.day), value: num(r.value) })),
+    totalInstalls: num(d1Rows.total[0]?.n),
+    asrModelBreakdown: toBreakdown(aeRows.asrModels),
+    chipBreakdown: toBreakdown(d1Rows.chips),
+    ramBreakdown: toBreakdown(d1Rows.rams),
+    countryBreakdown: toBreakdown(d1Rows.countries),
     magicFormatAdoptionPct,
-    fallbackReasons: toBreakdown(fallbackRows),
+    fallbackReasons: toBreakdown(aeRows.fallbacks),
     latency,
-    errorsByType: toBreakdown(errorRows),
+    errorsByType: toBreakdown(aeRows.errors),
     crashProxyRatePct,
-    audioBackends: toBreakdown(audioRows),
+    audioBackends: toBreakdown(aeRows.audio),
     audioFallbackRatePct,
-    editRateMedianPct: num(editRateRows[0]?.median),
+    editRateMedianPct: num(aeRows.editRate[0]?.median),
     editedSharePct: dictCount > 0 ? (editedCount / dictCount) * 100 : 0,
-    keepAliveEvictions: num(evictionRows[0]?.value),
+    keepAliveEvictions: num(aeRows.evictions[0]?.value),
     segmentEventCount: dictCount,
     filterOptions,
   };
@@ -376,12 +419,14 @@ async function loadFilterOptions(
     ["asr_model", "blob5"], ["language", "blob7"], ["target", "blob11"],
   ];
 
-  const d1Results = await Promise.all(d1Dims.map(([, col]) =>
-    d1(`SELECT DISTINCT ${col} AS v FROM installs WHERE last_seen >= ? AND ${col} IS NOT NULL ORDER BY v`, [cutoffDay])
-  ));
-  const aeResults = await Promise.all(aeDims.map(([, col]) =>
-    ae(sql.breakdown(ds, col, "blob1 = 'dictation_completed'", cutoffMs))
-  ));
+  const [d1Results, aeResults] = await Promise.all([
+    Promise.all(d1Dims.map(([, col]) =>
+      d1(`SELECT DISTINCT ${col} AS v FROM installs WHERE last_seen >= ? AND ${col} IS NOT NULL ORDER BY v`, [cutoffDay])
+    )),
+    Promise.all(aeDims.map(([, col]) =>
+      ae(sql.breakdown(ds, col, "blob1 = 'dictation_completed'", cutoffMs))
+    )),
+  ]);
 
   const out: Partial<Record<FilterDim, Array<string | number>>> = {};
   d1Dims.forEach(([dim], i) => {

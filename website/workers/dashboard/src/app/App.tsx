@@ -14,13 +14,8 @@ import type { FilterDim, Filters, StatsResponse } from "./types";
 
 const RANGES = [7, 30, 90];
 
-/** First active filter dim (if any) that a panel's event cannot honor. */
-function blockedBy(filters: Filters, dims: FilterDim[]): FilterDim | null {
-  for (const dim of dims) if (filters[dim]) return dim;
-  return null;
-}
-
-const DICTATION_ONLY: FilterDim[] = ["asr_model", "language", "target"];
+/** "Not recorded under {dim}" copy — the server decides WHICH panels are blocked. */
+const notRecorded = (dim: FilterDim) => `Not recorded under the ${dim.replace("_", " ")} filter.`;
 
 export default function App() {
   const [range, setRange] = useState(30);
@@ -171,8 +166,12 @@ export default function App() {
                 />
                 <KeyFigure
                   label="Installs"
-                  value={formatCount(stats.totalInstalls)}
-                  detail={newInstalls > 0 ? `+${formatCount(newInstalls)} new in window` : "all-time"}
+                  value={stats.blocked.installs ? "—" : formatCount(stats.totalInstalls)}
+                  detail={
+                    stats.blocked.installs
+                      ? notRecorded(stats.blocked.installs)
+                      : newInstalls > 0 ? `+${formatCount(newInstalls)} new in window` : "all-time"
+                  }
                 />
                 <KeyFigure
                   label="Magic Format"
@@ -181,8 +180,8 @@ export default function App() {
                 />
                 <KeyFigure
                   label="Crash-free"
-                  value={formatPct(100 - stats.crashProxyRatePct, 1)}
-                  detail="clean session proxy"
+                  value={stats.blocked.crash ? "—" : formatPct(100 - stats.crashProxyRatePct, 1)}
+                  detail={stats.blocked.crash ? notRecorded(stats.blocked.crash) : "clean session proxy"}
                 />
               </TotalsStrip>
             </div>
@@ -197,11 +196,8 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="mb-2 text-sm text-ink">Active installs / day</h3>
-                  {blockedBy(filters, ["mac_model", "arch", "cpu_cores", ...DICTATION_ONLY]) ? (
-                    <EmptyState
-                      message={`Not recorded under the ${blockedBy(filters, ["mac_model", "arch", "cpu_cores", ...DICTATION_ONLY])} filter.`}
-                      className="min-h-[200px]"
-                    />
+                  {stats.blocked.activeInstalls ? (
+                    <EmptyState message={notRecorded(stats.blocked.activeInstalls)} className="min-h-[200px]" />
                   ) : stats.activeInstallsPerDay.length > 0 ? (
                     <AreaTrend data={stats.activeInstallsPerDay} label="Active installs per day" />
                   ) : (
@@ -210,16 +206,26 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="mb-2 text-sm text-ink">New installs / day</h3>
-                  {stats.newInstallsPerDay.length > 0
-                    ? <MiniBars data={stats.newInstallsPerDay} />
-                    : <EmptyState message="No new installs in this window." className="min-h-[200px]" />}
+                  {stats.blocked.installs ? (
+                    <EmptyState message={notRecorded(stats.blocked.installs)} className="min-h-[200px]" />
+                  ) : stats.newInstallsPerDay.length > 0 ? (
+                    <MiniBars data={stats.newInstallsPerDay} />
+                  ) : (
+                    <EmptyState message="No new installs in this window." className="min-h-[200px]" />
+                  )}
                 </div>
               </div>
             </Section>
 
             <Section
               eyebrow="Pipeline latency"
-              note={stats.keepAliveEvictions > 0 ? `${formatCount(stats.keepAliveEvictions)} keep-alive evictions` : undefined}
+              note={
+                stats.blocked.modelLoad
+                  ? `model load ${notRecorded(stats.blocked.modelLoad).toLowerCase()}`
+                  : stats.keepAliveEvictions > 0
+                    ? `${formatCount(stats.keepAliveEvictions)} keep-alive evictions`
+                    : undefined
+              }
             >
               <LatencyBars stages={stats.latency} />
             </Section>
@@ -235,15 +241,21 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="mb-2 text-sm text-ink">Edits after insertion</h3>
-                  <p className="font-mono text-2xl tabular-nums text-ink">{formatPct(stats.editedSharePct)}</p>
-                  <p className="mt-1 font-mono text-[11px] text-muted">
-                    of dictations edited · median edit {formatPct(stats.editRateMedianPct)} of the text
-                  </p>
+                  {stats.blocked.edits ? (
+                    <EmptyState message={notRecorded(stats.blocked.edits)} />
+                  ) : (
+                    <>
+                      <p className="font-mono text-2xl tabular-nums text-ink">{formatPct(stats.editedSharePct)}</p>
+                      <p className="mt-1 font-mono text-[11px] text-muted">
+                        of dictations edited · median edit {formatPct(stats.editRateMedianPct)} of the text
+                      </p>
+                    </>
+                  )}
                 </div>
                 <div>
                   <h3 className="mb-2 text-sm text-ink">Audio backend</h3>
-                  {blockedBy(filters, ["arch", "cpu_cores", ...DICTATION_ONLY]) ? (
-                    <EmptyState message={`Not recorded under the ${blockedBy(filters, ["arch", "cpu_cores", ...DICTATION_ONLY])} filter.`} />
+                  {stats.blocked.audio ? (
+                    <EmptyState message={notRecorded(stats.blocked.audio)} />
                   ) : (
                     <>
                       <BreakdownList items={stats.audioBackends} emptyMessage="No capture data in this window." />
@@ -264,24 +276,26 @@ export default function App() {
                   <h3 className="mb-2 text-sm text-ink">ASR model</h3>
                   <BreakdownList items={stats.asrModelBreakdown} />
                 </div>
-                <div>
-                  <h3 className="mb-2 text-sm text-ink">Chip</h3>
-                  <BreakdownList items={stats.chipBreakdown} />
-                </div>
-                <div>
-                  <h3 className="mb-2 text-sm text-ink">RAM (GB)</h3>
-                  <BreakdownList items={stats.ramBreakdown} />
-                </div>
-                <div>
-                  <h3 className="mb-2 text-sm text-ink">Country</h3>
-                  <BreakdownList items={stats.countryBreakdown} />
-                </div>
+                {(
+                  [
+                    ["Chip", stats.chipBreakdown],
+                    ["RAM (GB)", stats.ramBreakdown],
+                    ["Country", stats.countryBreakdown],
+                  ] as const
+                ).map(([title, items]) => (
+                  <div key={title}>
+                    <h3 className="mb-2 text-sm text-ink">{title}</h3>
+                    {stats.blocked.installs
+                      ? <EmptyState message={notRecorded(stats.blocked.installs)} />
+                      : <BreakdownList items={items} />}
+                  </div>
+                ))}
               </div>
             </Section>
 
             <Section eyebrow="Reliability">
-              {blockedBy(filters, ["arch", ...DICTATION_ONLY]) ? (
-                <EmptyState message={`Not recorded under the ${blockedBy(filters, ["arch", ...DICTATION_ONLY])} filter.`} />
+              {stats.blocked.errors ? (
+                <EmptyState message={notRecorded(stats.blocked.errors)} />
               ) : (
                 <BreakdownList items={stats.errorsByType} emptyMessage="No errors in this window." />
               )}

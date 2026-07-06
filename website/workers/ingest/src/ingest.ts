@@ -161,7 +161,9 @@ function validateBatch(raw: unknown): WireBatch | string {
 }
 
 // The batch `device` block is stamped onto every event's blob20 JSON, so bound
-// its size (scalar values, short strings, few keys) so it can't blow AE's budget.
+// its size so it can't blow AE's ~5 KB blob budget (an oversized blob20 makes
+// writeDataPoint throw and silently drop the whole event). The JSON-length cap
+// bounds keys and values together.
 function validateDevice(raw: unknown): string | undefined {
   if (!isObject(raw)) return "device must be an object.";
   if (Object.keys(raw).length > 16) return "too many device keys.";
@@ -170,6 +172,7 @@ function validateDevice(raw: unknown): string | undefined {
     if (t !== "string" && t !== "number" && t !== "boolean") return "device values must be scalars.";
     if (t === "string" && (value as string).length > 64) return "device value too long.";
   }
+  if (JSON.stringify(raw).length > 1024) return "device too large.";
   return undefined;
 }
 

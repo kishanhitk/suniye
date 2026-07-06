@@ -30,10 +30,28 @@ export const FILTER_DIMS = [
 export type FilterDim = (typeof FILTER_DIMS)[number];
 export type Filters = Partial<Record<FilterDim, string>>;
 
+/**
+ * Panels whose underlying event cannot honor one of the active filters. The
+ * value is the offending dim; the FE renders an explicit "not recorded under
+ * {dim}" state instead of a fake zero. Server-computed from DIM_SPECS so the
+ * FE never mirrors slot-availability knowledge.
+ */
+export interface BlockedPanels {
+  activeInstalls?: FilterDim;
+  audio?: FilterDim;
+  errors?: FilterDim;
+  edits?: FilterDim;
+  crash?: FilterDim;
+  modelLoad?: FilterDim;
+  /** D1 install registry (installs tile, new-installs, fleet breakdowns). */
+  installs?: FilterDim;
+}
+
 export interface StatsResponse {
   rangeDays: number;
   /** The filters actually applied (post-sanitization) — the FE's source of truth. */
   appliedFilters: Filters;
+  blocked: BlockedPanels;
   wordsPerDay: TimePoint[];
   activeInstallsPerDay: TimePoint[];
   newInstallsPerDay: TimePoint[];
