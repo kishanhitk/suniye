@@ -6,15 +6,22 @@
 //
 // RULES (append-only, forever):
 //   1. Never move or repurpose a slot. To add a field, append it to the next
-//      free slot.
+//      free slot (or append a key to a shared slot's alias list — see below).
 //   2. Keep this in sync with the Swift `AnalyticsEvent` prop keys.
-//   3. Device details (mac_model, ram, cpu, os) are NOT here — they go to D1 on
-//      app_launch and are joined by install_id, keeping AE rows small.
 //
-// `blob20` always carries the full compact props JSON as a backstop, so a newly
-// added field is never lost before it earns a dedicated slot.
+// DEVICE CONTEXT: the batch envelope carries a `device` block (chip, ram_gb,
+// mac_model, os_version, cpu_cores, arch). `buildDataPoint` merges it into every
+// event's prop map so any metric can be sliced by hardware. Device keys are
+// appended LAST on their shared slots (blob14/16/17/18, double18) so a native
+// per-event field always wins its slot; device dims fill the slot only on events
+// that don't use it (e.g. chip=blob16 on dictation, but blob16=kind on
+// model_changed → chip rides blob20 there). ram_gb has its own slot (double19).
+// Device is also fully in D1 on app_launch (joined by install_id).
+//
+// `blob20` always carries the full compact props JSON (event props + device) as a
+// backstop, so a field is never lost before it earns a dedicated slot.
 
-import type { PropValue, WireEvent } from "./types";
+import type { PropValue, WireBatch, WireEvent } from "./types";
 
 type StrPick = (p: Record<string, PropValue>) => string | undefined;
 type NumPick = (p: Record<string, PropValue>) => number | undefined;
@@ -47,9 +54,9 @@ const boolNum = (...keys: string[]): NumPick => (p) => {
 // second its own appended slot (the loser is otherwise recoverable only from the
 // blob20 props backstop).
 const BLOB_FIELDS: StrPick[] = [
-  str("session_id"),                              // blob2
-  str("app_version"),                             // blob3
-  str("channel"),                                 // blob4
+  () => undefined,                                // blob2 = session_id — set explicitly (event top-level field, not props)
+  () => undefined,                                // blob3 = app_version — set explicitly (batch envelope, not props)
+  () => undefined,                                // blob4 = channel — set explicitly (batch envelope, not props)
   str("asr_model"),                               // blob5
   str("asr_family"),                              // blob6
   str("language"),                                // blob7
@@ -59,11 +66,11 @@ const BLOB_FIELDS: StrPick[] = [
   str("target_category"),                         // blob11
   str("insertion_method"),                        // blob12
   str("source"),                                  // blob13
-  firstStr("reason", "stage", "step", "type", "backend"),   // blob14 - categorical detail A
+  firstStr("reason", "stage", "step", "type", "backend", "arch"),   // blob14 - categorical detail A (+ device arch)
   firstStr("code", "outcome"),                    // blob15 - categorical detail B
-  firstStr("kind", "feature"),                    // blob16
-  str("model"),                                   // blob17
-  firstStr("from_version", "to_version"),         // blob18
+  firstStr("kind", "feature", "chip"),            // blob16 (+ device chip)
+  firstStr("model", "mac_model"),                 // blob17 (+ device mac_model)
+  firstStr("from_version", "to_version", "os_version"),   // blob18 (+ device os_version)
 ];
 
 // Index in this array + 1 == doubleN (DOUBLE_FIELDS[0] -> double1).
@@ -85,13 +92,14 @@ const DOUBLE_FIELDS: NumPick[] = [
   firstNum("count", "event_count", "queue_depth", "upload_failures", "evicted_by_ttl"), // double15
   boolNum("was_llm_polished"),                    // double16
   boolNum("granted", "enabled", "clean_exit", "fallback_occurred", "first_launch"),     // double17
-  num("rung"),                                    // double18
-  num("ram_gb"),                                  // double19
+  firstNum("rung", "cpu_cores"),                  // double18 (+ device cpu_cores)
+  num("ram_gb"),                                  // double19 (device ram_gb, now on every event)
   num("edit_rate_bucket"),                        // double20 - post-insertion edit rate (dictation_edited)
 ];
-// NB: doubles are now full (20/20). Newer numeric fields must reuse a generic
-// slot or live in the blob20 props JSON. Audio-quality fields (audio_backend,
-// input_sample_rate, aec_effective, …) intentionally ride only in props JSON.
+// NB: doubles are full (20/20). Newer numeric fields must alias a generic slot
+// (append to a firstNum list) or live in the blob20 props JSON. Audio-quality
+// fields (audio_backend, input_sample_rate, aec_effective, …) and device
+// perf_cores/eff_cores intentionally ride only in props JSON.
 //
 // analytics_health carries four numerics (queue_depth, upload_failures,
 // evicted_by_ttl, evicted_by_size); double15's firstNum surfaces only
@@ -107,20 +115,27 @@ export interface DataPoint {
 }
 
 /**
- * Builds one Analytics Engine data point from a wire event, using the fixed
- * slot registry above. `install_id` is index1; the event name is blob1;
- * `country` (server-derived) is appended after the props JSON backstop.
+ * Builds one Analytics Engine data point from a wire event + its batch envelope.
+ * `install_id` is index1; the event name is blob1; `country` (server-derived) is
+ * blob19. The batch's `device` block is merged into the prop map (event props win
+ * any collision) so hardware dims fill their aliased slots and the blob20 JSON.
+ * session_id / app_version / channel are set explicitly (they live on the event
+ * top-level / batch envelope, not in props — reading them from props left
+ * blob2/3/4 null on every row historically).
  */
-export function buildDataPoint(event: WireEvent, installId: string, country: string): DataPoint {
-  const p = event.props ?? {};
+export function buildDataPoint(event: WireEvent, batch: WireBatch, country: string): DataPoint {
+  const p: Record<string, PropValue> = { ...(batch.device ?? {}), ...(event.props ?? {}) };
 
   const blobs: (string | null)[] = new Array(20).fill(null);
   blobs[0] = event.name;                          // blob1
   BLOB_FIELDS.forEach((pick, i) => {
     blobs[i + 1] = pick(p) ?? null;               // blob2..blob18
   });
+  blobs[1] = event.session_id || null;            // blob2 - event top-level field
+  blobs[2] = batch.app_version || null;           // blob3 - batch envelope
+  blobs[3] = batch.channel || null;               // blob4 - batch envelope
   blobs[18] = country || null;                    // blob19 - server-derived country
-  blobs[19] = JSON.stringify(p);                  // blob20 - full props backstop
+  blobs[19] = JSON.stringify(p);                  // blob20 - full props + device backstop
 
   const doubles: number[] = new Array(20).fill(0);
   DOUBLE_FIELDS.forEach((pick, i) => {
@@ -129,5 +144,5 @@ export function buildDataPoint(event: WireEvent, installId: string, country: str
   });
   doubles[0] = event.event_ts; // double1 = client event timestamp (time-series bucket key)
 
-  return { indexes: [installId], blobs, doubles };
+  return { indexes: [batch.install_id], blobs, doubles };
 }
