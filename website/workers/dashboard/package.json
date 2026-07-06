@@ -1,0 +1,32 @@
+{
+  "name": "suniye-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "deploy": "vite build && wrangler deploy --config wrangler.jsonc",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.460.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^2.13.3",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260415.0",
+    "@tailwindcss/vite": "^4.1.11",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "wrangler": "^4.98.0"
+  }
+}

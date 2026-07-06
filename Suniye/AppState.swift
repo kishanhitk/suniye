@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import Foundation
 import Observation
+import SuniyeAnalytics
 import SwiftUI
 
 enum LLME2EMode {
@@ -311,6 +312,7 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
+            analytics.track(.featureToggled(feature: .autoSubmit, enabled: autoSubmitEnabled))
             onStateChange?()
         }
     }
@@ -320,6 +322,7 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
+            analytics.track(.featureToggled(feature: .echoCancellation, enabled: echoCancellationEnabled))
             refreshAudioRouteSnapshot()
             onStateChange?()
         }
@@ -330,6 +333,21 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
+            analytics.track(.featureToggled(feature: .soundFeedback, enabled: soundFeedbackEnabled))
+            onStateChange?()
+        }
+    }
+    /// Opt-out toggle for anonymous usage analytics (default on).
+    var shareAnalyticsEnabled = true {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            guard oldValue != shareAnalyticsEnabled else {
+                return
+            }
+            persistGeneralSettings()
+            analytics.setEnabled(shareAnalyticsEnabled)
             onStateChange?()
         }
     }
@@ -1381,6 +1399,10 @@ final class AppState {
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
     private let diagnosticBundleService: DiagnosticBundleServiceProtocol
     private let issueReportUploadService: IssueReportUploadServiceProtocol
+    private let analytics: Analytics
+    /// Per-dictation monotonic latency marks. Safe as a single instance because
+    /// the phase machine serializes dictations. Not observed UI state.
+    @ObservationIgnored private var dictationTiming = DictationTiming()
     private let editLearningService: EditLearningServiceProtocol
     private let learningToastPresenter: LearningToastPresenting
     private let currentAppVersionProvider: () -> AppVersion?
@@ -1454,6 +1476,7 @@ final class AppState {
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
         diagnosticBundleService: DiagnosticBundleServiceProtocol = DiagnosticBundleService(),
         issueReportUploadService: IssueReportUploadServiceProtocol = IssueReportUploadService(),
+        analytics: Analytics = AppAnalytics.makeDefault(),
         editLearningService: EditLearningServiceProtocol? = nil,
         learningToastPresenter: LearningToastPresenting? = nil,
         currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion.fromBundle() },
@@ -1489,7 +1512,13 @@ final class AppState {
         self.localLLMModelManager = localLLMModelManager
         let resolvedLocalGemmaPostProcessor = localGemmaMagicFormatPostProcessor ?? LocalGemmaPostProcessor(
             client: LocalGemmaLlamaCppClient(
-                locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager)
+                locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager),
+                onModelLoad: { model, loadMs in
+                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: loadMs, evictedByKeepAlive: false))
+                },
+                onKeepAliveEvicted: { model in
+                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: 0, evictedByKeepAlive: true))
+                }
             )
         )
         self.localGemmaMagicFormatPostProcessor = resolvedLocalGemmaPostProcessor
@@ -1507,6 +1536,7 @@ final class AppState {
         self.launchAtLoginService = launchAtLoginService
         self.diagnosticBundleService = diagnosticBundleService
         self.issueReportUploadService = issueReportUploadService
+        self.analytics = analytics
         self.editLearningService = editLearningService ?? EditLearningService()
         self.learningToastPresenter = learningToastPresenter ?? LearningToastPresenter()
         self.currentAppVersionProvider = currentAppVersionProvider
@@ -1525,6 +1555,9 @@ final class AppState {
         }
         self.editLearningService.onLearnedTerms = { [weak self] terms in
             self?.handleLearnedVocabularyTerms(terms)
+        }
+        self.editLearningService.onEditRate = { [weak self] bucket in
+            self?.analytics.track(.dictationEdited(editRateBucket: bucket))
         }
         self.audioCaptureService.onEvent = { [weak self] event in
             Task { @MainActor [weak self] in
@@ -1549,6 +1582,7 @@ final class AppState {
         loadHistory()
         loadGeneralSettings()
         loadLLMSettings()
+        analytics.setEnabled(shareAnalyticsEnabled)
         refreshUpdateControllerState()
         refreshInputDevices()
         refreshLaunchAtLoginStatus()
@@ -1566,10 +1600,50 @@ final class AppState {
         }
 
         if startServices {
+            analytics.start()
+            emitAppLaunchEvent()
             wireHotkey()
             Task {
                 await bootstrap()
             }
+        }
+    }
+
+    private func emitAppLaunchEvent() {
+        analytics.track(.appLaunch(
+            device: DeviceProfileReader.read(),
+            settings: analyticsSettingsSnapshot(),
+            firstLaunch: !hasSeenOnboardingWelcome
+        ))
+    }
+
+    private func analyticsSettingsSnapshot() -> SettingsSnapshot {
+        SettingsSnapshot([
+            "asr_model": .label(SafeLabel(selectedASRModelID.rawValue)),
+            "auto_submit": .bool(autoSubmitEnabled),
+            "echo_cancellation": .bool(echoCancellationEnabled),
+            "sound_feedback": .bool(soundFeedbackEnabled),
+            "magic_format_enabled": .bool(llmEnabled),
+            "magic_format_provider": .label(AnalyticsMapping.cleanupProvider(llmProvider)),
+            "update_channel": .label(SafeLabel(updateChannel.rawValue)),
+        ])
+    }
+
+    /// Force-send queued analytics (called on sleep). Best-effort, never blocks.
+    func flushAnalytics() async {
+        await analytics.flush()
+    }
+
+    /// Durably enqueue a session_end without awaiting (safe on app termination;
+    /// the event ships on the next launch). Also usable on power-off.
+    func recordAnalyticsSessionEnd() {
+        analytics.recordSessionEnd(cleanExit: true)
+    }
+
+    /// Opens the public "what we collect" privacy page.
+    func openAnalyticsPrivacyInfo() {
+        if let url = URL(string: "https://suniye.kishans.in/privacy") {
+            _ = fileOpener(url)
         }
     }
 
@@ -1688,6 +1762,7 @@ final class AppState {
     private func showMagicFormatOnboarding() {
         hasSeenOnboardingWelcome = true
         activeOnboardingStep = .magicFormat
+        analytics.track(.onboardingStep(step: .magicFormat, granted: nil))
     }
 
     func completeCoreOnboarding() {
@@ -1696,6 +1771,7 @@ final class AppState {
         onboardingPracticeText = ""
         onboardingPracticeResult = nil
         activeOnboardingStep = .practice
+        analytics.track(.onboardingStep(step: .completed, granted: nil))
     }
 
     func finishOnboarding() {
@@ -1704,6 +1780,9 @@ final class AppState {
     }
 
     func refreshPermissions(requestMicrophone: Bool = false, promptAccessibility: Bool = false) async {
+        let priorMic = hasMicPermission
+        let priorAccessibility = hasAccessibilityPermission
+
         if requestMicrophone {
             hasMicPermission = await AVCaptureDevice.requestAccess(for: .audio)
         } else {
@@ -1715,6 +1794,13 @@ final class AppState {
             hasAccessibilityPermission = AXIsProcessTrustedWithOptions(options)
         } else {
             hasAccessibilityPermission = AXIsProcessTrusted()
+        }
+
+        if !priorMic, hasMicPermission {
+            analytics.track(.permissionTransition(kind: .microphone, granted: true))
+        }
+        if !priorAccessibility, hasAccessibilityPermission {
+            analytics.track(.permissionTransition(kind: .accessibility, granted: true))
         }
 
         AppLogger.shared.log(.info, "permissions: mic=\(hasMicPermission) ax=\(hasAccessibilityPermission)")
@@ -2068,6 +2154,7 @@ final class AppState {
             return
         }
         AppLogger.shared.log(.info, "edit learning added vocabulary terms count=\(added.count)")
+        analytics.track(.vocabLearnedFromEdit(count: added.count))
         learningToastPresenter.showLearnedTerms(added) { [weak self] in
             self?.removeAutoLearnedVocabularyTerms(added)
         }
@@ -2461,6 +2548,7 @@ final class AppState {
 
         let hadLoadedModel = loadedASRModelID != nil
         activeASRModelOperationID = modelID
+        analytics.track(.modelChanged(kind: .asr, model: SafeLabel(modelID.rawValue)))
         phase = .loading
         statusText = "Loading model..."
         lastError = nil
@@ -2751,11 +2839,13 @@ final class AppState {
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
         appUpdateController.automaticallyChecksForUpdates = enabled
         refreshUpdateControllerState()
+        analytics.track(.updateAction(kind: .autoToggle, fromVersion: nil, toVersion: nil))
         AppLogger.shared.log(.info, "sparkle automatic update checks set enabled=\(enabled)")
     }
 
     func setUpdateChannel(_ channel: UpdateChannel) {
         updateChannel = channel
+        analytics.track(.updateAction(kind: .channelChange, fromVersion: nil, toVersion: SafeLabel(channel.rawValue)))
         AppLogger.shared.log(.info, "sparkle update channel set channel=\(channel.rawValue)")
     }
 
@@ -3032,6 +3122,7 @@ final class AppState {
         }
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "start recording ignored in phase=\(phase.rawValue)")
+            analytics.track(.dictationBlocked(reason: .wrongPhase))
             showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             return
         }
@@ -3042,6 +3133,7 @@ final class AppState {
             lastError = "Microphone permission not granted"
             statusText = "Permission required"
             AppLogger.shared.log(.warning, "microphone permission denied")
+            analytics.track(.dictationBlocked(reason: .micDenied))
             playSoundFeedback(.error)
             showTransientIndicatorError("Microphone permission required")
             return
@@ -3054,6 +3146,7 @@ final class AppState {
             lastError = "Accessibility permission not granted"
             statusText = "Accessibility required"
             AppLogger.shared.log(.warning, "accessibility permission denied before recording")
+            analytics.track(.dictationBlocked(reason: .accessibilityDenied))
             playSoundFeedback(.error)
             showTransientIndicatorError("Enable Accessibility for dictation")
             return
@@ -3089,6 +3182,8 @@ final class AppState {
         }
 
         let sessionID = UUID()
+        dictationTiming = DictationTiming()
+        dictationTiming.recordStart = .now()
         // Capture the target app before any Suniye UI can steal focus.
         let context = DictationSessionContext(
             id: sessionID,
@@ -3122,6 +3217,7 @@ final class AppState {
                 activeDictationSession = .recording(context)
             }
             audioRouteSnapshot = session.route
+            dictationTiming.captureStarted = .now()
             AppLogger.shared.log(.info, "recording started session=\(sessionID.uuidString) \(session.route.privacySafeLogValue)")
         } catch {
             guard activeAudioCaptureSessionID == sessionID else {
@@ -3157,6 +3253,7 @@ final class AppState {
         let samples = captured.samples
         let sampleRate = captured.sampleRate
         let duration = Date().timeIntervalSince(context.startedAt)
+        dictationTiming.stopped = .now()
         let destination = context.destination
         AppLogger.shared.log(.info, "dictation stop samples=\(samples.count) sr=\(sampleRate) duration=\(String(format: "%.2f", duration))")
 
@@ -3166,7 +3263,9 @@ final class AppState {
         }
 
         do {
+            dictationTiming.asrStart = .now()
             let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
+            dictationTiming.asrEnd = .now()
             let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 
             switch destination {
@@ -3184,7 +3283,8 @@ final class AppState {
                     duration: duration,
                     sampleCount: samples.count,
                     sampleRate: sampleRate,
-                    frontmostAppBundleID: context.frontmostAppBundleID
+                    frontmostAppBundleID: context.frontmostAppBundleID,
+                    source: context.source
                 )
             case .onboardingPractice:
                 await completeOnboardingPracticeDictation(rawText: rawText, sessionID: sessionID)
@@ -3198,6 +3298,7 @@ final class AppState {
                 )
             }
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
+            analytics.track(.error(type: .transcription, code: .unknown))
             failDictationSession(
                 sessionID: sessionID,
                 lastErrorMessage: "Transcription failed: \(error.localizedDescription)",
@@ -3212,7 +3313,8 @@ final class AppState {
         duration: TimeInterval,
         sampleCount: Int,
         sampleRate: Int,
-        frontmostAppBundleID: String?
+        frontmostAppBundleID: String?,
+        source: RecordingSource
     ) async throws {
         let rawParse = AppState.parseSubmitCommand(from: rawText)
         var shouldSubmit = rawParse.shouldSubmit
@@ -3220,7 +3322,9 @@ final class AppState {
         var finalText = rawParse.text
 
         if !finalText.isEmpty {
+            dictationTiming.llmStart = .now()
             llmOutputText = await postProcessTextIfEnabled(rawParse.text, frontmostAppBundleID: frontmostAppBundleID)
+            dictationTiming.llmEnd = .now()
             let polishedParse = AppState.parseSubmitCommand(from: llmOutputText)
             finalText = polishedParse.text
             shouldSubmit = shouldSubmit || polishedParse.shouldSubmit
@@ -3245,6 +3349,7 @@ final class AppState {
                 insertionContext: textInsertionService.captureInsertionContext()
             )
             try textInsertionService.insertText(insertionText)
+            dictationTiming.inserted = .now()
             beginEditLearningTracking(insertedText: insertionText)
             recentResults.insert(
                 RecentResult(
@@ -3272,9 +3377,62 @@ final class AppState {
         if finalText.isEmpty && !shouldSubmit {
             AppLogger.shared.log(.warning, "transcription returned empty text samples=\(sampleCount) sr=\(sampleRate)")
             playSoundFeedback(.error)
+            analytics.track(.dictationEmpty)
+        }
+
+        if didCompleteDictation {
+            emitDictationCompleted(
+                finalText: finalText,
+                wordCount: wordCount,
+                duration: duration,
+                wasLLMPolished: wasLLMPolished,
+                source: source,
+                frontmostAppBundleID: frontmostAppBundleID
+            )
         }
 
         completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation)
+    }
+
+    private func emitDictationCompleted(
+        finalText: String,
+        wordCount: Int,
+        duration: TimeInterval,
+        wasLLMPolished: Bool,
+        source: RecordingSource,
+        frontmostAppBundleID: String?
+    ) {
+        let metrics = DictationMetrics(
+            wordCount: wordCount,
+            charCount: finalText.count,
+            audioDurationMs: Int(duration * 1000),
+            source: AnalyticsMapping.source(source),
+            destination: .systemInsertion,
+            asrModel: SafeLabel(selectedASRModelID.rawValue),
+            asrFamily: SafeLabel(ASRModelCatalog.entry(for: selectedASRModelID).family.rawValue),
+            // The model's language coverage from the catalog (e.g. "english",
+            // "multilingual") — the ASR layer doesn't return a detected language.
+            language: SafeLabel(ASRModelCatalog.entry(for: selectedASRModelID).languageSummary),
+            wasLLMPolished: wasLLMPolished,
+            cleanupProvider: wasLLMPolished ? AnalyticsMapping.cleanupProvider(llmProvider) : nil,
+            cleanupModel: wasLLMPolished ? SafeLabel(llmSelectedModelPreset.rawValue) : nil,
+            cleanupFallbackReason: nil,
+            insertionMethod: .clipboard, // insertion is always clipboard+paste
+            targetCategory: TargetCategoryMapper.category(for: frontmostAppBundleID),
+            latency: dictationTiming.latency(),
+            audio: audioRouteSnapshot.map { route in
+                DictationMetrics.AudioQuality(
+                    backend: SafeLabel(route.backend.rawValue),
+                    fallbackReason: route.fallbackReason.map { SafeLabel($0.rawValue) },
+                    inputTransport: SafeLabel(route.inputTransport.rawValue),
+                    inputSampleRate: route.inputSampleRate,
+                    inputChannels: route.inputChannelCount,
+                    echoCancellationRequested: route.requestedEchoCancellation,
+                    echoCancellationEffective: route.effectiveEchoCancellation
+                )
+            } ?? DictationMetrics.AudioQuality()
+        )
+        analytics.track(.dictationCompleted(metrics))
     }
 
     private func completeOnboardingPracticeDictation(rawText: String, sessionID: UUID) async {
@@ -3396,6 +3554,7 @@ final class AppState {
             await stopRecordingAndTranscribe(trigger: activeRecordingSource ?? .manual)
             return
         }
+        analytics.track(.audioCaptureInterrupted(reason: AnalyticsMapping.interruptionReason(reason)))
         await audioCaptureService.cancelCapture(sessionID: sessionID, reason: reason)
         guard activeAudioCaptureSessionID == sessionID else {
             return
@@ -3413,6 +3572,7 @@ final class AppState {
             onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
         }
         AppLogger.shared.log(.warning, "audio capture rejected outcome=\(String(describing: outcome))")
+        analytics.track(.audioCaptureFailed(outcome: AnalyticsMapping.audioOutcome(outcome)))
         failDictationSession(
             sessionID: nil,
             lastErrorMessage: "Audio capture failed: \(message)",
@@ -3453,6 +3613,7 @@ final class AppState {
         selectedASRModelID = settings.selectedASRModelID
         updateChannel = settings.updateChannel
         accessibilityDragHelperEnabled = settings.accessibilityDragHelperEnabled
+        shareAnalyticsEnabled = settings.shareAnalyticsEnabled
         hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
         hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
         isHydratingGeneralSettings = false
@@ -3483,7 +3644,8 @@ final class AppState {
             hasCompletedCoreOnboarding: hasCompletedCoreOnboarding,
             selectedASRModelID: selectedASRModelID,
             updateChannel: updateChannel,
-            accessibilityDragHelperEnabled: accessibilityDragHelperEnabled
+            accessibilityDragHelperEnabled: accessibilityDragHelperEnabled,
+            shareAnalyticsEnabled: shareAnalyticsEnabled
         )
     }
 
