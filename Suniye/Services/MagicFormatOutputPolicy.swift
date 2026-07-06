@@ -61,6 +61,7 @@ enum MagicFormatPipeline {
         systemPrompt: String,
         keywords: [String],
         maxTokens: Int? = nil,
+        singleTurn: Bool = false,
         sanitize: (String) -> String = MagicFormatOutputSanitizer.sanitize,
         generate: (MagicFormatGenerationRequest) async throws -> String
     ) async throws -> String {
@@ -71,16 +72,30 @@ enum MagicFormatPipeline {
 
         var lastInvalidOutputWasEmpty = false
         for attempt in 0 ..< 2 {
-            let request = MagicFormatGenerationRequest(
-                instructions: MagicFormatPromptComposer.makeInstructions(
-                    systemPrompt: systemPrompt,
-                    keywords: keywords,
-                    text: trimmedInput,
-                    retrying: attempt > 0
-                ),
-                prompt: makePrompt(text: trimmedInput),
-                maxTokens: maxTokens
-            )
+            let request: MagicFormatGenerationRequest
+            if singleTurn {
+                // Fold the prompt and transcript into ONE user turn with no system
+                // instructions and no <transcript> tags. The on-device Apple model
+                // obeys transcript-embedded commands when the rules live in a separate
+                // instruction channel; a single turn resists prompt injection. It also
+                // tends to echo XML tags, so the transcript uses a plain delimiter.
+                request = MagicFormatGenerationRequest(
+                    instructions: "",
+                    prompt: makeSingleTurnPrompt(systemPrompt: systemPrompt, keywords: keywords, text: trimmedInput),
+                    maxTokens: maxTokens
+                )
+            } else {
+                request = MagicFormatGenerationRequest(
+                    instructions: MagicFormatPromptComposer.makeInstructions(
+                        systemPrompt: systemPrompt,
+                        keywords: keywords,
+                        text: trimmedInput,
+                        retrying: attempt > 0
+                    ),
+                    prompt: makePrompt(text: trimmedInput),
+                    maxTokens: maxTokens
+                )
+            }
 
             let raw = try await generate(request)
             let sanitized = sanitize(raw)
@@ -98,6 +113,20 @@ enum MagicFormatPipeline {
         <transcript>
         \(text)
         </transcript>
+        """
+    }
+
+    private static func makeSingleTurnPrompt(systemPrompt: String, keywords: [String], text: String) -> String {
+        var head = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !keywords.isEmpty {
+            head += "\n\nVocabulary terms to preserve exactly when present: \(keywords.joined(separator: ", "))."
+        }
+        return """
+        \(head)
+
+        ===
+        Dictated transcript to clean (output only the cleaned text):
+        \(text)
         """
     }
 }
