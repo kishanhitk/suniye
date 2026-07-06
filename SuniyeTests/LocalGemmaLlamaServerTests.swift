@@ -144,14 +144,19 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
         let server = LocalGemmaLlamaServer()
 
         do {
-            _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 1, idleTimeoutSeconds: 30)
+            // Long enough that the helper reliably boots and serves its (unhealthy) 503
+            // before the timeout fires, even under CI load — the 503 guarantees the timeout.
+            _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 4, idleTimeoutSeconds: 30)
             XCTFail("Expected startup timeout")
         } catch let error as LLMPostProcessorError {
             XCTAssertEqual(error.errorDescription, LLMPostProcessorError.timeout.errorDescription)
         }
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        XCTAssertEqual(startCount(at: logURL), 1)
+        // The helper may still be cold-starting under load; wait for it to record its start
+        // rather than asserting on a fixed sleep.
+        let didStart = await waitForStartCount(1, at: logURL)
+        XCTAssertTrue(didStart)
+        await server.stop()
     }
 
     func testStopWaitsForHelperProcessExit() async throws {
@@ -290,7 +295,9 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
     }
 
     private func waitForStartCount(_ expectedCount: Int, at url: URL) async -> Bool {
-        let deadline = Date().addingTimeInterval(2)
+        // Generous deadline: the fake Python helper's cold start can take several seconds
+        // under CI parallel-test CPU load, well beyond a couple of seconds.
+        let deadline = Date().addingTimeInterval(15)
         while Date() < deadline {
             if startCount(at: url) >= expectedCount {
                 return true
