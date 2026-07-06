@@ -330,6 +330,56 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         appState.openModelFolder()
         appState.openModelFolder(for: .moonshineBase)
     }
+
+    // MARK: - System-managed (Apple Speech) UI helpers
+
+    func testSystemManagedModelHidesSecondaryActionsAndShowsBuiltInSize() {
+        let appState = makeTestAppState()
+
+        XCTAssertEqual(appState.asrModelInstalledSizeText(for: .appleSpeech), "Built into macOS")
+        XCTAssertFalse(
+            appState.asrModelSecondaryActionsEnabled(for: .appleSpeech),
+            "System-managed models have no folder to open and can't be deleted"
+        )
+        XCTAssertNotEqual(appState.asrModelInstalledSizeText(for: .parakeetV3), "Built into macOS")
+
+        // Location label must not fabricate an on-disk path for a system-managed model.
+        XCTAssertEqual(appState.asrModelLocationText(for: .appleSpeech), "Built into macOS")
+        appState.selectedASRModelID = .appleSpeech
+        XCTAssertEqual(appState.modelLocationText, "Built into macOS")
+        XCTAssertTrue(appState.asrModelLocationText(for: .parakeetV3).contains("models"))
+    }
+
+    func testPrimaryActionForSystemManagedDownloadsAssetThenSelects() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3] // Apple asset NOT present → needs download
+        let transcription = StubTranscriptionService()
+        let appState = makeTestAppState(modelManager: modelManager, transcriptionService: transcription)
+        appState.phase = .ready
+
+        appState.performPrimaryASRAction(for: .appleSpeech)
+        await waitUntil { appState.selectedASRModelID == .appleSpeech && appState.phase == .ready }
+
+        XCTAssertEqual(appState.selectedASRModelID, .appleSpeech)
+        XCTAssertEqual(modelManager.lastDownloadedModelID, .appleSpeech, "an absent asset must be downloaded with progress")
+        XCTAssertEqual(transcription.loadCallCount, 1)
+        XCTAssertEqual(appState.phase, .ready)
+    }
+
+    func testPrimaryActionForSystemManagedSkipsDownloadWhenAssetPresent() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3, .appleSpeech] // asset already present
+        let transcription = StubTranscriptionService()
+        let appState = makeTestAppState(modelManager: modelManager, transcriptionService: transcription)
+        appState.phase = .ready
+
+        appState.performPrimaryASRAction(for: .appleSpeech)
+        await waitUntil { appState.selectedASRModelID == .appleSpeech && appState.phase == .ready }
+
+        XCTAssertNil(modelManager.lastDownloadedModelID, "a present asset must not trigger a download")
+        XCTAssertEqual(transcription.loadCallCount, 1)
+        XCTAssertEqual(appState.selectedASRModelID, .appleSpeech)
+    }
 }
 
 /// Model manager wrapper adding failure knobs on top of the shared stub.

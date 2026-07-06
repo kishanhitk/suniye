@@ -997,7 +997,7 @@ final class AppState {
     }
 
     var modelLocationText: String {
-        (try? modelManager.modelDirectoryURL(for: selectedASRModelID).path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) ?? "~/Library/Application Support/Suniye/models"
+        asrModelLocationText(for: selectedASRModelID)
     }
 
     var asrModelBanner: ASRModelBannerState? {
@@ -1116,7 +1116,12 @@ final class AppState {
     }
 
     func asrModelSecondaryActionsEnabled(for modelID: ASRModelID) -> Bool {
-        modelManager.isInstalled(modelID) && activeASRModelOperationID == nil && phase != .recording && phase != .transcribing
+        // System-managed models (Apple Speech) have no on-disk folder to open and can't
+        // be deleted by us, so hide the folder/trash actions for them.
+        guard !ASRModelCatalog.entry(for: modelID).isSystemManaged else {
+            return false
+        }
+        return modelManager.isInstalled(modelID) && activeASRModelOperationID == nil && phase != .recording && phase != .transcribing
     }
 
     func asrModelProgressLabel(for modelID: ASRModelID) -> String? {
@@ -1135,11 +1140,21 @@ final class AppState {
     }
 
     func asrModelInstalledSizeText(for modelID: ASRModelID) -> String {
-        ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(for: modelID), countStyle: .file)
+        let entry = ASRModelCatalog.entry(for: modelID)
+        if entry.isSystemManaged {
+            // Single source of truth for the system-managed label.
+            return entry.sizeDisplayText
+        }
+        return ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(for: modelID), countStyle: .file)
     }
 
     func asrModelLocationText(for modelID: ASRModelID) -> String {
-        (try? modelManager.modelDirectoryURL(for: modelID).path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) ?? "~/Library/Application Support/Suniye/models"
+        let entry = ASRModelCatalog.entry(for: modelID)
+        if entry.isSystemManaged {
+            // System-managed models have no on-disk folder; the OS owns the asset.
+            return entry.sizeDisplayText
+        }
+        return (try? modelManager.modelDirectoryURL(for: modelID).path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) ?? "~/Library/Application Support/Suniye/models"
     }
 
     var launchAtLoginDetailText: String {
@@ -1442,7 +1457,7 @@ final class AppState {
 
     init(
         modelManager: ModelManagerProtocol = ModelManager(),
-        transcriptionService: TranscriptionServiceProtocol = TranscriptionService(),
+        transcriptionService: TranscriptionServiceProtocol = RoutingTranscriptionService(),
         audioCaptureService: AudioCaptureServiceProtocol = AudioCaptureService(),
         textInsertionService: TextInsertionServiceProtocol = TextInsertionService(),
         editModeSelectionProvider: EditModeSelectionProviding? = nil,
@@ -2376,10 +2391,70 @@ final class AppState {
             return
         }
 
-        if modelManager.isInstalled(modelID) {
+        if ASRModelCatalog.entry(for: modelID).isSystemManaged {
+            // Presence of the OS-managed asset can only be checked asynchronously, so this
+            // path decides download-with-progress vs. straight load inside its own Task.
+            prepareSystemManagedModel(modelID)
+        } else if modelManager.isInstalled(modelID) {
             selectASRModel(modelID)
         } else {
             downloadASRModel(modelID, autoSelect: true)
+        }
+    }
+
+    /// Sets up a system-managed model (Apple Speech): if its on-device asset isn't present
+    /// yet, download it with a real progress bar; otherwise load it straight away. Then
+    /// selects it. Avoids the silent, hung-looking first-run download inside `loadModel`.
+    private func prepareSystemManagedModel(_ modelID: ASRModelID) {
+        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+            return
+        }
+
+        let hadLoadedModel = loadedASRModelID != nil
+        activeASRModelOperationID = modelID
+        phase = .loading
+        statusText = "Loading model..."
+        lastError = nil
+        lastFailedASRModelID = nil
+        lastFailedASRModelError = nil
+
+        Task {
+            do {
+                let assetInstalled = await modelManager.isSystemManagedAssetInstalled(modelID)
+                if !assetInstalled {
+                    phase = .downloadingModel
+                    statusText = "Downloading model..."
+                    downloadProgress = 0
+                    modelDownloadStartedAt = nowProvider()
+                    try await modelManager.downloadAndExtractModel(modelID) { [weak self] progress in
+                        Task { @MainActor in
+                            self?.downloadProgress = progress
+                        }
+                    }
+                    modelDownloadStartedAt = nil
+                    phase = .loading
+                    statusText = "Loading model..."
+                }
+
+                try await loadRecognizer(for: modelID)
+                selectedASRModelID = modelID
+                phase = .ready
+                statusText = "Ready"
+                lastError = nil
+                lastFailedASRModelID = nil
+                lastFailedASRModelError = nil
+                refreshOnboardingProgressIfNeeded()
+                AppLogger.shared.log(.info, "system-managed model ready id=\(modelID.rawValue)")
+            } catch {
+                handleASRModelOperationFailure(
+                    for: modelID,
+                    error: error,
+                    fallbackToReadyState: hadLoadedModel
+                )
+            }
+
+            activeASRModelOperationID = nil
+            modelDownloadStartedAt = nil
         }
     }
 

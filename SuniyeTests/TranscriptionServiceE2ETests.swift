@@ -30,6 +30,22 @@ final class TranscriptionServiceE2ETests: XCTestCase {
         }
     }
 
+    func testLoadModelRejectsAppleSpeechConfig() async throws {
+        // The sherpa engine must never accept an Apple Speech config (routing sends it
+        // to the Apple engine); it rejects it rather than trying to validate token files.
+        let service = TranscriptionService()
+        let config = RecognizerConfig(modelID: .appleSpeech, family: .appleSpeech, tokensPath: "", numThreads: 1)
+
+        do {
+            try await service.loadModel(config: config)
+            XCTFail("Expected loadModel to reject an Apple Speech config")
+        } catch let error as TranscriptionService.ServiceError {
+            guard case .invalidRecognizerConfiguration = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
     func testLoadMoonshineFailsFastForMissingFiles() async throws {
         let service = TranscriptionService()
 

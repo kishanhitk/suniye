@@ -349,6 +349,10 @@ actor TranscriptionService: TranscriptionServiceProtocol {
                 provider: "cpu",
                 debug: 0
             )
+        case .appleSpeech:
+            // Apple's SpeechAnalyzer is not a sherpa-onnx model; it is handled by a
+            // separate engine and must never reach this recognizer.
+            throw ServiceError.invalidRecognizerConfiguration
         }
 
         return sherpaOnnxOfflineRecognizerConfig(
@@ -376,6 +380,11 @@ actor TranscriptionService: TranscriptionServiceProtocol {
             paths.append(contentsOf: [config.modelPath].compactMap { $0 })
         case .whisper:
             paths.append(contentsOf: [config.encoderPath, config.decoderPath].compactMap { $0 })
+        case .appleSpeech:
+            // Apple's SpeechAnalyzer has no on-disk files and must never reach this
+            // sherpa-only path; reject it the same way makeRecognizerConfig does rather
+            // than falling through to validate the (empty) tokensPath.
+            throw ServiceError.invalidRecognizerConfiguration
         }
 
         for path in paths where !FileManager.default.fileExists(atPath: path) {
