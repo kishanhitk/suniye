@@ -1,8 +1,9 @@
 import Foundation
 
-/// Coarse, non-identifying hardware/OS profile. Sent ONLY on `app_launch`
-/// (joined to other events by install id in the dashboard) to stay within
-/// Analytics Engine's per-row blob budget.
+/// Coarse, non-identifying hardware/OS profile. The full profile ships on
+/// `app_launch` (→ the D1 install registry); `batchProps` also rides every
+/// batch envelope so the ingest Worker can stamp device dims onto each event's
+/// AE row, making every metric hardware-sliceable.
 ///
 /// The app assembles this — the package never reads `sysctl`/`ProcessInfo`
 /// itself, so it carries no platform knowledge. Rare-combo bucketing (to avoid
@@ -57,9 +58,10 @@ public struct DeviceProfile: Sendable, Equatable {
     }
 
     /// Device props for the batch envelope, stamped onto EVERY event's AE row so
-    /// any metric can be sliced by hardware. Excludes `language` — it would
-    /// collide with a dictation's own spoken-language key (both map to blob7);
-    /// the full `props` (incl. `language`) still ships on `app_launch`.
+    /// any metric can be sliced by hardware. Excludes `language` — the ingest
+    /// merge lets event props win, but on events with no language of their own
+    /// the device UI language would FILL the spoken-language slot (blob7) and
+    /// corrupt language slicing; the full `props` still ship on `app_launch`.
     var batchProps: [String: AnalyticsValue] {
         var out = props
         out.removeValue(forKey: "language")

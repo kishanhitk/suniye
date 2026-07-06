@@ -1,3 +1,4 @@
+import SuniyeAnalytics
 import XCTest
 @testable import Suniye
 
@@ -20,6 +21,32 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         XCTAssertEqual(output.text, "raw text")
         XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
+        XCTAssertEqual(output.fallbackReason, .emptyOutput)
+        XCTAssertEqual(output.provider, .openAICompatible) // provider recorded even on fallback
+    }
+
+    func testEveryLLMErrorMapsToASpecificFallbackReason() {
+        // Reason fidelity: no producible error may silently degrade to .unknown —
+        // the fallback-reasons dashboard card exists to diagnose these.
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.invalidConfiguration("x")), .invalidConfig)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.timeout), .timeout)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.unauthorized), .unauthorized)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.provider("x")), .providerError)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.malformedResponse), .malformedResponse)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.emptyOutput), .emptyOutput)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.network("x")), .network)
+    }
+
+    func testUnresolvedLocalProviderRecordsAttemptedProviderAndReason() async {
+        let coordinator = makeCoordinator()
+        let request = makeRequest(provider: .localGemma, localGemmaAvailability: .runtimeUnavailable)
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran)
+        XCTAssertEqual(output.provider, .localGemma) // which provider was attempted
+        XCTAssertEqual(output.fallbackReason, .providerUnavailable)
     }
 
     func testAPIPolishFallsBackToRawTextOnUnknownError() async {
@@ -100,6 +127,7 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         XCTAssertEqual(output.text, "raw text")
         XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
+        XCTAssertEqual(output.fallbackReason, .timeout) // typed reason survives the boundary
     }
 
     func testGemmaPolishFallsBackToRawTextOnUnknownError() async {

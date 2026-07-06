@@ -2870,7 +2870,7 @@ final class AppState {
     func polishOutcome(_ rawText: String, frontmostAppBundleID: String? = nil) async -> MagicFormatPolishOutcome {
         let input = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else {
-            return MagicFormatPolishOutcome(text: rawText, ran: false, provider: nil, model: nil, fallbackReason: nil)
+            return .notRun(rawText)
         }
 
         switch llmE2EMode {
@@ -2879,14 +2879,14 @@ final class AppState {
             return .polished("\(input).", provider: .openAICompatible, model: nil)
         case .forceFailure:
             AppLogger.shared.log(.warning, "llm e2e forced fallback")
-            return .fellBack(rawText, provider: nil, reason: "forced_failure")
+            return .fellBack(rawText, provider: nil, reason: .unknown)
         case .none:
             break
         }
 
         guard llmEnabled else {
             // Magic Format is off — not a fallback, just not run.
-            return MagicFormatPolishOutcome(text: rawText, ran: false, provider: nil, model: nil, fallbackReason: nil)
+            return .notRun(rawText)
         }
 
         var settings = currentLLMSettings()
@@ -2896,11 +2896,17 @@ final class AppState {
             AppLogger.shared.log(.info, "llm per-app prompt instructions appended")
         }
 
-        return await magicFormatCoordinator.polish(
+        let outcome = await magicFormatCoordinator.polish(
             input: input,
             rawText: rawText,
             request: makeMagicFormatRequest(settings: settings)
         )
+        // The custom API preset's model id is user free text — mask it before it
+        // can reach analytics (labels are controlled vocabulary only).
+        if outcome.provider == .openAICompatible, llmSelectedModelPreset == .custom {
+            return outcome.replacingModel("custom")
+        }
+        return outcome
     }
 
     /// Pass `settings` when per-app prompt instructions apply (dictation polish);
@@ -3415,16 +3421,11 @@ final class AppState {
         source: RecordingSource,
         frontmostAppBundleID: String?
     ) {
-        // Record the provider that ran (or was attempted) whenever Magic Format is
-        // on — NOT gated on whether the text changed — so the provider mix and
-        // fallback reasons are visible even when a polish is idempotent or falls
-        // back. `cleanup_model` reflects the actual model when the provider
-        // reported one, else the user's selected preset.
-        let ranProvider = llmOutcome?.provider.map { AnalyticsMapping.cleanupProvider(effective: $0) }
-        let cleanupProvider = llmEnabled ? (ranProvider ?? AnalyticsMapping.cleanupProvider(llmProvider)) : nil
-        let cleanupModel = cleanupProvider == nil
-            ? nil
-            : SafeLabel(llmOutcome?.model ?? llmSelectedModelPreset.rawValue)
+        // Pure function of the polish outcome — no live settings reads here (they
+        // could have changed across the insertion suspension points, and the
+        // outcome already knows what actually ran/was attempted and why).
+        let cleanupProvider = llmOutcome?.provider.map { AnalyticsMapping.cleanupProvider(effective: $0) }
+        let cleanupModel = llmOutcome?.model.map { SafeLabel($0) }
 
         let metrics = DictationMetrics(
             wordCount: wordCount,
@@ -3440,7 +3441,7 @@ final class AppState {
             wasLLMPolished: llmOutcome?.ran ?? false,
             cleanupProvider: cleanupProvider,
             cleanupModel: cleanupModel,
-            cleanupFallbackReason: AnalyticsMapping.cleanupFallbackReason(llmOutcome?.fallbackReason),
+            cleanupFallbackReason: llmOutcome?.fallbackReason,
             insertionMethod: .clipboard, // insertion is always clipboard+paste
             targetCategory: TargetCategoryMapper.category(for: frontmostAppBundleID),
             latency: dictationTiming.latency(),

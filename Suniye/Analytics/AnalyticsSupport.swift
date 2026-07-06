@@ -129,13 +129,6 @@ enum AnalyticsMapping {
         case .openAICompatible: return .openAICompatible
         }
     }
-
-    /// Maps a coordinator fallback reason string to the closed enum; unmapped
-    /// reasons become `.unknown` (we still record that a fallback happened).
-    static func cleanupFallbackReason(_ reason: String?) -> CleanupFallbackReason? {
-        guard let reason else { return nil }
-        return CleanupFallbackReason(rawValue: reason) ?? .unknown
-    }
 }
 
 /// Monotonic per-dictation latency marks. Dictation is serialized by the phase
