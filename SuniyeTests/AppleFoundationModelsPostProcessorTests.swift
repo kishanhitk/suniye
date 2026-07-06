@@ -45,6 +45,11 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         XCTAssertEqual(output, "Final text.")
         XCTAssertEqual(client.callCount, 2)
         XCTAssertEqual(client.instructions.last, "")
+        // The model is deterministic, so the retry must vary the prompt or it would
+        // just replay the rejected output. Attempt 2 carries a correction directive.
+        XCTAssertNotEqual(client.prompts.first, client.prompts.last)
+        XCTAssertFalse(client.prompts.first?.contains("previous answer was rejected") == true)
+        XCTAssertTrue(client.prompts.last?.contains("previous answer was rejected") == true)
     }
 
     func testLegitimateSentenceStartersAreAccepted() async throws {

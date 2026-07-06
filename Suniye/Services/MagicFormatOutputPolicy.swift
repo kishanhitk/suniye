@@ -81,7 +81,12 @@ enum MagicFormatPipeline {
                 // tends to echo XML tags, so the transcript uses a plain delimiter.
                 request = MagicFormatGenerationRequest(
                     instructions: "",
-                    prompt: makeSingleTurnPrompt(systemPrompt: systemPrompt, keywords: keywords, text: trimmedInput),
+                    prompt: makeSingleTurnPrompt(
+                        systemPrompt: systemPrompt,
+                        keywords: keywords,
+                        text: trimmedInput,
+                        retrying: attempt > 0
+                    ),
                     maxTokens: maxTokens
                 )
             } else {
@@ -116,10 +121,15 @@ enum MagicFormatPipeline {
         """
     }
 
-    private static func makeSingleTurnPrompt(systemPrompt: String, keywords: [String], text: String) -> String {
+    private static func makeSingleTurnPrompt(systemPrompt: String, keywords: [String], text: String, retrying: Bool) -> String {
         var head = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         if !keywords.isEmpty {
             head += "\n\nVocabulary terms to preserve exactly when present: \(keywords.joined(separator: ", "))."
+        }
+        if retrying {
+            // The model is deterministic, so a byte-identical retry would just replay the
+            // rejected output. Vary the second attempt with a correction directive.
+            head += "\n\nYour previous answer was rejected. Return ONLY the cleaned transcript text on the fewest lines the transcript dictates — no preamble, no commentary, no <transcript> tags."
         }
         return """
         \(head)

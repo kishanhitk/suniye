@@ -8,10 +8,12 @@ own Swift harness at `evals/apple-magic-eval/` (macOS 26, Apple Intelligence req
 ```bash
 swift build --package-path evals/apple-magic-eval
 ./evals/apple-magic-eval/.build/debug/apple-magic-eval \
-  --prompt evals/prompts/apple_magic_format_v15.txt \
+  --prompt evals/prompts/apple_magic_format_v45.txt \
   --cases evals/magic_format_cases.json \
-  --json-output evals/runs/apple_v15_multiturn.json
-# add --single-turn to fold prompt+transcript into one user turn (Gemma-eval-path shape)
+  --single-turn \
+  --json-output evals/runs/apple_v45.json
+# --single-turn = the shipped Apple request shape (one user turn, no <transcript> tags).
+# Drop it for multi-turn (instructions + tagged transcript).
 ```
 
 It reuses the same 39-case suite and ports `eval_magic_format.py`'s scoring exactly
@@ -19,6 +21,14 @@ It reuses the same 39-case suite and ports `eval_magic_format.py`'s scoring exac
 0.92 threshold), plus a **refusal** category Gemma never had. The on-device model is
 deterministic at temp 0 (repeated runs are byte-identical), so every flip is signal.
 Concurrent runs serialize on the ANE with overhead — run candidates sequentially.
+
+**Latency (per cleanup, greedy/temp 0).** Apple's on-device model is ~4× slower than
+the quantized Gemma-4 on llama.cpp:
+
+| model | avg | median | max | first call (warmup) |
+|-------|-----|--------|-----|---------------------|
+| Gemma-4 E2B Q4_K_M (llama.cpp) | 507 ms | 417 ms | 2236 ms | — |
+| Apple Intelligence (single-turn) | 1665 ms | 1631 ms | 2633 ms | 2218 ms |
 
 ### Version scores (39-case suite, Apple Intelligence, macOS 26, decontaminated)
 

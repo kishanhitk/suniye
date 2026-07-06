@@ -1,14 +1,14 @@
 import Foundation
 
-// Standalone Apple Intelligence Magic Format eval. Mirrors the request shape of
-// scripts/eval_magic_format.py (single-shot prompt + <transcript> wrap, no
-// composer/retry) so scores compare directly to the Gemma version table.
+// Standalone Apple Intelligence Magic Format eval, comparable to the Gemma runner
+// in scripts/eval_magic_format.py (same case JSONs, same scoring).
 //
-// Apple's API forces an instructions/prompt split, so we map:
-//   instructions <- prompt text   (the tuned system prompt)
-//   prompt        <- <transcript>…</transcript>
-// documented here because it is the one unavoidable divergence from the Gemma
-// single-user-turn layout.
+// Request shape is selectable:
+//   default (multi-turn): instructions <- prompt text; prompt <- <transcript>…</transcript>
+//   --single-turn:        instructions empty; one user turn = prompt text + a plain
+//                         delimiter + the raw transcript (no tags). This is the shipped
+//                         Apple shape — folding into one turn is what makes the model
+//                         resist transcript-embedded injection commands.
 
 struct Options {
     var prompt = URL(fileURLWithPath: "evals/prompts/apple_magic_format_v1.txt")
@@ -57,6 +57,7 @@ struct Result: Codable {
     let refused: Bool
     let passed: Bool
     let error: String?
+    let latencyMs: Int
 }
 
 func makePrompt(transcript: String) -> String {
@@ -95,11 +96,13 @@ for c in cases {
     let userPrompt = opts.singleTurn
         ? "\(promptText)\n\n===\nDictated transcript to clean (output only the cleaned text):\n\(c.input)"
         : multiTurnUser
+    let startedAt = Date()
     let outcome = await runner.generate(
         instructions: instructions,
         prompt: userPrompt,
         maxTokens: opts.maxTokens
     )
+    let latencyMs = Int(Date().timeIntervalSince(startedAt) * 1000)
 
     let actual: String
     var refused = false
@@ -116,7 +119,8 @@ for c in cases {
     results.append(Result(
         id: c.id, category: c.category, input: c.input, expected: c.expected,
         actual: actual, exact: score.exact, similarity: (score.similarity * 1000).rounded() / 1000,
-        structureMatches: score.structureMatches, refused: refused, passed: passed, error: error
+        structureMatches: score.structureMatches, refused: refused, passed: passed, error: error,
+        latencyMs: latencyMs
     ))
 }
 
@@ -129,6 +133,14 @@ print("Cases: \(results.count)")
 print("Exact: \(exactCount)/\(results.count)")
 print("Passed @ \(String(format: "%.2f", opts.threshold)): \(passCount)/\(results.count)")
 print("Refusals: \(refusalCount)")
+
+let latencies = results.map(\.latencyMs).sorted()
+if !latencies.isEmpty {
+    let avg = latencies.reduce(0, +) / latencies.count
+    let median = latencies[latencies.count / 2]
+    // First call includes model/session warmup; report it separately.
+    print("Latency ms: avg=\(avg) median=\(median) max=\(latencies.last!) first=\(results.first!.latencyMs)")
+}
 
 let byCategory = Dictionary(grouping: results, by: \.category)
 print("\nBy category:")

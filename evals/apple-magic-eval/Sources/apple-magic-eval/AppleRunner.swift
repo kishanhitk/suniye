@@ -42,9 +42,7 @@ struct UnsupportedRunner: AppleModelRunner {
 #if canImport(FoundationModels)
 @available(macOS 26.0, *)
 struct LiveRunner: AppleModelRunner {
-    private var model: SystemLanguageModel {
-        SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations)
-    }
+    private let model = SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations)
 
     var isAvailable: Bool {
         if case .available = model.availability { return true }
