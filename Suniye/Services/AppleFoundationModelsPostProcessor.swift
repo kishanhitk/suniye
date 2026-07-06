@@ -29,7 +29,8 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
             text: text,
             systemPrompt: config.systemPrompt,
             keywords: config.keywords,
-            maxTokens: config.maxTokens
+            maxTokens: config.maxTokens,
+            singleTurn: true
         ) { request in
             do {
                 return try await withTimeout(seconds: config.timeoutSeconds) {
@@ -188,7 +189,12 @@ private struct LiveAppleFoundationModelsClient: AppleFoundationModelsClient {
 
     func generate(instructions: String, prompt: String, maxTokens: Int) async throws -> String {
         let activeModel = model
-        let session = LanguageModelSession(model: activeModel, instructions: instructions)
+        // Empty instructions means single-turn: everything is in `prompt`, so create
+        // the session without a separate system-instruction channel (this is what makes
+        // the model resist transcript-embedded injection commands).
+        let session = instructions.isEmpty
+            ? LanguageModelSession(model: activeModel)
+            : LanguageModelSession(model: activeModel, instructions: instructions)
         let options = GenerationOptions(
             sampling: .greedy,
             temperature: 0,
