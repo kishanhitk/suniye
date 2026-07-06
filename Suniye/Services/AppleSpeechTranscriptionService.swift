@@ -75,7 +75,11 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
         )
         let analyzer = SpeechAnalyzer(modules: [transcriber])
 
-        let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber])
+        guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber]) else {
+            // A nil format means the module can't advertise one (not ready / unsupported);
+            // feeding an arbitrary format risks empty or garbage output, so fail cleanly.
+            throw ServiceError.bufferPreparationFailed
+        }
         let inputBuffer = try Self.makeInputBuffer(
             samples: samples,
             sampleRate: max(8_000, sampleRate),
@@ -83,29 +87,25 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
         )
 
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
+        continuation.yield(AnalyzerInput(buffer: inputBuffer))
+        continuation.finish()
 
-        // Collect finalized text concurrently with feeding audio. The results sequence
-        // terminates once the analyzer finishes, ending this loop.
-        let collector = Task {
-            var text = AttributedString()
-            for try await result in transcriber.results {
-                text.append(result.text)
-            }
-            return String(text.characters)
+        // Structured child task: collects finalized segments while the analyzer runs, and
+        // is automatically cancelled/awaited if this function throws. With no volatile
+        // results each segment is final and carries its own spacing, so plain concatenation
+        // is correct — do not insert separators.
+        async let transcription = transcriber.results.reduce(into: AttributedString()) { $0.append($1.text) }
+
+        // Documented one-shot batch path: analyze the finite input, then flush finalized
+        // results through the last processed sample.
+        if let lastSample = try await analyzer.analyzeSequence(stream) {
+            try await analyzer.finalizeAndFinish(through: lastSample)
+        } else {
+            await analyzer.cancelAndFinishNow()
         }
 
-        do {
-            try await analyzer.start(inputSequence: stream)
-            continuation.yield(AnalyzerInput(buffer: inputBuffer))
-            continuation.finish()
-            try await analyzer.finalizeAndFinishThroughEndOfInput()
-        } catch {
-            continuation.finish()
-            collector.cancel()
-            throw error
-        }
-
-        let text = try await collector.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attributed = try await transcription
+        let text = String(attributed.characters).trimmingCharacters(in: .whitespacesAndNewlines)
         AppLogger.shared.log(.info, "apple speech transcribe done chars=\(text.count)")
         return text
     }
@@ -122,21 +122,44 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
     }
 
     private static func ensureModelInstalled(for locale: Locale) async throws {
-        let installed = await SpeechTranscriber.installedLocales
         let target = locale.identifier(.bcp47)
-        if installed.contains(where: { $0.identifier(.bcp47) == target }) {
+        let installed = await SpeechTranscriber.installedLocales
+        if !installed.contains(where: { $0.identifier(.bcp47) == target }) {
+            let transcriber = SpeechTranscriber(
+                locale: locale,
+                transcriptionOptions: [],
+                reportingOptions: [],
+                attributeOptions: []
+            )
+            if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+                AppLogger.shared.log(.info, "apple speech installing asset locale=\(target)")
+                try await request.downloadAndInstall()
+            }
+        }
+
+        await reserveLocaleIfNeeded(locale)
+    }
+
+    /// Reserves the locale so the OS won't purge its installed asset between sessions
+    /// (an unreserved asset can be reclaimed, forcing a surprise re-download). Reservation
+    /// is best-effort: a failure or a full reservation slate must not fail transcription,
+    /// since the asset is already installed and usable.
+    private static func reserveLocaleIfNeeded(_ locale: Locale) async {
+        let target = locale.identifier(.bcp47)
+        let reserved = await AssetInventory.reservedLocales
+        guard !reserved.contains(where: { $0.identifier(.bcp47) == target }) else {
             return
         }
 
-        let transcriber = SpeechTranscriber(
-            locale: locale,
-            transcriptionOptions: [],
-            reportingOptions: [],
-            attributeOptions: []
-        )
-        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-            AppLogger.shared.log(.info, "apple speech installing asset locale=\(target)")
-            try await request.downloadAndInstall()
+        if reserved.count >= AssetInventory.maximumReservedLocales, let evictable = reserved.last {
+            _ = await AssetInventory.release(reservedLocale: evictable)
+        }
+
+        do {
+            _ = try await AssetInventory.reserve(locale: locale)
+            AppLogger.shared.log(.info, "apple speech reserved locale=\(target)")
+        } catch {
+            AppLogger.shared.log(.warning, "apple speech reserve failed locale=\(target) error=\(error.localizedDescription)")
         }
     }
 
@@ -145,7 +168,7 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
     private static func makeInputBuffer(
         samples: [Float],
         sampleRate: Int,
-        targetFormat: AVAudioFormat?
+        targetFormat: AVAudioFormat
     ) throws -> AVAudioPCMBuffer {
         guard
             let sourceFormat = AVAudioFormat(
@@ -172,7 +195,7 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
         }
 
         // No conversion needed when the analyzer accepts our native format.
-        guard let targetFormat, targetFormat != sourceFormat else {
+        if targetFormat == sourceFormat {
             return sourceBuffer
         }
 
@@ -180,8 +203,11 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
             throw ServiceError.bufferPreparationFailed
         }
 
+        // Capacity = resampled length + a ~100 ms margin covering the resampler's filter
+        // delay, so the whole input converts in a single pass without dropping tail frames.
         let ratio = targetFormat.sampleRate / sourceFormat.sampleRate
-        let targetCapacity = AVAudioFrameCount((Double(samples.count) * ratio).rounded(.up)) + 1
+        let margin = AVAudioFrameCount(targetFormat.sampleRate / 10) + 1
+        let targetCapacity = AVAudioFrameCount((Double(samples.count) * ratio).rounded(.up)) + margin
         guard let targetBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: targetCapacity) else {
             throw ServiceError.bufferPreparationFailed
         }
@@ -198,6 +224,8 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
             return sourceBuffer
         }
 
+        // The margin above guarantees a single pass reaches .endOfStream; only a hard
+        // converter error is a real failure.
         if status == .error || conversionError != nil {
             throw ServiceError.bufferPreparationFailed
         }

@@ -26,6 +26,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Suniye needs microphone access to capture dictation.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Suniye uses on-device speech recognition to transcribe your dictation.</string>
 	<key>SUAutomaticallyUpdate</key>
 	<true/>
 	<key>SUEnableAutomaticChecks</key>
