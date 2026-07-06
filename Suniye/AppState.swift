@@ -1382,6 +1382,9 @@ final class AppState {
     private let diagnosticBundleService: DiagnosticBundleServiceProtocol
     private let issueReportUploadService: IssueReportUploadServiceProtocol
     private let analytics: Analytics
+    /// Per-dictation monotonic latency marks. Safe as a single instance because
+    /// the phase machine serializes dictations. Not observed UI state.
+    @ObservationIgnored private var dictationTiming = DictationTiming()
     private let editLearningService: EditLearningServiceProtocol
     private let learningToastPresenter: LearningToastPresenting
     private let currentAppVersionProvider: () -> AppVersion?
@@ -1571,11 +1574,32 @@ final class AppState {
 
         if startServices {
             analytics.start()
+            emitAppLaunchEvent()
             wireHotkey()
             Task {
                 await bootstrap()
             }
         }
+    }
+
+    private func emitAppLaunchEvent() {
+        analytics.track(.appLaunch(
+            device: DeviceProfileReader.read(),
+            settings: analyticsSettingsSnapshot(),
+            firstLaunch: !hasSeenOnboardingWelcome
+        ))
+    }
+
+    private func analyticsSettingsSnapshot() -> SettingsSnapshot {
+        SettingsSnapshot([
+            "asr_model": .label(SafeLabel(selectedASRModelID.rawValue)),
+            "auto_submit": .bool(autoSubmitEnabled),
+            "echo_cancellation": .bool(echoCancellationEnabled),
+            "sound_feedback": .bool(soundFeedbackEnabled),
+            "magic_format_enabled": .bool(llmEnabled),
+            "magic_format_provider": .label(AnalyticsMapping.cleanupProvider(describing: String(describing: llmProvider))),
+            "update_channel": .label(SafeLabel(updateChannel.rawValue)),
+        ])
     }
 
     /// Force-send queued analytics (called on sleep). Best-effort, never blocks.
@@ -2995,6 +3019,7 @@ final class AppState {
         }
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "start recording ignored in phase=\(phase.rawValue)")
+            analytics.track(.dictationBlocked(reason: .wrongPhase))
             showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             return
         }
@@ -3005,6 +3030,7 @@ final class AppState {
             lastError = "Microphone permission not granted"
             statusText = "Permission required"
             AppLogger.shared.log(.warning, "microphone permission denied")
+            analytics.track(.dictationBlocked(reason: .micDenied))
             playSoundFeedback(.error)
             showTransientIndicatorError("Microphone permission required")
             return
@@ -3017,6 +3043,7 @@ final class AppState {
             lastError = "Accessibility permission not granted"
             statusText = "Accessibility required"
             AppLogger.shared.log(.warning, "accessibility permission denied before recording")
+            analytics.track(.dictationBlocked(reason: .accessibilityDenied))
             playSoundFeedback(.error)
             showTransientIndicatorError("Enable Accessibility for dictation")
             return
@@ -3052,6 +3079,8 @@ final class AppState {
         }
 
         let sessionID = UUID()
+        dictationTiming = DictationTiming()
+        dictationTiming.recordStart = .now()
         // Capture the target app before any Suniye UI can steal focus.
         let context = DictationSessionContext(
             id: sessionID,
@@ -3085,6 +3114,7 @@ final class AppState {
                 activeDictationSession = .recording(context)
             }
             audioRouteSnapshot = session.route
+            dictationTiming.captureStarted = .now()
             AppLogger.shared.log(.info, "recording started session=\(sessionID.uuidString) \(session.route.privacySafeLogValue)")
         } catch {
             guard activeAudioCaptureSessionID == sessionID else {
@@ -3120,6 +3150,7 @@ final class AppState {
         let samples = captured.samples
         let sampleRate = captured.sampleRate
         let duration = Date().timeIntervalSince(context.startedAt)
+        dictationTiming.stopped = .now()
         let destination = context.destination
         AppLogger.shared.log(.info, "dictation stop samples=\(samples.count) sr=\(sampleRate) duration=\(String(format: "%.2f", duration))")
 
@@ -3129,7 +3160,9 @@ final class AppState {
         }
 
         do {
+            dictationTiming.asrStart = .now()
             let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
+            dictationTiming.asrEnd = .now()
             let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 
             switch destination {
@@ -3147,7 +3180,8 @@ final class AppState {
                     duration: duration,
                     sampleCount: samples.count,
                     sampleRate: sampleRate,
-                    frontmostAppBundleID: context.frontmostAppBundleID
+                    frontmostAppBundleID: context.frontmostAppBundleID,
+                    source: context.source
                 )
             case .onboardingPractice:
                 await completeOnboardingPracticeDictation(rawText: rawText, sessionID: sessionID)
@@ -3161,6 +3195,7 @@ final class AppState {
                 )
             }
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
+            analytics.track(.error(type: .transcription, code: .unknown))
             failDictationSession(
                 sessionID: sessionID,
                 lastErrorMessage: "Transcription failed: \(error.localizedDescription)",
@@ -3175,7 +3210,8 @@ final class AppState {
         duration: TimeInterval,
         sampleCount: Int,
         sampleRate: Int,
-        frontmostAppBundleID: String?
+        frontmostAppBundleID: String?,
+        source: RecordingSource
     ) async throws {
         let rawParse = AppState.parseSubmitCommand(from: rawText)
         var shouldSubmit = rawParse.shouldSubmit
@@ -3183,7 +3219,9 @@ final class AppState {
         var finalText = rawParse.text
 
         if !finalText.isEmpty {
+            dictationTiming.llmStart = .now()
             llmOutputText = await postProcessTextIfEnabled(rawParse.text, frontmostAppBundleID: frontmostAppBundleID)
+            dictationTiming.llmEnd = .now()
             let polishedParse = AppState.parseSubmitCommand(from: llmOutputText)
             finalText = polishedParse.text
             shouldSubmit = shouldSubmit || polishedParse.shouldSubmit
@@ -3208,6 +3246,7 @@ final class AppState {
                 insertionContext: textInsertionService.captureInsertionContext()
             )
             try textInsertionService.insertText(insertionText)
+            dictationTiming.inserted = .now()
             beginEditLearningTracking(insertedText: insertionText)
             recentResults.insert(
                 RecentResult(
@@ -3235,9 +3274,51 @@ final class AppState {
         if finalText.isEmpty && !shouldSubmit {
             AppLogger.shared.log(.warning, "transcription returned empty text samples=\(sampleCount) sr=\(sampleRate)")
             playSoundFeedback(.error)
+            analytics.track(.dictationEmpty)
+        }
+
+        if didCompleteDictation {
+            emitDictationCompleted(
+                finalText: finalText,
+                wordCount: wordCount,
+                duration: duration,
+                wasLLMPolished: wasLLMPolished,
+                source: source,
+                frontmostAppBundleID: frontmostAppBundleID
+            )
         }
 
         completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation)
+    }
+
+    private func emitDictationCompleted(
+        finalText: String,
+        wordCount: Int,
+        duration: TimeInterval,
+        wasLLMPolished: Bool,
+        source: RecordingSource,
+        frontmostAppBundleID: String?
+    ) {
+        let metrics = DictationMetrics(
+            wordCount: wordCount,
+            charCount: finalText.count,
+            audioDurationMs: Int(duration * 1000),
+            source: AnalyticsMapping.source(source),
+            destination: .systemInsertion,
+            asrModel: SafeLabel(selectedASRModelID.rawValue),
+            asrFamily: SafeLabel(selectedASRModelID.rawValue),
+            language: SafeLabel("en"),
+            wasLLMPolished: wasLLMPolished,
+            cleanupProvider: wasLLMPolished
+                ? AnalyticsMapping.cleanupProvider(describing: String(describing: llmProvider))
+                : nil,
+            cleanupModel: nil,
+            cleanupFallbackReason: nil,
+            insertionMethod: .unknown,
+            targetCategory: TargetCategoryMapper.category(for: frontmostAppBundleID),
+            latency: dictationTiming.latency()
+        )
+        analytics.track(.dictationCompleted(metrics))
     }
 
     private func completeOnboardingPracticeDictation(rawText: String, sessionID: UUID) async {
@@ -3359,6 +3440,7 @@ final class AppState {
             await stopRecordingAndTranscribe(trigger: activeRecordingSource ?? .manual)
             return
         }
+        analytics.track(.audioCaptureInterrupted(reason: AnalyticsMapping.interruptionReason(reason)))
         await audioCaptureService.cancelCapture(sessionID: sessionID, reason: reason)
         guard activeAudioCaptureSessionID == sessionID else {
             return
@@ -3376,6 +3458,7 @@ final class AppState {
             onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
         }
         AppLogger.shared.log(.warning, "audio capture rejected outcome=\(String(describing: outcome))")
+        analytics.track(.audioCaptureFailed(outcome: AnalyticsMapping.audioOutcome(outcome)))
         failDictationSession(
             sessionID: nil,
             lastErrorMessage: "Audio capture failed: \(message)",

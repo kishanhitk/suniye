@@ -80,8 +80,8 @@ public struct SafeLabel: Encodable, Equatable, Sendable, CustomStringConvertible
 }
 
 extension AnalyticsValue {
-    static func label(_ safe: SafeLabel) -> AnalyticsValue { .label(safe.value) }
-    static func label<R: RawRepresentable>(_ raw: R) -> AnalyticsValue where R.RawValue == String {
+    public static func label(_ safe: SafeLabel) -> AnalyticsValue { .label(safe.value) }
+    public static func label<R: RawRepresentable>(_ raw: R) -> AnalyticsValue where R.RawValue == String {
         .label(raw.rawValue)
     }
 }
