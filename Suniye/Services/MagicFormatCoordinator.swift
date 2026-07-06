@@ -1,9 +1,56 @@
 import Foundation
+import SuniyeAnalytics
 
-enum EffectiveMagicFormatProvider {
+enum EffectiveMagicFormatProvider: Equatable {
     case appleFoundationModels
     case localGemma
     case openAICompatible
+}
+
+/// The result of a Magic Format polish attempt: the text to insert, plus which
+/// provider was involved and why it fell back (closed vocabulary — never a log
+/// string). Construct only via the factories, which make the states coherent:
+/// not-run (provider nil), polished (reason nil), or fell-back (reason set).
+struct MagicFormatPolishOutcome {
+    let text: String
+    /// The provider that ran or was attempted; nil when no polish was attempted
+    /// (Magic Format off, empty input).
+    let provider: EffectiveMagicFormatProvider?
+    let model: String?
+    let fallbackReason: CleanupFallbackReason?
+
+    /// A provider actually ran and produced output. This is the honest "Magic
+    /// Format adoption" signal — an idempotent polish counts, a fallback-to-raw
+    /// does not (unlike "did the text change").
+    var ran: Bool { provider != nil && fallbackReason == nil }
+
+    static func notRun(_ text: String) -> MagicFormatPolishOutcome {
+        MagicFormatPolishOutcome(text: text, provider: nil, model: nil, fallbackReason: nil)
+    }
+
+    static func polished(_ text: String, provider: EffectiveMagicFormatProvider, model: String?) -> MagicFormatPolishOutcome {
+        MagicFormatPolishOutcome(text: text, provider: provider, model: model, fallbackReason: nil)
+    }
+
+    static func fellBack(_ text: String, provider: EffectiveMagicFormatProvider?, model: String? = nil, reason: CleanupFallbackReason) -> MagicFormatPolishOutcome {
+        MagicFormatPolishOutcome(text: text, provider: provider, model: model, fallbackReason: reason)
+    }
+}
+
+extension CleanupFallbackReason {
+    /// Exhaustive: adding an `LLMPostProcessorError` case won't compile until it
+    /// picks an analytics reason — the boundary can't silently degrade.
+    init(_ error: LLMPostProcessorError) {
+        switch error {
+        case .invalidConfiguration: self = .invalidConfig
+        case .timeout: self = .timeout
+        case .unauthorized: self = .unauthorized
+        case .provider: self = .providerError
+        case .malformedResponse: self = .malformedResponse
+        case .emptyOutput: self = .emptyOutput
+        case .network: self = .network
+        }
+    }
 }
 
 enum MagicFormatRewriteError: LocalizedError, Equatable {
@@ -34,6 +81,10 @@ final class MagicFormatCoordinator {
         let startSlowWarning: () -> Task<Void, Never>
         /// Advertise the current stage to both the status text and the pill.
         let setStage: (String) -> Void
+        /// Replaces the API model id in outcomes AND logs (e.g. "custom" when the
+        /// user's preset carries a free-text model id). Snapshotted at request
+        /// build time — settings can change across the polish suspension.
+        var analyticsModelOverride: String? = nil
     }
 
     private let apiPostProcessor: LLMPostProcessor
@@ -150,7 +201,7 @@ final class MagicFormatCoordinator {
         return task
     }
 
-    func polish(input: String, rawText: String, request: PolishRequest) async -> String {
+    func polish(input: String, rawText: String, request: PolishRequest) async -> MagicFormatPolishOutcome {
         // Real work takes priority: free the generation slot if the probe still holds it.
         // (Server startup is a separate shared task; canceling the probe does not cancel it.)
         prewarmTask?.cancel()
@@ -162,7 +213,15 @@ final class MagicFormatCoordinator {
             localGemmaAvailability: request.localGemmaAvailability
         ) else {
             AppLogger.shared.log(.warning, "llm fallback raw reason=local_provider_unavailable apple_availability=\(request.appleAvailability.logValue) gemma_availability=\(request.localGemmaAvailability.logValue)")
-            return rawText
+            // resolvedProvider is nil only when a SPECIFIC local provider was
+            // requested but is unavailable (.automatic/.openAICompatible always
+            // resolve) — record which one was attempted.
+            let attempted: EffectiveMagicFormatProvider? = switch request.requestedProvider {
+            case .appleFoundationModels: .appleFoundationModels
+            case .localGemma: .localGemma
+            case .automatic, .openAICompatible: nil // unreachable: these always resolve
+            }
+            return .fellBack(rawText, provider: attempted, reason: .providerUnavailable)
         }
 
         switch provider {
@@ -180,6 +239,15 @@ final class MagicFormatCoordinator {
         case invalidModel = "invalid_model"
         case missingKey = "missing_key"
         case keyReadFailed = "key_read_failed"
+
+        var reason: CleanupFallbackReason {
+            switch self {
+            case .invalidEndpoint: .invalidEndpoint
+            case .invalidModel: .invalidModel
+            case .missingKey: .missingKey
+            case .keyReadFailed: .keyReadFailed
+            }
+        }
     }
 
     /// Shared endpoint/model/key resolution for the API provider. The
@@ -202,102 +270,82 @@ final class MagicFormatCoordinator {
         return .success(Self.makeAPIConfig(settings: request.settings, apiKey: apiKey, endpointURL: endpointURL, modelId: modelId))
     }
 
-    private func polishWithAPI(input: String, rawText: String, request: PolishRequest) async -> String {
+    private func polishWithAPI(input: String, rawText: String, request: PolishRequest) async -> MagicFormatPolishOutcome {
         let config: LLMConfig
         switch resolveAPIConfig(request: request) {
         case let .success(resolved):
             config = resolved
-        case let .failure(reason):
-            AppLogger.shared.log(.warning, "llm fallback raw reason=\(reason.rawValue)")
-            return rawText
+        case let .failure(failure):
+            AppLogger.shared.log(.warning, "llm fallback raw reason=\(failure.rawValue)")
+            return .fellBack(rawText, provider: .openAICompatible, reason: failure.reason)
         }
 
-        let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
         request.setStage(Stage.polishing)
-        defer {
-            slowWarningTask.cancel()
-        }
+        defer { slowWarningTask.cancel() }
 
-        do {
-            let polished = try await apiPostProcessor.polish(text: input, config: config)
-            let normalized = polished.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalized.isEmpty else {
-                AppLogger.shared.log(.warning, "llm fallback raw reason=empty_output model=\(config.modelId)")
-                return rawText
-            }
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            AppLogger.shared.log(.info, "llm polish success provider=api model=\(config.modelId) latency_ms=\(latencyMs)")
-            return normalized
-        } catch {
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            if let llmError = error as? LLMPostProcessorError {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=api reason=\(llmError.logValue) model=\(config.modelId) latency_ms=\(latencyMs)")
-            } else {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=api reason=unknown model=\(config.modelId) latency_ms=\(latencyMs)")
-            }
-            return rawText
+        // Masked BEFORE it can reach the outcome or app.log (which ships in
+        // diagnostic reports) — a custom preset's model id is user free text.
+        let reportedModel = request.analyticsModelOverride ?? config.modelId
+        return await runPolish(provider: .openAICompatible, model: reportedModel, logName: "api", rawText: rawText) {
+            try await self.apiPostProcessor.polish(text: input, config: config)
         }
     }
 
-    private func polishWithApple(input: String, rawText: String, request: PolishRequest) async -> String {
+    private func polishWithApple(input: String, rawText: String, request: PolishRequest) async -> MagicFormatPolishOutcome {
         let config = Self.makeAppleConfig(settings: request.settings)
-        let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
         request.setStage(Stage.polishing)
-        defer {
-            slowWarningTask.cancel()
-        }
+        defer { slowWarningTask.cancel() }
 
-        do {
-            let polished = try await applePostProcessor.polish(text: input, config: config)
-            let normalized = polished.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalized.isEmpty else {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=apple reason=empty_output")
-                return rawText
-            }
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            AppLogger.shared.log(.info, "llm polish success provider=apple_foundation_models latency_ms=\(latencyMs)")
-            return normalized
-        } catch {
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            if let llmError = error as? LLMPostProcessorError {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=apple reason=\(llmError.logValue) latency_ms=\(latencyMs)")
-            } else {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=apple reason=unknown latency_ms=\(latencyMs)")
-            }
-            return rawText
+        return await runPolish(provider: .appleFoundationModels, model: nil, logName: "apple_foundation_models", rawText: rawText) {
+            try await self.applePostProcessor.polish(text: input, config: config)
         }
     }
 
-    private func polishWithLocalGemma(input: String, rawText: String, request: PolishRequest) async -> String {
+    private func polishWithLocalGemma(input: String, rawText: String, request: PolishRequest) async -> MagicFormatPolishOutcome {
         let config = Self.makeLocalGemmaConfig(settings: request.settings)
-        let startTime = Date()
         let slowWarningTask = request.startSlowWarning()
         let isRuntimeWarm = await localGemmaPostProcessor.isRuntimeWarm()
         request.setStage(isRuntimeWarm ? Stage.polishing : Stage.startingLocalModel)
-        defer {
-            slowWarningTask.cancel()
-        }
+        defer { slowWarningTask.cancel() }
 
+        return await runPolish(
+            provider: .localGemma,
+            model: LocalGemmaDefaults.modelDisplayName,
+            logName: LocalGemmaDefaults.providerLogName,
+            rawText: rawText
+        ) {
+            try await self.localGemmaPostProcessor.polish(text: input, config: config)
+        }
+    }
+
+    /// The shared polish epilogue: run the provider, trim, guard empty output,
+    /// log, and shape the outcome. One drift point instead of three.
+    private func runPolish(
+        provider: EffectiveMagicFormatProvider,
+        model: String?,
+        logName: String,
+        rawText: String,
+        body: () async throws -> String
+    ) async -> MagicFormatPolishOutcome {
+        let startTime = Date()
+        let modelSuffix = model.map { " model=\($0)" } ?? ""
         do {
-            let polished = try await localGemmaPostProcessor.polish(text: input, config: config)
+            let polished = try await body()
             let normalized = polished.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !normalized.isEmpty else {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=\(LocalGemmaDefaults.providerLogName) reason=empty_output")
-                return rawText
+                AppLogger.shared.log(.warning, "llm fallback raw provider=\(logName) reason=empty_output\(modelSuffix)")
+                return .fellBack(rawText, provider: provider, model: model, reason: .emptyOutput)
             }
             let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            AppLogger.shared.log(.info, "llm polish success provider=\(LocalGemmaDefaults.providerLogName) model=\(LocalGemmaDefaults.modelDisplayName) latency_ms=\(latencyMs)")
-            return normalized
+            AppLogger.shared.log(.info, "llm polish success provider=\(logName)\(modelSuffix) latency_ms=\(latencyMs)")
+            return .polished(normalized, provider: provider, model: model)
         } catch {
             let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            if let llmError = error as? LLMPostProcessorError {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=\(LocalGemmaDefaults.providerLogName) reason=\(llmError.logValue) latency_ms=\(latencyMs)")
-            } else {
-                AppLogger.shared.log(.warning, "llm fallback raw provider=\(LocalGemmaDefaults.providerLogName) reason=unknown latency_ms=\(latencyMs)")
-            }
-            return rawText
+            let llmError = error as? LLMPostProcessorError
+            AppLogger.shared.log(.warning, "llm fallback raw provider=\(logName) reason=\(llmError?.logValue ?? "unknown")\(modelSuffix) latency_ms=\(latencyMs)")
+            return .fellBack(rawText, provider: provider, model: model, reason: llmError.map(CleanupFallbackReason.init) ?? .unknown)
         }
     }
 

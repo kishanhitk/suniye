@@ -27,7 +27,10 @@ enum AppAnalytics {
             appVersion: version.map { "\($0.marketing.major).\($0.marketing.minor).\($0.marketing.patch)" } ?? "0",
             build: version?.build.map(String.init) ?? "0",
             channel: (version?.channel ?? .stable).rawValue,
-            isDebug: isDebugBuild()
+            isDebug: isDebugBuild(),
+            // Stamped onto every event's AE row (via the batch envelope) so any
+            // metric can be sliced by hardware. Read once here at startup.
+            device: DeviceProfileReader.read()
         )
 
         return AnalyticsClient(identity: identity, store: store, queue: queue, uploader: uploader)

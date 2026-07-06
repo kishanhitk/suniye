@@ -174,13 +174,17 @@ describe("handleIngestRequest", () => {
 });
 
 describe("buildDataPoint slot registry", () => {
+  // A representative device block (as it rides the batch envelope).
+  const device = { chip: "apple-m3-pro", mac_model: "mac15-3", os_version: "15.5", arch: "arm64", ram_gb: 36, cpu_cores: 12 };
+  const b = (overrides: Partial<WireBatch> = {}) => batch([], overrides);
+
   test("maps core fields to fixed slots", () => {
     const ev = event("dictation_completed", {
       word_count: 42, char_count: 213, audio_duration_ms: 4200,
       asr_model: "parakeet-v3", language: "en", was_llm_polished: true,
       target_category: "editor", lat_end_to_end: 512,
     });
-    const dp = buildDataPoint(ev, "install-1", "DE");
+    const dp = buildDataPoint(ev, b(), "DE");
     expect(dp.indexes).toEqual(["install-1"]);
     expect(dp.blobs[0]).toBe("dictation_completed"); // blob1
     expect(dp.blobs[4]).toBe("parakeet-v3");          // blob5 asr_model
@@ -192,28 +196,72 @@ describe("buildDataPoint slot registry", () => {
     expect(dp.doubles[15]).toBe(1);                   // double16 was_llm_polished
   });
 
+  test("session_id/app_version/channel populate blob2/3/4 (dead-slot fix)", () => {
+    const dp = buildDataPoint(event("dictation_empty"), b({ install_id: "i", app_version: "1.2.3", channel: "beta" }), "");
+    expect(dp.blobs[1]).toBe("s1");    // blob2 = session_id (event top-level field)
+    expect(dp.blobs[2]).toBe("1.2.3"); // blob3 = app_version (batch envelope)
+    expect(dp.blobs[3]).toBe("beta");  // blob4 = channel (batch envelope)
+    expect(dp.indexes).toEqual(["i"]);
+  });
+
+  test("device block fans out to slots on dictation_completed", () => {
+    const dp = buildDataPoint(event("dictation_completed", { word_count: 5 }), b({ device }), "US");
+    expect(dp.blobs[15]).toBe("apple-m3-pro"); // blob16 chip
+    expect(dp.blobs[16]).toBe("mac15-3");      // blob17 mac_model
+    expect(dp.blobs[17]).toBe("15.5");         // blob18 os_version
+    expect(dp.blobs[13]).toBe("arm64");        // blob14 arch (dictation has no reason/type/etc.)
+    expect(dp.doubles[17]).toBe(12);           // double18 cpu_cores
+    expect(dp.doubles[18]).toBe(36);           // double19 ram_gb
+    expect(JSON.parse(dp.blobs[19] as string).chip).toBe("apple-m3-pro"); // blob20 backstop
+  });
+
+  test("native per-event fields win their shared slots over device (precedence)", () => {
+    // error uses blob14=type — arch must NOT clobber it; chip still lands (blob16 free)
+    const err = buildDataPoint(event("error", { type: "transcription", code: "timeout" }), b({ device }), "");
+    expect(err.blobs[13]).toBe("transcription");                       // blob14 = type (not arch)
+    expect(err.blobs[14]).toBe("timeout");                            // blob15 = code
+    expect(err.blobs[15]).toBe("apple-m3-pro");                       // blob16 = chip
+    expect(JSON.parse(err.blobs[19] as string).arch).toBe("arm64");   // arch survives in blob20
+
+    // audio_backend_used uses blob14=backend, double18=rung
+    const audio = buildDataPoint(event("audio_backend_used", { backend: "core_audio", fallback_occurred: true, rung: 2 }), b({ device }), "");
+    expect(audio.blobs[13]).toBe("core_audio"); // blob14 = backend (not arch)
+    expect(audio.doubles[17]).toBe(2);          // double18 = rung (not cpu_cores)
+    expect(audio.blobs[15]).toBe("apple-m3-pro"); // blob16 = chip
+    expect(audio.blobs[17]).toBe("15.5");       // blob18 = os_version
+
+    // model_load uses blob17=model — mac_model must NOT clobber it
+    const ml = buildDataPoint(event("model_load", { model: "gemma-3-4b", load_ms: 800 }), b({ device }), "");
+    expect(ml.blobs[16]).toBe("gemma-3-4b");    // blob17 = model (not mac_model)
+    expect(ml.blobs[15]).toBe("apple-m3-pro");  // blob16 = chip
+  });
+
+  test("event props win over device on any key collision (blob7 stays spoken language)", () => {
+    const dp = buildDataPoint(event("dictation_completed", { language: "fr" }), b({ device: { ...device, language: "de" } }), "");
+    expect(dp.blobs[6]).toBe("fr"); // blob7 = the dictation's own language, not the device's
+  });
+
   test("props JSON backstop is present", () => {
-    const dp = buildDataPoint(event("error", { type: "transcription", code: "timeout" }), "i", "");
+    const dp = buildDataPoint(event("error", { type: "transcription", code: "timeout" }), b({ install_id: "i" }), "");
     const backstop = JSON.parse(dp.blobs[19] as string);
     expect(backstop.code).toBe("timeout");
-    // Categorical detail slots: type -> blob14, code -> blob15
-    expect(dp.blobs[13]).toBe("transcription");
-    expect(dp.blobs[14]).toBe("timeout");
+    expect(dp.blobs[13]).toBe("transcription"); // type -> blob14
+    expect(dp.blobs[14]).toBe("timeout");       // code -> blob15
   });
 
   test("event_ts falls back to event timestamp when not in props", () => {
-    const dp = buildDataPoint(event("dictation_empty"), "i", "");
+    const dp = buildDataPoint(event("dictation_empty"), b({ install_id: "i" }), "");
     expect(dp.doubles[0]).toBe(1_700_000_000_000);
   });
 
   test("edit_rate_bucket maps to double20", () => {
-    const dp = buildDataPoint(event("dictation_edited", { edit_rate_bucket: 30 }), "i", "");
+    const dp = buildDataPoint(event("dictation_edited", { edit_rate_bucket: 30 }), b({ install_id: "i" }), "");
     expect(dp.doubles).toHaveLength(20);
     expect(dp.doubles[19]).toBe(30);
   });
 
   test("audio-quality fields survive in the props JSON backstop (blob20)", () => {
-    const dp = buildDataPoint(event("dictation_completed", { audio_backend: "core_audio", input_sample_rate: 48000 }), "i", "");
+    const dp = buildDataPoint(event("dictation_completed", { audio_backend: "core_audio", input_sample_rate: 48000 }), b({ install_id: "i" }), "");
     const backstop = JSON.parse(dp.blobs[19] as string);
     expect(backstop.audio_backend).toBe("core_audio");
     expect(backstop.input_sample_rate).toBe(48000);

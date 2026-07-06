@@ -228,6 +228,7 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
             channel: identity.channel,
             isDebug: identity.isDebug,
             sentAt: Int64(now().timeIntervalSince1970 * 1000),
+            device: identity.device?.batchProps,
             events: events
         )
     }

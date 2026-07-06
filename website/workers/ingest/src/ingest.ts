@@ -85,7 +85,7 @@ export async function handleIngestRequest(
 
   for (const event of batch.events) {
     try {
-      env.EVENTS.writeDataPoint(buildDataPoint(event, batch.install_id, country));
+      env.EVENTS.writeDataPoint(buildDataPoint(event, batch, country));
     } catch (error) {
       console.error("writeDataPoint failed", error);
     }
@@ -145,6 +145,10 @@ function validateBatch(raw: unknown): WireBatch | string {
   if (!isNonEmptyString(raw.channel, 50)) return "channel is required.";
   if (typeof raw.sent_at !== "number" || !Number.isFinite(raw.sent_at)) return "sent_at must be a number.";
   if (typeof raw.is_debug !== "boolean") return "is_debug must be a boolean.";
+  if (raw.device !== undefined) {
+    const deviceError = validateDevice(raw.device);
+    if (deviceError) return deviceError;
+  }
   if (!Array.isArray(raw.events)) return "events must be an array.";
   if (raw.events.length === 0) return "events must not be empty.";
   if (raw.events.length > MAX_EVENTS_PER_BATCH) return "Too many events in one batch.";
@@ -154,6 +158,22 @@ function validateBatch(raw: unknown): WireBatch | string {
     if (error) return error;
   }
   return raw as unknown as WireBatch;
+}
+
+// The batch `device` block is stamped onto every event's blob20 JSON, so bound
+// its size so it can't blow AE's ~5 KB blob budget (an oversized blob20 makes
+// writeDataPoint throw and silently drop the whole event). The JSON-length cap
+// bounds keys and values together.
+function validateDevice(raw: unknown): string | undefined {
+  if (!isObject(raw)) return "device must be an object.";
+  if (Object.keys(raw).length > 16) return "too many device keys.";
+  for (const value of Object.values(raw)) {
+    const t = typeof value;
+    if (t !== "string" && t !== "number" && t !== "boolean") return "device values must be scalars.";
+    if (t === "string" && (value as string).length > 64) return "device value too long.";
+  }
+  if (JSON.stringify(raw).length > 1024) return "device too large.";
+  return undefined;
 }
 
 function validateEvent(raw: unknown): string | undefined {

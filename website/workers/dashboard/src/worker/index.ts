@@ -1,6 +1,6 @@
 import { validateAccessJwt } from "./jwt";
 import { buildStats, makeAeRunner, type D1Runner } from "./stats";
-import type { DashboardEnv } from "./types";
+import { FILTER_DIMS, type DashboardEnv, type Filters } from "./types";
 
 // Access-gated dashboard Worker. Validates the Access JWT for every request
 // (defense in depth — the origin is publicly routable), then serves the stats
@@ -38,7 +38,15 @@ async function handleStats(request: Request, env: DashboardEnv): Promise<Respons
     return json({ error: "not_configured" }, 503);
   }
 
-  const rangeDays = clampRange(Number(new URL(request.url).searchParams.get("range") ?? "30"));
+  const params = new URL(request.url).searchParams;
+  const rangeDays = clampRange(Number(params.get("range") ?? "30"));
+  // Filter values are sanitized in stats.ts (safeLabel/safeInt) before any SQL.
+  const filters: Filters = {};
+  for (const dim of FILTER_DIMS) {
+    const value = params.get(dim);
+    if (value) filters[dim] = value;
+  }
+
   const ae = makeAeRunner(env.CF_ACCOUNT_ID, env.AE_API_TOKEN);
   const d1: D1Runner = async (query, binds) => {
     const stmt = env.INSTALLS_DB!.prepare(query);
@@ -48,7 +56,7 @@ async function handleStats(request: Request, env: DashboardEnv): Promise<Respons
   };
 
   try {
-    const stats = await buildStats(ae, d1, { rangeDays, nowMs: Date.now(), datasetName: env.AE_DATASET });
+    const stats = await buildStats(ae, d1, { rangeDays, nowMs: Date.now(), datasetName: env.AE_DATASET, filters });
     return json(stats, 200);
   } catch (error) {
     console.error("stats failed", error);

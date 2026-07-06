@@ -47,8 +47,16 @@ final class TestIDGenerator: @unchecked Sendable {
 }
 
 enum TestFixtures {
-    static func identity(isDebug: Bool = false) -> AnalyticsIdentity {
-        AnalyticsIdentity(installID: "install-1", appVersion: "0.0.8", build: "8", channel: "stable", isDebug: isDebug)
+    static func identity(isDebug: Bool = false, device: DeviceProfile? = nil) -> AnalyticsIdentity {
+        AnalyticsIdentity(installID: "install-1", appVersion: "0.0.8", build: "8", channel: "stable", isDebug: isDebug, device: device)
+    }
+
+    static var sampleDevice: DeviceProfile {
+        DeviceProfile(
+            osVersion: SafeLabel("15.5"), arch: SafeLabel("arm64"),
+            macModel: SafeLabel("mac15-3"), chip: SafeLabel("apple-m3-pro"),
+            ramGB: 36, cpuCores: 12, perfCores: 6, effCores: 6, language: SafeLabel("en")
+        )
     }
 
     static func tempQueueURL() -> URL {
