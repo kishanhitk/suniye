@@ -432,20 +432,30 @@ actor LocalGemmaLlamaServer {
             return
         }
 
-        process.terminate()
-        let waitTask = Task.detached(priority: .utility) {
-            process.waitUntilExit()
-        }
-        let timeoutTask = Task.detached(priority: .utility) {
-            let delayNanos = UInt64(max(0, timeoutSeconds) * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: delayNanos)
-            if process.isRunning {
-                Darwin.kill(process.processIdentifier, SIGKILL)
-            }
-        }
+        process.terminate() // SIGTERM
 
-        await waitTask.value
-        timeoutTask.cancel()
+        // Poll for exit rather than blocking in `waitUntilExit()`, which can hang
+        // indefinitely when the child's output pipe isn't drained (its SIGKILL fallback
+        // can't help because the blocking call never returns). Escalate to SIGKILL past
+        // the grace period. This is always bounded, so it cannot hang the caller.
+        if await waitForExit(process, timeoutSeconds: max(0, timeoutSeconds)) {
+            return
+        }
+        Darwin.kill(process.processIdentifier, SIGKILL)
+        _ = await waitForExit(process, timeoutSeconds: 2)
+    }
+
+    /// Waits (by polling the non-blocking `isRunning` flag) for the process to exit, up to
+    /// `timeoutSeconds`. Returns `true` if it exited within the window.
+    private static func waitForExit(_ process: Process, timeoutSeconds: Double) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while process.isRunning {
+            if Date() >= deadline {
+                return false
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return true
     }
 
     private static func exitReason(status: Int32, standardError: Pipe) -> String {
