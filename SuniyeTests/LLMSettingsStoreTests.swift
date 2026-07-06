@@ -127,7 +127,7 @@ final class LLMSettingsStoreTests: XCTestCase {
     func testDefaultGemmaPromptIsTunedSeparatelyFromApplePrompt() {
         XCTAssertNotEqual(LLMDefaults.defaultGemmaMagicFormatPrompt, LLMDefaults.defaultAppleMagicFormatPrompt)
         XCTAssertTrue(LLMDefaults.defaultGemmaMagicFormatPrompt.contains("Ordinary \"and\" alone does not make a list"))
-        XCTAssertTrue(LLMDefaults.defaultAppleMagicFormatPrompt.contains("Use one line by default"))
+        XCTAssertTrue(LLMDefaults.defaultAppleMagicFormatPrompt.contains("You are a text-transformation tool"))
     }
 
     func testDefaultLocalPromptsAvoidAppSpecificExamples() {
