@@ -40,6 +40,8 @@
 	<true/>
 	<key>SUVerifyUpdateBeforeExtraction</key>
 	<true/>
+	<key>SuniyeAnalyticsEndpointURL</key>
+	<string>https://ingest.suniye.kishans.in/api/v1/events</string>
 	<key>SuniyeBuildChannel</key>
 	<string>$(SUNIYE_BUILD_CHANNEL)</string>
 	<key>SuniyeIssueReportEndpointURL</key>

@@ -1,0 +1,58 @@
+---
+// The site's top navigation bar. Shared across the homepage and subpages so the
+// bar stays identical everywhere. The only per-page difference is the secondary
+// link and how Download behaves:
+//   - "home":    links to /changelog; Download carries `data-dmg` so the
+//                homepage's inline script intercepts the click and shows the
+//                quarantine modal instead of navigating.
+//   - "subpage": links back to /; Download goes straight to the DMG (no modal
+//                script exists off the homepage).
+interface Props {
+  variant?: "home" | "subpage";
+}
+const { variant = "subpage" } = Astro.props;
+
+const githubUrl = "https://github.com/kishanhitk/suniye";
+const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/download/Suniye.dmg";
+---
+
+<nav class="fixed top-0 z-50 w-full border-b border-border/60 bg-bg/90 backdrop-blur-md">
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+    <a href="/" class="flex items-center gap-2.5">
+      <img src="/suniye-icon.png" alt="Suniye" class="h-7 w-7 rounded-[5px]" />
+      <span class="font-display text-base tracking-tight">Suniye</span>
+    </a>
+    <div class="flex items-center gap-5">
+      {variant === "home" ? (
+        <a
+          href="/changelog"
+          class="hidden font-display text-sm text-muted transition-colors hover:text-ink sm:inline"
+        >
+          Changelog
+        </a>
+      ) : (
+        <a
+          href="/"
+          class="hidden font-display text-sm text-muted transition-colors hover:text-ink sm:inline"
+        >
+          Home
+        </a>
+      )}
+      <a
+        href={githubUrl}
+        target="_blank"
+        rel="noopener"
+        class="font-display text-sm text-muted transition-colors hover:text-ink"
+      >
+        GitHub
+      </a>
+      <a
+        href={downloadUrl}
+        data-dmg={variant === "home" ? "" : undefined}
+        class="rounded-lg bg-ink px-4 py-2 font-display text-sm text-bg transition-colors hover:bg-ink/85"
+      >
+        Download
+      </a>
+    </div>
+  </div>
+</nav>

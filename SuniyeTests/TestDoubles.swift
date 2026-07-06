@@ -1,5 +1,25 @@
 import Foundation
+import SuniyeAnalytics
 @testable import Suniye
+
+/// Records analytics interactions for assertions in tests.
+final class SpyAnalytics: Analytics, @unchecked Sendable {
+    private(set) var trackedEvents: [AnalyticsEvent] = []
+    private(set) var enabledStates: [Bool] = []
+    private(set) var flushCount = 0
+    private(set) var sessionEndCount = 0
+    private(set) var started = false
+
+    func track(_ event: AnalyticsEvent) { trackedEvents.append(event) }
+    func setEnabled(_ enabled: Bool) { enabledStates.append(enabled) }
+    func flush() async { flushCount += 1 }
+    func start() { started = true }
+    func stop() {}
+    func recordSessionEnd(cleanExit: Bool) { sessionEndCount += 1 }
+    func endSession(cleanExit: Bool) async { sessionEndCount += 1; flushCount += 1 }
+
+    var trackedEventNames: [String] { trackedEvents.map(\.name) }
+}
 
 final class TestLLMSettingsStore: LLMSettingsStoreProtocol {
     private var value = LLMSettings()
@@ -571,6 +591,7 @@ final class SpyEditLearningService: EditLearningServiceProtocol {
     }
 
     var onLearnedTerms: (([String]) -> Void)?
+    var onEditRate: ((Int) -> Void)?
     private(set) var events: [Event] = []
     private(set) var beganSessions: [EditLearningSession] = []
 
@@ -647,6 +668,7 @@ func makeTestAppState(
     launchAtLoginService: LaunchAtLoginServiceProtocol = StubLaunchAtLoginService(),
     diagnosticBundleService: DiagnosticBundleServiceProtocol = StubDiagnosticBundleService(),
     issueReportUploadService: IssueReportUploadServiceProtocol = StubIssueReportUploadService(),
+    analytics: Analytics = SpyAnalytics(),
     editLearningService: EditLearningServiceProtocol? = nil,
     learningToastPresenter: LearningToastPresenting? = nil,
     currentAppVersionProvider: @escaping () -> AppVersion? = { AppVersion(marketing: SemVer(rawValue: "0.0.1")!, build: 1) },
@@ -681,6 +703,7 @@ func makeTestAppState(
         launchAtLoginService: launchAtLoginService,
         diagnosticBundleService: diagnosticBundleService,
         issueReportUploadService: issueReportUploadService,
+        analytics: analytics,
         editLearningService: editLearningService ?? SpyEditLearningService(),
         learningToastPresenter: learningToastPresenter ?? SpyLearningToastPresenter(),
         currentAppVersionProvider: currentAppVersionProvider,

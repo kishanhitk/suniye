@@ -348,6 +348,9 @@ struct GeneralSettings: Codable, Equatable {
     /// Kill switch: when false, the Accessibility buttons fall back to the plain
     /// System Settings deep-link.
     var accessibilityDragHelperEnabled: Bool = true
+    /// Opt-out toggle for anonymous usage analytics. Default on; disclosed in
+    /// onboarding and controllable in Settings. When false, nothing is emitted.
+    var shareAnalyticsEnabled: Bool = true
 
     init(
         preferredInputDeviceID: String? = nil,
@@ -363,7 +366,8 @@ struct GeneralSettings: Codable, Equatable {
         hasCompletedCoreOnboarding: Bool? = nil,
         selectedASRModelID: ASRModelID = .parakeetV3,
         updateChannel: UpdateChannel = .stable,
-        accessibilityDragHelperEnabled: Bool = true
+        accessibilityDragHelperEnabled: Bool = true,
+        shareAnalyticsEnabled: Bool = true
     ) {
         self.preferredInputDeviceID = preferredInputDeviceID
         self.preferredInputDeviceName = preferredInputDeviceName
@@ -379,6 +383,7 @@ struct GeneralSettings: Codable, Equatable {
         self.selectedASRModelID = selectedASRModelID
         self.updateChannel = updateChannel
         self.accessibilityDragHelperEnabled = accessibilityDragHelperEnabled
+        self.shareAnalyticsEnabled = shareAnalyticsEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -396,6 +401,7 @@ struct GeneralSettings: Codable, Equatable {
         case selectedASRModelID
         case updateChannel
         case accessibilityDragHelperEnabled
+        case shareAnalyticsEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -416,6 +422,7 @@ struct GeneralSettings: Codable, Equatable {
         let storedUpdateChannel = try container.decodeIfPresent(String.self, forKey: .updateChannel)
         updateChannel = storedUpdateChannel.flatMap(UpdateChannel.init(rawValue:)) ?? .stable
         accessibilityDragHelperEnabled = try container.decodeIfPresent(Bool.self, forKey: .accessibilityDragHelperEnabled) ?? true
+        shareAnalyticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .shareAnalyticsEnabled) ?? true
     }
 }
 
