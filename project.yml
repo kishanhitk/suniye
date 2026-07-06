@@ -5,6 +5,8 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     exactVersion: 2.9.2
+  SuniyeAnalytics:
+    path: SuniyeAnalytics
 schemes:
   Suniye:
     build:
@@ -44,7 +46,9 @@ targets:
         ATSApplicationFontsPath: "."
         LSUIElement: true
         NSMicrophoneUsageDescription: Suniye needs microphone access to capture dictation.
+        NSSpeechRecognitionUsageDescription: Suniye uses on-device speech recognition to transcribe your dictation.
         SuniyeIssueReportEndpointURL: https://suniye.kishans.in/api/issue-reports
+        SuniyeAnalyticsEndpointURL: https://ingest.suniye.kishans.in/api/v1/events
         SuniyeBuildChannel: $(SUNIYE_BUILD_CHANNEL)
         SuniyeUpdatesEnabled: $(SUNIYE_UPDATES_ENABLED)
         SUFeedURL: $(SUNIYE_STABLE_APPCAST_URL)
@@ -70,6 +74,8 @@ targets:
           - $(PROJECT_DIR)/Suniye/Frameworks
     dependencies:
       - package: Sparkle
+      - package: SuniyeAnalytics
+        product: SuniyeAnalytics
       - framework: Suniye/Frameworks/libsherpa-onnx-c-api.dylib
       - framework: Suniye/Frameworks/libonnxruntime.dylib
     postBuildScripts:

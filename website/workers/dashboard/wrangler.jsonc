@@ -1,0 +1,28 @@
+{
+  // Access-gated analytics dashboard Worker. Holds the AE read token + account
+  // id as SECRETS (wrangler secret put). Non-secret Access config is in vars.
+  // Deploy: bun run build && wrangler deploy --config wrangler.jsonc
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "suniye-dashboard",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-04-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "stats.suniye.kishans.in", "custom_domain": true }],
+  // run_worker_first: the Worker's Access-JWT check gates EVERY request,
+  // including the static app shell — assets are only served after authorize().
+  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": true },
+  "d1_databases": [
+    {
+      "binding": "INSTALLS_DB",
+      "database_name": "suniye-installs",
+      "database_id": "1f8f3f15-2871-468f-905a-e40965e5d36f"
+    }
+  ],
+  "vars": {
+    "AE_DATASET": "suniye_events",
+    "CF_ACCESS_TEAM_DOMAIN": "overengineered-go.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "f911301c847063939c3fba32db11df7908239de6ebb99a184c92a15f78330860"
+  }
+  // Secrets (wrangler secret put): CF_ACCOUNT_ID, AE_API_TOKEN
+}

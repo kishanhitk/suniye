@@ -9,10 +9,16 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
     init(
         locator: LocalGemmaRuntimeLocator = LocalGemmaRuntimeLocator(),
         server: LocalGemmaLlamaServer? = nil,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        onModelLoad: (@Sendable (String, Int) -> Void)? = nil,
+        onKeepAliveEvicted: (@Sendable (String) -> Void)? = nil
     ) {
         self.locator = locator
-        self.server = server ?? LocalGemmaLlamaServer(healthSession: session)
+        self.server = server ?? LocalGemmaLlamaServer(
+            healthSession: session,
+            onModelLoad: onModelLoad,
+            onKeepAliveEvicted: onKeepAliveEvicted
+        )
         self.completionClient = ChatCompletionClient(session: session)
     }
 
@@ -48,6 +54,10 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
             throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
         }
 
+        // The cold-start `model_load` event is emitted inside the server actor's
+        // `start()` success path — the actor serializes startup, so a real load
+        // fires exactly one event with the true spawn+health latency, even when a
+        // prewarm probe and a real request race for the same (shared) startup.
         let endpoint = try await server.endpoint(
             for: runtime,
             startupTimeoutSeconds: startupTimeoutSeconds,
@@ -136,6 +146,12 @@ actor LocalGemmaLlamaServer {
     }
 
     private let healthSession: URLSession
+    /// Fired (model name, cold-start load ms) once per real process start, from
+    /// `start()`'s success path. Analytics-only; may be nil.
+    private let onModelLoad: (@Sendable (String, Int) -> Void)?
+    /// Fired (with the model name) when the keep-alive idle timeout evicts the
+    /// loaded model. Analytics-only; may be nil.
+    private let onKeepAliveEvicted: (@Sendable (String) -> Void)?
     private var process: Process?
     private var runtime: LocalGemmaRuntime?
     private var endpoint: LocalGemmaServerEndpoint?
@@ -143,8 +159,14 @@ actor LocalGemmaLlamaServer {
     private var idleShutdownTask: Task<Void, Never>?
     private var stoppingTask: Task<Void, Never>?
 
-    init(healthSession: URLSession = .shared) {
+    init(
+        healthSession: URLSession = .shared,
+        onModelLoad: (@Sendable (String, Int) -> Void)? = nil,
+        onKeepAliveEvicted: (@Sendable (String) -> Void)? = nil
+    ) {
         self.healthSession = healthSession
+        self.onModelLoad = onModelLoad
+        self.onKeepAliveEvicted = onKeepAliveEvicted
     }
 
     func isWarm(for runtime: LocalGemmaRuntime) -> Bool {
@@ -203,7 +225,8 @@ actor LocalGemmaLlamaServer {
             throw LLMPostProcessorError.provider("server_start_canceled")
         }
 
-        let port = Int.random(in: 49_152 ... 65_535)
+        let loadStart = DispatchTime.now()
+        let port = Self.findFreePort()
         let endpoint = LocalGemmaServerEndpoint(
             baseURL: URL(string: "http://127.0.0.1:\(port)")!,
             apiKey: Self.makeAPIKey()
@@ -246,6 +269,8 @@ actor LocalGemmaLlamaServer {
             throw LLMPostProcessorError.provider("server_stopped_during_startup")
         }
         self.endpoint = endpoint
+        let loadMs = Int((DispatchTime.now().uptimeNanoseconds - loadStart.uptimeNanoseconds) / 1_000_000)
+        onModelLoad?(runtime.model.displayName, loadMs)
         return endpoint
     }
 
@@ -325,7 +350,9 @@ actor LocalGemmaLlamaServer {
 
     private func stopForIdleTimeout() async {
         AppLogger.shared.log(.info, "local gemma server idle shutdown")
+        let evictedModel = runtime?.model.displayName // capture before stop() clears it
         await stop()
+        if let evictedModel { onKeepAliveEvicted?(evictedModel) }
     }
 
     func stop() async {
@@ -365,25 +392,70 @@ actor LocalGemmaLlamaServer {
         "suniye-\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
     }
 
+    /// Returns an OS-assigned free TCP port (bind to port 0, read it back, release) rather
+    /// than a random guess. A random port can collide with an in-use or TIME_WAIT port and
+    /// make the server fail to bind — a prime source of CI flakiness for the helper tests.
+    private static func findFreePort() -> Int {
+        let fallback = Int.random(in: 49_152 ... 65_535)
+        let descriptor = socket(AF_INET, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { return fallback }
+        defer { close(descriptor) }
+
+        var reuse: Int32 = 1
+        _ = setsockopt(descriptor, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr.s_addr = in_addr_t(0) // INADDR_ANY
+        address.sin_port = 0 // let the OS choose a free port
+
+        let bound = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard bound == 0 else { return fallback }
+
+        var assigned = sockaddr_in()
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let named = withUnsafeMutablePointer(to: &assigned) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                getsockname(descriptor, $0, &length)
+            }
+        }
+        guard named == 0 else { return fallback }
+        return Int(UInt16(bigEndian: assigned.sin_port))
+    }
+
     private static func terminateAndWait(_ process: Process, timeoutSeconds: Double) async {
         guard process.isRunning else {
             return
         }
 
-        process.terminate()
-        let waitTask = Task.detached(priority: .utility) {
-            process.waitUntilExit()
-        }
-        let timeoutTask = Task.detached(priority: .utility) {
-            let delayNanos = UInt64(max(0, timeoutSeconds) * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: delayNanos)
-            if process.isRunning {
-                Darwin.kill(process.processIdentifier, SIGKILL)
-            }
-        }
+        process.terminate() // SIGTERM
 
-        await waitTask.value
-        timeoutTask.cancel()
+        // Poll for exit rather than blocking in `waitUntilExit()`, which can hang
+        // indefinitely when the child's output pipe isn't drained (its SIGKILL fallback
+        // can't help because the blocking call never returns). Escalate to SIGKILL past
+        // the grace period. This is always bounded, so it cannot hang the caller.
+        if await waitForExit(process, timeoutSeconds: max(0, timeoutSeconds)) {
+            return
+        }
+        Darwin.kill(process.processIdentifier, SIGKILL)
+        _ = await waitForExit(process, timeoutSeconds: 2)
+    }
+
+    /// Waits (by polling the non-blocking `isRunning` flag) for the process to exit, up to
+    /// `timeoutSeconds`. Returns `true` if it exited within the window.
+    private static func waitForExit(_ process: Process, timeoutSeconds: Double) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while process.isRunning {
+            if Date() >= deadline {
+                return false
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return true
     }
 
     private static func exitReason(status: Int32, standardError: Pipe) -> String {

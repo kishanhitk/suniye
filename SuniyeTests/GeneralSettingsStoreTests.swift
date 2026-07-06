@@ -19,12 +19,14 @@ final class GeneralSettingsStoreTests: XCTestCase {
             hasSeenOnboardingWelcome: true,
             hasCompletedCoreOnboarding: true,
             selectedASRModelID: .senseVoice,
-            updateChannel: .tip
+            updateChannel: .tip,
+            shareAnalyticsEnabled: false
         )
 
         store.save(settings)
 
         XCTAssertEqual(store.load(), settings)
+        XCTAssertEqual(store.load().shareAnalyticsEnabled, false)
     }
 
     func testUnknownASRModelIDFallsBackWithoutResettingOtherSettings() {

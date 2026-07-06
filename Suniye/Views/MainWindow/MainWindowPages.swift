@@ -185,7 +185,7 @@ struct ModelPage: View {
                     rowMeta(title: "Speed", value: entry.speedLabel)
                     rowMeta(title: "Quality", value: entry.qualityLabel)
                     rowMeta(title: "Languages", value: entry.languageSummary)
-                    rowMeta(title: "Size", value: entry.estimatedSizeText)
+                    rowMeta(title: "Size", value: entry.sizeDisplayText)
                     rowMeta(title: "On disk", value: appState.asrModelInstalledSizeText(for: entry.id))
                 }
 
@@ -246,7 +246,7 @@ struct ModelPage: View {
                 }
 
                 LazyVGrid(columns: libraryModelColumns, alignment: .leading, spacing: 12) {
-                    rowMeta(title: "Size", value: entry.estimatedSizeText)
+                    rowMeta(title: "Size", value: entry.sizeDisplayText)
                     rowMeta(title: "Speed", value: entry.speedLabel)
                     rowMeta(title: "Quality", value: entry.qualityLabel)
                     rowMeta(title: "Languages", value: entry.languageSummary)
@@ -566,6 +566,28 @@ struct GeneralPage: View {
                                 .font(AppTypography.caption)
                                 .foregroundStyle(.red)
                         }
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Privacy")
+
+                SurfaceCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        SettingsToggleRow(
+                            title: "Share Anonymous Analytics",
+                            detail: "Helps improve Suniye with anonymous usage stats — word counts, timings, hardware, and feature usage. Never your audio or transcripts. Turn off anytime.",
+                            isOn: Binding(
+                                get: { appState.shareAnalyticsEnabled },
+                                set: { appState.shareAnalyticsEnabled = $0 }
+                            )
+                        )
+                        Button("Learn what we collect") {
+                            appState.openAnalyticsPrivacyInfo()
+                        }
+                        .buttonStyle(.link)
+                        .font(AppTypography.subheadline)
                     }
                 }
             }

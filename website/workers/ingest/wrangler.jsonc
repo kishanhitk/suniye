@@ -1,0 +1,20 @@
+{
+  // Public analytics ingest Worker. Holds NO secrets — only bindings.
+  // Deploy: wrangler deploy --config workers/ingest/wrangler.jsonc
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "suniye-ingest",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-15",
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "ingest.suniye.kishans.in", "custom_domain": true }],
+  "analytics_engine_datasets": [
+    { "binding": "EVENTS", "dataset": "suniye_events" }
+  ],
+  "d1_databases": [
+    {
+      "binding": "INSTALLS_DB",
+      "database_name": "suniye-installs",
+      "database_id": "1f8f3f15-2871-468f-905a-e40965e5d36f"
+    }
+  ]
+}

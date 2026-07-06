@@ -12,6 +12,7 @@ struct WelcomeView: View {
                 benefitRow(icon: "lock.shield", text: "Private — runs on your device")
                 benefitRow(icon: "bolt.fill", text: "Works offline after setup")
                 benefitRow(icon: "macwindow.on.rectangle", text: "Works in every app")
+                benefitRow(icon: "chart.bar.xaxis", text: "Anonymous stats help improve it — off anytime")
             }
         }
     }

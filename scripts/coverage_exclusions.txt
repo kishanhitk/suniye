@@ -20,6 +20,8 @@ Suniye/Services/HotkeyService.swift                   # Carbon hotkey registrati
 Suniye/Services/AccessibilityOnboarding.swift         # drives live AXIsProcessTrusted permission flow
 Suniye/Services/SoundFeedbackService.swift            # NSSound playback wrapper
 Suniye/Services/LaunchAtLoginService.swift            # SMAppService registration; needs signed, installed app
+Suniye/Services/AppleSpeechTranscriptionService.swift # SpeechAnalyzer/SpeechTranscriber/AssetInventory; needs macOS 26 + a downloaded speech model asset (engine routing is tested via RoutingTranscriptionServiceTests)
+Suniye/Services/AppleFoundationModelsPostProcessor.swift # Apple Intelligence FoundationModels API; its on-device paths compile on the macOS 26 SDK but can't run on a headless CI runner (no provisioned model), so they count as uncovered. Exercised locally where the model is available.
 
 # --- Window-server bound UI shells (logic lives in state/services) ---
 Suniye/Services/LearningToastPresenter.swift          # transient NSPanel toast

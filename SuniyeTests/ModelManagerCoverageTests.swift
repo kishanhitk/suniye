@@ -225,7 +225,10 @@ final class ModelManagerCoverageTests: XCTestCase {
 
     func testCatalogAndFallbackOrderMirrorSharedCatalog() {
         let manager = makeSandboxedManager()
-        XCTAssertEqual(manager.catalog, ASRModelCatalog.entries)
+        // catalog exposes only device-available entries (system-managed models are
+        // filtered out where unsupported), so it mirrors availableEntries rather than
+        // the raw entries list. This keeps the assertion deterministic across machines.
+        XCTAssertEqual(manager.catalog, ASRModelCatalog.availableEntries)
         XCTAssertEqual(manager.fallbackOrder, ASRModelCatalog.fallbackOrder)
     }
 
