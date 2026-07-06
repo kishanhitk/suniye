@@ -37,6 +37,15 @@ const boolNum = (...keys: string[]): NumPick => (p) => {
 
 // blob1 is always the event name; blob2..19 are typed; blob20 is props JSON.
 // Index in this array + 2 == blobN (so BLOB_FIELDS[0] -> blob2).
+//
+// SHARED SLOTS (blob14/15/16): a few slots are aliased across events whose fields
+// are mutually exclusive — e.g. blob14 holds `reason` (dictation_blocked),
+// `type` (error), `step` (onboarding), or `backend` (audio) depending on the
+// event. This is SAFE ONLY because every dashboard query filters `blob1='<event>'`
+// first, so the slot's meaning is unambiguous per query. Never read a shared slot
+// across event types. If an event ever needs two aliased keys at once, give the
+// second its own appended slot (the loser is otherwise recoverable only from the
+// blob20 props backstop).
 const BLOB_FIELDS: StrPick[] = [
   str("session_id"),                              // blob2
   str("app_version"),                             // blob3
@@ -59,7 +68,7 @@ const BLOB_FIELDS: StrPick[] = [
 
 // Index in this array + 1 == doubleN (DOUBLE_FIELDS[0] -> double1).
 const DOUBLE_FIELDS: NumPick[] = [
-  (p) => num("event_ts")(p),                      // double1 - time bucket key (client ts)
+  () => undefined,                                // double1 = event_ts, set explicitly from the top-level field (not props)
   num("word_count"),                              // double2
   num("char_count"),                              // double3
   num("audio_duration_ms"),                       // double4
@@ -107,8 +116,7 @@ export function buildDataPoint(event: WireEvent, installId: string, country: str
     const value = pick(p);
     if (value !== undefined && Number.isFinite(value)) doubles[i] = value;
   });
-  // Ensure the time-bucket key is always present even if the client omitted it.
-  if (!doubles[0]) doubles[0] = event.event_ts;
+  doubles[0] = event.event_ts; // double1 = client event timestamp (time-series bucket key)
 
   return { indexes: [installId], blobs, doubles };
 }

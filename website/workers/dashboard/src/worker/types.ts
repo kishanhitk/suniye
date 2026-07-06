@@ -55,6 +55,3 @@ export interface DashboardEnv {
   CF_ACCESS_TEAM_DOMAIN?: string; // e.g. myteam.cloudflareaccess.com
   CF_ACCESS_AUD?: string;
 }
-
-/** Injectable so the AE SQL API can be faked in tests. */
-export type SqlRunner = (sql: string) => Promise<Array<Record<string, unknown>>>;

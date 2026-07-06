@@ -34,22 +34,26 @@ final class AnalyticsSupportTests: XCTestCase {
     }
 
     func testCleanupProviderMapping() {
-        XCTAssertEqual(AnalyticsMapping.cleanupProvider(describing: "appleFoundationModels"), .appleFoundationModels)
-        XCTAssertEqual(AnalyticsMapping.cleanupProvider(describing: "localGemma"), .localGemma)
-        XCTAssertEqual(AnalyticsMapping.cleanupProvider(describing: "openAICompatible"), .openAICompatible)
-        XCTAssertEqual(AnalyticsMapping.cleanupProvider(describing: "automatic"), .automatic)
-        XCTAssertEqual(AnalyticsMapping.cleanupProvider(describing: "???"), .unknown)
+        XCTAssertEqual(AnalyticsMapping.cleanupProvider(.appleFoundationModels), .appleFoundationModels)
+        XCTAssertEqual(AnalyticsMapping.cleanupProvider(.localGemma), .localGemma)
+        XCTAssertEqual(AnalyticsMapping.cleanupProvider(.openAICompatible), .openAICompatible)
+        XCTAssertEqual(AnalyticsMapping.cleanupProvider(.automatic), .automatic)
     }
 
-    func testAudioOutcomeMappingIsDescriptionBased() {
+    func testAudioOutcomeMapping() {
         XCTAssertEqual(AnalyticsMapping.audioOutcome(.complete), .complete)
         XCTAssertEqual(AnalyticsMapping.audioOutcome(.silent), .silent)
+        XCTAssertEqual(AnalyticsMapping.audioOutcome(.bufferOverflow), .bufferOverflow)
         XCTAssertEqual(AnalyticsMapping.audioOutcome(.interrupted(.inputMuted)), .interrupted)
     }
 
-    func testInterruptionReasonMapping() {
+    func testInterruptionReasonMappingIsLossless() {
+        // Every source case maps to a distinct reason (no silent bucketing).
         XCTAssertEqual(AnalyticsMapping.interruptionReason(.inputMuted), .inputMuted)
         XCTAssertEqual(AnalyticsMapping.interruptionReason(.maximumDurationReached), .maximumDurationReached)
+        XCTAssertEqual(AnalyticsMapping.interruptionReason(.deviceUnavailable), .deviceUnavailable)
+        XCTAssertEqual(AnalyticsMapping.interruptionReason(.noAudioArriving), .noAudioArriving)
+        XCTAssertEqual(AnalyticsMapping.interruptionReason(.engineConfigurationChanged), .engineConfigChanged)
     }
 
     func testDictationTimingComputesDeltas() {

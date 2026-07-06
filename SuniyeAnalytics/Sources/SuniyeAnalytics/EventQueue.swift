@@ -2,11 +2,11 @@ import Foundation
 
 /// Durable, append-only offline queue backed by a JSONL file.
 ///
-/// Every `append` is flushed to disk synchronously (fsync) before returning, so
-/// events survive an abrupt termination — a resident menu-bar app gets no clean
-/// shutdown on force-quit/crash, so we can't rely on a graceful flush. Bounded
-/// by count and age; overflow drops the oldest and is surfaced as an eviction
-/// count (reported via an `analytics_health` event).
+/// Every `append` writes the queue to disk atomically (temp file + rename)
+/// before returning, so events survive an abrupt termination — a resident
+/// menu-bar app gets no clean shutdown on force-quit/crash, so we can't rely on
+/// a graceful flush. Bounded by count and age; overflow drops the oldest and is
+/// surfaced as an eviction count (reported via an `analytics_health` event).
 public final class EventQueue: @unchecked Sendable {
     public struct Config: Sendable {
         public var maxEvents: Int
@@ -124,7 +124,8 @@ public final class EventQueue: @unchecked Sendable {
             blob.append(line)
             blob.append(UInt8(ascii: "\n"))
         }
-        // Atomic replace + fsync so a crash mid-write can't corrupt the queue.
+        // Atomic replace (temp file + rename) so a crash mid-write can't corrupt
+        // the queue — the old file stays intact until the rename commits.
         do {
             try blob.write(to: fileURL, options: [.atomic])
         } catch {

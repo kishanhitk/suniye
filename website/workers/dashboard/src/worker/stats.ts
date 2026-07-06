@@ -19,11 +19,9 @@ const DAY_MS = 86_400_000;
 export type AeRunner = (sql: string) => Promise<Array<Record<string, unknown>>>;
 export type D1Runner = (sql: string, binds: unknown[]) => Promise<Array<Record<string, unknown>>>;
 
-export function dataset(name = "suniye_events"): string {
-  return name;
-}
-
 // ---- AE SQL builders (exported for tests) ----
+// NB: the AE SQL API takes raw SQL (no bind params). Every interpolated value
+// here is a server-computed number or a hardcoded literal — never request data.
 
 export const sql = {
   wordsPerDay: (ds: string, cutoffMs: number) =>
@@ -79,7 +77,7 @@ export async function buildStats(
   d1: D1Runner,
   opts: { rangeDays: number; nowMs: number; datasetName?: string }
 ): Promise<StatsResponse> {
-  const ds = dataset(opts.datasetName);
+  const ds = opts.datasetName ?? "suniye_events";
   const cutoffMs = opts.nowMs - opts.rangeDays * DAY_MS;
   const cutoffDay = new Date(cutoffMs).toISOString().slice(0, 10);
 
@@ -98,12 +96,14 @@ export async function buildStats(
     ae(sql.eventCount(ds, "session_end", cutoffMs)),
   ]);
 
+  // totalInstalls is all-time by definition; the breakdowns honor the selected
+  // range (installs active in the window) so the range toggle affects every card.
   const [totalRow, newRows, chipRows, ramRows, countryRows] = await Promise.all([
     d1("SELECT COUNT(*) AS n FROM installs", []),
     d1("SELECT first_seen AS day, COUNT(*) AS value FROM installs WHERE first_seen >= ? GROUP BY first_seen ORDER BY first_seen", [cutoffDay]),
-    d1("SELECT chip AS label, COUNT(*) AS value FROM installs GROUP BY chip ORDER BY value DESC LIMIT 20", []),
-    d1("SELECT ram_gb AS label, COUNT(*) AS value FROM installs GROUP BY ram_gb ORDER BY value DESC LIMIT 20", []),
-    d1("SELECT country AS label, COUNT(*) AS value FROM installs GROUP BY country ORDER BY value DESC LIMIT 20", []),
+    d1("SELECT chip AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ? GROUP BY chip ORDER BY value DESC LIMIT 20", [cutoffDay]),
+    d1("SELECT ram_gb AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ? GROUP BY ram_gb ORDER BY value DESC LIMIT 20", [cutoffDay]),
+    d1("SELECT country AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ? GROUP BY country ORDER BY value DESC LIMIT 20", [cutoffDay]),
   ]);
 
   const mf = mfRows[0] ?? {};

@@ -71,8 +71,9 @@ enum TargetCategoryMapper {
     }
 }
 
-/// Converts app-side dictation enums to the analytics vocabulary. Uses
-/// description-based matching so it stays robust if the app enums gain cases.
+/// Converts app-side dictation enums to the analytics vocabulary. Exhaustive
+/// switches over the real (closed) enums — lossless, and the compiler forces any
+/// future source case to be classified rather than silently bucketed.
 enum AnalyticsMapping {
     static func source(_ source: FloatingIndicatorState.Source) -> SuniyeAnalytics.DictationSource {
         switch source {
@@ -82,34 +83,39 @@ enum AnalyticsMapping {
     }
 
     static func audioOutcome(_ outcome: AudioCaptureOutcome) -> AudioOutcome {
-        let d = String(describing: outcome).lowercased()
-        if d.contains("complete") { return .complete }
-        if d.contains("short") { return .tooShort }
-        if d.contains("silent") { return .silent }
-        if d.contains("clip") { return .clipped }
-        if d.contains("overflow") { return .bufferOverflow }
-        if d.contains("invalid") { return .invalidSamples }
-        if d.contains("interrupt") { return .interrupted }
-        return .unknown
+        switch outcome {
+        case .complete: return .complete
+        case .tooShort: return .tooShort
+        case .silent: return .silent
+        case .clipped: return .clipped
+        case .bufferOverflow: return .bufferOverflow
+        case .invalidSamples: return .invalidSamples
+        case .interrupted: return .interrupted
+        }
     }
 
     static func interruptionReason(_ reason: AudioCaptureInterruption) -> AudioInterruptionReason {
-        let d = String(describing: reason).lowercased()
-        if d.contains("max") || d.contains("duration") { return .maximumDurationReached }
-        if d.contains("sleep") { return .systemSleep }
-        if d.contains("mute") { return .inputMuted }
-        if d.contains("device") { return .deviceChanged }
-        if d.contains("route") { return .routeLost }
-        return .other
+        switch reason {
+        case .deviceChanged: return .deviceChanged
+        case .deviceUnavailable: return .deviceUnavailable
+        case .formatChanged: return .formatChanged
+        case .serviceRestarted: return .serviceRestarted
+        case .engineConfigurationChanged: return .engineConfigChanged
+        case .inputMuted: return .inputMuted
+        case .ioStoppedAbnormally: return .ioStoppedAbnormally
+        case .noAudioArriving: return .noAudioArriving
+        case .maximumDurationReached: return .maximumDurationReached
+        case .systemSleep: return .systemSleep
+        }
     }
 
-    static func cleanupProvider(describing provider: String) -> CleanupProvider {
-        let d = provider.lowercased()
-        if d.contains("apple") { return .appleFoundationModels }
-        if d.contains("localgemma") || d.contains("local") || d.contains("gemma") { return .localGemma }
-        if d.contains("openai") || d.contains("compatible") || d.contains("generic") { return .openAICompatible }
-        if d.contains("automatic") { return .automatic }
-        return .unknown
+    static func cleanupProvider(_ provider: MagicFormatProvider) -> CleanupProvider {
+        switch provider {
+        case .automatic: return .automatic
+        case .appleFoundationModels: return .appleFoundationModels
+        case .localGemma: return .localGemma
+        case .openAICompatible: return .openAICompatible
+        }
     }
 }
 

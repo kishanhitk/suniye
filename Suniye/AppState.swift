@@ -1600,7 +1600,7 @@ final class AppState {
             "echo_cancellation": .bool(echoCancellationEnabled),
             "sound_feedback": .bool(soundFeedbackEnabled),
             "magic_format_enabled": .bool(llmEnabled),
-            "magic_format_provider": .label(AnalyticsMapping.cleanupProvider(describing: String(describing: llmProvider))),
+            "magic_format_provider": .label(AnalyticsMapping.cleanupProvider(llmProvider)),
             "update_channel": .label(SafeLabel(updateChannel.rawValue)),
         ])
     }
@@ -3325,13 +3325,11 @@ final class AppState {
             source: AnalyticsMapping.source(source),
             destination: .systemInsertion,
             asrModel: SafeLabel(selectedASRModelID.rawValue),
-            asrFamily: SafeLabel(selectedASRModelID.rawValue),
+            asrFamily: SafeLabel(ASRModelCatalog.entry(for: selectedASRModelID).family.rawValue),
             language: SafeLabel("en"),
             wasLLMPolished: wasLLMPolished,
-            cleanupProvider: wasLLMPolished
-                ? AnalyticsMapping.cleanupProvider(describing: String(describing: llmProvider))
-                : nil,
-            cleanupModel: nil,
+            cleanupProvider: wasLLMPolished ? AnalyticsMapping.cleanupProvider(llmProvider) : nil,
+            cleanupModel: wasLLMPolished ? SafeLabel(llmSelectedModelPreset.rawValue) : nil,
             cleanupFallbackReason: nil,
             insertionMethod: .unknown,
             targetCategory: TargetCategoryMapper.category(for: frontmostAppBundleID),

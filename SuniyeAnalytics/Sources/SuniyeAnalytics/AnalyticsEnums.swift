@@ -53,8 +53,17 @@ public enum AudioOutcome: String, Sendable, CaseIterable {
 }
 
 public enum AudioInterruptionReason: String, Sendable, CaseIterable {
-    case maximumDurationReached = "max_duration", systemSleep = "system_sleep", inputMuted = "input_muted"
-    case deviceChanged = "device_changed", routeLost = "route_lost", other, unknown
+    case deviceChanged = "device_changed"
+    case deviceUnavailable = "device_unavailable"
+    case formatChanged = "format_changed"
+    case serviceRestarted = "service_restarted"
+    case engineConfigChanged = "engine_config_changed"
+    case inputMuted = "input_muted"
+    case ioStoppedAbnormally = "io_stopped"
+    case noAudioArriving = "no_audio"
+    case maximumDurationReached = "max_duration"
+    case systemSleep = "system_sleep"
+    case unknown
 }
 
 public enum PermissionKind: String, Sendable, CaseIterable {
