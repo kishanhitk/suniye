@@ -8,7 +8,10 @@
   "compatibility_date": "2026-04-15",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
-  "assets": { "directory": "./dist", "binding": "ASSETS" },
+  "routes": [{ "pattern": "stats.suniye.kishans.in", "custom_domain": true }],
+  // run_worker_first: the Worker's Access-JWT check gates EVERY request,
+  // including the static app shell — assets are only served after authorize().
+  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": true },
   "d1_databases": [
     {
       "binding": "INSTALLS_DB",
