@@ -35,6 +35,14 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
     private let now: @Sendable () -> Date
     private let makeID: @Sendable () -> String
     private let sampler: @Sendable () -> Double
+    /// Runs queue persistence (disk I/O) off the caller thread. `track` is called
+    /// from the main actor during dictation, so the fsync'd append must not block
+    /// it. Injectable so tests can run it inline. Serial → FIFO event order.
+    private let persist: @Sendable (@escaping @Sendable () -> Void) -> Void
+
+    private static let defaultPersistQueue = DispatchQueue(
+        label: "dev.suniye.analytics.persist", qos: .utility
+    )
 
     private let lock = NSLock()
     private var enabled: Bool
@@ -55,7 +63,8 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         config: Config = Config(),
         now: @escaping @Sendable () -> Date = { Date() },
         makeID: @escaping @Sendable () -> String = { UUID().uuidString },
-        sampler: @escaping @Sendable () -> Double = { Double.random(in: 0..<1) }
+        sampler: @escaping @Sendable () -> Double = { Double.random(in: 0..<1) },
+        persist: (@Sendable (@escaping @Sendable () -> Void) -> Void)? = nil
     ) {
         self.identity = identity
         self.store = store
@@ -65,6 +74,7 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         self.now = now
         self.makeID = makeID
         self.sampler = sampler
+        self.persist = persist ?? { work in AnalyticsClient.defaultPersistQueue.async(execute: work) }
 
         let settings = store.loadOrCreate(makeInstallID: makeID, now: now)
         self.enabled = settings.enabled
@@ -101,10 +111,13 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         )
         lock.unlock()
 
-        queue.append(encoded, now: current)
-
-        if queue.count >= config.flushThreshold {
-            Task { await self.flush() }
+        // Persist off the caller thread — the append fsyncs and `track` runs on
+        // the main actor during dictation.
+        persist { [self] in
+            queue.append(encoded, now: current)
+            if queue.count >= config.flushThreshold {
+                Task { await self.flush() }
+            }
         }
     }
 
@@ -114,7 +127,9 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         lock.unlock()
         store.setEnabled(enabled, makeInstallID: makeID)
         if !enabled {
-            queue.removeAll()   // drop unsent events when the user opts out
+            // Route through `persist` so the drop happens-after any queued
+            // appends (FIFO) — an opt-out clears events still in flight too.
+            persist { [self] in queue.removeAll() }
         }
     }
 

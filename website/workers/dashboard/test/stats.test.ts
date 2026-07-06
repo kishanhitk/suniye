@@ -26,6 +26,16 @@ describe("sql builders", () => {
     expect(sql.latency("ds", 0)).not.toContain("double16");
   });
 
+  test("each latency stage is filtered on its own column so missing stages don't bias it", () => {
+    // e2e query is scoped to double5, never folding in double6/double7 zero rows.
+    expect(sql.latency("ds", 0)).toContain("double5 > 0");
+    expect(sql.latency("ds", 0)).not.toContain("double6");
+    // ASR has its own double6 > 0 query.
+    const q = sql.asrLatency("ds", 0);
+    expect(q).toContain("quantileWeighted(0.5, double6, _sample_interval)");
+    expect(q).toContain("double6 > 0");
+  });
+
   test("active installs uses COUNT(DISTINCT index1)", () => {
     expect(sql.activeInstallsPerDay("ds", 0)).toContain("COUNT(DISTINCT index1)");
   });
@@ -44,7 +54,8 @@ describe("buildStats", () => {
     if (q.includes("blob14 AS label")) return [{ label: "transcription", value: 3 }];
     if (q.includes("AS polished")) return [{ polished: 30, total: 50 }];
     if (q.includes("llm_p50")) return [{ llm_p50: 100, llm_p95: 250 }]; // separate polished-only query
-    if (q.includes("e2e_p50")) return [{ e2e_p50: 200, e2e_p95: 500, asr_p50: 150, asr_p95: 300 }];
+    if (q.includes("asr_p50")) return [{ asr_p50: 150, asr_p95: 300 }]; // separate double6>0 query
+    if (q.includes("e2e_p50")) return [{ e2e_p50: 200, e2e_p95: 500 }];
     if (q.includes("'app_launch'")) return [{ value: 20 }];
     if (q.includes("'session_end'")) return [{ value: 16 }];
     return [];

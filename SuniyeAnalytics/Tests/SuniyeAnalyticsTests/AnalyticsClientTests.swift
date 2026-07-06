@@ -15,7 +15,8 @@ final class AnalyticsClientTests: XCTestCase {
         let client = AnalyticsClient(
             identity: TestFixtures.identity(isDebug: isDebug),
             store: store, queue: queue, uploader: uploader, config: config,
-            now: clock.now, makeID: ids.next, sampler: { 0.0 }
+            now: clock.now, makeID: ids.next, sampler: { 0.0 },
+            persist: { work in work() }   // run persistence inline so `count` is deterministic
         )
         return (client, uploader, queue)
     }

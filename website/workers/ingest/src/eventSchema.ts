@@ -92,6 +92,13 @@ const DOUBLE_FIELDS: NumPick[] = [
 // NB: doubles are now full (20/20). Newer numeric fields must reuse a generic
 // slot or live in the blob20 props JSON. Audio-quality fields (audio_backend,
 // input_sample_rate, aec_effective, …) intentionally ride only in props JSON.
+//
+// analytics_health carries four numerics (queue_depth, upload_failures,
+// evicted_by_ttl, evicted_by_size); double15's firstNum surfaces only
+// queue_depth (the current-backlog gauge). The three counters ride the blob20
+// props JSON — this is self-observability telemetry, not a dashboard query, so
+// none needs a dedicated slot. Promote one to a shared slot if we ever build
+// alerting on it.
 
 export interface DataPoint {
   indexes: string[];

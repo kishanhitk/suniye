@@ -43,11 +43,17 @@ export const sql = {
     `SELECT SUM(double16 * _sample_interval) AS polished, SUM(_sample_interval) AS total ` +
     `FROM ${ds} WHERE blob1 = 'dictation_completed' AND double1 >= ${cutoffMs}`,
 
+  // Each stage is scoped to its own `> 0` filter. The latency fields are
+  // optional and buildDataPoint leaves missing doubles as 0, so a shared filter
+  // would fold zero rows into whichever stage happens to be absent, biasing its
+  // quantile toward zero.
   latency: (ds: string, cutoffMs: number) =>
-    `SELECT ` +
-    `quantileWeighted(0.5, double5, _sample_interval) AS e2e_p50, quantileWeighted(0.95, double5, _sample_interval) AS e2e_p95, ` +
-    `quantileWeighted(0.5, double6, _sample_interval) AS asr_p50, quantileWeighted(0.95, double6, _sample_interval) AS asr_p95 ` +
+    `SELECT quantileWeighted(0.5, double5, _sample_interval) AS e2e_p50, quantileWeighted(0.95, double5, _sample_interval) AS e2e_p95 ` +
     `FROM ${ds} WHERE blob1 = 'dictation_completed' AND double5 > 0 AND double1 >= ${cutoffMs}`,
+
+  asrLatency: (ds: string, cutoffMs: number) =>
+    `SELECT quantileWeighted(0.5, double6, _sample_interval) AS asr_p50, quantileWeighted(0.95, double6, _sample_interval) AS asr_p95 ` +
+    `FROM ${ds} WHERE blob1 = 'dictation_completed' AND double6 > 0 AND double1 >= ${cutoffMs}`,
 
   // LLM latency is measured only on polished dictations. Filtering on
   // was_llm_polished (double16) + double7 > 0 keeps non-polished zero rows out of
@@ -98,7 +104,7 @@ export async function buildStats(
   };
 
   const [
-    wordsRows, activeRows, asrRows, mfRows, latRows, llmLatRows, fallbackRows, errorRows,
+    wordsRows, activeRows, asrRows, mfRows, latRows, asrLatRows, llmLatRows, fallbackRows, errorRows,
     launchRows, sessionEndRows,
   ] = await Promise.all([
     safeAe(sql.wordsPerDay(ds, cutoffMs)),
@@ -106,6 +112,7 @@ export async function buildStats(
     safeAe(sql.breakdown(ds, "blob5", "blob1 = 'dictation_completed'", cutoffMs)),
     safeAe(sql.magicFormatAdoption(ds, cutoffMs)),
     safeAe(sql.latency(ds, cutoffMs)),
+    safeAe(sql.asrLatency(ds, cutoffMs)),
     safeAe(sql.llmLatency(ds, cutoffMs)),
     safeAe(sql.breakdown(ds, "blob10", "blob1 = 'dictation_completed'", cutoffMs)),
     safeAe(sql.breakdown(ds, "blob14", "blob1 = 'error'", cutoffMs)),
@@ -128,10 +135,11 @@ export async function buildStats(
   const magicFormatAdoptionPct = mfTotal > 0 ? (num(mf.polished) / mfTotal) * 100 : 0;
 
   const lat = latRows[0] ?? {};
+  const asrLat = asrLatRows[0] ?? {};
   const llmLat = llmLatRows[0] ?? {};
   const latency: LatencySummary[] = [
     { stage: "end_to_end", p50: num(lat.e2e_p50), p95: num(lat.e2e_p95) },
-    { stage: "asr", p50: num(lat.asr_p50), p95: num(lat.asr_p95) },
+    { stage: "asr", p50: num(asrLat.asr_p50), p95: num(asrLat.asr_p95) },
     { stage: "magic_format", p50: num(llmLat.llm_p50), p95: num(llmLat.llm_p95) },
   ];
 
