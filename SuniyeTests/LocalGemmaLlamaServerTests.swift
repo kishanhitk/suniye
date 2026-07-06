@@ -67,9 +67,10 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
         XCTAssertEqual(startCount(at: logURL), 1)
 
         await server.scheduleIdleShutdown(after: 0.05)
-        try? await Task.sleep(nanoseconds: 200_000_000)
-        let isWarmAfterIdleShutdown = await server.isWarm(for: runtime)
-        XCTAssertFalse(isWarmAfterIdleShutdown)
+        // Poll for the idle shutdown to complete rather than asserting after a fixed sleep —
+        // the terminate + wait-for-exit can exceed a couple hundred ms under CI load.
+        let becameCold = await waitUntil { await !server.isWarm(for: runtime) }
+        XCTAssertTrue(becameCold, "server should shut down after the idle timeout")
         _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
 
         XCTAssertEqual(startCount(at: logURL), 2)
@@ -292,6 +293,19 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
             .split(separator: "\n")
             .filter { $0 == "start" }
             .count
+    }
+
+    /// Polls `condition` until it holds or the timeout elapses. Replaces fixed-sleep-then-
+    /// assert patterns that flake when process/termination timing slips under CI load.
+    private func waitUntil(timeout: TimeInterval = 10, _ condition: @escaping () async -> Bool) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await condition() {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return await condition()
     }
 
     private func waitForStartCount(_ expectedCount: Int, at url: URL) async -> Bool {
