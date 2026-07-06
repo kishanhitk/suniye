@@ -42,6 +42,14 @@ final class AnalyticsSettingsStoreTests: XCTestCase {
         XCTAssertEqual(store.peek()?.installID, "B")
     }
 
+    func testDirectiveDecodesWithoutDisabledField() throws {
+        // A `{ "sample_rate": ... }`-only response must still decode.
+        let data = Data(#"{"sample_rate":0.5}"#.utf8)
+        let directive = try JSONDecoder().decode(KillSwitchDirective.self, from: data)
+        XCTAssertFalse(directive.disabled)
+        XCTAssertEqual(directive.sampleRate, 0.5)
+    }
+
     func testDirectivePersistAndClear() {
         let defaults = TestFixtures.scratchDefaults()
         let store = AnalyticsSettingsStore(userDefaults: defaults, storageKey: "k")

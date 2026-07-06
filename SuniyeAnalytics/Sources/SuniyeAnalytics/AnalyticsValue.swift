@@ -81,7 +81,9 @@ public struct SafeLabel: Encodable, Equatable, Sendable, CustomStringConvertible
 
 extension AnalyticsValue {
     public static func label(_ safe: SafeLabel) -> AnalyticsValue { .label(safe.value) }
-    public static func label<R: RawRepresentable>(_ raw: R) -> AnalyticsValue where R.RawValue == String {
+    /// `CaseIterable` (not just `RawRepresentable`) so only *closed* enums qualify
+    /// — a wrapper around free text can't sneak past `SafeLabel` through this path.
+    public static func label<R: RawRepresentable & CaseIterable>(_ raw: R) -> AnalyticsValue where R.RawValue == String {
         .label(raw.rawValue)
     }
 }

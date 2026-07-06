@@ -99,7 +99,7 @@ final class AnalyticsClientTests: XCTestCase {
         client.track(.dictationEmpty)
         clock.advance(10 * 60)             // exceeds 5-min gap
         client.track(.dictationEmpty)
-        let sessions = Set(queue.peek(max: 10).map(\.sessionID))
+        let sessions = Set(queue.peek(max: 10, now: clock.now()).map(\.sessionID))
         XCTAssertEqual(sessions.count, 2)
     }
 

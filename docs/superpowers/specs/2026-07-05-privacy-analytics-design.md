@@ -150,7 +150,7 @@ New self-contained module `SuniyeAnalytics` (own target; no Suniye domain types 
 - **`Analytics` protocol** — `track(_ event: AnalyticsEvent)`, `setEnabled(_:)`. Suniye depends only on this. `AnalyticsEvent` is a closed enum with typed associated values → [NEVER] fields structurally impossible.
 - **`AnalyticsClient`** — install ID, opt-out flag, super-property provider, batching, and an **on-disk queue written atomically on every enqueue** (so nothing depends on a clean shutdown). Emit is a no-op when disabled.
 - **Flush triggers (macOS-correct — this is a resident menu-bar app with no `scenePhase` background):** threshold, timer, `applicationWillTerminate`, `NSWorkspace.willSleepNotification`, `willPowerOffNotification`. None fire on force-quit/crash — hence atomic-on-enqueue is the real durability guarantee; the crash proxy (`session_end` absence) is the intended signal for those.
-- **`AnalyticsUploadService`** — injectable `URLSession`, endpoint from Info.plist key `SuniyeAnalyticsEndpointURL`, typed `Codable` payload, JSON POST (request-factory per `ChatCompletionClient.swift:46`), background encode. **Retry only on connection errors, never on ambiguous/timeout responses** (avoids over-counting; at-least-once accepted, deduped-by-`event_id` if ever needed). Honors the `204` **kill-switch directive** (`{disabled, sample_rate}`) by caching + obeying it.
+- **`AnalyticsUploadService`** — injectable `URLSession`, endpoint from Info.plist key `SuniyeAnalyticsEndpointURL`, typed `Codable` payload, JSON POST (request-factory per `ChatCompletionClient.swift:46`), background encode. **Retry only on connection errors, never on ambiguous/timeout responses** (avoids over-counting; at-least-once accepted, deduped-by-`event_id` if ever needed). Honors the `200` **kill-switch directive** (`{disabled, sample_rate}`) by caching + obeying it.
 - **`AnalyticsSettingsStore`** — copy `GeneralSettingsStore` verbatim (injectable UserDefaults + key + Codable). Holds `installID`, `enabled`, `firstLaunchAt`, cached kill-switch directive.
 - **Wiring** — inject into `AppState.init` (`:1379`) alongside existing services; emit at §5 hook points (same sites that already `AppLogger.shared.log(...)`). No event bus.
 
@@ -164,7 +164,7 @@ Follows website conventions (`import { env } from "cloudflare:workers"`, `preren
 - **Writes:**
   - AE `writeDataPoint({ blobs, doubles, indexes })` — `index1`=`install_id`; `blob1`=event type; remaining slots per the **field→slot registry** (below). Client `event_ts` written as a `double`.
   - D1 upsert into `installs(install_id PK, first_seen, last_seen, app_version, os_version, mac_model_bucketed, chip, ram_gb, country)` — **once per session (driven off `app_launch` only)**, not per event, to stay well under D1's ~100k writes/day free tier.
-- **`204` response** carries the kill-switch directive `{disabled?, sample_rate?}`.
+- **`200` JSON response** carries the kill-switch directive `{disabled?, sample_rate?}` (a body is required, so 200 not 204).
 - **Bindings** (`wrangler.jsonc` → merged into `dist/server/wrangler.json`; don't collide with the adapter's `SESSION` KV):
   ```jsonc
   "analytics_engine_datasets": [{ "binding": "EVENTS", "dataset": "suniye_events" }],

@@ -32,6 +32,14 @@ public struct KillSwitchDirective: Codable, Equatable, Sendable {
         case disabled
         case sampleRate = "sample_rate"
     }
+
+    // The server may send `{ "sample_rate": ... }` with no `disabled`; default it
+    // to false rather than failing decode and dropping the whole directive.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        disabled = try container.decodeIfPresent(Bool.self, forKey: .disabled) ?? false
+        sampleRate = try container.decodeIfPresent(Double.self, forKey: .sampleRate)
+    }
 }
 
 public final class AnalyticsSettingsStore: @unchecked Sendable {

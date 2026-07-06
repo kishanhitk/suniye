@@ -123,7 +123,7 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         defer { endFlush() }
 
         while true {
-            let events = queue.peek(max: config.maxBatchSize)
+            let events = queue.peek(max: config.maxBatchSize, now: now())
             if events.isEmpty { break }
 
             let outcome = await uploader.upload(makeBatch(events))

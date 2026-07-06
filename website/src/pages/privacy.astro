@@ -7,7 +7,7 @@ const collected = [
   ["Your Mac", "Model, chip, memory tier, and macOS version — so we know which on-device models run well on which hardware."],
   ["What you use", "Which speech model is selected, whether AI cleanup is on, and other feature toggles — as on/off flags and counts."],
   ["Where text lands", "A coarse category of the target app (email, editor, browser, terminal, …) — never the specific app or its identifier."],
-  ["Reliability", "Anonymous error types and a rough coarse country (derived from your connection, then discarded — never stored)."],
+  ["Reliability", "Error types (no messages) and a coarse country. The country is derived from your connection's IP — the IP itself is never stored, but the country is kept as coarse metadata."],
 ];
 
 const neverCollected = [
@@ -25,7 +25,7 @@ const neverCollected = [
 
 <Layout
   title="What Suniye collects"
-  description="Suniye's analytics are anonymous by design. No audio, no transcribed text, no personal data — just counts and timings that help improve the app."
+  description="Suniye's analytics are pseudonymous and opt-out. No audio, no transcribed text, no names — just counts, timings, and coarse hardware that help improve the app."
   canonicalPath="/privacy"
 >
   <nav class="fixed top-0 z-50 w-full border-b border-border/60 bg-bg/90 backdrop-blur">
@@ -42,7 +42,7 @@ const neverCollected = [
     <h1 class="font-display text-3xl tracking-tight sm:text-4xl">What Suniye collects</h1>
     <p class="mt-4 text-lg text-muted">
       Suniye runs entirely on your Mac. To improve it, the app sends a small amount of
-      <strong class="text-ink">anonymous usage data</strong> — counts, timings, and hardware class.
+      <strong class="text-ink">pseudonymous usage data</strong> — counts, timings, and hardware class.
       <strong class="text-ink">No audio and no text ever leave your device.</strong> It's on by default and
       you can turn it off any time in <span class="font-medium text-ink">Settings → Privacy</span>.
     </p>
@@ -71,7 +71,7 @@ const neverCollected = [
     </section>
 
     <section class="mt-12 space-y-4 text-sm text-muted">
-      <h2 class="font-display text-xl tracking-tight text-ink">How it stays anonymous</h2>
+      <h2 class="font-display text-xl tracking-tight text-ink">How it stays private</h2>
       <p>
         Each install gets a random identifier so we can count returning users, but it maps to no name,
         email, or device serial — it can't identify you and isn't shared with anyone. This makes the data
@@ -80,7 +80,9 @@ const neverCollected = [
       </p>
       <p>
         Data is stored on our own Cloudflare infrastructure — never sold, never shared with third-party
-        trackers. Rich detail (exact events) is kept for about 90 days; only anonymous aggregate counts persist.
+        trackers. We keep one small record per install (its random id, the days it was first and last seen,
+        coarse hardware — chip, memory tier, macOS version — and coarse country). Per-event detail (word
+        counts, timings) is kept for about 90 days, after which only aggregate counts remain.
       </p>
       <p>
         Turn it off: <span class="font-medium text-ink">Settings → Privacy → Share Anonymous Analytics</span>.

@@ -16,11 +16,11 @@ final class EventQueueTests: XCTestCase {
         queue.append(event(id: "b", offsetMs: 1), now: base)
         XCTAssertEqual(queue.count, 2)
 
-        let peeked = queue.peek(max: 10)
+        let peeked = queue.peek(max: 10, now: base)
         XCTAssertEqual(peeked.map(\.eventID), ["a", "b"])
 
         queue.removeOldest(1)
-        XCTAssertEqual(queue.peek(max: 10).map(\.eventID), ["b"])
+        XCTAssertEqual(queue.peek(max: 10, now: base).map(\.eventID), ["b"])
     }
 
     func testDurabilityAcrossInstances() {
@@ -31,7 +31,7 @@ final class EventQueueTests: XCTestCase {
 
         // Simulate an abrupt termination: brand-new instance reads the same file.
         let second = EventQueue(fileURL: url)
-        XCTAssertEqual(second.peek(max: 10).map(\.eventID), ["a", "b"])
+        XCTAssertEqual(second.peek(max: 10, now: base).map(\.eventID), ["a", "b"])
     }
 
     func testSizeEvictionDropsOldest() {
@@ -39,7 +39,7 @@ final class EventQueueTests: XCTestCase {
         queue.append(event(id: "a", offsetMs: 0), now: base)
         queue.append(event(id: "b", offsetMs: 1), now: base)
         queue.append(event(id: "c", offsetMs: 2), now: base)
-        XCTAssertEqual(queue.peek(max: 10).map(\.eventID), ["b", "c"])
+        XCTAssertEqual(queue.peek(max: 10, now: base).map(\.eventID), ["b", "c"])
         XCTAssertEqual(queue.takeEvictedCount(), 1)
         XCTAssertEqual(queue.takeEvictedCount(), 0) // reset after read
     }
@@ -50,7 +50,7 @@ final class EventQueueTests: XCTestCase {
         // 2 minutes later, the old event is beyond the 60s TTL.
         let later = base.addingTimeInterval(120)
         queue.append(EncodedEvent(event: .dictationEmpty, eventID: "new", eventTS: Int64(later.timeIntervalSince1970 * 1000), sessionID: "s"), now: later)
-        XCTAssertEqual(queue.peek(max: 10).map(\.eventID), ["new"])
+        XCTAssertEqual(queue.peek(max: 10, now: later).map(\.eventID), ["new"])
         XCTAssertEqual(queue.takeEvictedCount(), 1)
     }
 

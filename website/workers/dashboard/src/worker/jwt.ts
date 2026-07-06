@@ -103,10 +103,30 @@ export async function validateAccessJwt(token: string | null, opts: ValidateOpti
   return { valid: true, email: decoded.payload.email };
 }
 
+interface JwksCacheEntry {
+  keys: Jwk[];
+  fetchedAt: number;
+}
+const jwksCache = new Map<string, JwksCacheEntry>();
+const JWKS_TTL_MS = 60 * 60 * 1000; // certs rotate slowly; 1h is safe
+const JWKS_TIMEOUT_MS = 5000;
+
 function defaultGetJwks(teamDomain: string, fetcher: typeof fetch = fetch) {
   return async () => {
-    const res = await fetcher(`https://${teamDomain}/cdn-cgi/access/certs`);
-    if (!res.ok) throw new Error(`JWKS ${res.status}`);
-    return (await res.json()) as { keys: Jwk[] };
+    const cached = jwksCache.get(teamDomain);
+    if (cached && Date.now() - cached.fetchedAt < JWKS_TTL_MS) {
+      return { keys: cached.keys };
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), JWKS_TIMEOUT_MS);
+    try {
+      const res = await fetcher(`https://${teamDomain}/cdn-cgi/access/certs`, { signal: controller.signal });
+      if (!res.ok) throw new Error(`JWKS ${res.status}`);
+      const jwks = (await res.json()) as { keys: Jwk[] };
+      jwksCache.set(teamDomain, { keys: jwks.keys, fetchedAt: Date.now() });
+      return jwks;
+    } finally {
+      clearTimeout(timer);
+    }
   };
 }

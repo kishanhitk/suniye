@@ -73,7 +73,7 @@ For local dev only: set `DASHBOARD_ALLOW_INSECURE=1` in `.dev.vars` to bypass Ac
 2. Do a few dictations; toggle Magic Format; quit the app.
 3. AE: `wrangler d1 ...` for installs, and query events:
    ```bash
-   curl -s "https://api.cloudflare.com/client/v4/accounts/$ACCT/analytics_engine/sql" \
+   curl -s "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/analytics_engine/sql" \
      -H "Authorization: Bearer $AE_API_TOKEN" \
      --data "SELECT blob1, COUNT() FROM suniye_events GROUP BY blob1"
    ```

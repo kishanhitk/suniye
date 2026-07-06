@@ -139,6 +139,9 @@ function validateBatch(raw: unknown): WireBatch | string {
   if (raw.schema_version !== 1) return "Unsupported schema version.";
   if (!isNonEmptyString(raw.install_id, 200)) return "install_id is required.";
   if (!isNonEmptyString(raw.app_version, 100)) return "app_version is required.";
+  if (!isNonEmptyString(raw.build, 100)) return "build is required.";
+  if (!isNonEmptyString(raw.channel, 50)) return "channel is required.";
+  if (typeof raw.sent_at !== "number" || !Number.isFinite(raw.sent_at)) return "sent_at must be a number.";
   if (typeof raw.is_debug !== "boolean") return "is_debug must be a boolean.";
   if (!Array.isArray(raw.events)) return "events must be an array.";
   if (raw.events.length === 0) return "events must not be empty.";
