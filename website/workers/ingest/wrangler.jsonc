@@ -6,6 +6,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-04-15",
   "observability": { "enabled": true },
+  "routes": [{ "pattern": "ingest.suniye.kishans.in", "custom_domain": true }],
   "analytics_engine_datasets": [
     { "binding": "EVENTS", "dataset": "suniye_events" }
   ],
@@ -13,7 +14,7 @@
     {
       "binding": "INSTALLS_DB",
       "database_name": "suniye-installs",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+      "database_id": "1f8f3f15-2871-468f-905a-e40965e5d36f"
     }
   ]
 }
