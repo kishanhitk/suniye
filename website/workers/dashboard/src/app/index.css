@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* Clean, minimal shadcn-style dark neutral theme with a teal accent that
+   matches the Suniye analytics identity ("content stays, counts leave"). */
+@theme {
+  --color-background: hsl(240 10% 3.9%);
+  --color-foreground: hsl(0 0% 98%);
+  --color-card: hsl(240 6% 8%);
+  --color-card-foreground: hsl(0 0% 98%);
+  --color-muted: hsl(240 5% 64%);
+  --color-border: hsl(240 5% 16%);
+  --color-primary: hsl(168 62% 45%);
+  --color-chart-1: hsl(168 62% 45%);
+  --color-chart-2: hsl(38 92% 60%);
+  --color-chart-3: hsl(220 70% 60%);
+  --radius: 0.75rem;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
