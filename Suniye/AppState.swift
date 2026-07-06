@@ -312,6 +312,7 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
+            analytics.track(.featureToggled(feature: .autoSubmit, enabled: autoSubmitEnabled))
             onStateChange?()
         }
     }
@@ -321,6 +322,7 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
+            analytics.track(.featureToggled(feature: .echoCancellation, enabled: echoCancellationEnabled))
             refreshAudioRouteSnapshot()
             onStateChange?()
         }
@@ -331,6 +333,7 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
+            analytics.track(.featureToggled(feature: .soundFeedback, enabled: soundFeedbackEnabled))
             onStateChange?()
         }
     }
@@ -1735,6 +1738,7 @@ final class AppState {
     private func showMagicFormatOnboarding() {
         hasSeenOnboardingWelcome = true
         activeOnboardingStep = .magicFormat
+        analytics.track(.onboardingStep(step: .magicFormat, granted: nil))
     }
 
     func completeCoreOnboarding() {
@@ -1743,6 +1747,7 @@ final class AppState {
         onboardingPracticeText = ""
         onboardingPracticeResult = nil
         activeOnboardingStep = .practice
+        analytics.track(.onboardingStep(step: .completed, granted: nil))
     }
 
     func finishOnboarding() {
@@ -1751,6 +1756,9 @@ final class AppState {
     }
 
     func refreshPermissions(requestMicrophone: Bool = false, promptAccessibility: Bool = false) async {
+        let priorMic = hasMicPermission
+        let priorAccessibility = hasAccessibilityPermission
+
         if requestMicrophone {
             hasMicPermission = await AVCaptureDevice.requestAccess(for: .audio)
         } else {
@@ -1762,6 +1770,13 @@ final class AppState {
             hasAccessibilityPermission = AXIsProcessTrustedWithOptions(options)
         } else {
             hasAccessibilityPermission = AXIsProcessTrusted()
+        }
+
+        if !priorMic, hasMicPermission {
+            analytics.track(.permissionTransition(kind: .microphone, granted: true))
+        }
+        if !priorAccessibility, hasAccessibilityPermission {
+            analytics.track(.permissionTransition(kind: .accessibility, granted: true))
         }
 
         AppLogger.shared.log(.info, "permissions: mic=\(hasMicPermission) ax=\(hasAccessibilityPermission)")
@@ -2115,6 +2130,7 @@ final class AppState {
             return
         }
         AppLogger.shared.log(.info, "edit learning added vocabulary terms count=\(added.count)")
+        analytics.track(.vocabLearnedFromEdit(count: added.count))
         learningToastPresenter.showLearnedTerms(added) { [weak self] in
             self?.removeAutoLearnedVocabularyTerms(added)
         }
@@ -2448,6 +2464,7 @@ final class AppState {
 
         let hadLoadedModel = loadedASRModelID != nil
         activeASRModelOperationID = modelID
+        analytics.track(.modelChanged(kind: .asr, model: SafeLabel(modelID.rawValue)))
         phase = .loading
         statusText = "Loading model..."
         lastError = nil
@@ -2738,11 +2755,13 @@ final class AppState {
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
         appUpdateController.automaticallyChecksForUpdates = enabled
         refreshUpdateControllerState()
+        analytics.track(.updateAction(kind: .autoToggle, fromVersion: nil, toVersion: nil))
         AppLogger.shared.log(.info, "sparkle automatic update checks set enabled=\(enabled)")
     }
 
     func setUpdateChannel(_ channel: UpdateChannel) {
         updateChannel = channel
+        analytics.track(.updateAction(kind: .channelChange, fromVersion: nil, toVersion: SafeLabel(channel.rawValue)))
         AppLogger.shared.log(.info, "sparkle update channel set channel=\(channel.rawValue)")
     }
 

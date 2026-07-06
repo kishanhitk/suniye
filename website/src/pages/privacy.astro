@@ -1,0 +1,91 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+const collected = [
+  ["How much you dictate", "Word and character counts per dictation — never the words themselves."],
+  ["Timing", "How long each pipeline stage takes (speech recognition, AI cleanup, insertion) so we can make it faster."],
+  ["Your Mac", "Model, chip, memory tier, and macOS version — so we know which on-device models run well on which hardware."],
+  ["What you use", "Which speech model is selected, whether AI cleanup is on, and other feature toggles — as on/off flags and counts."],
+  ["Where text lands", "A coarse category of the target app (email, editor, browser, terminal, …) — never the specific app or its identifier."],
+  ["Reliability", "Anonymous error types and a rough coarse country (derived from your connection, then discarded — never stored)."],
+];
+
+const neverCollected = [
+  "Your audio",
+  "Any transcribed or corrected text",
+  "Words you learn / custom vocabulary",
+  "Your IP address",
+  "Serial numbers or hardware IDs",
+  "Your name, email, hostname, or username",
+  "Precise location",
+  "Which specific apps you use",
+  "Anything you type",
+];
+---
+
+<Layout
+  title="What Suniye collects"
+  description="Suniye's analytics are anonymous by design. No audio, no transcribed text, no personal data — just counts and timings that help improve the app."
+  canonicalPath="/privacy"
+>
+  <nav class="fixed top-0 z-50 w-full border-b border-border/60 bg-bg/90 backdrop-blur">
+    <div class="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
+      <a href="/" class="flex items-center gap-2.5">
+        <img src="/suniye-icon.png" alt="Suniye" class="h-7 w-7 rounded-[5px]" />
+        <span class="font-display text-base tracking-tight">Suniye</span>
+      </a>
+      <a href="/" class="font-display text-sm text-muted transition-colors hover:text-ink">Home</a>
+    </div>
+  </nav>
+
+  <main class="mx-auto max-w-3xl px-6 pb-24 pt-28">
+    <h1 class="font-display text-3xl tracking-tight sm:text-4xl">What Suniye collects</h1>
+    <p class="mt-4 text-lg text-muted">
+      Suniye runs entirely on your Mac. To improve it, the app sends a small amount of
+      <strong class="text-ink">anonymous usage data</strong> — counts, timings, and hardware class.
+      <strong class="text-ink">No audio and no text ever leave your device.</strong> It's on by default and
+      you can turn it off any time in <span class="font-medium text-ink">Settings → Privacy</span>.
+    </p>
+
+    <section class="mt-12">
+      <h2 class="font-display text-xl tracking-tight">What we collect</h2>
+      <dl class="mt-5 space-y-4">
+        {collected.map(([term, detail]) => (
+          <div class="rounded-xl border border-border/60 bg-white/40 p-5">
+            <dt class="font-display text-base text-ink">{term}</dt>
+            <dd class="mt-1 text-sm text-muted">{detail}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+
+    <section class="mt-12">
+      <h2 class="font-display text-xl tracking-tight">What we never collect</h2>
+      <ul class="mt-5 flex flex-wrap gap-2">
+        {neverCollected.map((item) => (
+          <li class="rounded-lg border border-border/60 px-3 py-1.5 text-sm text-muted line-through decoration-red-400/70">
+            {item}
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="mt-12 space-y-4 text-sm text-muted">
+      <h2 class="font-display text-xl tracking-tight text-ink">How it stays anonymous</h2>
+      <p>
+        Each install gets a random identifier so we can count returning users, but it maps to no name,
+        email, or device serial — it can't identify you and isn't shared with anyone. This makes the data
+        <strong class="text-ink">pseudonymous</strong>: we can see trends, never people. We collect it on a
+        legitimate-interest basis, disclose it here, and let you opt out.
+      </p>
+      <p>
+        Data is stored on our own Cloudflare infrastructure — never sold, never shared with third-party
+        trackers. Rich detail (exact events) is kept for about 90 days; only anonymous aggregate counts persist.
+      </p>
+      <p>
+        Turn it off: <span class="font-medium text-ink">Settings → Privacy → Share Anonymous Analytics</span>.
+        When off, nothing is sent and any queued data is discarded.
+      </p>
+    </section>
+  </main>
+</Layout>

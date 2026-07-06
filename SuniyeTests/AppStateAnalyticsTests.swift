@@ -60,4 +60,25 @@ final class AppStateAnalyticsTests: XCTestCase {
         // Running under XCTest must be treated as a debug/excluded build.
         XCTAssertTrue(AppAnalytics.isDebugBuild())
     }
+
+    func testFeatureToggleEmitted() {
+        let spy = SpyAnalytics()
+        let appState = makeTestAppState(analytics: spy)
+        appState.autoSubmitEnabled = true
+        XCTAssertTrue(spy.trackedEventNames.contains("feature_toggled"))
+    }
+
+    func testUpdateChannelChangeEmitted() {
+        let spy = SpyAnalytics()
+        let appState = makeTestAppState(analytics: spy)
+        appState.setUpdateChannel(.tip)
+        XCTAssertTrue(spy.trackedEventNames.contains("update_action"))
+    }
+
+    func testOnboardingCompletionEmitted() {
+        let spy = SpyAnalytics()
+        let appState = makeTestAppState(analytics: spy)
+        appState.completeCoreOnboarding()
+        XCTAssertTrue(spy.trackedEventNames.contains("onboarding_step"))
+    }
 }
