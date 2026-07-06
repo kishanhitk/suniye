@@ -54,6 +54,8 @@ final class AppStateAnalyticsEmissionTests: XCTestCase {
         XCTAssertEqual(metrics?.wordCount, 3)
         XCTAssertGreaterThan(metrics?.charCount ?? 0, 0)
         XCTAssertFalse(metrics?.wasLLMPolished ?? true) // Magic Format off in tests
+        XCTAssertFalse(metrics?.language.value.isEmpty ?? true) // model-derived coverage, not empty
+        XCTAssertEqual(metrics?.insertionMethod, .clipboard) // always clipboard paste
     }
 
     func testAudioCaptureFailureEmitted() async {

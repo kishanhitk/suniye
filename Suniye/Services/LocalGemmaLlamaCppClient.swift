@@ -5,14 +5,20 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
     private let locator: LocalGemmaRuntimeLocator
     private let server: LocalGemmaLlamaServer
     private let completionClient: ChatCompletionClient
+    /// Fired (model name, cold-start load ms) when a generation had to load the
+    /// model. Analytics-only; may be nil.
+    private let onModelLoad: ((String, Int) -> Void)?
 
     init(
         locator: LocalGemmaRuntimeLocator = LocalGemmaRuntimeLocator(),
         server: LocalGemmaLlamaServer? = nil,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        onModelLoad: ((String, Int) -> Void)? = nil,
+        onKeepAliveEvicted: (@Sendable (String) -> Void)? = nil
     ) {
         self.locator = locator
-        self.server = server ?? LocalGemmaLlamaServer(healthSession: session)
+        self.onModelLoad = onModelLoad
+        self.server = server ?? LocalGemmaLlamaServer(healthSession: session, onKeepAliveEvicted: onKeepAliveEvicted)
         self.completionClient = ChatCompletionClient(session: session)
     }
 
@@ -48,11 +54,17 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
             throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
         }
 
+        let wasWarm = await server.isWarm(for: runtime)
+        let loadStart = DispatchTime.now()
         let endpoint = try await server.endpoint(
             for: runtime,
             startupTimeoutSeconds: startupTimeoutSeconds,
             idleTimeoutSeconds: idleTimeoutSeconds
         )
+        if !wasWarm {
+            let loadMs = Int((DispatchTime.now().uptimeNanoseconds - loadStart.uptimeNanoseconds) / 1_000_000)
+            onModelLoad?(runtime.model.displayName, loadMs)
+        }
         defer {
             Task {
                 await server.scheduleIdleShutdown(after: idleTimeoutSeconds)
@@ -136,6 +148,9 @@ actor LocalGemmaLlamaServer {
     }
 
     private let healthSession: URLSession
+    /// Fired (with the model name) when the keep-alive idle timeout evicts the
+    /// loaded model. Analytics-only; may be nil.
+    private let onKeepAliveEvicted: (@Sendable (String) -> Void)?
     private var process: Process?
     private var runtime: LocalGemmaRuntime?
     private var endpoint: LocalGemmaServerEndpoint?
@@ -143,8 +158,9 @@ actor LocalGemmaLlamaServer {
     private var idleShutdownTask: Task<Void, Never>?
     private var stoppingTask: Task<Void, Never>?
 
-    init(healthSession: URLSession = .shared) {
+    init(healthSession: URLSession = .shared, onKeepAliveEvicted: (@Sendable (String) -> Void)? = nil) {
         self.healthSession = healthSession
+        self.onKeepAliveEvicted = onKeepAliveEvicted
     }
 
     func isWarm(for runtime: LocalGemmaRuntime) -> Bool {
@@ -325,7 +341,9 @@ actor LocalGemmaLlamaServer {
 
     private func stopForIdleTimeout() async {
         AppLogger.shared.log(.info, "local gemma server idle shutdown")
+        let evictedModel = runtime?.model.displayName // capture before stop() clears it
         await stop()
+        onKeepAliveEvicted?(evictedModel ?? "gemma")
     }
 
     func stop() async {

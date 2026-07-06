@@ -1497,7 +1497,13 @@ final class AppState {
         self.localLLMModelManager = localLLMModelManager
         let resolvedLocalGemmaPostProcessor = localGemmaMagicFormatPostProcessor ?? LocalGemmaPostProcessor(
             client: LocalGemmaLlamaCppClient(
-                locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager)
+                locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager),
+                onModelLoad: { model, loadMs in
+                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: loadMs, evictedByKeepAlive: false))
+                },
+                onKeepAliveEvicted: { model in
+                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: 0, evictedByKeepAlive: true))
+                }
             )
         )
         self.localGemmaMagicFormatPostProcessor = resolvedLocalGemmaPostProcessor
@@ -3329,7 +3335,9 @@ final class AppState {
             destination: .systemInsertion,
             asrModel: SafeLabel(selectedASRModelID.rawValue),
             asrFamily: SafeLabel(ASRModelCatalog.entry(for: selectedASRModelID).family.rawValue),
-            language: SafeLabel("en"),
+            // The model's language coverage from the catalog (e.g. "english",
+            // "multilingual") — the ASR layer doesn't return a detected language.
+            language: SafeLabel(ASRModelCatalog.entry(for: selectedASRModelID).languageSummary),
             wasLLMPolished: wasLLMPolished,
             cleanupProvider: wasLLMPolished ? AnalyticsMapping.cleanupProvider(llmProvider) : nil,
             cleanupModel: wasLLMPolished ? SafeLabel(llmSelectedModelPreset.rawValue) : nil,

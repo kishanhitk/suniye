@@ -20,6 +20,17 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         XCTAssertNil(props["lat_asr_to_llm"])
     }
 
+    func testModelLoadEvent() {
+        let load = AnalyticsEvent.modelLoad(model: SafeLabel("gemma-3-4b"), loadMs: 1200, evictedByKeepAlive: false)
+        XCTAssertEqual(load.name, "model_load")
+        XCTAssertEqual(load.props["model"], .label("gemma-3-4b"))
+        XCTAssertEqual(load.props["load_ms"], .int(1200))
+        XCTAssertEqual(load.props["evicted_by_keepalive"], .bool(false))
+
+        let evict = AnalyticsEvent.modelLoad(model: SafeLabel("gemma-3-4b"), loadMs: 0, evictedByKeepAlive: true)
+        XCTAssertEqual(evict.props["evicted_by_keepalive"], .bool(true))
+    }
+
     func testDictationEditedEvent() {
         let event = AnalyticsEvent.dictationEdited(editRateBucket: 30)
         XCTAssertEqual(event.name, "dictation_edited")
