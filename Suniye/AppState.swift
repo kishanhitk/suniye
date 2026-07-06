@@ -2896,17 +2896,11 @@ final class AppState {
             AppLogger.shared.log(.info, "llm per-app prompt instructions appended")
         }
 
-        let outcome = await magicFormatCoordinator.polish(
+        return await magicFormatCoordinator.polish(
             input: input,
             rawText: rawText,
             request: makeMagicFormatRequest(settings: settings)
         )
-        // The custom API preset's model id is user free text — mask it before it
-        // can reach analytics (labels are controlled vocabulary only).
-        if outcome.provider == .openAICompatible, llmSelectedModelPreset == .custom {
-            return outcome.replacingModel("custom")
-        }
-        return outcome
     }
 
     /// Pass `settings` when per-app prompt instructions apply (dictation polish);
@@ -2936,7 +2930,11 @@ final class AppState {
                     return
                 }
                 self.setFloatingIndicatorState(.processing(message: text))
-            }
+            },
+            // The custom preset's model id is user free text: masked here (at
+            // request build, pre-suspension) so neither analytics nor app.log
+            // ever see it.
+            analyticsModelOverride: llmSelectedModelPreset == .custom ? "custom" : nil
         )
     }
 

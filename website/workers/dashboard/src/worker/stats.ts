@@ -417,6 +417,9 @@ async function loadFilterOptions(
   ];
   const aeDims: Array<[FilterDim, string]> = [
     ["asr_model", "blob5"], ["language", "blob7"], ["target", "blob11"],
+    // arch isn't in D1; on dictation_completed its aliased slot (blob14) has no
+    // native occupant, so the breakdown yields exactly the arch values.
+    ["arch", "blob14"],
   ];
 
   const [d1Results, aeResults] = await Promise.all([

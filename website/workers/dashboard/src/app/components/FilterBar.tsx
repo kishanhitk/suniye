@@ -9,6 +9,7 @@ const DIMS: Array<[FilterDim, string]> = [
   ["ram", "ram gb"],
   ["os", "macos"],
   ["mac_model", "model id"],
+  ["arch", "arch"],
   ["cpu_cores", "cores"],
   ["asr_model", "asr model"],
   ["language", "language"],

@@ -25,6 +25,20 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
         XCTAssertEqual(output.provider, .openAICompatible) // provider recorded even on fallback
     }
 
+    func testAnalyticsModelOverrideMasksAPIModelInOutcome() async {
+        // The custom preset's model id is user free text — the override (set at
+        // request build) must replace it in the outcome so analytics and logs
+        // never see the raw id.
+        let coordinator = makeCoordinator(api: FakeLLMPostProcessor(result: .success("polished")))
+        var request = makeRequest(provider: .openAICompatible)
+        request.analyticsModelOverride = "custom"
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertTrue(output.ran)
+        XCTAssertEqual(output.model, "custom")
+    }
+
     func testEveryLLMErrorMapsToASpecificFallbackReason() {
         // Reason fidelity: no producible error may silently degrade to .unknown —
         // the fallback-reasons dashboard card exists to diagnose these.

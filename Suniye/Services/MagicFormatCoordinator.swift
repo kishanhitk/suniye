@@ -35,12 +35,6 @@ struct MagicFormatPolishOutcome {
     static func fellBack(_ text: String, provider: EffectiveMagicFormatProvider?, model: String? = nil, reason: CleanupFallbackReason) -> MagicFormatPolishOutcome {
         MagicFormatPolishOutcome(text: text, provider: provider, model: model, fallbackReason: reason)
     }
-
-    /// Same outcome with the model name replaced (used to mask a user-entered
-    /// custom model id before it can reach analytics).
-    func replacingModel(_ newModel: String?) -> MagicFormatPolishOutcome {
-        MagicFormatPolishOutcome(text: text, provider: provider, model: newModel, fallbackReason: fallbackReason)
-    }
 }
 
 extension CleanupFallbackReason {
@@ -87,6 +81,10 @@ final class MagicFormatCoordinator {
         let startSlowWarning: () -> Task<Void, Never>
         /// Advertise the current stage to both the status text and the pill.
         let setStage: (String) -> Void
+        /// Replaces the API model id in outcomes AND logs (e.g. "custom" when the
+        /// user's preset carries a free-text model id). Snapshotted at request
+        /// build time — settings can change across the polish suspension.
+        var analyticsModelOverride: String? = nil
     }
 
     private let apiPostProcessor: LLMPostProcessor
@@ -286,7 +284,10 @@ final class MagicFormatCoordinator {
         request.setStage(Stage.polishing)
         defer { slowWarningTask.cancel() }
 
-        return await runPolish(provider: .openAICompatible, model: config.modelId, logName: "api", rawText: rawText) {
+        // Masked BEFORE it can reach the outcome or app.log (which ships in
+        // diagnostic reports) — a custom preset's model id is user free text.
+        let reportedModel = request.analyticsModelOverride ?? config.modelId
+        return await runPolish(provider: .openAICompatible, model: reportedModel, logName: "api", rawText: rawText) {
             try await self.apiPostProcessor.polish(text: input, config: config)
         }
     }
