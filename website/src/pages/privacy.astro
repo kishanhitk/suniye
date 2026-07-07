@@ -5,7 +5,8 @@ import Navbar from "../components/Navbar.astro";
 const collected = [
   ["How much you dictate", "Word and character counts per dictation — never the words themselves."],
   ["Timing", "How long each pipeline stage takes (speech recognition, AI cleanup, insertion) so we can make it faster."],
-  ["Your Mac", "Model, chip, memory tier, and macOS version — so we know which on-device models run well on which hardware."],
+  ["Your Mac", "Hardware class — Mac model identifier (e.g. Mac15,3, not a serial), chip, CPU core counts, architecture (Apple Silicon / Intel), memory tier, and macOS version — so we know which on-device models run well on which hardware."],
+  ["Language", "The interface language and the language coverage of the speech model you pick (e.g. “english”, “multilingual”) — a code only, never what you said."],
   ["What you use", "Which speech model is selected, whether AI cleanup is on, and other feature toggles — as on/off flags and counts."],
   ["Where text lands", "A coarse category of the target app (email, editor, browser, terminal, …) — never the specific app or its identifier."],
   ["Reliability", "Error types (no messages) and a coarse country. The country is derived from your connection's IP — the IP itself is never stored, but the country is kept as coarse metadata."],
@@ -74,8 +75,8 @@ const neverCollected = [
       <p>
         Data is stored on our own Cloudflare infrastructure — never sold, never shared with third-party
         trackers. We keep one small record per install (its random id, the days it was first and last seen,
-        coarse hardware — chip, memory tier, macOS version — and coarse country). Per-event detail (word
-        counts, timings) is kept for about 90 days, after which only aggregate counts remain.
+        coarse hardware — Mac model, chip, CPU cores, memory tier, macOS version — and coarse country).
+        Per-event detail (word counts, timings) is kept for about 90 days, after which only aggregate counts remain.
       </p>
       <p>
         Turn it off: <span class="font-medium text-ink">Settings → Privacy → Share Anonymous Analytics</span>.

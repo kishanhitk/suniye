@@ -146,7 +146,7 @@ const compareRows = [
 const faqs = [
   {
     q: "Is my dictation really private?",
-    a: "Yes. Your voice is captured and turned into text entirely on your Mac — it never touches the internet. The only times Suniye goes online are to check for updates and to download a model the first time.",
+    a: "Yes. Your voice is captured and turned into text entirely on your Mac — it never touches the internet. To improve the app, Suniye does send a small amount of pseudonymous usage data (counts and timings — never your words), which you can turn off in Settings → Privacy; the privacy page lists exactly what's collected. Otherwise it only goes online to check for updates and download a model the first time.",
   },
   {
     q: "Does the optional AI cleanup see my audio?",
@@ -158,7 +158,7 @@ const faqs = [
   },
   {
     q: "Does it work offline?",
-    a: "Yes — once you've downloaded a model, dictation needs no internet at all. The only thing that ever goes online is the optional cleanup provider, if you choose to turn it on.",
+    a: "Yes — once you've downloaded a model, dictation itself needs no internet at all. Suniye does phone home for a few non-dictation things: pseudonymous usage stats (opt-out in Settings) and update checks, plus the optional online cleanup provider if you turn it on.",
   },
   {
     q: "Apple Silicon or Intel?",
@@ -521,8 +521,11 @@ const faqs = [
             <p class="mt-4 leading-relaxed text-muted">
               Speech models run directly on your Mac — pick one from the built-in
               library. Voice is processed in memory, transcribed locally, and never
-              touches a network. The only network calls Suniye makes are to check
-              for app updates and download models.
+              touches a network. Suniye does send pseudonymous usage analytics
+              (counts and timings, never your words — opt-out in Settings, detailed
+              on the <a href="/privacy" class="underline decoration-border underline-offset-2 hover:text-ink">privacy page</a>);
+              beyond that its only network calls are checking for updates and
+              downloading models.
             </p>
             <p class="mt-4 text-sm leading-relaxed text-muted/70">
               Even the optional cleanup can stay on your Mac, using Apple's built-in AI
