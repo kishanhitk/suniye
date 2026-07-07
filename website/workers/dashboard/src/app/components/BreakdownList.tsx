@@ -13,10 +13,11 @@ export function BreakdownList({ items, emptyMessage = "No data in this window ye
   const max = Math.max(1, ...items.map((i) => i.value));
   return (
     <ul className="space-y-2.5">
-      {items.map((item) => (
+      {items.map((item, i) => (
         // Stacked (label+count over a full-width bar) so bars keep their
-        // proportion even inside 3- and 4-column grids.
-        <li key={item.label} className="space-y-1">
+        // proportion even inside 3- and 4-column grids. Key by index — labels
+        // can collapse to duplicate "unknown" for distinct null-label rows.
+        <li key={`${item.label}-${i}`} className="space-y-1">
           <div className="flex items-baseline justify-between gap-3">
             <span className="truncate font-mono text-xs text-ink" title={item.label || "unknown"}>
               {item.label || "unknown"}

@@ -54,8 +54,9 @@ export function safeNum(value: unknown): number | null {
  *   device dim only survives in blob20 JSON there, so it can't be filtered.
  * - `dictationOnly`: the dim is a dictation_completed prop; it has no meaning on
  *   any other event.
- * - `star`: safe on the event-unscoped active-installs query (its slot is either
- *   dedicated or only occupied on rare non-queried events).
+ * - `eventUnscopedSafe`: the dim sits on a DEDICATED AE slot, so it can be applied
+ *   to the event-unscoped active-installs query without a slot collision. Dims on
+ *   shared slots omit this and block that query instead (honest empty).
  */
 const DIM_SPECS: Record<FilterDim, {
   ae: string;
@@ -63,22 +64,28 @@ const DIM_SPECS: Record<FilterDim, {
   d1?: string;
   unavailableOn?: string[];
   dictationOnly?: boolean;
-  star?: boolean;
+  eventUnscopedSafe?: boolean;
 }> = {
-  version:   { ae: "blob3",  d1: "app_version", star: true },
-  channel:   { ae: "blob4",  d1: "channel", star: true },
-  country:   { ae: "blob19", d1: "country", star: true },
-  ram:       { ae: "double19", numeric: true, d1: "ram_gb", star: true },
-  chip:      { ae: "blob16", d1: "chip", star: true,
+  version:   { ae: "blob3",  d1: "app_version", eventUnscopedSafe: true },
+  channel:   { ae: "blob4",  d1: "channel", eventUnscopedSafe: true },
+  country:   { ae: "blob19", d1: "country", eventUnscopedSafe: true },
+  ram:       { ae: "double19", numeric: true, d1: "ram_gb", eventUnscopedSafe: true },
+  // chip/os live on SHARED slots (blob16=kind/feature, blob18=from/to_version on
+  // some events), so they are NOT eventUnscopedSafe: on the event-unscoped
+  // active-installs query they'd exclude installs whose only in-day events used
+  // the slot for its other meaning → silent undercount. Omitting the flag makes
+  // active-installs block under these filters (honest empty) instead.
+  chip:      { ae: "blob16", d1: "chip",
                unavailableOn: ["permission_transition", "model_changed", "model_download", "feature_toggled", "update_action"] },
-  os:        { ae: "blob18", d1: "os_version", star: true, unavailableOn: ["update_action"] },
+  os:        { ae: "blob18", d1: "os_version", unavailableOn: ["update_action"] },
   mac_model: { ae: "blob17", d1: "mac_model", unavailableOn: ["model_load", "model_changed", "model_download"] },
   arch:      { ae: "blob14", // not in D1 (installs has no arch column)
                unavailableOn: ["error", "audio_backend_used", "dictation_blocked", "dictation_cancelled", "onboarding_step", "audio_capture_interrupted"] },
   cpu_cores: { ae: "double18", numeric: true, d1: "cpu_cores", unavailableOn: ["audio_backend_used"] },
-  asr_model: { ae: "blob5",  dictationOnly: true },
-  language:  { ae: "blob7",  dictationOnly: true },
-  target:    { ae: "blob11", dictationOnly: true },
+  asr_model:     { ae: "blob5",  dictationOnly: true },
+  cleanup_model: { ae: "blob9",  dictationOnly: true },
+  language:      { ae: "blob7",  dictationOnly: true },
+  target:        { ae: "blob11", dictationOnly: true },
 };
 
 /**
@@ -116,7 +123,7 @@ export function blockedDim(filters: Filters | undefined, event: string): FilterD
   for (const [dim, spec] of sanitizedEntries(filters)) {
     const unavailable =
       (spec.dictationOnly && event !== "dictation_completed") ||
-      (event === "*" ? !spec.star : (spec.unavailableOn?.includes(event) ?? false));
+      (event === "*" ? !spec.eventUnscopedSafe : (spec.unavailableOn?.includes(event) ?? false));
     if (unavailable) return dim;
   }
   return null;
@@ -177,7 +184,7 @@ export const sql = {
   // COUNT(DISTINCT) is exact only at the default sample_rate = 1. Under sampling
   // it counts distinct installs among sampled rows and undercounts the true
   // population — unlike SUM counts, it can't be corrected via _sample_interval.
-  // Event-unscoped ("*"): only star-safe dims may filter it.
+  // Event-unscoped ("*"): only eventUnscopedSafe (dedicated-slot) dims may filter it.
   activeInstallsPerDay: (ds: string, cutoffMs: number, where = "") =>
     `SELECT toStartOfInterval(toDateTime(double1 / 1000), INTERVAL '1' DAY) AS day, COUNT(DISTINCT index1) AS value ` +
     `FROM ${ds} WHERE double1 >= ${cutoffMs}${where} GROUP BY day ORDER BY day`,
@@ -225,10 +232,19 @@ export const sql = {
     `FROM ${ds} WHERE blob1 = 'audio_backend_used' AND double1 >= ${cutoffMs}${where}`,
 
   // Post-insertion edit rate (double20, a coarse % bucket) — an ASR/cleanup
-  // accuracy proxy. Median over dictations the user actually edited.
+  // accuracy proxy. Median over dictations the user actually edited (> 0).
   editRate: (ds: string, cutoffMs: number, where = "") =>
     `SELECT quantileWeighted(0.5, double20, _sample_interval) AS median ` +
     `FROM ${ds} WHERE blob1 = 'dictation_edited' AND double20 > 0 AND double1 >= ${cutoffMs}${where}`,
+
+  // Edited share is derived from the dictation_edited stream ALONE: it fires once
+  // per finalized edit session (bucket 0 = verbatim/unedited), so edited/finalized
+  // is a coherent, bounded ratio. Dividing by dictation_completed instead would
+  // exceed 100% — that stream is lagged (finalize-on-next-dictation) and stamped
+  // at a later time, so the two populations differ across the window edges.
+  editedCount: (ds: string, cutoffMs: number, where = "") =>
+    `SELECT SUM(_sample_interval) AS value FROM ${ds} ` +
+    `WHERE blob1 = 'dictation_edited' AND double20 > 0 AND double1 >= ${cutoffMs}${where}`,
 
   // Cold model-load latency (double14 = load_ms). Keep-alive evictions are also
   // emitted as model_load but with load_ms 0 (evicted_by_keepalive rides only the
@@ -247,6 +263,15 @@ export const sql = {
 function num(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * A percentage that is null (→ "—" on the FE) when there's no data, so an empty
+ * window can never read as a real 0%. The invariant lives here, once, instead of
+ * being hand-rolled at each KPI (which is exactly how one site got missed).
+ */
+function ratio(numerator: number, denominator: number): number | null {
+  return denominator > 0 ? (numerator / denominator) * 100 : null;
 }
 
 function toTimePoints(rows: Array<Record<string, unknown>>): TimePoint[] {
@@ -304,7 +329,11 @@ export async function buildStats(
       lat: safeAe(sql.latency(ds, cutoffMs, w("dictation_completed"))),
       asrLat: safeAe(sql.asrLatency(ds, cutoffMs, w("dictation_completed"))),
       llmLat: safeAe(sql.llmLatency(ds, cutoffMs, w("dictation_completed"))),
-      fallbacks: safeAe(sql.breakdown(ds, "blob10", "blob1 = 'dictation_completed'", cutoffMs, w("dictation_completed"))),
+      // Only dictations that ACTUALLY fell back: cleanup_fallback_reason (blob10)
+      // is empty for a successful polish, an MF-off dictation, or any event
+      // before v0.0.51 (where the reason was hardcoded nil). Without this filter
+      // those all collapse into a meaningless "unknown" bucket.
+      fallbacks: safeAe(sql.breakdown(ds, "blob10", "blob1 = 'dictation_completed' AND blob10 != ''", cutoffMs, w("dictation_completed"))),
       errors: safeAe(sql.breakdown(ds, "blob14", "blob1 = 'error'", cutoffMs, w("error"))),
       launches: safeAe(sql.eventCount(ds, "app_launch", cutoffMs, w("app_launch"))),
       sessionEnds: safeAe(sql.eventCount(ds, "session_end", cutoffMs, w("session_end"))),
@@ -314,7 +343,8 @@ export async function buildStats(
       modelLoad: safeAe(sql.modelLoadLatency(ds, cutoffMs, w("model_load"))),
       evictions: safeAe(sql.keepAliveEvictions(ds, cutoffMs, w("model_load"))),
       dictCount: safeAe(sql.eventCount(ds, "dictation_completed", cutoffMs, w("dictation_completed"))),
-      editedCount: safeAe(sql.eventCount(ds, "dictation_edited", cutoffMs, w("dictation_edited"))),
+      editFinalized: safeAe(sql.eventCount(ds, "dictation_edited", cutoffMs, w("dictation_edited"))),
+      editChanged: safeAe(sql.editedCount(ds, cutoffMs, w("dictation_edited"))),
     }),
     // totalInstalls is all-time by definition; the breakdowns honor the selected
     // range (installs active in the window) so the range toggle affects every
@@ -330,8 +360,7 @@ export async function buildStats(
   ]);
 
   const mf = aeRows.mf[0] ?? {};
-  const mfTotal = num(mf.total);
-  const magicFormatAdoptionPct = mfTotal > 0 ? (num(mf.polished) / mfTotal) * 100 : 0;
+  const magicFormatAdoptionPct = ratio(num(mf.polished), num(mf.total));
 
   const lat = aeRows.lat[0] ?? {};
   const asrLat = aeRows.asrLat[0] ?? {};
@@ -344,16 +373,26 @@ export async function buildStats(
     { stage: "model_load", p50: num(modelLoad.p50), p95: num(modelLoad.p95) },
   ];
 
+  // Crash-free is a proxy: clean session_ends / launches. Needs BOTH streams —
+  // null (→ "—") when either is absent, so an empty window can't read as a fake
+  // "100% crash-free". Returned as crash-FREE directly (the one concept the FE
+  // shows) rather than a crash rate the FE would have to invert. Note: the most
+  // recent launches have no session_end yet, so it slightly understates near
+  // "now" — inherent to the proxy at low volume.
   const launches = num(aeRows.launches[0]?.value);
   const sessionEnds = num(aeRows.sessionEnds[0]?.value);
-  const crashProxyRatePct = launches > 0 ? Math.max(0, (1 - sessionEnds / launches) * 100) : 0;
+  const crashFreeRatePct = launches > 0 && sessionEnds > 0
+    ? Math.min(100, (sessionEnds / launches) * 100)
+    : null;
 
   const audioRate = aeRows.audioRate[0] ?? {};
   const audioTotal = num(audioRate.total);
   const audioFallbackRatePct = audioTotal > 0 ? (num(audioRate.fell_back) / audioTotal) * 100 : 0;
 
   const dictCount = num(aeRows.dictCount[0]?.value);
-  const editedCount = num(aeRows.editedCount[0]?.value);
+  // "of finalized dictations, how many were edited" — same stream, bounded ≤ 100%.
+  const editFinalized = num(aeRows.editFinalized[0]?.value);
+  const editChanged = num(aeRows.editChanged[0]?.value);
 
   // Which panels the active filters can't honor. The FE renders explicit
   // "not recorded under {dim}" states from this — a blocked query returns zero
@@ -387,11 +426,11 @@ export async function buildStats(
     fallbackReasons: toBreakdown(aeRows.fallbacks),
     latency,
     errorsByType: toBreakdown(aeRows.errors),
-    crashProxyRatePct,
+    crashFreeRatePct,
     audioBackends: toBreakdown(aeRows.audio),
     audioFallbackRatePct,
     editRateMedianPct: num(aeRows.editRate[0]?.median),
-    editedSharePct: dictCount > 0 ? (editedCount / dictCount) * 100 : 0,
+    editedSharePct: ratio(editChanged, editFinalized),
     keepAliveEvictions: num(aeRows.evictions[0]?.value),
     segmentEventCount: dictCount,
     filterOptions,
@@ -416,7 +455,7 @@ async function loadFilterOptions(
     ["country", "country"], ["cpu_cores", "cpu_cores"],
   ];
   const aeDims: Array<[FilterDim, string]> = [
-    ["asr_model", "blob5"], ["language", "blob7"], ["target", "blob11"],
+    ["asr_model", "blob5"], ["cleanup_model", "blob9"], ["language", "blob7"], ["target", "blob11"],
     // arch isn't in D1; on dictation_completed its aliased slot (blob14) has no
     // native occupant, so the breakdown yields exactly the arch values.
     ["arch", "blob14"],

@@ -25,7 +25,7 @@ export interface LatencySummary {
 export const FILTER_DIMS = [
   "version", "channel", "country", "ram",
   "chip", "os", "mac_model", "arch", "cpu_cores",
-  "asr_model", "language", "target",
+  "asr_model", "cleanup_model", "language", "target",
 ] as const;
 export type FilterDim = (typeof FILTER_DIMS)[number];
 export type Filters = Partial<Record<FilterDim, string>>;
@@ -60,18 +60,27 @@ export interface StatsResponse {
   chipBreakdown: Breakdown[];
   ramBreakdown: Breakdown[];
   countryBreakdown: Breakdown[];
-  magicFormatAdoptionPct: number;
+  /** null when there are no dictations in the window (render "—", not "0%"). */
+  magicFormatAdoptionPct: number | null;
   fallbackReasons: Breakdown[];
   /** Per-stage p50/p95 incl. model_load (cold model start). */
   latency: LatencySummary[];
   errorsByType: Breakdown[];
-  crashProxyRatePct: number;
+  /**
+   * Clean-session proxy (session_ends / launches), as crash-FREE %. null when
+   * either stream is absent in the window (render "—").
+   */
+  crashFreeRatePct: number | null;
   audioBackends: Breakdown[];
   audioFallbackRatePct: number;
   /** Median post-insertion edit-rate bucket (%) over edited dictations. */
   editRateMedianPct: number;
-  /** Share of completed dictations the user then edited (%). */
-  editedSharePct: number;
+  /**
+   * Share of *finalized* dictations that were edited (%), derived from the
+   * dictation_edited stream alone (edited / finalized) so it's bounded ≤ 100.
+   * null (→ "—") when no edit sessions have finalized in the window.
+   */
+  editedSharePct: number | null;
   keepAliveEvictions: number;
   /** dictation_completed count in the window under the active filters. */
   segmentEventCount: number;
