@@ -251,6 +251,8 @@ export default function App() {
                   <h3 className="mb-2 text-sm text-ink">Edits after insertion</h3>
                   {blocked.edits ? (
                     <EmptyState message={notRecorded(blocked.edits)} />
+                  ) : stats.editedSharePct === null ? (
+                    <EmptyState message="No edited dictations in this window yet." />
                   ) : (
                     <>
                       <p className="font-mono text-2xl tabular-nums text-ink">{formatPct(stats.editedSharePct)}</p>

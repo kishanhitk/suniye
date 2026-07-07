@@ -416,7 +416,8 @@ export async function buildStats(
     audioBackends: toBreakdown(aeRows.audio),
     audioFallbackRatePct,
     editRateMedianPct: num(aeRows.editRate[0]?.median),
-    editedSharePct: editFinalized > 0 ? (editChanged / editFinalized) * 100 : 0,
+    // null (→ "—") when no dictations have finalized an edit session yet.
+    editedSharePct: editFinalized > 0 ? (editChanged / editFinalized) * 100 : null,
     keepAliveEvictions: num(aeRows.evictions[0]?.value),
     segmentEventCount: dictCount,
     filterOptions,

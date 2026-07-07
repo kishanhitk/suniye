@@ -279,6 +279,6 @@ describe("buildStats", () => {
     expect(stats.crashProxyRatePct).toBeNull(); // no sessions → "—", not fake "100% crash-free"
     expect(stats.totalInstalls).toBe(0);
     expect(stats.audioFallbackRatePct).toBe(0);
-    expect(stats.editedSharePct).toBe(0);
+    expect(stats.editedSharePct).toBeNull(); // no edit sessions → "—", not "0%"
   });
 });

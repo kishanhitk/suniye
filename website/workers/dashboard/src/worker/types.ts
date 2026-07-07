@@ -75,8 +75,9 @@ export interface StatsResponse {
   /**
    * Share of *finalized* dictations that were edited (%), derived from the
    * dictation_edited stream alone (edited / finalized) so it's bounded ≤ 100.
+   * null (→ "—") when no edit sessions have finalized in the window.
    */
-  editedSharePct: number;
+  editedSharePct: number | null;
   keepAliveEvictions: number;
   /** dictation_completed count in the window under the active filters. */
   segmentEventCount: number;
