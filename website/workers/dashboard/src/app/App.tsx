@@ -1,137 +1,318 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AreaTrend } from "./components/AreaTrend";
 import { BreakdownList } from "./components/BreakdownList";
-import { StatTile } from "./components/StatTile";
-import { Card, CardSubtitle, CardTitle } from "./components/ui/card";
-import { formatNumber } from "./lib/utils";
-import type { StatsResponse } from "./types";
+import { EmptyState } from "./components/EmptyState";
+import { FilterBar } from "./components/FilterBar";
+import { LatencyBars } from "./components/LatencyBars";
+import { MiniBars } from "./components/MiniBars";
+import { Section } from "./components/Section";
+import { Skeleton } from "./components/Skeleton";
+import { KeyFigure, TotalsStrip } from "./components/TotalsStrip";
+import { Sparkline } from "./components/Sparkline";
+import { deltaPct, formatCount, formatPct, relativeTime } from "./lib/utils";
+import type { FilterDim, Filters, StatsResponse } from "./types";
 
 const RANGES = [7, 30, 90];
 
+/** "Not recorded under {dim}" copy — the server decides WHICH panels are blocked. */
+const notRecorded = (dim: FilterDim) => `Not recorded under the ${dim.replace("_", " ")} filter.`;
+
 export default function App() {
   const [range, setRange] = useState(30);
+  const [filters, setFilters] = useState<Filters>({});
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchedAt, setFetchedAt] = useState<number | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const rangeRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // Re-render each minute so the "updated Xm ago" stamp stays honest.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
-    fetch(`/api/stats?range=${range}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data: StatsResponse) => !cancelled && setStats(data))
-      .catch((e) => !cancelled && setError(String(e)))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [range]);
+    const params = new URLSearchParams({ range: String(range) });
+    for (const [dim, value] of Object.entries(filters)) {
+      if (value) params.set(dim, value);
+    }
+    fetch(`/api/stats?${params}`, { signal: controller.signal })
+      .then((r) => (r.ok ? (r.json() as Promise<StatsResponse>) : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data) => {
+        setStats(data);
+        setFetchedAt(Date.now());
+      })
+      .catch((e: unknown) => {
+        if (!controller.signal.aborted) setError(String(e));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [range, filters, retryNonce]);
 
-  const totalWords = stats?.wordsPerDay.reduce((sum, p) => sum + p.value, 0) ?? 0;
+  // Defensive: a stale/cached response without `blocked` must degrade to
+  // "nothing blocked", never crash the whole dashboard.
+  const blocked = stats?.blocked ?? {};
+
+  const totalWords = useMemo(
+    () => stats?.wordsPerDay.reduce((sum, p) => sum + p.value, 0) ?? 0,
+    [stats]
+  );
+  const newInstalls = useMemo(
+    () => stats?.newInstallsPerDay.reduce((sum, p) => sum + p.value, 0) ?? 0,
+    [stats]
+  );
+  const wordsDelta = stats ? deltaPct(stats.wordsPerDay, stats.rangeDays) : null;
+
+  const onRangeKeyDown = (event: React.KeyboardEvent, index: number) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const next = (index + (event.key === "ArrowRight" ? 1 : -1) + RANGES.length) % RANGES.length;
+    setRange(RANGES[next]);
+    rangeRefs.current[next]?.focus();
+  };
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
-      <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Suniye Analytics</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--color-muted)" }}>
-            Anonymous usage — content stays on the device, only counts leave.
-          </p>
-        </div>
-        <div className="flex gap-1 rounded-lg border p-1">
-          {RANGES.map((r) => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className="rounded-md px-3 py-1 font-mono text-xs transition-colors"
-              style={{
-                background: r === range ? "var(--color-primary)" : "transparent",
-                color: r === range ? "#04120f" : "var(--color-muted)",
-              }}
-            >
-              {r}d
-            </button>
-          ))}
+    <div className="mx-auto max-w-6xl px-6 pb-16">
+      <header className="sticky top-0 z-10 -mx-6 border-b border-line bg-paper/95 px-6 py-4 backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="font-mono text-sm uppercase tracking-[0.2em] text-ink">
+            Suniye <span className="text-muted">·</span> Analytics
+          </h1>
+          <div className="flex items-center gap-4">
+            <p className="hidden font-mono text-[11px] text-muted sm:block" aria-live="polite">
+              only counts leave the device ·{" "}
+              {loading ? "updating…" : fetchedAt ? `updated ${relativeTime(fetchedAt)}` : "loading…"}
+            </p>
+            <div role="radiogroup" aria-label="Time range" className="flex rounded-lg border border-line p-0.5">
+              {RANGES.map((r, i) => (
+                <button
+                  key={r}
+                  ref={(el) => { rangeRefs.current[i] = el; }}
+                  role="radio"
+                  aria-checked={r === range}
+                  tabIndex={r === range ? 0 : -1}
+                  onClick={() => setRange(r)}
+                  onKeyDown={(e) => onRangeKeyDown(e, i)}
+                  className={
+                    r === range
+                      ? "rounded-md bg-ink px-3 py-1 font-mono text-xs text-paper"
+                      : "rounded-md px-3 py-1 font-mono text-xs text-muted hover:text-ink"
+                  }
+                >
+                  {r}d
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </header>
 
-      {loading && <p style={{ color: "var(--color-muted)" }}>Loading…</p>}
-      {error && (
-        <Card>
-          <p className="text-sm text-red-400">Couldn't load stats: {error}</p>
-        </Card>
-      )}
+      <main>
+        {stats && (
+          <FilterBar
+            options={stats.filterOptions}
+            filters={filters}
+            segmentCount={loading ? null : stats.segmentEventCount}
+            onChange={(dim, value) =>
+              setFilters((prev) => {
+                const next = { ...prev };
+                if (value) next[dim] = value;
+                else delete next[dim];
+                return next;
+              })
+            }
+            onClear={() => setFilters({})}
+          />
+        )}
 
-      {stats && (
-        <div className="space-y-5">
-          <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
-            <StatTile label="Total installs" value={formatNumber(stats.totalInstalls)} />
-            <StatTile label="Words dictated" value={formatNumber(totalWords)} />
-            <StatTile label="Magic Format" value={stats.magicFormatAdoptionPct.toFixed(0)} suffix="%" />
-            <StatTile label="Crash proxy" value={stats.crashProxyRatePct.toFixed(1)} suffix="%" />
+        {error && (
+          <div className="border-t border-line py-6" role="alert">
+            <p className="text-sm text-ink">Couldn't load stats ({error}).</p>
+            <button
+              onClick={() => setRetryNonce((n) => n + 1)}
+              className="mt-3 rounded-md border border-line px-3 py-1.5 font-mono text-xs text-ink hover:bg-surface"
+            >
+              Retry
+            </button>
           </div>
+        )}
 
-          <div className="grid gap-5 md:grid-cols-2">
-            <Card>
-              <CardTitle>Words dictated / day</CardTitle>
-              <CardSubtitle>bucketed on device timestamp, sampling-corrected</CardSubtitle>
-              <div className="mt-4">
-                <AreaTrend data={stats.wordsPerDay} />
-              </div>
-            </Card>
-            <Card>
-              <CardTitle>Active installs / day</CardTitle>
-              <CardSubtitle>distinct install ids</CardSubtitle>
-              <div className="mt-4">
-                <AreaTrend data={stats.activeInstallsPerDay} color="var(--color-chart-3)" />
-              </div>
-            </Card>
-          </div>
-
-          <div className="grid gap-5 md:grid-cols-3">
-            <Card>
-              <CardTitle>ASR model</CardTitle>
-              <BreakdownList items={stats.asrModelBreakdown} />
-            </Card>
-            <Card>
-              <CardTitle>Chip</CardTitle>
-              <BreakdownList items={stats.chipBreakdown} />
-            </Card>
-            <Card>
-              <CardTitle>RAM (GB)</CardTitle>
-              <BreakdownList items={stats.ramBreakdown} />
-            </Card>
-          </div>
-
-          <Card>
-            <CardTitle>Pipeline latency (ms)</CardTitle>
-            <CardSubtitle>p50 / p95 by stage — the number users feel is end_to_end</CardSubtitle>
-            <div className="mt-4 grid grid-cols-3 gap-4">
-              {stats.latency.map((l) => (
-                <div key={l.stage} className="rounded-lg border p-3">
-                  <div className="font-mono text-xs" style={{ color: "var(--color-muted)" }}>{l.stage}</div>
-                  <div className="mt-1 font-mono">
-                    <span className="text-lg font-semibold">{Math.round(l.p50)}</span>
-                    <span className="text-xs" style={{ color: "var(--color-muted)" }}> / {Math.round(l.p95)}</span>
-                  </div>
-                </div>
-              ))}
+        {!stats && !error && (
+          // First load: reserve the page's shape so data doesn't shift the layout.
+          <div className="space-y-6 pt-6" aria-hidden>
+            <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)}
             </div>
-          </Card>
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <Card>
-              <CardTitle>Countries</CardTitle>
-              <BreakdownList items={stats.countryBreakdown} />
-            </Card>
-            <Card>
-              <CardTitle>Errors by type</CardTitle>
-              <BreakdownList items={stats.errorsByType} />
-            </Card>
+            <Skeleton className="h-52" />
+            <Skeleton className="h-40" />
+            <Skeleton className="h-40" />
           </div>
-        </div>
-      )}
+        )}
+
+        {stats && (
+          <>
+            <div className="border-t border-line py-7">
+              <TotalsStrip>
+                <KeyFigure
+                  label="Words dictated"
+                  value={formatCount(totalWords)}
+                  accent
+                  extra={<Sparkline data={stats.wordsPerDay} />}
+                  detail={wordsDelta === null ? undefined : `${wordsDelta >= 0 ? "+" : ""}${wordsDelta.toFixed(0)}% vs prior half`}
+                />
+                <KeyFigure
+                  label="Installs"
+                  value={blocked.installs ? "—" : formatCount(stats.totalInstalls)}
+                  detail={
+                    blocked.installs
+                      ? notRecorded(blocked.installs)
+                      : newInstalls > 0 ? `+${formatCount(newInstalls)} new in window` : "all-time"
+                  }
+                />
+                <KeyFigure
+                  label="Magic Format"
+                  value={formatPct(stats.magicFormatAdoptionPct)}
+                  detail="of dictations polished"
+                />
+                <KeyFigure
+                  label="Crash-free"
+                  value={blocked.crash ? "—" : formatPct(100 - stats.crashProxyRatePct, 1)}
+                  detail={blocked.crash ? notRecorded(blocked.crash) : "clean session proxy"}
+                />
+              </TotalsStrip>
+            </div>
+
+            <Section eyebrow="Usage" note="bucketed on device time · sampling-corrected">
+              <div className="grid gap-8 md:grid-cols-3">
+                <div>
+                  <h3 className="mb-2 text-sm text-ink">Words / day</h3>
+                  {stats.wordsPerDay.length > 0
+                    ? <AreaTrend data={stats.wordsPerDay} tone="accent" label="Words dictated per day" />
+                    : <EmptyState message="No dictations in this window yet." className="min-h-[200px]" />}
+                </div>
+                <div>
+                  <h3 className="mb-2 text-sm text-ink">Active installs / day</h3>
+                  {blocked.activeInstalls ? (
+                    <EmptyState message={notRecorded(blocked.activeInstalls)} className="min-h-[200px]" />
+                  ) : stats.activeInstallsPerDay.length > 0 ? (
+                    <AreaTrend data={stats.activeInstallsPerDay} label="Active installs per day" />
+                  ) : (
+                    <EmptyState message="No activity in this window yet." className="min-h-[200px]" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="mb-2 text-sm text-ink">New installs / day</h3>
+                  {blocked.installs ? (
+                    <EmptyState message={notRecorded(blocked.installs)} className="min-h-[200px]" />
+                  ) : stats.newInstallsPerDay.length > 0 ? (
+                    <MiniBars data={stats.newInstallsPerDay} />
+                  ) : (
+                    <EmptyState message="No new installs in this window." className="min-h-[200px]" />
+                  )}
+                </div>
+              </div>
+            </Section>
+
+            <Section
+              eyebrow="Pipeline latency"
+              note={
+                blocked.modelLoad
+                  ? `model load ${notRecorded(blocked.modelLoad).toLowerCase()}`
+                  : stats.keepAliveEvictions > 0
+                    ? `${formatCount(stats.keepAliveEvictions)} keep-alive evictions`
+                    : undefined
+              }
+            >
+              <LatencyBars stages={stats.latency} />
+            </Section>
+
+            <Section eyebrow="Quality">
+              <div className="grid gap-8 md:grid-cols-3">
+                <div>
+                  <h3 className="mb-2 text-sm text-ink">Magic Format fallbacks</h3>
+                  <BreakdownList
+                    items={stats.fallbackReasons}
+                    emptyMessage="No fallbacks — every polish ran."
+                  />
+                </div>
+                <div>
+                  <h3 className="mb-2 text-sm text-ink">Edits after insertion</h3>
+                  {blocked.edits ? (
+                    <EmptyState message={notRecorded(blocked.edits)} />
+                  ) : (
+                    <>
+                      <p className="font-mono text-2xl tabular-nums text-ink">{formatPct(stats.editedSharePct)}</p>
+                      <p className="mt-1 font-mono text-[11px] text-muted">
+                        of dictations edited · median edit {formatPct(stats.editRateMedianPct)} of the text
+                      </p>
+                    </>
+                  )}
+                </div>
+                <div>
+                  <h3 className="mb-2 text-sm text-ink">Audio backend</h3>
+                  {blocked.audio ? (
+                    <EmptyState message={notRecorded(blocked.audio)} />
+                  ) : (
+                    <>
+                      <BreakdownList items={stats.audioBackends} emptyMessage="No capture data in this window." />
+                      {stats.audioBackends.length > 0 && (
+                        <p className="mt-2 font-mono text-[11px] text-muted">
+                          fell back to a lower rung on {formatPct(stats.audioFallbackRatePct, 1)} of captures
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </Section>
+
+            <Section eyebrow="Fleet" note="installs active in window">
+              <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-4">
+                <div>
+                  <h3 className="mb-2 text-sm text-ink">ASR model</h3>
+                  <BreakdownList items={stats.asrModelBreakdown} />
+                </div>
+                {(
+                  [
+                    ["Chip", stats.chipBreakdown],
+                    ["RAM (GB)", stats.ramBreakdown],
+                    ["Country", stats.countryBreakdown],
+                  ] as const
+                ).map(([title, items]) => (
+                  <div key={title}>
+                    <h3 className="mb-2 text-sm text-ink">{title}</h3>
+                    {blocked.installs
+                      ? <EmptyState message={notRecorded(blocked.installs)} />
+                      : <BreakdownList items={items} />}
+                  </div>
+                ))}
+              </div>
+            </Section>
+
+            <Section eyebrow="Reliability">
+              {blocked.errors ? (
+                <EmptyState message={notRecorded(blocked.errors)} />
+              ) : (
+                <BreakdownList items={stats.errorsByType} emptyMessage="No errors in this window." />
+              )}
+            </Section>
+
+            <footer className="border-t border-line pt-5">
+              <p className="font-mono text-[11px] text-muted">
+                pseudonymous · ip never stored · counts and timings only — no audio, no text
+              </p>
+            </footer>
+          </>
+        )}
+      </main>
     </div>
   );
 }

@@ -43,6 +43,11 @@ public struct AnalyticsBatch: Encodable, Sendable {
     public let channel: String
     public let isDebug: Bool
     public let sentAt: Int64
+    /// Process-stable device profile (chip/ram/os/…), stamped onto every event's
+    /// AE row by the ingest Worker so any metric can be sliced by hardware. Once
+    /// per batch, not per event. Omitted from the wire when nil (non-breaking —
+    /// `schema_version` stays 1).
+    public let device: [String: AnalyticsValue]?
     public let events: [EncodedEvent]
 
     enum CodingKeys: String, CodingKey {
@@ -53,6 +58,7 @@ public struct AnalyticsBatch: Encodable, Sendable {
         case channel
         case isDebug = "is_debug"
         case sentAt = "sent_at"
+        case device
         case events
     }
 }
@@ -64,12 +70,23 @@ public struct AnalyticsIdentity: Sendable, Equatable {
     public let build: String
     public let channel: String
     public let isDebug: Bool
+    /// Coarse device profile, stamped onto every event's AE row via the batch
+    /// envelope. Optional so callers that don't collect it (or tests) can omit it.
+    public let device: DeviceProfile?
 
-    public init(installID: String, appVersion: String, build: String, channel: String, isDebug: Bool) {
+    public init(
+        installID: String,
+        appVersion: String,
+        build: String,
+        channel: String,
+        isDebug: Bool,
+        device: DeviceProfile? = nil
+    ) {
         self.installID = installID
         self.appVersion = appVersion
         self.build = build
         self.channel = channel
         self.isDebug = isDebug
+        self.device = device
     }
 }

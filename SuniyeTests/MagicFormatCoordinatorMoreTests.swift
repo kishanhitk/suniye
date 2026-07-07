@@ -1,3 +1,4 @@
+import SuniyeAnalytics
 import XCTest
 @testable import Suniye
 
@@ -18,7 +19,48 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
+        XCTAssertEqual(output.fallbackReason, .emptyOutput)
+        XCTAssertEqual(output.provider, .openAICompatible) // provider recorded even on fallback
+    }
+
+    func testAnalyticsModelOverrideMasksAPIModelInOutcome() async {
+        // The custom preset's model id is user free text — the override (set at
+        // request build) must replace it in the outcome so analytics and logs
+        // never see the raw id.
+        let coordinator = makeCoordinator(api: FakeLLMPostProcessor(result: .success("polished")))
+        var request = makeRequest(provider: .openAICompatible)
+        request.analyticsModelOverride = "custom"
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertTrue(output.ran)
+        XCTAssertEqual(output.model, "custom")
+    }
+
+    func testEveryLLMErrorMapsToASpecificFallbackReason() {
+        // Reason fidelity: no producible error may silently degrade to .unknown —
+        // the fallback-reasons dashboard card exists to diagnose these.
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.invalidConfiguration("x")), .invalidConfig)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.timeout), .timeout)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.unauthorized), .unauthorized)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.provider("x")), .providerError)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.malformedResponse), .malformedResponse)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.emptyOutput), .emptyOutput)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.network("x")), .network)
+    }
+
+    func testUnresolvedLocalProviderRecordsAttemptedProviderAndReason() async {
+        let coordinator = makeCoordinator()
+        let request = makeRequest(provider: .localGemma, localGemmaAvailability: .runtimeUnavailable)
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran)
+        XCTAssertEqual(output.provider, .localGemma) // which provider was attempted
+        XCTAssertEqual(output.fallbackReason, .providerUnavailable)
     }
 
     func testAPIPolishFallsBackToRawTextOnUnknownError() async {
@@ -27,7 +69,22 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
+    }
+
+    func testPolishReportsRanEvenWhenOutputEqualsInput() async {
+        // The exact "Magic Format 0%" bug: an idempotent polish (a provider runs
+        // but returns text identical to the input) still RAN, so it must count as
+        // polished — `ran` is not "did the text change".
+        let coordinator = makeCoordinator(api: FakeLLMPostProcessor(result: .success("polish me")))
+        let request = makeRequest(provider: .openAICompatible)
+
+        let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
+
+        XCTAssertEqual(output.text, "polish me")
+        XCTAssertTrue(output.ran)
+        XCTAssertNotNil(output.provider) // provider recorded even on an idempotent polish
     }
 
     // MARK: - polish fallbacks (Apple provider)
@@ -39,7 +96,8 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
         XCTAssertEqual(apple.callCount, 1)
     }
 
@@ -53,7 +111,8 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
     }
 
     // MARK: - polish fallbacks (local Gemma provider)
@@ -65,7 +124,8 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
         XCTAssertEqual(gemma.callCount, 1)
     }
 
@@ -79,7 +139,9 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
+        XCTAssertEqual(output.fallbackReason, .timeout) // typed reason survives the boundary
     }
 
     func testGemmaPolishFallsBackToRawTextOnUnknownError() async {
@@ -92,7 +154,8 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
 
         let output = await coordinator.polish(input: "polish me", rawText: "raw text", request: request)
 
-        XCTAssertEqual(output, "raw text")
+        XCTAssertEqual(output.text, "raw text")
+        XCTAssertFalse(output.ran) // fell back to raw → not counted as polished
     }
 
     // MARK: - rewrite

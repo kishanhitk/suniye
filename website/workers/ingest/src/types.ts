@@ -22,6 +22,8 @@ export interface WireBatch {
   channel: string;
   is_debug: boolean;
   sent_at: number;
+  /** Coarse device profile stamped onto every event's AE row. Optional. */
+  device?: Record<string, PropValue>;
   events: WireEvent[];
 }
 

@@ -42,8 +42,14 @@ public enum CleanupProvider: String, Sendable, CaseIterable {
 
 public enum CleanupFallbackReason: String, Sendable, CaseIterable {
     case invalidEndpoint = "invalid_endpoint"
+    case invalidModel = "invalid_model"
     case missingKey = "missing_key"
+    case keyReadFailed = "key_read_failed"
+    case invalidConfig = "invalid_config"
     case emptyOutput = "empty_output"
+    case providerError = "provider_error"
+    case malformedResponse = "malformed_response"
+    case providerUnavailable = "provider_unavailable"
     case timeout, network, unauthorized, unknown
 }
 

@@ -117,6 +117,18 @@ enum AnalyticsMapping {
         case .openAICompatible: return .openAICompatible
         }
     }
+
+    /// The provider that actually ran (resolved from `.automatic`), for the
+    /// `dictation_completed` metric — more precise than the requested provider.
+    /// Labeled `effective:` so it never overloads-ambiguously with the
+    /// `MagicFormatProvider` variant (both enums share case names).
+    static func cleanupProvider(effective provider: EffectiveMagicFormatProvider) -> CleanupProvider {
+        switch provider {
+        case .appleFoundationModels: return .appleFoundationModels
+        case .localGemma: return .localGemma
+        case .openAICompatible: return .openAICompatible
+        }
+    }
 }
 
 /// Monotonic per-dictation latency marks. Dictation is serialized by the phase
