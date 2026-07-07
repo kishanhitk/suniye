@@ -22,7 +22,8 @@
 // or comment/statement characters, so it cannot escape a quoted literal).
 // D1 queries use bind params throughout.
 
-import type { BlockedPanels, Breakdown, FilterDim, Filters, LatencySummary, StatsResponse, TimePoint } from "./types";
+import { FILTER_DIMS } from "./types";
+import type { BlockedPanels, Breakdown, FilterDim, FilterOption, Filters, LatencySummary, StatsResponse, TimePoint } from "./types";
 
 const DAY_MS = 86_400_000;
 
@@ -95,23 +96,40 @@ const DIM_SPECS: Record<FilterDim, {
  */
 const AE_NEVER = " AND blob1 = ''";
 
+type DimSpec = (typeof DIM_SPECS)[FilterDim];
+
 /**
- * The active filters that survive sanitization, with their specs. Invalid
- * values are dropped entirely (a stale or malformed option must not blank the
- * dashboard). Single source for the where-builders and blocked-panel checks.
+ * The active filters that survive sanitization, with their specs. Each dim maps
+ * to its list of valid selected values (OR within a dim). Invalid values are
+ * dropped element-wise (a stale/malformed option must not blank the dashboard);
+ * a dim with no surviving values drops out entirely. Single source of truth for
+ * the where-builders and blocked-panel checks. Duplicates are collapsed.
  */
 function sanitizedEntries(
   filters: Filters | undefined
-): Array<[FilterDim, (typeof DIM_SPECS)[FilterDim], string | number]> {
+): Array<[FilterDim, DimSpec, Array<string | number>]> {
   if (!filters) return [];
-  const out: Array<[FilterDim, (typeof DIM_SPECS)[FilterDim], string | number]> = [];
-  for (const [dim, raw] of Object.entries(filters) as Array<[FilterDim, string]>) {
+  const out: Array<[FilterDim, DimSpec, Array<string | number>]> = [];
+  for (const [dim, raw] of Object.entries(filters) as Array<[FilterDim, string[] | string | undefined]>) {
     const spec = DIM_SPECS[dim];
-    if (!spec || raw === undefined || raw === "") continue;
-    const value = spec.numeric ? safeNum(raw) : safeLabel(raw);
-    if (value !== null) out.push([dim, spec, value]);
+    if (!spec || raw === undefined) continue;
+    // Tolerate a bare string (e.g. a hand-built URL) as a one-element set.
+    const rawValues = Array.isArray(raw) ? raw : [raw];
+    const values: Array<string | number> = [];
+    for (const rv of rawValues) {
+      const value = spec.numeric ? safeNum(rv) : safeLabel(rv);
+      if (value !== null && !values.includes(value)) values.push(value);
+    }
+    if (values.length > 0) out.push([dim, spec, values]);
   }
   return out;
+}
+
+/** One dim's SQL predicate: `= v` for a single value, `IN (…)` for a set. */
+function aeClause(spec: DimSpec, values: Array<string | number>): string {
+  const lit = (v: string | number) => (spec.numeric ? String(v) : `'${v}'`);
+  if (values.length === 1) return ` AND ${spec.ae} = ${lit(values[0])}`;
+  return ` AND ${spec.ae} IN (${values.map(lit).join(", ")})`;
 }
 
 /**
@@ -145,8 +163,8 @@ export function blockedDimD1(filters: Filters | undefined): FilterDim | null {
 export function whereFiltersAE(filters: Filters | undefined, event: string): string {
   if (blockedDim(filters, event)) return AE_NEVER;
   let out = "";
-  for (const [, spec, value] of sanitizedEntries(filters)) {
-    out += spec.numeric ? ` AND ${spec.ae} = ${value}` : ` AND ${spec.ae} = '${value}'`;
+  for (const [, spec, values] of sanitizedEntries(filters)) {
+    out += aeClause(spec, values);
   }
   return out;
 }
@@ -156,9 +174,14 @@ export function whereFiltersD1(filters: Filters | undefined): { sql: string; bin
   if (blockedDimD1(filters)) return { sql: " AND 1 = 0", binds: [] };
   let sql = "";
   const binds: unknown[] = [];
-  for (const [, spec, value] of sanitizedEntries(filters)) {
-    sql += ` AND ${spec.d1} = ?`;
-    binds.push(value);
+  for (const [, spec, values] of sanitizedEntries(filters)) {
+    if (values.length === 1) {
+      sql += ` AND ${spec.d1} = ?`;
+      binds.push(values[0]);
+    } else {
+      sql += ` AND ${spec.d1} IN (${values.map(() => "?").join(", ")})`;
+      binds.push(...values);
+    }
   }
   return { sql, binds };
 }
@@ -166,8 +189,19 @@ export function whereFiltersD1(filters: Filters | undefined): { sql: string; bin
 /** Sanitized copy of the incoming filters (what the response echoes back). */
 export function sanitizeFilters(filters: Filters | undefined): Filters {
   const out: Filters = {};
-  for (const [dim, , value] of sanitizedEntries(filters)) {
-    out[dim] = String(value);
+  for (const [dim, , values] of sanitizedEntries(filters)) {
+    out[dim] = values.map(String);
+  }
+  return out;
+}
+
+/** The active filters with one dimension dropped — the base for its facet counts
+ *  (a dim's own selection must not constrain its own value list). */
+function filtersExcept(filters: Filters | undefined, drop: FilterDim): Filters {
+  if (!filters) return {};
+  const out: Filters = {};
+  for (const [dim, values] of Object.entries(filters) as Array<[FilterDim, string[]]>) {
+    if (dim !== drop) out[dim] = values;
   }
   return out;
 }
@@ -189,9 +223,9 @@ export const sql = {
     `SELECT toStartOfInterval(toDateTime(double1 / 1000), INTERVAL '1' DAY) AS day, COUNT(DISTINCT index1) AS value ` +
     `FROM ${ds} WHERE double1 >= ${cutoffMs}${where} GROUP BY day ORDER BY day`,
 
-  breakdown: (ds: string, col: string, whereEvent: string, cutoffMs: number, where = "") =>
+  breakdown: (ds: string, col: string, whereEvent: string, cutoffMs: number, where = "", limit = 20) =>
     `SELECT ${col} AS label, SUM(_sample_interval) AS value FROM ${ds} ` +
-    `WHERE ${whereEvent} AND double1 >= ${cutoffMs}${where} GROUP BY label ORDER BY value DESC LIMIT 20`,
+    `WHERE ${whereEvent} AND double1 >= ${cutoffMs}${where} GROUP BY label ORDER BY value DESC LIMIT ${limit}`,
 
   magicFormatAdoption: (ds: string, cutoffMs: number, where = "") =>
     `SELECT SUM(double16 * _sample_interval) AS polished, SUM(_sample_interval) AS total ` +
@@ -356,7 +390,7 @@ export async function buildStats(
       rams: safeD1(`SELECT ram_gb AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ?${d1Filter.sql} GROUP BY ram_gb ORDER BY value DESC LIMIT 20`, [cutoffDay, ...d1Filter.binds]),
       countries: safeD1(`SELECT country AS label, COUNT(*) AS value FROM installs WHERE last_seen >= ?${d1Filter.sql} GROUP BY country ORDER BY value DESC LIMIT 20`, [cutoffDay, ...d1Filter.binds]),
     }),
-    loadFilterOptions(safeAe, safeD1, ds, cutoffMs, cutoffDay),
+    loadFilterOptions(safeAe, ds, cutoffMs, filters),
   ]);
 
   const mf = aeRows.mf[0] ?? {};
@@ -438,46 +472,40 @@ export async function buildStats(
 }
 
 /**
- * Available values per filter dimension: install-registry dims from D1 DISTINCT,
- * dictation dims from AE breakdowns. Range-scoped but NOT filter-scoped, so the
- * option lists stay stable while a filter is active.
+ * Selectable values + live facet counts per dimension. Every dimension resolves
+ * to a clean slot on dictation_completed (device dims via their aliased slots),
+ * so a single breakdown per dim yields both its value list and a count. Each
+ * dim's counts are computed under the OTHER active filters (self excluded) — so
+ * the numbers reflect the current slice, yet a dimension never hides its own
+ * sibling values. Unit is dictations throughout (matching segmentEventCount);
+ * a value with no dictations under the current filters drops out of its list.
  */
 async function loadFilterOptions(
   ae: AeRunner,
-  d1: D1Runner,
   ds: string,
   cutoffMs: number,
-  cutoffDay: string
-): Promise<Partial<Record<FilterDim, Array<string | number>>>> {
-  const d1Dims: Array<[FilterDim, string]> = [
-    ["version", "app_version"], ["channel", "channel"], ["chip", "chip"],
-    ["ram", "ram_gb"], ["os", "os_version"], ["mac_model", "mac_model"],
-    ["country", "country"], ["cpu_cores", "cpu_cores"],
-  ];
-  const aeDims: Array<[FilterDim, string]> = [
-    ["asr_model", "blob5"], ["cleanup_model", "blob9"], ["language", "blob7"], ["target", "blob11"],
-    // arch isn't in D1; on dictation_completed its aliased slot (blob14) has no
-    // native occupant, so the breakdown yields exactly the arch values.
-    ["arch", "blob14"],
-  ];
+  filters: Filters | undefined
+): Promise<Partial<Record<FilterDim, FilterOption[]>>> {
+  const results = await Promise.all(
+    FILTER_DIMS.map((dim) =>
+      ae(sql.breakdown(
+        ds, DIM_SPECS[dim].ae, "blob1 = 'dictation_completed'", cutoffMs,
+        whereFiltersAE(filtersExcept(filters, dim), "dictation_completed"), 100,
+      ))
+    )
+  );
 
-  const [d1Results, aeResults] = await Promise.all([
-    Promise.all(d1Dims.map(([, col]) =>
-      d1(`SELECT DISTINCT ${col} AS v FROM installs WHERE last_seen >= ? AND ${col} IS NOT NULL ORDER BY v`, [cutoffDay])
-    )),
-    Promise.all(aeDims.map(([, col]) =>
-      ae(sql.breakdown(ds, col, "blob1 = 'dictation_completed'", cutoffMs))
-    )),
-  ]);
-
-  const out: Partial<Record<FilterDim, Array<string | number>>> = {};
-  d1Dims.forEach(([dim], i) => {
-    const values = d1Results[i].map((r) => r.v).filter((v): v is string | number => v !== null && v !== undefined && v !== "");
-    if (values.length > 0) out[dim] = values;
-  });
-  aeDims.forEach(([dim], i) => {
-    const values = aeResults[i].map((r) => String(r.label ?? "")).filter((v) => v !== "");
-    if (values.length > 0) out[dim] = values;
+  const out: Partial<Record<FilterDim, FilterOption[]>> = {};
+  FILTER_DIMS.forEach((dim, i) => {
+    const numeric = DIM_SPECS[dim].numeric;
+    const opts: FilterOption[] = [];
+    for (const r of results[i]) {
+      const value = numeric ? num(r.label) : String(r.label ?? "");
+      // Drop empty labels and non-positive numerics (0-ram/-cores are bad rows).
+      if (numeric ? !(Number(value) > 0) : value === "") continue;
+      opts.push({ value, count: num(r.value) });
+    }
+    if (opts.length > 0) out[dim] = opts;
   });
   return out;
 }

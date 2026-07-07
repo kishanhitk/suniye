@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  blockedDim, blockedDimD1, buildStats, safeLabel, safeNum, sql, whereFiltersAE, whereFiltersD1,
+  blockedDim, blockedDimD1, buildStats, safeLabel, safeNum, sanitizeFilters, sql, whereFiltersAE, whereFiltersD1,
   type AeRunner, type D1Runner,
 } from "../src/worker/stats";
 import type { Filters } from "../src/worker/types";
@@ -81,18 +81,37 @@ describe("filter sanitization", () => {
 
 describe("whereFiltersAE (event-aware)", () => {
   test("tier-1 dims emit clauses on any event", () => {
-    const w = whereFiltersAE({ version: "0.0.51", ram: "36" }, "dictation_completed");
+    const w = whereFiltersAE({ version: ["0.0.51"], ram: ["36"] }, "dictation_completed");
     expect(w).toContain("AND blob3 = '0.0.51'");
     expect(w).toContain("AND double19 = 36");
   });
 
   test("injection payloads are dropped, not interpolated", () => {
-    const w = whereFiltersAE({ chip: "x' OR '1'='1" } as Filters, "dictation_completed");
+    const w = whereFiltersAE({ chip: ["x' OR '1'='1"] } as Filters, "dictation_completed");
     expect(w).toBe("");
   });
 
+  test("multiple values in a dim become an IN set (OR within the dim)", () => {
+    expect(whereFiltersAE({ chip: ["apple-m1", "apple-m3-pro"] }, "dictation_completed"))
+      .toBe(" AND blob16 IN ('apple-m1', 'apple-m3-pro')");
+    // numeric IN is unquoted
+    expect(whereFiltersAE({ ram: ["16", "36"] }, "dictation_completed"))
+      .toBe(" AND double19 IN (16, 36)");
+  });
+
+  test("a set is sanitized element-wise: bad values drop, the dim survives on the rest", () => {
+    // one poisoned element is dropped, collapsing to a single-value equality
+    expect(whereFiltersAE({ chip: ["apple-m1", "x' OR 1=1"] }, "dictation_completed"))
+      .toBe(" AND blob16 = 'apple-m1'");
+    // every element invalid → the whole dim drops out (no clause at all)
+    expect(whereFiltersAE({ chip: ["bad val!", "'; DROP TABLE installs"] }, "dictation_completed")).toBe("");
+    // duplicates collapse
+    expect(whereFiltersAE({ chip: ["apple-m1", "apple-m1"] }, "dictation_completed"))
+      .toBe(" AND blob16 = 'apple-m1'");
+  });
+
   test("device dims land on their aliased slots for dictation panels", () => {
-    const w = whereFiltersAE({ chip: "apple-m3-pro", os: "15.5", mac_model: "mac15-3" }, "dictation_completed");
+    const w = whereFiltersAE({ chip: ["apple-m3-pro"], os: ["15.5"], mac_model: ["mac15-3"] }, "dictation_completed");
     expect(w).toContain("AND blob16 = 'apple-m3-pro'");
     expect(w).toContain("AND blob18 = '15.5'");
     expect(w).toContain("AND blob17 = 'mac15-3'");
@@ -100,53 +119,68 @@ describe("whereFiltersAE (event-aware)", () => {
 
   test("a dim whose slot is occupied on the event yields an always-false guard", () => {
     // audio_backend_used: blob14 = backend, double18 = rung
-    expect(whereFiltersAE({ arch: "arm64" }, "audio_backend_used")).toBe(" AND blob1 = ''");
-    expect(whereFiltersAE({ cpu_cores: "12" }, "audio_backend_used")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ arch: ["arm64"] }, "audio_backend_used")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ cpu_cores: ["12"] }, "audio_backend_used")).toBe(" AND blob1 = ''");
     // model_load: blob17 = model
-    expect(whereFiltersAE({ mac_model: "mac15-3" }, "model_load")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ mac_model: ["mac15-3"] }, "model_load")).toBe(" AND blob1 = ''");
     // error: blob14 = type
-    expect(whereFiltersAE({ arch: "arm64" }, "error")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ arch: ["arm64"] }, "error")).toBe(" AND blob1 = ''");
   });
 
   test("dictation-scoped dims only apply to dictation_completed", () => {
-    expect(whereFiltersAE({ asr_model: "parakeet-v3" }, "dictation_completed")).toBe(" AND blob5 = 'parakeet-v3'");
-    expect(whereFiltersAE({ asr_model: "parakeet-v3" }, "error")).toBe(" AND blob1 = ''");
-    expect(whereFiltersAE({ asr_model: "parakeet-v3" }, "*")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ asr_model: ["parakeet-v3"] }, "dictation_completed")).toBe(" AND blob5 = 'parakeet-v3'");
+    expect(whereFiltersAE({ asr_model: ["parakeet-v3"] }, "error")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ asr_model: ["parakeet-v3"] }, "*")).toBe(" AND blob1 = ''");
   });
 
   test("the event-unscoped query only accepts dedicated-slot dims", () => {
     // version lives on a dedicated slot → safe on the active-installs query.
-    expect(whereFiltersAE({ version: "0.0.51" }, "*")).toBe(" AND blob3 = '0.0.51'");
+    expect(whereFiltersAE({ version: ["0.0.51"] }, "*")).toBe(" AND blob3 = '0.0.51'");
     // chip/os/mac_model live on SHARED slots → they'd undercount distinct installs
     // on the unscoped query, so they block it instead.
-    expect(whereFiltersAE({ chip: "apple-m3-pro" }, "*")).toBe(" AND blob1 = ''");
-    expect(whereFiltersAE({ os: "15.5" }, "*")).toBe(" AND blob1 = ''");
-    expect(whereFiltersAE({ mac_model: "mac15-3" }, "*")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ chip: ["apple-m3-pro"] }, "*")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ os: ["15.5"] }, "*")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ mac_model: ["mac15-3"] }, "*")).toBe(" AND blob1 = ''");
+  });
+});
+
+describe("sanitizeFilters (echoed appliedFilters)", () => {
+  test("drops invalid elements, dedups, and stringifies", () => {
+    expect(sanitizeFilters({ chip: ["apple-m1", "apple-m1", "bad value!"], ram: ["36"] }))
+      .toEqual({ chip: ["apple-m1"], ram: ["36"] });
+    // a dim with no surviving values disappears entirely
+    expect(sanitizeFilters({ chip: ["!!"] })).toEqual({});
   });
 });
 
 describe("blocked-panel detection", () => {
   test("reports the first dim a panel's event cannot honor", () => {
-    expect(blockedDim({ asr_model: "parakeet-v3" }, "app_launch")).toBe("asr_model");
-    expect(blockedDim({ arch: "arm64" }, "error")).toBe("arch");
-    expect(blockedDim({ mac_model: "mac15-3" }, "model_load")).toBe("mac_model");
-    expect(blockedDim({ chip: "apple-m3-pro" }, "dictation_completed")).toBeNull();
-    expect(blockedDimD1({ asr_model: "parakeet-v3" })).toBe("asr_model");
-    expect(blockedDimD1({ chip: "apple-m3-pro" })).toBeNull();
+    expect(blockedDim({ asr_model: ["parakeet-v3"] }, "app_launch")).toBe("asr_model");
+    expect(blockedDim({ arch: ["arm64"] }, "error")).toBe("arch");
+    expect(blockedDim({ mac_model: ["mac15-3"] }, "model_load")).toBe("mac_model");
+    expect(blockedDim({ chip: ["apple-m3-pro"] }, "dictation_completed")).toBeNull();
+    expect(blockedDimD1({ asr_model: ["parakeet-v3"] })).toBe("asr_model");
+    expect(blockedDimD1({ chip: ["apple-m3-pro"] })).toBeNull();
     // Invalid values are dropped before the check — they never block.
-    expect(blockedDim({ asr_model: "bad value!!" }, "app_launch")).toBeNull();
+    expect(blockedDim({ asr_model: ["bad value!!"] }, "app_launch")).toBeNull();
   });
 });
 
 describe("whereFiltersD1", () => {
   test("emits bind params, never interpolation", () => {
-    const { sql: w, binds } = whereFiltersD1({ chip: "apple-m3-pro", ram: "36" });
+    const { sql: w, binds } = whereFiltersD1({ chip: ["apple-m3-pro"], ram: ["36"] });
     expect(w).toBe(" AND chip = ? AND ram_gb = ?");
     expect(binds).toEqual(["apple-m3-pro", 36]);
   });
 
+  test("a value set becomes an IN with one bind per value", () => {
+    const { sql: w, binds } = whereFiltersD1({ chip: ["apple-m1", "apple-m3-pro"], ram: ["36"] });
+    expect(w).toBe(" AND chip IN (?, ?) AND ram_gb = ?");
+    expect(binds).toEqual(["apple-m1", "apple-m3-pro", 36]);
+  });
+
   test("dims not in the install registry blank install cards honestly", () => {
-    const { sql: w, binds } = whereFiltersD1({ asr_model: "parakeet-v3" });
+    const { sql: w, binds } = whereFiltersD1({ asr_model: ["parakeet-v3"] });
     expect(w).toBe(" AND 1 = 0");
     expect(binds).toEqual([]);
   });
@@ -158,12 +192,25 @@ describe("buildStats", () => {
     aeQueries.push(q);
     if (q.includes("SUM(double2")) return [{ day: "2026-07-06 00:00:00", value: 100 }, { day: "2026-07-07 00:00:00", value: 150 }];
     if (q.includes("COUNT(DISTINCT index1)")) return [{ day: "2026-07-06 00:00:00", value: 5 }];
+    // Breakdowns AND facet option lists both select "<slot> AS label" (facets add
+    // LIMIT 100). These stay ahead of the broad dictation_completed aggregate
+    // matcher below, which would otherwise swallow every facet query.
     if (q.includes("blob5 AS label")) return [{ label: "parakeet-v3", value: 42 }];
     if (q.includes("blob7 AS label")) return [{ label: "english", value: 42 }];
+    if (q.includes("blob9 AS label")) return [{ label: "gemma-3-4b", value: 30 }];
     if (q.includes("blob11 AS label")) return [{ label: "editor", value: 12 }];
     if (q.includes("blob10 AS label")) return [{ label: "timeout", value: 2 }];
     if (q.includes("blob14 AS label") && q.includes("'audio_backend_used'")) return [{ label: "core_audio", value: 40 }];
     if (q.includes("blob14 AS label") && q.includes("'error'")) return [{ label: "transcription", value: 3 }];
+    if (q.includes("blob14 AS label")) return [{ label: "arm64", value: 60 }]; // arch facet (dictation_completed)
+    if (q.includes("blob3 AS label")) return [{ label: "0.0.51", value: 50 }];
+    if (q.includes("blob4 AS label")) return [{ label: "stable", value: 50 }];
+    if (q.includes("blob16 AS label")) return [{ label: "apple-m3-pro", value: 8 }, { label: "apple-m5", value: 2 }];
+    if (q.includes("blob17 AS label")) return [{ label: "mac15-3", value: 7 }];
+    if (q.includes("blob18 AS label")) return [{ label: "15.5", value: 30 }];
+    if (q.includes("blob19 AS label")) return [{ label: "US", value: 9 }];
+    if (q.includes("double18 AS label")) return [{ label: 12, value: 4 }];
+    if (q.includes("double19 AS label")) return [{ label: 36, value: 5 }];
     if (q.includes("AS polished")) return [{ polished: 30, total: 50 }];
     if (q.includes("AS fell_back")) return [{ fell_back: 2, total: 40 }];
     if (q.includes("AS median")) return [{ median: 10 }];
@@ -188,9 +235,6 @@ describe("buildStats", () => {
     if (q.includes("chip AS label")) return [{ label: "apple-m3-pro", value: 8 }];
     if (q.includes("ram_gb AS label")) return [{ label: 36, value: 5 }];
     if (q.includes("country AS label")) return [{ label: "US", value: 9 }];
-    if (q.includes("DISTINCT app_version")) return [{ v: "0.0.51" }];
-    if (q.includes("DISTINCT chip")) return [{ v: "apple-m3-pro" }, { v: "apple-m5" }];
-    if (q.includes("DISTINCT ram_gb")) return [{ v: 24 }, { v: 36 }];
     return [];
   };
 
@@ -221,8 +265,11 @@ describe("buildStats", () => {
     expect(stats.editedSharePct).toBeCloseTo(25, 5); // 10 edited / 40 finalized — bounded, from one stream
     expect(stats.keepAliveEvictions).toBe(3);
     expect(stats.segmentEventCount).toBe(50);
-    expect(stats.filterOptions.chip).toEqual(["apple-m3-pro", "apple-m5"]);
-    expect(stats.filterOptions.asr_model).toEqual(["parakeet-v3"]);
+    // Options carry a live facet count and are ordered by it; numeric dims keep numbers.
+    expect(stats.filterOptions.chip).toEqual([{ value: "apple-m3-pro", count: 8 }, { value: "apple-m5", count: 2 }]);
+    expect(stats.filterOptions.asr_model).toEqual([{ value: "parakeet-v3", count: 42 }]);
+    expect(stats.filterOptions.ram).toEqual([{ value: 36, count: 5 }]);
+    expect(stats.filterOptions.version).toEqual([{ value: "0.0.51", count: 50 }]);
   });
 
   test("threads sanitized filters into AE queries and D1 binds, and echoes them", async () => {
@@ -230,10 +277,10 @@ describe("buildStats", () => {
     d1Binds.length = 0;
     const stats = await buildStats(ae, d1, {
       rangeDays: 30, nowMs: 1_700_000_000_000,
-      filters: { chip: "apple-m3-pro", version: "0.0.51", asr_model: "bad value!!" },
+      filters: { chip: ["apple-m3-pro"], version: ["0.0.51"], asr_model: ["bad value!!"] },
     });
 
-    expect(stats.appliedFilters).toEqual({ chip: "apple-m3-pro", version: "0.0.51" }); // invalid dropped
+    expect(stats.appliedFilters).toEqual({ chip: ["apple-m3-pro"], version: ["0.0.51"] }); // invalid dropped
     // chip is on a shared slot → it blocks only the event-unscoped active-installs
     // query; every other panel (incl. dictation) applies it.
     expect(stats.blocked).toEqual({ activeInstalls: "chip" });
@@ -250,7 +297,7 @@ describe("buildStats", () => {
 
   test("dictation-only filters mark every non-dictation panel as blocked", async () => {
     const stats = await buildStats(ae, d1, {
-      rangeDays: 30, nowMs: 1_700_000_000_000, filters: { asr_model: "parakeet-v3" },
+      rangeDays: 30, nowMs: 1_700_000_000_000, filters: { asr_model: ["parakeet-v3"] },
     });
     // A blocked query returns zero rows; the response must say WHY so the FE
     // never renders a fake "100% crash-free" or "0 installs".
@@ -265,14 +312,19 @@ describe("buildStats", () => {
     expect(stats.segmentEventCount).toBe(50);
   });
 
-  test("option lists are range-scoped but never filter-scoped", async () => {
+  test("facet counts are contextual but exclude their own dimension", async () => {
     aeQueries.length = 0;
     await buildStats(ae, d1, {
-      rangeDays: 30, nowMs: 1_700_000_000_000, filters: { chip: "apple-m3-pro" },
+      rangeDays: 30, nowMs: 1_700_000_000_000, filters: { asr_model: ["parakeet-v3"] },
     });
-    // The asr_model options query (blob5 breakdown) must NOT carry the chip filter.
-    const optionQueries = aeQueries.filter((q) => q.includes("blob5 AS label"));
-    expect(optionQueries.some((q) => !q.includes("apple-m3-pro"))).toBe(true);
+    // A dim's own option list must not be constrained by its own selection (else
+    // it would collapse to just the picked value). The asr_model facet — the
+    // LIMIT-100 blob5 query — therefore omits the asr_model filter…
+    const asrFacet = aeQueries.find((q) => q.includes("blob5 AS label") && q.includes("LIMIT 100"))!;
+    expect(asrFacet).not.toContain("blob5 = 'parakeet-v3'");
+    // …while every OTHER dim's facet reflects it, so the counts track the slice.
+    const chipFacet = aeQueries.find((q) => q.includes("blob16 AS label") && q.includes("LIMIT 100"))!;
+    expect(chipFacet).toContain("blob5 = 'parakeet-v3'");
   });
 
   test("handles empty data without dividing by zero", async () => {

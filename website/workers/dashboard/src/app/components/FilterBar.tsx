@@ -7,83 +7,108 @@ import { formatCount } from "../lib/utils";
 /** Stable dimension order for rendering active chips. */
 const ORDER: FilterDim[] = DIM_GROUPS.flatMap((g) => g.dims);
 
+/** A chip reads like a query clause: `chip=apple-m3-pro` for one value, or
+ *  `chip ∈ m1, m3` / `chip ∈ 4 values` for a set (OR within the dimension). */
+function chipLabel(dim: FilterDim, values: string[]): string {
+  const key = CHIP_KEY[dim];
+  if (values.length === 1) return `${key}=${values[0]}`;
+  if (values.length <= 3) return `${key} ∈ ${values.join(", ")}`;
+  return `${key} ∈ ${values.length} values`;
+}
+
 /**
- * The segment bar. Active filters render as removable monospace chips that read
- * like a query line (chip=apple-m3-pro · ram=36); everything else is added via
- * a searchable "+ add filter" menu. Press `f` anywhere to open it.
+ * The segment bar. Active filters render as removable chips that read like a
+ * query line; each chip opens the menu drilled into its dimension to add/remove
+ * values. Everything else is added via the searchable "+ add filter" menu
+ * (press `f` anywhere).
  */
 export function FilterBar({
   options,
   filters,
   segmentCount,
-  onChange,
+  onToggle,
+  onClearDim,
   onClear,
 }: {
   options: StatsResponse["filterOptions"];
   filters: Filters;
   /** dictation_completed count inside the current segment (null while loading). */
   segmentCount: number | null;
-  onChange: (dim: FilterDim, value: string | null) => void;
+  onToggle: (dim: FilterDim, value: string) => void;
+  onClearDim: (dim: FilterDim) => void;
   onClear: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  // null = closed; { drill } = open (drill null → top level, or into a dimension).
+  const [menu, setMenu] = useState<{ drill: FilterDim | null } | null>(null);
+  const barRef = useRef<HTMLDivElement>(null);
 
-  const activeDims = ORDER.filter((dim) => filters[dim]);
-  const anyAddable = ORDER.some((dim) => (options[dim]?.length ?? 0) > 0 && !filters[dim]);
+  const activeDims = ORDER.filter((dim) => (filters[dim]?.length ?? 0) > 0);
+  const anyOptions = ORDER.some((dim) => (options[dim]?.length ?? 0) > 0);
   const active = activeDims.length > 0;
 
-  // `f` opens the menu (ignored while typing in a field).
+  // `f` opens the add menu (ignored while typing in a field).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "f" || e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement;
       if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable) return;
-      if (!anyAddable) return;
+      if (!anyOptions) return;
       e.preventDefault();
-      setOpen(true);
+      setMenu({ drill: null });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [anyAddable]);
+  }, [anyOptions]);
 
   // Nothing active and nothing to add (no data yet) → hide the bar.
-  if (!active && !anyAddable) return null;
+  if (!active && !anyOptions) return null;
 
   return (
     <div className="border-t border-line py-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {activeDims.map((dim) => (
-          <span key={dim} className="inline-flex items-center overflow-hidden rounded-md border border-accent font-mono text-xs">
-            <span className="py-1 pl-2 pr-1 text-ink">{CHIP_KEY[dim]}={filters[dim]}</span>
-            <button
-              aria-label={`Remove ${CHIP_KEY[dim]} filter`}
-              onClick={() => onChange(dim, null)}
-              className="px-1.5 py-1 text-muted hover:text-accent"
-            >
-              ×
-            </button>
-          </span>
-        ))}
+      <div ref={barRef} className="flex flex-wrap items-center gap-2">
+        {activeDims.map((dim) => {
+          const values = filters[dim] ?? [];
+          return (
+            <span key={dim} className="inline-flex items-center overflow-hidden rounded-md border border-accent font-mono text-xs">
+              <button
+                onClick={() => setMenu({ drill: dim })}
+                title="Edit filter"
+                className="max-w-[15rem] truncate py-1 pl-2 pr-1 text-ink hover:bg-surface"
+              >
+                {chipLabel(dim, values)}
+              </button>
+              <button
+                aria-label={`Remove ${CHIP_KEY[dim]} filter`}
+                onClick={() => onClearDim(dim)}
+                className="px-1.5 py-1 text-muted hover:text-accent"
+              >
+                ×
+              </button>
+            </span>
+          );
+        })}
 
-        {anyAddable && (
+        {anyOptions && (
           <div className="relative">
             <button
-              ref={triggerRef}
-              onClick={() => setOpen((o) => !o)}
+              onClick={() => setMenu((m) => (m ? null : { drill: null }))}
               aria-haspopup="listbox"
-              aria-expanded={open}
+              aria-expanded={!!menu}
               className="rounded-md border border-dashed border-line px-2 py-1.5 font-mono text-xs text-muted hover:text-ink"
             >
               + add filter
             </button>
-            {open && (
+            {menu && (
               <FilterMenu
+                // Remount when the drill target changes so clicking a chip re-drills
+                // an already-open menu.
+                key={menu.drill ?? "*"}
                 options={options}
                 filters={filters}
-                triggerRef={triggerRef}
-                onSelect={(dim, value) => onChange(dim, value)}
-                onClose={() => setOpen(false)}
+                triggerRef={barRef}
+                initialDrill={menu.drill}
+                onToggle={onToggle}
+                onClose={() => setMenu(null)}
               />
             )}
           </div>

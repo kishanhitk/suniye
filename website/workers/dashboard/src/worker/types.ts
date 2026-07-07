@@ -28,7 +28,23 @@ export const FILTER_DIMS = [
   "asr_model", "cleanup_model", "language", "target",
 ] as const;
 export type FilterDim = (typeof FILTER_DIMS)[number];
-export type Filters = Partial<Record<FilterDim, string>>;
+/**
+ * A dimension maps to a *set* of selected values (OR within a dimension), and
+ * dimensions combine with AND — the standard faceted-filter model. An empty or
+ * absent array means the dimension isn't constrained.
+ */
+export type Filters = Partial<Record<FilterDim, string[]>>;
+
+/** One selectable filter value plus how much data it represents in-context. */
+export interface FilterOption {
+  value: string | number;
+  /**
+   * Dictations matching this value under the *other* active filters (this
+   * dimension excluded), range-scoped — a live facet count so slicing is
+   * informed, not blind. Zero when the combination has no data yet.
+   */
+  count: number;
+}
 
 /**
  * Panels whose underlying event cannot honor one of the active filters. The
@@ -84,8 +100,12 @@ export interface StatsResponse {
   keepAliveEvictions: number;
   /** dictation_completed count in the window under the active filters. */
   segmentEventCount: number;
-  /** Available values per dimension (range-scoped, NOT filter-scoped). */
-  filterOptions: Partial<Record<FilterDim, Array<string | number>>>;
+  /**
+   * Selectable values per dimension, each with a contextual facet count
+   * (dictations under the other active filters). Ordered by count, so the most
+   * common values lead. See FilterOption.
+   */
+  filterOptions: Partial<Record<FilterDim, FilterOption[]>>;
 }
 
 /** Minimal D1 binding shape (read-only usage). */
