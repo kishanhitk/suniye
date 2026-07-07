@@ -167,16 +167,20 @@ describe("blocked-panel detection", () => {
 });
 
 describe("whereFiltersD1", () => {
-  test("emits bind params, never interpolation", () => {
+  test("interpolates sanitized values (no per-value binds → no 100-parameter ceiling)", () => {
     const { sql: w, binds } = whereFiltersD1({ chip: ["apple-m3-pro"], ram: ["36"] });
-    expect(w).toBe(" AND chip = ? AND ram_gb = ?");
-    expect(binds).toEqual(["apple-m3-pro", 36]);
+    expect(w).toBe(" AND chip = 'apple-m3-pro' AND ram_gb = 36"); // numeric unquoted
+    expect(binds).toEqual([]);
   });
 
-  test("a value set becomes an IN with one bind per value", () => {
-    const { sql: w, binds } = whereFiltersD1({ chip: ["apple-m1", "apple-m3-pro"], ram: ["36"] });
-    expect(w).toBe(" AND chip IN (?, ?) AND ram_gb = ?");
-    expect(binds).toEqual(["apple-m1", "apple-m3-pro", 36]);
+  test("a value set becomes an IN list", () => {
+    expect(whereFiltersD1({ chip: ["apple-m1", "apple-m3-pro"] }).sql)
+      .toBe(" AND chip IN ('apple-m1', 'apple-m3-pro')");
+  });
+
+  test("injection can't ride the interpolation — bad values are sanitized out first", () => {
+    expect(whereFiltersD1({ chip: ["x' OR 1=1"] }).sql).toBe(""); // dropped, nothing interpolated
+    expect(whereFiltersD1({ chip: ["apple-m1", "'; DROP TABLE installs"] }).sql).toBe(" AND chip = 'apple-m1'");
   });
 
   test("dims not in the install registry blank install cards honestly", () => {
@@ -228,8 +232,10 @@ describe("buildStats", () => {
   };
 
   const d1Binds: unknown[][] = [];
+  const d1Queries: string[] = [];
   const d1: D1Runner = async (q, binds) => {
     d1Binds.push(binds);
+    d1Queries.push(q);
     if (q.includes("COUNT(*) AS n")) return [{ n: 12 }];
     if (q.includes("first_seen AS day")) return [{ day: "2026-07-01", value: 2 }];
     if (q.includes("chip AS label")) return [{ label: "apple-m3-pro", value: 8 }];
@@ -272,9 +278,10 @@ describe("buildStats", () => {
     expect(stats.filterOptions.version).toEqual([{ value: "0.0.51", count: 50 }]);
   });
 
-  test("threads sanitized filters into AE queries and D1 binds, and echoes them", async () => {
+  test("threads sanitized filters into AE queries and D1 install queries, and echoes them", async () => {
     aeQueries.length = 0;
     d1Binds.length = 0;
+    d1Queries.length = 0;
     const stats = await buildStats(ae, d1, {
       rangeDays: 30, nowMs: 1_700_000_000_000,
       filters: { chip: ["apple-m3-pro"], version: ["0.0.51"], asr_model: ["bad value!!"] },
@@ -291,8 +298,10 @@ describe("buildStats", () => {
     // model_load queries keep chip (blob16 free there) but the fragment differs per event
     const evict = aeQueries.find((q) => q.includes("double14 = 0"))!;
     expect(evict).toContain("AND blob16 = 'apple-m3-pro'");
-    // D1 breakdowns received the filter as binds
-    expect(d1Binds.some((b) => b.includes("apple-m3-pro") && b.includes("0.0.51"))).toBe(true);
+    // D1 install queries carry the (sanitized) filter as interpolated SQL, and the
+    // value is never a bind — so a large multi-select can't hit D1's parameter cap.
+    expect(d1Queries.some((q) => q.includes("chip = 'apple-m3-pro'") && q.includes("app_version = '0.0.51'"))).toBe(true);
+    expect(d1Binds.every((b) => !b.includes("apple-m3-pro"))).toBe(true);
   });
 
   test("dictation-only filters mark every non-dictation panel as blocked", async () => {

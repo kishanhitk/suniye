@@ -19,8 +19,10 @@
 // SECURITY: the AE SQL API takes RAW SQL (no bind params). Every interpolated
 // value is either a server-computed number or a `safeLabel`-sanitized string
 // (SafeLabel charset [A-Za-z0-9._-]{1,64} — cannot contain quotes, whitespace,
-// or comment/statement characters, so it cannot escape a quoted literal).
-// D1 queries use bind params throughout.
+// or comment/statement characters, so it cannot escape a quoted literal). The
+// same guarantee lets D1 *filter* values be interpolated too (which sidesteps
+// D1's 100-bound-parameter cap that a broad multi-select would otherwise hit);
+// structural/range values (cutoff dates) still go through bind params.
 
 import { FILTER_DIMS } from "./types";
 import type { BlockedPanels, Breakdown, FilterDim, FilterOption, Filters, LatencySummary, StatsResponse, TimePoint } from "./types";
@@ -125,11 +127,16 @@ function sanitizedEntries(
   return out;
 }
 
-/** One dim's SQL predicate: `= v` for a single value, `IN (…)` for a set. */
-function aeClause(spec: DimSpec, values: Array<string | number>): string {
-  const lit = (v: string | number) => (spec.numeric ? String(v) : `'${v}'`);
-  if (values.length === 1) return ` AND ${spec.ae} = ${lit(values[0])}`;
-  return ` AND ${spec.ae} IN (${values.map(lit).join(", ")})`;
+/**
+ * One dim's SQL predicate against `col`: `= v` for a single value, `IN (…)` for a
+ * set. Every value is already safeLabel/safeNum-sanitized, so interpolation is
+ * injection-safe — the same guarantee the raw AE SQL relies on, reused for D1's
+ * filter columns so a large multi-select can't exceed D1's bind-parameter cap.
+ */
+function inClause(col: string, numeric: boolean | undefined, values: Array<string | number>): string {
+  const lit = (v: string | number) => (numeric ? String(v) : `'${v}'`);
+  if (values.length === 1) return ` AND ${col} = ${lit(values[0])}`;
+  return ` AND ${col} IN (${values.map(lit).join(", ")})`;
 }
 
 /**
@@ -164,26 +171,25 @@ export function whereFiltersAE(filters: Filters | undefined, event: string): str
   if (blockedDim(filters, event)) return AE_NEVER;
   let out = "";
   for (const [, spec, values] of sanitizedEntries(filters)) {
-    out += aeClause(spec, values);
+    out += inClause(spec.ae, spec.numeric, values);
   }
   return out;
 }
 
-/** D1 (installs) filter fragment — bind params, never interpolation. */
+/**
+ * D1 (installs) filter fragment. Filter values are interpolated (not bound) using
+ * the same safeLabel/safeNum guarantee as the AE path — so an arbitrarily large
+ * multi-select can't blow D1's 100-bound-parameter ceiling and silently empty the
+ * install cards. `binds` stays in the return shape for the range/date params the
+ * install queries still bind. blockedDimD1 guarantees every dim here has a `d1`.
+ */
 export function whereFiltersD1(filters: Filters | undefined): { sql: string; binds: unknown[] } {
   if (blockedDimD1(filters)) return { sql: " AND 1 = 0", binds: [] };
   let sql = "";
-  const binds: unknown[] = [];
   for (const [, spec, values] of sanitizedEntries(filters)) {
-    if (values.length === 1) {
-      sql += ` AND ${spec.d1} = ?`;
-      binds.push(values[0]);
-    } else {
-      sql += ` AND ${spec.d1} IN (${values.map(() => "?").join(", ")})`;
-      binds.push(...values);
-    }
+    sql += inClause(spec.d1!, spec.numeric, values);
   }
-  return { sql, binds };
+  return { sql, binds: [] };
 }
 
 /** Sanitized copy of the incoming filters (what the response echoes back). */
