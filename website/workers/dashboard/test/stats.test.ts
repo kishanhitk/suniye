@@ -210,6 +210,10 @@ describe("buildStats", () => {
     expect(stats.latency.find((l) => l.stage === "magic_format")?.p50).toBe(100);
     expect(stats.latency.find((l) => l.stage === "model_load")?.p50).toBe(800);
     expect(stats.errorsByType[0].label).toBe("transcription");
+    // Magic Format fallbacks only count dictations that actually fell back —
+    // empty cleanup_fallback_reason (successful/off/pre-v0.0.51) must be excluded,
+    // else it collapses into a meaningless "unknown" bucket.
+    expect(aeQueries.find((q) => q.includes("blob10 AS label"))).toContain("blob10 != ''");
     // New signals
     expect(stats.audioBackends[0].label).toBe("core_audio");
     expect(stats.audioFallbackRatePct).toBeCloseTo(5, 5); // 2/40

@@ -88,7 +88,6 @@ export default function App() {
           </h1>
           <div className="flex items-center gap-4">
             <p className="hidden font-mono text-[11px] text-muted sm:block" aria-live="polite">
-              only counts leave the device ·{" "}
               {loading ? "updating…" : fetchedAt ? `updated ${relativeTime(fetchedAt)}` : "loading…"}
             </p>
             <div role="radiogroup" aria-label="Time range" className="flex rounded-lg border border-line p-0.5">
@@ -310,12 +309,6 @@ export default function App() {
                 <BreakdownList items={stats.errorsByType} emptyMessage="No errors in this window." />
               )}
             </Section>
-
-            <footer className="border-t border-line pt-5">
-              <p className="font-mono text-[11px] text-muted">
-                pseudonymous · ip never stored · counts and timings only — no audio, no text
-              </p>
-            </footer>
           </>
         )}
       </main>
