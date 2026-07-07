@@ -170,7 +170,8 @@ describe("buildStats", () => {
     if (q.includes("'app_launch'")) return [{ value: 20 }];
     if (q.includes("'session_end'")) return [{ value: 16 }];
     if (q.includes("'dictation_completed'") && q.includes("SUM(_sample_interval) AS value")) return [{ value: 50 }];
-    if (q.includes("'dictation_edited'") && q.includes("SUM(_sample_interval) AS value")) return [{ value: 10 }];
+    if (q.includes("'dictation_edited'") && q.includes("double20 > 0") && q.includes("SUM(_sample_interval) AS value")) return [{ value: 10 }]; // edited
+    if (q.includes("'dictation_edited'") && q.includes("SUM(_sample_interval) AS value")) return [{ value: 40 }]; // finalized total
     return [];
   };
 
@@ -208,7 +209,7 @@ describe("buildStats", () => {
     expect(stats.audioBackends[0].label).toBe("core_audio");
     expect(stats.audioFallbackRatePct).toBeCloseTo(5, 5); // 2/40
     expect(stats.editRateMedianPct).toBe(10);
-    expect(stats.editedSharePct).toBeCloseTo(20, 5); // 10/50
+    expect(stats.editedSharePct).toBeCloseTo(25, 5); // 10 edited / 40 finalized — bounded, from one stream
     expect(stats.keepAliveEvictions).toBe(3);
     expect(stats.segmentEventCount).toBe(50);
     expect(stats.filterOptions.chip).toEqual(["apple-m3-pro", "apple-m5"]);

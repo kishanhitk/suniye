@@ -70,7 +70,10 @@ export interface StatsResponse {
   audioFallbackRatePct: number;
   /** Median post-insertion edit-rate bucket (%) over edited dictations. */
   editRateMedianPct: number;
-  /** Share of completed dictations the user then edited (%). */
+  /**
+   * Share of *finalized* dictations that were edited (%), derived from the
+   * dictation_edited stream alone (edited / finalized) so it's bounded ≤ 100.
+   */
   editedSharePct: number;
   keepAliveEvictions: number;
   /** dictation_completed count in the window under the active filters. */

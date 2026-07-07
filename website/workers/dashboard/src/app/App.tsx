@@ -251,7 +251,7 @@ export default function App() {
                     <>
                       <p className="font-mono text-2xl tabular-nums text-ink">{formatPct(stats.editedSharePct)}</p>
                       <p className="mt-1 font-mono text-[11px] text-muted">
-                        of dictations edited · median edit {formatPct(stats.editRateMedianPct)} of the text
+                        of dictations were edited after insertion · median edit reshaped {formatPct(stats.editRateMedianPct)} of the text
                       </p>
                     </>
                   )}

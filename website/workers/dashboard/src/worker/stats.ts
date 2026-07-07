@@ -225,10 +225,19 @@ export const sql = {
     `FROM ${ds} WHERE blob1 = 'audio_backend_used' AND double1 >= ${cutoffMs}${where}`,
 
   // Post-insertion edit rate (double20, a coarse % bucket) — an ASR/cleanup
-  // accuracy proxy. Median over dictations the user actually edited.
+  // accuracy proxy. Median over dictations the user actually edited (> 0).
   editRate: (ds: string, cutoffMs: number, where = "") =>
     `SELECT quantileWeighted(0.5, double20, _sample_interval) AS median ` +
     `FROM ${ds} WHERE blob1 = 'dictation_edited' AND double20 > 0 AND double1 >= ${cutoffMs}${where}`,
+
+  // Edited share is derived from the dictation_edited stream ALONE: it fires once
+  // per finalized edit session (bucket 0 = verbatim/unedited), so edited/finalized
+  // is a coherent, bounded ratio. Dividing by dictation_completed instead would
+  // exceed 100% — that stream is lagged (finalize-on-next-dictation) and stamped
+  // at a later time, so the two populations differ across the window edges.
+  editedCount: (ds: string, cutoffMs: number, where = "") =>
+    `SELECT SUM(_sample_interval) AS value FROM ${ds} ` +
+    `WHERE blob1 = 'dictation_edited' AND double20 > 0 AND double1 >= ${cutoffMs}${where}`,
 
   // Cold model-load latency (double14 = load_ms). Keep-alive evictions are also
   // emitted as model_load but with load_ms 0 (evicted_by_keepalive rides only the
@@ -314,7 +323,8 @@ export async function buildStats(
       modelLoad: safeAe(sql.modelLoadLatency(ds, cutoffMs, w("model_load"))),
       evictions: safeAe(sql.keepAliveEvictions(ds, cutoffMs, w("model_load"))),
       dictCount: safeAe(sql.eventCount(ds, "dictation_completed", cutoffMs, w("dictation_completed"))),
-      editedCount: safeAe(sql.eventCount(ds, "dictation_edited", cutoffMs, w("dictation_edited"))),
+      editFinalized: safeAe(sql.eventCount(ds, "dictation_edited", cutoffMs, w("dictation_edited"))),
+      editChanged: safeAe(sql.editedCount(ds, cutoffMs, w("dictation_edited"))),
     }),
     // totalInstalls is all-time by definition; the breakdowns honor the selected
     // range (installs active in the window) so the range toggle affects every
@@ -353,7 +363,9 @@ export async function buildStats(
   const audioFallbackRatePct = audioTotal > 0 ? (num(audioRate.fell_back) / audioTotal) * 100 : 0;
 
   const dictCount = num(aeRows.dictCount[0]?.value);
-  const editedCount = num(aeRows.editedCount[0]?.value);
+  // "of finalized dictations, how many were edited" — same stream, bounded ≤ 100%.
+  const editFinalized = num(aeRows.editFinalized[0]?.value);
+  const editChanged = num(aeRows.editChanged[0]?.value);
 
   // Which panels the active filters can't honor. The FE renders explicit
   // "not recorded under {dim}" states from this — a blocked query returns zero
@@ -391,7 +403,7 @@ export async function buildStats(
     audioBackends: toBreakdown(aeRows.audio),
     audioFallbackRatePct,
     editRateMedianPct: num(aeRows.editRate[0]?.median),
-    editedSharePct: dictCount > 0 ? (editedCount / dictCount) * 100 : 0,
+    editedSharePct: editFinalized > 0 ? (editChanged / editFinalized) * 100 : 0,
     keepAliveEvictions: num(aeRows.evictions[0]?.value),
     segmentEventCount: dictCount,
     filterOptions,
