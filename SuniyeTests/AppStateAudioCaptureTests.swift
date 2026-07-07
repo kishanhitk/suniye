@@ -1,8 +1,40 @@
+import SuniyeAnalytics
 import XCTest
 @testable import Suniye
 
 @MainActor
 final class AppStateAudioCaptureTests: XCTestCase {
+    private func audioRoute(backend: AudioCaptureBackend, fallback: AudioCaptureFallbackReason?) -> AudioRouteSnapshot {
+        AudioRouteSnapshot(
+            preferredInputDeviceID: nil, effectiveInputDeviceID: "d", effectiveInputName: "Mic",
+            inputTransport: .builtIn, outputTransport: .builtIn, inputSampleRate: 16_000,
+            inputChannelCount: 1, requestedEchoCancellation: false, effectiveEchoCancellation: false,
+            backend: backend, fallbackReason: fallback
+        )
+    }
+
+    func testAudioBackendUsedEventDerivesRungAndFallback() {
+        func decode(_ r: AudioRouteSnapshot) -> (backend: SafeLabel, fell: Bool, rung: Int)? {
+            guard case let .audioBackendUsed(backend, fell, rung) = AppState.audioBackendUsedEvent(for: r) else { return nil }
+            return (backend, fell, rung)
+        }
+        // Primary rung, no fallback.
+        let vpe = decode(audioRoute(backend: .voiceProcessingEngine, fallback: nil))
+        XCTAssertEqual(vpe?.backend, SafeLabel("voiceProcessingEngine"))
+        XCTAssertEqual(vpe?.fell, false)
+        XCTAssertEqual(vpe?.rung, 0)
+        // inputOnlyHAL is also a primary rung.
+        XCTAssertEqual(decode(audioRoute(backend: .inputOnlyHAL, fallback: nil))?.rung, 0)
+        // Bluetooth is an echo-cancellation degrade on rung 0 — NOT a ladder descent.
+        let bt = decode(audioRoute(backend: .inputOnlyHAL, fallback: .bluetoothRoute))
+        XCTAssertEqual(bt?.fell, false)
+        XCTAssertEqual(bt?.rung, 0)
+        // A real descent: standardEngine after backendStartFailed → rung 1, fell back.
+        let fell = decode(audioRoute(backend: .standardEngine, fallback: .backendStartFailed))
+        XCTAssertEqual(fell?.fell, true)
+        XCTAssertEqual(fell?.rung, 1)
+    }
+
     func testPreferredInputDevicePassedToCaptureService() async {
         let audioCapture = StubAudioCaptureService()
         audioCapture.availableDevices = [

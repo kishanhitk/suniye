@@ -1572,6 +1572,10 @@ final class AppState {
                 case let .routeChanged(sessionID, route):
                     guard activeAudioCaptureSessionID == sessionID else { return }
                     audioRouteSnapshot = route
+                    // Mid-session (async) descent down the capture ladder — record
+                    // the re-resolved backend too, else a session that starts on
+                    // rung 0 and drops to rung 1 would only ever report rung 0.
+                    emitAudioBackendUsed(route)
                 case let .interrupted(sessionID, reason):
                     await handleAudioCaptureInterruption(sessionID: sessionID, reason: reason)
                 }
@@ -3231,6 +3235,7 @@ final class AppState {
                 activeDictationSession = .recording(context)
             }
             audioRouteSnapshot = session.route
+            emitAudioBackendUsed(session.route)
             dictationTiming.captureStarted = .now()
             AppLogger.shared.log(.info, "recording started session=\(sessionID.uuidString) \(session.route.privacySafeLogValue)")
         } catch {
@@ -3409,6 +3414,26 @@ final class AppState {
         }
 
         completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation)
+    }
+
+    /// Records which audio-capture backend a session resolved to, whether it
+    /// descended the fallback ladder, and how far (rung). Called once at capture
+    /// start and again on any mid-session (async) descent.
+    private func emitAudioBackendUsed(_ route: AudioRouteSnapshot) {
+        analytics.track(Self.audioBackendUsedEvent(for: route))
+    }
+
+    /// The `audio_backend_used` event for a resolved capture route. Pure, so the
+    /// rung / fallback derivation is unit-testable without driving live capture.
+    nonisolated static func audioBackendUsedEvent(for route: AudioRouteSnapshot) -> AnalyticsEvent {
+        .audioBackendUsed(
+            backend: SafeLabel(route.backend.rawValue),
+            // Only `.backendStartFailed` (→ standardEngine) is a real ladder
+            // descent; `.bluetoothRoute` is an echo-cancellation degrade that
+            // stays on the primary rung, so it must NOT count as a fallback.
+            fallbackOccurred: route.fallbackReason == .backendStartFailed,
+            rung: route.backend == .standardEngine ? 1 : 0
+        )
     }
 
     private func emitDictationCompleted(
