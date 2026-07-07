@@ -54,8 +54,9 @@ export function safeNum(value: unknown): number | null {
  *   device dim only survives in blob20 JSON there, so it can't be filtered.
  * - `dictationOnly`: the dim is a dictation_completed prop; it has no meaning on
  *   any other event.
- * - `star`: safe on the event-unscoped active-installs query (its slot is either
- *   dedicated or only occupied on rare non-queried events).
+ * - `eventUnscopedSafe`: the dim sits on a DEDICATED AE slot, so it can be applied
+ *   to the event-unscoped active-installs query without a slot collision. Dims on
+ *   shared slots omit this and block that query instead (honest empty).
  */
 const DIM_SPECS: Record<FilterDim, {
   ae: string;
@@ -63,17 +64,17 @@ const DIM_SPECS: Record<FilterDim, {
   d1?: string;
   unavailableOn?: string[];
   dictationOnly?: boolean;
-  star?: boolean;
+  eventUnscopedSafe?: boolean;
 }> = {
-  version:   { ae: "blob3",  d1: "app_version", star: true },
-  channel:   { ae: "blob4",  d1: "channel", star: true },
-  country:   { ae: "blob19", d1: "country", star: true },
-  ram:       { ae: "double19", numeric: true, d1: "ram_gb", star: true },
+  version:   { ae: "blob3",  d1: "app_version", eventUnscopedSafe: true },
+  channel:   { ae: "blob4",  d1: "channel", eventUnscopedSafe: true },
+  country:   { ae: "blob19", d1: "country", eventUnscopedSafe: true },
+  ram:       { ae: "double19", numeric: true, d1: "ram_gb", eventUnscopedSafe: true },
   // chip/os live on SHARED slots (blob16=kind/feature, blob18=from/to_version on
-  // some events), so they are NOT star-safe: on the event-unscoped active-installs
-  // query they'd exclude installs whose only in-day events used the slot for its
-  // other meaning → silent undercount. Not star → active-installs blocks under
-  // these filters (honest empty) instead.
+  // some events), so they are NOT eventUnscopedSafe: on the event-unscoped
+  // active-installs query they'd exclude installs whose only in-day events used
+  // the slot for its other meaning → silent undercount. Omitting the flag makes
+  // active-installs block under these filters (honest empty) instead.
   chip:      { ae: "blob16", d1: "chip",
                unavailableOn: ["permission_transition", "model_changed", "model_download", "feature_toggled", "update_action"] },
   os:        { ae: "blob18", d1: "os_version", unavailableOn: ["update_action"] },
@@ -121,7 +122,7 @@ export function blockedDim(filters: Filters | undefined, event: string): FilterD
   for (const [dim, spec] of sanitizedEntries(filters)) {
     const unavailable =
       (spec.dictationOnly && event !== "dictation_completed") ||
-      (event === "*" ? !spec.star : (spec.unavailableOn?.includes(event) ?? false));
+      (event === "*" ? !spec.eventUnscopedSafe : (spec.unavailableOn?.includes(event) ?? false));
     if (unavailable) return dim;
   }
   return null;
@@ -182,7 +183,7 @@ export const sql = {
   // COUNT(DISTINCT) is exact only at the default sample_rate = 1. Under sampling
   // it counts distinct installs among sampled rows and undercounts the true
   // population — unlike SUM counts, it can't be corrected via _sample_interval.
-  // Event-unscoped ("*"): only star-safe dims may filter it.
+  // Event-unscoped ("*"): only eventUnscopedSafe (dedicated-slot) dims may filter it.
   activeInstallsPerDay: (ds: string, cutoffMs: number, where = "") =>
     `SELECT toStartOfInterval(toDateTime(double1 / 1000), INTERVAL '1' DAY) AS day, COUNT(DISTINCT index1) AS value ` +
     `FROM ${ds} WHERE double1 >= ${cutoffMs}${where} GROUP BY day ORDER BY day`,
@@ -261,6 +262,15 @@ export const sql = {
 function num(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * A percentage that is null (→ "—" on the FE) when there's no data, so an empty
+ * window can never read as a real 0%. The invariant lives here, once, instead of
+ * being hand-rolled at each KPI (which is exactly how one site got missed).
+ */
+function ratio(numerator: number, denominator: number): number | null {
+  return denominator > 0 ? (numerator / denominator) * 100 : null;
 }
 
 function toTimePoints(rows: Array<Record<string, unknown>>): TimePoint[] {
@@ -345,9 +355,7 @@ export async function buildStats(
   ]);
 
   const mf = aeRows.mf[0] ?? {};
-  const mfTotal = num(mf.total);
-  // null (not 0) when there are no dictations — 0% would read as a real metric.
-  const magicFormatAdoptionPct = mfTotal > 0 ? (num(mf.polished) / mfTotal) * 100 : null;
+  const magicFormatAdoptionPct = ratio(num(mf.polished), num(mf.total));
 
   const lat = aeRows.lat[0] ?? {};
   const asrLat = aeRows.asrLat[0] ?? {};
@@ -360,15 +368,16 @@ export async function buildStats(
     { stage: "model_load", p50: num(modelLoad.p50), p95: num(modelLoad.p95) },
   ];
 
-  // Crash-free is a proxy (a launch with no matching clean session_end = assumed
-  // crash/force-quit) and needs BOTH streams. null (→ "—") when either is absent,
-  // so an empty window can't read as a fake "100% crash-free". Note: the most
-  // recent launches have no session_end yet, so the rate slightly understates
-  // near "now" — inherent to the proxy at low volume.
+  // Crash-free is a proxy: clean session_ends / launches. Needs BOTH streams —
+  // null (→ "—") when either is absent, so an empty window can't read as a fake
+  // "100% crash-free". Returned as crash-FREE directly (the one concept the FE
+  // shows) rather than a crash rate the FE would have to invert. Note: the most
+  // recent launches have no session_end yet, so it slightly understates near
+  // "now" — inherent to the proxy at low volume.
   const launches = num(aeRows.launches[0]?.value);
   const sessionEnds = num(aeRows.sessionEnds[0]?.value);
-  const crashProxyRatePct = launches > 0 && sessionEnds > 0
-    ? Math.max(0, Math.min(100, (1 - sessionEnds / launches) * 100))
+  const crashFreeRatePct = launches > 0 && sessionEnds > 0
+    ? Math.min(100, (sessionEnds / launches) * 100)
     : null;
 
   const audioRate = aeRows.audioRate[0] ?? {};
@@ -412,12 +421,11 @@ export async function buildStats(
     fallbackReasons: toBreakdown(aeRows.fallbacks),
     latency,
     errorsByType: toBreakdown(aeRows.errors),
-    crashProxyRatePct,
+    crashFreeRatePct,
     audioBackends: toBreakdown(aeRows.audio),
     audioFallbackRatePct,
     editRateMedianPct: num(aeRows.editRate[0]?.median),
-    // null (→ "—") when no dictations have finalized an edit session yet.
-    editedSharePct: editFinalized > 0 ? (editChanged / editFinalized) * 100 : null,
+    editedSharePct: ratio(editChanged, editFinalized),
     keepAliveEvictions: num(aeRows.evictions[0]?.value),
     segmentEventCount: dictCount,
     filterOptions,

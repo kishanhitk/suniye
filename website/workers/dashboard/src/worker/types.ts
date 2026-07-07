@@ -66,8 +66,11 @@ export interface StatsResponse {
   /** Per-stage p50/p95 incl. model_load (cold model start). */
   latency: LatencySummary[];
   errorsByType: Breakdown[];
-  /** null when app_launch or session_end is absent in the window (render "—"). */
-  crashProxyRatePct: number | null;
+  /**
+   * Clean-session proxy (session_ends / launches), as crash-FREE %. null when
+   * either stream is absent in the window (render "—").
+   */
+  crashFreeRatePct: number | null;
   audioBackends: Breakdown[];
   audioFallbackRatePct: number;
   /** Median post-insertion edit-rate bucket (%) over edited dictations. */

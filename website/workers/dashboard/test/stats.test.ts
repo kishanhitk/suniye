@@ -205,7 +205,7 @@ describe("buildStats", () => {
     expect(stats.asrModelBreakdown[0].label).toBe("parakeet-v3");
     expect(stats.chipBreakdown[0].label).toBe("apple-m3-pro");
     expect(stats.magicFormatAdoptionPct).toBe(60);
-    expect(stats.crashProxyRatePct).toBeCloseTo(20, 5); // 1 - 16/20
+    expect(stats.crashFreeRatePct).toBeCloseTo(80, 5); // 16 clean / 20 launches
     expect(stats.latency.find((l) => l.stage === "end_to_end")?.p50).toBe(200);
     expect(stats.latency.find((l) => l.stage === "magic_format")?.p50).toBe(100);
     expect(stats.latency.find((l) => l.stage === "model_load")?.p50).toBe(800);
@@ -276,7 +276,7 @@ describe("buildStats", () => {
     const emptyD1: D1Runner = async () => [];
     const stats = await buildStats(empty, emptyD1, { rangeDays: 7, nowMs: 1_700_000_000_000 });
     expect(stats.magicFormatAdoptionPct).toBeNull(); // no dictations → "—", not "0%"
-    expect(stats.crashProxyRatePct).toBeNull(); // no sessions → "—", not fake "100% crash-free"
+    expect(stats.crashFreeRatePct).toBeNull(); // no sessions → "—", not fake "100% crash-free"
     expect(stats.totalInstalls).toBe(0);
     expect(stats.audioFallbackRatePct).toBe(0);
     expect(stats.editedSharePct).toBeNull(); // no edit sessions → "—", not "0%"

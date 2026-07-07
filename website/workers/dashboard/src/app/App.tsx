@@ -184,10 +184,10 @@ export default function App() {
                 />
                 <KeyFigure
                   label="Crash-free"
-                  value={blocked.crash || stats.crashProxyRatePct === null ? "—" : formatPct(100 - stats.crashProxyRatePct, 1)}
+                  value={blocked.crash || stats.crashFreeRatePct === null ? "—" : formatPct(stats.crashFreeRatePct, 1)}
                   detail={
                     blocked.crash ? notRecorded(blocked.crash)
-                      : stats.crashProxyRatePct === null ? "not enough sessions yet"
+                      : stats.crashFreeRatePct === null ? "not enough sessions yet"
                       : "clean session proxy"
                   }
                 />
