@@ -138,7 +138,10 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
         AppLogger.shared.log(.info, "apple speech loaded locale=\(supported.identifier(.bcp47))")
     }
 
-    func transcribe(samples: [Float], sampleRate: Int) async throws -> String {
+    // `purpose` is ignored: this engine reports finalized results only (no
+    // volatile partials), and `appleSpeech` opts out of the live preview, so it
+    // is never asked for a `.partial` decode.
+    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String {
         guard let locale else {
             throw ServiceError.notLoaded
         }

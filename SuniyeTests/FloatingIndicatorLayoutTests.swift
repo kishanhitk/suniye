@@ -48,4 +48,86 @@ final class FloatingIndicatorLayoutTests: XCTestCase {
         XCTAssertLessThanOrEqual(frame.maxX, visibleFrame.maxX)
         XCTAssertLessThanOrEqual(frame.maxY, visibleFrame.maxY)
     }
+
+    func testListeningPanelMatchesPillWithoutPreviewAndBubbleGeometryIsFixed() {
+        XCTAssertEqual(
+            FloatingIndicatorMetrics.listeningPanelSize(preview: .off),
+            FloatingIndicatorMetrics.listeningPillSize
+        )
+
+        // Fixed reservation: `.pending` and any preview text yield identical
+        // panel geometry, so the panel never resizes mid-recording and the
+        // layout cannot jitter as the transcript grows tick to tick. The
+        // reservation includes room for the bubble's shadow so the window edge
+        // cannot clip it.
+        let expected = CGSize(
+            width: max(
+                FloatingIndicatorMetrics.listeningPillSize.width,
+                FloatingIndicatorMetrics.previewBubbleSize.width
+                    + FloatingIndicatorMetrics.previewShadowPadding * 2
+            ),
+            height: FloatingIndicatorMetrics.listeningPillSize.height
+                + FloatingIndicatorMetrics.previewBubbleGap
+                + FloatingIndicatorMetrics.previewBubbleSize.height
+                + FloatingIndicatorMetrics.previewShadowPadding
+        )
+        let previews: [FloatingIndicatorState.PreviewState] = [
+            .pending,
+            .text("hi"),
+            .text(String(repeating: "x", count: 200))
+        ]
+        for preview in previews {
+            XCTAssertEqual(FloatingIndicatorMetrics.listeningPanelSize(preview: preview), expected)
+        }
+    }
+
+    func testPreviewBubbleGrowsPanelUpwardWithoutMovingThePill() {
+        let visibleFrame = NSRect(x: 0, y: 32, width: 1440, height: 900)
+        let placement = FloatingIndicatorPlacement(centerXRatio: 0.5, bottomYRatio: 0.1)
+        let pillOnly = FloatingIndicatorMetrics.listeningPanelSize(preview: .off)
+        let withBubble = FloatingIndicatorMetrics.listeningPanelSize(preview: .pending)
+
+        let pillFrame = FloatingIndicatorLayout.frame(
+            for: NSSize(width: pillOnly.width, height: pillOnly.height),
+            in: visibleFrame,
+            placement: placement,
+            bottomMargin: 28
+        )
+        let bubbleFrame = FloatingIndicatorLayout.frame(
+            for: NSSize(width: withBubble.width, height: withBubble.height),
+            in: visibleFrame,
+            placement: placement,
+            bottomMargin: 28
+        )
+
+        // Bottom edge and horizontal center are anchored; only the top rises.
+        // The panel content is bottom-aligned, so the pill itself stays put.
+        XCTAssertEqual(bubbleFrame.minY, pillFrame.minY, accuracy: 0.001)
+        XCTAssertEqual(bubbleFrame.midX, pillFrame.midX, accuracy: 0.001)
+        XCTAssertEqual(
+            bubbleFrame.maxY - pillFrame.maxY,
+            FloatingIndicatorMetrics.previewBubbleGap
+                + FloatingIndicatorMetrics.previewBubbleSize.height
+                + FloatingIndicatorMetrics.previewShadowPadding,
+            accuracy: 0.001
+        )
+    }
+
+    func testPreviewTailKeepsShortTextIntact() {
+        XCTAssertEqual(FloatingIndicatorMetrics.previewTail("hello world"), "hello world")
+        XCTAssertEqual(FloatingIndicatorMetrics.previewTail("  padded  "), "padded")
+        XCTAssertEqual(FloatingIndicatorMetrics.previewTail(""), "")
+    }
+
+    func testPreviewTailTruncatesLongTextToSuffixWithoutEllipsis() {
+        let maxCharacters = FloatingIndicatorMetrics.previewTailMaxCharacters
+        let text = String(repeating: "a", count: 40) + String(repeating: "b", count: maxCharacters)
+        let tail = FloatingIndicatorMetrics.previewTail(text)
+
+        // No leading ellipsis: the bubble fades older text out at the top, so a
+        // marker would only double up with the fade.
+        XCTAssertEqual(tail, String(repeating: "b", count: maxCharacters))
+        XCTAssertEqual(tail.count, maxCharacters)
+        XCTAssertFalse(tail.hasPrefix("…"))
+    }
 }

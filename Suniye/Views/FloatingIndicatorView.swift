@@ -1,36 +1,132 @@
+import AppKit
+import Observation
 import SwiftUI
 
+/// Observable state feeding the floating indicator. The controller mutates
+/// `state` in place rather than rebuilding the hosting view's root, so SwiftUI's
+/// own implicit animations actually run — reassigning the whole rootView each
+/// tick discards in-flight animations and makes every transition snap.
+@MainActor
+@Observable
+final class FloatingIndicatorModel {
+    var state: FloatingIndicatorState = .idle
+}
+
 struct FloatingIndicatorView: View {
-    let state: FloatingIndicatorState
+    let model: FloatingIndicatorModel
     let onHoverChanged: (Bool) -> Void
     let onAction: () -> Void
     let onDragChanged: () -> Void
     let onDragEnded: () -> Void
 
-    var body: some View {
-        VStack(spacing: helperText == nil ? 0 : 8) {
-            if let helperText {
-                Text(helperText)
-                    .font(AppTypography.bodyMedium)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 12)
-                    .background(capsuleFill)
-                    .overlay(
-                        Capsule()
-                            .stroke(capsuleStroke, lineWidth: capsuleBorderWidth)
-                    )
-                    .clipShape(Capsule())
-                    .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
-            }
+    private var state: FloatingIndicatorState { model.state }
 
-            capsule
+    var body: some View {
+        glassGrouped {
+            VStack(spacing: topAccessorySpacing) {
+                if let helperText {
+                    Text(helperText)
+                        .font(AppTypography.bodyMedium)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        // Static hint text — no `.interactive()` (the tap lives
+                        // on the pill below, not here).
+                        .liquidGlassPill(
+                            fill: capsuleFill,
+                            glassTint: capsuleGlassTint,
+                            stroke: capsuleStroke,
+                            strokeWidth: capsuleBorderWidth,
+                            interactive: false
+                        )
+                        .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
+                }
+
+                if let previewText {
+                    previewBubble(previewText)
+                }
+
+                capsule
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .padding(.bottom, helperText == nil ? 0 : 4)
         .contentShape(Rectangle())
         .onHover(perform: onHoverChanged)
-        .animation(.spring(response: 0.28, dampingFraction: 0.84), value: state)
+        // Non-overshooting so the growing pill/bubble never pokes past the
+        // (instantly-sized) window bounds mid-animation.
+        .animation(.smooth(duration: 0.3), value: state.layoutAnimationKey)
+        // Animate the live-preview bubble's appearance/disappearance. Keyed on
+        // presence only (not the text), so it fires once when the bubble shows
+        // or hides — per-tick text changes crossfade inside LivePreviewText.
+        .animation(.smooth(duration: 0.28), value: previewText != nil)
+        // The indicator is dark chrome in both appearances: force the dark
+        // color scheme so the pill's Liquid Glass renders its dark material in
+        // Light Mode too, keeping its white content legible.
+        .environment(\.colorScheme, .dark)
+    }
+
+    /// Groups the indicator's glass surfaces in a GlassEffectContainer on
+    /// macOS 26+ so the hover-hint capsule and the pill share one sampling
+    /// region (per Apple's guidance). No-op on the blur fallback.
+    @ViewBuilder
+    private func glassGrouped<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        if #available(macOS 26, *) {
+            GlassEffectContainer(spacing: FloatingIndicatorMetrics.previewBubbleGap) {
+                content()
+            }
+        } else {
+            content()
+        }
+    }
+
+    private static let previewBubbleShape = RoundedRectangle(
+        cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2,
+        style: .continuous
+    )
+
+    /// Detached live-preview bubble above the pill. Fixed geometry (see
+    /// FloatingIndicatorMetrics) so only the text content changes per tick, and
+    /// non-interactive so the pill keeps all click/drag behavior.
+    private func previewBubble(_ text: String) -> some View {
+        LivePreviewText(text: text)
+            .padding(.horizontal, 20)
+            .frame(
+                width: FloatingIndicatorMetrics.previewBubbleSize.width,
+                height: FloatingIndicatorMetrics.previewBubbleSize.height,
+                alignment: .leading
+            )
+            .background {
+                ZStack {
+                    BehindWindowBlur(cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2)
+                    Color.black.opacity(0.35)
+                }
+            }
+            .overlay(Self.previewBubbleShape.stroke(capsuleStroke, lineWidth: capsuleBorderWidth))
+            .clipShape(Self.previewBubbleShape)
+            .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+            .allowsHitTesting(false)
+            .transition(.asymmetric(
+                insertion: .opacity
+                    .combined(with: .scale(scale: 0.96, anchor: .bottom))
+                    .combined(with: .offset(y: 6))
+                    .animation(.easeOut(duration: 0.25)),
+                removal: .opacity.animation(.easeOut(duration: 0.15))
+            ))
+    }
+
+    private var previewText: String? {
+        if case let .listening(_, _, preview) = state {
+            return preview.text
+        }
+        return nil
+    }
+
+    private var topAccessorySpacing: CGFloat {
+        if helperText != nil {
+            return 8
+        }
+        return previewText == nil ? 0 : FloatingIndicatorMetrics.previewBubbleGap
     }
 
     private var capsule: some View {
@@ -39,12 +135,13 @@ struct FloatingIndicatorView: View {
         }
         .padding(.horizontal, horizontalPadding)
         .frame(width: pillWidth, height: pillHeight)
-        .background(capsuleFill)
-        .overlay(
-            Capsule()
-                .stroke(capsuleStroke, lineWidth: capsuleBorderWidth)
+        .liquidGlassPill(
+            fill: capsuleFill,
+            glassTint: capsuleGlassTint,
+            stroke: capsuleStroke,
+            strokeWidth: capsuleBorderWidth,
+            interactive: isInteractive
         )
-        .clipShape(Capsule())
         .contentShape(Capsule())
         .onTapGesture {
             guard isInteractive else { return }
@@ -70,7 +167,7 @@ struct FloatingIndicatorView: View {
             EmptyView()
         case .hover:
             hoverContent
-        case let .listening(levels, source):
+        case let .listening(levels, source, _):
             if source == .editHotkey {
                 Image(systemName: "pencil.line")
                     .font(.system(size: 12, weight: .semibold))
@@ -126,7 +223,7 @@ struct FloatingIndicatorView: View {
         switch state {
         case .hover:
             return true
-        case let .listening(_, source):
+        case let .listening(_, source, _):
             return source == .manual
         default:
             return false
@@ -151,11 +248,23 @@ struct FloatingIndicatorView: View {
         }
     }
 
+    /// Tint for the Liquid Glass pill — much lighter than `capsuleFill` so the
+    /// glass material shows through instead of being smothered. Legibility of
+    /// the white content leans on the forced dark color scheme.
+    private var capsuleGlassTint: Color {
+        switch state {
+        case .idle:
+            return Color.black.opacity(0.35)
+        default:
+            return Color.black.opacity(0.55)
+        }
+    }
+
     private var capsuleStroke: Color {
         switch state {
         case .idle:
             return Color.white.opacity(0.34)
-        case .listening(_, .editHotkey):
+        case .listening(_, .editHotkey, _):
             return FloatingIndicatorView.editModeTint.opacity(0.7)
         default:
             return Color.white.opacity(0.14)
@@ -179,10 +288,8 @@ struct FloatingIndicatorView: View {
             return 74
         case .hover:
             return 152
-        case .listening(_, .editHotkey):
-            return 150
-        case .listening:
-            return 124
+        case let .listening(_, source, _):
+            return FloatingIndicatorMetrics.pillSize(source: source).width
         case let .processing(message):
             guard let message else {
                 return 128
@@ -199,7 +306,9 @@ struct FloatingIndicatorView: View {
             return 7
         case .hover:
             return 32
-        case .listening, .processing:
+        case .listening:
+            return FloatingIndicatorMetrics.listeningPillSize.height
+        case .processing:
             return 40
         case .error:
             return 52
@@ -229,6 +338,151 @@ struct FloatingIndicatorView: View {
                     .frame(width: 3.2, height: 3.2)
             }
         }
+    }
+}
+
+private extension View {
+    /// Pill / hover-hint surface. On macOS 26+ a Liquid Glass capsule with a
+    /// light tint so the material actually reads as glass (a near-opaque tint
+    /// would smother it); `.interactive()` only on tappable states, per Apple's
+    /// guidance. On macOS 14/15 the solid capsule `fill` + stroke — identical to
+    /// the pre-glass rendering.
+    @ViewBuilder
+    func liquidGlassPill(
+        fill: Color,
+        glassTint: Color,
+        stroke: Color,
+        strokeWidth: CGFloat,
+        interactive: Bool
+    ) -> some View {
+        if #available(macOS 26, *) {
+            glassEffect(
+                interactive ? .regular.tint(glassTint).interactive() : .regular.tint(glassTint),
+                in: Capsule()
+            )
+        } else {
+            background(fill)
+                .overlay(Capsule().stroke(stroke, lineWidth: strokeWidth))
+                .clipShape(Capsule())
+        }
+    }
+}
+
+/// Live-preview transcript text. Shows the newest two lines pinned to the
+/// bottom; when the transcript is longer, the older remainder scrolls up out of
+/// view and the top edge fades to transparent — no ellipsis. The fade engages
+/// only while the text actually overflows two lines, so a short partial renders
+/// fully solid with no phantom "cut off" marker.
+private struct LivePreviewText: View {
+    let text: String
+
+    /// Natural height of the full (unclamped) transcript at the bubble's width.
+    @State private var fullHeight: CGFloat = 0
+    /// Height of exactly two rendered lines, measured with the same font so the
+    /// overflow test matches real metrics regardless of the resolved typeface.
+    @State private var twoLineHeight: CGFloat = 0
+
+    private var isOverflowing: Bool {
+        twoLineHeight > 0 && fullHeight > twoLineHeight + 0.5
+    }
+
+    var body: some View {
+        Text(text)
+            .font(AppTypography.subheadline)
+            .foregroundStyle(.white.opacity(0.95))
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(key: FullHeightKey.self, value: proxy.size.height)
+                }
+            )
+            // One or two lines sit centered in the bubble; only once the
+            // transcript overflows do we pin the newest line to the bottom and
+            // fade the older text out at the top.
+            .frame(
+                height: twoLineHeight > 0 ? twoLineHeight : nil,
+                alignment: isOverflowing ? .bottom : .center
+            )
+            .clipped()
+            .mask(alignment: .bottom) {
+                if isOverflowing {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.58)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                } else {
+                    Rectangle()
+                }
+            }
+            .background(
+                Text("Ag\nAg")
+                    .font(AppTypography.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .hidden()
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear.preference(key: TwoLineHeightKey.self, value: proxy.size.height)
+                        }
+                    )
+            )
+            .onPreferenceChange(FullHeightKey.self) { fullHeight = $0 }
+            .onPreferenceChange(TwoLineHeightKey.self) { twoLineHeight = $0 }
+            .contentTransition(.interpolate)
+            .animation(.easeInOut(duration: 0.18), value: text)
+    }
+}
+
+private struct FullHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct TwoLineHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+/// Behind-window blur for the preview bubble. SwiftUI materials only blur
+/// content within the same window, and this panel is transparent — real blur
+/// of whatever is behind the panel needs NSVisualEffectView with
+/// `.behindWindow` blending. The blur region is masked via `maskImage`
+/// (a plain CALayer mask does not constrain behind-window blur).
+private struct BehindWindowBlur: NSViewRepresentable {
+    let cornerRadius: CGFloat
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.maskImage = .roundedRectMask(cornerRadius: cornerRadius)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
+
+private extension NSImage {
+    static func roundedRectMask(cornerRadius: CGFloat) -> NSImage {
+        let edge = cornerRadius * 2 + 1
+        let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: cornerRadius, left: cornerRadius, bottom: cornerRadius, right: cornerRadius)
+        image.resizingMode = .stretch
+        return image
     }
 }
 

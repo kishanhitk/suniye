@@ -1,6 +1,9 @@
 import XCTest
 @testable import Suniye
 
+// StubTranscriptionService is @MainActor (its consuming tests run on the main
+// actor), so this suite must be too, to touch the stub's call-count properties.
+@MainActor
 final class RoutingTranscriptionServiceTests: XCTestCase {
     private func config(family: ASRModelFamily, modelID: ASRModelID) -> RecognizerConfig {
         RecognizerConfig(modelID: modelID, family: family, tokensPath: "", numThreads: 1)
