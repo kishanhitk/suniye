@@ -1,35 +1,40 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { FilterDim, Filters, StatsResponse } from "../types";
+import type { FilterDim, FilterOption, Filters, StatsResponse } from "../types";
 import { DIM_GROUPS, DIM_LABEL } from "./filterMeta";
+import { formatNumber } from "../lib/utils";
 
-type Item =
+type Row =
   | { kind: "header"; label: string }
-  | { kind: "dim"; dim: FilterDim; sel: number }
-  | { kind: "value"; dim: FilterDim; value: string; sel: number };
+  | { kind: "dim"; dim: FilterDim; selCount: number; sel: number }
+  | { kind: "value"; dim: FilterDim; option: FilterOption; selected: boolean; showDim: boolean; sel: number };
 
 /**
- * The "add filter" popover. Browse dimensions by group, or type to jump straight
- * to a value across all dimensions (collapsing the pick-dimension-then-value
- * two-step). Keyboard-first: ↑/↓ move, ↵ selects, Esc/Backspace steps back.
- * Stays open after adding so several filters can be set in one session.
+ * The add/edit-filter popover. Browse dimensions by group, or type to jump to a
+ * value across all dimensions (collapsing the pick-dimension-then-value two-step).
+ * Each value carries a live facet count (dictations in the current slice), and a
+ * dimension holds a *set* of values — toggling checks/unchecks in place and keeps
+ * the menu open, so several values (and dimensions) can be set in one session.
+ * Keyboard-first: ↑/↓ move, ↵ toggles / drills, Esc/Backspace steps back.
  */
 export function FilterMenu({
   options,
   filters,
   triggerRef,
-  onSelect,
+  initialDrill = null,
+  onToggle,
   onClose,
 }: {
   options: StatsResponse["filterOptions"];
   filters: Filters;
-  /** The button that toggles this menu — excluded from outside-click close so
-   *  clicking it while open closes (via its own toggle) rather than reopening. */
+  /** The filter-bar region whose clicks must NOT close the menu (chips + trigger). */
   triggerRef: React.RefObject<HTMLElement | null>;
-  onSelect: (dim: FilterDim, value: string) => void;
+  /** Open drilled straight into this dimension (e.g. when editing a chip). */
+  initialDrill?: FilterDim | null;
+  onToggle: (dim: FilterDim, value: string) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [drill, setDrill] = useState<FilterDim | null>(null);
+  const [drill, setDrill] = useState<FilterDim | null>(initialDrill);
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -37,7 +42,8 @@ export function FilterMenu({
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
-  // Close on outside click.
+  // Close on outside click (the filter bar itself is excluded, so clicking a chip
+  // or the trigger re-drills/toggles the menu rather than closing then reopening).
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -48,43 +54,47 @@ export function FilterMenu({
     return () => document.removeEventListener("mousedown", onDown);
   }, [onClose, triggerRef]);
 
-  const { items, count } = useMemo(() => {
-    const addable = (dim: FilterDim) => (options[dim]?.length ?? 0) > 0 && !filters[dim];
-    const items: Item[] = [];
+  const { rows, count } = useMemo(() => {
+    const has = (dim: FilterDim) => (options[dim]?.length ?? 0) > 0;
+    const selectedIn = (dim: FilterDim) => filters[dim] ?? [];
+    const rows: Row[] = [];
     let sel = 0;
-    const dimRow = (dim: FilterDim) => items.push({ kind: "dim", dim, sel: sel++ });
-    const valRow = (dim: FilterDim, value: string) => items.push({ kind: "value", dim, value, sel: sel++ });
+    const valueRow = (dim: FilterDim, option: FilterOption, showDim: boolean) =>
+      rows.push({ kind: "value", dim, option, selected: selectedIn(dim).includes(String(option.value)), showDim, sel: sel++ });
+    const dimRow = (dim: FilterDim) =>
+      rows.push({ kind: "dim", dim, selCount: selectedIn(dim).length, sel: sel++ });
 
     if (drill) {
-      for (const v of (options[drill] ?? []).map(String)) {
-        if (!q || v.toLowerCase().includes(q)) valRow(drill, v);
+      for (const opt of options[drill] ?? []) {
+        if (!q || String(opt.value).toLowerCase().includes(q)) valueRow(drill, opt, false);
       }
     } else if (q) {
+      // Value matches across every dimension, then dimension-name matches to drill.
       for (const { dims } of DIM_GROUPS) for (const dim of dims) {
-        if (!addable(dim)) continue;
-        for (const v of (options[dim] ?? []).map(String)) if (v.toLowerCase().includes(q)) valRow(dim, v);
+        if (!has(dim)) continue;
+        for (const opt of options[dim] ?? []) if (String(opt.value).toLowerCase().includes(q)) valueRow(dim, opt, true);
       }
       for (const { dims } of DIM_GROUPS) for (const dim of dims) {
-        if (addable(dim) && DIM_LABEL[dim].includes(q)) dimRow(dim);
+        if (has(dim) && DIM_LABEL[dim].includes(q)) dimRow(dim);
       }
     } else {
       for (const group of DIM_GROUPS) {
-        const groupDims = group.dims.filter(addable);
-        if (groupDims.length === 0) continue;
-        items.push({ kind: "header", label: group.label });
-        groupDims.forEach(dimRow);
+        const dims = group.dims.filter(has);
+        if (dims.length === 0) continue;
+        rows.push({ kind: "header", label: group.label });
+        dims.forEach(dimRow);
       }
     }
-    return { items, count: sel };
+    return { rows, count: sel };
   }, [options, filters, drill, q]);
 
   // Keep the highlight in range whenever the list changes.
   useLayoutEffect(() => { setHighlight((h) => Math.min(Math.max(h, 0), Math.max(count - 1, 0))); }, [count]);
 
-  const selectable = items.filter((i): i is Extract<Item, { sel: number }> => i.kind !== "header");
-  const choose = (item: Extract<Item, { sel: number }>) => {
-    if (item.kind === "dim") { setDrill(item.dim); setQuery(""); setHighlight(0); }
-    else { onSelect(item.dim, item.value); setDrill(null); setQuery(""); setHighlight(0); }
+  const selectable = rows.filter((r): r is Extract<Row, { sel: number }> => r.kind !== "header");
+  const choose = (row: Extract<Row, { sel: number }>) => {
+    if (row.kind === "dim") { setDrill(row.dim); setQuery(""); setHighlight(0); }
+    else onToggle(row.dim, String(row.option.value)); // toggle in place — menu stays open
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -96,7 +106,7 @@ export function FilterMenu({
   };
 
   return (
-    <div ref={rootRef} className="absolute left-0 top-full z-20 mt-1 w-72 overflow-hidden rounded-lg border border-line bg-paper shadow-md">
+    <div ref={rootRef} className="absolute left-0 top-full z-20 mt-1 w-80 overflow-hidden rounded-lg border border-line bg-paper shadow-md">
       <input
         ref={inputRef}
         value={query}
@@ -110,31 +120,57 @@ export function FilterMenu({
         aria-activedescendant={count > 0 ? `filter-opt-${highlight}` : undefined}
         className="w-full border-b border-line bg-transparent px-3 py-2 font-mono text-xs text-ink outline-none placeholder:text-muted"
       />
-      <ul id="filter-listbox" role="listbox" className="max-h-72 overflow-y-auto py-1">
+      {drill && (
+        <button
+          onClick={() => { setDrill(null); setQuery(""); setHighlight(0); }}
+          className="flex w-full items-center gap-1 border-b border-line px-3 py-1.5 font-mono text-[11px] text-muted hover:text-ink"
+        >
+          ‹ all dimensions
+        </button>
+      )}
+      <ul id="filter-listbox" role="listbox" aria-multiselectable className="max-h-72 overflow-y-auto py-1">
         {count === 0 && <li className="px-3 py-2 font-mono text-xs text-muted">no matches</li>}
-        {items.map((item, i) => {
-          if (item.kind === "header") {
-            return <li key={`h-${item.label}`} className="px-3 pb-1 pt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted">{item.label}</li>;
+        {rows.map((row, i) => {
+          if (row.kind === "header") {
+            return <li key={`h-${row.label}`} className="px-3 pb-1 pt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted">{row.label}</li>;
           }
-          const on = item.sel === highlight;
+          const on = row.sel === highlight;
+          const base = `flex cursor-pointer items-center justify-between gap-3 px-3 py-1.5 font-mono text-xs ${on ? "bg-surface" : ""}`;
+          if (row.kind === "dim") {
+            return (
+              <li
+                key={`d-${row.dim}`}
+                id={`filter-opt-${row.sel}`}
+                role="option"
+                aria-selected={row.selCount > 0}
+                onMouseEnter={() => setHighlight(row.sel)}
+                onClick={() => choose(row)}
+                className={`${base} text-ink`}
+              >
+                <span>{DIM_LABEL[row.dim]}</span>
+                <span className="flex items-center gap-1.5 text-muted">
+                  {row.selCount > 0 && <span className="tabular-nums text-accent">{row.selCount}</span>}
+                  ›
+                </span>
+              </li>
+            );
+          }
+          const { option, selected, showDim } = row;
           return (
             <li
-              key={item.kind === "value" ? `v-${item.dim}-${item.value}` : `d-${item.dim}-${i}`}
-              id={`filter-opt-${item.sel}`}
+              key={`v-${row.dim}-${option.value}`}
+              id={`filter-opt-${row.sel}`}
               role="option"
-              aria-selected={on}
-              onMouseEnter={() => setHighlight(item.sel)}
-              onClick={() => choose(item)}
-              className={`flex cursor-pointer items-center justify-between gap-3 px-3 py-1.5 font-mono text-xs ${on ? "bg-surface text-ink" : "text-ink"}`}
+              aria-selected={selected}
+              onMouseEnter={() => setHighlight(row.sel)}
+              onClick={() => choose(row)}
+              className={`${base} text-ink`}
             >
-              {item.kind === "dim" ? (
-                <><span>{DIM_LABEL[item.dim]}</span><span className="text-muted">›</span></>
-              ) : (
-                <>
-                  <span className="truncate">{drill ? item.value : `${DIM_LABEL[item.dim]} = ${item.value}`}</span>
-                  {on && <span className="text-accent">↵</span>}
-                </>
-              )}
+              <span className="flex min-w-0 items-center gap-2">
+                <span className={`h-3 w-3 shrink-0 rounded-[3px] border ${selected ? "border-accent bg-accent" : "border-line"}`} aria-hidden />
+                <span className="truncate">{showDim ? `${DIM_LABEL[row.dim]} = ${option.value}` : String(option.value)}</span>
+              </span>
+              <span className="shrink-0 tabular-nums text-muted">{formatNumber(option.count)}</span>
             </li>
           );
         })}

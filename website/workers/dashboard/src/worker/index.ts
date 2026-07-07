@@ -40,11 +40,12 @@ async function handleStats(request: Request, env: DashboardEnv): Promise<Respons
 
   const params = new URL(request.url).searchParams;
   const rangeDays = clampRange(Number(params.get("range") ?? "30"));
-  // Filter values are sanitized in stats.ts (safeLabel/safeInt) before any SQL.
+  // Multi-value per dim: repeated params (?chip=m1&chip=m3) → a set (OR within a
+  // dim). Values are sanitized in stats.ts (safeLabel/safeNum) before any SQL.
   const filters: Filters = {};
   for (const dim of FILTER_DIMS) {
-    const value = params.get(dim);
-    if (value) filters[dim] = value;
+    const values = params.getAll(dim).filter((v) => v !== "");
+    if (values.length > 0) filters[dim] = values;
   }
 
   const ae = makeAeRunner(env.CF_ACCOUNT_ID, env.AE_API_TOKEN);

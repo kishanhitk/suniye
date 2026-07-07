@@ -10,6 +10,7 @@ import { Skeleton } from "./components/Skeleton";
 import { KeyFigure, TotalsStrip } from "./components/TotalsStrip";
 import { Sparkline } from "./components/Sparkline";
 import { deltaPct, formatCount, formatPct, relativeTime } from "./lib/utils";
+import { FILTER_DIMS } from "./types";
 import type { FilterDim, Filters, StatsResponse } from "./types";
 
 const RANGES = [7, 30, 90];
@@ -17,9 +18,26 @@ const RANGES = [7, 30, 90];
 /** "Not recorded under {dim}" copy — the server decides WHICH panels are blocked. */
 const notRecorded = (dim: FilterDim) => `Not recorded under the ${dim.replace("_", " ")} filter.`;
 
+const clampRange = (n: number) => (RANGES.includes(n) ? n : 30);
+
+/** Hydrate range + filters from the URL so a sliced view is shareable and
+ *  survives reload. Multi-value dims arrive as repeated params. */
+function stateFromUrl(): { range: number; filters: Filters } {
+  if (typeof window === "undefined") return { range: 30, filters: {} };
+  const p = new URLSearchParams(window.location.search);
+  const filters: Filters = {};
+  for (const dim of FILTER_DIMS) {
+    const values = p.getAll(dim).filter(Boolean);
+    if (values.length > 0) filters[dim] = values;
+  }
+  return { range: clampRange(Number(p.get("range"))), filters };
+}
+
+const initial = stateFromUrl();
+
 export default function App() {
-  const [range, setRange] = useState(30);
-  const [filters, setFilters] = useState<Filters>({});
+  const [range, setRange] = useState(initial.range);
+  const [filters, setFilters] = useState<Filters>(initial.filters);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,8 +65,8 @@ export default function App() {
     }
     const seq = ++reqSeq.current;
     const params = new URLSearchParams({ range: String(range) });
-    for (const [dim, value] of Object.entries(filters)) {
-      if (value) params.set(dim, value);
+    for (const dim of FILTER_DIMS) {
+      for (const value of filters[dim] ?? []) params.append(dim, value);
     }
     try {
       const r = await fetch(`/api/stats?${params}`, { signal });
@@ -89,6 +107,41 @@ export default function App() {
       window.removeEventListener("focus", refresh);
     };
   }, [fetchStats]);
+
+  // Mirror range + filters into the URL (canonical order, replaceState so the
+  // back button isn't spammed) — the current slice is always shareable.
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (range !== 30) p.set("range", String(range));
+    for (const dim of FILTER_DIMS) {
+      for (const value of filters[dim] ?? []) p.append(dim, value);
+    }
+    const qs = p.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [range, filters]);
+
+  // Add/remove one value within a dimension (OR within a dim). Dropping the last
+  // value removes the dimension entirely.
+  const toggleFilter = useCallback((dim: FilterDim, value: string) => {
+    setFilters((prev) => {
+      const current = prev[dim] ?? [];
+      const nextValues = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      const next = { ...prev };
+      if (nextValues.length > 0) next[dim] = nextValues;
+      else delete next[dim];
+      return next;
+    });
+  }, []);
+
+  const clearDim = useCallback((dim: FilterDim) => {
+    setFilters((prev) => {
+      const next = { ...prev };
+      delete next[dim];
+      return next;
+    });
+  }, []);
 
   // Defensive: a stale/cached response without `blocked` must degrade to
   // "nothing blocked", never crash the whole dashboard.
@@ -153,14 +206,8 @@ export default function App() {
             options={stats.filterOptions}
             filters={filters}
             segmentCount={loading ? null : stats.segmentEventCount}
-            onChange={(dim, value) =>
-              setFilters((prev) => {
-                const next = { ...prev };
-                if (value) next[dim] = value;
-                else delete next[dim];
-                return next;
-              })
-            }
+            onToggle={toggleFilter}
+            onClearDim={clearDim}
             onClear={() => setFilters({})}
           />
         )}
