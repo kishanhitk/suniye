@@ -60,12 +60,14 @@ export interface StatsResponse {
   chipBreakdown: Breakdown[];
   ramBreakdown: Breakdown[];
   countryBreakdown: Breakdown[];
-  magicFormatAdoptionPct: number;
+  /** null when there are no dictations in the window (render "—", not "0%"). */
+  magicFormatAdoptionPct: number | null;
   fallbackReasons: Breakdown[];
   /** Per-stage p50/p95 incl. model_load (cold model start). */
   latency: LatencySummary[];
   errorsByType: Breakdown[];
-  crashProxyRatePct: number;
+  /** null when app_launch or session_end is absent in the window (render "—"). */
+  crashProxyRatePct: number | null;
   audioBackends: Breakdown[];
   audioFallbackRatePct: number;
   /** Median post-insertion edit-rate bucket (%) over edited dictations. */

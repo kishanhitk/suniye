@@ -114,8 +114,13 @@ describe("whereFiltersAE (event-aware)", () => {
     expect(whereFiltersAE({ asr_model: "parakeet-v3" }, "*")).toBe(" AND blob1 = ''");
   });
 
-  test("the event-unscoped query only accepts star-safe dims", () => {
-    expect(whereFiltersAE({ chip: "apple-m3-pro" }, "*")).toBe(" AND blob16 = 'apple-m3-pro'");
+  test("the event-unscoped query only accepts dedicated-slot dims", () => {
+    // version lives on a dedicated slot → safe on the active-installs query.
+    expect(whereFiltersAE({ version: "0.0.51" }, "*")).toBe(" AND blob3 = '0.0.51'");
+    // chip/os/mac_model live on SHARED slots → they'd undercount distinct installs
+    // on the unscoped query, so they block it instead.
+    expect(whereFiltersAE({ chip: "apple-m3-pro" }, "*")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ os: "15.5" }, "*")).toBe(" AND blob1 = ''");
     expect(whereFiltersAE({ mac_model: "mac15-3" }, "*")).toBe(" AND blob1 = ''");
   });
 });
@@ -225,7 +230,9 @@ describe("buildStats", () => {
     });
 
     expect(stats.appliedFilters).toEqual({ chip: "apple-m3-pro", version: "0.0.51" }); // invalid dropped
-    expect(stats.blocked).toEqual({}); // chip/version apply everywhere
+    // chip is on a shared slot → it blocks only the event-unscoped active-installs
+    // query; every other panel (incl. dictation) applies it.
+    expect(stats.blocked).toEqual({ activeInstalls: "chip" });
     const words = aeQueries.find((q) => q.includes("SUM(double2"))!;
     expect(words).toContain("AND blob16 = 'apple-m3-pro'");
     expect(words).toContain("AND blob3 = '0.0.51'");
@@ -268,8 +275,8 @@ describe("buildStats", () => {
     const empty: AeRunner = async () => [];
     const emptyD1: D1Runner = async () => [];
     const stats = await buildStats(empty, emptyD1, { rangeDays: 7, nowMs: 1_700_000_000_000 });
-    expect(stats.magicFormatAdoptionPct).toBe(0);
-    expect(stats.crashProxyRatePct).toBe(0);
+    expect(stats.magicFormatAdoptionPct).toBeNull(); // no dictations → "—", not "0%"
+    expect(stats.crashProxyRatePct).toBeNull(); // no sessions → "—", not fake "100% crash-free"
     expect(stats.totalInstalls).toBe(0);
     expect(stats.audioFallbackRatePct).toBe(0);
     expect(stats.editedSharePct).toBe(0);

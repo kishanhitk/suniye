@@ -69,9 +69,14 @@ const DIM_SPECS: Record<FilterDim, {
   channel:   { ae: "blob4",  d1: "channel", star: true },
   country:   { ae: "blob19", d1: "country", star: true },
   ram:       { ae: "double19", numeric: true, d1: "ram_gb", star: true },
-  chip:      { ae: "blob16", d1: "chip", star: true,
+  // chip/os live on SHARED slots (blob16=kind/feature, blob18=from/to_version on
+  // some events), so they are NOT star-safe: on the event-unscoped active-installs
+  // query they'd exclude installs whose only in-day events used the slot for its
+  // other meaning → silent undercount. Not star → active-installs blocks under
+  // these filters (honest empty) instead.
+  chip:      { ae: "blob16", d1: "chip",
                unavailableOn: ["permission_transition", "model_changed", "model_download", "feature_toggled", "update_action"] },
-  os:        { ae: "blob18", d1: "os_version", star: true, unavailableOn: ["update_action"] },
+  os:        { ae: "blob18", d1: "os_version", unavailableOn: ["update_action"] },
   mac_model: { ae: "blob17", d1: "mac_model", unavailableOn: ["model_load", "model_changed", "model_download"] },
   arch:      { ae: "blob14", // not in D1 (installs has no arch column)
                unavailableOn: ["error", "audio_backend_used", "dictation_blocked", "dictation_cancelled", "onboarding_step", "audio_capture_interrupted"] },
@@ -341,7 +346,8 @@ export async function buildStats(
 
   const mf = aeRows.mf[0] ?? {};
   const mfTotal = num(mf.total);
-  const magicFormatAdoptionPct = mfTotal > 0 ? (num(mf.polished) / mfTotal) * 100 : 0;
+  // null (not 0) when there are no dictations — 0% would read as a real metric.
+  const magicFormatAdoptionPct = mfTotal > 0 ? (num(mf.polished) / mfTotal) * 100 : null;
 
   const lat = aeRows.lat[0] ?? {};
   const asrLat = aeRows.asrLat[0] ?? {};
@@ -354,9 +360,16 @@ export async function buildStats(
     { stage: "model_load", p50: num(modelLoad.p50), p95: num(modelLoad.p95) },
   ];
 
+  // Crash-free is a proxy (a launch with no matching clean session_end = assumed
+  // crash/force-quit) and needs BOTH streams. null (→ "—") when either is absent,
+  // so an empty window can't read as a fake "100% crash-free". Note: the most
+  // recent launches have no session_end yet, so the rate slightly understates
+  // near "now" — inherent to the proxy at low volume.
   const launches = num(aeRows.launches[0]?.value);
   const sessionEnds = num(aeRows.sessionEnds[0]?.value);
-  const crashProxyRatePct = launches > 0 ? Math.max(0, (1 - sessionEnds / launches) * 100) : 0;
+  const crashProxyRatePct = launches > 0 && sessionEnds > 0
+    ? Math.max(0, Math.min(100, (1 - sessionEnds / launches) * 100))
+    : null;
 
   const audioRate = aeRows.audioRate[0] ?? {};
   const audioTotal = num(audioRate.total);

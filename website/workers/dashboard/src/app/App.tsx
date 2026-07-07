@@ -179,13 +179,17 @@ export default function App() {
                 />
                 <KeyFigure
                   label="Magic Format"
-                  value={formatPct(stats.magicFormatAdoptionPct)}
-                  detail="of dictations polished"
+                  value={stats.magicFormatAdoptionPct === null ? "—" : formatPct(stats.magicFormatAdoptionPct)}
+                  detail={stats.magicFormatAdoptionPct === null ? "no dictations yet" : "of dictations polished"}
                 />
                 <KeyFigure
                   label="Crash-free"
-                  value={blocked.crash ? "—" : formatPct(100 - stats.crashProxyRatePct, 1)}
-                  detail={blocked.crash ? notRecorded(blocked.crash) : "clean session proxy"}
+                  value={blocked.crash || stats.crashProxyRatePct === null ? "—" : formatPct(100 - stats.crashProxyRatePct, 1)}
+                  detail={
+                    blocked.crash ? notRecorded(blocked.crash)
+                      : stats.crashProxyRatePct === null ? "not enough sessions yet"
+                      : "clean session proxy"
+                  }
                 />
               </TotalsStrip>
             </div>
