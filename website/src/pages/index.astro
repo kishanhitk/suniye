@@ -53,7 +53,7 @@ const features = [
   },
   {
     title: "Open source, MIT licensed",
-    desc: "Full source on GitHub. Read every line. No tracking, no surprises. Build it yourself if you want.",
+    desc: "Full source on GitHub. Read every line. No third-party tracking, no surprises. Build it yourself if you want.",
   },
 ];
 
@@ -139,14 +139,14 @@ const compareRows = [
   { label: "AI cleanup that can run on your Mac", values: ["yes", "cloud", "no"] },
   { label: "Inserts into any app", values: ["yes", "some", "yes"] },
   { label: "Open source", values: ["yes", "no", "no"] },
-  { label: "No tracking", values: ["yes", "varies", "varies"] },
+  { label: "No third-party tracking", values: ["yes", "varies", "varies"] },
   { label: "Price", values: ["Free", "Subscription", "Free"] },
 ];
 
 const faqs = [
   {
     q: "Is my dictation really private?",
-    a: "Yes. Your voice is captured and turned into text entirely on your Mac — it never touches the internet. The only times Suniye goes online are to check for updates and to download a model the first time.",
+    a: "Yes. Your voice is captured and turned into text entirely on your Mac — it never touches the internet. To improve the app, Suniye does send a small amount of pseudonymous usage data (counts and timings — never your words), which you can turn off in Settings → Privacy; the privacy page lists exactly what's collected. Otherwise it only goes online to check for updates and download a model the first time.",
   },
   {
     q: "Does the optional AI cleanup see my audio?",
@@ -158,7 +158,7 @@ const faqs = [
   },
   {
     q: "Does it work offline?",
-    a: "Yes — once you've downloaded a model, dictation needs no internet at all. The only thing that ever goes online is the optional cleanup provider, if you choose to turn it on.",
+    a: "Yes — once you've downloaded a model, dictation itself needs no internet at all. Suniye does phone home for a few non-dictation things: pseudonymous usage stats (opt-out in Settings) and update checks, plus the optional online cleanup provider if you turn it on.",
   },
   {
     q: "Apple Silicon or Intel?",
@@ -182,7 +182,7 @@ const faqs = [
   },
   {
     q: "Is it free?",
-    a: "Completely. Free and open-source under the MIT license. No subscription, no account, no tracking.",
+    a: "Completely. Free and open-source under the MIT license. No subscription, no account, no third-party tracking.",
   },
 ];
 ---
@@ -521,8 +521,7 @@ const faqs = [
             <p class="mt-4 leading-relaxed text-muted">
               Speech models run directly on your Mac — pick one from the built-in
               library. Voice is processed in memory, transcribed locally, and never
-              touches a network. The only network calls Suniye makes are to check
-              for app updates and download models.
+              touches a network.
             </p>
             <p class="mt-4 text-sm leading-relaxed text-muted/70">
               Even the optional cleanup can stay on your Mac, using Apple's built-in AI

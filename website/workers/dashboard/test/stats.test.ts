@@ -114,8 +114,13 @@ describe("whereFiltersAE (event-aware)", () => {
     expect(whereFiltersAE({ asr_model: "parakeet-v3" }, "*")).toBe(" AND blob1 = ''");
   });
 
-  test("the event-unscoped query only accepts star-safe dims", () => {
-    expect(whereFiltersAE({ chip: "apple-m3-pro" }, "*")).toBe(" AND blob16 = 'apple-m3-pro'");
+  test("the event-unscoped query only accepts dedicated-slot dims", () => {
+    // version lives on a dedicated slot → safe on the active-installs query.
+    expect(whereFiltersAE({ version: "0.0.51" }, "*")).toBe(" AND blob3 = '0.0.51'");
+    // chip/os/mac_model live on SHARED slots → they'd undercount distinct installs
+    // on the unscoped query, so they block it instead.
+    expect(whereFiltersAE({ chip: "apple-m3-pro" }, "*")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ os: "15.5" }, "*")).toBe(" AND blob1 = ''");
     expect(whereFiltersAE({ mac_model: "mac15-3" }, "*")).toBe(" AND blob1 = ''");
   });
 });
@@ -170,7 +175,8 @@ describe("buildStats", () => {
     if (q.includes("'app_launch'")) return [{ value: 20 }];
     if (q.includes("'session_end'")) return [{ value: 16 }];
     if (q.includes("'dictation_completed'") && q.includes("SUM(_sample_interval) AS value")) return [{ value: 50 }];
-    if (q.includes("'dictation_edited'") && q.includes("SUM(_sample_interval) AS value")) return [{ value: 10 }];
+    if (q.includes("'dictation_edited'") && q.includes("double20 > 0") && q.includes("SUM(_sample_interval) AS value")) return [{ value: 10 }]; // edited
+    if (q.includes("'dictation_edited'") && q.includes("SUM(_sample_interval) AS value")) return [{ value: 40 }]; // finalized total
     return [];
   };
 
@@ -199,7 +205,7 @@ describe("buildStats", () => {
     expect(stats.asrModelBreakdown[0].label).toBe("parakeet-v3");
     expect(stats.chipBreakdown[0].label).toBe("apple-m3-pro");
     expect(stats.magicFormatAdoptionPct).toBe(60);
-    expect(stats.crashProxyRatePct).toBeCloseTo(20, 5); // 1 - 16/20
+    expect(stats.crashFreeRatePct).toBeCloseTo(80, 5); // 16 clean / 20 launches
     expect(stats.latency.find((l) => l.stage === "end_to_end")?.p50).toBe(200);
     expect(stats.latency.find((l) => l.stage === "magic_format")?.p50).toBe(100);
     expect(stats.latency.find((l) => l.stage === "model_load")?.p50).toBe(800);
@@ -208,7 +214,7 @@ describe("buildStats", () => {
     expect(stats.audioBackends[0].label).toBe("core_audio");
     expect(stats.audioFallbackRatePct).toBeCloseTo(5, 5); // 2/40
     expect(stats.editRateMedianPct).toBe(10);
-    expect(stats.editedSharePct).toBeCloseTo(20, 5); // 10/50
+    expect(stats.editedSharePct).toBeCloseTo(25, 5); // 10 edited / 40 finalized — bounded, from one stream
     expect(stats.keepAliveEvictions).toBe(3);
     expect(stats.segmentEventCount).toBe(50);
     expect(stats.filterOptions.chip).toEqual(["apple-m3-pro", "apple-m5"]);
@@ -224,7 +230,9 @@ describe("buildStats", () => {
     });
 
     expect(stats.appliedFilters).toEqual({ chip: "apple-m3-pro", version: "0.0.51" }); // invalid dropped
-    expect(stats.blocked).toEqual({}); // chip/version apply everywhere
+    // chip is on a shared slot → it blocks only the event-unscoped active-installs
+    // query; every other panel (incl. dictation) applies it.
+    expect(stats.blocked).toEqual({ activeInstalls: "chip" });
     const words = aeQueries.find((q) => q.includes("SUM(double2"))!;
     expect(words).toContain("AND blob16 = 'apple-m3-pro'");
     expect(words).toContain("AND blob3 = '0.0.51'");
@@ -267,10 +275,10 @@ describe("buildStats", () => {
     const empty: AeRunner = async () => [];
     const emptyD1: D1Runner = async () => [];
     const stats = await buildStats(empty, emptyD1, { rangeDays: 7, nowMs: 1_700_000_000_000 });
-    expect(stats.magicFormatAdoptionPct).toBe(0);
-    expect(stats.crashProxyRatePct).toBe(0);
+    expect(stats.magicFormatAdoptionPct).toBeNull(); // no dictations → "—", not "0%"
+    expect(stats.crashFreeRatePct).toBeNull(); // no sessions → "—", not fake "100% crash-free"
     expect(stats.totalInstalls).toBe(0);
     expect(stats.audioFallbackRatePct).toBe(0);
-    expect(stats.editedSharePct).toBe(0);
+    expect(stats.editedSharePct).toBeNull(); // no edit sessions → "—", not "0%"
   });
 });

@@ -179,13 +179,17 @@ export default function App() {
                 />
                 <KeyFigure
                   label="Magic Format"
-                  value={formatPct(stats.magicFormatAdoptionPct)}
-                  detail="of dictations polished"
+                  value={stats.magicFormatAdoptionPct === null ? "—" : formatPct(stats.magicFormatAdoptionPct)}
+                  detail={stats.magicFormatAdoptionPct === null ? "no dictations yet" : "of dictations polished"}
                 />
                 <KeyFigure
                   label="Crash-free"
-                  value={blocked.crash ? "—" : formatPct(100 - stats.crashProxyRatePct, 1)}
-                  detail={blocked.crash ? notRecorded(blocked.crash) : "clean session proxy"}
+                  value={blocked.crash || stats.crashFreeRatePct === null ? "—" : formatPct(stats.crashFreeRatePct, 1)}
+                  detail={
+                    blocked.crash ? notRecorded(blocked.crash)
+                      : stats.crashFreeRatePct === null ? "not enough sessions yet"
+                      : "clean session proxy"
+                  }
                 />
               </TotalsStrip>
             </div>
@@ -247,11 +251,13 @@ export default function App() {
                   <h3 className="mb-2 text-sm text-ink">Edits after insertion</h3>
                   {blocked.edits ? (
                     <EmptyState message={notRecorded(blocked.edits)} />
+                  ) : stats.editedSharePct === null ? (
+                    <EmptyState message="No edited dictations in this window yet." />
                   ) : (
                     <>
                       <p className="font-mono text-2xl tabular-nums text-ink">{formatPct(stats.editedSharePct)}</p>
                       <p className="mt-1 font-mono text-[11px] text-muted">
-                        of dictations edited · median edit {formatPct(stats.editRateMedianPct)} of the text
+                        of dictations were edited after insertion · median edit reshaped {formatPct(stats.editRateMedianPct)} of the text
                       </p>
                     </>
                   )}

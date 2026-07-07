@@ -228,6 +228,12 @@ html {
     opacity: 1;
   }
 
+  /* The waveform "draws" by animating stroke-dashoffset 500 → 0; with animation
+     off it must be reset to 0, else the whole stroke stays dashed away (invisible). */
+  .waveform-path {
+    stroke-dashoffset: 0;
+  }
+
   .reveal {
     opacity: 1;
     transform: none;
