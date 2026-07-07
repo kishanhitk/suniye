@@ -343,17 +343,17 @@ final class AppStateLivePreviewTests: XCTestCase {
         XCTAssertEqual(transcription.transcribeCallCount, decodeCountAfterToggle)
     }
 
-    func testLiveTranscriptionPreviewSettingPersistsAndDefaultsOn() {
+    func testLiveTranscriptionPreviewSettingPersistsAndDefaultsOff() {
         let settingsStore = TestGeneralSettingsStore()
         let appState = makeTestAppState(generalSettingsStore: settingsStore)
 
-        XCTAssertTrue(appState.liveTranscriptionPreviewEnabled)
-
-        appState.liveTranscriptionPreviewEnabled = false
-        XCTAssertFalse(settingsStore.latest.liveTranscriptionPreviewEnabled)
+        XCTAssertFalse(appState.liveTranscriptionPreviewEnabled)
 
         appState.liveTranscriptionPreviewEnabled = true
         XCTAssertTrue(settingsStore.latest.liveTranscriptionPreviewEnabled)
+
+        appState.liveTranscriptionPreviewEnabled = false
+        XCTAssertFalse(settingsStore.latest.liveTranscriptionPreviewEnabled)
     }
 
     private func readyAppState(
@@ -371,6 +371,9 @@ final class AppStateLivePreviewTests: XCTestCase {
         appState.phase = .ready
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
+        // Live preview is off by default; enable it so these behavior tests
+        // exercise the preview path (the disabled path is tested explicitly).
+        appState.liveTranscriptionPreviewEnabled = true
         return appState
     }
 

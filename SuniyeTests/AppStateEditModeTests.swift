@@ -101,7 +101,7 @@ final class AppStateEditModeTests: XCTestCase {
         XCTAssertEqual(scenario.appState.phase, .recording)
         XCTAssertEqual(
             scenario.appState.floatingIndicatorState,
-            .listening(levels: Array(repeating: 0, count: AudioLevelMeter.bandCount), source: .editHotkey, preview: .pending)
+            .listening(levels: Array(repeating: 0, count: AudioLevelMeter.bandCount), source: .editHotkey, preview: .off)
         )
 
         await scenario.appState.finishEditModeRecording()

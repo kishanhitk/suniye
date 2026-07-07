@@ -58,17 +58,17 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertEqual(loaded.updateChannel, .stable)
     }
 
-    func testLiveTranscriptionPreviewFlagRoundTripsAndDefaultsTrueForLegacyBlob() {
+    func testLiveTranscriptionPreviewFlagRoundTripsAndDefaultsFalseForLegacyBlob() {
         let suite = "dev.suniye.tests.general.livePreview.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
 
-        store.save(GeneralSettings(liveTranscriptionPreviewEnabled: false))
-        XCTAssertFalse(store.load().liveTranscriptionPreviewEnabled)
-
-        // Blob saved before the key existed must decode the flag as the default (true).
-        defaults.set(Data(#"{"autoSubmitEnabled": true}"#.utf8), forKey: "general")
+        store.save(GeneralSettings(liveTranscriptionPreviewEnabled: true))
         XCTAssertTrue(store.load().liveTranscriptionPreviewEnabled)
+
+        // Blob saved before the key existed must decode the flag as the default (false).
+        defaults.set(Data(#"{"autoSubmitEnabled": true}"#.utf8), forKey: "general")
+        XCTAssertFalse(store.load().liveTranscriptionPreviewEnabled)
     }
 
     func testAccessibilityDragHelperFlagRoundTrips() {

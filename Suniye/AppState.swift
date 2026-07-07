@@ -364,7 +364,7 @@ final class AppState {
             onStateChange?()
         }
     }
-    var liveTranscriptionPreviewEnabled = true {
+    var liveTranscriptionPreviewEnabled = false {
         didSet {
             guard !isHydratingGeneralSettings else {
                 return
