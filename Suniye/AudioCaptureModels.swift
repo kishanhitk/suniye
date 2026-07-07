@@ -140,6 +140,13 @@ struct AudioCaptureSession: Equatable, Sendable {
     let route: AudioRouteSnapshot
 }
 
+/// Mid-recording copy of the tail of the accumulated sample buffer, used for
+/// live transcription preview decodes.
+struct AudioSampleSnapshot: Equatable, Sendable {
+    let samples: [Float]
+    let sampleRate: Int
+}
+
 enum AudioCaptureEvent: Equatable, Sendable {
     case levelsUpdated(sessionID: UUID, levels: [Float])
     case devicesChanged([AudioInputDevice])

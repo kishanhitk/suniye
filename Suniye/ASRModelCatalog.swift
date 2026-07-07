@@ -9,6 +9,21 @@ enum ASRModelFamily: String, Codable {
     // sherpa-onnx model family — it is routed to a separate engine and its model
     // asset is managed by the OS rather than downloaded/extracted by us.
     case appleSpeech
+
+    /// Whether repeated partial decodes for the live transcription preview are
+    /// affordable. Whisper decodes a fixed 30s mel window regardless of input
+    /// length, so every ~700ms partial tick would cost a full-window decode and
+    /// delay the final decode behind an in-flight partial; the other families
+    /// decode roughly proportional to the snapshot length. Apple's stack routes
+    /// to a separate engine our partial scheduler doesn't drive, so it opts out.
+    var supportsLivePreview: Bool {
+        switch self {
+        case .nemoTransducer, .moonshine, .senseVoice:
+            return true
+        case .whisper, .appleSpeech:
+            return false
+        }
+    }
 }
 
 enum ASRModelID: String, Codable, CaseIterable, Identifiable {

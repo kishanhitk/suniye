@@ -45,6 +45,7 @@ protocol AudioCaptureServiceProtocol: AnyObject {
         echoCancellationEnabled: Bool
     ) async throws -> AudioCaptureSession
     func stopCapture(sessionID: UUID) async -> CapturedAudio
+    func snapshotSamples(sessionID: UUID, maxDurationSeconds: Double) async -> AudioSampleSnapshot?
     func cancelCapture(sessionID: UUID, reason: AudioCaptureInterruption?) async
     func availableInputDevices() -> [AudioInputDevice]
     func routeSnapshot(preferredInputDeviceID: String?, echoCancellationEnabled: Bool) throws -> AudioRouteSnapshot
@@ -219,6 +220,26 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                 }
                 let captured = self.finalize(active: active, discard: false)
                 continuation.resume(returning: captured)
+            }
+        }
+    }
+
+    /// Copies the most recent `maxDurationSeconds` of accumulated samples without
+    /// disturbing the ongoing capture. Runs on the control queue, so it is
+    /// consistent with the drain timer that appends samples.
+    func snapshotSamples(sessionID: UUID, maxDurationSeconds: Double) async -> AudioSampleSnapshot? {
+        await withCheckedContinuation { continuation in
+            controlQueue.async {
+                guard let active = self.activeCapture, active.id == sessionID, active.interruption == nil else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                let sampleRate = max(8_000, active.route.inputSampleRate)
+                let maxCount = Int(Double(sampleRate) * max(0, maxDurationSeconds))
+                continuation.resume(returning: AudioSampleSnapshot(
+                    samples: Array(active.samples.suffix(maxCount)),
+                    sampleRate: sampleRate
+                ))
             }
         }
     }

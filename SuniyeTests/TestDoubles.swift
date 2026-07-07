@@ -386,15 +386,27 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
     }
 }
 
+/// MainActor-isolated so overlapping decodes in tests (e.g. a gated partial plus
+/// a concurrent final) serialize their mutations instead of racing on the
+/// cooperative pool. All consuming tests already run on the main actor.
+@MainActor
 final class StubTranscriptionService: TranscriptionServiceProtocol {
     var transcribeResult: Result<String, Error> = .success("")
+    /// Consumed in order before falling back to `transcribeResult`.
+    var scriptedTranscribeResults: [Result<String, Error>] = []
     var loadModelResult: Result<Void, Error> = .success(())
     var loadModelErrorsByModelID: [ASRModelID: Error] = [:]
     var unloadCallCount = 0
     var loadCallCount = 0
     var transcribeCallCount = 0
+    var transcribePurposes: [TranscriptionPurpose] = []
     var loadedConfigs: [RecognizerConfig] = []
     var onTranscribe: (() -> Void)?
+    /// Awaited after the scripted result is claimed; receives the 1-based call number.
+    var onTranscribeAwait: ((Int) async -> Void)?
+
+    /// Nonisolated so it can serve as a default argument (evaluated outside the main actor).
+    nonisolated init() {}
 
     func loadModel(config: RecognizerConfig) async throws {
         loadCallCount += 1
@@ -405,10 +417,18 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
         try loadModelResult.get()
     }
 
-    func transcribe(samples: [Float], sampleRate: Int) async throws -> String {
+    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String {
         transcribeCallCount += 1
+        transcribePurposes.append(purpose)
+        let callNumber = transcribeCallCount
         onTranscribe?()
-        return try transcribeResult.get()
+        let result = scriptedTranscribeResults.isEmpty
+            ? transcribeResult
+            : scriptedTranscribeResults.removeFirst()
+        if let onTranscribeAwait {
+            await onTranscribeAwait(callNumber)
+        }
+        return try result.get()
     }
 
     func unloadModel() async {
@@ -430,6 +450,9 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
     var lastCanceledSessionID: UUID?
     var startCaptureDelayNanoseconds: UInt64 = 0
     var stopCaptureResult = CapturedAudio(samples: [], sampleRate: 16_000)
+    var snapshotCallCount = 0
+    var lastSnapshotMaxDurationSeconds: Double?
+    var snapshotSamplesResult: [Float]? = Array(repeating: 0.2, count: 1_600)
     var availableDevices: [AudioInputDevice] = []
     var startCaptureError: Error?
     var routeSnapshotError: Error?
@@ -483,6 +506,18 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
         lastStoppedSessionID = sessionID
         onStopCapture?(sessionID)
         return stopCaptureResult
+    }
+
+    func snapshotSamples(sessionID: UUID, maxDurationSeconds: Double) async -> AudioSampleSnapshot? {
+        snapshotCallCount += 1
+        lastSnapshotMaxDurationSeconds = maxDurationSeconds
+        guard let snapshotSamplesResult else {
+            return nil
+        }
+        return AudioSampleSnapshot(
+            samples: snapshotSamplesResult,
+            sampleRate: route.inputSampleRate
+        )
     }
 
     func cancelCapture(sessionID: UUID, reason: AudioCaptureInterruption?) async {
@@ -575,6 +610,35 @@ final class StubLaunchAtLoginService: LaunchAtLoginServiceProtocol {
     }
 }
 
+/// One-shot gate for holding an async stub call open until the test releases it.
+final class AsyncGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if isOpen {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            waiters.append(continuation)
+            lock.unlock()
+        }
+    }
+
+    func open() {
+        lock.lock()
+        let pending = waiters
+        waiters = []
+        isOpen = true
+        lock.unlock()
+        pending.forEach { $0.resume() }
+    }
+}
+
 struct FakeError: LocalizedError, Equatable {
     let message: String
 
@@ -653,6 +717,7 @@ func makeTestAppState(
     editModeSelectionProvider: EditModeSelectionProviding? = nil,
     hotkeyService: HotkeyServiceProtocol = StubHotkeyService(),
     soundFeedbackService: SoundFeedbackServiceProtocol = SpySoundFeedbackService(),
+    partialTranscriptionScheduler: PartialTranscriptionScheduler? = nil,
     llmPostProcessor: LLMPostProcessor = NoopLLMPostProcessor(),
     appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor = NoopAppleMagicFormatPostProcessor(),
     localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor = NoopLocalGemmaMagicFormatPostProcessor(),
@@ -690,6 +755,7 @@ func makeTestAppState(
         editModeSelectionProvider: editModeSelectionProvider ?? StubEditModeSelectionProvider(),
         hotkeyService: hotkeyService,
         soundFeedbackService: soundFeedbackService,
+        partialTranscriptionScheduler: partialTranscriptionScheduler,
         llmPostProcessor: llmPostProcessor,
         appleMagicFormatPostProcessor: appleMagicFormatPostProcessor,
         localGemmaMagicFormatPostProcessor: localGemmaMagicFormatPostProcessor,

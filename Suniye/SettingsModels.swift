@@ -339,6 +339,7 @@ struct GeneralSettings: Codable, Equatable {
     var echoCancellationEnabled: Bool = false
     var soundFeedbackEnabled: Bool = false
     var hideFloatingIndicatorWhenIdle: Bool = false
+    var liveTranscriptionPreviewEnabled: Bool = false
     var floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil
     var hasSeenOnboardingWelcome: Bool? = nil
     var hasCompletedCoreOnboarding: Bool? = nil
@@ -361,6 +362,7 @@ struct GeneralSettings: Codable, Equatable {
         echoCancellationEnabled: Bool = false,
         soundFeedbackEnabled: Bool = false,
         hideFloatingIndicatorWhenIdle: Bool = false,
+        liveTranscriptionPreviewEnabled: Bool = false,
         floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil,
         hasSeenOnboardingWelcome: Bool? = nil,
         hasCompletedCoreOnboarding: Bool? = nil,
@@ -377,6 +379,7 @@ struct GeneralSettings: Codable, Equatable {
         self.echoCancellationEnabled = echoCancellationEnabled
         self.soundFeedbackEnabled = soundFeedbackEnabled
         self.hideFloatingIndicatorWhenIdle = hideFloatingIndicatorWhenIdle
+        self.liveTranscriptionPreviewEnabled = liveTranscriptionPreviewEnabled
         self.floatingIndicatorPlacement = floatingIndicatorPlacement
         self.hasSeenOnboardingWelcome = hasSeenOnboardingWelcome
         self.hasCompletedCoreOnboarding = hasCompletedCoreOnboarding
@@ -395,6 +398,7 @@ struct GeneralSettings: Codable, Equatable {
         case echoCancellationEnabled
         case soundFeedbackEnabled
         case hideFloatingIndicatorWhenIdle
+        case liveTranscriptionPreviewEnabled
         case floatingIndicatorPlacement
         case hasSeenOnboardingWelcome
         case hasCompletedCoreOnboarding
@@ -414,6 +418,7 @@ struct GeneralSettings: Codable, Equatable {
         echoCancellationEnabled = try container.decodeIfPresent(Bool.self, forKey: .echoCancellationEnabled) ?? false
         soundFeedbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundFeedbackEnabled) ?? false
         hideFloatingIndicatorWhenIdle = try container.decodeIfPresent(Bool.self, forKey: .hideFloatingIndicatorWhenIdle) ?? false
+        liveTranscriptionPreviewEnabled = try container.decodeIfPresent(Bool.self, forKey: .liveTranscriptionPreviewEnabled) ?? false
         floatingIndicatorPlacement = try container.decodeIfPresent(FloatingIndicatorPlacement.self, forKey: .floatingIndicatorPlacement)
         hasSeenOnboardingWelcome = try container.decodeIfPresent(Bool.self, forKey: .hasSeenOnboardingWelcome)
         hasCompletedCoreOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedCoreOnboarding)

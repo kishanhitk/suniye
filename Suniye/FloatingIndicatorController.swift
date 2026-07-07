@@ -61,6 +61,7 @@ final class FloatingIndicatorController {
 
     private var panel: NSPanel?
     private var hostingView: NSHostingView<FloatingIndicatorView>?
+    private let model = FloatingIndicatorModel()
     private var pointerTrackingTimer: Timer?
     private var hoverExitTask: Task<Void, Never>?
     private var baseState: FloatingIndicatorState = .idle
@@ -73,12 +74,18 @@ final class FloatingIndicatorController {
     private var dragStartMouseLocation: NSPoint?
     private var isDragging = false
     private var isStarted = false
+    private var settleTask: Task<Void, Never>?
+    private var resizeGeneration = 0
     private let bottomMargin: CGFloat = 28
     private let animationDuration: TimeInterval = 0.11
+    /// Slightly longer than the view's layout spring so the window trims to its
+    /// exact size only after the SwiftUI content has finished animating.
+    private let panelSettleDelay: UInt64 = 400_000_000
 
     deinit {
         pointerTrackingTimer?.invalidate()
         hoverExitTask?.cancel()
+        settleTask?.cancel()
         lastLoggedStateValue = nil
     }
 
@@ -96,6 +103,8 @@ final class FloatingIndicatorController {
         pointerTrackingTimer = nil
         hoverExitTask?.cancel()
         hoverExitTask = nil
+        settleTask?.cancel()
+        settleTask = nil
         guard let panel, panel.isVisible else { return }
         panel.orderOut(nil)
         AppLogger.shared.log(.info, "floating indicator stopped")
@@ -145,7 +154,7 @@ final class FloatingIndicatorController {
         switch effectiveState {
         case .idle, .hover:
             return true
-        case .listening(_, let source):
+        case .listening(_, let source, _):
             return source == .manual
         case .processing, .error:
             return false
@@ -174,7 +183,7 @@ final class FloatingIndicatorController {
 
         let host = NSHostingView(
             rootView: FloatingIndicatorView(
-                state: .idle,
+                model: model,
                 onHoverChanged: { [weak self] isHovered in
                     self?.setHovered(isHovered)
                 },
@@ -229,30 +238,25 @@ final class FloatingIndicatorController {
     private func render() {
         ensurePanel()
 
-        guard let panel, let hostingView else { return }
+        guard let panel, hostingView != nil else { return }
         let state = effectiveState
         let size = size(for: state)
         let targetFrame = frame(for: size)
 
-        hostingView.rootView = FloatingIndicatorView(
-            state: state,
-            onHoverChanged: { [weak self] isHovered in
-                self?.setHovered(isHovered)
-            },
-            onAction: { [weak self] in
-                self?.onAction?()
-            },
-            onDragChanged: { [weak self] in
-                self?.handleDragChanged()
-            },
-            onDragEnded: { [weak self] in
-                self?.handleDragEnded()
-            }
-        )
+        // Mutate the observed model in place — SwiftUI diffs and animates the
+        // content itself. (Rebuilding rootView here would discard the animation
+        // and make every transition snap.)
+        model.state = state
 
         panel.ignoresMouseEvents = !panelShouldCaptureMouseEvents
         if !isDragging {
-            positionPanel(targetFrame: targetFrame, animated: shouldShowPanel && !panel.frame.equalTo(targetFrame))
+            if shouldShowPanel {
+                resizePanel(to: targetFrame)
+            } else {
+                settleTask?.cancel()
+                settleTask = nil
+                panel.setFrame(targetFrame, display: false)
+            }
         }
         panel.alphaValue = 1
         if shouldShowPanel {
@@ -298,6 +302,55 @@ final class FloatingIndicatorController {
             placement: customPlacement,
             bottomMargin: bottomMargin
         )
+    }
+
+    /// Resizes the panel for a state change without animating the window frame.
+    /// The window is snapped instantly to a box containing both the current and
+    /// target content so the SwiftUI content spring can grow/shrink without
+    /// being clipped; because the panel is transparent and bottom-anchored, this
+    /// interim size is invisible. Once the content animation has settled, the
+    /// window is trimmed to its exact target. Removing the AppKit frame
+    /// animation eliminates the window-vs-content race (and the per-frame
+    /// re-blur of the vibrancy/glass content) that made transitions stutter.
+    private func resizePanel(to targetFrame: NSRect) {
+        guard let panel, targetFrame != .zero else { return }
+        resizeGeneration &+= 1
+        let generation = resizeGeneration
+
+        let current = panel.frame
+        if current.equalTo(targetFrame) {
+            settleTask?.cancel()
+            settleTask = nil
+            return
+        }
+
+        // Only union when the old and new frames overlap (a same-place resize);
+        // a relocation across screens must not stretch a window between them.
+        let interim = (panel.isVisible && current.intersects(targetFrame))
+            ? current.union(targetFrame)
+            : targetFrame
+        setPanelFrameInstantly(interim)
+
+        settleTask?.cancel()
+        settleTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: self?.panelSettleDelay ?? 400_000_000)
+            guard let self, !Task.isCancelled, self.resizeGeneration == generation else { return }
+            guard !self.isDragging, self.shouldShowPanel else { return }
+            self.setPanelFrameInstantly(targetFrame)
+            self.settleTask = nil
+        }
+    }
+
+    /// Sets the panel frame with no animation at all — including suppressing the
+    /// implicit CoreAnimation on the layer-backed hosting view, which would
+    /// otherwise animate its bounds from a corner and make the SwiftUI content
+    /// look like it expands from the top-left instead of growing in place.
+    private func setPanelFrameInstantly(_ frame: NSRect) {
+        guard let panel else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        panel.setFrame(frame, display: true)
+        CATransaction.commit()
     }
 
     private func positionPanel(targetFrame: NSRect, animated: Bool) {
@@ -385,10 +438,9 @@ final class FloatingIndicatorController {
             return NSSize(width: 74, height: 7)
         case .hover:
             return NSSize(width: 272, height: 84)
-        case .listening(_, .editHotkey):
-            return NSSize(width: 150, height: 40)
-        case .listening:
-            return NSSize(width: 124, height: 40)
+        case let .listening(_, source, preview):
+            let panelSize = FloatingIndicatorMetrics.listeningPanelSize(preview: preview, source: source)
+            return NSSize(width: panelSize.width, height: panelSize.height)
         case let .processing(message):
             guard let message else {
                 return NSSize(width: 128, height: 40)

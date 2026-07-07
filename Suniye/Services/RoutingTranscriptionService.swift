@@ -61,11 +61,11 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         activeEngine = engine
     }
 
-    func transcribe(samples: [Float], sampleRate: Int) async throws -> String {
+    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String {
         guard let activeEngine, let service = service(for: activeEngine) else {
             throw TranscriptionService.ServiceError.recognizerNotLoaded
         }
-        return try await service.transcribe(samples: samples, sampleRate: sampleRate)
+        return try await service.transcribe(samples: samples, sampleRate: sampleRate, purpose: purpose)
     }
 
     func unloadModel() async {
