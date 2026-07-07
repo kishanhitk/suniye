@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FilterDim, Filters, StatsResponse } from "../types";
 import { CHIP_KEY, DIM_GROUPS } from "./filterMeta";
 import { FilterMenu } from "./FilterMenu";
@@ -38,9 +38,17 @@ export function FilterBar({
   onClearDim: (dim: FilterDim) => void;
   onClear: () => void;
 }) {
-  // null = closed; { drill } = open (drill null → top level, or into a dimension).
-  const [menu, setMenu] = useState<{ drill: FilterDim | null } | null>(null);
+  // null = closed; { drill, id } = open (drill null → top level, or into a dim).
+  // `id` bumps on every open so re-opening into the same dimension still remounts
+  // the menu (fresh drill), even from an already-open menu.
+  const [menu, setMenu] = useState<{ drill: FilterDim | null; id: number } | null>(null);
+  const openIdRef = useRef(0);
   const barRef = useRef<HTMLDivElement>(null);
+
+  const openMenu = useCallback((drill: FilterDim | null) => {
+    openIdRef.current += 1;
+    setMenu({ drill, id: openIdRef.current });
+  }, []);
 
   const activeDims = ORDER.filter((dim) => (filters[dim]?.length ?? 0) > 0);
   const anyOptions = ORDER.some((dim) => (options[dim]?.length ?? 0) > 0);
@@ -54,11 +62,11 @@ export function FilterBar({
       if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable) return;
       if (!anyOptions) return;
       e.preventDefault();
-      setMenu({ drill: null });
+      openMenu(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [anyOptions]);
+  }, [anyOptions, openMenu]);
 
   // Nothing active and nothing to add (no data yet) → hide the bar.
   if (!active && !anyOptions) return null;
@@ -71,7 +79,7 @@ export function FilterBar({
           return (
             <span key={dim} className="inline-flex items-center overflow-hidden rounded-md border border-accent font-mono text-xs">
               <button
-                onClick={() => setMenu({ drill: dim })}
+                onClick={() => openMenu(dim)}
                 title="Edit filter"
                 className="max-w-[15rem] truncate py-1 pl-2 pr-1 text-ink hover:bg-surface"
               >
@@ -91,7 +99,7 @@ export function FilterBar({
         {anyOptions && (
           <div className="relative">
             <button
-              onClick={() => setMenu((m) => (m ? null : { drill: null }))}
+              onClick={() => (menu ? setMenu(null) : openMenu(null))}
               aria-haspopup="listbox"
               aria-expanded={!!menu}
               className="rounded-md border border-dashed border-line px-2 py-1.5 font-mono text-xs text-muted hover:text-ink"
@@ -100,9 +108,9 @@ export function FilterBar({
             </button>
             {menu && (
               <FilterMenu
-                // Remount when the drill target changes so clicking a chip re-drills
-                // an already-open menu.
-                key={menu.drill ?? "*"}
+                // Remount on every open (id bumps) so clicking a chip always
+                // re-drills — even into the same dimension from an open menu.
+                key={menu.id}
                 options={options}
                 filters={filters}
                 triggerRef={barRef}
