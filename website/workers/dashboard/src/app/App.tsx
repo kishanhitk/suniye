@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AreaTrend } from "./components/AreaTrend";
 import { BreakdownList } from "./components/BreakdownList";
 import { EmptyState } from "./components/EmptyState";
@@ -34,28 +34,55 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
+  // `silent` = a background refresh (poll / tab-focus): update the data in place
+  // without the loading skeleton or clobbering the view with a transient error.
+  const fetchStats = useCallback(async (silent: boolean, signal: AbortSignal) => {
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     const params = new URLSearchParams({ range: String(range) });
     for (const [dim, value] of Object.entries(filters)) {
       if (value) params.set(dim, value);
     }
-    fetch(`/api/stats?${params}`, { signal: controller.signal })
-      .then((r) => (r.ok ? (r.json() as Promise<StatsResponse>) : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data) => {
-        setStats(data);
-        setFetchedAt(Date.now());
-      })
-      .catch((e: unknown) => {
-        if (!controller.signal.aborted) setError(String(e));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+    try {
+      const r = await fetch(`/api/stats?${params}`, { signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = (await r.json()) as StatsResponse;
+      setStats(data);
+      setFetchedAt(Date.now());
+      setError(null);
+    } catch (e) {
+      if (!signal.aborted && !silent) setError(String(e));
+    } finally {
+      if (!signal.aborted && !silent) setLoading(false);
+    }
+  }, [range, filters]);
+
+  // Foreground load: on range / filter change and manual retry.
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchStats(false, controller.signal);
     return () => controller.abort();
-  }, [range, filters, retryNonce]);
+  }, [fetchStats, retryNonce]);
+
+  // Keep it live: silently refresh every 15s while the tab is visible, and
+  // immediately on tab focus / visibility, so returning to the tab is current.
+  useEffect(() => {
+    const controller = new AbortController();
+    const refresh = () => {
+      if (document.visibilityState === "visible") fetchStats(true, controller.signal);
+    };
+    const id = window.setInterval(refresh, 15_000);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(id);
+      controller.abort();
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [fetchStats]);
 
   // Defensive: a stale/cached response without `blocked` must degrade to
   // "nothing blocked", never crash the whole dashboard.

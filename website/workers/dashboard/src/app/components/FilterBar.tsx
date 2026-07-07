@@ -1,24 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FilterDim, Filters, StatsResponse } from "../types";
+import { CHIP_KEY, DIM_GROUPS } from "./filterMeta";
+import { FilterMenu } from "./FilterMenu";
 import { formatCount } from "../lib/utils";
 
-const LABELS: Record<FilterDim, string> = {
-  version: "version", channel: "channel", country: "country", ram: "ram gb",
-  chip: "chip", os: "macos", mac_model: "model id", arch: "arch", cpu_cores: "cores",
-  asr_model: "asr model", cleanup_model: "llm model", language: "language", target: "target app",
-};
-
-/** Display order for the filter chips + the "add filter" menu. */
-const ORDER: FilterDim[] = [
-  "version", "channel", "chip", "ram", "os", "mac_model", "arch", "cpu_cores",
-  "asr_model", "cleanup_model", "language", "target", "country",
-];
+/** Stable dimension order for rendering active chips. */
+const ORDER: FilterDim[] = DIM_GROUPS.flatMap((g) => g.dims);
 
 /**
- * The segment bar: every panel below re-scopes to the selected slice. With a
- * dozen+ filterable dims, showing them all as a row of dropdowns is noise — so
- * only ACTIVE filters render as chips; the rest live behind "+ add filter".
- * Native selects, so keyboard + screen-reader support come for free.
+ * The segment bar. Active filters render as removable monospace chips that read
+ * like a query line (chip=apple-m3-pro · ram=36); everything else is added via
+ * a searchable "+ add filter" menu. Press `f` anywhere to open it.
  */
 export function FilterBar({
   options,
@@ -34,84 +26,71 @@ export function FilterBar({
   onChange: (dim: FilterDim, value: string | null) => void;
   onClear: () => void;
 }) {
-  // Dims the user has revealed but not yet given a value (kept local — the parent
-  // only tracks dims with an actual value).
-  const [revealed, setRevealed] = useState<FilterDim[]>([]);
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const hasOptions = (dim: FilterDim) => (options[dim]?.length ?? 0) > 0;
-  const shown = ORDER.filter((dim) => filters[dim] || revealed.includes(dim));
-  const addable = ORDER.filter((dim) => !filters[dim] && !revealed.includes(dim) && hasOptions(dim));
-  const active = Object.keys(filters).length > 0;
+  const activeDims = ORDER.filter((dim) => filters[dim]);
+  const anyAddable = ORDER.some((dim) => (options[dim]?.length ?? 0) > 0 && !filters[dim]);
+  const active = activeDims.length > 0;
 
-  const remove = (dim: FilterDim) => {
-    onChange(dim, null);
-    setRevealed((r) => r.filter((d) => d !== dim));
-  };
-  const clearAll = () => {
-    onClear();
-    setRevealed([]);
-  };
+  // `f` opens the menu (ignored while typing in a field).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "f" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement;
+      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable) return;
+      if (!anyAddable) return;
+      e.preventDefault();
+      setOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [anyAddable]);
 
-  // No filters applied and nothing to add (no data yet) → hide the bar entirely.
-  if (shown.length === 0 && addable.length === 0) return null;
+  // Nothing active and nothing to add (no data yet) → hide the bar.
+  if (!active && !anyAddable) return null;
 
   return (
     <div className="border-t border-line py-4">
       <div className="flex flex-wrap items-center gap-2">
-        {shown.map((dim) => {
-          const label = LABELS[dim];
-          const value = filters[dim] ?? "";
-          const values = (options[dim] ?? []).map(String);
-          // An active value that fell out of the option list (range change, stale
-          // data) must stay visible — it still filters the queries.
-          if (value && !values.includes(value)) values.unshift(value);
-          return (
-            <span
-              key={dim}
-              className={`inline-flex items-center overflow-hidden rounded-md border ${value ? "border-accent" : "border-line"}`}
+        {activeDims.map((dim) => (
+          <span key={dim} className="inline-flex items-center overflow-hidden rounded-md border border-accent font-mono text-xs">
+            <span className="py-1 pl-2 pr-1 text-ink">{CHIP_KEY[dim]}={filters[dim]}</span>
+            <button
+              aria-label={`Remove ${CHIP_KEY[dim]} filter`}
+              onClick={() => onChange(dim, null)}
+              className="px-1.5 py-1 text-muted hover:text-accent"
             >
-              <select
-                aria-label={`Filter by ${label}`}
-                value={value}
-                onChange={(e) => onChange(dim, e.target.value || null)}
-                className={`bg-paper py-1.5 pl-2 pr-1 font-mono text-xs ${value ? "text-ink" : "text-muted"}`}
-              >
-                <option value="">{label}: all</option>
-                {values.map((option) => (
-                  <option key={option} value={option}>{label}: {option}</option>
-                ))}
-              </select>
-              <button
-                aria-label={`Remove ${label} filter`}
-                onClick={() => remove(dim)}
-                className="px-1.5 py-1.5 font-mono text-xs text-muted hover:text-accent"
-              >
-                ×
-              </button>
-            </span>
-          );
-        })}
+              ×
+            </button>
+          </span>
+        ))}
 
-        {addable.length > 0 && (
-          <select
-            aria-label="Add a filter"
-            value=""
-            onChange={(e) => { if (e.target.value) setRevealed((r) => [...r, e.target.value as FilterDim]); }}
-            className="rounded-md border border-dashed border-line bg-paper px-2 py-1.5 font-mono text-xs text-muted hover:text-ink"
-          >
-            <option value="">+ add filter</option>
-            {addable.map((dim) => (
-              <option key={dim} value={dim}>{LABELS[dim]}</option>
-            ))}
-          </select>
+        {anyAddable && (
+          <div className="relative">
+            <button
+              ref={triggerRef}
+              onClick={() => setOpen((o) => !o)}
+              aria-haspopup="listbox"
+              aria-expanded={open}
+              className="rounded-md border border-dashed border-line px-2 py-1.5 font-mono text-xs text-muted hover:text-ink"
+            >
+              + add filter
+            </button>
+            {open && (
+              <FilterMenu
+                options={options}
+                filters={filters}
+                onSelect={(dim, value) => onChange(dim, value)}
+                onClose={() => setOpen(false)}
+              />
+            )}
+          </div>
         )}
 
         {active && (
-          <button
-            onClick={clearAll}
-            className="rounded-md px-2 py-1.5 font-mono text-xs text-accent hover:bg-surface"
-          >
-            clear all
+          <button onClick={onClear} className="rounded-md px-2 py-1.5 font-mono text-xs text-accent hover:bg-surface">
+            clear
           </button>
         )}
 
