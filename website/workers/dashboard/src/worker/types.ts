@@ -25,7 +25,7 @@ export interface LatencySummary {
 export const FILTER_DIMS = [
   "version", "channel", "country", "ram",
   "chip", "os", "mac_model", "arch", "cpu_cores",
-  "asr_model", "language", "target",
+  "asr_model", "cleanup_model", "language", "target",
 ] as const;
 export type FilterDim = (typeof FILTER_DIMS)[number];
 export type Filters = Partial<Record<FilterDim, string>>;

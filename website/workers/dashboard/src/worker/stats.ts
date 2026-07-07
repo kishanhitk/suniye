@@ -82,9 +82,10 @@ const DIM_SPECS: Record<FilterDim, {
   arch:      { ae: "blob14", // not in D1 (installs has no arch column)
                unavailableOn: ["error", "audio_backend_used", "dictation_blocked", "dictation_cancelled", "onboarding_step", "audio_capture_interrupted"] },
   cpu_cores: { ae: "double18", numeric: true, d1: "cpu_cores", unavailableOn: ["audio_backend_used"] },
-  asr_model: { ae: "blob5",  dictationOnly: true },
-  language:  { ae: "blob7",  dictationOnly: true },
-  target:    { ae: "blob11", dictationOnly: true },
+  asr_model:     { ae: "blob5",  dictationOnly: true },
+  cleanup_model: { ae: "blob9",  dictationOnly: true },
+  language:      { ae: "blob7",  dictationOnly: true },
+  target:        { ae: "blob11", dictationOnly: true },
 };
 
 /**
@@ -328,7 +329,11 @@ export async function buildStats(
       lat: safeAe(sql.latency(ds, cutoffMs, w("dictation_completed"))),
       asrLat: safeAe(sql.asrLatency(ds, cutoffMs, w("dictation_completed"))),
       llmLat: safeAe(sql.llmLatency(ds, cutoffMs, w("dictation_completed"))),
-      fallbacks: safeAe(sql.breakdown(ds, "blob10", "blob1 = 'dictation_completed'", cutoffMs, w("dictation_completed"))),
+      // Only dictations that ACTUALLY fell back: cleanup_fallback_reason (blob10)
+      // is empty for a successful polish, an MF-off dictation, or any event
+      // before v0.0.51 (where the reason was hardcoded nil). Without this filter
+      // those all collapse into a meaningless "unknown" bucket.
+      fallbacks: safeAe(sql.breakdown(ds, "blob10", "blob1 = 'dictation_completed' AND blob10 != ''", cutoffMs, w("dictation_completed"))),
       errors: safeAe(sql.breakdown(ds, "blob14", "blob1 = 'error'", cutoffMs, w("error"))),
       launches: safeAe(sql.eventCount(ds, "app_launch", cutoffMs, w("app_launch"))),
       sessionEnds: safeAe(sql.eventCount(ds, "session_end", cutoffMs, w("session_end"))),
@@ -450,7 +455,7 @@ async function loadFilterOptions(
     ["country", "country"], ["cpu_cores", "cpu_cores"],
   ];
   const aeDims: Array<[FilterDim, string]> = [
-    ["asr_model", "blob5"], ["language", "blob7"], ["target", "blob11"],
+    ["asr_model", "blob5"], ["cleanup_model", "blob9"], ["language", "blob7"], ["target", "blob11"],
     // arch isn't in D1; on dictation_completed its aliased slot (blob14) has no
     // native occupant, so the breakdown yields exactly the arch values.
     ["arch", "blob14"],
