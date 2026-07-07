@@ -16,11 +16,15 @@ type Item =
 export function FilterMenu({
   options,
   filters,
+  triggerRef,
   onSelect,
   onClose,
 }: {
   options: StatsResponse["filterOptions"];
   filters: Filters;
+  /** The button that toggles this menu — excluded from outside-click close so
+   *  clicking it while open closes (via its own toggle) rather than reopening. */
+  triggerRef: React.RefObject<HTMLElement | null>;
   onSelect: (dim: FilterDim, value: string) => void;
   onClose: () => void;
 }) {
@@ -36,11 +40,13 @@ export function FilterMenu({
   // Close on outside click.
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) onClose();
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      onClose();
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [onClose]);
+  }, [onClose, triggerRef]);
 
   const { items, count } = useMemo(() => {
     const addable = (dim: FilterDim) => (options[dim]?.length ?? 0) > 0 && !filters[dim];
@@ -97,10 +103,14 @@ export function FilterMenu({
         onChange={(e) => { setQuery(e.target.value); setHighlight(0); }}
         onKeyDown={onKeyDown}
         placeholder={drill ? `${DIM_LABEL[drill]}…` : "filter by dimension or value…"}
+        role="combobox"
         aria-label="Filter by dimension or value"
+        aria-expanded
+        aria-controls="filter-listbox"
+        aria-activedescendant={count > 0 ? `filter-opt-${highlight}` : undefined}
         className="w-full border-b border-line bg-transparent px-3 py-2 font-mono text-xs text-ink outline-none placeholder:text-muted"
       />
-      <ul role="listbox" className="max-h-72 overflow-y-auto py-1">
+      <ul id="filter-listbox" role="listbox" className="max-h-72 overflow-y-auto py-1">
         {count === 0 && <li className="px-3 py-2 font-mono text-xs text-muted">no matches</li>}
         {items.map((item, i) => {
           if (item.kind === "header") {
@@ -110,6 +120,7 @@ export function FilterMenu({
           return (
             <li
               key={item.kind === "value" ? `v-${item.dim}-${item.value}` : `d-${item.dim}-${i}`}
+              id={`filter-opt-${item.sel}`}
               role="option"
               aria-selected={on}
               onMouseEnter={() => setHighlight(item.sel)}

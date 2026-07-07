@@ -81,6 +81,7 @@ export function FilterBar({
               <FilterMenu
                 options={options}
                 filters={filters}
+                triggerRef={triggerRef}
                 onSelect={(dim, value) => onChange(dim, value)}
                 onClose={() => setOpen(false)}
               />

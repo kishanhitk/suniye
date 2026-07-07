@@ -26,6 +26,10 @@ export default function App() {
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const rangeRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  // Monotonic request id: only the most recently *issued* fetch may apply its
+  // result, so an overlapping silent refresh that resolves out of order can't
+  // roll the dashboard back to stale data.
+  const reqSeq = useRef(0);
 
   // Re-render each minute so the "updated Xm ago" stamp stays honest.
   const [, setTick] = useState(0);
@@ -41,6 +45,7 @@ export default function App() {
       setLoading(true);
       setError(null);
     }
+    const seq = ++reqSeq.current;
     const params = new URLSearchParams({ range: String(range) });
     for (const [dim, value] of Object.entries(filters)) {
       if (value) params.set(dim, value);
@@ -49,6 +54,7 @@ export default function App() {
       const r = await fetch(`/api/stats?${params}`, { signal });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = (await r.json()) as StatsResponse;
+      if (seq !== reqSeq.current) return; // a newer request has since started — its result wins
       setStats(data);
       setFetchedAt(Date.now());
       setError(null);
