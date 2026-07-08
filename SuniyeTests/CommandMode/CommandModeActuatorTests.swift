@@ -50,7 +50,7 @@ final class CommandModeActuatorTests: XCTestCase {
 
     // MARK: PressKeys posts the parsed chord
 
-    private final class Sink: @unchecked Sendable { var code: CGKeyCode? }
+    private final class Sink: @unchecked Sendable { var code: CGKeyCode?; var text: String? }
     private struct RecordingPoster: KeyChordPosting {
         let sink: Sink
         func post(keyCode: CGKeyCode, flags: CGEventFlags) { sink.code = keyCode }
@@ -69,5 +69,18 @@ final class CommandModeActuatorTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? CommandModeError, .malformedToolCall("press_keys needs 'keys'"))
         }
+    }
+
+    // MARK: Closure adapters forward to their backing calls
+
+    func testClosureAdaptersForward() async throws {
+        let generator = ClosureAgentTextGenerator { instructions, userText in "\(instructions)|\(userText)" }
+        let out = try await generator.generate(instructions: "a", userText: "b")
+        XCTAssertEqual(out, "a|b")
+
+        let sink = Sink()
+        let typer = ClosureTextTyping { sink.text = $0 }
+        typer.type("hi")
+        XCTAssertEqual(sink.text, "hi")
     }
 }
