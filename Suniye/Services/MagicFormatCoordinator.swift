@@ -418,6 +418,76 @@ final class MagicFormatCoordinator {
         }
     }
 
+    /// Dedicated Command Mode inference: the agent's instruction+task → text (its
+    /// next tool call as JSON). Parallel to `rewrite`, but Command Mode is NOT Edit
+    /// Mode — it has its own logging and configs and no dictation side-effects.
+    /// (A later change can request grammar-constrained JSON output on this path.)
+    func commandInference(instructions: String, userText: String, request: PolishRequest) async throws -> String {
+        prewarmTask?.cancel()
+        prewarmTask = nil
+
+        guard let provider = Self.resolvedProvider(
+            requestedProvider: request.requestedProvider,
+            appleAvailability: request.appleAvailability,
+            localGemmaAvailability: request.localGemmaAvailability
+        ) else {
+            AppLogger.shared.log(.warning, "command inference blocked reason=local_provider_unavailable")
+            throw MagicFormatRewriteError.providerNotConfigured
+        }
+
+        let startTime = Date()
+        let slowWarningTask = request.startSlowWarning()
+        defer {
+            slowWarningTask.cancel()
+        }
+
+        do {
+            let output: String
+            switch provider {
+            case .appleFoundationModels:
+                output = try await applePostProcessor.generate(
+                    instructions: instructions,
+                    userText: userText,
+                    config: Self.makeCommandModeAppleConfig(settings: request.settings)
+                )
+            case .localGemma:
+                if await !localGemmaPostProcessor.isRuntimeWarm() {
+                    request.setStage(Stage.startingLocalModel)
+                }
+                output = try await localGemmaPostProcessor.generate(
+                    instructions: instructions,
+                    userText: userText,
+                    config: Self.makeCommandModeLocalGemmaConfig(settings: request.settings)
+                )
+            case .openAICompatible:
+                switch resolveAPIConfig(request: request) {
+                case let .success(config):
+                    output = try await apiPostProcessor.generate(
+                        instructions: instructions,
+                        userText: userText,
+                        config: config
+                    )
+                case let .failure(reason):
+                    AppLogger.shared.log(.warning, "command inference blocked reason=\(reason.rawValue)")
+                    throw MagicFormatRewriteError.providerNotConfigured
+                }
+            }
+
+            let normalized = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else {
+                throw LLMPostProcessorError.emptyOutput
+            }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            AppLogger.shared.log(.info, "command inference success provider=\(provider) latency_ms=\(latencyMs)")
+            return normalized
+        } catch {
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            let reason = (error as? LLMPostProcessorError)?.logValue ?? "unknown"
+            AppLogger.shared.log(.warning, "command inference failed provider=\(provider) reason=\(reason) latency_ms=\(latencyMs)")
+            throw error
+        }
+    }
+
     static func makeAPIConfig(settings: LLMSettings, apiKey: String, endpointURL: URL, modelId: String) -> LLMConfig {
         LLMConfig(
             modelId: modelId,
@@ -459,6 +529,29 @@ final class MagicFormatCoordinator {
     }
 
     static func makeEditModeLocalGemmaConfig(settings: LLMSettings) -> LocalGemmaMagicFormatConfig {
+        LocalGemmaMagicFormatConfig(
+            systemPrompt: "",
+            keywords: [],
+            startupTimeoutSeconds: LocalGemmaDefaults.startupTimeoutSeconds,
+            generationTimeoutSeconds: LocalGemmaDefaults.editModeGenerationTimeoutSeconds,
+            idleTimeoutSeconds: settings.localModelKeepAlive.seconds,
+            maxTokens: LLMDefaults.editModeMaxTokens
+        )
+    }
+
+    // Command Mode inference configs: empty system prompt (the agent supplies the
+    // full instruction), short generation timeout, and a small token budget (one
+    // JSON tool call). Kept separate from Edit Mode so the two can diverge.
+    static func makeCommandModeAppleConfig(settings: LLMSettings) -> AppleMagicFormatConfig {
+        AppleMagicFormatConfig(
+            systemPrompt: "",
+            keywords: [],
+            timeoutSeconds: settings.timeoutSeconds,
+            maxTokens: LLMDefaults.editModeMaxTokens
+        )
+    }
+
+    static func makeCommandModeLocalGemmaConfig(settings: LLMSettings) -> LocalGemmaMagicFormatConfig {
         LocalGemmaMagicFormatConfig(
             systemPrompt: "",
             keywords: [],

@@ -3677,7 +3677,7 @@ final class AppState {
 
         let request = makeMagicFormatRequest()
         let generator = ClosureAgentTextGenerator { [magicFormatCoordinator] instructions, userText in
-            try await magicFormatCoordinator.rewrite(instructions: instructions, userText: userText, request: request)
+            try await magicFormatCoordinator.commandInference(instructions: instructions, userText: userText, request: request)
         }
         let typer = ClosureTextTyping { [textInsertionService] text in
             try? textInsertionService.insertText(text)
