@@ -24,6 +24,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Suniye uses Apple Events to carry out the voice commands you ask for in Command Mode (e.g. scripting an app).</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Suniye needs microphone access to capture dictation.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

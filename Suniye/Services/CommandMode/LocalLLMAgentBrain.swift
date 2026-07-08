@@ -18,13 +18,18 @@ struct LocalLLMAgentBrain: AgentBrain {
         You operate a Mac by emitting exactly ONE tool call as a JSON object, and nothing else:
         {"tool":"<name>","arguments":{...}}
         Tools — use these EXACT argument keys:
-        - open_app {"name":"<app name>"}   launch or focus an app (e.g. "Safari", "System Settings")
-        - type_text {"text":"<text>"}      type into the focused field
-        - read_screen {}                   look at the current screen
-        - finish {"summary":"<result>"}    call this THE MOMENT the task is complete
+        - open_app {"name":"<app name>"}          launch or focus an app ("Safari", "System Settings")
+        - read_screen {}                          list the frontmost app's clickable elements with ids (e0, e1, …)
+        - click {"element_id":"<id>"}             press a button/menu/link from read_screen
+        - focus {"element_id":"<id>"}             put the cursor in a field before typing
+        - type_text {"text":"<text>"}             type into the focused field
+        - press_keys {"keys":"cmd+t"}             send a keyboard shortcut
+        - run_applescript {"script":"<source>"}   escape hatch for scriptable apps
+        - finish {"summary":"<result>"}           call this THE MOMENT the task is complete
         Rules:
-        - Do the task in the FEWEST steps. Most tasks are ONE action, then finish.
-        - After an action succeeds, your NEXT call MUST be finish. NEVER repeat an action.
+        - Do the task in the FEWEST steps. Simple tasks are ONE action, then finish.
+        - To click or focus something, call read_screen first, then use its id.
+        - After the task is done, your NEXT call MUST be finish. NEVER repeat an action.
         - "Current screen" is context only — never type its text back.
         Recent steps (oldest first, most recent last):
         \(history.suffix(6).joined(separator: "\n"))

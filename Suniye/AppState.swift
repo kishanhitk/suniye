@@ -3682,18 +3682,22 @@ final class AppState {
         let typer = ClosureTextTyping { [textInsertionService] text in
             try? textInsertionService.insertText(text)
         }
-        let reader = AXScreenReader(context: SystemFrontmostContext())
+        let reader = AXTreeReader()
         let registry = AgentToolRegistry(tools: [
             ReadScreenTool(reader: reader),
             OpenAppTool(launcher: SystemAppLauncher()),
+            ClickTool(resolver: reader),
+            FocusTool(resolver: reader),
             TypeTextTool(typer: typer),
+            PressKeysTool(poster: SystemKeyChordPoster()),
+            RunAppleScriptTool(),
             FinishTool(),
         ])
         let agent = CommandModeAgent(
             brain: LocalLLMAgentBrain(generator: generator),
             registry: registry,
             screenReader: reader,
-            maxSteps: 8,
+            maxSteps: 12,
             onStep: { [weak self] step in
                 AppLogger.shared.log(.info, "command step: tool=\(step.toolCall.name) args=\(step.toolCall.arguments) result=\(step.result?.output ?? "-") error=\(step.error ?? "-")")
                 self?.setFloatingIndicatorState(.processing(message: step.toolCall.name))
