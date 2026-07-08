@@ -3,5 +3,5 @@
 ---
 <script>
   import { initBeacon } from "../lib/webAnalytics/beacon";
-  initBeacon();
+  try { initBeacon(); } catch {}
 </script>
