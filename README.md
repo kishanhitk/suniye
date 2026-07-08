@@ -97,10 +97,11 @@ Turn a raw transcript into polished text on your terms. It's off until you turn 
 
 ## Choose your speech model
 
-Suniye ships a curated catalog instead of a single fixed recognizer — pick the trade-off you want between speed, accuracy, size, and languages. Everything runs offline, and you can switch instantly from the **Model** page.
+Suniye ships a curated catalog instead of a single fixed recognizer — from Apple's built-in engine to on-device Parakeet and Whisper models. Pick the trade-off you want between speed, accuracy, size, and languages; everything runs offline, and you can switch instantly from the **Model** page.
 
 | Model | Best for |
 |---|---|
+| **Apple Speech** | Built into macOS 26+ — no download, follows your system language |
 | **Parakeet TDT 0.6B v3** | Recommended default — 25 European languages |
 | **Parakeet TDT 0.6B v2** | Strong English-focused option |
 | **SenseVoice** | Chinese, Japanese, Korean, English, Cantonese |
