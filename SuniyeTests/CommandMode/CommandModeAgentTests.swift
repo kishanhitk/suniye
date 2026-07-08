@@ -1,6 +1,7 @@
 import XCTest
 @testable import Suniye
 
+@MainActor
 final class CommandModeAgentTests: XCTestCase {
     /// Thread-safe recorder so test doubles can cross the actor boundary cleanly.
     private final class Recorder: @unchecked Sendable {

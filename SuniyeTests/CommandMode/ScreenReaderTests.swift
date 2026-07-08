@@ -1,6 +1,7 @@
 import XCTest
 @testable import Suniye
 
+@MainActor
 final class ScreenReaderTests: XCTestCase {
     private struct FakeContext: FrontmostContextProviding {
         let appName: String?

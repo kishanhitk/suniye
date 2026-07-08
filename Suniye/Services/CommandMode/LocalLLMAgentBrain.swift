@@ -2,6 +2,7 @@ import Foundation
 
 /// Text-in/text-out seam over the existing on-device LLM (adapts
 /// `MagicFormatCoordinator.rewrite` / a provider's `generate`).
+@MainActor
 protocol AgentTextGenerator {
     func generate(instructions: String, userText: String) async throws -> String
 }

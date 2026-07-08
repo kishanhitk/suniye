@@ -1,6 +1,7 @@
 import XCTest
 @testable import Suniye
 
+@MainActor
 final class CommandModeToolsTests: XCTestCase {
     private final class StringSink: @unchecked Sendable {
         var value: String?

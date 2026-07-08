@@ -41,6 +41,11 @@ struct MenuBarView: View {
                     .disabled(appState.phase != .recording)
             }
 
+            Toggle("Command Mode (Preview)", isOn: $appState.commandModePreviewEnabled)
+                .toggleStyle(.switch)
+                .font(AppTypography.caption)
+                .help("When on, your Edit-Mode hotkey runs the voice-driven Command Mode agent instead of Edit Mode.")
+
             Button(appState.activeOnboardingStep == nil ? "Open \(appIdentity.displayName)" : "Continue Setup") {
                 appState.openMainWindow()
             }

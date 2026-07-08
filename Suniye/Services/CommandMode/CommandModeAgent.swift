@@ -1,6 +1,7 @@
 import Foundation
 
 /// The agent's perception: the current screen rendered as text.
+@MainActor
 protocol ScreenReading {
     func readScreen() async -> String
 }
@@ -13,9 +14,12 @@ struct AgentStep {
 }
 
 /// Drives see → decide → act → observe until a terminal tool, the step cap, a
-/// stall (identical screen with no progress), or cancellation. Actor-isolated so
-/// the kill switch (`cancel`) is race-free against the running loop.
-actor CommandModeAgent {
+/// stall (identical screen with no progress), or cancellation. Main-actor isolated
+/// so it drives the app's @MainActor services (LLM, text insertion, indicator)
+/// without cross-actor hops; awaits inside the loop yield the main actor, so the
+/// UI stays responsive. The kill switch (`cancel`) is race-free on the main actor.
+@MainActor
+final class CommandModeAgent {
     private let brain: AgentBrain
     private let registry: AgentToolRegistry
     private let screenReader: ScreenReading

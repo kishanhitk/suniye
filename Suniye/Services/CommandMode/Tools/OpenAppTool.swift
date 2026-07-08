@@ -1,6 +1,7 @@
 import AppKit
 
 /// Launches or activates an app by name. Seam so the tool is unit-testable.
+@MainActor
 protocol AppLaunching {
     func launchOrActivate(_ name: String) -> Bool
 }
@@ -24,8 +25,6 @@ struct OpenAppTool: AgentTool {
     let name = "open_app"
     let risk: RiskTier = .benign
     let launcher: AppLaunching
-
-    init(launcher: AppLaunching = SystemAppLauncher()) { self.launcher = launcher }
 
     func execute(_ arguments: [String: String]) async throws -> ToolResult {
         guard let app = arguments["name"], !app.isEmpty else {

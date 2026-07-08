@@ -1,6 +1,7 @@
 import Foundation
 
 /// Types text into the focused field. Seam adapts to `TextInsertionService`.
+@MainActor
 protocol TextTyping {
     func type(_ text: String)
 }

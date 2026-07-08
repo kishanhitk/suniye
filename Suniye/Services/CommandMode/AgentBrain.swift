@@ -2,6 +2,7 @@ import Foundation
 
 /// The decision-maker. Given the task, the latest screen observation, and prior
 /// step summaries, returns exactly one tool call chosen from `toolNames`.
+@MainActor
 protocol AgentBrain {
     func nextToolCall(task: String, observation: String, history: [String], toolNames: [String]) async throws -> ToolCall
 }

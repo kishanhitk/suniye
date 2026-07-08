@@ -565,6 +565,11 @@ final class AppState {
     var llmEnabled = false {
         didSet { persistLLMSettings() }
     }
+    /// KIS-168 preview flag: when on, the Edit-Mode hotkey runs Command Mode
+    /// (the voice-driven agent) instead of Edit Mode. Off by default.
+    var commandModePreviewEnabled = UserDefaults.standard.bool(forKey: "commandModePreviewEnabled") {
+        didSet { UserDefaults.standard.set(commandModePreviewEnabled, forKey: "commandModePreviewEnabled") }
+    }
     var llmProvider: MagicFormatProvider = .automatic {
         didSet { persistLLMSettings() }
     }
@@ -1477,6 +1482,8 @@ final class AppState {
         case systemInsertion
         case onboardingPractice
         case editRewrite(selectedText: String?)
+        /// KIS-168: the transcript is a task for the Command Mode agent.
+        case command
     }
 
     init(
@@ -3040,7 +3047,15 @@ final class AppState {
         hotkeyService.onEditModeHotkeyDown = { [weak self] in
             AppLogger.shared.log(.debug, "edit mode hotkey callback: down")
             Task { @MainActor in
-                await self?.beginEditModeRecordingFlow()
+                guard let self else { return }
+                // KIS-168 preview: the Edit-Mode hotkey drives Command Mode when
+                // the preview flag is on. The UP handler is unchanged — routing is
+                // decided by the session's destination.
+                if self.commandModePreviewEnabled {
+                    await self.beginCommandModeFlow()
+                } else {
+                    await self.beginEditModeRecordingFlow()
+                }
             }
         }
 
@@ -3153,6 +3168,28 @@ final class AppState {
     /// Edit Mode hotkey up: transcribe the instruction and run the rewrite.
     func finishEditModeRecording() async {
         await stopRecordingAndTranscribe(trigger: .editHotkey)
+    }
+
+    /// Command Mode hotkey down (KIS-168 preview): record the spoken task.
+    /// Reuses the Edit-Mode hotkey/trigger; the destination routes it to the agent.
+    func beginCommandModeFlow() async {
+        guard isEditModeAvailable else {
+            lastError = "Command Mode needs a working Magic Format provider"
+            statusText = "Magic Format required"
+            AppLogger.shared.log(.warning, "command mode blocked: magic format not ready")
+            playSoundFeedback(.error)
+            showTransientIndicatorError("Set up Magic Format to use Command Mode")
+            return
+        }
+        if phase == .error, canRetryRecordingAfterError {
+            clearRetryableRecordingError()
+        }
+        guard phase == .ready else {
+            AppLogger.shared.log(.debug, "command mode start ignored in phase=\(phase.rawValue)")
+            showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
+            return
+        }
+        await beginRecordingFlow(trigger: .editHotkey, destination: .command)
     }
 
     private func beginRecordingFlow(trigger: RecordingSource, destination: DictationDestination? = nil) async {
@@ -3323,6 +3360,8 @@ final class AppState {
                     sessionID: sessionID,
                     duration: duration
                 )
+            case .command:
+                await finishCommandModeSession(task: rawText, sessionID: sessionID, duration: duration)
             case .systemInsertion:
                 try await completeSystemDictation(
                     rawText: rawText,
@@ -3584,6 +3623,51 @@ final class AppState {
                 indicatorMessage: "Rewrite failed"
             )
         }
+    }
+
+    /// KIS-168 preview: run the on-device Command Mode agent on the spoken task.
+    /// Everything is main-actor isolated; the agent's awaits (LLM) yield the main
+    /// actor so the UI stays live. Brain = the existing local LLM as a tool-caller.
+    private func finishCommandModeSession(task: String, sessionID: UUID, duration: TimeInterval) async {
+        guard !task.isEmpty else {
+            AppLogger.shared.log(.warning, "command mode produced empty task")
+            failDictationSession(sessionID: sessionID, lastErrorMessage: nil, indicatorMessage: "No command heard")
+            return
+        }
+        AppLogger.shared.log(.info, "command mode task=\"\(task.prefix(80))\"")
+        setFloatingIndicatorState(.processing(message: "Working…"))
+
+        let request = makeMagicFormatRequest()
+        let generator = ClosureAgentTextGenerator { [magicFormatCoordinator] instructions, userText in
+            try await magicFormatCoordinator.rewrite(instructions: instructions, userText: userText, request: request)
+        }
+        let typer = ClosureTextTyping { [textInsertionService] text in
+            try? textInsertionService.insertText(text)
+        }
+        let reader = AXScreenReader(context: SystemFrontmostContext())
+        let registry = AgentToolRegistry(tools: [
+            ReadScreenTool(reader: reader),
+            OpenAppTool(launcher: SystemAppLauncher()),
+            TypeTextTool(typer: typer),
+            FinishTool(),
+        ])
+        let agent = CommandModeAgent(
+            brain: LocalLLMAgentBrain(generator: generator),
+            registry: registry,
+            screenReader: reader,
+            maxSteps: 8,
+            onStep: { [weak self] step in
+                self?.setFloatingIndicatorState(.processing(message: step.toolCall.name))
+            }
+        )
+
+        let summary = await agent.run(task: task)
+        AppLogger.shared.log(.info, "command mode done: \(summary)")
+        recentResults.insert(
+            RecentResult(id: UUID(), text: summary, createdAt: Date(), durationSeconds: duration, wasLLMPolished: true),
+            at: 0
+        )
+        completeDictationSession(sessionID: sessionID, playSuccessSound: true)
     }
 
     /// Shared success epilogue for every dictation/edit session.

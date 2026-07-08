@@ -3,6 +3,7 @@ import ApplicationServices
 
 /// The minimal facts the Increment-1 perception needs about the frontmost UI.
 /// A later increment replaces this with a filtered, id-stamped tree walk.
+@MainActor
 protocol FrontmostContextProviding {
     var appName: String? { get }
     var focusedRoleAndValue: (role: String, value: String)? { get }
@@ -11,10 +12,6 @@ protocol FrontmostContextProviding {
 /// Increment-1 perception: frontmost app + focused element only.
 struct AXScreenReader: ScreenReading {
     let context: FrontmostContextProviding
-
-    init(context: FrontmostContextProviding = SystemFrontmostContext()) {
-        self.context = context
-    }
 
     func readScreen() async -> String {
         let app = context.appName ?? "unknown app"
