@@ -62,6 +62,7 @@ export function validateWebBatch(raw: unknown): WebBatch | string {
     if (typeof item.event_ts !== "number" || !Number.isFinite(item.event_ts)) return "event_ts must be a number";
     if (!nonEmptyStr(item.session_id, 100)) return "session_id required";
     if (!nonEmptyStr(item.name, 64)) return "name required";
+    if (!NAME_SET.has(item.name)) continue; // forward-compatible: drop unknown events
     if (!isObject(item.props)) return "props must be an object";
 
     const keys = Object.keys(item.props);
@@ -75,7 +76,6 @@ export function validateWebBatch(raw: unknown): WebBatch | string {
       props[k] = val as WebPropValue;
     }
 
-    if (!NAME_SET.has(item.name)) continue; // forward-compatible: drop unknown events
     events.push({ event_id: item.event_id, event_ts: item.event_ts, session_id: item.session_id, name: item.name, props });
   }
 

@@ -41,6 +41,14 @@ describe("validateWebBatch", () => {
     expect(typeof validateWebBatch({ sent_at: 1, events: [ev({ props })] })).toBe("string");
   });
 
+  test("drops an unknown event even when its props are malformed, keeping valid events", () => {
+    const bad = ev({ name: "future_event", props: (() => { const p: Record<string, string> = {}; for (let i = 0; i < 13; i++) p["k" + i] = "v"; return p; })() });
+    const out = validateWebBatch({ sent_at: 1, events: [bad, ev()] });
+    expect(typeof out).not.toBe("string");
+    expect((out as any).events).toHaveLength(1);
+    expect((out as any).events[0].name).toBe("pageview");
+  });
+
   test("exposes the closed name set", () => {
     expect(WEB_EVENT_NAMES).toContain("download_click");
     expect(WEB_EVENT_NAMES).toHaveLength(6);
