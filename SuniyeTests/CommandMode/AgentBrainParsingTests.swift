@@ -17,4 +17,17 @@ final class AgentBrainParsingTests: XCTestCase {
             XCTAssertEqual(error as? CommandModeError, .malformedToolCall("no JSON object found"))
         }
     }
+
+    /// Small models sometimes drop the `arguments` wrapper and put the arg at the
+    /// top level. The parser recovers the intent (observed in the command eval).
+    func testParsesFlattenedTopLevelArguments() throws {
+        let call = try ToolCallParser.parse(#"{"tool":"focus","element_id":"e1"}"#)
+        XCTAssertEqual(call, ToolCall(name: "focus", arguments: ["element_id": "e1"]))
+    }
+
+    /// A `}` inside a string value must not close the object early.
+    func testBraceInsideStringDoesNotTruncate() throws {
+        let call = try ToolCallParser.parse(#"{"tool":"type_text","arguments":{"text":"meet at 3} today"}}"#)
+        XCTAssertEqual(call, ToolCall(name: "type_text", arguments: ["text": "meet at 3} today"]))
+    }
 }

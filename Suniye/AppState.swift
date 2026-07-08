@@ -1495,6 +1495,10 @@ final class AppState {
     private var overlayErrorResetTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
+    /// The in-flight Command Mode agent, held so the Esc kill-switch can cancel it.
+    private var activeCommandAgent: CommandModeAgent?
+    /// Global Esc monitor, live only while a command runs (`NSEvent.removeMonitor` token).
+    private var commandModeEscMonitor: Any?
     private var isHydratingLLMSettings = false
     private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
@@ -1683,6 +1687,7 @@ final class AppState {
             "sound_feedback": .bool(soundFeedbackEnabled),
             "magic_format_enabled": .bool(llmEnabled),
             "magic_format_provider": .label(AnalyticsMapping.cleanupProvider(llmProvider)),
+            "command_mode_enabled": .bool(commandHotkeyConfiguration != nil),
             "update_channel": .label(SafeLabel(updateChannel.rawValue)),
         ])
     }
@@ -3208,6 +3213,7 @@ final class AppState {
             lastError = "Command Mode needs a working Magic Format provider"
             statusText = "Magic Format required"
             AppLogger.shared.log(.warning, "command mode blocked: magic format not ready")
+            analytics.track(.commandBlocked(reason: .magicFormatUnavailable))
             playSoundFeedback(.error)
             showTransientIndicatorError("Set up Magic Format to use Command Mode")
             return
@@ -3217,6 +3223,7 @@ final class AppState {
         }
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "command mode start ignored in phase=\(phase.rawValue)")
+            analytics.track(.commandBlocked(reason: .wrongPhase))
             showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             return
         }
@@ -3397,7 +3404,12 @@ final class AppState {
                     duration: duration
                 )
             case .command:
-                await finishCommandModeSession(task: rawText, sessionID: sessionID, duration: duration)
+                await finishCommandModeSession(
+                    task: rawText,
+                    sessionID: sessionID,
+                    duration: duration,
+                    frontmostAppBundleID: context.frontmostAppBundleID
+                )
             case .systemInsertion:
                 try await completeSystemDictation(
                     rawText: rawText,
@@ -3666,9 +3678,11 @@ final class AppState {
     /// stays live. Command Mode is NOT dictation — it never writes to recentResults.
     /// (Phase 2 replaces the Magic-Format `rewrite` brain with a dedicated
     /// grammar-constrained inference path.)
-    private func finishCommandModeSession(task: String, sessionID: UUID, duration: TimeInterval) async {
+    private func finishCommandModeSession(task: String, sessionID: UUID, duration: TimeInterval, frontmostAppBundleID: String?) async {
+        let spokenDurationMs = Int(duration * 1000)
         guard !task.isEmpty else {
             AppLogger.shared.log(.warning, "command mode produced empty task")
+            emitCommandCompleted(outcome: .emptyCommand, spokenDurationMs: spokenDurationMs, agentRuntimeMs: 0, frontmostAppBundleID: frontmostAppBundleID)
             failDictationSession(sessionID: sessionID, lastErrorMessage: nil, indicatorMessage: "No command heard")
             return
         }
@@ -3700,13 +3714,111 @@ final class AppState {
             maxSteps: 12,
             onStep: { [weak self] step in
                 AppLogger.shared.log(.info, "command step: tool=\(step.toolCall.name) args=\(step.toolCall.arguments) result=\(step.result?.output ?? "-") error=\(step.error ?? "-")")
-                self?.setFloatingIndicatorState(.processing(message: step.toolCall.name))
+                // Live action log: name the action only (never the typed text,
+                // script body, or element) so the on-screen pill can't leak content.
+                self?.setFloatingIndicatorState(.processing(message: Self.commandStepLabel(for: step.toolCall)))
             }
         )
 
-        let summary = await agent.run(task: task)
-        AppLogger.shared.log(.info, "command mode done: \(summary)")
-        completeDictationSession(sessionID: sessionID, playSuccessSound: true)
+        // Arm the Esc kill-switch and time the run for metrics.
+        activeCommandAgent = agent
+        installCommandModeKillSwitch()
+        let startedAt = DispatchTime.now()
+        let result = await agent.run(task: task)
+        let runtimeMs = Int((DispatchTime.now().uptimeNanoseconds &- startedAt.uptimeNanoseconds) / 1_000_000)
+        removeCommandModeKillSwitch()
+        activeCommandAgent = nil
+
+        AppLogger.shared.log(.info, "command mode done outcome=\(result.outcome) steps=\(result.stepCount) tools=\(result.toolInvocations) invalid=\(result.invalidActions): \(result.summary)")
+        emitCommandCompleted(
+            outcome: AnalyticsMapping.commandOutcome(result.outcome),
+            stepCount: result.stepCount,
+            toolInvocations: result.toolInvocations,
+            invalidActions: result.invalidActions,
+            spokenDurationMs: spokenDurationMs,
+            agentRuntimeMs: runtimeMs,
+            frontmostAppBundleID: frontmostAppBundleID
+        )
+        // A cancelled run tears down quietly — no success chime.
+        completeDictationSession(sessionID: sessionID, playSuccessSound: result.outcome != .cancelled)
+    }
+
+    // MARK: - Command Mode kill-switch + telemetry
+
+    /// Esc while the agent is running cancels it. The agent is main-actor isolated
+    /// but `await`s inside its loop, so this main-actor callback lands between steps
+    /// and trips the loop's cooperative cancel flag. No-op when nothing is running.
+    func cancelCommandMode() {
+        guard let agent = activeCommandAgent else { return }
+        AppLogger.shared.log(.info, "command mode cancel requested (Esc)")
+        agent.cancel()
+    }
+
+    /// The target app is frontmost during a command (Suniye is a menu-bar
+    /// accessory), so a GLOBAL Esc monitor is what catches the kill-switch. It
+    /// requires Accessibility — already gated by Command Mode. Global monitors
+    /// observe without consuming, which is fine here: Esc also reaching the app is
+    /// harmless next to cancelling the agent. Installed only for a run's duration.
+    private func installCommandModeKillSwitch() {
+        removeCommandModeKillSwitch()
+        commandModeEscMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53 else { return } // 53 = Esc
+            // AppKit event monitors fire on the main thread.
+            MainActor.assumeIsolated { self?.cancelCommandMode() }
+        }
+    }
+
+    private func removeCommandModeKillSwitch() {
+        if let monitor = commandModeEscMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        commandModeEscMonitor = nil
+    }
+
+    /// A short present-tense label for the live action log in the floating pill.
+    /// Names only the action — never the typed text, script body, or element —
+    /// so the on-screen log can't surface content. Pure, so it is unit-testable.
+    nonisolated static func commandStepLabel(for call: ToolCall) -> String {
+        switch call.name {
+        case "open_app": return "Opening \(call.arguments["name"] ?? "app")"
+        case "read_screen": return "Reading the screen"
+        case "click": return "Clicking"
+        case "focus": return "Selecting a field"
+        case "type_text": return "Typing"
+        case "press_keys": return "Pressing \(call.arguments["keys"] ?? "keys")"
+        case "run_applescript": return "Running a script"
+        case "finish": return "Done"
+        default: return "Working…"
+        }
+    }
+
+    /// Emits the single `command_completed` metric. Content-free: counts, the
+    /// terminal outcome, the requested brain provider, and the target app's coarse
+    /// category — never the spoken task, tool arguments, or screen text. The brain
+    /// provider is the *requested* Magic Format provider (Command Mode shares that
+    /// stack until a dedicated brain lands); the effective provider/model aren't
+    /// surfaced by the string-in/out inference seam yet.
+    private func emitCommandCompleted(
+        outcome: CommandOutcome,
+        stepCount: Int = 0,
+        toolInvocations: Int = 0,
+        invalidActions: Int = 0,
+        spokenDurationMs: Int,
+        agentRuntimeMs: Int,
+        frontmostAppBundleID: String?
+    ) {
+        let metrics = CommandMetrics(
+            outcome: outcome,
+            stepCount: stepCount,
+            toolInvocations: toolInvocations,
+            invalidActions: invalidActions,
+            brainProvider: AnalyticsMapping.cleanupProvider(llmProvider),
+            brainModel: nil,
+            targetCategory: TargetCategoryMapper.category(for: frontmostAppBundleID),
+            spokenDurationMs: spokenDurationMs,
+            agentRuntimeMs: agentRuntimeMs
+        )
+        analytics.track(.commandCompleted(metrics))
     }
 
     /// Shared success epilogue for every dictation/edit session.

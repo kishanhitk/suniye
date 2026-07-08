@@ -109,6 +109,7 @@
 		823795E1243615DFFBBEDC9F /* RoutingTranscriptionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7C23F9B077871C0A935834 /* RoutingTranscriptionServiceTests.swift */; };
 		83681464B14AD92EBCFCD908 /* IssueReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 104370E76CFD4D8D685CEAC7 /* IssueReportService.swift */; };
 		84CB629AA94E239EEC0911F6 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4213B4B666CF5B60F3371019 /* AppLogger.swift */; };
+		85447D1A60CAC4DFDCE23C9B /* CommandTelemetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B8A99DCB3C1CBAA4EEF29D /* CommandTelemetryTests.swift */; };
 		8557A42A25A6F4F119B8788F /* ASRLatencyBenchmarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 635BB3CFFBC759E73B59157C /* ASRLatencyBenchmarkTests.swift */; };
 		8631A2258EE726CB987F5FDB /* EditLearningMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACB700EFAB40AF2BE0D05D2 /* EditLearningMoreTests.swift */; };
 		86AC38418D4F76638222975C /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F2DDA03B5269D9475CA06C9 /* OnboardingView.swift */; };
@@ -340,6 +341,7 @@
 		8D4C44D5D8846E9AC198372D /* AppleFoundationModelsPostProcessorMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessorMoreTests.swift; sourceTree = "<group>"; };
 		8D6779ECB9F9F1FA192943D7 /* CommandModeTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandModeTypes.swift; sourceTree = "<group>"; };
 		920198666EB5634CA199A1B4 /* FloatingIndicatorStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorStateTests.swift; sourceTree = "<group>"; };
+		92B8A99DCB3C1CBAA4EEF29D /* CommandTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandTelemetryTests.swift; sourceTree = "<group>"; };
 		96753F72AB64EA4C792D7AB5 /* AppleFoundationModelsPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessor.swift; sourceTree = "<group>"; };
 		9770C7327E63F04E1F9345E0 /* CommandModeActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandModeActuatorTests.swift; sourceTree = "<group>"; };
 		98B58C8F7A33FE14A72479F5 /* RoutingTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTranscriptionService.swift; sourceTree = "<group>"; };
@@ -661,6 +663,7 @@
 				9770C7327E63F04E1F9345E0 /* CommandModeActuatorTests.swift */,
 				FE38985B5DF4D728E746E670 /* CommandModeAgentTests.swift */,
 				7D2C10D082ACF003A8CCE13B /* CommandModeToolsTests.swift */,
+				92B8A99DCB3C1CBAA4EEF29D /* CommandTelemetryTests.swift */,
 				ABE9E8AEEB1311A005A3259C /* LocalLLMAgentBrainTests.swift */,
 				D8DCA7B3B55CE1972D043258 /* ScreenReaderTests.swift */,
 			);
@@ -1044,6 +1047,7 @@
 				4EBB138B38563258C53E2CE7 /* CommandModeActuatorTests.swift in Sources */,
 				15F257300717DBCFB6D0934B /* CommandModeAgentTests.swift in Sources */,
 				3686E8550067FFAB826E081B /* CommandModeToolsTests.swift in Sources */,
+				85447D1A60CAC4DFDCE23C9B /* CommandTelemetryTests.swift in Sources */,
 				8631A2258EE726CB987F5FDB /* EditLearningMoreTests.swift in Sources */,
 				897485217D84BB1499292D04 /* EditLearningServiceMoreTests.swift in Sources */,
 				51EA5FB28162D4F0372B5ADD /* EditLearningServiceTests.swift in Sources */,

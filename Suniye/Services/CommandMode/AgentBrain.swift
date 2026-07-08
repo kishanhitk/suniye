@@ -25,18 +25,39 @@ enum ToolCallParser {
         var args: [String: String] = [:]
         if let rawArgs = obj["arguments"] as? [String: Any] {
             for (key, value) in rawArgs { args[key] = String(describing: value) }
+        } else {
+            // Small models sometimes FLATTEN the args to the top level, e.g.
+            // {"tool":"focus","element_id":"e1"} with no "arguments" wrapper. Treat
+            // every non-"tool" key as an argument so a valid intent still runs.
+            for (key, value) in obj where key != "tool" {
+                args[key] = String(describing: value)
+            }
         }
         return ToolCall(name: name, arguments: args)
     }
 
-    /// First balanced brace-matched run, so nested objects are captured whole.
+    /// First balanced brace-matched run, IGNORING braces inside string literals, so
+    /// nested objects are captured whole and a `}` inside a value (e.g. typed text)
+    /// can't close the object early.
     private static func firstJSONObject(in text: String) -> String? {
         guard let start = text.firstIndex(of: "{") else { return nil }
         var depth = 0
+        var inString = false
+        var escaped = false
         var idx = start
         while idx < text.endIndex {
             let character = text[idx]
-            if character == "{" {
+            if inString {
+                if escaped {
+                    escaped = false
+                } else if character == "\\" {
+                    escaped = true
+                } else if character == "\"" {
+                    inString = false
+                }
+            } else if character == "\"" {
+                inString = true
+            } else if character == "{" {
                 depth += 1
             } else if character == "}" {
                 depth -= 1

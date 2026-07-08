@@ -36,6 +36,32 @@ public enum DictationCancelStage: String, Sendable, CaseIterable {
     case recording, transcribing, formatting, inserting, unknown
 }
 
+/// Terminal state of a Command Mode agent run.
+public enum CommandOutcome: String, Sendable, CaseIterable {
+    /// The agent reached a terminal tool (e.g. `finish`).
+    case completed
+    /// Repeat-guard fired — the model looped on an action instead of finishing.
+    case stalled
+    /// Ran out of steps before finishing.
+    case stepLimit = "step_limit"
+    /// The user hit the Esc kill-switch.
+    case cancelled
+    /// The model never produced a valid, parseable action.
+    case brainFailure = "brain_failure"
+    /// Nothing intelligible was said.
+    case emptyCommand = "empty_command"
+    case unknown
+}
+
+/// Why a Command Mode run couldn't start.
+public enum CommandBlockedReason: String, Sendable, CaseIterable {
+    case wrongPhase = "wrong_phase"
+    case micDenied = "mic_denied"
+    case accessibilityDenied = "accessibility_denied"
+    case magicFormatUnavailable = "magic_format_unavailable"
+    case unknown
+}
+
 public enum CleanupProvider: String, Sendable, CaseIterable {
     case automatic, appleFoundationModels = "apple", localGemma = "local_gemma", openAICompatible = "openai_compatible", unknown
 }
@@ -101,6 +127,7 @@ public enum TrackableFeature: String, Sendable, CaseIterable {
     case learnFromEdits = "learn_from_edits"
     case accessibilityDragHelper = "accessibility_drag_helper"
     case shareAnalytics = "share_analytics"
+    case commandMode = "command_mode"
 }
 
 public enum AnalyticsErrorType: String, Sendable, CaseIterable {

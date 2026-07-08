@@ -1,0 +1,128 @@
+[
+  {
+    "id": "open_safari",
+    "category": "open_app",
+    "utterance": "open Safari",
+    "history": [],
+    "observation": "Frontmost app: Finder\nNo actionable elements found.",
+    "expected_tool": "open_app",
+    "expected_args": {"name": "Safari"}
+  },
+  {
+    "id": "open_system_settings",
+    "category": "open_app",
+    "utterance": "open System Settings",
+    "history": [],
+    "observation": "Frontmost app: Finder\nNo actionable elements found.",
+    "expected_tool": "open_app",
+    "expected_args": {"name": "System Settings"}
+  },
+  {
+    "id": "switch_to_slack",
+    "category": "open_app",
+    "utterance": "switch to Slack",
+    "history": [],
+    "observation": "Frontmost app: Safari\nActionable elements — reference an id with click/focus:\ne0: button \"Reload\"\ne1: textfield \"Address\"",
+    "expected_tool": "open_app",
+    "expected_args": {"name": "Slack"}
+  },
+  {
+    "id": "new_tab",
+    "category": "press_keys",
+    "utterance": "open a new tab",
+    "history": [],
+    "observation": "Frontmost app: Safari\nActionable elements — reference an id with click/focus:\ne0: button \"Show sidebar\"\ne1: textfield \"Address\"",
+    "expected_tool": "press_keys",
+    "expected_args": {"keys": "cmd+t"}
+  },
+  {
+    "id": "save_document",
+    "category": "press_keys",
+    "utterance": "save this",
+    "history": [],
+    "observation": "Frontmost app: TextEdit\nFocused: AXTextArea = \"Dear team,\"\nActionable elements — reference an id with click/focus:\ne0: textarea \"Dear team,\"",
+    "expected_tool": "press_keys",
+    "expected_args": {"keys": "cmd+s"}
+  },
+  {
+    "id": "close_window",
+    "category": "press_keys",
+    "utterance": "close this window",
+    "history": [],
+    "observation": "Frontmost app: Preview\nActionable elements — reference an id with click/focus:\ne0: button \"Zoom\"",
+    "expected_tool": "press_keys",
+    "expected_args": {"keys": "cmd+w"}
+  },
+  {
+    "id": "select_all",
+    "category": "press_keys",
+    "utterance": "select all",
+    "history": [],
+    "observation": "Frontmost app: TextEdit\nFocused: AXTextArea = \"the quick brown fox\"\nActionable elements — reference an id with click/focus:\ne0: textarea \"the quick brown fox\"",
+    "expected_tool": "press_keys",
+    "expected_args": {"keys": "cmd+a"}
+  },
+  {
+    "id": "click_send",
+    "category": "click",
+    "utterance": "click the Send button",
+    "history": ["read_screen → listed 4 elements"],
+    "observation": "Frontmost app: Mail\nActionable elements — reference an id with click/focus:\ne0: button \"Attach\"\ne1: button \"Send\"\ne2: textfield \"To\"\ne3: textfield \"Subject\"",
+    "expected_tool": "click",
+    "expected_args": {"element_id": "e1"}
+  },
+  {
+    "id": "click_compose",
+    "category": "click",
+    "utterance": "start a new message",
+    "history": ["read_screen → listed 3 elements"],
+    "observation": "Frontmost app: Mail\nActionable elements — reference an id with click/focus:\ne0: button \"New Message\"\ne1: button \"Archive\"\ne2: searchfield \"Search\"",
+    "expected_tool": "click",
+    "expected_args": {"element_id": "e0"}
+  },
+  {
+    "id": "focus_search",
+    "category": "focus",
+    "utterance": "click into the search box",
+    "history": ["read_screen → listed 3 elements"],
+    "observation": "Frontmost app: Safari\nActionable elements — reference an id with click/focus:\ne0: button \"Back\"\ne1: searchfield \"Search or enter website name\"\ne2: button \"Share\"",
+    "expected_tool": "focus",
+    "expected_args": {"element_id": "e1"}
+  },
+  {
+    "id": "read_first_when_blank",
+    "category": "read_screen",
+    "utterance": "click the Add to Cart button",
+    "history": [],
+    "observation": "Frontmost app: Safari\nNo actionable elements found.",
+    "expected_tool": "read_screen",
+    "expected_args": {}
+  },
+  {
+    "id": "type_after_focus",
+    "category": "type_text",
+    "utterance": "type hello world",
+    "history": ["focus → focused e1"],
+    "observation": "Frontmost app: Notes\nFocused: AXTextArea = \"\"\nActionable elements — reference an id with click/focus:\ne0: textarea \"\"",
+    "expected_tool": "type_text",
+    "expected_args": {"text": "hello world"}
+  },
+  {
+    "id": "set_volume_script",
+    "category": "run_applescript",
+    "utterance": "set the system volume to thirty percent",
+    "history": [],
+    "observation": "Frontmost app: Finder\nNo actionable elements found.",
+    "expected_tool": "run_applescript",
+    "expected_args": {}
+  },
+  {
+    "id": "finish_when_done",
+    "category": "finish",
+    "utterance": "open Safari",
+    "history": ["open_app → opened Safari"],
+    "observation": "Frontmost app: Safari\nActionable elements — reference an id with click/focus:\ne0: textfield \"Address\"",
+    "expected_tool": "finish",
+    "expected_args": {}
+  }
+]

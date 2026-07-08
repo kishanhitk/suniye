@@ -111,6 +111,18 @@ enum AnalyticsMapping {
         }
     }
 
+    /// The agent loop's terminal state → the analytics vocabulary. Exhaustive, so
+    /// a new `AgentOutcome` case must be classified rather than silently bucketed.
+    static func commandOutcome(_ outcome: AgentOutcome) -> CommandOutcome {
+        switch outcome {
+        case .completed: return .completed
+        case .stalled: return .stalled
+        case .stepLimit: return .stepLimit
+        case .cancelled: return .cancelled
+        case .brainFailure: return .brainFailure
+        }
+    }
+
     static func cleanupProvider(_ provider: MagicFormatProvider) -> CleanupProvider {
         switch provider {
         case .automatic: return .automatic

@@ -227,3 +227,58 @@ v14 then closed every remaining model gap:
 
 Result: **39/39, 24/24 referential probe, 4/4 advanced, injection 2/2 — five consecutive all-green
 rounds** (the previously flappy cases included). Run artifacts: `evals/runs/v14_*.json`.
+
+---
+
+# Command Mode tool-call eval (KIS-168)
+
+Command Mode is a different task from Magic Format: instead of rewriting a transcript, the
+model must pick ONE tool call (`{"tool","arguments"}`) given the brain prompt, a screen
+observation, and short history. `scripts/eval_command_mode.py` scores that — reusing the
+Magic Format runner's server/health scaffolding but with a tool-call scorer instead of text
+similarity. Its purpose is **model selection for the dedicated brain (Phase 6)** and prompt
+iteration, not a ship gate.
+
+```bash
+python3 scripts/eval_command_mode.py --server Suniye/LocalLLM/llama-server \
+  --json-output evals/runs/command_mode_v1_baseline.json
+```
+
+- **Dataset** `evals/command_mode_cases.json` — 14 cases across every tool (`open_app`,
+  `read_screen`, `click`, `focus`, `type_text`, `press_keys`, `run_applescript`, `finish`).
+  Each carries a realistic `observation` in the exact `read_screen` format (`e0: button
+  "Send"`), optional `history`, and the `expected_tool` + `expected_args`.
+- **Prompt** `evals/prompts/command_mode_v1.txt` — the static tool-list + rules block from
+  `LocalLLMAgentBrain`; the runner appends the runtime history + screen, matching the app.
+- **Scorer** — tolerant brace-matched JSON extraction (mirrors `ToolCallParser`, incl. the
+  flattened-args fallback and string-aware brace matching), then valid-JSON rate, tool-name
+  accuracy, and arg match (`keys` chord-normalized so `Command+T` == `cmd+t`).
+
+## Baseline: 7/14 (Gemma-4 E2B Q4_K_M, temp 0)
+
+| metric | score |
+|--------|-------|
+| Valid JSON | 13/14 |
+| Tool accuracy | 7/14 |
+| Passed (tool+args) | 7/14 |
+
+Per category the 2B model nails `open_app` (3/3), `click` (2/2), `focus`, `type_text`, but
+the failures are honest capability signals for Phase 6, not scorer artifacts:
+
+- **`press_keys` 0/4** — the biggest gap. Asked to "open a new tab" / "save this" / "close
+  this window" / "select all", the model **clicks `e0`** instead of emitting the keyboard
+  shortcut. It doesn't reach for `cmd+*` chords. → the strongest argument for a more capable
+  dedicated brain (or shortcut-teaching prompt examples).
+- **`read_screen`** — the one invalid-JSON case: `{"tool":"read_screen":{}}` (a `:` where
+  `,"arguments"` belongs). Grammar-constrained output (Phase 2, deferred) eliminates this
+  class outright.
+- **`finish`** — after a completed action the model re-issues the action rather than calling
+  `finish`; the runtime **repeat-guard** already compensates, but it confirms small models
+  don't self-terminate.
+- **`run_applescript`** — chose `open_app "System Settings"` for "set the system volume to
+  30%" (a defensible alternative, not strictly wrong — the expected label is strict here).
+
+Two robustness fixes fell out of the first run and are shipped in the agent: `ToolCallParser`
+now tolerates **flattened top-level args** (`{"tool":"focus","element_id":"e1"}`, observed
+live — lifted focus from fail→pass) and **braces inside string values** (a `}` in typed text
+no longer truncates the object). Run artifacts: `evals/runs/command_mode_v1_baseline.json`.
