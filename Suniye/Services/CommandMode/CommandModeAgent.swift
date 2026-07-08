@@ -44,14 +44,13 @@ final class CommandModeAgent {
     /// Returns a human-readable final summary.
     func run(task: String) async -> String {
         var history: [String] = []
-        var lastObservation = ""
+        var lastCall: ToolCall?
+        var lastOutcome = ""
 
         for _ in 0..<maxSteps {
             if cancelled { return "Cancelled." }
 
             let observation = await screenReader.readScreen()
-            let stalled = observation == lastObservation && !history.isEmpty
-            lastObservation = observation
 
             let call: ToolCall
             do {
@@ -64,10 +63,17 @@ final class CommandModeAgent {
                 return "Stopped: the model didn't return a valid action."
             }
 
+            // Repeat-guard: small models re-issue the SAME call instead of calling
+            // finish. Treat an identical consecutive call as completion, and report
+            // the previous outcome honestly (success or the failure message).
+            if let last = lastCall, last == call, call.name != "finish" {
+                return lastOutcome.isEmpty ? "Done." : lastOutcome
+            }
+            lastCall = call
+
             guard let tool = registry.tool(named: call.name) else {
                 onStep?(AgentStep(toolCall: call, result: nil, error: "unknown tool"))
                 history.append("tried unknown tool \(call.name)")
-                if stalled { return "Stopped: stuck." }
                 continue
             }
 
@@ -75,12 +81,14 @@ final class CommandModeAgent {
                 let result = try await tool.execute(call.arguments)
                 onStep?(AgentStep(toolCall: call, result: result, error: nil))
                 history.append("\(call.name) → \(result.output)")
+                lastOutcome = result.output
                 if result.isTerminal { return result.output }
             } catch {
                 onStep?(AgentStep(toolCall: call, result: nil, error: String(describing: error)))
                 history.append("\(call.name) failed: \(error)")
+                lastOutcome = String(describing: error)
             }
         }
-        return "Stopped: reached the step limit."
+        return lastOutcome.isEmpty ? "Stopped: reached the step limit." : lastOutcome
     }
 }
