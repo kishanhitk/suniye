@@ -16,6 +16,9 @@ import type { WebStats } from "./types";
 export function WebView({ range }: { range: number }) {
   const [stats, setStats] = useState<WebStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped by the Retry button to re-trigger the fetch effect below — range
+  // changes alone don't cover "stuck on error, same range".
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -27,12 +30,18 @@ export function WebView({ range }: { range: number }) {
     return () => {
       alive = false;
     };
-  }, [range]);
+  }, [range, retryNonce]);
 
   if (error) {
     return (
       <div className="border-t border-line py-6" role="alert">
         <p className="text-sm text-ink">Couldn't load web stats ({error}).</p>
+        <button
+          onClick={() => setRetryNonce((n) => n + 1)}
+          className="mt-3 rounded-md border border-line px-3 py-1.5 font-mono text-xs text-ink hover:bg-surface"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -57,6 +66,7 @@ export function WebView({ range }: { range: number }) {
           <KeyFigure label="Visitors" value={formatCount(stats.visitors)} accent />
           <KeyFigure label="Pageviews" value={formatCount(stats.pageviews)} />
           <KeyFigure label="Downloads" value={formatCount(stats.downloads)} />
+          <KeyFigure label="CTA clicks" value={formatCount(stats.ctaClicks)} />
           <KeyFigure
             label="Conversion"
             value={formatPct(stats.conversionPct, 1)}
@@ -90,6 +100,10 @@ export function WebView({ range }: { range: number }) {
 
       <Section eyebrow="Downloads" note="by target">
         <BreakdownList items={stats.downloadsByTarget} emptyMessage="No downloads in this window." />
+      </Section>
+
+      <Section eyebrow="CTA clicks" note="by button">
+        <BreakdownList items={stats.topCtas} emptyMessage="No CTA clicks in this window." />
       </Section>
 
       <Section eyebrow="Engagement" note="scroll depth">

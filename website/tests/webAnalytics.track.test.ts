@@ -46,4 +46,24 @@ describe("handleTrackRequest", () => {
     const res = await handleTrackRequest(new Request("https://suniye.app/api/track"), mkEnv().env);
     expect(res.status).toBe(405);
   });
+
+  test("warns once (not per request) when SECRET_SALT is missing, and still writes + returns 204", async () => {
+    const points: WebDataPoint[] = [];
+    const env: TrackEnv = { WEB_EVENTS: { writeDataPoint: (p) => points.push(p) } }; // no SECRET_SALT
+    const warnCalls: unknown[][] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnCalls.push(args);
+    try {
+      const body = { sent_at: 1, events: [{ event_id: "a", event_ts: 1, session_id: "s", name: "pageview", props: { path: "/" } }] };
+      const res1 = await handleTrackRequest(post(body), env);
+      const res2 = await handleTrackRequest(post(body), env);
+      expect(res1.status).toBe(204);
+      expect(res2.status).toBe(204);
+      expect(points).toHaveLength(2); // events still written despite the missing salt
+      expect(points[0].indexes?.[0]).toMatch(/^[0-9a-f]{64}$/); // hash still computed (unsalted)
+      expect(warnCalls.filter((c) => String(c[0]).includes("SECRET_SALT"))).toHaveLength(1); // warns once per isolate
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
 });

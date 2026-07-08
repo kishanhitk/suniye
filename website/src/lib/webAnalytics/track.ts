@@ -10,6 +10,20 @@ export interface TrackEnv {
 const MAX_BODY = 16 * 1024;
 const noContent = () => new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
 
+// Warn at most once per isolate: an unprovisioned SECRET_SALT silently
+// produces an unsalted (brute-forceable → IP-reversible) hash, which
+// contradicts the privacy promise. We still compute + write the hash (never
+// drop events, never change the 204-always contract) — this just makes the
+// misconfiguration observable in logs instead of silently degrading privacy.
+let warnedMissingSalt = false;
+function warnMissingSaltOnce(): void {
+  if (warnedMissingSalt) return;
+  warnedMissingSalt = true;
+  console.warn(
+    "web-analytics: SECRET_SALT is not set — visitor hashes are unsalted and reversible; run `wrangler secret put SECRET_SALT`"
+  );
+}
+
 function referrerHost(request: Request): string {
   const ref = request.headers.get("Referer");
   if (!ref) return "";
@@ -46,6 +60,7 @@ export async function handleTrackRequest(request: Request, env: TrackEnv, nowMs:
     ?? "";
   const ip = request.headers.get("CF-Connecting-IP") ?? "";
   const ua = request.headers.get("User-Agent") ?? "";
+  if (!env.SECRET_SALT) warnMissingSaltOnce();
   const visitorHash = await dailyVisitorHash(ip, ua, utcDate(nowMs), env.SECRET_SALT ?? "");
   const enrich = { referrerHost: referrerHost(request), country, visitorHash };
 
