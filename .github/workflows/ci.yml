@@ -6,7 +6,38 @@ on:
     branches: [main]
 
 jobs:
+  # Cheap gate: does this change actually touch the app? Website, evals, docs,
+  # .claude, and markdown-only changes skip the expensive macOS build/test below.
+  # build-test is a required check, so it must still REPORT on every PR — a job
+  # skipped via `if:` reports "skipped", which branch protection treats as a pass
+  # (unlike a workflow-level paths filter, which would leave it stuck pending).
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Detect app changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # `every` + all-negated globs = "match any changed file that is NOT one
+          # of these paths". Deny-list on purpose: an unlisted path runs CI (cheap
+          # mistake) rather than skipping a real app change (dangerous one).
+          predicate-quantifier: 'every'
+          filters: |
+            app:
+              - '!website/**'
+              - '!evals/**'
+              - '!docs/**'
+              - '!.claude/**'
+              - '!**/*.md'
+
   build-test:
+    needs: changes
+    if: ${{ needs.changes.outputs.app == 'true' }}
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -71,8 +102,8 @@ jobs:
             dist
 
   publish-tip:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build-test
+    needs: [changes, build-test]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.app == 'true' }}
     runs-on: macos-26
     timeout-minutes: 90
     permissions:
