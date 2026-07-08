@@ -5,9 +5,15 @@ on:
   push:
     branches: [main]
 
+# Cancel superseded runs when a PR gets new commits. Scoped to pull_request only
+# so a main-branch run (which publishes the tip release) is never killed midway.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Cheap gate: does this change actually touch the app? Website, evals, docs,
-  # .claude, and markdown-only changes skip the expensive macOS build/test below.
+  # .claude, workflow, and markdown-only changes skip the expensive build below.
   # build-test is a required check, so it must still REPORT on every PR — a job
   # skipped via `if:` reports "skipped", which branch protection treats as a pass
   # (unlike a workflow-level paths filter, which would leave it stuck pending).
@@ -33,6 +39,7 @@ jobs:
               - '!evals/**'
               - '!docs/**'
               - '!.claude/**'
+              - '!.github/**'
               - '!**/*.md'
 
   build-test:
