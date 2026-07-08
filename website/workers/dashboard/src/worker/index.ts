@@ -1,6 +1,7 @@
 import { validateAccessJwt } from "./jwt";
 import { buildStats, makeAeRunner, type D1Runner } from "./stats";
 import { FILTER_DIMS, type DashboardEnv, type Filters } from "./types";
+import { buildWebStats } from "./webStats";
 
 // Access-gated dashboard Worker. Validates the Access JWT for every request
 // (defense in depth — the origin is publicly routable), then serves the stats
@@ -14,6 +15,9 @@ export default {
 
     if (url.pathname === "/api/stats") {
       return handleStats(request, env);
+    }
+    if (url.pathname === "/api/web-stats") {
+      return handleWebStats(request, env);
     }
     if (env.ASSETS) return env.ASSETS.fetch(request);
     return new Response("Not found", { status: 404 });
@@ -40,11 +44,12 @@ async function handleStats(request: Request, env: DashboardEnv): Promise<Respons
 
   const params = new URL(request.url).searchParams;
   const rangeDays = clampRange(Number(params.get("range") ?? "30"));
-  // Filter values are sanitized in stats.ts (safeLabel/safeInt) before any SQL.
+  // Multi-value per dim: repeated params (?chip=m1&chip=m3) → a set (OR within a
+  // dim). Values are sanitized in stats.ts (safeLabel/safeNum) before any SQL.
   const filters: Filters = {};
   for (const dim of FILTER_DIMS) {
-    const value = params.get(dim);
-    if (value) filters[dim] = value;
+    const values = params.getAll(dim).filter((v) => v !== "");
+    if (values.length > 0) filters[dim] = values;
   }
 
   const ae = makeAeRunner(env.CF_ACCOUNT_ID, env.AE_API_TOKEN);
@@ -60,6 +65,23 @@ async function handleStats(request: Request, env: DashboardEnv): Promise<Respons
     return json(stats, 200);
   } catch (error) {
     console.error("stats failed", error);
+    return json({ error: "stats_failed" }, 502);
+  }
+}
+
+async function handleWebStats(request: Request, env: DashboardEnv): Promise<Response> {
+  if (!env.CF_ACCOUNT_ID || !env.AE_API_TOKEN) return json({ error: "not_configured" }, 503);
+  const rangeDays = clampRange(Number(new URL(request.url).searchParams.get("range") ?? "30"));
+  const ae = makeAeRunner(env.CF_ACCOUNT_ID, env.AE_API_TOKEN);
+  try {
+    const stats = await buildWebStats(ae, {
+      rangeDays,
+      nowMs: Date.now(),
+      datasetName: env.AE_WEB_DATASET ?? "suniye_web",
+    });
+    return json(stats, 200);
+  } catch (error) {
+    console.error("web stats failed", error);
     return json({ error: "stats_failed" }, 502);
   }
 }
