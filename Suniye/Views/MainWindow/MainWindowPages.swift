@@ -489,6 +489,14 @@ struct GeneralPage: View {
                         Text("Select text in any app, hold the shortcut, and speak an instruction like \"make this formal\". With nothing selected, the spoken instruction generates text at the cursor. Requires Magic Format.")
                             .font(AppTypography.subheadline)
                             .foregroundStyle(MainWindowPalette.secondaryText)
+
+                        CardDivider()
+
+                        SettingsToggleRow(
+                            title: "Command Mode (Preview)",
+                            detail: "Repurpose the Edit Mode hotkey to run the voice-driven Command Mode agent: speak an action like \"open Safari\" and it's carried out on your Mac. Experimental, on-device, single-step commands. Requires Magic Format.",
+                            isOn: $appState.commandModePreviewEnabled
+                        )
                     }
                 }
             }
