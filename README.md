@@ -1,18 +1,49 @@
-# Suniye
+<div align="center">
 
-Open-source, local-first dictation for macOS. Hold a key, speak, and your words appear as text — right where your cursor is. No audio leaves your machine. (*Suniye* is Hindi for "listen.")
+<img src="docs/assets/icon.png" width="84" alt="Suniye" />
 
-> **Alpha** — Expect rough edges and breaking changes.
+<h1>Suniye</h1>
 
-**[Website](https://suniye.kishans.in)** · **[Download](https://github.com/kishanhitk/suniye/releases/latest)** · **Report bugs from inside the app**
+<p><strong>Private dictation for macOS. Hold a key, speak, and your words appear&nbsp;— right where your cursor is.</strong></p>
 
-## Why Suniye?
+<p>Speech recognition runs entirely on your Mac. No cloud, no account, no audio ever leaves your machine.<br/>
+<em>(Suniye is Hindi for “listen.”)</em></p>
 
-- **Private by default** — Local speech models run entirely on your Mac. Audio never leaves your machine, with no cloud processing or training data retention.
-- **Works everywhere** — Inserts text directly into whichever app you're using via macOS Accessibility APIs.
-- **Instant** — No network round-trip. Your voice becomes text in milliseconds, not seconds.
-- **One shortcut** — Hold a key (configurable), talk, release. That's it.
-- **Optional Magic Format cleanup** — Use Apple Intelligence locally when available, run a local Gemma 4 Q4 formatter, or connect an OpenAI-compatible endpoint to polish transcriptions and preserve domain-specific vocabulary.
+<p>
+  <a href="https://suniye.kishans.in"><strong>Website</strong></a> ·
+  <a href="https://github.com/kishanhitk/suniye/releases/latest"><strong>Download</strong></a> ·
+  <a href="#reporting-a-problem"><strong>Report a bug</strong></a>
+</p>
+
+<p>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-c4441a" alt="MIT License" /></a>
+  <img src="https://img.shields.io/badge/status-alpha-e07a5f" alt="Status: Alpha" />
+  <img src="https://img.shields.io/badge/macOS-14%2B-1a1a1a" alt="macOS 14+" />
+</p>
+
+<img src="docs/assets/dashboard.png" width="760" alt="Suniye's dashboard: sessions, words dictated, total time, and recent transcriptions — all stored locally on your Mac" />
+
+</div>
+
+> **Alpha** — expect rough edges and breaking changes while Suniye finds its feet.
+
+## Talk instead of type
+
+Typing is a bottleneck. Suniye turns the fastest thing you do — talking — into text in any app, without sending a single word to the cloud.
+
+Hold your hotkey, say what you mean, release. Your words land at the cursor in Mail, Slack, your editor, a terminal — anywhere you can type.
+
+- **Private by default.** Local speech models transcribe on-device. Your audio never touches a network, so there's nothing to store, leak, or train on.
+- **Instant.** No round-trip to a server. The model is always loaded, so speech becomes text in milliseconds, not seconds.
+- **Everywhere you type.** Text is inserted through the macOS Accessibility APIs, so it works in every app — not just a special editor.
+- **One shortcut.** Hold Fn/Globe (or any combo you pick), talk, release. No modes, no buttons.
+- **Yours to inspect.** Open source under the MIT license — read every line, build it yourself, or send a patch.
+
+## How it works
+
+1. A small icon lives in your **menu bar** — that's Suniye, listening for its hotkey.
+2. **Hold your hotkey** (default: Fn/Globe) and speak naturally.
+3. **Release** — your speech is transcribed on-device and pasted at the cursor.
 
 ## Install
 
@@ -24,108 +55,80 @@ Requires **macOS 14 (Sonoma)** or later.
 brew install --cask kishanhitk/tap/suniye
 ```
 
-The cask taps [`kishanhitk/homebrew-tap`](https://github.com/kishanhitk/homebrew-tap) and installs the latest release. Suniye is self-signed (not yet notarized), so the cask clears the Gatekeeper quarantine for you on install — no manual `xattr` step. Run `brew upgrade --cask suniye` to update, though Suniye also updates itself in the background via Sparkle.
+This taps [`kishanhitk/homebrew-tap`](https://github.com/kishanhitk/homebrew-tap) and installs the latest release. Suniye is self-signed (not yet notarized), so the cask clears the Gatekeeper quarantine for you — no manual steps. Update with `brew upgrade --cask suniye`, though Suniye also updates itself in the background.
 
-On Homebrew 6+ you may be asked to trust the tap on first install — third-party taps run code (here, a postflight that clears quarantine), so Homebrew gates them behind trust. The fully-qualified command above trusts just this cask; `brew trust --cask kishanhitk/tap/suniye` pre-trusts it for non-interactive use.
+> On Homebrew 6+ you may be asked to trust the tap on first install — third-party taps run code (here, a postflight that clears quarantine), so Homebrew gates them behind trust. The fully-qualified command above trusts just this cask.
 
 ### Direct download
 
-1. Download **Suniye.dmg** from the [latest GitHub Release](../../releases/latest).
-2. Open the DMG and drag **Suniye.app** into `/Applications`.
-3. If macOS blocks the app on first launch, remove quarantine and try again:
+1. Grab **Suniye.dmg** from the [latest release](https://github.com/kishanhitk/suniye/releases/latest).
+2. Open it and drag **Suniye.app** into `/Applications`.
+3. If macOS blocks it on first launch, clear the quarantine and reopen:
    ```bash
    xattr -dr com.apple.quarantine /Applications/Suniye.app
    ```
 
-### First launch (either method)
+### First launch
 
-1. Grant the permissions Suniye asks for:
-   - **Microphone** — to hear you
-   - **Accessibility** — to type text into other apps
-2. Suniye will help you install a local speech model on first launch. The onboarding flow defaults to **Parakeet TDT 0.6B v3**, and you can switch to another supported offline model later from the `ASR Model` page.
-3. On first launch, Suniye walks you through welcome, required setup, an optional Magic Format choice, and a practice dictation. The recommended Local Model download is optional and continues in the background while you try dictation.
+Suniye asks for two permissions — **Microphone** (to hear you) and **Accessibility** (to type into other apps) — then walks you through a short setup and a practice dictation. It installs a recommended speech model (**Parakeet TDT 0.6B v3**) in the background while you try it out.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed steps.
 
-## How it works
-
-1. A small icon appears in your **menu bar** — that's Suniye.
-2. **Hold your hotkey** (default: Fn/Globe) and speak.
-3. Release the key — your speech is transcribed and pasted at the cursor.
-
-## Reporting issues
-
-Use **Report a Problem** from the menu bar, the General page, or the Help menu. Suniye sends your description and an optional sanitized diagnostics bundle to the maintainer's private issue queue. Diagnostics include app logs and metadata only; audio, transcripts, clipboard contents, API keys, model files, and full system logs are not included.
-
-## Features
-
-| Feature | Description |
-|---|---|
-| **Dashboard** | Session stats, today's word count, total dictation time, recent activity |
-| **History** | Searchable log of past transcriptions with copy and delete |
-| **Hotkey** | Configurable hold-to-talk shortcut (Fn/Globe, modifier combos, etc.) |
-| **Edit Mode** | Select text anywhere, hold a second shortcut, and speak an instruction ("make this formal") to rewrite it in place; with nothing selected it writes new text at the cursor (requires Magic Format) |
-| **Live preview** | See a live partial transcript in the floating indicator while you dictate (fast local models; off by default, enable in Settings) |
-| **Model** | Compare local ASR models by speed, quality, size, and language support; install supported options, switch the active model, or remove unused ones |
-| **Vocabulary** | Add domain-specific terms so the app gets your jargon right |
-| **Magic Format** | Optional AI cleanup — use Apple Intelligence locally when available, local Gemma 4 Q4 when installed, or an API model with your own key; customize editable prompt files and vocabulary |
-| **Per-app prompts** | Append app-specific Magic Format instructions for specific apps (e.g. terse for chat, prose for notes); files live under `~/Library/Application Support/Suniye/prompts/apps/` |
-| **General** | Preferred mic, auto-paste, launch at login, diagnostics |
-
-## Supported speech models
-
-Suniye ships a curated local model catalog instead of a single fixed recognizer:
-
-- **Parakeet TDT 0.6B v3** — recommended default for everyday dictation
-- **Parakeet TDT 0.6B v2** — strong English-focused Parakeet option
-- **Moonshine Base** — fastest lightweight English option
-- **SenseVoice** — multilingual option for Chinese, Japanese, Korean, English, and Cantonese
-- **Whisper Tiny (English)** — smallest Whisper download
-- **Whisper Base (English)** — lightweight Whisper English model
-- **Whisper Small (English)** — more accurate English Whisper option
-- **Whisper Large v3 Turbo** — faster large Whisper model
-- **Whisper Distil Large v3** — distilled large Whisper model
-- **Whisper Large v3** — broad multilingual fallback with the heaviest footprint
-
-All supported models run offline on your Mac and are managed from the `ASR Model` page.
-
-## Updating
-
-Suniye checks for updates automatically in the background. Stable releases are the default. To test the latest `main` branch build, open `General` settings and switch **Update Channel** from `Stable` to `Tip`.
-
-When an update is available:
-
-1. Open the menu bar icon.
-2. Click **Check for Updates...** if you want to check manually.
-3. Follow the native updater prompt to install and relaunch.
-
-Switching from Tip back to Stable does not downgrade the app. Sparkle will offer the next stable release once it has a newer build number than the installed tip build.
-
-### Sparkle signing key recovery
-
-GitHub Actions secrets are write-only. You cannot read `SPARKLE_PRIVATE_KEY` back from GitHub after storing it.
-
-The owner copy is kept in the local macOS Keychain under Sparkle account `suniye`. To export it from a Sparkle distribution:
-
-```bash
-./bin/generate_keys --account suniye -x ./suniye-sparkle-private-key
-```
-
-Keep that exported file in a password manager or other secret store, then delete the local export.
-
-## Privacy
-
-- All transcription happens **locally** on your Mac.
-- The only network calls are model downloads, update checks, and issue reports you explicitly submit.
-- If you enable Magic Format, Suniye uses Apple Intelligence locally when available, or local Gemma when configured. When you choose an API endpoint, transcribed text is sent to the provider you configure.
-
-## Technical details
+## What's inside
 
 | | |
 |---|---|
-| **Platform** | macOS 14+ |
+| **Dashboard** | Sessions, words dictated, total time, and recent activity — at a glance |
+| **History** | Searchable log of past transcriptions; copy or delete any entry |
+| **Magic Format** | Optional AI cleanup for punctuation, capitalization, and formatting |
+| **Per-app prompts** | Give each app its own Magic Format style — terse in chat, prose in notes |
+| **Edit Mode** | Select text anywhere, hold a second shortcut, and speak an instruction (“make this formal”) to rewrite it in place |
+| **Live preview** | Watch a partial transcript appear in the floating indicator as you speak |
+| **Models** | Compare, install, and switch local speech models by speed, quality, size, and language |
+| **Vocabulary** | Teach Suniye your names and jargon so it gets them right |
+| **Your hotkey** | Any hold-to-talk shortcut you like — Fn/Globe, modifier combos, and more |
+
+### Magic Format — cleanup that can stay on your Mac
+
+Turn a raw transcript into polished text on your terms. It's off until you turn it on; when enabled, it cascades and stays local wherever it can:
+
+1. **Apple Intelligence** — on supported Macs, nothing leaves the machine.
+2. **A local model** — a small on-device formatter (Gemma) that works fully offline.
+3. **Your own provider** — bring an OpenAI-compatible key; only text (never audio) is sent, and only if you choose this.
+
+## Choose your speech model
+
+Suniye ships a curated catalog instead of a single fixed recognizer — from Apple's built-in engine to on-device Parakeet and Whisper models. Pick the trade-off you want between speed, accuracy, size, and languages; everything runs offline, and you can switch instantly from the **Model** page.
+
+| Model | Best for |
+|---|---|
+| **Apple Speech** | Built into macOS 26+ — no download, follows your system language |
+| **Parakeet TDT 0.6B v3** | Recommended default — 25 European languages |
+| **Parakeet TDT 0.6B v2** | Strong English-focused option |
+| **SenseVoice** | Chinese, Japanese, Korean, English, Cantonese |
+| **Moonshine Base** | Fastest lightweight English |
+| **Whisper Large v3 Turbo · Distil · v3** | Broad multilingual coverage |
+| **Whisper Tiny · Base · Small (English)** | Small, fast English downloads |
+
+## Privacy
+
+- Transcription happens **entirely on your Mac**. Audio is processed in memory and never sent anywhere.
+- The only network calls are model downloads, update checks, optional pseudonymous usage stats (counts and timings — never your words, and opt-out in Settings), and issue reports you explicitly submit.
+- With Magic Format's on-device options, cleanup stays local too. Only the optional API provider sends text (never audio) off your Mac — and it's off by default.
+
+---
+
+## Under the hood
+
+Suniye is a native macOS app. The technical bits, for the curious and for contributors:
+
+| | |
+|---|---|
+| **Platform** | macOS 14+ (Apple Silicon and Intel) |
 | **UI** | SwiftUI |
-| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with a curated local model catalog (Parakeet, Moonshine, SenseVoice, and multiple Whisper variants) |
+| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with a curated local model catalog (Parakeet, Moonshine, SenseVoice, and Whisper variants) |
+| **Text insertion** | macOS Accessibility APIs |
+| **Updates** | [Sparkle](https://sparkle-project.org) — Stable and Tip channels |
 | **License** | [MIT](LICENSE) |
 
 ### Build from source
@@ -145,10 +148,43 @@ For side-by-side local development, build the preview variant instead:
 ./scripts/build_app.sh Debug --preview --install-user --open
 ```
 
-This installs `~/Applications/Suniye Preview.app` with bundle id `dev.suniye.app.preview`, so it can coexist with the official `Suniye.app` release. The preview variant disables Sparkle release updates and still shares the large local ASR model cache under `~/Library/Application Support/Suniye/models`.
+This installs `~/Applications/Suniye Preview.app` (bundle id `dev.suniye.app.preview`) so it can coexist with the release build. The preview variant disables Sparkle updates and shares the local ASR model cache under `~/Library/Application Support/Suniye/models`.
+
+Run the tests:
+
+```bash
+./scripts/e2e_preflight.sh && ./scripts/e2e_smoke.sh
+```
+
+### Update channels
+
+Suniye checks for updates in the background; **Stable** is the default. To ride the latest `main` build, open **General** settings and switch **Update Channel** to **Tip**. Switching back to Stable won't downgrade you — Sparkle waits for a stable build newer than your installed tip.
+
+### Reporting a problem
+
+Use **Report a Problem** from the menu bar, the General page, or the Help menu. Suniye sends your description and an optional, sanitized diagnostics bundle to the maintainer's private queue. Diagnostics are logs and metadata only — audio, transcripts, clipboard contents, API keys, and model files are never included.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines and [CHANGELOG.md](CHANGELOG.md) for what's changed.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get started, and browse [releases](https://github.com/kishanhitk/suniye/releases) for what's changed.
 
-To run tests: `./scripts/e2e_preflight.sh && ./scripts/e2e_smoke.sh`
+<details>
+<summary><strong>Maintainer note — Sparkle signing key recovery</strong></summary>
+
+<br/>
+
+GitHub Actions secrets are write-only; `SPARKLE_PRIVATE_KEY` can't be read back after it's stored. The owner copy lives in the local macOS Keychain under Sparkle account `suniye`. To export it from a Sparkle distribution:
+
+```bash
+./bin/generate_keys --account suniye -x ./suniye-sparkle-private-key
+```
+
+Keep the export in a password manager or other secret store, then delete the local copy.
+
+</details>
+
+---
+
+<div align="center">
+<sub><strong>Suniye</strong> · MIT License · <a href="https://suniye.kishans.in">suniye.kishans.in</a></sub>
+</div>
