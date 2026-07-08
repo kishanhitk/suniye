@@ -12,6 +12,7 @@ import { Sparkline } from "./components/Sparkline";
 import { deltaPct, formatCount, formatPct, relativeTime } from "./lib/utils";
 import { FILTER_DIMS } from "./types";
 import type { FilterDim, Filters, StatsResponse } from "./types";
+import { WebView } from "./WebView";
 
 const RANGES = [7, 30, 90];
 
@@ -36,6 +37,7 @@ function stateFromUrl(): { range: number; filters: Filters } {
 const initial = stateFromUrl();
 
 export default function App() {
+  const [tab, setTab] = useState<"app" | "web">("app");
   const [range, setRange] = useState(initial.range);
   const [filters, setFilters] = useState<Filters>(initial.filters);
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -174,8 +176,36 @@ export default function App() {
           </h1>
           <div className="flex items-center gap-4">
             <p className="hidden font-mono text-[11px] text-muted sm:block" aria-live="polite">
-              {loading ? "updating…" : fetchedAt ? `updated ${relativeTime(fetchedAt)}` : "loading…"}
+              {tab === "app"
+                ? (loading ? "updating…" : fetchedAt ? `updated ${relativeTime(fetchedAt)}` : "loading…")
+                : null}
             </p>
+            <div role="tablist" aria-label="Dashboard section" className="flex rounded-lg border border-line p-0.5">
+              <button
+                role="tab"
+                aria-selected={tab === "app"}
+                onClick={() => setTab("app")}
+                className={
+                  tab === "app"
+                    ? "rounded-md bg-ink px-3 py-1 font-mono text-xs text-paper"
+                    : "rounded-md px-3 py-1 font-mono text-xs text-muted hover:text-ink"
+                }
+              >
+                App
+              </button>
+              <button
+                role="tab"
+                aria-selected={tab === "web"}
+                onClick={() => setTab("web")}
+                className={
+                  tab === "web"
+                    ? "rounded-md bg-ink px-3 py-1 font-mono text-xs text-paper"
+                    : "rounded-md px-3 py-1 font-mono text-xs text-muted hover:text-ink"
+                }
+              >
+                Web
+              </button>
+            </div>
             <div role="radiogroup" aria-label="Time range" className="flex rounded-lg border border-line p-0.5">
               {RANGES.map((r, i) => (
                 <button
@@ -201,7 +231,9 @@ export default function App() {
       </header>
 
       <main>
-        {stats && (
+        {tab === "web" && <WebView range={range} />}
+
+        {tab === "app" && stats && (
           <FilterBar
             options={stats.filterOptions}
             filters={filters}
@@ -212,7 +244,7 @@ export default function App() {
           />
         )}
 
-        {error && (
+        {tab === "app" && error && (
           <div className="border-t border-line py-6" role="alert">
             <p className="text-sm text-ink">Couldn't load stats ({error}).</p>
             <button
@@ -224,7 +256,7 @@ export default function App() {
           </div>
         )}
 
-        {!stats && !error && (
+        {tab === "app" && !stats && !error && (
           // First load: reserve the page's shape so data doesn't shift the layout.
           <div className="space-y-6 pt-6" aria-hidden>
             <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
@@ -236,7 +268,7 @@ export default function App() {
           </div>
         )}
 
-        {stats && (
+        {tab === "app" && stats && (
           <>
             <div className="border-t border-line py-7">
               <TotalsStrip>
