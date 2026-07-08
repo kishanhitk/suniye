@@ -57,9 +57,10 @@ const features = [
   },
 ];
 
-// Speech models — mirrors the in-app catalog (ASRModelCatalog.swift),
-// ordered the way Suniye recommends them.
+// Speech models — mirrors the in-app catalog (ASRModelCatalog.swift). Apple's
+// built-in engine leads; Parakeet v3 stays the recommended download.
 const models = [
+  { name: "Apple Speech", langs: "Follows your system language", speed: "Fast", quality: "Good", size: "Built in", tag: "macOS 26+" },
   { name: "Parakeet TDT 0.6B v3", langs: "25 European languages", speed: "Balanced", quality: "Best", size: "~680 MB", tag: "Recommended" },
   { name: "Parakeet TDT 0.6B v2", langs: "English", speed: "Balanced", quality: "Better", size: "~482 MB", tag: null },
   { name: "SenseVoice", langs: "Chinese · English · Japanese · Korean · Cantonese", speed: "Balanced", quality: "Better", size: "~240 MB", tag: "Multilingual" },
@@ -122,6 +123,10 @@ const moreFeatures = [
   {
     title: "Safe insertion",
     desc: "Your text lands at the cursor and your clipboard is kept intact. Optionally press Return to send automatically.",
+  },
+  {
+    title: "Per-app prompts",
+    desc: "Give each app its own Magic Format style — terse in chat, prose in notes. Add a prompt per app, or none at all.",
   },
   {
     title: "Learns from your edits",
@@ -384,7 +389,7 @@ const faqs = [
             Choose your model
           </h2>
           <p class="mt-5 text-2xl leading-snug tracking-tight md:text-3xl">
-            Ten speech models. Pick the trade-off you want —
+            Eleven speech models. Pick the trade-off you want —
             <span class="text-accent">speed, accuracy, or languages.</span>
           </p>
           <p class="mt-4 leading-relaxed text-muted">
