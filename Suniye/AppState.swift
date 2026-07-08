@@ -413,11 +413,17 @@ final class AppState {
             guard !isHydratingGeneralSettings else {
                 return
             }
-            // Collision policy lives at this settings boundary: the Edit Mode slot always yields.
+            // Collision policy lives at this settings boundary: the Edit Mode and
+            // Command Mode slots always yield to dictation.
             if editModeHotkeyConfiguration == hotkeyConfiguration {
                 editModeHotkeyConfiguration = nil
                 AppLogger.shared.log(.warning, "edit mode hotkey cleared: matched new dictation hotkey")
                 showTransientIndicatorError("Edit Mode shortcut cleared: it matched dictation")
+            }
+            if commandHotkeyConfiguration == hotkeyConfiguration {
+                commandHotkeyConfiguration = nil
+                AppLogger.shared.log(.warning, "command hotkey cleared: matched new dictation hotkey")
+                showTransientIndicatorError("Command Mode shortcut cleared: it matched dictation")
             }
             persistGeneralSettings()
             if runtimeServicesEnabled {
@@ -435,6 +441,26 @@ final class AppState {
                 editModeHotkeyConfiguration = oldValue == hotkeyConfiguration ? nil : oldValue
                 AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches dictation hotkey")
                 showTransientIndicatorError("Edit Mode shortcut must differ from dictation")
+                return
+            }
+            persistGeneralSettings()
+            if runtimeServicesEnabled {
+                wireHotkey()
+            }
+            onStateChange?()
+        }
+    }
+    /// Command Mode shortcut; nil means Command Mode is disabled. Must differ from
+    /// both the dictation and Edit Mode shortcuts.
+    var commandHotkeyConfiguration: HotkeyConfiguration? {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != commandHotkeyConfiguration else {
+                return
+            }
+            if let config = commandHotkeyConfiguration, config == hotkeyConfiguration || config == editModeHotkeyConfiguration {
+                commandHotkeyConfiguration = oldValue.flatMap { ($0 == hotkeyConfiguration || $0 == editModeHotkeyConfiguration) ? nil : $0 }
+                AppLogger.shared.log(.warning, "command hotkey rejected: matches dictation or edit-mode hotkey")
+                showTransientIndicatorError("Command Mode shortcut must differ from dictation and Edit Mode")
                 return
             }
             persistGeneralSettings()
@@ -564,11 +590,6 @@ final class AppState {
 
     var llmEnabled = false {
         didSet { persistLLMSettings() }
-    }
-    /// KIS-168 preview flag: when on, the Edit-Mode hotkey runs Command Mode
-    /// (the voice-driven agent) instead of Edit Mode. Off by default.
-    var commandModePreviewEnabled = UserDefaults.standard.bool(forKey: "commandModePreviewEnabled") {
-        didSet { UserDefaults.standard.set(commandModePreviewEnabled, forKey: "commandModePreviewEnabled") }
     }
     var llmProvider: MagicFormatProvider = .automatic {
         didSet { persistLLMSettings() }
@@ -3047,15 +3068,7 @@ final class AppState {
         hotkeyService.onEditModeHotkeyDown = { [weak self] in
             AppLogger.shared.log(.debug, "edit mode hotkey callback: down")
             Task { @MainActor in
-                guard let self else { return }
-                // KIS-168 preview: the Edit-Mode hotkey drives Command Mode when
-                // the preview flag is on. The UP handler is unchanged — routing is
-                // decided by the session's destination.
-                if self.commandModePreviewEnabled {
-                    await self.beginCommandModeFlow()
-                } else {
-                    await self.beginEditModeRecordingFlow()
-                }
+                await self?.beginEditModeRecordingFlow()
             }
         }
 
@@ -3066,8 +3079,26 @@ final class AppState {
             }
         }
 
-        hotkeyService.startMonitoring(configuration: hotkeyConfiguration, editModeConfiguration: editModeHotkeyConfiguration)
-        AppLogger.shared.log(.info, "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off")")
+        hotkeyService.onCommandHotkeyDown = { [weak self] in
+            AppLogger.shared.log(.debug, "command hotkey callback: down")
+            Task { @MainActor in
+                await self?.beginCommandModeFlow()
+            }
+        }
+
+        hotkeyService.onCommandHotkeyUp = { [weak self] in
+            AppLogger.shared.log(.debug, "command hotkey callback: up")
+            Task { @MainActor in
+                await self?.finishCommandModeRecording()
+            }
+        }
+
+        hotkeyService.startMonitoring(
+            configuration: hotkeyConfiguration,
+            editModeConfiguration: editModeHotkeyConfiguration,
+            commandConfiguration: commandHotkeyConfiguration
+        )
+        AppLogger.shared.log(.info, "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off") command=\(commandHotkeyConfiguration?.displayString ?? "off")")
     }
 
     private func orderedInstalledASRModelIDs(excluding excludedModelIDs: Set<ASRModelID> = []) -> [ASRModelID] {
@@ -3170,8 +3201,8 @@ final class AppState {
         await stopRecordingAndTranscribe(trigger: .editHotkey)
     }
 
-    /// Command Mode hotkey down (KIS-168 preview): record the spoken task.
-    /// Reuses the Edit-Mode hotkey/trigger; the destination routes it to the agent.
+    /// Command Mode hotkey down: record the spoken task; the `.command` destination
+    /// routes the transcript to the agent.
     func beginCommandModeFlow() async {
         guard isEditModeAvailable else {
             lastError = "Command Mode needs a working Magic Format provider"
@@ -3189,7 +3220,12 @@ final class AppState {
             showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             return
         }
-        await beginRecordingFlow(trigger: .editHotkey, destination: .command)
+        await beginRecordingFlow(trigger: .command, destination: .command)
+    }
+
+    /// Command Mode hotkey up: transcribe the task and run the agent.
+    func finishCommandModeRecording() async {
+        await stopRecordingAndTranscribe(trigger: .command)
     }
 
     private func beginRecordingFlow(trigger: RecordingSource, destination: DictationDestination? = nil) async {
@@ -3625,9 +3661,11 @@ final class AppState {
         }
     }
 
-    /// KIS-168 preview: run the on-device Command Mode agent on the spoken task.
-    /// Everything is main-actor isolated; the agent's awaits (LLM) yield the main
-    /// actor so the UI stays live. Brain = the existing local LLM as a tool-caller.
+    /// Run the on-device Command Mode agent on the spoken task. Everything is
+    /// main-actor isolated; the agent's awaits (LLM) yield the main actor so the UI
+    /// stays live. Command Mode is NOT dictation — it never writes to recentResults.
+    /// (Phase 2 replaces the Magic-Format `rewrite` brain with a dedicated
+    /// grammar-constrained inference path.)
     private func finishCommandModeSession(task: String, sessionID: UUID, duration: TimeInterval) async {
         guard !task.isEmpty else {
             AppLogger.shared.log(.warning, "command mode produced empty task")
@@ -3657,16 +3695,13 @@ final class AppState {
             screenReader: reader,
             maxSteps: 8,
             onStep: { [weak self] step in
+                AppLogger.shared.log(.info, "command step: tool=\(step.toolCall.name) args=\(step.toolCall.arguments) result=\(step.result?.output ?? "-") error=\(step.error ?? "-")")
                 self?.setFloatingIndicatorState(.processing(message: step.toolCall.name))
             }
         )
 
         let summary = await agent.run(task: task)
         AppLogger.shared.log(.info, "command mode done: \(summary)")
-        recentResults.insert(
-            RecentResult(id: UUID(), text: summary, createdAt: Date(), durationSeconds: duration, wasLLMPolished: true),
-            at: 0
-        )
         completeDictationSession(sessionID: sessionID, playSuccessSound: true)
     }
 
@@ -3766,6 +3801,7 @@ final class AppState {
         autoSubmitEnabled = settings.autoSubmitEnabled
         hotkeyConfiguration = settings.hotkeyConfiguration
         editModeHotkeyConfiguration = settings.editModeHotkeyConfiguration
+        commandHotkeyConfiguration = settings.commandHotkeyConfiguration
         echoCancellationEnabled = settings.echoCancellationEnabled
         soundFeedbackEnabled = settings.soundFeedbackEnabled
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
@@ -3778,9 +3814,12 @@ final class AppState {
         hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
         hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
         isHydratingGeneralSettings = false
-        // A persisted collision (e.g. hand-edited settings) would silently kill Edit Mode.
+        // A persisted collision (e.g. hand-edited settings) would silently kill a mode.
         if editModeHotkeyConfiguration != nil, editModeHotkeyConfiguration == hotkeyConfiguration {
             editModeHotkeyConfiguration = nil
+        }
+        if let command = commandHotkeyConfiguration, command == hotkeyConfiguration || command == editModeHotkeyConfiguration {
+            commandHotkeyConfiguration = nil
         }
         applyUpdateChannelToController()
         normalizeOnboardingSettingsIfNeeded(loadedSettings: settings)
@@ -3797,6 +3836,7 @@ final class AppState {
             autoSubmitEnabled: autoSubmitEnabled,
             hotkeyConfiguration: hotkeyConfiguration,
             editModeHotkeyConfiguration: editModeHotkeyConfiguration,
+            commandHotkeyConfiguration: commandHotkeyConfiguration,
             echoCancellationEnabled: echoCancellationEnabled,
             soundFeedbackEnabled: soundFeedbackEnabled,
             hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,

@@ -336,6 +336,8 @@ struct GeneralSettings: Codable, Equatable {
     var hotkeyConfiguration: HotkeyConfiguration = .globe
     /// Edit Mode shortcut; nil means Edit Mode is disabled.
     var editModeHotkeyConfiguration: HotkeyConfiguration? = nil
+    /// Command Mode shortcut; nil means Command Mode is disabled.
+    var commandHotkeyConfiguration: HotkeyConfiguration? = nil
     var echoCancellationEnabled: Bool = false
     var soundFeedbackEnabled: Bool = false
     var hideFloatingIndicatorWhenIdle: Bool = false
@@ -359,6 +361,7 @@ struct GeneralSettings: Codable, Equatable {
         autoSubmitEnabled: Bool = false,
         hotkeyConfiguration: HotkeyConfiguration = .globe,
         editModeHotkeyConfiguration: HotkeyConfiguration? = nil,
+        commandHotkeyConfiguration: HotkeyConfiguration? = nil,
         echoCancellationEnabled: Bool = false,
         soundFeedbackEnabled: Bool = false,
         hideFloatingIndicatorWhenIdle: Bool = false,
@@ -376,6 +379,7 @@ struct GeneralSettings: Codable, Equatable {
         self.autoSubmitEnabled = autoSubmitEnabled
         self.hotkeyConfiguration = hotkeyConfiguration
         self.editModeHotkeyConfiguration = editModeHotkeyConfiguration
+        self.commandHotkeyConfiguration = commandHotkeyConfiguration
         self.echoCancellationEnabled = echoCancellationEnabled
         self.soundFeedbackEnabled = soundFeedbackEnabled
         self.hideFloatingIndicatorWhenIdle = hideFloatingIndicatorWhenIdle
@@ -395,6 +399,7 @@ struct GeneralSettings: Codable, Equatable {
         case autoSubmitEnabled
         case hotkeyConfiguration
         case editModeHotkeyConfiguration
+        case commandHotkeyConfiguration
         case echoCancellationEnabled
         case soundFeedbackEnabled
         case hideFloatingIndicatorWhenIdle
@@ -415,6 +420,7 @@ struct GeneralSettings: Codable, Equatable {
         autoSubmitEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSubmitEnabled) ?? false
         hotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .hotkeyConfiguration) ?? .globe
         editModeHotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .editModeHotkeyConfiguration)
+        commandHotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .commandHotkeyConfiguration)
         echoCancellationEnabled = try container.decodeIfPresent(Bool.self, forKey: .echoCancellationEnabled) ?? false
         soundFeedbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundFeedbackEnabled) ?? false
         hideFloatingIndicatorWhenIdle = try container.decodeIfPresent(Bool.self, forKey: .hideFloatingIndicatorWhenIdle) ?? false

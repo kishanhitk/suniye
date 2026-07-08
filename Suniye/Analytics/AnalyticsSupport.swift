@@ -77,7 +77,9 @@ enum TargetCategoryMapper {
 enum AnalyticsMapping {
     static func source(_ source: FloatingIndicatorState.Source) -> SuniyeAnalytics.DictationSource {
         switch source {
-        case .hotkey, .editHotkey: return .hotkey
+        // Command Mode is hotkey-triggered but emits its own command_* events, not
+        // dictation_completed — this mapping is only reached on dictation emits.
+        case .hotkey, .editHotkey, .command: return .hotkey
         case .manual: return .manual
         }
     }

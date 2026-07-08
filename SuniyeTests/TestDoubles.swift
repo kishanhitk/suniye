@@ -565,14 +565,18 @@ final class StubHotkeyService: HotkeyServiceProtocol {
     var onHotkeyUp: (() -> Void)?
     var onEditModeHotkeyDown: (() -> Void)?
     var onEditModeHotkeyUp: (() -> Void)?
+    var onCommandHotkeyDown: (() -> Void)?
+    var onCommandHotkeyUp: (() -> Void)?
     private(set) var startMonitoringCallCount = 0
     private(set) var lastConfiguration: HotkeyConfiguration?
     private(set) var lastEditModeConfiguration: HotkeyConfiguration?
+    private(set) var lastCommandConfiguration: HotkeyConfiguration?
 
-    func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?) {
+    func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?, commandConfiguration: HotkeyConfiguration?) {
         startMonitoringCallCount += 1
         lastConfiguration = configuration
         lastEditModeConfiguration = editModeConfiguration
+        lastCommandConfiguration = commandConfiguration
     }
 
     func stopMonitoring() {}

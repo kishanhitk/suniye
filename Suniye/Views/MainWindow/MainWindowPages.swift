@@ -491,12 +491,21 @@ struct GeneralPage: View {
                             .foregroundStyle(MainWindowPalette.secondaryText)
 
                         CardDivider()
-
-                        SettingsToggleRow(
-                            title: "Command Mode (Preview)",
-                            detail: "Repurpose the Edit Mode hotkey to run the voice-driven Command Mode agent: speak an action like \"open Safari\" and it's carried out on your Mac. Experimental, on-device, single-step commands. Requires Magic Format.",
-                            isOn: $appState.commandModePreviewEnabled
-                        )
+                        HStack(spacing: 12) {
+                            Text("Hold for Command Mode")
+                                .font(AppTypography.body)
+                            Spacer(minLength: 12)
+                            HotkeyRecorderButton(
+                                configuration: $appState.commandHotkeyConfiguration,
+                                idleIcon: "wand.and.stars",
+                                allowsClear: true,
+                                clearHelp: "Remove the Command Mode shortcut"
+                            )
+                        }
+                        CardDivider()
+                        Text("Hold the shortcut and speak an action like \"open Safari\"; the on-device agent carries it out on your Mac. Experimental. Requires Magic Format.")
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
                     }
                 }
             }
