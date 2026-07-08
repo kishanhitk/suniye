@@ -11,5 +11,7 @@
   "name": "suniye",
   "compatibility_date": "2026-04-15",
   "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // First-party web-analytics dataset (marketing site). Auto-provisions on first write.
+  "analytics_engine_datasets": [{ "binding": "WEB_EVENTS", "dataset": "suniye_web" }]
 }
