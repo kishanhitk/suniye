@@ -191,10 +191,19 @@ const faqs = [
   <!-- ── Nav ──────────────────────────────── -->
   <Navbar variant="home" />
 
+  <!-- With JS off, reveal-on-scroll never fires — show everything up front. -->
+  <noscript>
+    <style>
+      .reveal, .hero-word, .fade-in { opacity: 1 !important; transform: none !important; animation: none !important; }
+      .waveform-path { stroke-dashoffset: 0 !important; }
+    </style>
+  </noscript>
+
   <main>
     <!-- ── Hero ─────────────────────────────── -->
     <section class="relative overflow-hidden pt-36 pb-24 md:pt-44 md:pb-32">
-      <div class="mx-auto max-w-6xl px-6">
+      <div class="hero-glow left-[-6rem] top-[1.5rem] h-[24rem] w-[32rem]" aria-hidden="true"></div>
+      <div class="relative z-10 mx-auto max-w-6xl px-6">
         <div class="max-w-3xl">
           <!-- Waveform SVG — decorative -->
           <svg
@@ -217,7 +226,7 @@ const faqs = [
             {heroWords.map((word, i) => (
               <span
                 class="hero-word"
-                style={`animation-delay: ${0.1 + i * 0.1}s`}
+                style={`animation-delay: ${0.08 + i * 0.06}s`}
               >
                 {word}{" "}
               </span>
@@ -233,7 +242,7 @@ const faqs = [
           <div class="fade-in mt-10 max-w-lg">
             <div class="mb-2 flex items-center gap-2">
               <span class="font-display text-xs uppercase tracking-widest text-muted">Install with Homebrew</span>
-              <span class="rounded-full border border-accent/25 bg-accent/5 px-2 py-0.5 font-display text-[10px] uppercase tracking-wide text-accent">Recommended</span>
+              <span class="pill pill-accent">Recommended</span>
             </div>
             <CopyField value={brewInstall} label="Copy install command" />
           </div>
@@ -257,7 +266,7 @@ const faqs = [
         <!-- block autoplay-with-audio, so we lead with a poster + play affordance. -->
         <figure class="reveal mt-16 md:mt-24">
           <div
-            class="mx-auto max-w-5xl overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_40px_90px_-28px_rgba(26,26,26,0.32)]"
+            class="mx-auto max-w-5xl overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-float)]"
           >
             <!-- Titlebar, echoing the macOS app chrome used elsewhere on the page -->
             <div class="flex items-center gap-1.5 border-b border-border/70 bg-surface/70 px-4 py-3">
@@ -300,7 +309,7 @@ const faqs = [
                 aria-label="Play the demo with sound"
               >
                 <span
-                  class="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-accent text-white shadow-xl ring-1 ring-white/10 transition-transform duration-300 group-hover:scale-105 md:h-[88px] md:w-[88px]"
+                  class="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-accent text-white shadow-xl ring-1 ring-white/10 transition-transform duration-150 [transition-timing-function:var(--curve-out)] group-hover:scale-105 group-active:scale-95 md:h-[88px] md:w-[88px]"
                 >
                   <svg class="h-7 w-7 translate-x-[2px] md:h-9 md:w-9" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M6 4.5l13 7.5-13 7.5z" />
@@ -326,7 +335,7 @@ const faqs = [
 
         <div class="mt-14 grid gap-12 md:grid-cols-3 md:gap-8">
           {steps.map((step, i) => (
-            <div class="reveal" style={`transition-delay: ${i * 0.12}s`}>
+            <div class="reveal" style={`transition-delay: ${i * 0.06}s`}>
               <span class="font-display text-5xl tracking-tighter text-accent/25">
                 {step.num}
               </span>
@@ -353,7 +362,7 @@ const faqs = [
           {features.map((f, i) => (
             <div
               class="reveal border-l-2 border-accent/20 pl-5"
-              style={`transition-delay: ${i * 0.08}s`}
+              style={`transition-delay: ${i * 0.06}s`}
             >
               <h3 class="font-display text-base tracking-tight">{f.title}</h3>
               <p class="mt-2 text-[15px] leading-relaxed text-muted">
@@ -396,19 +405,22 @@ const faqs = [
             </thead>
             <tbody>
               {models.map((m) => (
-                <tr class="border-b border-border/50 align-middle transition-colors hover:bg-surface/60">
+                <tr
+                  class:list={[
+                    "border-b border-border/50 align-middle transition-colors",
+                    m.tag === "Recommended"
+                      ? "bg-accent/[0.04] hover:bg-accent/[0.07]"
+                      : "hover:bg-surface/60",
+                  ]}
+                >
                   <td class="py-4 pr-4">
                     <span class="font-display text-[15px] tracking-tight text-ink">{m.name}</span>
-                    {m.tag && (
-                      <span class="ml-2 inline-block rounded-full border border-accent/25 bg-accent/5 px-2 py-0.5 font-display text-[10px] uppercase tracking-wide text-accent">
-                        {m.tag}
-                      </span>
-                    )}
+                    {m.tag && <span class="pill pill-accent ml-2">{m.tag}</span>}
                   </td>
                   <td class="py-4 pr-4 text-sm text-muted">{m.langs}</td>
                   <td class="py-4 pr-4 text-sm text-muted">{m.speed}</td>
                   <td class="py-4 pr-4 text-sm text-muted">{m.quality}</td>
-                  <td class="py-4 pr-4 text-right font-display text-sm text-muted">{m.size}</td>
+                  <td class="py-4 pr-4 text-right font-display text-sm tabular-nums text-muted">{m.size}</td>
                 </tr>
               ))}
             </tbody>
@@ -418,20 +430,21 @@ const faqs = [
         <!-- Mobile cards -->
         <div class="reveal mt-10 grid gap-3 md:hidden">
           {models.map((m) => (
-            <div class="rounded-xl border border-border bg-surface/40 p-4">
+            <div
+              class:list={[
+                "card card-hover p-4",
+                m.tag === "Recommended" ? "card-accent" : "bg-surface/40",
+              ]}
+            >
               <div class="flex items-start justify-between gap-3">
                 <span class="font-display text-[15px] tracking-tight text-ink">{m.name}</span>
-                {m.tag && (
-                  <span class="shrink-0 rounded-full border border-accent/25 bg-accent/5 px-2 py-0.5 font-display text-[10px] uppercase tracking-wide text-accent">
-                    {m.tag}
-                  </span>
-                )}
+                {m.tag && <span class="pill pill-accent shrink-0">{m.tag}</span>}
               </div>
               <p class="mt-1.5 text-sm text-muted">{m.langs}</p>
               <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1 font-display text-xs text-muted/80">
                 <span>{m.speed}</span>
                 <span>{m.quality}</span>
-                <span>{m.size}</span>
+                <span class="tabular-nums">{m.size}</span>
               </div>
             </div>
           ))}
@@ -459,19 +472,15 @@ const faqs = [
         <div class="mt-12 grid gap-5 md:grid-cols-3">
           {cleanupTiers.map((t, i) => (
             <div
-              class="reveal flex flex-col rounded-2xl border border-border bg-bg p-6"
-              style={`transition-delay: ${i * 0.1}s`}
+              class:list={[
+                "reveal card card-hover flex flex-col p-6",
+                t.onDevice ? "card-accent" : "bg-bg",
+              ]}
+              style={`transition-delay: ${i * 0.06}s`}
             >
               <div class="flex items-center justify-between">
                 <span class="font-display text-3xl tracking-tighter text-accent/25">{t.step}</span>
-                <span
-                  class:list={[
-                    "rounded-full px-2.5 py-1 font-display text-[10px] uppercase tracking-wide",
-                    t.onDevice
-                      ? "border border-accent/25 bg-accent/5 text-accent"
-                      : "border border-border bg-surface text-muted",
-                  ]}
-                >
+                <span class:list={["pill", t.onDevice ? "pill-accent" : "pill-muted"]}>
                   {t.onDevice ? "On your Mac" : "Optional"}
                 </span>
               </div>
@@ -542,7 +551,7 @@ const faqs = [
 
         <div class="mt-14 grid gap-x-12 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
           {moreFeatures.map((f, i) => (
-            <div class="reveal" style={`transition-delay: ${i * 0.07}s`}>
+            <div class="reveal" style={`transition-delay: ${i * 0.06}s`}>
               <h3 class="font-display text-base tracking-tight">{f.title}</h3>
               <p class="mt-2 text-[15px] leading-relaxed text-muted">{f.desc}</p>
             </div>
@@ -572,7 +581,7 @@ const faqs = [
                   <th
                     class:list={[
                       "py-4 px-4 text-center font-display text-sm tracking-tight",
-                      i === 0 ? "text-accent" : "text-muted",
+                      i === 0 ? "bg-accent/[0.06] text-accent" : "text-muted",
                     ]}
                   >
                     {col}
@@ -588,7 +597,7 @@ const faqs = [
                     <td
                       class:list={[
                         "py-4 px-4 text-center",
-                        i === 0 ? "bg-accent/[0.04]" : "",
+                        i === 0 ? "bg-accent/[0.05]" : "",
                       ]}
                     >
                       {v === "yes" ? (
@@ -653,7 +662,7 @@ const faqs = [
           <div class="mt-8 mx-auto max-w-md">
             <div class="mb-2 flex items-center justify-center gap-2">
               <span class="font-display text-xs uppercase tracking-widest text-muted">Install with Homebrew</span>
-              <span class="rounded-full border border-accent/25 bg-accent/5 px-2 py-0.5 font-display text-[10px] uppercase tracking-wide text-accent">Recommended</span>
+              <span class="pill pill-accent">Recommended</span>
             </div>
             <CopyField value={brewInstall} label="Copy install command" class="text-left" />
           </div>
@@ -662,7 +671,7 @@ const faqs = [
             <a
               href={downloadUrl}
               data-dmg
-              class="inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 font-display text-sm text-ink transition-colors hover:bg-surface"
+              class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 font-display text-sm text-ink hover:bg-surface"
             >
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
@@ -673,7 +682,7 @@ const faqs = [
               href={`${githubUrl}#build-from-source`}
               target="_blank"
               rel="noopener"
-              class="inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 font-display text-sm text-ink transition-colors hover:bg-surface"
+              class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 font-display text-sm text-ink hover:bg-surface"
             >
               Build from Source
             </a>
@@ -705,7 +714,7 @@ const faqs = [
           <button
             id="dmg-banner-close"
             type="button"
-            class="-mt-0.5 flex-none rounded-md p-1 text-muted/50 transition-colors hover:bg-surface hover:text-ink"
+            class="btn-press -mt-0.5 flex-none rounded-md p-1 text-muted/50 hover:bg-surface hover:text-ink"
             aria-label="Dismiss"
           >
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -725,7 +734,7 @@ const faqs = [
           <button
             type="button"
             data-dmg-close
-            class="rounded-lg bg-ink px-5 py-2.5 font-display text-sm text-bg transition-colors hover:bg-ink/85"
+            class="btn-press rounded-lg bg-ink px-5 py-2.5 font-display text-sm text-bg hover:bg-ink/85"
           >
             Got it
           </button>
@@ -762,19 +771,24 @@ const faqs = [
 
   <!-- ── Scroll reveal observer ─────────────── -->
   <script>
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("visible");
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
-    );
-
-    document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
+    const revealEls = document.querySelectorAll(".reveal");
+    if (!("IntersectionObserver" in window)) {
+      // No observer support — reveal everything rather than leave it hidden.
+      revealEls.forEach((el) => el.classList.add("visible"));
+    } else {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("visible");
+              observer.unobserve(entry.target);
+            }
+          });
+        },
+        { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
+      );
+      revealEls.forEach((el) => observer.observe(el));
+    }
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
