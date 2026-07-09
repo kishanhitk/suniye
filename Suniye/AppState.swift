@@ -3711,7 +3711,7 @@ final class AppState {
             brain: LocalLLMAgentBrain(generator: generator),
             registry: registry,
             screenReader: reader,
-            maxSteps: 12,
+            maxSteps: 50,
             onStep: { [weak self] step in
                 AppLogger.shared.log(.info, "command step: tool=\(step.toolCall.name) args=\(step.toolCall.arguments) result=\(step.result?.output ?? "-") error=\(step.error ?? "-")")
                 // Live action log: name the action only (never the typed text,

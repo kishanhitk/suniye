@@ -58,7 +58,7 @@ final class CommandModeAgent {
     init(brain: AgentBrain,
          registry: AgentToolRegistry,
          screenReader: ScreenReading,
-         maxSteps: Int = 12,
+         maxSteps: Int = 50,
          onStep: ((AgentStep) -> Void)? = nil) {
         self.brain = brain
         self.registry = registry
