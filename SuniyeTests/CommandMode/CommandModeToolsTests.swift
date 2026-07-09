@@ -9,7 +9,7 @@ final class CommandModeToolsTests: XCTestCase {
 
     private struct FakeLauncher: AppLaunching {
         let sink: StringSink
-        func launchOrActivate(_ name: String) -> Bool { sink.value = name; return true }
+        func launchOrActivate(_ name: String) async -> Bool { sink.value = name; return true }
     }
 
     private struct FakeTyper: TextTyping {
