@@ -113,12 +113,19 @@ final class CommandModeE2ETests: XCTestCase {
     private func run(task: String) async -> Outcome {
         let reader = AXTreeReader()
         let recorder = StepRecorder()
+        // Native-only routing surface (no browser transport); auto-approve any
+        // confirmation so headless runs never block on a modal.
+        let surface = RoutingCommandSurface(
+            native: reader, browser: nil, transport: nil, nativeTyper: CGEventTyper(),
+            frontmostBundleID: { NSWorkspace.shared.frontmostApplication?.bundleIdentifier },
+            isBrowser: { _ in false }, confirmRisky: { _ in true }
+        )
         let registry = AgentToolRegistry(tools: [
-            ReadScreenTool(reader: reader),
+            ReadScreenTool(reader: surface),
             OpenAppTool(launcher: SystemAppLauncher()),
-            ClickTool(resolver: reader),
-            FocusTool(resolver: reader),
-            TypeTextTool(typer: CGEventTyper()),
+            ClickTool(surface: surface),
+            FocusTool(surface: surface),
+            TypeTextTool(surface: surface),
             PressKeysTool(poster: SystemKeyChordPoster()),
             RunAppleScriptTool(),
             FinishTool(),
@@ -126,7 +133,7 @@ final class CommandModeE2ETests: XCTestCase {
         let agent = CommandModeAgent(
             brain: LocalLLMAgentBrain(generator: llm),
             registry: registry,
-            screenReader: reader,
+            screenReader: surface,
             maxSteps: 50,
             onStep: { recorder.add($0) }
         )

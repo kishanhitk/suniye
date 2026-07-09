@@ -9,13 +9,12 @@ protocol TextTyping {
 struct TypeTextTool: AgentTool {
     let name = "type_text"
     let risk: RiskTier = .benign
-    let typer: TextTyping
+    let surface: CommandActing
 
     func execute(_ arguments: [String: String]) async throws -> ToolResult {
         guard let text = arguments["text"] else {
             throw CommandModeError.malformedToolCall("type_text needs 'text'")
         }
-        typer.type(text)
-        return ToolResult(output: "typed \(text.count) chars", isTerminal: false)
+        return await surface.typeText(text)
     }
 }

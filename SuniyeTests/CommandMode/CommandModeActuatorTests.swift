@@ -27,24 +27,22 @@ final class CommandModeActuatorTests: XCTestCase {
         XCTAssertNil(KeyChord.parse("cmd+😀"))
     }
 
-    // MARK: Click/Focus (arg + unknown-element paths; a live AX press needs integration)
-
-    private struct NilResolver: ElementResolving {
-        func element(forId id: String) -> AXUIElement? { nil }
-    }
+    // MARK: Click/Focus (arg guard + delegation; the native/browser action lives in the surface)
 
     func testClickRejectsMissingId() async {
         do {
-            _ = try await ClickTool(resolver: NilResolver()).execute([:])
+            _ = try await ClickTool(surface: FakeCommandSurface()).execute([:])
             XCTFail("expected malformedToolCall")
         } catch {
             XCTAssertEqual(error as? CommandModeError, .malformedToolCall("click needs 'element_id'"))
         }
     }
 
-    func testClickReportsUnknownElement() async throws {
-        let result = try await ClickTool(resolver: NilResolver()).execute(["element_id": "e9"])
-        XCTAssertTrue(result.output.contains("no element"))
+    func testClickDelegatesToSurface() async throws {
+        let surface = FakeCommandSurface()
+        let result = try await ClickTool(surface: surface).execute(["element_id": "e9"])
+        XCTAssertEqual(surface.clicks, ["e9"])
+        XCTAssertEqual(result.output, "clicked e9")
         XCTAssertFalse(result.isTerminal)
     }
 

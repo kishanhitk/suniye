@@ -92,6 +92,77 @@ final class BrowserBridgeTests: XCTestCase {
         XCTAssertEqual(BrowserBridge.stringify(["a", "b"]), #"["a","b"]"#)
     }
 
+    // MARK: snapshot render + routing surface (Phase C)
+
+    private final class ScriptedBrowserTransport: BrowserTransport, @unchecked Sendable {
+        var connected = true
+        var responses: [String: BrowserResponse] = [:]
+        private(set) var sent: [(tool: String, args: [String: String])] = []
+        var isConnected: Bool { get async { connected } }
+        func send(tool: String, args: [String: String], timeout: TimeInterval) async throws -> BrowserResponse {
+            sent.append((tool, args))
+            return responses[tool] ?? BrowserResponse.success([:])
+        }
+    }
+
+    private struct NoopTyper: TextTyping { func type(_ text: String) {} }
+
+    func testSnapshotSummaryMatchesNativeShape() {
+        let text = BrowserSnapshotReader.summary(url: "https://x.com", title: "Cart",
+                                                 rows: ["e0: button \"Buy\"", "e1: link \"Home\""])
+        XCTAssertTrue(text.hasPrefix("Frontmost app: Google Chrome — Cart"))
+        XCTAssertTrue(text.contains("URL: https://x.com"))
+        XCTAssertTrue(text.contains("Actionable elements — reference an id with click/focus:"))
+        XCTAssertTrue(text.contains("e0: button \"Buy\""))
+    }
+
+    private func browserSurface(_ transport: ScriptedBrowserTransport,
+                                confirm: @escaping @MainActor (String) async -> Bool) -> RoutingCommandSurface {
+        RoutingCommandSurface(
+            native: AXTreeReader(), browser: BrowserSnapshotReader(transport: transport), transport: transport,
+            nativeTyper: NoopTyper(), frontmostBundleID: { "com.google.Chrome" },
+            isBrowser: { _ in true }, confirmRisky: confirm
+        )
+    }
+
+    func testRoutesToBrowserAndConfirmsConsequentialClick() async {
+        let transport = ScriptedBrowserTransport()
+        transport.responses["snapshot"] = .success(["rows": #"[{"ref":"e0","role":"button","label":"Add to cart"}]"#, "url": "https://x", "title": "X"])
+        transport.responses["click"] = .success(["output": "clicked e0"])
+        var confirmed: [String] = []
+        let surface = browserSurface(transport) { description in confirmed.append(description); return true }
+
+        let observation = await surface.readScreen()
+        XCTAssertEqual(surface.activeKind, .browser)
+        XCTAssertTrue(observation.contains(#"e0: button "Add to cart""#))
+
+        let result = await surface.click(id: "e0")
+        XCTAssertEqual(result.output, "clicked e0")
+        XCTAssertEqual(confirmed.count, 1, "\"Add to cart\" is consequential → must confirm")
+        XCTAssertTrue(transport.sent.contains { $0.tool == "click" && $0.args["ref"] == "e0" })
+    }
+
+    func testConsequentialClickCancelledWhenUserDeclines() async {
+        let transport = ScriptedBrowserTransport()
+        transport.responses["snapshot"] = .success(["rows": #"[{"ref":"e0","role":"button","label":"Place order"}]"#])
+        let surface = browserSurface(transport) { _ in false } // user declines
+        _ = await surface.readScreen()
+        let result = await surface.click(id: "e0")
+        XCTAssertTrue(result.output.contains("declined"))
+        XCTAssertFalse(transport.sent.contains { $0.tool == "click" }, "a declined action must not reach the page")
+    }
+
+    func testPlainLinkClickSkipsConfirmation() async {
+        let transport = ScriptedBrowserTransport()
+        transport.responses["snapshot"] = .success(["rows": #"[{"ref":"e0","role":"link","label":"Home"}]"#])
+        transport.responses["click"] = .success(["output": "clicked e0"])
+        var confirmCount = 0
+        let surface = browserSurface(transport) { _ in confirmCount += 1; return true }
+        _ = await surface.readScreen()
+        _ = await surface.click(id: "e0")
+        XCTAssertEqual(confirmCount, 0, "navigating a link is not a risky action")
+    }
+
     // MARK: toolNames-driven prompt
 
     func testPromptIncludesBrowserToolOnlyWhenRegistered() async throws {

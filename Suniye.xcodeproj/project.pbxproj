@@ -66,6 +66,7 @@
 		46CCC583C6502528306225E2 /* MagicFormatProviderPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A7986DAFD4E7E959E2DE2A6 /* MagicFormatProviderPresentation.swift */; };
 		4716CC2BEBA805E69064122E /* libsherpa-onnx-c-api.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 75E6194F3E61C3D677F93DA9 /* libsherpa-onnx-c-api.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		475BE9AB69E088E2E374CF3B /* AppStateCoverageModelOpsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B2090CE8148347D8A1A12DE /* AppStateCoverageModelOpsTests.swift */; };
+		4806C851875AD1D5BFD204A9 /* BrowserSnapshotReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E50022A391587E1CC4204A55 /* BrowserSnapshotReader.swift */; };
 		49C43FB63F5A0F13F0FF79F8 /* RunAppleScriptTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD54109E04A9F0E887680190 /* RunAppleScriptTool.swift */; };
 		4AF9B1202D7019824CA6D851 /* GeneralSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3161CA1497B7EEA0FB2CE36 /* GeneralSettingsStore.swift */; };
 		4B30AE36C13C0DA07F5B9BB0 /* EditModeServiceMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFA029A8D395DF106BEEB35E /* EditModeServiceMoreTests.swift */; };
@@ -75,6 +76,7 @@
 		4EBB138B38563258C53E2CE7 /* CommandModeActuatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9770C7327E63F04E1F9345E0 /* CommandModeActuatorTests.swift */; };
 		4F37908DEC15B105CAD05C4F /* CoreAudioDeviceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74358CCAA04D28E170CC02C2 /* CoreAudioDeviceMonitor.swift */; };
 		50530ADD0EB72B0C65FDF940 /* ASRModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EEF5DAFB9957AB9ADBF7E3 /* ASRModelCatalog.swift */; };
+		50B40466FE38FAFCB2402201 /* CommandSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA3C5BC2EBD4DA7C33636C73 /* CommandSurface.swift */; };
 		51EA5FB28162D4F0372B5ADD /* EditLearningServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4B11A27F20609007582902C /* EditLearningServiceTests.swift */; };
 		5281C912B2528C33773C008C /* MainWindowComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E769F836704229B962F80C /* MainWindowComponents.swift */; };
 		538CCC22F273225E882F7463 /* HistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */; };
@@ -422,6 +424,7 @@
 		D8ED33B3E86E3D32345233D3 /* ChatCompletionClientMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCompletionClientMoreTests.swift; sourceTree = "<group>"; };
 		D9A43576952A870136E63581 /* MagicFormatPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatPage.swift; sourceTree = "<group>"; };
 		DA3686A213810FF9BE79E3CC /* FloatingIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorView.swift; sourceTree = "<group>"; };
+		DA3C5BC2EBD4DA7C33636C73 /* CommandSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandSurface.swift; sourceTree = "<group>"; };
 		DA6D9C9D8CF9BF854941CE7C /* SuniyeNativeBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = SuniyeNativeBridge.mm; sourceTree = "<group>"; };
 		DB16CAD532E7ECD31B041352 /* AppleSpeechTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSpeechTranscriptionService.swift; sourceTree = "<group>"; };
 		DB71DAFF5363E778A2E91DB2 /* AudioRingBuffer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioRingBuffer.h; sourceTree = "<group>"; };
@@ -434,6 +437,7 @@
 		E3471ED7BC0D817AF7D5C516 /* SherpaOnnx.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SherpaOnnx.swift; sourceTree = "<group>"; };
 		E373424E3D8F59743DFA0806 /* LLMAvailabilityAndVersionCoverageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMAvailabilityAndVersionCoverageTests.swift; sourceTree = "<group>"; };
 		E4B11A27F20609007582902C /* EditLearningServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditLearningServiceTests.swift; sourceTree = "<group>"; };
+		E50022A391587E1CC4204A55 /* BrowserSnapshotReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserSnapshotReader.swift; sourceTree = "<group>"; };
 		E5C333F9E2D2E53C8388E26E /* FloatingIndicatorLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorLayoutTests.swift; sourceTree = "<group>"; };
 		E62E23E5D4CD3C127DD7F39C /* AppVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersionTests.swift; sourceTree = "<group>"; };
 		E69ACF4C1E158980EDDDA56F /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
@@ -781,7 +785,9 @@
 				037D9659560F4934C395A0D5 /* BrowserBridge.swift */,
 				6410E131C6FFD8E5428C88EE /* BrowserBridgeConfig.swift */,
 				25ED083D82E9072D4FF5EC8A /* BrowserExtensionInstaller.swift */,
+				E50022A391587E1CC4204A55 /* BrowserSnapshotReader.swift */,
 				5A7F6AF062DDDBF83D9865D2 /* BrowserTransport.swift */,
+				DA3C5BC2EBD4DA7C33636C73 /* CommandSurface.swift */,
 				E3A51D734A8A3FDE7FA107C4 /* Tools */,
 			);
 			path = Browser;
@@ -992,11 +998,13 @@
 				A79062560C1E074054582300 /* BrowserExtensionInstaller.swift in Sources */,
 				9426924A282420B6FC0DB3A4 /* BrowserNavigateTool.swift in Sources */,
 				CED14E430960681FB511D5CC /* BrowserReadTextTool.swift in Sources */,
+				4806C851875AD1D5BFD204A9 /* BrowserSnapshotReader.swift in Sources */,
 				0E8343E5A1D726AF0DD87983 /* BrowserTransport.swift in Sources */,
 				8026BDFF0398AE05E7C479C9 /* ChatCompletionClient.swift in Sources */,
 				2804E6E435B6D7F0EA77B718 /* ClickTool.swift in Sources */,
 				8C38794A69D3C1F0215F5C82 /* CommandModeAgent.swift in Sources */,
 				09B8477F29BBE91B07DCCE4D /* CommandModeTypes.swift in Sources */,
+				50B40466FE38FAFCB2402201 /* CommandSurface.swift in Sources */,
 				4F37908DEC15B105CAD05C4F /* CoreAudioDeviceMonitor.swift in Sources */,
 				0A63B97243811A96C593B4B7 /* EditLearning.swift in Sources */,
 				928A4D6D164E3C5432A6FBD0 /* EditLearningService.swift in Sources */,

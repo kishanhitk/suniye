@@ -12,11 +12,6 @@ final class CommandModeToolsTests: XCTestCase {
         func launchOrActivate(_ name: String) async -> Bool { sink.value = name; return true }
     }
 
-    private struct FakeTyper: TextTyping {
-        let sink: StringSink
-        func type(_ text: String) { sink.value = text }
-    }
-
     private struct FakeScreen: ScreenReading {
         func readScreen() async -> String { "Frontmost app: Finder" }
     }
@@ -39,11 +34,12 @@ final class CommandModeToolsTests: XCTestCase {
         }
     }
 
-    func testTypeTextInvokesTyper() async throws {
-        let sink = StringSink()
-        let tool = TypeTextTool(typer: FakeTyper(sink: sink))
-        _ = try await tool.execute(["text": "hello"])
-        XCTAssertEqual(sink.value, "hello")
+    func testTypeTextDelegatesToSurface() async throws {
+        let surface = FakeCommandSurface()
+        let tool = TypeTextTool(surface: surface)
+        let result = try await tool.execute(["text": "hello"])
+        XCTAssertEqual(surface.typed, ["hello"])
+        XCTAssertEqual(result.output, "typed 5 chars")
     }
 
     func testReadScreenReturnsObservation() async throws {

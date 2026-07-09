@@ -1796,6 +1796,20 @@ final class AppState {
         await browserBridge?.stop()
     }
 
+    /// Confirmation gate for risky web actions (v1 safety): a consequential page
+    /// action — click a submit/buy/checkout/delete control — pauses for the user
+    /// to Allow or Cancel. Login/payment targets are hard-refused in the extension.
+    func confirmBrowserAction(_ description: String) -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Allow this web action?"
+        alert.informativeText = "Suniye wants to \(description) on the current page."
+        alert.addButton(withTitle: "Allow")
+        alert.addButton(withTitle: "Cancel")
+        AppLogger.shared.log(.info, "command mode confirm requested: \(description)")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
     func startOnboardingIfNeeded() {
         guard !hasCompletedCoreOnboarding else {
             activeOnboardingStep = nil
@@ -3746,20 +3760,31 @@ final class AppState {
         let typer = ClosureTextTyping { [textInsertionService] text in
             try? textInsertionService.insertText(text)
         }
+        // Routing surface: read_screen/click/focus/type act on the native AX tree,
+        // OR — when a browser is frontmost and the extension is connected — on the
+        // web page (snapshot + trusted CDP), with a confirmation on risky web actions.
         let reader = AXTreeReader()
+        let surface = RoutingCommandSurface(
+            native: reader,
+            browser: browserBridge.map { BrowserSnapshotReader(transport: $0) },
+            transport: browserBridge,
+            nativeTyper: typer,
+            frontmostBundleID: { NSWorkspace.shared.frontmostApplication?.bundleIdentifier },
+            isBrowser: { TargetCategoryMapper.category(for: $0) == .browser },
+            confirmRisky: { [weak self] description in self?.confirmBrowserAction(description) ?? false }
+        )
         var tools: [AgentTool] = [
-            ReadScreenTool(reader: reader),
+            ReadScreenTool(reader: surface),
             OpenAppTool(launcher: SystemAppLauncher()),
-            ClickTool(resolver: reader),
-            FocusTool(resolver: reader),
-            TypeTextTool(typer: typer),
+            ClickTool(surface: surface),
+            FocusTool(surface: surface),
+            TypeTextTool(surface: surface),
             PressKeysTool(poster: SystemKeyChordPoster()),
             RunAppleScriptTool(),
             FinishTool(),
         ]
-        // Browser control: offer the web-reading tool only when the extension is
-        // actually connected, so the prompt catalog (toolNames-driven) stays clean
-        // on machines without it. (Phase B routes read_screen/click/type too.)
+        // Browser-only verbs, offered only when the extension is connected so the
+        // prompt catalog (toolNames-driven) stays clean on machines without it.
         if let bridge = browserBridge, await bridge.isConnected {
             tools.append(BrowserReadTextTool(transport: bridge))
             tools.append(BrowserNavigateTool(transport: bridge))
@@ -3768,7 +3793,7 @@ final class AppState {
         let agent = CommandModeAgent(
             brain: LocalLLMAgentBrain(generator: generator),
             registry: registry,
-            screenReader: reader,
+            screenReader: surface,
             maxSteps: 50,
             onStep: { [weak self] step in
                 AppLogger.shared.log(.info, "command step: tool=\(step.toolCall.name) args=\(step.toolCall.arguments) result=\(step.result?.output ?? "-") error=\(step.error ?? "-")")
@@ -3845,6 +3870,8 @@ final class AppState {
         case "type_text": return "Typing"
         case "press_keys": return "Pressing \(call.arguments["keys"] ?? "keys")"
         case "run_applescript": return "Running a script"
+        case "browser_navigate": return "Opening \(call.arguments["url"] ?? "a page")"
+        case "browser_read_text": return "Reading the page"
         case "finish": return "Done"
         default: return "Working…"
         }
