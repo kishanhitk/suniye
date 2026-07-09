@@ -23,12 +23,15 @@ GATE="$HOME/.suniye-browser-e2e.json"
 
 # --llm: also run the full-pipeline tier with a REAL LLM brain (spawns a local
 # llama-server on the Suniye Gemma model; override with --endpoint/--model/--key).
-LLM="0"; LLM_ENDPOINT=""; LLM_MODEL="local"; LLM_KEY=""
+LLM="0"; LLM_ENDPOINT=""; LLM_MODEL="local"; LLM_KEY=""; SITE=""
 LLAMA_SERVER="${SUNIYE_LLAMA_SERVER:-$ROOT/Suniye/LocalLLM/llama-server}"
 LLM_MODEL_PATH="${SUNIYE_LLM_MODEL_PATH:-$HOME/Library/Application Support/Suniye/llm/gemma-4-e2b-Q4_K_M.gguf}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --llm)      LLM="1"; shift ;;
+    # --flipkart: also run the LIVE-Flipkart tier (real site, the user's logged-in
+    # Chrome session). Implies --llm for the orders-navigation flow.
+    --flipkart) SITE="flipkart"; LLM="1"; shift ;;
     --endpoint) LLM_ENDPOINT="$2"; LLM="1"; shift 2 ;;
     --model)    LLM_MODEL="$2"; shift 2 ;;
     --key)      LLM_KEY="$2"; shift 2 ;;
@@ -54,6 +57,20 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+# Preferred test brain: a remote smart model via OpenRouter, keyed from the
+# environment or a 0600 credential file (never hardcoded/committed). Override the
+# model with SUNIYE_TEST_LLM_MODEL.
+KEY_FILE="$HOME/.config/suniye/test-llm-key"
+if [[ -z "${SUNIYE_TEST_LLM_KEY:-}" && -f "$KEY_FILE" ]]; then
+  SUNIYE_TEST_LLM_KEY="$(cat "$KEY_FILE")"
+fi
+if [[ "$LLM" == "1" && -z "$LLM_ENDPOINT" && -n "${SUNIYE_TEST_LLM_KEY:-}" ]]; then
+  LLM_ENDPOINT="${SUNIYE_TEST_LLM_ENDPOINT:-https://openrouter.ai/api}"
+  LLM_MODEL="${SUNIYE_TEST_LLM_MODEL:-anthropic/claude-sonnet-4.6}"
+  LLM_KEY="$SUNIYE_TEST_LLM_KEY"
+  echo "Using remote test model: $LLM_MODEL"
+fi
 
 if [[ "$LLM" == "1" && -z "$LLM_ENDPOINT" ]]; then
   [[ -x "$LLAMA_SERVER" ]] || { echo "llama-server not found at $LLAMA_SERVER" >&2; exit 2; }
@@ -90,27 +107,32 @@ if pgrep -x "Google Chrome" >/dev/null 2>&1; then
   for _ in $(seq 1 30); do pgrep -x "Google Chrome" >/dev/null 2>&1 || break; sleep 0.5; done
 fi
 
-python3 - "$GATE" "$LLM_ENDPOINT" "$LLM_MODEL" "$LLM_KEY" <<'PY'
+python3 - "$GATE" "$LLM_ENDPOINT" "$LLM_MODEL" "$LLM_KEY" "$SITE" <<'PY'
 import json, sys
-path, url, model, key = sys.argv[1:5]
+path, url, model, key, site = sys.argv[1:6]
 cfg = {"enabled": True}
 if url:
     cfg["llm_url"] = url
     cfg["llm_model"] = model
     if key:
         cfg["llm_key"] = key
+if site:
+    cfg["site"] = site
 with open(path, "w") as f:
     json.dump(cfg, f)
 PY
 
-echo "Running browser E2E (real extension + fixture page)…"
+ONLY_TESTS=(-only-testing:SuniyeTests/BrowserFixtureE2ETests)
+[[ -n "$SITE" ]] && ONLY_TESTS+=(-only-testing:SuniyeTests/BrowserLiveSiteE2ETests)
+
+echo "Running browser E2E (real extension + fixture page${SITE:+ + live $SITE})…"
 set +e
 xcodebuild test \
   -scheme Suniye \
   -destination 'platform=macOS,arch=arm64' \
-  -only-testing:SuniyeTests/BrowserFixtureE2ETests \
+  "${ONLY_TESTS[@]}" \
   CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO 2>&1 \
-  | grep -E "Test Case '.*(started|passed|failed)|error:|XCTSkip|Executed [0-9]+ test|TEST (SUCCEEDED|FAILED)|page never|failed -"
+  | grep -E "Test Case '.*(started|passed|failed)|error:|XCTSkip|skipped|Executed [0-9]+ test|TEST (SUCCEEDED|FAILED)|page never|FLIPKART|WIKI|EXAMPLE|failed -"
 STATUS="${PIPESTATUS[0]}"
 set -e
 

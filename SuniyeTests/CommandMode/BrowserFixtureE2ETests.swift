@@ -196,6 +196,35 @@ final class BrowserFixtureE2ETests: XCTestCase {
         XCTAssertFalse(page.contains("hunter2"), "the secret must never reach the page")
     }
 
+    /// The exact shape that stalled in dogfooding: an "Account → My orders"
+    /// dropdown where the menu item is display:none until the toggle is clicked.
+    /// Proves the item is ABSENT before and PRESENT after — i.e. that a re-read
+    /// after a click surfaces newly-revealed controls (so the model has a fresh
+    /// ref to click, rather than re-clicking the toggle and stalling).
+    func testRevealedDropdownMenuAppearsInSnapshotAfterClick() async throws {
+        let surface = makeSurface()
+        confirmAnswer = true
+
+        let nav = try await bridge.send(tool: "navigate", args: ["url": fixtureURL + "?run=menu"], timeout: 30)
+        XCTAssertTrue(nav.ok)
+
+        let before = await surface.readScreen()
+        XCTAssertTrue(before.contains(#"button "Account""#), before)
+        XCTAssertFalse(before.contains(#""My orders""#), "the hidden menu item must not be snapshotted yet")
+        let accountRef = try XCTUnwrap(ref(in: before, labelled: #"button "Account""#))
+
+        _ = await surface.click(id: accountRef)
+        try await expectStatus("MENU-OPEN")
+
+        // A fresh read after the click MUST surface the revealed item.
+        let after = await surface.readScreen()
+        XCTAssertTrue(after.contains(#""My orders""#),
+                      "the revealed menu item must appear after the toggle click:\n\(after)")
+        let ordersRef = try XCTUnwrap(ref(in: after, labelled: "My orders"))
+        _ = await surface.click(id: ordersRef)
+        try await expectStatus("ORDERS-OPENED")
+    }
+
     /// The full agent machinery (loop + registry + surface + real extension) driven
     /// by a deterministic brain — proves the wiring end-to-end without LLM variance.
     func testScriptedAgentClicksAddToCart() async throws {
@@ -227,6 +256,82 @@ final class BrowserFixtureE2ETests: XCTestCase {
     /// loop + routing surface + real extension + real page, only ASR skipped.
     /// Armed by scripts/e2e_browser_command.sh --llm (spawns a local llama-server).
     func testRealLLMAgentAddsToCart() async throws {
+        let result = try await runLLMAgent(task: "add the item to my cart", run: "llm-cart")
+        try await expectStatus("CARTED", timeout: 8)
+        XCTAssertGreaterThanOrEqual(confirmations.count, 1, "the risky click must pass the confirm gate")
+        XCTAssertEqual(result.invalidActions, 0, "the model should emit only valid tool calls")
+    }
+
+    /// The dogfood shape the earlier LLM test MISSED: a menu item that only exists
+    /// after a click, buried among many links. The model must click "Account",
+    /// re-read (now the revealed "My orders" is snapshotted), and click it —
+    /// instead of re-clicking the toggle and stalling.
+    func testRealLLMNavigatesAccountDropdown() async throws {
+        let result = try await runLLMAgent(task: "open the account menu, then open my orders", run: "llm-menu")
+        try await expectStatus("ORDERS-OPENED", timeout: 8)
+        XCTAssertEqual(result.invalidActions, 0, "the model should emit only valid tool calls")
+    }
+
+    // MARK: - Complex LLM scenarios on the deterministic fixture (smart model)
+
+    func testLLMSearchSubmitsQuery() async throws {
+        let result = try await runLLMAgent(task: "search for wireless headphones", run: "llm-search")
+        XCTAssertEqual(result.invalidActions, 0)
+        try await expectPage(contains: "SUBMITTED:wireless headphones", timeout: 8)
+    }
+
+    func testLLMFillsMultiFieldSettingsForm() async throws {
+        let result = try await runLLMAgent(
+            task: "in settings, set full name to Alice Smith, set email to alice@example.com, turn ON the newsletter subscription, then save",
+            run: "llm-form", maxSteps: 16)
+        XCTAssertEqual(result.invalidActions, 0)
+        let page = try await pollPage { $0.contains("SAVED:") }
+        XCTAssertTrue(page.contains("Alice Smith"), "name not saved: \(saved(page))")
+        XCTAssertTrue(page.contains("alice@example.com"), "email not saved: \(saved(page))")
+        XCTAssertTrue(saved(page).hasSuffix("|true"), "subscribe checkbox not enabled: \(saved(page))")
+    }
+
+    func testLLMPaginationLoadsMoreTwice() async throws {
+        // Repeated identical "Load more" clicks — legitimate because each changes
+        // the snapshot; the observation-aware repeat-guard must allow them.
+        let result = try await runLLMAgent(task: "click Load more two times", run: "llm-page", maxSteps: 10)
+        XCTAssertEqual(result.invalidActions, 0)
+        try await expectPage(contains: "LOADED:2", timeout: 8)
+    }
+
+    func testLLMDeleteRequiresConfirmation() async throws {
+        let result = try await runLLMAgent(task: "delete my account", run: "llm-delete")
+        XCTAssertEqual(result.invalidActions, 0)
+        XCTAssertGreaterThanOrEqual(confirmations.count, 1, "a destructive action must pass the confirm gate")
+        try await expectPage(contains: "DELETED", timeout: 8)
+    }
+
+    func testLLMReadsPageAndAnswers() async throws {
+        // The answer lives in a non-actionable <div>, so the model must read the
+        // page text (not the element snapshot) and report via finish.
+        let result = try await runLLMAgent(task: "when is order A1042 arriving?", run: "llm-read")
+        XCTAssertEqual(result.outcome, .completed)
+        XCTAssertTrue(result.summary.lowercased().contains("jul 14") || result.summary.contains("14"),
+                      "should have read + reported the arrival date, got: \(result.summary)")
+    }
+
+    private func saved(_ page: String) -> String {
+        page.split(separator: "\n").first(where: { $0.hasPrefix("SAVED:") }).map(String.init) ?? page
+    }
+
+    private func pollPage(_ predicate: (String) -> Bool, timeout: TimeInterval = 8) async throws -> String {
+        let deadline = Date().addingTimeInterval(timeout)
+        var last = ""
+        while Date() < deadline {
+            last = (try? await readPage()) ?? last
+            if predicate(last) { return last }
+            try await Task.sleep(nanoseconds: 150_000_000)
+        }
+        return last
+    }
+
+    @discardableResult
+    private func runLLMAgent(task: String, run: String, maxSteps: Int = 12) async throws -> AgentRunResult {
         guard let llmURL = gateConfig["llm_url"] as? String, !llmURL.isEmpty else {
             throw XCTSkip("LLM tier off — run scripts/e2e_browser_command.sh --llm")
         }
@@ -234,7 +339,7 @@ final class BrowserFixtureE2ETests: XCTestCase {
         confirmAnswer = true
         confirmations = []
 
-        let nav = try await bridge.send(tool: "navigate", args: ["url": fixtureURL + "?run=llm"], timeout: 30)
+        let nav = try await bridge.send(tool: "navigate", args: ["url": fixtureURL + "?run=\(run)"], timeout: 30)
         XCTAssertTrue(nav.ok)
 
         let generator = FixtureLiveLLM(base: llmURL, model: gateConfig["llm_model"] as? String ?? "local",
@@ -254,27 +359,15 @@ final class BrowserFixtureE2ETests: XCTestCase {
             brain: LocalLLMAgentBrain(generator: generator),
             registry: registry,
             screenReader: surface,
-            maxSteps: 12,
+            maxSteps: maxSteps,
             onStep: { step in
                 trace.add("\(step.toolCall.name) \(step.toolCall.arguments) -> \(step.result?.output.prefix(200) ?? Substring(step.error ?? "-"))")
             }
         )
-        let result = await agent.run(task: "add the item to my cart")
+        let result = await agent.run(task: task)
         trace.add("=> \(result.outcome) steps=\(result.stepCount) tools=\(result.toolInvocations) invalid=\(result.invalidActions) summary=\(result.summary.prefix(160))")
-        for attempt in 1...3 {
-            do {
-                let read = try await bridge.send(tool: "read_text", args: [:], timeout: 12)
-                trace.add("verify-read \(attempt): ok=\(read.ok) err=\(read.errorCode ?? "-") text=\(read.result["text"]?.prefix(120) ?? "")")
-            } catch {
-                trace.add("verify-read \(attempt): THREW \(error)")
-            }
-        }
-        try? trace.dump().write(toFile: "/tmp/suniye-llm-trace.txt", atomically: true, encoding: .utf8)
-
-        // Primary assertions: the cart action really happened, through the gate.
-        try await expectStatus("CARTED", timeout: 8)
-        XCTAssertGreaterThanOrEqual(confirmations.count, 1, "the risky click must pass the confirm gate")
-        XCTAssertEqual(result.invalidActions, 0, "the model should emit only valid tool calls")
+        try? trace.dump().write(toFile: "/tmp/suniye-llm-trace-\(run).txt", atomically: true, encoding: .utf8)
+        return result
     }
 
     private final class TraceRecorder: @unchecked Sendable {

@@ -29,6 +29,36 @@ mutates <code>#status</code> so page reads can verify actuation happened.</p>
 <button id="focus-pw">Focus password</button>
 <input id="pw" type="password" placeholder="Password">
 
+<!-- Account dropdown: mirrors the Flipkart "account → Orders" flow that stalled
+     in dogfooding. "My orders" is display:none until the toggle is clicked, so
+     it must NOT appear in the snapshot until then, and MUST appear after. -->
+<button id="account">Account</button>
+<div id="account-menu" style="display:none">
+  <a href="#orders" id="orders">My orders</a>
+</div>
+
+<!-- Multi-field settings form: focus + type across several fields + a checkbox,
+     then submit. Tests the model tracking a multi-step data-entry task. -->
+<form id="settingsForm">
+  <label for="fullname">Full name</label>
+  <input id="fullname" type="text" autocomplete="off">
+  <label for="email">Email</label>
+  <input id="email" type="email" autocomplete="off">
+  <label for="subscribe"><input id="subscribe" type="checkbox"> Subscribe to newsletter</label>
+  <button type="submit" id="save">Save settings</button>
+</form>
+
+<!-- Pagination: each "Load more" appends a NEW item (the snapshot changes), so
+     repeated identical clicks are legitimate progress, not a stall. -->
+<button id="loadmore">Load more</button>
+<ul id="items"></ul>
+
+<!-- Consequential action: must pass the confirm gate. -->
+<button id="delete">Delete account</button>
+
+<!-- Read-and-answer: content the model must extract and report via finish. -->
+<div id="orderInfo">Order #A1042: Blue Headphones, ₹2,499, arriving Jul 14.</div>
+
 <script>
   // Status mirrors into the tab TITLE too: titles live in Chrome's browser
   // process (chrome.tabs.get), readable even if the renderer is busy/blocked.
@@ -58,6 +88,33 @@ mutates <code>#status</code> so page reads can verify actuation happened.</p>
   document.getElementById("cart").addEventListener("click", () => setStatus("CARTED"));
   document.getElementById("more").addEventListener("click", (e) => { e.preventDefault(); setStatus("LINKED"); });
   document.getElementById("focus-pw").addEventListener("click", () => { document.getElementById("pw").focus(); });
+  document.getElementById("account").addEventListener("click", () => {
+    document.getElementById("account-menu").style.display = "block";
+    setStatus("MENU-OPEN");
+  });
+  document.getElementById("orders").addEventListener("click", (e) => { e.preventDefault(); setStatus("ORDERS-OPENED"); });
+
+  document.getElementById("settingsForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = document.getElementById("fullname").value;
+    const email = document.getElementById("email").value;
+    const sub = document.getElementById("subscribe").checked;
+    setStatus("SAVED:" + name + "|" + email + "|" + sub);
+  });
+
+  let loaded = 0;
+  document.getElementById("loadmore").addEventListener("click", () => {
+    loaded += 1;
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.href = "#item" + loaded;
+    a.textContent = "Item " + loaded;
+    li.appendChild(a);
+    document.getElementById("items").appendChild(li);
+    setStatus("LOADED:" + loaded);
+  });
+
+  document.getElementById("delete").addEventListener("click", () => setStatus("DELETED"));
 
   // Simulates a React re-render: after 300ms the Add-to-cart button node is
   // REPLACED and our data-suniye-ref tag is stripped — the self-heal +
