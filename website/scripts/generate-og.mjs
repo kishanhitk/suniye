@@ -95,7 +95,7 @@ const svg = await satori(
           props: {
             style: {
               position: "absolute",
-              bottom: "40px",
+              bottom: "44px",
               left: "80px",
               display: "flex",
               alignItems: "center",
@@ -105,6 +105,26 @@ const svg = await satori(
               color: "#6b635a",
             },
             children: "suniye.app",
+          },
+        },
+        // Call-to-action
+        {
+          type: "div",
+          props: {
+            style: {
+              position: "absolute",
+              bottom: "36px",
+              right: "80px",
+              display: "flex",
+              alignItems: "center",
+              fontSize: "22px",
+              fontFamily: "Fragment Mono",
+              color: "#faf8f5",
+              backgroundColor: "#c4441a",
+              padding: "14px 28px",
+              borderRadius: "10px",
+            },
+            children: "Download free for macOS",
           },
         },
       ],
