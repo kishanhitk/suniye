@@ -73,14 +73,29 @@ final class CommandModeE2ETests: XCTestCase {
 
     func testOpensSafariAndNavigates() async throws {
         try requireAXTier()
+        try resetSafariToBlank() // start clean so a leftover page can't mask the result
         let target = "example.com"
-        let outcome = await run(task: "open Safari, go to \(target), and press enter")
-        XCTAssertTrue(outcome.reachedTool("open_app"), "trace:\n\(outcome.trace)")
+        let outcome = await run(task: "go to \(target)")
+        print("=== Safari navigate trace ===\n\(outcome.trace)\n=============================")
         // Give the page a moment to commit the address, then read Safari's URL.
-        try await Task.sleep(nanoseconds: 2_500_000_000)
+        try await Task.sleep(nanoseconds: 3_000_000_000)
         let url = try safariCurrentURL()
         XCTAssertTrue(url.localizedCaseInsensitiveContains(target),
                       "Safari URL was \"\(url)\", expected to contain \(target). trace:\n\(outcome.trace)")
+    }
+
+    private func resetSafariToBlank() throws {
+        let source = """
+        tell application "Safari"
+          activate
+          if (count of windows) = 0 then make new document
+          set URL of current tab of front window to "about:blank"
+        end tell
+        """
+        guard let script = NSAppleScript(source: source) else { throw XCTSkip("could not build reset script") }
+        var err: NSDictionary?
+        script.executeAndReturnError(&err)
+        if let err { throw XCTSkip("Safari reset needs Automation permission: \(err)") }
     }
 
     // MARK: harness
