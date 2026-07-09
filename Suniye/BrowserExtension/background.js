@@ -289,7 +289,7 @@ function waitForComplete(tabId, timeoutMs) {
 async function readText() {
   const tab = await activeTab();
   if (!tab || !tab.id) return { ok: false, error: { code: "no_tab", message: "no active browser tab" } };
-  const maxChars = 12000;
+  const maxChars = 4000; // keep the agent prompt/history small enough to avoid LLM timeouts
   const [res] = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: (limit) => {

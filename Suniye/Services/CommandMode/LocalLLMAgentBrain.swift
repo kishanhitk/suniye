@@ -18,14 +18,14 @@ struct LocalLLMAgentBrain: AgentBrain {
     /// appears in the catalog — one prompt, no divergent literals.
     private static let toolUsage: [String: String] = [
         "open_app": #"- open_app {"name":"<app name>"}          launch or focus an app ("Safari", "System Settings")"#,
-        "read_screen": #"- read_screen {}                          list the current surface's clickable elements with ids (e0, e1, …)"#,
+        "read_screen": #"- read_screen {}                          list the current surface's clickable elements with ids (e0, e1, …) — use this to FIND a button/field to act on"#,
         "click": #"- click {"element_id":"<id>"}             press a button/menu/link from read_screen"#,
         "focus": #"- focus {"element_id":"<id>"}             put the cursor in a field before typing"#,
         "type_text": #"- type_text {"text":"<text>"}             type into the focused field"#,
         "press_keys": #"- press_keys {"keys":"cmd+t"}             send a keyboard shortcut"#,
         "run_applescript": #"- run_applescript {"script":"<source>"}   full AppleScript for scriptable apps — ALWAYS wrap it in tell application "Name" … end tell"#,
         "browser_navigate": #"- browser_navigate {"url":"<url>"}        open a web address in the browser (use this to go to a site — NEVER type a URL into a page field)"#,
-        "browser_read_text": #"- browser_read_text {}                    read the visible text of the current web page (use this to answer questions ABOUT a page — order status, prices, results)"#,
+        "browser_read_text": #"- browser_read_text {}                    read the page's text to ANSWER a question about its content (order status, prices) — NOT to find buttons; use read_screen to click things"#,
         "finish": #"- finish {"summary":"<result>"}           call this THE MOMENT the task is complete"#,
     ]
     /// Display order for the catalog (stable, readable).
