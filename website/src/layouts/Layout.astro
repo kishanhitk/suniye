@@ -1,6 +1,7 @@
 ---
 import "../styles/global.css";
 import Beacon from "../components/Beacon.astro";
+import { SITE_URL } from "../lib/seo";
 
 interface Props {
   title?: string;
@@ -14,8 +15,7 @@ const {
   canonicalPath = "/",
 } = Astro.props;
 
-const siteUrl = "https://suniye.app";
-const canonicalUrl = new URL(canonicalPath, siteUrl).toString();
+const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
 ---
 
 <!doctype html>
@@ -41,6 +41,14 @@ const canonicalUrl = new URL(canonicalPath, siteUrl).toString();
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content="https://suniye.app/og-image.png" />
+    <link
+      rel="preload"
+      href="/fonts/GoogleSans-Variable.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <slot name="head" />
   </head>
   <body class="min-w-[320px] bg-bg font-body text-ink antialiased">
     <slot />
