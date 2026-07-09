@@ -216,9 +216,26 @@ async function typeRef(args) {
   const tab = await activeTab();
   if (!tab || !tab.id) return { ok: false, error: { code: "no_tab", message: "no active browser tab" } };
   await ensureAttached(tab.id);
-  const loc = await locate(tab.id, args.ref); // reuses refusal + scroll; focus below
-  if (loc.error) return { ok: false, error: loc.error };
-  await cdp(tab.id, "Runtime.evaluate", { expression: `document.querySelector('[data-suniye-ref=${JSON.stringify(args.ref)}]').focus()` });
+  if (args.ref) {
+    // Explicit target: locate (refuse password/payment + scroll), then focus it.
+    const loc = await locate(tab.id, args.ref);
+    if (loc.error) return { ok: false, error: loc.error };
+    await cdp(tab.id, "Runtime.evaluate", { expression: `document.querySelector('[data-suniye-ref=${JSON.stringify(args.ref)}]').focus()` });
+  } else {
+    // No ref (type into whatever the model just focused): refuse password/payment.
+    const ev = await cdp(tab.id, "Runtime.evaluate", {
+      expression: `(() => { const el = document.activeElement;
+        if (!el || el === document.body) return { err: "nofocus" };
+        const t = (el.type || "").toLowerCase();
+        const ac = ((el.getAttribute && el.getAttribute("autocomplete")) || "").toLowerCase();
+        if (t === "password" || /cc-|cardnumber|creditcard/.test(ac)) return { refused: 1 };
+        return { ok: 1 }; })()`,
+      returnByValue: true,
+    });
+    const v = ev && ev.result && ev.result.value;
+    if (!v || v.err === "nofocus") return { ok: false, error: { code: "no_focus", message: "focus a field first, then type" } };
+    if (v.refused) return { ok: false, error: { code: "refused", message: "I can't fill password or payment fields" } };
+  }
   await cdp(tab.id, "Input.insertText", { text: String(args.text || "") });
   if (args.submit === "true" || args.submit === true) await pressKey(tab.id, "enter");
   return { ok: true, result: { output: `typed ${String(args.text || "").length} chars` } };
