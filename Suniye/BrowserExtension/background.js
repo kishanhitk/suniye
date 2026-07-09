@@ -166,6 +166,23 @@ async function snapshot() {
   return { ok: true, result: { rows: JSON.stringify(data.rows), url: data.url, title: data.title, count: data.count } };
 }
 
+// If a ref's tag is gone (SPA re-render removed our data-suniye-ref), re-run the
+// snapshot walk — which re-tags in the same document order — and check again.
+// Self-heals the common "element still there, lost its tag" case.
+async function ensureRef(tabId, ref) {
+  const present = async () => {
+    const [res] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (r) => !!document.querySelector(`[data-suniye-ref="${r}"]`),
+      args: [ref],
+    });
+    return !!(res && res.result === true);
+  };
+  if (await present()) return true;
+  await chrome.scripting.executeScript({ target: { tabId }, func: snapshotFn, args: [60] });
+  return present();
+}
+
 // ---- Actuation via CDP (trusted). Refuses password/payment targets (defense in
 // depth; the app also gates .risky actions with a user confirmation).
 function locateExpr(ref) {
@@ -193,6 +210,7 @@ async function clickRef(args) {
   const tab = await activeTab();
   if (!tab || !tab.id) return { ok: false, error: { code: "no_tab", message: "no active browser tab" } };
   await ensureAttached(tab.id);
+  if (!(await ensureRef(tab.id, args.ref))) return { ok: false, error: { code: "stale_ref", message: `no element ${args.ref} — call read_screen first` } };
   const loc = await locate(tab.id, args.ref);
   if (loc.error) return { ok: false, error: loc.error };
   await cdp(tab.id, "Input.dispatchMouseEvent", { type: "mousePressed", x: loc.x, y: loc.y, button: "left", clickCount: 1 });
@@ -203,6 +221,7 @@ async function clickRef(args) {
 async function focusRef(args) {
   const tab = await activeTab();
   if (!tab || !tab.id) return { ok: false, error: { code: "no_tab", message: "no active browser tab" } };
+  if (!(await ensureRef(tab.id, args.ref))) return { ok: false, error: { code: "stale_ref", message: `no element ${args.ref} — call read_screen first` } };
   const [res] = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: (ref) => { const el = document.querySelector(`[data-suniye-ref="${ref}"]`); if (!el) return "stale"; el.focus(); el.scrollIntoView({ block: "center" }); return "ok"; },
@@ -218,6 +237,7 @@ async function typeRef(args) {
   await ensureAttached(tab.id);
   if (args.ref) {
     // Explicit target: locate (refuse password/payment + scroll), then focus it.
+    if (!(await ensureRef(tab.id, args.ref))) return { ok: false, error: { code: "stale_ref", message: `no element ${args.ref} — call read_screen first` } };
     const loc = await locate(tab.id, args.ref);
     if (loc.error) return { ok: false, error: loc.error };
     await cdp(tab.id, "Runtime.evaluate", { expression: `document.querySelector('[data-suniye-ref=${JSON.stringify(args.ref)}]').focus()` });
@@ -271,6 +291,7 @@ async function navigate(args) {
   if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = "https://" + url; // add scheme if omitted
   await chrome.tabs.update(tab.id, { url });
   await waitForComplete(tab.id, 15000);
+  await new Promise((r) => setTimeout(r, 1500)); // let SPA content (React etc.) hydrate before the next snapshot
   return { ok: true, result: { output: "navigated to " + url, url } };
 }
 
