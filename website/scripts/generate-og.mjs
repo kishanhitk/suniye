@@ -104,7 +104,7 @@ const svg = await satori(
               fontFamily: "Fragment Mono",
               color: "#6b635a",
             },
-            children: "suniye.kishans.in",
+            children: "suniye.app",
           },
         },
       ],
