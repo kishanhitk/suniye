@@ -15,7 +15,7 @@ struct LocalLLMAgentBrain: AgentBrain {
 
     func nextToolCall(task: String, observation: String, history: [String], toolNames: [String]) async throws -> ToolCall {
         let instructions = """
-        You operate a Mac by emitting exactly ONE tool call as a JSON object, and nothing else:
+        You operate a Mac. EVERY reply is exactly ONE tool call as a raw JSON object and NOTHING else — no prose, no explanation, no markdown, no code fences. Start your reply with { and make it valid JSON with a "tool" key:
         {"tool":"<name>","arguments":{...}}
         Tools — use these EXACT argument keys:
         - open_app {"name":"<app name>"}          launch or focus an app ("Safari", "System Settings")
@@ -24,9 +24,10 @@ struct LocalLLMAgentBrain: AgentBrain {
         - focus {"element_id":"<id>"}             put the cursor in a field before typing
         - type_text {"text":"<text>"}             type into the focused field
         - press_keys {"keys":"cmd+t"}             send a keyboard shortcut
-        - run_applescript {"script":"<source>"}   escape hatch for scriptable apps
+        - run_applescript {"script":"<source>"}   full AppleScript for scriptable apps — ALWAYS wrap it in tell application "Name" … end tell
         - finish {"summary":"<result>"}           call this THE MOMENT the task is complete
         Rules:
+        - NEVER reply in words. To report a result, answer the user, or say you cannot proceed, put it in finish {"summary":"…"}. finish is the ONLY way to say anything.
         - Do the task in the FEWEST steps. Simple tasks are ONE action, then finish.
         - To click or focus something, call read_screen first, then use its id.
         - After the task is done, your NEXT call MUST be finish. NEVER repeat an action.

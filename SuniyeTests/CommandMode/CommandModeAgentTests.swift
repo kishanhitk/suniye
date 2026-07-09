@@ -44,6 +44,21 @@ final class CommandModeAgentTests: XCTestCase {
         }
     }
 
+    /// Throws for the first `failuresBeforeSuccess` calls (a transient network
+    /// blip / prose reply), then returns a real call — to exercise brain retries.
+    private final class FlakyBrain: AgentBrain, @unchecked Sendable {
+        private let failuresBeforeSuccess: Int
+        private let lock = NSLock()
+        private var calls = 0
+        struct Boom: Error {}
+        init(failuresBeforeSuccess: Int) { self.failuresBeforeSuccess = failuresBeforeSuccess }
+        func nextToolCall(task: String, observation: String, history: [String], toolNames: [String]) async throws -> ToolCall {
+            lock.lock(); let n = calls; calls += 1; lock.unlock()
+            if n < failuresBeforeSuccess { throw Boom() }
+            return ToolCall(name: "finish", arguments: [:])
+        }
+    }
+
     func testRunsToolsThenStopsOnTerminal() async {
         let recorder = Recorder()
         let registry = AgentToolRegistry(tools: [
@@ -106,9 +121,25 @@ final class CommandModeAgentTests: XCTestCase {
         let registry = AgentToolRegistry(tools: [
             RecordingTool(name: "finish", risk: .benign, terminal: true, recorder: Recorder()),
         ])
-        let agent = CommandModeAgent(brain: ThrowingBrain(), registry: registry, screenReader: FakeScreen(), maxSteps: 10)
+        // brainRetryDelay: 0 keeps the give-up path fast; it still exhausts retries.
+        let agent = CommandModeAgent(brain: ThrowingBrain(), registry: registry, screenReader: FakeScreen(),
+                                     maxSteps: 10, maxBrainAttempts: 3, brainRetryDelay: 0)
         let result = await agent.run(task: "x")
         XCTAssertEqual(result.outcome, .brainFailure)
         XCTAssertEqual(result.invalidActions, 1)
+    }
+
+    func testRetriesTransientBrainFailureThenSucceeds() async {
+        let recorder = Recorder()
+        let registry = AgentToolRegistry(tools: [
+            RecordingTool(name: "finish", risk: .benign, terminal: true, recorder: recorder),
+        ])
+        // Two transient failures, then a real call — within the 3-attempt budget.
+        let agent = CommandModeAgent(brain: FlakyBrain(failuresBeforeSuccess: 2), registry: registry,
+                                     screenReader: FakeScreen(), maxSteps: 10, maxBrainAttempts: 3, brainRetryDelay: 0)
+        let result = await agent.run(task: "x")
+        XCTAssertEqual(result.outcome, .completed)
+        XCTAssertEqual(recorder.items, ["finish"])
+        XCTAssertEqual(result.invalidActions, 0, "a recovered transient failure is not an invalid action")
     }
 }

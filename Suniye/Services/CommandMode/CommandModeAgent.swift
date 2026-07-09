@@ -52,6 +52,12 @@ final class CommandModeAgent {
     private let registry: AgentToolRegistry
     private let screenReader: ScreenReading
     private let maxSteps: Int
+    /// How many times to ask the brain for one step before giving up. Transient
+    /// failures — a dropped API connection, a timeout, or the model replying in
+    /// prose (no tool) — shouldn't abort a whole task, so we retry.
+    private let maxBrainAttempts: Int
+    /// Backoff between brain attempts (0 in tests).
+    private let brainRetryDelay: TimeInterval
     private let onStep: ((AgentStep) -> Void)?
     private var cancelled = false
 
@@ -59,15 +65,42 @@ final class CommandModeAgent {
          registry: AgentToolRegistry,
          screenReader: ScreenReading,
          maxSteps: Int = 50,
+         maxBrainAttempts: Int = 3,
+         brainRetryDelay: TimeInterval = 0.4,
          onStep: ((AgentStep) -> Void)? = nil) {
         self.brain = brain
         self.registry = registry
         self.screenReader = screenReader
         self.maxSteps = maxSteps
+        self.maxBrainAttempts = max(1, maxBrainAttempts)
+        self.brainRetryDelay = brainRetryDelay
         self.onStep = onStep
     }
 
     func cancel() { cancelled = true }
+
+    /// Ask the brain for the next tool call, retrying transient failures (network
+    /// drop, timeout, or a non-tool/malformed reply) with a short backoff. Throws
+    /// the last error only after every attempt is exhausted.
+    private func nextToolCallWithRetries(task: String, observation: String, history: [String]) async throws -> ToolCall {
+        var lastError: Error?
+        for attempt in 1...maxBrainAttempts {
+            if cancelled { break }
+            if attempt > 1, brainRetryDelay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(brainRetryDelay * 1_000_000_000))
+            }
+            do {
+                return try await brain.nextToolCall(
+                    task: task, observation: observation,
+                    history: history, toolNames: registry.toolNames
+                )
+            } catch {
+                lastError = error
+                AppLogger.shared.log(.warning, "command brain attempt \(attempt)/\(maxBrainAttempts) failed: \(error)")
+            }
+        }
+        throw lastError ?? CommandModeError.malformedToolCall("no response from the model")
+    }
 
     /// Drives the loop to a terminal state and returns the summary + metrics.
     func run(task: String) async -> AgentRunResult {
@@ -93,11 +126,10 @@ final class CommandModeAgent {
 
             let call: ToolCall
             do {
-                call = try await brain.nextToolCall(
-                    task: task, observation: observation,
-                    history: history, toolNames: registry.toolNames
-                )
+                call = try await nextToolCallWithRetries(task: task, observation: observation, history: history)
             } catch {
+                // Esc during the retries reads as a cancel, not a model failure.
+                if cancelled { return done("Cancelled.", .cancelled) }
                 invalidActions += 1
                 onStep?(AgentStep(toolCall: ToolCall(name: "?", arguments: [:]), result: nil, error: String(describing: error)))
                 return done("Stopped: the model didn't return a valid action.", .brainFailure)
