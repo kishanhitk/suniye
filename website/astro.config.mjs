@@ -3,6 +3,7 @@ import cloudflare from "@astrojs/cloudflare";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
+  site: "https://suniye.app",
   adapter: cloudflare({
     imageService: "compile"
   }),

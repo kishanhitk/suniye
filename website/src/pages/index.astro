@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import CopyField from "../components/CopyField.astro";
 import Navbar from "../components/Navbar.astro";
+import { softwareApplicationSchema, faqPageSchema, jsonLdString } from "../lib/seo";
 
 const heroWords = "Your voice. Your machine. Your text.".split(" ");
 const githubUrl = "https://github.com/kishanhitk/suniye";
@@ -193,6 +194,19 @@ const faqs = [
 ---
 
 <Layout>
+  <script
+    slot="head"
+    is:inline
+    type="application/ld+json"
+    set:html={jsonLdString(softwareApplicationSchema())}
+  />
+  <script
+    slot="head"
+    is:inline
+    type="application/ld+json"
+    set:html={jsonLdString(faqPageSchema(faqs))}
+  />
+
   <!-- ── Nav ──────────────────────────────── -->
   <Navbar variant="home" />
 

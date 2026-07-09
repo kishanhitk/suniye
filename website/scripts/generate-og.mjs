@@ -6,7 +6,8 @@ import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import { readFileSync, writeFileSync } from "fs";
 
-const fragmentMono = readFileSync("public/fonts/FragmentMono-Regular.ttf");
+// Satori can't parse woff2, so a TTF copy lives here as a build-time asset.
+const fragmentMono = readFileSync("scripts/fonts/FragmentMono-Regular.ttf");
 
 const svg = await satori(
   {
