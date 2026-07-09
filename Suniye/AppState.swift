@@ -1499,6 +1499,11 @@ final class AppState {
     private var activeCommandAgent: CommandModeAgent?
     /// Global Esc monitor, live only while a command runs (`NSEvent.removeMonitor` token).
     private var commandModeEscMonitor: Any?
+    /// Localhost bridge the Chrome extension connects to (nil when browser control is off).
+    /// Constructed + started in `bootstrap()` so its state closure can capture self.
+    private var browserBridge: BrowserBridge?
+    /// Mirrors `browserBridge` connection state for the UI / tool gating (observable).
+    private(set) var browserExtensionConnected = false
     private var isHydratingLLMSettings = false
     private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
@@ -1715,6 +1720,7 @@ final class AppState {
         if floatingIndicatorEnabled {
             floatingIndicatorController.start()
         }
+        await startBrowserBridgeIfEnabled()
         statusText = "Checking permissions..."
         await refreshPermissions()
 
@@ -1744,6 +1750,50 @@ final class AppState {
         startOnboardingIfNeeded()
         setFloatingIndicatorState(.idle)
         AppLogger.shared.log(.info, "bootstrap done")
+    }
+
+    // MARK: - Browser control (Command Mode)
+
+    /// Phase A gate: browser control is on for Debug/Preview builds (dogfooding) or
+    /// when `SUNIYE_BROWSER_CONTROL=1`. A user-facing toggle lands in Phase D.
+    private static var browserControlEnabledForBuild: Bool {
+        if ProcessInfo.processInfo.environment["SUNIYE_BROWSER_CONTROL"] == "1" { return true }
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    /// Starts the localhost bridge the Chrome extension connects to, and writes a
+    /// paired copy of the extension (with `pairing.json`) for load-unpacked install.
+    private func startBrowserBridgeIfEnabled() async {
+        guard runtimeServicesEnabled, Self.browserControlEnabledForBuild, browserBridge == nil else { return }
+        let bridge = BrowserBridge(config: .standard()) { [weak self] connected in
+            Task { @MainActor in
+                self?.browserExtensionConnected = connected
+                AppLogger.shared.log(.info, "browser extension \(connected ? "connected" : "disconnected")")
+            }
+        }
+        browserBridge = bridge
+        do {
+            try await bridge.start()
+            let port = await bridge.port ?? 0
+            let token = await bridge.pairingToken
+            BrowserExtensionInstaller.installPaired(port: port, token: token)
+        } catch {
+            AppLogger.shared.log(.warning, "browser bridge start failed: \(error)")
+            browserBridge = nil
+        }
+    }
+
+    /// Reveal the paired extension folder in Finder for the load-unpacked flow.
+    func setUpBrowserExtension() {
+        BrowserExtensionInstaller.revealForInstall()
+    }
+
+    func stopBrowserBridge() async {
+        await browserBridge?.stop()
     }
 
     func startOnboardingIfNeeded() {
@@ -3697,7 +3747,7 @@ final class AppState {
             try? textInsertionService.insertText(text)
         }
         let reader = AXTreeReader()
-        let registry = AgentToolRegistry(tools: [
+        var tools: [AgentTool] = [
             ReadScreenTool(reader: reader),
             OpenAppTool(launcher: SystemAppLauncher()),
             ClickTool(resolver: reader),
@@ -3706,7 +3756,14 @@ final class AppState {
             PressKeysTool(poster: SystemKeyChordPoster()),
             RunAppleScriptTool(),
             FinishTool(),
-        ])
+        ]
+        // Browser control: offer the web-reading tool only when the extension is
+        // actually connected, so the prompt catalog (toolNames-driven) stays clean
+        // on machines without it. (Phase B routes read_screen/click/type too.)
+        if let bridge = browserBridge, await bridge.isConnected {
+            tools.append(BrowserReadTextTool(transport: bridge))
+        }
+        let registry = AgentToolRegistry(tools: tools)
         let agent = CommandModeAgent(
             brain: LocalLLMAgentBrain(generator: generator),
             registry: registry,

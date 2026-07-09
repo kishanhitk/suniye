@@ -18,6 +18,8 @@ Suniye/Services/CommandMode/ScreenReader.swift              # AXTreeReader walks
 Suniye/Services/CommandMode/Tools/OpenAppTool.swift         # SystemAppLauncher does a live NSWorkspace / `open -a` launch; OpenAppTool.execute (arg guard + launcher seam) is tested in CommandModeToolsTests
 Suniye/Services/CommandMode/Tools/ClickTool.swift           # click/focus perform live AXUIElementPerformAction/SetAttribute; the arg + unknown-element paths are tested in CommandModeActuatorTests
 Suniye/Services/CommandMode/Tools/RunAppleScriptTool.swift  # runs live NSAppleScript (Automation TCC prompt on first Apple Event); no headless-executable logic to extract
+Suniye/Services/CommandMode/Browser/BrowserBridge.swift        # live NWListener/NWConnection WebSocket server; the pure stringify + BrowserTransport/Config/ReadTextTool are unit-tested, the socket lifecycle needs a live connection
+Suniye/Services/CommandMode/Browser/BrowserExtensionInstaller.swift  # copies the extension folder on disk + reveals it via NSWorkspace (window-server); only path assembly is headless-executable
 
 # --- Hardware / OS-permission bound ---
 Suniye/Services/AudioCaptureDrivers.swift             # AVAudioEngine/HAL AudioUnit render callbacks; needs microphone

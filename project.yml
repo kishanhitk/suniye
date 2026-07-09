@@ -36,6 +36,7 @@ targets:
         excludes:
           - Frameworks/**
           - LocalLLM/**
+          - BrowserExtension/**
           - Vendor/Permiso/PERMISO_UPSTREAM.md
     info:
       path: Suniye/Info.plist
@@ -108,6 +109,20 @@ targets:
             exit 1
           else
             echo "Skipping local LLM helper embed; helper not found at ${HELPER_SOURCE}."
+          fi
+      - name: Embed Browser Extension
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          SRC="${SRCROOT}/Suniye/BrowserExtension"
+          DEST="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Resources/BrowserExtension"
+          if [[ -d "${SRC}" ]]; then
+            rm -rf "${DEST}"
+            mkdir -p "$(dirname "${DEST}")"
+            /usr/bin/ditto "${SRC}" "${DEST}"
+            echo "Embedded browser extension: ${DEST}"
+          else
+            echo "Skipping browser extension embed; not found at ${SRC}."
           fi
   SuniyeTests:
     type: bundle.unit-test
