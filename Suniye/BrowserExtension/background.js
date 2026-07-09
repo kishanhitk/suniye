@@ -140,22 +140,29 @@ function snapshotFn(maxElements) {
     if (el.offsetParent === null && st.position !== "fixed") return false;
     return true;
   };
-  const rows = [];
-  let n = 0;
+  const collected = [];
   const candidates = document.querySelectorAll('a, button, input, textarea, select, summary, [role], [contenteditable="true"]');
   for (const el of candidates) {
-    if (n >= maxElements) break;
+    if (collected.length >= 300) break;
     const role = roleFor(el);
     if (!role) continue;
     if (el.disabled || el.getAttribute("aria-disabled") === "true" || !visible(el)) continue;
     let label = labelFor(el);
     if (label.length > 60) label = label.slice(0, 60) + "…";
-    const ref = "e" + n;
-    el.setAttribute("data-suniye-ref", ref);
-    rows.push({ ref, role, label });
-    n++;
+    collected.push({ el, role, label });
   }
-  return { rows, url: location.href, title: document.title, count: n };
+  // Prioritize interactive controls (buttons/fields) over the many nav links, so a
+  // key button like "Add to cart" survives the cap on dense pages. Array.sort is
+  // stable, so document order is preserved within a priority band.
+  const priority = (role) => (role === "link" || role === "menuitem" ? 1 : 0);
+  collected.sort((a, b) => priority(a.role) - priority(b.role));
+  const rows = [];
+  collected.slice(0, maxElements).forEach((item, index) => {
+    const ref = "e" + index;
+    item.el.setAttribute("data-suniye-ref", ref);
+    rows.push({ ref, role: item.role, label: item.label });
+  });
+  return { rows, url: location.href, title: document.title, count: rows.length };
 }
 
 async function snapshot() {
