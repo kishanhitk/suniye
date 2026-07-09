@@ -143,7 +143,7 @@ final class CommandModeAgentTests: XCTestCase {
         XCTAssertEqual(recorder.items.count, 3, "first call + 2 allowed repeats, then stall")
     }
 
-    func testActionToolStillStallsOnFirstRepeat() async {
+    func testRepeatedActionIsNudgedNotDoubleFiredThenStalls() async {
         let recorder = Recorder()
         let registry = AgentToolRegistry(tools: [
             RecordingTool(name: "open_app", risk: .benign, terminal: false, recorder: recorder),
@@ -151,8 +151,27 @@ final class CommandModeAgentTests: XCTestCase {
         let brain = ScriptedBrain(Array(repeating: ToolCall(name: "open_app", arguments: ["name": "Safari"]), count: 5))
         let agent = CommandModeAgent(brain: brain, registry: registry, screenReader: FakeScreen(), maxSteps: 10)
         let result = await agent.run(task: "open safari")
-        XCTAssertEqual(result.outcome, .stalled)
-        XCTAssertEqual(recorder.items.count, 1, "an ACTION repeat must stall immediately — actions have side effects")
+        XCTAssertEqual(result.outcome, .stalled, "a persistent action loop still stalls")
+        XCTAssertEqual(recorder.items.count, 1, "the action must run ONCE — the repeat is dropped, never double-fired")
+    }
+
+    func testRepeatedActionRecoversWhenModelChangesCourse() async {
+        // Clicks the same element, gets nudged, then finishes — the nudge path
+        // must let the model self-correct instead of stalling.
+        let recorder = Recorder()
+        let registry = AgentToolRegistry(tools: [
+            RecordingTool(name: "click", risk: .risky, terminal: false, recorder: recorder),
+            RecordingTool(name: "finish", risk: .benign, terminal: true, recorder: recorder),
+        ])
+        let brain = ScriptedBrain([
+            ToolCall(name: "click", arguments: ["element_id": "e1"]),
+            ToolCall(name: "click", arguments: ["element_id": "e1"]), // repeat → nudged, not executed
+            ToolCall(name: "finish", arguments: [:]),
+        ])
+        let agent = CommandModeAgent(brain: brain, registry: registry, screenReader: FakeScreen(), maxSteps: 10)
+        let result = await agent.run(task: "click then finish")
+        XCTAssertEqual(result.outcome, .completed, "the nudge lets the model recover")
+        XCTAssertEqual(recorder.items, ["click", "finish"], "click ran once, the duplicate was dropped")
     }
 
     func testRetriesTransientBrainFailureThenSucceeds() async {

@@ -107,6 +107,7 @@ final class CommandModeAgent {
         var history: [String] = []
         var lastCall: ToolCall?
         var lastOutcome = ""
+        var previousObservation = ""
         var stepCount = 0
         var toolInvocations = 0
         var invalidActions = 0
@@ -136,16 +137,30 @@ final class CommandModeAgent {
                 return done("Stopped: the model didn't return a valid action.", .brainFailure)
             }
 
-            // Repeat-guard: small models re-issue the SAME call instead of calling
-            // finish. Treat an identical consecutive call as completion, and report
-            // the previous outcome honestly (success or the failure message).
-            // EXCEPTION: read-only tools legitimately repeat (re-checking a page
-            // that's still loading) — argument-less reads are byte-identical, so
-            // allow a couple of consecutive re-reads before calling it a stall.
-            if let last = lastCall, last == call, call.name != "finish" {
+            // Repeat-guard. An identical consecutive call is only a STALL if the
+            // screen also didn't change — a repeat that moves the world forward
+            // (pagination "Next", "Load more") is legitimate and allowed. When the
+            // screen is unchanged:
+            //  - read-only tools may still re-read a couple of times (a page that's
+            //    genuinely still loading);
+            //  - an ACTION repeated once usually means the model didn't notice the
+            //    result of its last action. DROP the duplicate (no double
+            //    side-effect) and nudge it to re-read and pick the next step. A
+            //    SECOND unproductive repeat is a real loop → stall.
+            let screenChanged = observation != previousObservation
+            previousObservation = observation
+            if let last = lastCall, last == call, call.name != "finish", !screenChanged {
                 consecutiveRepeats += 1
                 let isReadOnly = registry.tool(named: call.name)?.risk == RiskTier.read
-                if !(isReadOnly && consecutiveRepeats <= 2) {
+                if isReadOnly && consecutiveRepeats <= 2 {
+                    // fall through and re-read
+                } else if !isReadOnly && consecutiveRepeats == 1 {
+                    let argHint = call.arguments.isEmpty ? "" : " \(call.arguments)"
+                    history.append("You already ran \(call.name)\(argHint) and the screen didn't change. Read the screen and choose a DIFFERENT next action toward the goal, or call finish if the task is done.")
+                    onStep?(AgentStep(toolCall: call, result: ToolResult(output: "(repeated action skipped — re-read the screen and continue)", isTerminal: false), error: nil))
+                    lastCall = call
+                    continue
+                } else {
                     return done(lastOutcome.isEmpty ? "Done." : lastOutcome, .stalled)
                 }
             } else {

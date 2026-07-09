@@ -11,7 +11,12 @@
 // Code-level version: Chrome caches unpacked SW scripts, and getManifest() can
 // report a RELOADED manifest while stale script code still runs — so staleness
 // detection must key off a constant baked into THIS file. Bump with every edit.
-const CODE_VERSION = "0.0.5";
+const CODE_VERSION = "0.0.6";
+
+// Max actionable elements per snapshot. Controls are prioritized over links, but
+// the cap must be high enough that important LINKS (e.g. a "My orders" item in an
+// account dropdown) aren't all crowded out behind a page's nav links.
+const SNAPSHOT_CAP = 120;
 
 let ws = null;
 let connecting = false;
@@ -229,7 +234,7 @@ function snapshotFn(maxElements) {
 }
 
 async function runSnapshot(tabId) {
-  const [res] = await chrome.scripting.executeScript({ target: { tabId }, func: snapshotFn, args: [60] });
+  const [res] = await chrome.scripting.executeScript({ target: { tabId }, func: snapshotFn, args: [SNAPSHOT_CAP] });
   return (res && res.result) || { rows: [], url: "", title: "", count: 0 };
 }
 
