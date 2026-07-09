@@ -883,8 +883,10 @@ final class FakeCommandSurface: CommandActing {
     private(set) var clicks: [String] = []
     private(set) var focuses: [String] = []
     private(set) var typed: [String] = []
+    private(set) var pressed: [String] = []
     func readScreen() async -> String { screen }
     func click(id: String) async -> ToolResult { clicks.append(id); return ToolResult(output: "clicked \(id)", isTerminal: false) }
     func focus(id: String) async -> ToolResult { focuses.append(id); return ToolResult(output: "focused \(id)", isTerminal: false) }
     func typeText(_ text: String) async -> ToolResult { typed.append(text); return ToolResult(output: "typed \(text.count) chars", isTerminal: false) }
+    func pressKeys(_ chord: String) async -> ToolResult { pressed.append(chord); return ToolResult(output: "pressed \(chord)", isTerminal: false) }
 }

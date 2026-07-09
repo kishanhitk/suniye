@@ -116,11 +116,19 @@ final class BrowserBridgeTests: XCTestCase {
         XCTAssertTrue(text.contains("e0: button \"Buy\""))
     }
 
+    private struct RecordingKeyPoster: KeyChordPosting {
+        let sink: KeySink
+        func post(keyCode: CGKeyCode, flags: CGEventFlags) { sink.codes.append(keyCode) }
+    }
+    final class KeySink: @unchecked Sendable { var codes: [CGKeyCode] = [] }
+
     private func browserSurface(_ transport: ScriptedBrowserTransport,
+                                keySink: KeySink = KeySink(),
                                 confirm: @escaping @MainActor (String) async -> Bool) -> RoutingCommandSurface {
         RoutingCommandSurface(
             native: AXTreeReader(), browser: BrowserSnapshotReader(transport: transport), transport: transport,
-            nativeTyper: NoopTyper(), frontmostBundleID: { "com.google.Chrome" },
+            nativeTyper: NoopTyper(), keyPoster: RecordingKeyPoster(sink: keySink),
+            frontmostBundleID: { "com.google.Chrome" },
             isBrowser: { _ in true }, confirmRisky: confirm
         )
     }
@@ -150,6 +158,39 @@ final class BrowserBridgeTests: XCTestCase {
         let result = await surface.click(id: "e0")
         XCTAssertTrue(result.output.contains("declined"))
         XCTAssertFalse(transport.sent.contains { $0.tool == "click" }, "a declined action must not reach the page")
+    }
+
+    func testPressKeysRoutesPageKeysToBrowserAndChordsNative() async {
+        let transport = ScriptedBrowserTransport()
+        transport.responses["snapshot"] = .success(["rows": #"[{"ref":"e0","role":"searchfield","label":"Search"}]"#])
+        transport.responses["press"] = .success(["output": "pressed enter"])
+        let sink = KeySink()
+        let surface = browserSurface(transport, keySink: sink) { _ in true }
+        _ = await surface.readScreen() // activate browser surface
+
+        // Enter acts on the PAGE → trusted CDP key via the extension.
+        let enter = await surface.pressKeys("Return")
+        XCTAssertEqual(enter.output, "pressed enter")
+        XCTAssertTrue(transport.sent.contains { $0.tool == "press" && $0.args["keys"] == "enter" })
+
+        // cmd+t targets the browser APP → native CGEvent path.
+        _ = await surface.pressKeys("cmd+t")
+        XCTAssertEqual(sink.codes, [17])
+        XCTAssertFalse(transport.sent.contains { $0.tool == "press" && $0.args["keys"] == "cmd+t" })
+    }
+
+    // MARK: prompt history rendering (large tool outputs must not ride every prompt)
+
+    func testRenderHistoryTruncatesOlderEntriesKeepsLatest() {
+        let bigOld = "read: " + String(repeating: "x", count: 1000)
+        let bigNew = "page: " + String(repeating: "y", count: 1000)
+        let rendered = LocalLLMAgentBrain.renderHistory([bigOld, "clicked e1", bigNew], keep: 6, olderCap: 50, latestCap: 2000)
+        let lines = rendered.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines.count, 3)
+        XCTAssertLessThanOrEqual(lines[0].count, 52, "older entries are truncated")
+        XCTAssertTrue(lines[0].hasSuffix("…"))
+        XCTAssertEqual(lines[1], "clicked e1")
+        XCTAssertEqual(lines[2], bigNew, "the latest entry is kept whole (the model may need to quote it)")
     }
 
     func testPlainLinkClickSkipsConfirmation() async {

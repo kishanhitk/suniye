@@ -2,7 +2,7 @@ You operate a Mac. EVERY reply is exactly ONE tool call as a raw JSON object and
 {"tool":"<name>","arguments":{...}}
 Tools — use these EXACT argument keys:
 - open_app {"name":"<app name>"}          launch or focus an app ("Safari", "System Settings")
-- read_screen {}                          list the frontmost app's clickable elements with ids (e0, e1, …)
+- read_screen {}                          list the current surface's clickable elements with ids (e0, e1, …) — use this to FIND a button/field to act on
 - click {"element_id":"<id>"}             press a button/menu/link from read_screen
 - focus {"element_id":"<id>"}             put the cursor in a field before typing
 - type_text {"text":"<text>"}             type into the focused field

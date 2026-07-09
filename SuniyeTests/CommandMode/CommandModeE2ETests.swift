@@ -117,6 +117,7 @@ final class CommandModeE2ETests: XCTestCase {
         // confirmation so headless runs never block on a modal.
         let surface = RoutingCommandSurface(
             native: reader, browser: nil, transport: nil, nativeTyper: CGEventTyper(),
+            keyPoster: SystemKeyChordPoster(),
             frontmostBundleID: { NSWorkspace.shared.frontmostApplication?.bundleIdentifier },
             isBrowser: { _ in false }, confirmRisky: { _ in true }
         )
@@ -126,7 +127,7 @@ final class CommandModeE2ETests: XCTestCase {
             ClickTool(surface: surface),
             FocusTool(surface: surface),
             TypeTextTool(surface: surface),
-            PressKeysTool(poster: SystemKeyChordPoster()),
+            PressKeysTool(surface: surface),
             RunAppleScriptTool(),
             FinishTool(),
         ])

@@ -1,0 +1,272 @@
+[
+  {
+    "id": "open_safari",
+    "category": "open_app",
+    "utterance": "open Safari",
+    "history": [],
+    "observation": "Frontmost app: Finder\nNo actionable elements found.",
+    "expected_tool": "open_app",
+    "expected_args": {
+      "name": "Safari"
+    },
+    "actual": "{\"tool\":\"open_app\",\"arguments\":{\"name\":\"Safari\"}}",
+    "latency_ms": 477,
+    "valid_json": true,
+    "tool": "open_app",
+    "tool_match": true,
+    "args_match": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "id": "open_system_settings",
+    "category": "open_app",
+    "utterance": "open System Settings",
+    "history": [],
+    "observation": "Frontmost app: Finder\nNo actionable elements found.",
+    "expected_tool": "open_app",
+    "expected_args": {
+      "name": "System Settings"
+    },
+    "actual": "{\"tool\":\"open_app\",\"arguments\":{\"name\":\"System Settings\"}}",
+    "latency_ms": 253,
+    "valid_json": true,
+    "tool": "open_app",
+    "tool_match": true,
+    "args_match": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "id": "switch_to_slack",
+    "category": "open_app",
+    "utterance": "switch to Slack",
+    "history": [],
+    "observation": "Frontmost app: Safari\nActionable elements \u2014 reference an id with click/focus:\ne0: button \"Reload\"\ne1: textfield \"Address\"",
+    "expected_tool": "open_app",
+    "expected_args": {
+      "name": "Slack"
+    },
+    "actual": "{\"tool\":\"open_app\",\"arguments\":{\"name\":\"Slack\"}}",
+    "latency_ms": 267,
+    "valid_json": true,
+    "tool": "open_app",
+    "tool_match": true,
+    "args_match": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "id": "new_tab",
+    "category": "press_keys",
+    "utterance": "open a new tab",
+    "history": [],
+    "observation": "Frontmost app: Safari\nActionable elements \u2014 reference an id with click/focus:\ne0: button \"Show sidebar\"\ne1: textfield \"Address\"",
+    "expected_tool": "press_keys",
+    "expected_args": {
+      "keys": "cmd+t"
+    },
+    "actual": "{\"tool\":\"click\",\"arguments\":{\"element_id\":\"e0\"}}",
+    "latency_ms": 285,
+    "valid_json": true,
+    "tool": "click",
+    "tool_match": false,
+    "args_match": false,
+    "passed": false,
+    "error": null
+  },
+  {
+    "id": "save_document",
+    "category": "press_keys",
+    "utterance": "save this",
+    "history": [],
+    "observation": "Frontmost app: TextEdit\nFocused: AXTextArea = \"Dear team,\"\nActionable elements \u2014 reference an id with click/focus:\ne0: textarea \"Dear team,\"",
+    "expected_tool": "press_keys",
+    "expected_args": {
+      "keys": "cmd+s"
+    },
+    "actual": "{\n\"tool\": \"click\",\n\"arguments\": {\n\"element_id\": \"e0\"\n}\n}",
+    "latency_ms": 490,
+    "valid_json": true,
+    "tool": "click",
+    "tool_match": false,
+    "args_match": false,
+    "passed": false,
+    "error": null
+  },
+  {
+    "id": "close_window",
+    "category": "press_keys",
+    "utterance": "close this window",
+    "history": [],
+    "observation": "Frontmost app: Preview\nActionable elements \u2014 reference an id with click/focus:\ne0: button \"Zoom\"",
+    "expected_tool": "press_keys",
+    "expected_args": {
+      "keys": "cmd+w"
+    },
+    "actual": "{\n\"tool\": \"click\",\n\"arguments\": {\n\"element_id\": \"e0\"\n}\n}",
+    "latency_ms": 501,
+    "valid_json": true,
+    "tool": "click",
+    "tool_match": false,
+    "args_match": false,
+    "passed": false,
+    "error": null
+  },
+  {
+    "id": "select_all",
+    "category": "press_keys",
+    "utterance": "select all",
+    "history": [],
+    "observation": "Frontmost app: TextEdit\nFocused: AXTextArea = \"the quick brown fox\"\nActionable elements \u2014 reference an id with click/focus:\ne0: textarea \"the quick brown fox\"",
+    "expected_tool": "press_keys",
+    "expected_args": {
+      "keys": "cmd+a"
+    },
+    "actual": "{\"tool\":\"press_keys\",\"arguments\":{\"keys\":\"cmd+a\"}}",
+    "latency_ms": 312,
+    "valid_json": true,
+    "tool": "press_keys",
+    "tool_match": true,
+    "args_match": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "id": "click_send",
+    "category": "click",
+    "utterance": "click the Send button",
+    "history": [
+      "read_screen \u2192 listed 4 elements"
+    ],
+    "observation": "Frontmost app: Mail\nActionable elements \u2014 reference an id with click/focus:\ne0: button \"Attach\"\ne1: button \"Send\"\ne2: textfield \"To\"\ne3: textfield \"Subject\"",
+    "expected_tool": "click",
+    "expected_args": {
+      "element_id": "e1"
+    },
+    "actual": "{\"tool\":\"click\",\"arguments\":{\"element_id\":\"e1\"}}",
+    "latency_ms": 307,
+    "valid_json": true,
+    "tool": "click",
+    "tool_match": true,
+    "args_match": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "id": "click_compose",
+    "category": "click",
+    "utterance": "start a new message",
+    "history": [
+      "read_screen \u2192 listed 3 elements"
+    ],
+    "observation": "Frontmost app: Mail\nActionable elements \u2014 reference an id with click/focus:\ne0: button \"New Message\"\ne1: button \"Archive\"\ne2: searchfield \"Search\"",
+    "expected_tool": "click",
+    "expected_args": {
+      "element_id": "e0"
+    },
+    "actual": "{\n\"tool\": \"click\",\n\"arguments\": {\n\"element_id\": \"e0\"\n}\n}",
+    "latency_ms": 482,
+    "valid_json": true,
+    "tool": "click",
+    "tool_match": true,
+    "args_match": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "id": "focus_search",
+    "category": "focus",
+    "utterance": "click into the search box",
+    "history": [
+      "read_screen \u2192 listed 3 elements"
+    ],
+    "observation": "Frontmost app: Safari\nActionable elements \u2014 reference an id with click/focus:\ne0: button \"Back\"\ne1: searchfield \"Search or enter website name\"\ne2: button \"Share\"",
+    "expected_tool": "focus",
+    "expected_args": {
+      "element_id": "e1"
+    },
+    "actual": "{\"tool\":\"focus\",\"arguments\":{\"element_id\":\"e1\"}}",
+    "latency_ms": 307,
+    "valid_json": true,
+    "tool": "focus",
+    "tool_match": true,
+    "args_match": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "id": "read_first_when_blank",
+    "category": "read_screen",
+    "utterance": "click the Add to Cart button",
+    "history": [],
+    "observation": "Frontmost app: Safari\nNo actionable elements found.",
+    "expected_tool": "read_screen",
+    "expected_args": {},
+    "actual": "{\"tool\":\"read_screen\":{}}",
+    "latency_ms": 212,
+    "valid_json": false,
+    "tool": null,
+    "tool_match": false,
+    "args_match": true,
+    "passed": false,
+    "error": null
+  },
+  {
+    "id": "type_after_focus",
+    "category": "type_text",
+    "utterance": "type hello world",
+    "history": [
+      "focus \u2192 focused e1"
+    ],
+    "observation": "Frontmost app: Notes\nFocused: AXTextArea = \"\"\nActionable elements \u2014 reference an id with click/focus:\ne0: textarea \"\"",
+    "expected_tool": "type_text",
+    "expected_args": {
+      "text": "hello world"
+    },
+    "actual": "{\"tool\":\"type_text\",\"arguments\":{\"text\":\"hello world\"}}",
+    "latency_ms": 292,
+    "valid_json": true,
+    "tool": "type_text",
+    "tool_match": true,
+    "args_match": true,
+    "passed": true,
+    "error": null
+  },
+  {
+    "id": "set_volume_script",
+    "category": "run_applescript",
+    "utterance": "set the system volume to thirty percent",
+    "history": [],
+    "observation": "Frontmost app: Finder\nNo actionable elements found.",
+    "expected_tool": "run_applescript",
+    "expected_args": {},
+    "actual": "{\"tool\":\"open_app\",\"arguments\":{\"name\":\"System Settings\"}}",
+    "latency_ms": 296,
+    "valid_json": true,
+    "tool": "open_app",
+    "tool_match": false,
+    "args_match": true,
+    "passed": false,
+    "error": null
+  },
+  {
+    "id": "finish_when_done",
+    "category": "finish",
+    "utterance": "open Safari",
+    "history": [
+      "open_app \u2192 opened Safari"
+    ],
+    "observation": "Frontmost app: Safari\nActionable elements \u2014 reference an id with click/focus:\ne0: textfield \"Address\"",
+    "expected_tool": "finish",
+    "expected_args": {},
+    "actual": "{\"tool\":\"open_app\",\"arguments\":{\"name\":\"Safari\"}}",
+    "latency_ms": 294,
+    "valid_json": true,
+    "tool": "open_app",
+    "tool_match": false,
+    "args_match": true,
+    "passed": false,
+    "error": null
+  }
+]

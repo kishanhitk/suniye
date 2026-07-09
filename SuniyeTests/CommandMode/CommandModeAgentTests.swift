@@ -129,6 +129,32 @@ final class CommandModeAgentTests: XCTestCase {
         XCTAssertEqual(result.invalidActions, 1)
     }
 
+    func testReadOnlyToolMayRepeatBeforeStalling() async {
+        // Re-reading a still-loading page is legitimate: identical consecutive
+        // read_screen calls are allowed a couple of times, THEN the guard stalls.
+        let recorder = Recorder()
+        let registry = AgentToolRegistry(tools: [
+            RecordingTool(name: "read_screen", risk: .read, terminal: false, recorder: recorder),
+        ])
+        let brain = ScriptedBrain(Array(repeating: ToolCall(name: "read_screen", arguments: [:]), count: 10))
+        let agent = CommandModeAgent(brain: brain, registry: registry, screenReader: FakeScreen(), maxSteps: 10)
+        let result = await agent.run(task: "watch the page")
+        XCTAssertEqual(result.outcome, .stalled)
+        XCTAssertEqual(recorder.items.count, 3, "first call + 2 allowed repeats, then stall")
+    }
+
+    func testActionToolStillStallsOnFirstRepeat() async {
+        let recorder = Recorder()
+        let registry = AgentToolRegistry(tools: [
+            RecordingTool(name: "open_app", risk: .benign, terminal: false, recorder: recorder),
+        ])
+        let brain = ScriptedBrain(Array(repeating: ToolCall(name: "open_app", arguments: ["name": "Safari"]), count: 5))
+        let agent = CommandModeAgent(brain: brain, registry: registry, screenReader: FakeScreen(), maxSteps: 10)
+        let result = await agent.run(task: "open safari")
+        XCTAssertEqual(result.outcome, .stalled)
+        XCTAssertEqual(recorder.items.count, 1, "an ACTION repeat must stall immediately — actions have side effects")
+    }
+
     func testRetriesTransientBrainFailureThenSucceeds() async {
         let recorder = Recorder()
         let registry = AgentToolRegistry(tools: [

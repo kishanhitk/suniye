@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Suniye Fixture</title>
+</head>
+<body>
+<h1>Suniye Browser Fixture</h1>
+<p>Deterministic test page for the browser-control E2E harness. Each control
+mutates <code>#status</code> so page reads can verify actuation happened.</p>
+<div id="status">READY</div>
+<div id="echo"></div>
+<div id="keylog"></div>
+
+<!-- The test link sits BEFORE the filler so it survives the link-band cap. -->
+<a href="#more" id="more">More information</a>
+
+<!-- 70 filler links BEFORE the controls: proves button prioritization past the
+     60-element snapshot cap (the Flipkart add-to-cart failure mode). -->
+<nav id="filler"></nav>
+
+<form id="searchForm">
+  <input id="search" type="search" placeholder="Search products" autocomplete="off">
+  <button type="submit" id="go">Go</button>
+</form>
+
+<button id="cart">Add to cart</button>
+<button id="rerender">Start rerender</button>
+<button id="focus-pw">Focus password</button>
+<input id="pw" type="password" placeholder="Password">
+
+<script>
+  // Status mirrors into the tab TITLE too: titles live in Chrome's browser
+  // process (chrome.tabs.get), readable even if the renderer is busy/blocked.
+  const setStatus = (t) => {
+    document.getElementById("status").textContent = t;
+    document.title = "Suniye Fixture — " + t;
+  };
+
+  const filler = document.getElementById("filler");
+  for (let i = 0; i < 70; i++) {
+    const a = document.createElement("a");
+    a.href = "#link" + i;
+    a.textContent = "Filler link " + i;
+    filler.appendChild(a);
+  }
+
+  document.getElementById("search").addEventListener("input", (e) => {
+    document.getElementById("echo").textContent = "ECHO:" + e.target.value;
+  });
+  document.addEventListener("keydown", (e) => {
+    document.getElementById("keylog").textContent = "KEY:" + e.key + " trusted:" + e.isTrusted;
+  });
+  document.getElementById("searchForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    setStatus("SUBMITTED:" + document.getElementById("search").value);
+  });
+  document.getElementById("cart").addEventListener("click", () => setStatus("CARTED"));
+  document.getElementById("more").addEventListener("click", (e) => { e.preventDefault(); setStatus("LINKED"); });
+  document.getElementById("focus-pw").addEventListener("click", () => { document.getElementById("pw").focus(); });
+
+  // Simulates a React re-render: after 300ms the Add-to-cart button node is
+  // REPLACED and our data-suniye-ref tag is stripped — the self-heal +
+  // identity-verification path must recover.
+  document.getElementById("rerender").addEventListener("click", () => {
+    setStatus("RERENDER-ARMED");
+    setTimeout(() => {
+      const old = document.getElementById("cart");
+      const fresh = old.cloneNode(true);
+      fresh.removeAttribute("data-suniye-ref");
+      fresh.addEventListener("click", () => setStatus("CARTED-AFTER-RERENDER"));
+      old.replaceWith(fresh);
+    }, 300);
+  });
+</script>
+</body>
+</html>

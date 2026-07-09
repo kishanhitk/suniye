@@ -46,23 +46,20 @@ final class CommandModeActuatorTests: XCTestCase {
         XCTAssertFalse(result.isTerminal)
     }
 
-    // MARK: PressKeys posts the parsed chord
+    // MARK: PressKeys (arg guard + delegation; chord semantics live in the surface)
 
-    private final class Sink: @unchecked Sendable { var code: CGKeyCode?; var text: String? }
-    private struct RecordingPoster: KeyChordPosting {
-        let sink: Sink
-        func post(keyCode: CGKeyCode, flags: CGEventFlags) { sink.code = keyCode }
-    }
+    private final class Sink: @unchecked Sendable { var text: String? }
 
-    func testPressKeysPostsParsedChord() async throws {
-        let sink = Sink()
-        _ = try await PressKeysTool(poster: RecordingPoster(sink: sink)).execute(["keys": "cmd+t"])
-        XCTAssertEqual(sink.code, 17)
+    func testPressKeysDelegatesToSurface() async throws {
+        let surface = FakeCommandSurface()
+        let result = try await PressKeysTool(surface: surface).execute(["keys": "cmd+t"])
+        XCTAssertEqual(surface.pressed, ["cmd+t"])
+        XCTAssertEqual(result.output, "pressed cmd+t")
     }
 
     func testPressKeysRejectsMissingKeys() async {
         do {
-            _ = try await PressKeysTool(poster: RecordingPoster(sink: Sink())).execute([:])
+            _ = try await PressKeysTool(surface: FakeCommandSurface()).execute([:])
             XCTFail("expected malformedToolCall")
         } catch {
             XCTAssertEqual(error as? CommandModeError, .malformedToolCall("press_keys needs 'keys'"))
