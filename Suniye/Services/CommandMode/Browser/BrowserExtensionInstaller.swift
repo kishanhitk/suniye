@@ -37,17 +37,28 @@ enum BrowserExtensionInstaller {
             AppLogger.shared.log(.warning, "browser extension not found (bundle or SUNIYE_BROWSER_EXTENSION_PATH)")
             return nil
         }
-        let fileManager = FileManager.default
         let destination = installedURL
         do {
-            if fileManager.fileExists(atPath: destination.path) {
-                try fileManager.removeItem(at: destination)
+            try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // ditto MERGES into the destination (overwriting files in place) rather
+            // than delete+recreate — Chrome has this folder loaded as an unpacked
+            // extension, and replacing the directory out from under it is fragile.
+            let ditto = Process()
+            ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            ditto.arguments = [source.path, destination.path]
+            try ditto.run()
+            ditto.waitUntilExit()
+            guard ditto.terminationStatus == 0 else {
+                AppLogger.shared.log(.warning, "browser extension install failed: ditto exit \(ditto.terminationStatus)")
+                return nil
             }
-            try fileManager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try fileManager.copyItem(at: source, to: destination)
             let pairing: [String: Any] = ["port": Int(port), "token": token]
             let data = try JSONSerialization.data(withJSONObject: pairing, options: [.prettyPrinted, .sortedKeys])
-            try data.write(to: destination.appendingPathComponent("pairing.json"))
+            let pairingURL = destination.appendingPathComponent("pairing.json")
+            try data.write(to: pairingURL)
+            // The token is the bridge's whole authentication — keep it out of reach
+            // of other users at least (same-user processes are out of scope here).
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: pairingURL.path)
             AppLogger.shared.log(.info, "browser extension paired at \(destination.path) (port \(port))")
             return destination
         } catch {

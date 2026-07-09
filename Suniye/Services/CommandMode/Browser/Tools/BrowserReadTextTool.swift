@@ -10,10 +10,8 @@ struct BrowserReadTextTool: AgentTool {
     let transport: BrowserTransport
 
     func execute(_ arguments: [String: String]) async throws -> ToolResult {
-        var args: [String: String] = [:]
-        if let ref = arguments["ref"], !ref.isEmpty { args["ref"] = ref }
         do {
-            let response = try await transport.send(tool: "read_text", args: args)
+            let response = try await transport.send(tool: "read_text", args: [:])
             guard response.ok else {
                 // Soft failure — the agent can retry or finish, not abort the run.
                 return ToolResult(output: response.errorMessage ?? "couldn't read the page", isTerminal: false)

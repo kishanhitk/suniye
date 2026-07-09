@@ -19,6 +19,8 @@ enum BrowserBridgeError: Error, Equatable {
     case notConnected
     case timedOut
     case badResponse(String)
+    /// No candidate port could be bound (or the listener never became ready).
+    case bindFailed
 }
 
 /// The seam the browser tools + snapshot reader depend on — NOT the concrete

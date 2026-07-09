@@ -110,6 +110,7 @@ final class CommandModeAgent {
         var stepCount = 0
         var toolInvocations = 0
         var invalidActions = 0
+        var consecutiveRepeats = 0
 
         func done(_ summary: String, _ outcome: AgentOutcome) -> AgentRunResult {
             AgentRunResult(
@@ -138,8 +139,17 @@ final class CommandModeAgent {
             // Repeat-guard: small models re-issue the SAME call instead of calling
             // finish. Treat an identical consecutive call as completion, and report
             // the previous outcome honestly (success or the failure message).
+            // EXCEPTION: read-only tools legitimately repeat (re-checking a page
+            // that's still loading) — argument-less reads are byte-identical, so
+            // allow a couple of consecutive re-reads before calling it a stall.
             if let last = lastCall, last == call, call.name != "finish" {
-                return done(lastOutcome.isEmpty ? "Done." : lastOutcome, .stalled)
+                consecutiveRepeats += 1
+                let isReadOnly = registry.tool(named: call.name)?.risk == RiskTier.read
+                if !(isReadOnly && consecutiveRepeats <= 2) {
+                    return done(lastOutcome.isEmpty ? "Done." : lastOutcome, .stalled)
+                }
+            } else {
+                consecutiveRepeats = 0
             }
             lastCall = call
 

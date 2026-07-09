@@ -11,6 +11,7 @@ protocol CommandActing: ScreenReading {
     func click(id: String) async -> ToolResult
     func focus(id: String) async -> ToolResult
     func typeText(_ text: String) async -> ToolResult
+    func pressKeys(_ chord: String) async -> ToolResult
     var activeKind: CommandSurfaceKind { get }
 }
 
@@ -23,6 +24,7 @@ final class RoutingCommandSurface: CommandActing {
     private let browser: BrowserSnapshotReader?
     private let transport: BrowserTransport?
     private let nativeTyper: TextTyping
+    private let keyPoster: KeyChordPosting
     private let frontmostBundleID: () -> String?
     private let isBrowser: (String?) -> Bool
     /// Returns true to allow a risky web action. Presented to the user.
@@ -34,6 +36,7 @@ final class RoutingCommandSurface: CommandActing {
          browser: BrowserSnapshotReader?,
          transport: BrowserTransport?,
          nativeTyper: TextTyping,
+         keyPoster: KeyChordPosting,
          frontmostBundleID: @escaping () -> String?,
          isBrowser: @escaping (String?) -> Bool,
          confirmRisky: @escaping (String) async -> Bool) {
@@ -41,6 +44,7 @@ final class RoutingCommandSurface: CommandActing {
         self.browser = browser
         self.transport = transport
         self.nativeTyper = nativeTyper
+        self.keyPoster = keyPoster
         self.frontmostBundleID = frontmostBundleID
         self.isBrowser = isBrowser
         self.confirmRisky = confirmRisky
@@ -70,7 +74,7 @@ final class RoutingCommandSurface: CommandActing {
                     return ToolResult(output: "cancelled — the user declined that action", isTerminal: false)
                 }
             }
-            return await forward("click", ["ref": id], fallback: "clicked \(id)")
+            return await forward("click", refArgs(id), fallback: "clicked \(id)")
         }
     }
 
@@ -81,8 +85,18 @@ final class RoutingCommandSurface: CommandActing {
             let status = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
             return ToolResult(output: status == .success ? "focused \(id)" : "focus \(id) failed", isTerminal: false)
         case .browser:
-            return await forward("focus", ["ref": id], fallback: "focused \(id)")
+            return await forward("focus", refArgs(id), fallback: "focused \(id)")
         }
+    }
+
+    /// Ref + its snapshot identity (role/label). The extension uses the identity to
+    /// VERIFY the ref still points at the element the model saw — an SPA re-render
+    /// can otherwise silently rebind e5 to a different control.
+    private func refArgs(_ id: String) -> [String: String] {
+        var args = ["ref": id]
+        if let role = browser?.role(forRef: id) { args["role"] = role }
+        if let label = browser?.label(forRef: id) { args["label"] = label }
+        return args
     }
 
     func typeText(_ text: String) async -> ToolResult {
@@ -95,20 +109,42 @@ final class RoutingCommandSurface: CommandActing {
         }
     }
 
+    /// Keyboard input routes by key: simple editing keys (enter/tab/escape/backspace)
+    /// go through the extension as trusted CDP key events when a page is active —
+    /// they act on the PAGE and must work even if Suniye's UI holds app focus.
+    /// Chords (cmd+T…) target the browser application itself, so they stay native.
+    func pressKeys(_ chord: String) async -> ToolResult {
+        if activeKind == .browser {
+            let key = chord.trimmingCharacters(in: .whitespaces).lowercased()
+            let pageKeys: Set<String> = ["enter", "return", "tab", "escape", "backspace"]
+            if pageKeys.contains(key) {
+                return await forward("press", ["keys": key == "return" ? "enter" : key], fallback: "pressed \(chord)")
+            }
+        }
+        guard let parsed = KeyChord.parse(chord) else {
+            return ToolResult(output: "couldn't press \(chord)", isTerminal: false)
+        }
+        keyPoster.post(keyCode: parsed.keyCode, flags: parsed.flags)
+        return ToolResult(output: "pressed \(chord)", isTerminal: false)
+    }
+
     private func noElement(_ id: String) -> ToolResult {
         ToolResult(output: "no element \(id) — call read_screen first", isTerminal: false)
     }
 
     /// A consequential page action (submit/purchase/delete/auth) worth confirming.
     /// Plain link navigation is not — confirming every click would be unusable.
+    /// Deliberately conservative keywords: generic words like "continue" would
+    /// gate half the web; actual payment/login FIELDS are refused extension-side.
+    private static let consequentialKeywords = [
+        "buy", "add to cart", "add to bag", "checkout", "check out", "place order",
+        "pay", "purchase", "confirm", "submit", "delete", "remove",
+        "sign in", "log in", "order now",
+    ]
+
     private func isConsequential(_ ref: String) -> Bool {
         let label = (browser?.label(forRef: ref) ?? "").lowercased()
-        let keywords = [
-            "buy", "add to cart", "add to bag", "checkout", "check out", "place order",
-            "pay", "purchase", "confirm", "submit", "delete", "remove",
-            "sign in", "log in", "order now", "continue",
-        ]
-        return keywords.contains { label.contains($0) }
+        return Self.consequentialKeywords.contains { label.contains($0) }
     }
 
     private func forward(_ tool: String, _ args: [String: String], fallback: String) async -> ToolResult {

@@ -1800,6 +1800,9 @@ final class AppState {
     /// action — click a submit/buy/checkout/delete control — pauses for the user
     /// to Allow or Cancel. Login/payment targets are hard-refused in the extension.
     func confirmBrowserAction(_ description: String) -> Bool {
+        // The dialog steals app focus from the browser; hand it back afterwards or
+        // the routing surface would see Suniye frontmost and flip to native mid-run.
+        let previousApp = NSWorkspace.shared.frontmostApplication
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "Allow this web action?"
@@ -1807,7 +1810,9 @@ final class AppState {
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Cancel")
         AppLogger.shared.log(.info, "command mode confirm requested: \(description)")
-        return alert.runModal() == .alertFirstButtonReturn
+        let allowed = alert.runModal() == .alertFirstButtonReturn
+        previousApp?.activate()
+        return allowed
     }
 
     func startOnboardingIfNeeded() {
@@ -3769,8 +3774,12 @@ final class AppState {
             browser: browserBridge.map { BrowserSnapshotReader(transport: $0) },
             transport: browserBridge,
             nativeTyper: typer,
+            keyPoster: SystemKeyChordPoster(),
             frontmostBundleID: { NSWorkspace.shared.frontmostApplication?.bundleIdentifier },
-            isBrowser: { TargetCategoryMapper.category(for: $0) == .browser },
+            // Route to the extension ONLY for the browser that actually hosts it
+            // (Chrome incl. Beta/Dev/Canary). A coarse "any browser" match would
+            // act on a BACKGROUND Chrome tab while e.g. Safari is frontmost.
+            isBrowser: { ($0 ?? "").lowercased().hasPrefix("com.google.chrome") },
             confirmRisky: { [weak self] description in self?.confirmBrowserAction(description) ?? false }
         )
         var tools: [AgentTool] = [
@@ -3779,7 +3788,7 @@ final class AppState {
             ClickTool(surface: surface),
             FocusTool(surface: surface),
             TypeTextTool(surface: surface),
-            PressKeysTool(poster: SystemKeyChordPoster()),
+            PressKeysTool(surface: surface),
             RunAppleScriptTool(),
             FinishTool(),
         ]
@@ -3870,7 +3879,8 @@ final class AppState {
         case "type_text": return "Typing"
         case "press_keys": return "Pressing \(call.arguments["keys"] ?? "keys")"
         case "run_applescript": return "Running a script"
-        case "browser_navigate": return "Opening \(call.arguments["url"] ?? "a page")"
+        // Host only: a full URL can carry query content (search terms) into the pill.
+        case "browser_navigate": return "Opening \(call.arguments["url"].flatMap { URL(string: $0)?.host } ?? "a page")"
         case "browser_read_text": return "Reading the page"
         case "finish": return "Done"
         default: return "Working…"

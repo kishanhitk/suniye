@@ -17,20 +17,19 @@ struct SystemKeyChordPoster: KeyChordPosting {
     }
 }
 
+/// Sends a keyboard shortcut. Delegates to the routing surface: page-editing keys
+/// (Enter/Tab/…) become trusted CDP key events when a web page is active, chords
+/// (cmd+T…) post natively via CGEvent.
 struct PressKeysTool: AgentTool {
     let name = "press_keys"
     let risk: RiskTier = .risky
-    let poster: KeyChordPosting
+    let surface: CommandActing
 
     func execute(_ arguments: [String: String]) async throws -> ToolResult {
         guard let chord = (arguments["keys"] ?? arguments["chord"])?.trimmingCharacters(in: .whitespaces), !chord.isEmpty else {
             throw CommandModeError.malformedToolCall("press_keys needs 'keys'")
         }
-        guard let parsed = KeyChord.parse(chord) else {
-            return ToolResult(output: "unrecognized keys: \(chord)", isTerminal: false)
-        }
-        poster.post(keyCode: parsed.keyCode, flags: parsed.flags)
-        return ToolResult(output: "pressed \(chord)", isTerminal: false)
+        return await surface.pressKeys(chord)
     }
 }
 

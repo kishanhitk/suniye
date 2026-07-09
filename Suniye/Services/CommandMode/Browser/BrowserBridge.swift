@@ -6,9 +6,20 @@ import Network
 /// replies (`{id, ok, result|error}`). Correlated by `id` via a pending-continuation
 /// map. Loopback-only bind + a per-launch token in the extension's `hello` frame.
 ///
-/// Modeled on `LocalGemmaLlamaServer`'s lifecycle (start/stop, per-process token).
-/// Uses `NWProtocolWebSocket`, so Network.framework does the RFC-6455 handshake,
-/// masking, and fragmentation — we only see complete JSON frames.
+/// Security model (localhost is reachable by any local process):
+///  - loopback-only bind, token required in the first (`hello`) frame,
+///  - ONLY the authenticated connection may deliver responses — frames from any
+///    other socket are dropped and the socket closed (no forged tool results),
+///  - unauthenticated connections are closed after `config.handshakeTimeout`,
+///  - a second valid `hello` replaces the current connection (last-authed-wins,
+///    which is how the extension recovers from service-worker restarts).
+///  (NWProtocolWebSocket exposes no server-side handshake headers, so an Origin
+///  check is not possible here; the token is the authentication.)
+///
+/// Reliability: the app sends a JSON `{"type":"ping"}` every `keepaliveInterval`
+/// — WebSocket activity is what keeps the extension's MV3 service worker alive
+/// (Chrome evicts idle workers after ~30s, which showed up as connect/disconnect
+/// churn before this existed).
 actor BrowserBridge: BrowserTransport {
     private let config: BrowserBridgeConfig
     private let onStateChange: (@Sendable (Bool) -> Void)?
@@ -19,6 +30,10 @@ actor BrowserBridge: BrowserTransport {
     private var handshakeComplete = false
     private var boundPort: UInt16?
     private var pending: [String: CheckedContinuation<BrowserResponse, Error>] = [:]
+    private var timeouts: [String: Task<Void, Never>] = [:]
+    /// Pre-auth deadline per connection: no valid `hello` in time → closed.
+    private var authDeadlines: [ObjectIdentifier: Task<Void, Never>] = [:]
+    private var keepalive: Task<Void, Never>?
 
     init(config: BrowserBridgeConfig, onStateChange: (@Sendable (Bool) -> Void)? = nil) {
         self.config = config
@@ -31,34 +46,40 @@ actor BrowserBridge: BrowserTransport {
 
     // MARK: - Lifecycle
 
-    func start() throws {
+    /// Binds the first available candidate port and returns only once the listener
+    /// is actually READY — NWListener reports bind failures asynchronously, so
+    /// returning after `start()` alone could claim a port another process owns.
+    func start() async throws {
         guard listener == nil else { return }
         var lastError: Error?
         for candidate in config.portCandidates {
             do {
-                let listener = try makeListener(port: candidate)
-                listener.newConnectionHandler = { [weak self] conn in
+                let candidateListener = try makeListener(port: candidate)
+                candidateListener.newConnectionHandler = { [weak self] conn in
                     Task { await self?.accept(conn) }
                 }
-                listener.stateUpdateHandler = { state in
+                let port = try await Self.startAndAwaitReady(candidateListener, on: queue)
+                candidateListener.stateUpdateHandler = { state in
                     if case let .failed(error) = state {
                         AppLogger.shared.log(.warning, "browser bridge listener failed: \(error)")
                     }
                 }
-                listener.start(queue: queue)
-                self.listener = listener
-                self.boundPort = candidate
-                AppLogger.shared.log(.info, "browser bridge listening on 127.0.0.1:\(candidate)")
+                listener = candidateListener
+                boundPort = port
+                AppLogger.shared.log(.info, "browser bridge listening on 127.0.0.1:\(port)")
                 return
             } catch {
                 lastError = error
             }
         }
         AppLogger.shared.log(.warning, "browser bridge could not bind any port \(config.portCandidates)")
-        throw lastError ?? BrowserBridgeError.notConnected
+        throw lastError ?? BrowserBridgeError.bindFailed
     }
 
     func stop() {
+        keepalive?.cancel(); keepalive = nil
+        for (_, task) in authDeadlines { task.cancel() }
+        authDeadlines.removeAll()
         listener?.cancel(); listener = nil
         connection?.cancel(); connection = nil
         handshakeComplete = false
@@ -75,9 +96,43 @@ actor BrowserBridge: BrowserTransport {
         ws.autoReplyPing = true
         params.defaultProtocolStack.applicationProtocols.insert(ws, at: 0)
         guard let nwPort = NWEndpoint.Port(rawValue: candidate) else {
-            throw BrowserBridgeError.badResponse("invalid port \(candidate)")
+            throw BrowserBridgeError.bindFailed
         }
         return try NWListener(using: params, on: nwPort)
+    }
+
+    /// Starts the listener and resolves with the bound port on `.ready`, or throws
+    /// on `.failed`/`.cancelled`/a 5s guard. Port 0 (tests) resolves to the
+    /// OS-assigned port. Nonisolated: pure state-machine bridging, no actor state.
+    private static func startAndAwaitReady(_ listener: NWListener, on queue: DispatchQueue) async throws -> UInt16 {
+        final class Once: @unchecked Sendable {
+            private let lock = NSLock()
+            private var done = false
+            func claim() -> Bool { lock.lock(); defer { lock.unlock() }; if done { return false }; done = true; return true }
+        }
+        let once = Once()
+        return try await withCheckedThrowingContinuation { continuation in
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    if once.claim() { continuation.resume(returning: listener.port?.rawValue ?? 0) }
+                case let .failed(error):
+                    if once.claim() { continuation.resume(throwing: error) }
+                    listener.cancel()
+                case .cancelled:
+                    if once.claim() { continuation.resume(throwing: BrowserBridgeError.bindFailed) }
+                default:
+                    break
+                }
+            }
+            queue.asyncAfter(deadline: .now() + 5) {
+                if once.claim() {
+                    listener.cancel()
+                    continuation.resume(throwing: BrowserBridgeError.bindFailed)
+                }
+            }
+            listener.start(queue: queue)
+        }
     }
 
     // MARK: - Connection handling
@@ -85,12 +140,30 @@ actor BrowserBridge: BrowserTransport {
     private func accept(_ conn: NWConnection) {
         conn.stateUpdateHandler = { [weak self] state in
             switch state {
-            case .ready: Task { await self?.receive(on: conn) }
+            case .ready: Task { await self?.connectionReady(conn) }
             case .failed, .cancelled: Task { await self?.connectionClosed(conn) }
             default: break
             }
         }
         conn.start(queue: queue)
+    }
+
+    private func connectionReady(_ conn: NWConnection) {
+        receive(on: conn)
+        // Close connections that never authenticate.
+        let key = ObjectIdentifier(conn)
+        authDeadlines[key] = Task { [timeout = config.handshakeTimeout] in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
+            self.expireUnauthenticated(conn)
+        }
+    }
+
+    private func expireUnauthenticated(_ conn: NWConnection) {
+        guard authDeadlines.removeValue(forKey: ObjectIdentifier(conn)) != nil else { return }
+        if connection !== conn {
+            AppLogger.shared.log(.info, "browser bridge closed a connection that never authenticated")
+            conn.cancel()
+        }
     }
 
     private func receive(on conn: NWConnection) {
@@ -107,15 +180,20 @@ actor BrowserBridge: BrowserTransport {
     }
 
     private func connectionClosed(_ conn: NWConnection) {
-        guard connection === conn else { return }         // ignore replaced/stale connections
+        authDeadlines.removeValue(forKey: ObjectIdentifier(conn))?.cancel()
+        guard connection === conn else { return }         // replaced/stranger connections: no teardown
         connection = nil
         handshakeComplete = false
+        keepalive?.cancel(); keepalive = nil
         failAllPending(BrowserBridgeError.notConnected)
         onStateChange?(false)
     }
 
     private func handleInbound(_ data: Data, from conn: NWConnection) {
-        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            if conn !== connection { conn.cancel() }      // garbage from a stranger → drop it
+            return
+        }
 
         if obj["type"] as? String == "hello" {
             guard obj["token"] as? String == config.token else {
@@ -123,26 +201,59 @@ actor BrowserBridge: BrowserTransport {
                 conn.cancel()
                 return
             }
-            if let old = connection, old !== conn { old.cancel() }   // last-authenticated-wins
+            authDeadlines.removeValue(forKey: ObjectIdentifier(conn))?.cancel()
+            // Reassign BEFORE cancelling the old connection so its close callback
+            // fails the `connection === conn` guard and can't flap the state.
+            let old = connection
             connection = conn
             handshakeComplete = true
+            if let old, old !== conn { old.cancel() }     // last-authenticated-wins
             send(json: ["type": "welcome", "protocol": BrowserBridgeConfig.protocolVersion], on: conn)
             AppLogger.shared.log(.info, "browser bridge: extension connected")
+            startKeepalive()
             onStateChange?(true)
             return
         }
+
+        // SECURITY: beyond `hello`, only the authenticated connection may speak.
+        // Anything else could be a local process trying to forge tool responses.
+        guard conn === connection, handshakeComplete else {
+            AppLogger.shared.log(.warning, "browser bridge dropped a message from an unauthenticated connection")
+            conn.cancel()
+            return
+        }
+
         if let type = obj["type"] as? String, type == "ping" || type == "pong" { return }
 
-        guard let id = obj["id"] as? String, let cont = pending.removeValue(forKey: id) else { return }
+        guard let id = obj["id"] as? String, pending[id] != nil else { return }
         var result: [String: String] = [:]
         if let raw = obj["result"] as? [String: Any] {
             for (key, value) in raw { result[key] = Self.stringify(value) }
         }
         let error = obj["error"] as? [String: Any]
-        cont.resume(returning: BrowserResponse(
+        resolvePending(id, BrowserResponse(
             ok: obj["ok"] as? Bool ?? false, result: result,
             errorCode: error?["code"] as? String, errorMessage: error?["message"] as? String
         ))
+    }
+
+    // MARK: - Keepalive (keeps the MV3 service worker alive between commands)
+
+    private func startKeepalive() {
+        keepalive?.cancel()
+        guard config.keepaliveInterval > 0 else { return }
+        keepalive = Task { [interval = config.keepaliveInterval] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                if Task.isCancelled { break }
+                self.sendKeepalivePing()
+            }
+        }
+    }
+
+    private func sendKeepalivePing() {
+        guard let conn = connection, handshakeComplete else { return }
+        send(json: ["type": "ping", "t": Int(Date().timeIntervalSince1970 * 1000)], on: conn)
     }
 
     // MARK: - Send
@@ -158,22 +269,31 @@ actor BrowserBridge: BrowserTransport {
             pending[id] = continuation
             conn.send(content: data, contentContext: Self.wsTextContext(), isComplete: true,
                       completion: .contentProcessed { [weak self] error in
-                if let error { Task { await self?.failPending(id, BrowserBridgeError.badResponse("\(error)")) } }
+                if let error { Task { await self?.failPending(id, BrowserBridgeError.badResponse("send failed: \(error)")) } }
             })
-            Task {
+            timeouts[id] = Task {
                 try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
                 self.failPending(id, BrowserBridgeError.timedOut)
             }
         }
     }
 
+    private func resolvePending(_ id: String, _ response: BrowserResponse) {
+        timeouts.removeValue(forKey: id)?.cancel()
+        pending.removeValue(forKey: id)?.resume(returning: response)
+    }
+
     private func failPending(_ id: String, _ error: Error) {
+        timeouts.removeValue(forKey: id)?.cancel()
         pending.removeValue(forKey: id)?.resume(throwing: error)
     }
 
     private func failAllPending(_ error: Error) {
-        let conts = pending; pending.removeAll()
-        for (_, cont) in conts { cont.resume(throwing: error) }
+        for (_, task) in timeouts { task.cancel() }
+        timeouts.removeAll()
+        let continuations = pending
+        pending.removeAll()
+        for (_, continuation) in continuations { continuation.resume(throwing: error) }
     }
 
     private func send(json: [String: Any], on conn: NWConnection) {

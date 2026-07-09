@@ -34,6 +34,19 @@ struct LocalLLMAgentBrain: AgentBrain {
         "press_keys", "run_applescript", "browser_navigate", "browser_read_text", "finish",
     ]
 
+    /// Renders recent history for the prompt: the MOST RECENT entry is kept nearly
+    /// whole (the model may need it verbatim — e.g. the page text it just read, to
+    /// answer from), older entries are truncated hard. Without this, one large
+    /// tool output (a 4KB `browser_read_text`) rides the next six prompts and can
+    /// blow latency/timeouts.
+    nonisolated static func renderHistory(_ history: [String], keep: Int = 6, olderCap: Int = 200, latestCap: Int = 3600) -> String {
+        let recent = Array(history.suffix(keep))
+        return recent.enumerated().map { index, entry in
+            let cap = index == recent.count - 1 ? latestCap : olderCap
+            return entry.count > cap ? String(entry.prefix(cap)) + "…" : entry
+        }.joined(separator: "\n")
+    }
+
     func nextToolCall(task: String, observation: String, history: [String], toolNames: [String]) async throws -> ToolCall {
         let available = Set(toolNames)
         let catalog = Self.toolOrder
@@ -55,7 +68,7 @@ struct LocalLLMAgentBrain: AgentBrain {
         - After the task is done, your NEXT call MUST be finish. NEVER repeat an action.
         - "Current screen" is context only — never type its text back.
         Recent steps (oldest first, most recent last):
-        \(history.suffix(6).joined(separator: "\n"))
+        \(Self.renderHistory(history))
         Current screen:
         \(observation)
         """
