@@ -4,6 +4,7 @@
 // Everything stays on 127.0.0.1; nothing is sent off the machine.
 
 let ws = null;
+let connecting = false;
 let reconnectTimer = null;
 
 async function loadPairing() {
@@ -18,31 +19,37 @@ async function loadPairing() {
 }
 
 async function connect() {
-  if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
+  // Guard against overlapping connects (load-time call + alarm + reconnect all race).
+  if (connecting || (ws && (ws.readyState === 0 || ws.readyState === 1))) return;
+  connecting = true;
   const pairing = await loadPairing();
-  if (!pairing || !pairing.port || !pairing.token) return scheduleReconnect();
+  if (!pairing || !pairing.port || !pairing.token) { connecting = false; return scheduleReconnect(); }
 
+  let socket;
   try {
-    ws = new WebSocket(`ws://127.0.0.1:${pairing.port}`);
+    socket = new WebSocket(`ws://127.0.0.1:${pairing.port}`);
   } catch (e) {
+    connecting = false;
     return scheduleReconnect();
   }
+  ws = socket; // capture locally in every handler so a later connect() can't hijack this one
 
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ type: "hello", protocol: 1, extensionVersion: "0.0.1", token: pairing.token }));
+  socket.onopen = () => {
+    connecting = false;
+    socket.send(JSON.stringify({ type: "hello", protocol: 1, extensionVersion: "0.0.1", token: pairing.token }));
     console.log("[suniye] connected to app");
   };
-  ws.onmessage = async (event) => {
+  socket.onmessage = async (event) => {
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
     if (msg.type === "welcome") { console.log("[suniye] paired"); return; }
-    if (msg.type === "ping") { ws.send(JSON.stringify({ type: "pong", t: msg.t })); return; }
+    if (msg.type === "ping") { socket.send(JSON.stringify({ type: "pong", t: msg.t })); return; }
     if (!msg.id || !msg.tool) return;
     const response = await handleTool(msg.tool, msg.args || {});
-    try { ws.send(JSON.stringify({ id: msg.id, ...response })); } catch {}
+    try { socket.send(JSON.stringify({ id: msg.id, ...response })); } catch {}
   };
-  ws.onclose = () => { ws = null; scheduleReconnect(); };
-  ws.onerror = () => { try { ws.close(); } catch {} };
+  socket.onclose = () => { connecting = false; if (ws === socket) ws = null; scheduleReconnect(); };
+  socket.onerror = () => { connecting = false; try { socket.close(); } catch {} };
 }
 
 function scheduleReconnect() {
