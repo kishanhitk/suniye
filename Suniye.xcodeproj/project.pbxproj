@@ -159,6 +159,7 @@
 		BD21382461296C745C376E4C /* LLMSettingsStoreMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB11655DD35A3470EDFC236F /* LLMSettingsStoreMoreTests.swift */; };
 		BF0B1BE62096AF43DD92C42F /* MainWindowSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49C6F3D1EED6DBFE38C52EC9 /* MainWindowSection.swift */; };
 		C3EE76D359ECB20D36DC4D0A /* HistoryStoreMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4DBF938AD8D245D78A33C9 /* HistoryStoreMoreTests.swift */; };
+		C54DD129D8637E08FFD71D9C /* CommandModeE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDAB17ED3F69CFBF4A9916C1 /* CommandModeE2ETests.swift */; };
 		C5FD99C053F76621FA55DC37 /* OnboardingMagicFormatPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6F0B6E75F07AA101E587796 /* OnboardingMagicFormatPresentation.swift */; };
 		C6D9D80335069A671A66A11A /* FloatingIndicatorState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAD363F5B6346BBC43B06E2E /* FloatingIndicatorState.swift */; };
 		C87AB02ECAA6386BC2ACBB23 /* AgentAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D10D6BED8BF1147FB43B11C /* AgentAdapters.swift */; };
@@ -440,6 +441,7 @@
 		F71F09E71632C13C91BE934A /* PartialTranscriptStabilizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartialTranscriptStabilizerTests.swift; sourceTree = "<group>"; };
 		F730F7A2C1E5C20D574C01FA /* MagicFormatPromptFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatPromptFileStoreTests.swift; sourceTree = "<group>"; };
 		FD7C23F9B077871C0A935834 /* RoutingTranscriptionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTranscriptionServiceTests.swift; sourceTree = "<group>"; };
+		FDAB17ED3F69CFBF4A9916C1 /* CommandModeE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandModeE2ETests.swift; sourceTree = "<group>"; };
 		FE38985B5DF4D728E746E670 /* CommandModeAgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandModeAgentTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -665,6 +667,7 @@
 				13537EE9F337748302A81E2A /* AgentToolRegistryTests.swift */,
 				9770C7327E63F04E1F9345E0 /* CommandModeActuatorTests.swift */,
 				FE38985B5DF4D728E746E670 /* CommandModeAgentTests.swift */,
+				FDAB17ED3F69CFBF4A9916C1 /* CommandModeE2ETests.swift */,
 				7D2C10D082ACF003A8CCE13B /* CommandModeToolsTests.swift */,
 				92B8A99DCB3C1CBAA4EEF29D /* CommandTelemetryTests.swift */,
 				ABE9E8AEEB1311A005A3259C /* LocalLLMAgentBrainTests.swift */,
@@ -1050,6 +1053,7 @@
 				A9AB62729C2E0FFE7C7788F2 /* ChatCompletionResponseTests.swift in Sources */,
 				4EBB138B38563258C53E2CE7 /* CommandModeActuatorTests.swift in Sources */,
 				15F257300717DBCFB6D0934B /* CommandModeAgentTests.swift in Sources */,
+				C54DD129D8637E08FFD71D9C /* CommandModeE2ETests.swift in Sources */,
 				3686E8550067FFAB826E081B /* CommandModeToolsTests.swift in Sources */,
 				85447D1A60CAC4DFDCE23C9B /* CommandTelemetryTests.swift in Sources */,
 				8631A2258EE726CB987F5FDB /* EditLearningMoreTests.swift in Sources */,
