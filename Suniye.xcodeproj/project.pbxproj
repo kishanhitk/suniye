@@ -130,6 +130,7 @@
 		928A4D6D164E3C5432A6FBD0 /* EditLearningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A99390B0C1FFE4B2791DA2BC /* EditLearningService.swift */; };
 		9312ADE3F912A9310431564E /* LLMPostProcessorMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E48710F9DA18C305318B2D /* LLMPostProcessorMoreTests.swift */; };
 		9374A5ECE15AF5CBAC46E067 /* MagicFormatComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7822658531989BA498E467C7 /* MagicFormatComponents.swift */; };
+		9426924A282420B6FC0DB3A4 /* BrowserNavigateTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C8A41F2A723F73B68CE7BC /* BrowserNavigateTool.swift */; };
 		94AE2550309125F6D6576B3C /* AppStateCoverageMiscTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14AC42D54C76CA184ED6E2DC /* AppStateCoverageMiscTests.swift */; };
 		95A4345F645D6F0044CDBB3B /* LocalLLMAgentBrain.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF46691295782ED7911FDF38 /* LocalLLMAgentBrain.swift */; };
 		95A7169E27ABDAE63AAD2948 /* PartialTranscriptStabilizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5EE94EB0449512CBDADFAD0 /* PartialTranscriptStabilizer.swift */; };
@@ -358,6 +359,7 @@
 		92B8A99DCB3C1CBAA4EEF29D /* CommandTelemetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandTelemetryTests.swift; sourceTree = "<group>"; };
 		96753F72AB64EA4C792D7AB5 /* AppleFoundationModelsPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessor.swift; sourceTree = "<group>"; };
 		9770C7327E63F04E1F9345E0 /* CommandModeActuatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandModeActuatorTests.swift; sourceTree = "<group>"; };
+		97C8A41F2A723F73B68CE7BC /* BrowserNavigateTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserNavigateTool.swift; sourceTree = "<group>"; };
 		98B58C8F7A33FE14A72479F5 /* RoutingTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTranscriptionService.swift; sourceTree = "<group>"; };
 		9C475FF825DFD57762422689 /* BrowserBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserBridgeTests.swift; sourceTree = "<group>"; };
 		9C66AC7DF49E58CFE111269E /* AgentBrainParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBrainParsingTests.swift; sourceTree = "<group>"; };
@@ -821,6 +823,7 @@
 		E3A51D734A8A3FDE7FA107C4 /* Tools */ = {
 			isa = PBXGroup;
 			children = (
+				97C8A41F2A723F73B68CE7BC /* BrowserNavigateTool.swift */,
 				437AA98D93E86ECCA2CFB41B /* BrowserReadTextTool.swift */,
 			);
 			path = Tools;
@@ -987,6 +990,7 @@
 				75C370BC71E9C203CE1C7E21 /* BrowserBridge.swift in Sources */,
 				72F596B1FC3A83A4F48DD73C /* BrowserBridgeConfig.swift in Sources */,
 				A79062560C1E074054582300 /* BrowserExtensionInstaller.swift in Sources */,
+				9426924A282420B6FC0DB3A4 /* BrowserNavigateTool.swift in Sources */,
 				CED14E430960681FB511D5CC /* BrowserReadTextTool.swift in Sources */,
 				0E8343E5A1D726AF0DD87983 /* BrowserTransport.swift in Sources */,
 				8026BDFF0398AE05E7C479C9 /* ChatCompletionClient.swift in Sources */,

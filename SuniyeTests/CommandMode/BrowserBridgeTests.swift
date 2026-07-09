@@ -57,6 +57,31 @@ final class BrowserBridgeTests: XCTestCase {
         XCTAssertEqual(result.output, "the page had no readable text")
     }
 
+    // MARK: browser_navigate tool
+
+    func testNavigateForwardsUrl() async throws {
+        let transport = FakeBrowserTransport(connected: true, result: .success(["output": "navigated to https://example.com"]))
+        let result = try await BrowserNavigateTool(transport: transport).execute(["url": "example.com"])
+        XCTAssertEqual(result.output, "navigated to https://example.com")
+        XCTAssertFalse(result.isTerminal)
+    }
+
+    func testNavigateRejectsMissingUrl() async {
+        let transport = FakeBrowserTransport(connected: true, result: .success([:]))
+        do {
+            _ = try await BrowserNavigateTool(transport: transport).execute([:])
+            XCTFail("expected malformedToolCall")
+        } catch {
+            XCTAssertEqual(error as? CommandModeError, .malformedToolCall("browser_navigate needs 'url'"))
+        }
+    }
+
+    func testNavigateSoftFailsWhenDisconnected() async throws {
+        let transport = FakeBrowserTransport(connected: false, result: nil)
+        let result = try await BrowserNavigateTool(transport: transport).execute(["url": "example.com"])
+        XCTAssertEqual(result.output, "browser not connected")
+    }
+
     // MARK: response stringify (rich results survive)
 
     func testStringifyDisambiguatesScalars() {

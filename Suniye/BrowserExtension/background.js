@@ -65,10 +65,34 @@ async function activeTab() {
 async function handleTool(tool, args) {
   try {
     if (tool === "read_text") return await readText(args);
+    if (tool === "navigate") return await navigate(args);
     return { ok: false, error: { code: "unknown_tool", message: `unknown tool ${tool}` } };
   } catch (e) {
     return { ok: false, error: { code: "exception", message: String((e && e.message) || e) } };
   }
+}
+
+async function navigate(args) {
+  const tab = await activeTab();
+  if (!tab || !tab.id) return { ok: false, error: { code: "no_tab", message: "no active browser tab" } };
+  let url = String(args.url || "").trim();
+  if (!url) return { ok: false, error: { code: "bad_args", message: "missing url" } };
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) url = "https://" + url; // add scheme if omitted
+  await chrome.tabs.update(tab.id, { url });
+  await waitForComplete(tab.id, 15000);
+  return { ok: true, result: { output: "navigated to " + url, url } };
+}
+
+function waitForComplete(tabId, timeoutMs) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => { if (done) return; done = true; chrome.tabs.onUpdated.removeListener(listener); resolve(); };
+    const timer = setTimeout(finish, timeoutMs);
+    function listener(id, info) {
+      if (id === tabId && info.status === "complete") { clearTimeout(timer); finish(); }
+    }
+    chrome.tabs.onUpdated.addListener(listener);
+  });
 }
 
 async function readText() {

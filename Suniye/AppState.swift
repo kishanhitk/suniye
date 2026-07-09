@@ -3762,6 +3762,7 @@ final class AppState {
         // on machines without it. (Phase B routes read_screen/click/type too.)
         if let bridge = browserBridge, await bridge.isConnected {
             tools.append(BrowserReadTextTool(transport: bridge))
+            tools.append(BrowserNavigateTool(transport: bridge))
         }
         let registry = AgentToolRegistry(tools: tools)
         let agent = CommandModeAgent(
