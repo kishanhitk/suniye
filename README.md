@@ -10,7 +10,7 @@
 <em>(Suniye is Hindi for “listen.”)</em></p>
 
 <p>
-  <a href="https://suniye.kishans.in"><strong>Website</strong></a> ·
+  <a href="https://suniye.app"><strong>Website</strong></a> ·
   <a href="https://github.com/kishanhitk/suniye/releases/latest"><strong>Download</strong></a> ·
   <a href="#reporting-a-problem"><strong>Report a bug</strong></a>
 </p>
@@ -186,5 +186,5 @@ Keep the export in a password manager or other secret store, then delete the loc
 ---
 
 <div align="center">
-<sub><strong>Suniye</strong> · MIT License · <a href="https://suniye.kishans.in">suniye.kishans.in</a></sub>
+<sub><strong>Suniye</strong> · MIT License · <a href="https://suniye.app">suniye.app</a></sub>
 </div>
