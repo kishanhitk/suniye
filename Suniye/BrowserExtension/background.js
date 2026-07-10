@@ -11,7 +11,7 @@
 // Code-level version: Chrome caches unpacked SW scripts, and getManifest() can
 // report a RELOADED manifest while stale script code still runs — so staleness
 // detection must key off a constant baked into THIS file. Bump with every edit.
-const CODE_VERSION = "0.0.6";
+const CODE_VERSION = "0.0.8";
 
 // Max actionable elements per snapshot. Controls are prioritized over links, but
 // the cap must be high enough that important LINKS (e.g. a "My orders" item in an

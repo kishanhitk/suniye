@@ -137,13 +137,11 @@ final class BrowserLiveSiteE2ETests: XCTestCase {
         let generator = FixtureLiveLLM(base: llmURL, model: gate["llm_model"] as? String ?? "local",
                                        key: gate["llm_key"] as? String)
         let trace = TraceRecorder()
-        let registry = AgentToolRegistry(tools: [
-            ReadScreenTool(reader: surface),
-            ClickTool(surface: surface),
-            FocusTool(surface: surface),
-            PressKeysTool(surface: surface),
-            BrowserReadTextTool(transport: bridge),
-            BrowserNavigateTool(transport: bridge),
+        let registry = AgentToolRegistry(tools: [  // mirrors the production registry
+            ReadScreenTool(reader: surface), OpenAppTool(launcher: SystemAppLauncher()),
+            ClickTool(surface: surface), FocusTool(surface: surface),
+            TypeTextTool(surface: surface), PressKeysTool(surface: surface), RunAppleScriptTool(),
+            BrowserReadTextTool(transport: bridge), BrowserNavigateTool(transport: bridge),
             FinishTool(),
         ])
         let agent = CommandModeAgent(
@@ -176,6 +174,35 @@ final class BrowserLiveSiteE2ETests: XCTestCase {
         print("FLIPKART-ORDERS outcome=\(result.outcome) reachedOrders=\(reachedOrders) invalid=\(result.invalidActions) — trace: /tmp/suniye-flipkart-orders.txt")
     }
 
+    /// The EXACT dogfood scenario that flailed: "add iPhone 17 to cart" on real
+    /// Flipkart. The dogfood model tried run_applescript/JS to click the button
+    /// (Chrome blocks it) instead of the extension path. Safe: risky clicks are
+    /// DECLINED, so nothing is ever added to a real cart — we assert the TOOL
+    /// CHOICE (extension, never AppleScript) and that any cart action hit the gate.
+    func testFlipkartAddToCartUsesExtensionNotAppleScript() async throws {
+        guard let llmURL = gate["llm_url"] as? String, !llmURL.isEmpty else {
+            throw XCTSkip("needs the LLM tier — add --llm")
+        }
+        let surface = makeSurface()
+        let nav = try await bridge.send(tool: "navigate", args: ["url": "https://www.flipkart.com"], timeout: 30)
+        XCTAssertTrue(nav.ok)
+
+        let (result, trace) = await runAgent(surface, task: "search for iPhone 17, open the first result, and add it to my cart", maxSteps: 22)
+        try? trace.write(toFile: "/tmp/suniye-flipkart-cart.txt", atomically: true, encoding: .utf8)
+
+        // The dogfood bug, guarded directly: NEVER control a web page via AppleScript.
+        // (Whether the cart action itself completes depends on the live listing's
+        // buy-box state; the guarded invariant is the TOOL CHOICE + safety.)
+        XCTAssertFalse(trace.contains("run_applescript"),
+                       "must control the page via the extension (read_screen→click), never AppleScript:\n\(trace)")
+        XCTAssertEqual(result.invalidActions, 0, "loop/parser must stay valid on real Flipkart")
+        // Safety: any add-to-cart / buy was routed through the confirm gate and DECLINED.
+        XCTAssertTrue(declinedRisky.allSatisfy { !$0.lowercased().contains("buy now") && !$0.lowercased().contains("pay") },
+                      "must never have proposed a purchase/payment")
+        let attemptedCart = declinedRisky.contains { $0.lowercased().contains("cart") }
+        print("FLIPKART-CART outcome=\(result.outcome) attemptedCart(declined)=\(attemptedCart) invalid=\(result.invalidActions) — trace: /tmp/suniye-flipkart-cart.txt")
+    }
+
     // MARK: - Helpers
 
     private func ref(in observation: String, labelledContaining needle: String) -> String? {
@@ -196,9 +223,10 @@ final class BrowserLiveSiteE2ETests: XCTestCase {
         let generator = FixtureLiveLLM(base: gate["llm_url"] as? String ?? "", model: gate["llm_model"] as? String ?? "local",
                                        key: gate["llm_key"] as? String)
         let trace = TraceRecorder()
-        let registry = AgentToolRegistry(tools: [
-            ReadScreenTool(reader: surface), ClickTool(surface: surface), FocusTool(surface: surface),
-            TypeTextTool(surface: surface), PressKeysTool(surface: surface),
+        let registry = AgentToolRegistry(tools: [  // mirrors the production registry
+            ReadScreenTool(reader: surface), OpenAppTool(launcher: SystemAppLauncher()),
+            ClickTool(surface: surface), FocusTool(surface: surface),
+            TypeTextTool(surface: surface), PressKeysTool(surface: surface), RunAppleScriptTool(),
             BrowserReadTextTool(transport: bridge), BrowserNavigateTool(transport: bridge), FinishTool(),
         ])
         let agent = CommandModeAgent(

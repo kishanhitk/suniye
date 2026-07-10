@@ -344,12 +344,18 @@ final class BrowserFixtureE2ETests: XCTestCase {
 
         let generator = FixtureLiveLLM(base: llmURL, model: gateConfig["llm_model"] as? String ?? "local",
                                        key: gateConfig["llm_key"] as? String)
+        // Mirror the PRODUCTION registry (finishCommandModeSession): the model has
+        // open_app + run_applescript available, so it can be tempted to control the
+        // web via AppleScript/JS — which Chrome blocks. The scenario status
+        // assertions verify it took the reliable read_screen→click path instead.
         let registry = AgentToolRegistry(tools: [
             ReadScreenTool(reader: surface),
+            OpenAppTool(launcher: SystemAppLauncher()),
             ClickTool(surface: surface),
             FocusTool(surface: surface),
             TypeTextTool(surface: surface),
             PressKeysTool(surface: surface),
+            RunAppleScriptTool(),
             BrowserReadTextTool(transport: bridge),
             BrowserNavigateTool(transport: bridge),
             FinishTool(),
