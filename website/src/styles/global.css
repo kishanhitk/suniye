@@ -4,7 +4,7 @@
 
 @font-face {
   font-family: "Fragment Mono";
-  src: url("/fonts/FragmentMono-Regular.ttf") format("truetype");
+  src: url("/fonts/FragmentMono-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -12,7 +12,7 @@
 
 @font-face {
   font-family: "Fragment Mono";
-  src: url("/fonts/FragmentMono-Italic.ttf") format("truetype");
+  src: url("/fonts/FragmentMono-Italic.woff2") format("woff2");
   font-weight: 400;
   font-style: italic;
   font-display: swap;
@@ -20,7 +20,7 @@
 
 @font-face {
   font-family: "Google Sans";
-  src: url("/fonts/GoogleSans-Variable.ttf") format("truetype");
+  src: url("/fonts/GoogleSans-Variable.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -53,6 +53,115 @@ html {
   color: #fff;
 }
 
+/* ── Motion tokens ─────────────────────────── */
+/* One source of truth for the site's motion. Strong custom curves — the
+   built-in CSS easings are too weak to read as intentional. */
+
+:root {
+  --curve-out: cubic-bezier(0.22, 1, 0.36, 1);       /* strong ease-out — enters, exits, presses */
+  --curve-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* subtle overshoot — earned delight only */
+
+  /* Soft, warm-tinted elevation — ink at low alpha, not neutral black. */
+  --shadow-card-hover: 0 2px 4px rgba(26, 26, 26, 0.05), 0 18px 40px -16px rgba(26, 26, 26, 0.16);
+  --shadow-float: 0 40px 90px -28px rgba(26, 26, 26, 0.32);
+}
+
+/* ── Pressable feedback ────────────────────── */
+/* Any button-like surface dips on press so the UI feels like it heard the
+   click. Colour and transform ride one cohesive transition. */
+
+.btn-press {
+  transition-property: transform, color, background-color, border-color, box-shadow, opacity;
+  transition-duration: 160ms;
+  transition-timing-function: var(--curve-out);
+}
+
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+/* Keyboard focus is a first-class state, not an afterthought. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ── Pills ─────────────────────────────────── */
+/* One shape for every uppercase micro-label so badges stay in lockstep. */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0.15rem 0.6rem;
+  font-family: var(--font-display);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pill-accent {
+  border: 1px solid color-mix(in oklab, var(--color-accent) 25%, transparent);
+  background: color-mix(in oklab, var(--color-accent) 6%, transparent);
+  color: var(--color-accent);
+}
+
+.pill-muted {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-muted);
+}
+
+/* ── Cards ─────────────────────────────────── */
+/* Border + radius only — each card sets its own background so it reads on both
+   the paper and the surface-tinted sections. */
+
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+}
+
+/* Warm accent wash for on-device / highlighted surfaces. */
+.card-accent {
+  border-color: color-mix(in oklab, var(--color-accent) 28%, var(--color-border));
+  background: color-mix(in oklab, var(--color-accent) 4%, var(--color-bg));
+}
+
+/* Lift on hover — real pointers only, movement dropped under reduced motion. */
+.card-hover {
+  transition: transform 0.2s var(--curve-out),
+              box-shadow 0.2s var(--curve-out),
+              border-color 0.2s var(--curve-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card-hover);
+    border-color: color-mix(in oklab, var(--color-accent) 32%, var(--color-border));
+  }
+}
+
+/* ── Decorative hero glow ──────────────────── */
+/* A barely-there warm halo behind the headline. closest-side keeps the box
+   edges transparent, so the hero's overflow-hidden clips nothing visible. */
+
+.hero-glow {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.45;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--color-accent) 20%, transparent),
+    transparent
+  );
+}
+
 /* ── Hero word-reveal animation ────────────── */
 
 @keyframes word-reveal {
@@ -72,7 +181,7 @@ html {
   opacity: 0;
   display: inline-block;
   margin-right: 0.275em;
-  animation: word-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: word-reveal 0.6s var(--curve-out) forwards;
 }
 
 /* ── Waveform draw animation ───────────────── */
@@ -89,16 +198,16 @@ html {
 .waveform-path {
   stroke-dasharray: 500;
   stroke-dashoffset: 500;
-  animation: draw-wave 1.8s cubic-bezier(0.22, 1, 0.36, 1) 0.6s forwards;
+  animation: draw-wave 1.8s var(--curve-out) 0.5s forwards;
 }
 
 /* ── Scroll-triggered reveal ───────────────── */
 
 .reveal {
   opacity: 0;
-  transform: translateY(28px);
-  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
-              transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transform: translateY(24px);
+  transition: opacity 0.6s var(--curve-out),
+              transform 0.6s var(--curve-out);
 }
 
 .reveal.visible {
@@ -109,13 +218,15 @@ html {
 /* ── Subtle fade-in for lighter elements ───── */
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Lands just after the headline settles — the primary install command is the
+   point of the page and can't stay hidden for two seconds. */
 .fade-in {
   opacity: 0;
-  animation: fade-in 0.8s ease 1.2s forwards;
+  animation: fade-in 0.5s var(--curve-out) 0.45s forwards;
 }
 
 /* ── Copy button icon swap ────────────────── */
@@ -124,9 +235,8 @@ html {
   position: relative;
 }
 
-.copy-btn .copy-icon,
-.copy-btn .check-icon {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+.copy-btn .copy-icon {
+  transition: opacity 0.18s var(--curve-out), transform 0.18s var(--curve-out);
 }
 
 .copy-btn .check-icon {
@@ -134,12 +244,15 @@ html {
   inset: 0;
   margin: auto;
   opacity: 0;
-  transform: scale(0.5);
+  /* 0.7, not 0 — a checkmark that grows from a visible shape reads as arriving,
+     not conjured from nothing. The spring gives the confirmation a small pop. */
+  transform: scale(0.7);
+  transition: opacity 0.2s var(--curve-out), transform 0.3s var(--curve-spring);
 }
 
 .copy-btn.copied .copy-icon {
   opacity: 0;
-  transform: scale(0.5);
+  transform: scale(0.7);
 }
 
 .copy-btn.copied .check-icon {
@@ -174,7 +287,7 @@ html {
 
 .dmg-modal .dmg-card {
   transform: translateY(10px) scale(0.98);
-  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.28s var(--curve-out);
 }
 
 .dmg-modal.is-open .dmg-card {
@@ -207,7 +320,7 @@ html {
 }
 
 .faq-item summary .faq-sign {
-  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.25s var(--curve-out);
 }
 
 .faq-item[open] summary .faq-sign {
@@ -226,6 +339,7 @@ html {
   .hero-word,
   .fade-in {
     opacity: 1;
+    transform: none;
   }
 
   /* The waveform "draws" by animating stroke-dashoffset 500 → 0; with animation
@@ -238,5 +352,33 @@ html {
     opacity: 1;
     transform: none;
     transition: none;
+  }
+
+  /* Micro-interactions keep their opacity crossfade but drop every movement. */
+  .btn-press:active {
+    transform: none;
+  }
+
+  .copy-btn .copy-icon,
+  .copy-btn .check-icon {
+    transition: opacity 0.15s ease;
+  }
+
+  .copy-btn .check-icon,
+  .copy-btn.copied .copy-icon {
+    transform: none;
+  }
+
+  .faq-item summary .faq-sign {
+    transition: none;
+  }
+
+  .demo-play span {
+    transition: none;
+    transform: none !important;
+  }
+
+  .card-hover:hover {
+    transform: none;
   }
 }

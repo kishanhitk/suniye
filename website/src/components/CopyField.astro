@@ -6,15 +6,16 @@ interface Props {
   value: string;
   label?: string;
   class?: string;
+  dataTrack?: string;
 }
 
-const { value, label = "Copy", class: className = "" } = Astro.props;
+const { value, label = "Copy", class: className = "", dataTrack } = Astro.props;
 ---
 
-<div class:list={["flex items-center rounded-lg border border-border/80 bg-ink/[0.03]", className]}>
+<div class:list={["flex items-center rounded-lg border border-border/80 bg-ink/[0.03]", className]} data-track={dataTrack}>
   <code class="flex-1 overflow-x-auto px-4 py-2.5 font-display text-[13px] text-ink/80">{value}</code>
   <button
-    class="copy-btn flex-none border-l border-border/60 px-3 py-2.5 text-muted/60 transition-colors hover:text-ink"
+    class="copy-btn btn-press flex-none border-l border-border/60 px-3 py-2.5 text-muted/60 hover:text-ink"
     data-copy={value}
     aria-label={label}
   >

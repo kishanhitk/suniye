@@ -1,5 +1,7 @@
 ---
 import "../styles/global.css";
+import Beacon from "../components/Beacon.astro";
+import { SITE_URL } from "../lib/seo";
 
 interface Props {
   title?: string;
@@ -9,12 +11,11 @@ interface Props {
 
 const {
   title = "Suniye — Private Dictation for macOS",
-  description = "Open-source, local-first dictation for macOS. Hold one key, speak, and your words appear at your cursor. Choose from 10 on-device speech models, with optional AI cleanup that can run entirely on your Mac. No audio leaves your machine.",
+  description = "Open-source, local-first dictation for macOS. Hold a key, speak, and your words appear at your cursor. No audio leaves your machine.",
   canonicalPath = "/",
 } = Astro.props;
 
-const siteUrl = "https://suniye.kishans.in";
-const canonicalUrl = new URL(canonicalPath, siteUrl).toString();
+const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
 ---
 
 <!doctype html>
@@ -30,16 +31,27 @@ const canonicalUrl = new URL(canonicalPath, siteUrl).toString();
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Suniye" />
     <meta property="og:url" content={canonicalUrl} />
-    <meta property="og:image" content="https://suniye.kishans.in/og-image.png" />
+    <meta property="og:image" content="https://suniye.app/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Suniye — private, on-device dictation for macOS" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content="https://suniye.kishans.in/og-image.png" />
+    <meta name="twitter:image" content="https://suniye.app/og-image.png" />
+    <link
+      rel="preload"
+      href="/fonts/GoogleSans-Variable.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <slot name="head" />
   </head>
   <body class="min-w-[320px] bg-bg font-body text-ink antialiased">
     <slot />
+    <Beacon />
   </body>
 </html>

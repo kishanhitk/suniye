@@ -127,6 +127,7 @@ export interface DashboardEnv {
   CF_ACCOUNT_ID?: string;
   AE_API_TOKEN?: string;
   AE_DATASET?: string;
+  AE_WEB_DATASET?: string;
   CF_ACCESS_TEAM_DOMAIN?: string; // e.g. myteam.cloudflareaccess.com
   CF_ACCESS_AUD?: string;
 }

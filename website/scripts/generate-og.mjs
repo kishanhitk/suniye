@@ -6,7 +6,8 @@ import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import { readFileSync, writeFileSync } from "fs";
 
-const fragmentMono = readFileSync("public/fonts/FragmentMono-Regular.ttf");
+// Satori can't parse woff2, so a TTF copy lives here as a build-time asset.
+const fragmentMono = readFileSync("scripts/fonts/FragmentMono-Regular.ttf");
 
 const svg = await satori(
   {
@@ -95,7 +96,7 @@ const svg = await satori(
           props: {
             style: {
               position: "absolute",
-              bottom: "40px",
+              bottom: "44px",
               left: "80px",
               display: "flex",
               alignItems: "center",
@@ -104,7 +105,27 @@ const svg = await satori(
               fontFamily: "Fragment Mono",
               color: "#6b635a",
             },
-            children: "suniye.kishans.in",
+            children: "suniye.app",
+          },
+        },
+        // Call-to-action
+        {
+          type: "div",
+          props: {
+            style: {
+              position: "absolute",
+              bottom: "36px",
+              right: "80px",
+              display: "flex",
+              alignItems: "center",
+              fontSize: "22px",
+              fontFamily: "Fragment Mono",
+              color: "#faf8f5",
+              backgroundColor: "#c4441a",
+              padding: "14px 28px",
+              borderRadius: "10px",
+            },
+            children: "Download free for macOS",
           },
         },
       ],
