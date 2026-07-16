@@ -34,9 +34,6 @@ Suniye/StatusItemController.swift                     # NSStatusBar item shell
 Suniye/Views/FloatingIndicatorView.swift              # SwiftUI render only
 Suniye/Views/IssueReportView.swift                    # SwiftUI render only
 Suniye/Views/ListeningOverlay.swift                   # SwiftUI render only
-Suniye/Views/MenuBarView.swift                        # SwiftUI render only
-Suniye/Views/ModelDownloadView.swift                  # SwiftUI render only
-Suniye/Views/OnboardingMagicFormatStepView.swift      # SwiftUI render only
 Suniye/Views/OnboardingView.swift                     # SwiftUI render only
 Suniye/Views/WelcomeView.swift                        # SwiftUI render only
 Suniye/Views/MainWindow/MagicFormatComponents.swift   # SwiftUI render only

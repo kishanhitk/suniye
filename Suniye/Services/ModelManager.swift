@@ -346,6 +346,7 @@ final class ModelManager: ModelManagerProtocol {
         var completedBytes: Int64 = 0
 
         for (index, file) in files.enumerated() {
+            try Task.checkCancellation()
             let fallbackBytes = file.expectedSizeBytes ?? max(1, totalExpectedBytes / Int64(max(files.count, 1)))
             let completedBytesBeforeFile = completedBytes
             let downloader = DownloadDelegate(
@@ -437,7 +438,7 @@ final class ModelManager: ModelManagerProtocol {
     }
 }
 
-private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
+private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     private let progressBlock: @Sendable (Double) -> Void
     private let fallbackExpectedSizeBytes: Int64
     private let temporaryFileBasename: String
@@ -445,6 +446,10 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     private var downloadedFileURL: URL?
     private var downloadResponse: URLResponse?
     private var hasResumed = false
+    /// Guarded by `taskLock`: the cancellation handler runs on an arbitrary
+    /// thread while delegate callbacks land on the session's queue.
+    private let taskLock = NSLock()
+    private var activeTask: URLSessionDownloadTask?
 
     init(
         progress: @escaping @Sendable (Double) -> Void,
@@ -457,11 +462,24 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     }
 
     func download(from url: URL, using session: URLSession) async throws -> (URL, URLResponse) {
-        try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-            let task = session.downloadTask(with: url)
-            task.resume()
-        }
+        // Cooperative cancellation: cancelling the surrounding Task cancels the
+        // URLSession task, which completes with NSURLErrorCancelled and resumes
+        // the continuation with that error.
+        try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+                let task = session.downloadTask(with: url)
+                self.taskLock.lock()
+                self.activeTask = task
+                self.taskLock.unlock()
+                task.resume()
+            }
+        }, onCancel: {
+            taskLock.lock()
+            let task = activeTask
+            taskLock.unlock()
+            task?.cancel()
+        })
     }
 
     func urlSession(

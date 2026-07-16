@@ -91,7 +91,6 @@ final class AppStateCoverageLocalGemmaTests: XCTestCase {
         appState.localGemmaInstallState = .notInstalled
         XCTAssertFalse(appState.canStartLocalGemmaDownload)
         XCTAssertFalse(appState.isLocalGemmaProviderSelectable)
-        XCTAssertFalse(appState.canSelectLocalGemmaDuringOnboarding)
     }
 
     func testRefreshLocalGemmaInstallStateSkippedWhileActive() {

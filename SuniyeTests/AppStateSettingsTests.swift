@@ -163,6 +163,8 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertTrue(appState.hasSeenOnboardingWelcome)
         XCTAssertTrue(appState.hasCompletedCoreOnboarding)
         XCTAssertNil(appState.activeOnboardingStep)
+        XCTAssertEqual(generalSettingsStore.latest.onboardingProgress, .finished)
+        // Legacy Bools stay written (derived) for downgrade safety.
         XCTAssertEqual(generalSettingsStore.latest.hasSeenOnboardingWelcome, true)
         XCTAssertEqual(generalSettingsStore.latest.hasCompletedCoreOnboarding, true)
     }
@@ -181,11 +183,10 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertFalse(appState.hasSeenOnboardingWelcome)
         XCTAssertFalse(appState.hasCompletedCoreOnboarding)
         XCTAssertEqual(appState.activeOnboardingStep, .welcome)
-        XCTAssertEqual(generalSettingsStore.latest.hasSeenOnboardingWelcome, false)
-        XCTAssertEqual(generalSettingsStore.latest.hasCompletedCoreOnboarding, false)
+        XCTAssertEqual(generalSettingsStore.latest.onboardingProgress, .notStarted)
     }
 
-    func testSeenWelcomeResumesSetup() {
+    func testSeenWelcomeResumesSpeak() {
         let modelManager = StubModelManager()
         modelManager.installedModelIDs = []
         let generalSettingsStore = TestGeneralSettingsStore(
@@ -202,222 +203,89 @@ final class AppStateSettingsTests: XCTestCase {
         )
         appState.startOnboardingIfNeeded()
 
-        XCTAssertEqual(appState.activeOnboardingStep, .setup)
+        XCTAssertEqual(appState.activeOnboardingStep, .speak)
     }
 
-    func testSetupCompleteRoutesToMagicFormat() {
-        let modelManager = StubModelManager()
+    func testFirstLaunchRecordedFlagPersistsThroughSettings() {
         let generalSettingsStore = TestGeneralSettingsStore(
-            value: GeneralSettings(
-                preferredInputDeviceID: nil,
-                hasSeenOnboardingWelcome: true,
-                hasCompletedCoreOnboarding: false
-            )
+            value: GeneralSettings(firstLaunchRecorded: true)
         )
+        let appState = makeTestAppState(generalSettingsStore: generalSettingsStore)
 
-        let appState = makeTestAppState(
-            modelManager: modelManager,
-            generalSettingsStore: generalSettingsStore
-        )
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
+        // Any persisting change must round-trip the flag untouched.
+        appState.autoSubmitEnabled = true
 
-        appState.startOnboardingIfNeeded()
-
-        XCTAssertEqual(appState.activeOnboardingStep, .magicFormat)
-        XCTAssertFalse(appState.hasCompletedCoreOnboarding)
+        XCTAssertEqual(generalSettingsStore.latest.firstLaunchRecorded, true)
     }
 
-    func testOnboardingLocalModelChoiceStartsDownloadAndRoutesToPractice() async {
+    func testChosenGemmaDownloadResumesAtBootstrap() async {
+        // The user chose the local model during setup, the download died after
+        // they moved on: bootstrap must self-heal instead of silently inserting
+        // raw text forever.
         let localManager = StubLocalLLMModelManager()
         let appState = makeTestAppState(localLLMModelManager: localManager)
-        appState.hasCompletedCoreOnboarding = false
-        appState.activeOnboardingStep = .magicFormat
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
 
-        appState.confirmMagicFormatDuringOnboarding(.localModel)
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.resumeInterruptedLocalGemmaDownloadIfNeeded()
+        for _ in 0 ..< 20 {
+            await Task.yield()
+        }
 
         XCTAssertEqual(localManager.downloadCallCount, 1)
-        XCTAssertTrue(appState.llmEnabled)
-        XCTAssertEqual(appState.llmProvider, .localGemma)
-        XCTAssertEqual(appState.activeOnboardingStep, .practice)
-        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
     }
 
-    func testOnboardingInstalledLocalModelDoesNotDownloadAgain() {
-        let localManager = StubLocalLLMModelManager()
-        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
-        let localGemma = NoopLocalGemmaMagicFormatPostProcessor(availability: .available)
-        let appState = makeTestAppState(
-            localGemmaMagicFormatPostProcessor: localGemma,
-            localLLMModelManager: localManager
-        )
-        appState.hasCompletedCoreOnboarding = false
-        appState.activeOnboardingStep = .magicFormat
+    func testGemmaResumeSkippedWhenInstalledOrNotChosen() {
+        let installed = StubLocalLLMModelManager()
+        installed.installedModelIDs.insert(installed.preferredModelID)
+        let installedState = makeTestAppState(localLLMModelManager: installed)
+        installedState.llmEnabled = true
+        installedState.llmProvider = .localGemma
+        installedState.resumeInterruptedLocalGemmaDownloadIfNeeded()
+        XCTAssertEqual(installed.downloadCallCount, 0)
 
-        appState.confirmMagicFormatDuringOnboarding(.localModel)
+        let notChosen = StubLocalLLMModelManager()
+        let notChosenState = makeTestAppState(localLLMModelManager: notChosen)
+        notChosenState.llmEnabled = false
+        notChosenState.llmProvider = .localGemma
+        notChosenState.resumeInterruptedLocalGemmaDownloadIfNeeded()
+        XCTAssertEqual(notChosen.downloadCallCount, 0)
 
-        XCTAssertEqual(localManager.downloadCallCount, 0)
-        XCTAssertTrue(appState.llmEnabled)
-        XCTAssertEqual(appState.llmProvider, .localGemma)
-        XCTAssertEqual(appState.activeOnboardingStep, .practice)
-    }
-
-    func testOnboardingInstalledLocalModelWithMissingRuntimeDoesNotAdvance() {
-        let localManager = StubLocalLLMModelManager()
-        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
-        let localGemma = NoopLocalGemmaMagicFormatPostProcessor(availability: .runtimeUnavailable)
-        let appState = makeTestAppState(
-            localGemmaMagicFormatPostProcessor: localGemma,
-            localLLMModelManager: localManager
-        )
-        appState.hasCompletedCoreOnboarding = false
-        appState.activeOnboardingStep = .magicFormat
-
-        appState.confirmMagicFormatDuringOnboarding(.localModel)
-
-        XCTAssertFalse(appState.llmEnabled)
-        XCTAssertEqual(localManager.downloadCallCount, 0)
-        XCTAssertEqual(appState.activeOnboardingStep, .magicFormat)
-        XCTAssertFalse(appState.hasCompletedCoreOnboarding)
-    }
-
-    func testOnboardingAppleIntelligenceChoiceEnablesProvider() {
-        let apple = NoopAppleMagicFormatPostProcessor(availability: .available)
-        let appState = makeTestAppState(appleMagicFormatPostProcessor: apple)
-        appState.hasCompletedCoreOnboarding = false
-        appState.activeOnboardingStep = .magicFormat
-
-        appState.confirmMagicFormatDuringOnboarding(.appleIntelligence)
-
-        XCTAssertTrue(appState.llmEnabled)
-        XCTAssertEqual(appState.llmProvider, .appleFoundationModels)
-        XCTAssertEqual(appState.activeOnboardingStep, .practice)
-        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
-    }
-
-    func testOnboardingUnavailableAppleIntelligenceDoesNotAdvance() {
-        let apple = NoopAppleMagicFormatPostProcessor(availability: .appleIntelligenceNotEnabled)
-        let appState = makeTestAppState(appleMagicFormatPostProcessor: apple)
-        appState.hasCompletedCoreOnboarding = false
-        appState.activeOnboardingStep = .magicFormat
-
-        appState.confirmMagicFormatDuringOnboarding(.appleIntelligence)
-
-        XCTAssertFalse(appState.llmEnabled)
-        XCTAssertEqual(appState.activeOnboardingStep, .magicFormat)
-        XCTAssertFalse(appState.hasCompletedCoreOnboarding)
-    }
-
-    func testOnboardingUnsupportedLocalModelDoesNotAdvance() {
-        let localManager = StubLocalLLMModelManager()
-        localManager.isHardwareSupported = false
-        let appState = makeTestAppState(localLLMModelManager: localManager)
-        appState.hasCompletedCoreOnboarding = false
-        appState.activeOnboardingStep = .magicFormat
-
-        appState.confirmMagicFormatDuringOnboarding(.localModel)
-
-        XCTAssertFalse(appState.llmEnabled)
-        XCTAssertEqual(localManager.downloadCallCount, 0)
-        XCTAssertEqual(appState.activeOnboardingStep, .magicFormat)
-        XCTAssertFalse(appState.hasCompletedCoreOnboarding)
-    }
-
-    func testSkippingMagicFormatLeavesItOffAndRoutesToPractice() {
-        let appState = makeTestAppState()
-        appState.hasCompletedCoreOnboarding = false
-        appState.llmEnabled = true
-        appState.activeOnboardingStep = .magicFormat
-
-        appState.skipMagicFormatDuringOnboarding()
-
-        XCTAssertFalse(appState.llmEnabled)
-        XCTAssertEqual(appState.activeOnboardingStep, .practice)
-        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
-    }
-
-    func testLocalModelFailureDoesNotBlockFinishingPractice() {
-        let appState = makeTestAppState()
-        appState.llmEnabled = true
-        appState.llmProvider = .localGemma
-        appState.localGemmaInstallState = .failed("Network unavailable.")
-        appState.activeOnboardingStep = .practice
-
-        XCTAssertEqual(appState.onboardingLocalModelStatusText, "Network unavailable.")
-
-        appState.finishOnboarding()
-
-        XCTAssertNil(appState.activeOnboardingStep)
-    }
-
-    func testUnavailableLocalModelStatusAppearsDuringPractice() {
-        let appState = makeTestAppState()
-        appState.llmEnabled = true
-        appState.llmProvider = .localGemma
-        appState.localGemmaInstallState = .unavailable("Local runtime is missing.")
-        appState.activeOnboardingStep = .practice
-
-        XCTAssertEqual(appState.onboardingLocalModelStatusText, "Local runtime is missing.")
-    }
-
-    func testOnboardingMagicFormatInitialChoicePrefersLocalModel() {
-        let appState = makeTestAppState()
-
-        XCTAssertEqual(OnboardingMagicFormatPresenter(appState: appState).initialProvider, .localModel)
-    }
-
-    func testOnboardingMagicFormatInitialChoiceUsesAppleWhenLocalModelUnsupported() {
-        let localManager = StubLocalLLMModelManager()
-        localManager.isHardwareSupported = false
-        let apple = NoopAppleMagicFormatPostProcessor(availability: .available)
-        let appState = makeTestAppState(
-            appleMagicFormatPostProcessor: apple,
-            localLLMModelManager: localManager
-        )
-
-        XCTAssertEqual(OnboardingMagicFormatPresenter(appState: appState).initialProvider, .appleIntelligence)
-    }
-
-    func testOnboardingMagicFormatUsesAppleWhenInstalledLocalRuntimeIsMissing() throws {
-        let localManager = StubLocalLLMModelManager()
-        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
-        let localGemma = NoopLocalGemmaMagicFormatPostProcessor(availability: .runtimeUnavailable)
-        let apple = NoopAppleMagicFormatPostProcessor(availability: .available)
-        let appState = makeTestAppState(
-            appleMagicFormatPostProcessor: apple,
-            localGemmaMagicFormatPostProcessor: localGemma,
-            localLLMModelManager: localManager
-        )
-        let presenter = OnboardingMagicFormatPresenter(appState: appState)
-        let localOption = try XCTUnwrap(presenter.option(for: .localModel))
-
-        XCTAssertFalse(localOption.isSelectable)
-        XCTAssertEqual(localOption.unavailableHelpText, "Local model runtime is not available.")
-        XCTAssertEqual(localOption.primaryActionTitle, "Local Model Unavailable")
-        XCTAssertEqual(presenter.initialProvider, .appleIntelligence)
+        let unsupported = StubLocalLLMModelManager()
+        unsupported.isHardwareSupported = false
+        let unsupportedState = makeTestAppState(localLLMModelManager: unsupported)
+        unsupportedState.llmEnabled = true
+        unsupportedState.llmProvider = .localGemma
+        unsupportedState.resumeInterruptedLocalGemmaDownloadIfNeeded()
+        XCTAssertEqual(unsupported.downloadCallCount, 0)
     }
 
     func testFinishOnboardingClearsActiveStep() {
-        let appState = makeTestAppState()
-        appState.activeOnboardingStep = .practice
+        let appState = makeTestAppState(
+            generalSettingsStore: TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .typeAnywhereReached))
+        )
+        appState.startOnboardingIfNeeded()
 
         appState.finishOnboarding()
 
         XCTAssertNil(appState.activeOnboardingStep)
     }
 
-    func testOnboardingSetupCompletesOnlyWhenPermissionsAndModelAreReady() {
+    func testASRModelReadyRequiresInstalledAndUsablePhase() {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
 
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        XCTAssertFalse(appState.isOnboardingSetupComplete)
+        appState.phase = .loading
+        XCTAssertFalse(appState.asrModelReady)
 
-        appState.hasAccessibilityPermission = true
-        XCTAssertTrue(appState.isOnboardingSetupComplete)
+        appState.phase = .ready
+        XCTAssertTrue(appState.asrModelReady)
+
+        appState.phase = .recording
+        XCTAssertTrue(appState.asrModelReady)
+
+        modelManager.installedModelIDs = []
+        XCTAssertFalse(appState.asrModelReady)
     }
 
 
@@ -747,7 +615,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
         appState.soundFeedbackEnabled = true
-        appState.activeOnboardingStep = .practice
+        appState.activeOnboardingStep = .speak
 
         appState.startRecordingFromUI()
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -773,7 +641,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.phase = .ready
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
-        appState.activeOnboardingStep = .practice
+        appState.activeOnboardingStep = .speak
 
         appState.startRecordingFromUI()
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -800,10 +668,10 @@ final class AppStateSettingsTests: XCTestCase {
         appState.phase = .ready
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
-        appState.activeOnboardingStep = .practice
+        appState.activeOnboardingStep = .speak
         appState.onboardingPracticeText = "Old preview"
         appState.onboardingPracticeResult = OnboardingPracticeResult(
-            message: "Captured locally. You can finish onboarding whenever you're ready.",
+            message: "That's it — this works in any app.",
             severity: .success
         )
 
@@ -821,13 +689,13 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.onboardingPracticeResult?.message, "decoder failed")
     }
 
-    func testRecordingDoesNotStartWhileSetupStepIsActive() async {
+    func testRecordingDoesNotStartWhileWelcomeStepIsActive() async {
         let audioCapture = StubAudioCaptureService()
         let appState = makeTestAppState(audioCaptureService: audioCapture)
         appState.phase = .ready
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
-        appState.activeOnboardingStep = .setup
+        appState.activeOnboardingStep = .welcome
 
         appState.startRecordingFromUI()
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -837,20 +705,20 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Finish setup first"))
     }
 
-    func testRecordingDoesNotStartWhileMagicFormatStepIsActive() async {
+    func testRecordingStartsOnTypeAnywhereStep() async {
+        // Real dictation is deliberately allowed on the Accessibility screen
+        // (the "try it in Notes" demo depends on it).
         let audioCapture = StubAudioCaptureService()
         let appState = makeTestAppState(audioCaptureService: audioCapture)
         appState.phase = .ready
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
-        appState.activeOnboardingStep = .magicFormat
+        appState.activeOnboardingStep = .typeAnywhere
 
         appState.startRecordingFromUI()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
-        XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
-        XCTAssertEqual(appState.phase, .ready)
-        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Finish setup first"))
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
     }
 
     func testBlockedIndicatorToggleShowsInlineErrorWhenModelMissing() async {
@@ -930,8 +798,6 @@ final class AppStateSettingsTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 100_000_000)
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
-        appState.hasSeenOnboardingWelcome = true
-        appState.hasCompletedCoreOnboarding = true
         appState.activeOnboardingStep = nil
         appState.phase = .ready
 
@@ -953,8 +819,6 @@ final class AppStateSettingsTests: XCTestCase {
         let transcriptionService = StubTranscriptionService()
         let appState = makeTestAppState(modelManager: modelManager, transcriptionService: transcriptionService)
         appState.phase = .ready
-        appState.hasSeenOnboardingWelcome = true
-        appState.hasCompletedCoreOnboarding = true
 
         appState.deleteModel()
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -1069,29 +933,27 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(transcriptionService.loadedConfigs.map(\.modelID), [.senseVoice, .moonshineBase])
     }
 
-    func testModelDownloadSuccessTransitionsSetupToMagicFormat() async {
+    func testModelDownloadSuccessStaysOnSpeakScreen() async {
+        // No auto-advance: the screen updates in place when the model turns
+        // ready; moving on stays a user action.
         let modelManager = StubModelManager()
         modelManager.installedModelIDs = []
         let generalSettingsStore = TestGeneralSettingsStore(
-            value: GeneralSettings(
-                preferredInputDeviceID: nil,
-                hasSeenOnboardingWelcome: true,
-                hasCompletedCoreOnboarding: false
-            )
+            value: GeneralSettings(onboardingProgress: .speakReached)
         )
         let appState = makeTestAppState(
             modelManager: modelManager,
             generalSettingsStore: generalSettingsStore
         )
-        appState.activeOnboardingStep = .setup
+        appState.startOnboardingIfNeeded()
         appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
 
         appState.startModelDownload()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(appState.phase, .ready)
-        XCTAssertEqual(appState.activeOnboardingStep, .magicFormat)
+        XCTAssertTrue(appState.asrModelReady)
+        XCTAssertEqual(appState.activeOnboardingStep, .speak)
         XCTAssertFalse(appState.hasCompletedCoreOnboarding)
     }
 
@@ -1110,9 +972,8 @@ final class AppStateSettingsTests: XCTestCase {
             modelManager: modelManager,
             generalSettingsStore: generalSettingsStore
         )
-        appState.activeOnboardingStep = .setup
+        appState.activeOnboardingStep = .speak
         appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
 
         appState.startModelDownload()
         try? await Task.sleep(nanoseconds: 50_000_000)

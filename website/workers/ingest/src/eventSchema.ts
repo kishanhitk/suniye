@@ -89,9 +89,12 @@ const DOUBLE_FIELDS: NumPick[] = [
   num("lat_asr_to_llm"),                          // double12
   num("lat_insert"),                              // double13
   firstNum("load_ms", "duration_ms"),             // double14 - generic value_ms
-  firstNum("count", "event_count", "queue_depth", "upload_failures", "evicted_by_ttl"), // double15
+  firstNum("count", "event_count", "queue_depth", "upload_failures", "evicted_by_ttl", "attempt"), // double15 (+ onboarding_practice_result attempt)
   boolNum("was_llm_polished"),                    // double16
-  boolNum("granted", "enabled", "clean_exit", "fallback_occurred", "first_launch"),     // double17
+  // `resumed` (onboarding_step) and `practiced` (onboarding_outcome) are appended:
+  // neither event carries an earlier alias of this slot, so they surface here;
+  // the JSON backstop keeps them recoverable everywhere else.
+  boolNum("granted", "enabled", "clean_exit", "fallback_occurred", "first_launch", "resumed", "practiced"),     // double17
   firstNum("rung", "cpu_cores"),                  // double18 (+ device cpu_cores)
   num("ram_gb"),                                  // double19 (device ram_gb, now on every event)
   num("edit_rate_bucket"),                        // double20 - post-insertion edit rate (dictation_edited)

@@ -12,6 +12,11 @@ public final class PermisoAssistant {
     private var pendingSourceFrameInScreen: CGRect?
     private var didPresentCurrentOverlay = false
 
+    /// Suniye addition (not upstream): fired after `dismiss()` tears an active
+    /// overlay down, so the owning wrapper can observe user-initiated dismissals
+    /// (the overlay's back chevron calls `dismiss()` directly). See PERMISO_UPSTREAM.md.
+    public var onDismiss: (() -> Void)?
+
     public init() {}
 
     public func present(
@@ -30,6 +35,7 @@ public final class PermisoAssistant {
     }
 
     public func dismiss() {
+        let hadActiveOverlay = overlayController != nil
         trackingTimer?.invalidate()
         trackingTimer = nil
         if let activationObserver {
@@ -41,6 +47,9 @@ public final class PermisoAssistant {
         activePanel = nil
         pendingSourceFrameInScreen = nil
         didPresentCurrentOverlay = false
+        if hadActiveOverlay {
+            onDismiss?()
+        }
     }
 
     private func startTracking() {

@@ -456,36 +456,32 @@ final class AppState {
             onStateChange?()
         }
     }
-    var hasSeenOnboardingWelcome = false {
+    /// Single persisted onboarding position. Private setter: every transition
+    /// goes through the state-machine funcs so persistence, analytics, and the
+    /// active step can never disagree.
+    private(set) var onboardingProgress: OnboardingProgress = .notStarted {
         didSet {
-            guard !isHydratingGeneralSettings else {
+            guard !isHydratingGeneralSettings, oldValue != onboardingProgress else {
                 return
             }
-            if oldValue != hasSeenOnboardingWelcome {
-                persistGeneralSettings()
-                onStateChange?()
-            }
+            persistGeneralSettings()
+            onStateChange?()
         }
     }
-    var hasCompletedCoreOnboarding = false {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            if oldValue != hasCompletedCoreOnboarding {
-                persistGeneralSettings()
-                onStateChange?()
-            }
-        }
-    }
+
+    /// Legacy accessors kept for read sites (diagnostics, tests).
+    var hasSeenOnboardingWelcome: Bool { onboardingProgress != .notStarted }
+    var hasCompletedCoreOnboarding: Bool { onboardingProgress.isFinished }
+
     var activeOnboardingStep: OnboardingStep? {
         didSet {
             guard oldValue != activeOnboardingStep else {
                 return
             }
-            if activeOnboardingStep != .practice {
+            if activeOnboardingStep != .speak {
                 onboardingPracticeResult = nil
             }
+            trackOnboardingStepShownIfNeeded()
             onStateChange?()
         }
     }
@@ -503,8 +499,44 @@ final class AppState {
             }
         }
     }
+    /// The user has completed at least one successful practice dictation this
+    /// onboarding run (gates the Speak screen's Continue button).
+    private(set) var onboardingPracticeSucceeded = false
+    /// 1-based practice attempt counter for this onboarding run; drives the
+    /// "Continue anyway" escape hatch and the practice-result analytics.
+    private(set) var onboardingPracticeAttempts = 0
+    /// User-facing reason the Get Started preflight refused to start (disk space).
+    var onboardingDiskSpaceMessage: String?
+    /// The Permiso overlay timed out with no grant — surface a visible hint
+    /// instead of the old silent disappearance.
+    private(set) var accessibilityAssistTimedOut = false
+    /// macOS reset a previously-working Accessibility grant (app update / TCC
+    /// reset). The drag overlay would mislead ("drag Suniye in" while it is
+    /// already listed), so the UI shows toggle-off-and-on copy instead.
+    private(set) var accessibilityGrantLikelyStale = false
+
+    /// Per-run dedupe of onboarding_step emissions (relaunch resume re-fires
+    /// once per run with resumed=true; navigation within a run fires once per step).
+    @ObservationIgnored private var onboardingStepsTracked: Set<OnboardingStep> = []
+    @ObservationIgnored private var onboardingResumedPending = false
+    @ObservationIgnored private var onboardingStartedAt: Date?
+    @ObservationIgnored private var hasTrackedMagicFormatNudgeShown = false
+    @ObservationIgnored private var firstLaunchRecorded = false
+    @ObservationIgnored private var lastKnownAccessibilityGranted = false
+    private var magicFormatNudgeDismissed = false {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != magicFormatNudgeDismissed else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
 
     var hasMicPermission = false
+    /// True when the mic authorization is `.denied`/`.restricted` — the system
+    /// prompt can never re-appear, so Enable buttons must become Open Settings.
+    var hasMicPermissionBeenDenied = false
     var hasAccessibilityPermission = false
 
     var issueReportType: IssueReportType = .other
@@ -563,7 +595,14 @@ final class AppState {
     }
 
     var llmEnabled = false {
-        didSet { persistLLMSettings() }
+        didSet {
+            persistLLMSettings()
+            // Adoption signal for the flagship feature: fires on any real toggle
+            // (settings page, nudge CTA) but never during settings hydration.
+            if !isHydratingLLMSettings, oldValue != llmEnabled {
+                analytics.track(.featureToggled(feature: .magicFormat, enabled: llmEnabled))
+            }
+        }
     }
     var llmProvider: MagicFormatProvider = .automatic {
         didSet { persistLLMSettings() }
@@ -768,11 +807,6 @@ final class AppState {
 
     var isLocalGemmaProviderSelectable: Bool {
         localLLMModelManager.isHardwareSupported
-    }
-
-    var canSelectLocalGemmaDuringOnboarding: Bool {
-        isLocalGemmaProviderSelectable
-            && (!localGemmaInstallState.isInstalled || localGemmaMagicFormatAvailability.isAvailable)
     }
 
     var localGemmaModelEntry: LocalLLMModelCatalogEntry {
@@ -1237,10 +1271,6 @@ final class AppState {
             .first
     }
 
-    var isOnboardingSetupComplete: Bool {
-        hasMicPermission && hasAccessibilityPermission && isModelInstalled && phase == .ready
-    }
-
     var onboardingPracticeLevels: [Float] {
         switch floatingIndicatorState {
         case let .listening(levels, _, _):
@@ -1251,26 +1281,46 @@ final class AppState {
     }
 
     var isOnboardingPracticeRecording: Bool {
-        activeOnboardingStep == .practice && phase == .recording
+        activeOnboardingStep == .speak && phase == .recording
     }
 
     var isOnboardingPracticeProcessing: Bool {
-        activeOnboardingStep == .practice && phase == .transcribing
+        activeOnboardingStep == .speak && phase == .transcribing
     }
 
-    var onboardingLocalModelStatusText: String? {
-        guard activeOnboardingStep == .practice,
-              llmEnabled,
-              llmProvider == .localGemma else {
-            return nil
-        }
+    /// Post-onboarding Magic Format nudge: shown once, after the user has real
+    /// dictations to judge the value against, only on hardware where at least
+    /// one provider could actually run. Replaces the old forced wizard step.
+    var shouldShowMagicFormatNudge: Bool {
+        onboardingProgress.isFinished
+            && !llmEnabled
+            && !magicFormatNudgeDismissed
+            && recentResults.count >= 3
+            && (isLocalGemmaProviderSelectable || appleMagicFormatAvailability.isAvailable)
+    }
 
-        switch localGemmaInstallState {
-        case .downloading, .verifying, .failed, .unavailable:
-            return localGemmaInstallStatusText
-        case .notInstalled, .installed:
-            return nil
+    /// Impression tracking for the nudge (idempotent per app run) — the
+    /// denominator for nudge-conversion analysis.
+    func magicFormatNudgeDidShow() {
+        guard shouldShowMagicFormatNudge, !hasTrackedMagicFormatNudgeShown else {
+            return
         }
+        hasTrackedMagicFormatNudgeShown = true
+        analytics.track(.mfNudge(action: .shown))
+    }
+
+    func dismissMagicFormatNudge() {
+        analytics.track(.mfNudge(action: .dismissed))
+        magicFormatNudgeDismissed = true
+    }
+
+    /// The nudge's CTA: records the open, retires the card, and hands the
+    /// caller the section to navigate to (the existing Magic Format settings
+    /// page, which already handles provider choice, unavailability, and repair).
+    func openMagicFormatSetupFromNudge() -> MainWindowSection {
+        analytics.track(.mfNudge(action: .opened))
+        magicFormatNudgeDismissed = true
+        return .style
     }
 
     var attentionItems: [AttentionItem] {
@@ -1434,6 +1484,12 @@ final class AppState {
     private let frontmostAppBundleIDProvider: () -> String?
     private let fileOpener: (URL) -> Bool
     private let accessibilityOnboarding: AccessibilityOnboardingPresenting
+    /// Injectable microphone TCC seams so denial/grant paths are unit-testable
+    /// (the real AVCaptureDevice statics cannot be driven headless in CI).
+    private let micAuthorizationStatusProvider: () -> AVAuthorizationStatus
+    private let micAccessRequester: () async -> Bool
+    /// Injectable free-disk probe for the onboarding download preflight.
+    private let availableDiskCapacityProvider: () -> Int64?
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
     private let temporaryFileCleanupScheduler: (URL) -> Void
     private let magicFormatSlowWarningDelaySeconds: TimeInterval
@@ -1467,8 +1523,10 @@ final class AppState {
     private var activeRecordingSource: RecordingSource? { activeDictationSession?.context.source }
     private var recordingStart: Date? { activeDictationSession?.context.startedAt }
     private var overlayErrorResetTask: Task<Void, Never>?
+    private var asrDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
+    private var localGemmaDownloadStartedAt: Date?
     private var isHydratingLLMSettings = false
     private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
@@ -1509,6 +1567,9 @@ final class AppState {
         frontmostAppBundleIDProvider: @escaping () -> String? = { NSWorkspace.shared.frontmostApplication?.bundleIdentifier },
         fileOpener: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         accessibilityOnboarding: AccessibilityOnboardingPresenting? = nil,
+        micAuthorizationStatusProvider: @escaping () -> AVAuthorizationStatus = { AVCaptureDevice.authorizationStatus(for: .audio) },
+        micAccessRequester: @escaping () async -> Bool = { await AVCaptureDevice.requestAccess(for: .audio) },
+        availableDiskCapacityProvider: (() -> Int64?)? = nil,
         issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { defaultName in
             let panel = NSSavePanel()
             panel.nameFieldStringValue = defaultName
@@ -1570,6 +1631,15 @@ final class AppState {
         self.frontmostAppBundleIDProvider = frontmostAppBundleIDProvider
         self.fileOpener = fileOpener
         self.accessibilityOnboarding = accessibilityOnboarding ?? PermisoAccessibilityOnboarding()
+        self.micAuthorizationStatusProvider = micAuthorizationStatusProvider
+        self.micAccessRequester = micAccessRequester
+        self.availableDiskCapacityProvider = availableDiskCapacityProvider ?? { [modelManager] in
+            guard let root = try? modelManager.modelsRootDirectoryURL(),
+                  let values = try? root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]) else {
+                return nil
+            }
+            return values.volumeAvailableCapacityForImportantUsage
+        }
         self.issueReportDiagnosticsDestinationPicker = issueReportDiagnosticsDestinationPicker
         self.temporaryFileCleanupScheduler = temporaryFileCleanupScheduler
         self.magicFormatSlowWarningDelaySeconds = magicFormatSlowWarningDelaySeconds
@@ -1643,8 +1713,14 @@ final class AppState {
         analytics.track(.appLaunch(
             device: DeviceProfileReader.read(),
             settings: analyticsSettingsSnapshot(),
-            firstLaunch: !hasSeenOnboardingWelcome
+            firstLaunch: !firstLaunchRecorded
         ))
+        if !firstLaunchRecorded {
+            // Dedicated flag (not the onboarding position): quitting on the
+            // welcome screen must not re-count as a new install next launch.
+            firstLaunchRecorded = true
+            persistGeneralSettings()
+        }
     }
 
     private func analyticsSettingsSnapshot() -> SettingsSnapshot {
@@ -1709,115 +1785,170 @@ final class AppState {
             statusText = "Model required"
         }
         startOnboardingIfNeeded()
+        resumeInterruptedLocalGemmaDownloadIfNeeded()
         setFloatingIndicatorState(.idle)
         AppLogger.shared.log(.info, "bootstrap done")
     }
 
+    // MARK: - Onboarding state machine
+
+    /// Resumes onboarding at the persisted position (or dismisses it once
+    /// finished). Steps re-shown by resume carry `resumed=true` in analytics.
     func startOnboardingIfNeeded() {
-        guard !hasCompletedCoreOnboarding else {
+        guard let step = onboardingProgress.resumeStep else {
             activeOnboardingStep = nil
             return
         }
-
-        if isOnboardingSetupComplete {
-            showMagicFormatOnboarding()
-            return
+        if onboardingProgress != .notStarted {
+            onboardingResumedPending = true
         }
-
-        activeOnboardingStep = hasSeenOnboardingWelcome ? .setup : .welcome
+        if onboardingStartedAt == nil {
+            onboardingStartedAt = nowProvider()
+        }
+        activeOnboardingStep = step
     }
 
+    /// Single forward transition used by the onboarding UI.
     func advanceOnboarding() {
         switch activeOnboardingStep {
         case .welcome:
-            hasSeenOnboardingWelcome = true
-            if isOnboardingSetupComplete {
-                showMagicFormatOnboarding()
-            } else {
-                activeOnboardingStep = .setup
-            }
-        case .setup:
-            guard isOnboardingSetupComplete else {
-                return
-            }
-            showMagicFormatOnboarding()
-        case .magicFormat:
-            skipMagicFormatDuringOnboarding()
-        case .practice:
+            beginOnboardingSetup()
+        case .speak:
+            advanceOnboardingFromSpeak()
+        case .typeAnywhere:
             finishOnboarding()
         case nil:
             startOnboardingIfNeeded()
         }
     }
 
-    func goBackOnboarding() {
-        guard activeOnboardingStep == .setup else {
+    /// "Get Started": persists progress and starts the required ASR model
+    /// download in the background, so download time overlaps the mic grant and
+    /// the first dictation instead of blocking on its own wizard screen.
+    func beginOnboardingSetup() {
+        guard activeOnboardingStep == .welcome else {
             return
         }
-        activeOnboardingStep = .welcome
-    }
-
-    func confirmMagicFormatDuringOnboarding(_ provider: OnboardingMagicFormatProvider) {
-        guard activeOnboardingStep == .magicFormat else {
+        onboardingDiskSpaceMessage = nil
+        if !isModelInstalled, let message = modelDownloadDiskSpaceMessage() {
+            onboardingDiskSpaceMessage = message
+            onStateChange?()
             return
         }
-
-        switch provider {
-        case .localModel:
-            guard canSelectLocalGemmaDuringOnboarding else {
-                return
-            }
-            llmProvider = provider.magicFormatProvider
-            startLocalGemmaDownload()
-        case .appleIntelligence:
-            guard appleMagicFormatAvailability.isAvailable else {
-                return
-            }
-            llmProvider = provider.magicFormatProvider
+        setOnboardingProgress(.speakReached)
+        activeOnboardingStep = .speak
+        if !isModelInstalled, activeASRModelOperationID == nil {
+            startModelDownload()
         }
-
-        llmEnabled = true
-        completeCoreOnboarding()
     }
 
-    func skipMagicFormatDuringOnboarding() {
-        guard activeOnboardingStep == .magicFormat else {
+    func advanceOnboardingFromSpeak() {
+        guard activeOnboardingStep == .speak else {
             return
         }
-
-        llmEnabled = false
-        completeCoreOnboarding()
+        setOnboardingProgress(.typeAnywhereReached)
+        activeOnboardingStep = .typeAnywhere
     }
 
-    private func showMagicFormatOnboarding() {
-        hasSeenOnboardingWelcome = true
-        activeOnboardingStep = .magicFormat
-        analytics.track(.onboardingStep(step: .magicFormat, granted: nil))
-    }
-
-    func completeCoreOnboarding() {
-        hasSeenOnboardingWelcome = true
-        hasCompletedCoreOnboarding = true
+    /// Terminal transition (Finish, or the "Later — I'll paste with ⌘V" skip on
+    /// the Accessibility screen). This is where completion is persisted and the
+    /// `completed` + `onboarding_outcome` events fire — after the flow actually
+    /// ends, not before the practice step as the old wizard did.
+    func finishOnboarding() {
+        guard activeOnboardingStep != nil else {
+            return
+        }
+        let durationMs = onboardingStartedAt.map { Int(nowProvider().timeIntervalSince($0) * 1000) }
+        analytics.track(.onboardingStep(step: .completed, granted: nil, resumed: nil))
+        analytics.track(.onboardingOutcome(
+            durationMs: durationMs,
+            practiced: onboardingPracticeSucceeded,
+            micGranted: hasMicPermission,
+            axGranted: hasAccessibilityPermission,
+            modelReady: asrModelReady
+        ))
+        setOnboardingProgress(.finished)
         onboardingPracticeText = ""
         onboardingPracticeResult = nil
-        activeOnboardingStep = .practice
-        analytics.track(.onboardingStep(step: .completed, granted: nil))
-    }
-
-    func finishOnboarding() {
-        onboardingPracticeResult = nil
+        onboardingStartedAt = nil
         activeOnboardingStep = nil
     }
 
-    func refreshPermissions(requestMicrophone: Bool = false, promptAccessibility: Bool = false) async {
+    /// Support/recovery path (Settings → General): re-runs the flow from the
+    /// welcome screen without touching `firstLaunchRecorded` or history.
+    func replayOnboarding() {
+        setOnboardingProgress(.notStarted)
+        onboardingStepsTracked = []
+        onboardingResumedPending = false
+        onboardingPracticeSucceeded = false
+        onboardingPracticeAttempts = 0
+        onboardingPracticeText = ""
+        onboardingPracticeResult = nil
+        onboardingDiskSpaceMessage = nil
+        onboardingStartedAt = nil
+        startOnboardingIfNeeded()
+    }
+
+    private func setOnboardingProgress(_ progress: OnboardingProgress) {
+        onboardingProgress = progress
+    }
+
+    /// One emission point for onboarding_step, deduped per run so launch-resume
+    /// and navigation can never double-count a step.
+    private func trackOnboardingStepShownIfNeeded() {
+        guard let step = activeOnboardingStep, !onboardingStepsTracked.contains(step) else {
+            onboardingResumedPending = false
+            return
+        }
+        onboardingStepsTracked.insert(step)
+        let resumed = onboardingResumedPending
+        onboardingResumedPending = false
+        analytics.track(.onboardingStep(step: step.analyticsName, granted: nil, resumed: resumed ? true : nil))
+    }
+
+    /// True while dictation prerequisites for the Speak screen's practice box
+    /// are met: installed model that is loaded or actively usable.
+    var asrModelReady: Bool {
+        isModelInstalled && (phase == .ready || phase == .recording || phase == .transcribing)
+    }
+
+    private func modelDownloadDiskSpaceMessage() -> String? {
+        let neededBytes = modelManager.expectedDownloadSizeBytes(for: selectedASRModelID) * 2
+        guard neededBytes > 0,
+              let available = availableDiskCapacityProvider(),
+              available < neededBytes else {
+            return nil
+        }
+        let neededText = ByteCountFormatter.string(fromByteCount: neededBytes, countStyle: .file)
+        return "Not enough free disk space — the speech model needs about \(neededText) free."
+    }
+
+    func refreshPermissions(
+        requestMicrophone: Bool = false,
+        promptAccessibility: Bool = false,
+        askSurface: PermissionAskSurface = .settings
+    ) async {
         let priorMic = hasMicPermission
         let priorAccessibility = hasAccessibilityPermission
 
-        if requestMicrophone {
-            hasMicPermission = await AVCaptureDevice.requestAccess(for: .audio)
-        } else {
-            hasMicPermission = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        var micStatus = micAuthorizationStatusProvider()
+        if requestMicrophone, micStatus == .notDetermined {
+            // A real system prompt: the one moment a mic grant rate is measurable.
+            let granted = await micAccessRequester()
+            micStatus = micAuthorizationStatusProvider()
+            // Some simulated/test providers only answer through the requester;
+            // trust the requester when the status read lags behind.
+            if granted, micStatus == .notDetermined {
+                micStatus = .authorized
+            }
+            analytics.track(.permissionRequest(
+                kind: .microphone,
+                surface: askSurface,
+                outcome: granted ? .granted : .denied
+            ))
         }
+        hasMicPermission = micStatus == .authorized
+        hasMicPermissionBeenDenied = micStatus == .denied || micStatus == .restricted
 
         if promptAccessibility {
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -1832,15 +1963,23 @@ final class AppState {
         if !priorAccessibility, hasAccessibilityPermission {
             analytics.track(.permissionTransition(kind: .accessibility, granted: true))
         }
+        updateLastKnownAccessibilityGranted()
 
         AppLogger.shared.log(.info, "permissions: mic=\(hasMicPermission) ax=\(hasAccessibilityPermission)")
-        refreshOnboardingProgressIfNeeded()
         onStateChange?()
     }
 
-    func requestAccessibilityPermission() {
-        Task {
-            await refreshPermissions(promptAccessibility: true)
+    /// Records the last observed Accessibility trust so a later `false` reading
+    /// can be recognized as a stale grant (app update / TCC reset) rather than a
+    /// never-granted state — the two need different recovery UI.
+    private func updateLastKnownAccessibilityGranted() {
+        if hasAccessibilityPermission {
+            accessibilityGrantLikelyStale = false
+            accessibilityAssistTimedOut = false
+            if !lastKnownAccessibilityGranted {
+                lastKnownAccessibilityGranted = true
+                persistGeneralSettings()
+            }
         }
     }
 
@@ -1848,38 +1987,73 @@ final class AppState {
     /// When the drag helper is enabled, presents the Permiso overlay and auto-advances
     /// once the user drags Suniye into the Accessibility list; otherwise falls back to the
     /// plain System Settings deep-link.
-    func beginAccessibilityOnboarding() {
+    func beginAccessibilityOnboarding(askSurface: PermissionAskSurface = .onboarding) {
+        accessibilityAssistTimedOut = false
+
+        // Stale TCC entry (post-update): Suniye is already in the Accessibility
+        // list, just untrusted. The drag overlay's "drag Suniye into the list"
+        // instruction would mislead; deep-link with toggle-off-and-on copy instead.
+        if lastKnownAccessibilityGranted, !hasAccessibilityPermission {
+            accessibilityGrantLikelyStale = true
+            onStateChange?()
+            openAccessibilityPrivacySettings()
+            return
+        }
+
         guard accessibilityDragHelperEnabled else {
             openAccessibilityPrivacySettings()
             return
         }
 
-        accessibilityOnboarding.present(onGranted: { [weak self] in
-            guard let self else {
-                return
+        accessibilityOnboarding.present(
+            onGranted: { [weak self] in
+                guard let self else {
+                    return
+                }
+                self.hasAccessibilityPermission = true
+                self.updateLastKnownAccessibilityGranted()
+                self.onStateChange?()
+                // Authoritative re-read of all permission state.
+                Task {
+                    await self.refreshPermissions()
+                }
+            },
+            onEnded: { [weak self] end in
+                guard let self else {
+                    return
+                }
+                switch end {
+                case .granted:
+                    self.analytics.track(.permissionRequest(kind: .accessibility, surface: askSurface, outcome: .granted))
+                case .dismissed:
+                    self.analytics.track(.permissionRequest(kind: .accessibility, surface: askSurface, outcome: .overlayDismissed))
+                case .timedOut:
+                    self.accessibilityAssistTimedOut = true
+                    self.onStateChange?()
+                    self.analytics.track(.permissionRequest(kind: .accessibility, surface: askSurface, outcome: .overlayTimeout))
+                }
             }
-            self.hasAccessibilityPermission = true
-            self.refreshOnboardingProgressIfNeeded()
-            self.onStateChange?()
-            // Authoritative re-read of all permission state.
-            Task {
-                await self.refreshPermissions()
-            }
-        })
+        )
     }
 
-    func requestMicrophonePermission() {
+    func requestMicrophonePermission(askSurface: PermissionAskSurface = .settings) {
+        // Once denied, the system never re-prompts: route straight to the pane
+        // the user must flip the switch in.
+        if hasMicPermissionBeenDenied {
+            openMicrophonePrivacySettings()
+            return
+        }
         Task {
-            await refreshPermissions(requestMicrophone: true)
+            await refreshPermissions(requestMicrophone: true, askSurface: askSurface)
         }
     }
 
     func handleAttentionFixAction(_ action: AttentionItemFixAction) {
         switch action {
         case .requestMicrophonePermission:
-            requestMicrophonePermission()
+            requestMicrophonePermission(askSurface: .dashboard)
         case .requestAccessibilityPermission:
-            beginAccessibilityOnboarding()
+            beginAccessibilityOnboarding(askSurface: .dashboard)
         }
     }
 
@@ -2265,6 +2439,8 @@ final class AppState {
 
         let downloadID = UUID()
         localGemmaDownloadID = downloadID
+        localGemmaDownloadStartedAt = nowProvider()
+        trackModelDownload(kind: .cleanup, model: modelID.rawValue, outcome: .started)
         localGemmaDownloadTask = Task { @MainActor [weak self] in
             guard let self else { return }
 
@@ -2286,22 +2462,43 @@ final class AppState {
                 self.localGemmaDownloadID = nil
                 self.localGemmaInstallState = self.localLLMModelManager.installState(for: modelID)
                 self.magicFormatSetupTestResult = nil
+                self.trackModelDownload(kind: .cleanup, model: modelID.rawValue, outcome: .completed, startedAt: self.localGemmaDownloadStartedAt)
                 AppLogger.shared.log(.info, "local gemma download complete model=\(entry.filename)")
             } catch {
                 self.localGemmaDownloadID = nil
                 let message: String
                 if Task.isCancelled || (error as NSError).code == NSURLErrorCancelled {
                     message = "Download canceled."
+                    self.trackModelDownload(kind: .cleanup, model: modelID.rawValue, outcome: .canceled, startedAt: self.localGemmaDownloadStartedAt)
                     AppLogger.shared.log(.info, "local gemma download canceled model=\(entry.filename)")
                 } else {
                     message = error.localizedDescription
+                    self.trackModelDownload(kind: .cleanup, model: modelID.rawValue, outcome: .failed, startedAt: self.localGemmaDownloadStartedAt)
                     AppLogger.shared.log(.error, "local gemma download failed model=\(entry.filename) error=\(message)")
                 }
                 self.localGemmaInstallState = .failed(message)
             }
 
+            self.localGemmaDownloadStartedAt = nil
             self.localGemmaDownloadTask = nil
         }
+    }
+
+    /// Self-heal for the worst Magic Format failure mode: the user chose the
+    /// local model, the 3.43 GB download died after they moved on, and every
+    /// dictation would silently insert raw text forever. Resuming is safe —
+    /// the user explicitly opted into this download, and size/SHA validation
+    /// already guards correctness.
+    func resumeInterruptedLocalGemmaDownloadIfNeeded() {
+        guard llmEnabled,
+              llmProvider == .localGemma,
+              localLLMModelManager.isHardwareSupported,
+              !localGemmaInstallState.isInstalled,
+              canStartLocalGemmaDownload else {
+            return
+        }
+        AppLogger.shared.log(.info, "resuming interrupted local gemma download at bootstrap")
+        startLocalGemmaDownload()
     }
 
     func cancelLocalGemmaDownload() {
@@ -2456,11 +2653,13 @@ final class AppState {
                     statusText = "Downloading model..."
                     downloadProgress = 0
                     modelDownloadStartedAt = nowProvider()
+                    trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .started)
                     try await modelManager.downloadAndExtractModel(modelID) { [weak self] progress in
                         Task { @MainActor in
                             self?.downloadProgress = progress
                         }
                     }
+                    trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
                     modelDownloadStartedAt = nil
                     phase = .loading
                     statusText = "Loading model..."
@@ -2473,9 +2672,11 @@ final class AppState {
                 lastError = nil
                 lastFailedASRModelID = nil
                 lastFailedASRModelError = nil
-                refreshOnboardingProgressIfNeeded()
                 AppLogger.shared.log(.info, "system-managed model ready id=\(modelID.rawValue)")
             } catch {
+                if phase == .downloadingModel {
+                    trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .failed, startedAt: modelDownloadStartedAt)
+                }
                 handleASRModelOperationFailure(
                     for: modelID,
                     error: error,
@@ -2502,8 +2703,9 @@ final class AppState {
         lastFailedASRModelError = nil
         downloadProgress = 0
         modelDownloadStartedAt = nowProvider()
+        trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .started)
 
-        Task {
+        asrDownloadTask = Task {
             do {
                 AppLogger.shared.log(.info, "model download started id=\(modelID.rawValue)")
                 try await modelManager.downloadAndExtractModel(modelID) { [weak self] progress in
@@ -2514,6 +2716,7 @@ final class AppState {
 
                 phase = .loading
                 statusText = "Validating model..."
+                trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
                 modelDownloadStartedAt = nil
 
                 guard modelManager.isInstalled(modelID) else {
@@ -2529,7 +2732,6 @@ final class AppState {
                         lastError = nil
                         lastFailedASRModelID = nil
                         lastFailedASRModelError = nil
-                        refreshOnboardingProgressIfNeeded()
                         AppLogger.shared.log(.info, "model download complete id=\(modelID.rawValue)")
                     } catch {
                         handleASRModelOperationFailure(
@@ -2550,16 +2752,81 @@ final class AppState {
                     lastFailedASRModelError = nil
                 }
             } catch {
-                handleASRModelOperationFailure(
-                    for: modelID,
-                    error: error,
-                    fallbackToReadyState: hadLoadedModel
-                )
-                AppLogger.shared.log(.error, "model download failed id=\(modelID.rawValue) error=\(error.localizedDescription)")
+                if Self.isCancellation(error) {
+                    trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .canceled, startedAt: modelDownloadStartedAt)
+                    downloadProgress = 0
+                    if hadLoadedModel {
+                        phase = .ready
+                        statusText = "Ready"
+                    } else {
+                        phase = .needsModel
+                        statusText = "Model required"
+                    }
+                    lastError = nil
+                    AppLogger.shared.log(.info, "model download canceled id=\(modelID.rawValue)")
+                } else {
+                    trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .failed, startedAt: modelDownloadStartedAt)
+                    handleASRModelOperationFailure(
+                        for: modelID,
+                        error: error,
+                        fallbackToReadyState: hadLoadedModel
+                    )
+                    AppLogger.shared.log(.error, "model download failed id=\(modelID.rawValue) error=\(error.localizedDescription)")
+                }
             }
 
             activeASRModelOperationID = nil
             modelDownloadStartedAt = nil
+            asrDownloadTask = nil
+        }
+    }
+
+    var canCancelASRModelDownload: Bool {
+        phase == .downloadingModel && asrDownloadTask != nil
+    }
+
+    /// Cancels an in-flight ASR model download (previously impossible: the
+    /// ~680 MB required download could only be abandoned by quitting the app).
+    func cancelASRModelDownload() {
+        guard canCancelASRModelDownload else {
+            return
+        }
+        asrDownloadTask?.cancel()
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
+    }
+
+    private func trackModelDownload(kind: ModelKind, model: String, outcome: ModelDownloadOutcome, startedAt: Date? = nil) {
+        let durationMs = startedAt.map { Int(nowProvider().timeIntervalSince($0) * 1000) }
+        analytics.track(.modelDownload(
+            kind: kind,
+            model: SafeLabel(model),
+            outcome: outcome,
+            durationMs: durationMs
+        ))
+    }
+
+    /// Maps the raw download errors most users actually hit to actionable copy.
+    private static func friendlyModelDownloadMessage(for error: Error) -> String? {
+        let nsError = error as NSError
+        guard nsError.domain == NSURLErrorDomain else {
+            return nil
+        }
+        switch nsError.code {
+        case NSURLErrorNotConnectedToInternet, NSURLErrorDataNotAllowed:
+            return "You appear to be offline. Reconnect and retry the download."
+        case NSURLErrorTimedOut:
+            return "The download timed out. Retry when your connection is stable."
+        case NSURLErrorNetworkConnectionLost:
+            return "The connection dropped mid-download. Retry to continue."
+        default:
+            return nil
         }
     }
 
@@ -2680,6 +2947,30 @@ final class AppState {
 
     func openMainWindow() {
         MainWindowController.shared.show(appState: self)
+    }
+
+    /// Title for the status-bar menu's setup/resume item; nil once onboarding is
+    /// finished. Shows live download progress so a window-closed-mid-download
+    /// install still has a visible pulse.
+    var setupMenuItemTitle: String? {
+        guard !onboardingProgress.isFinished else {
+            return nil
+        }
+        if phase == .downloadingModel {
+            return "Downloading speech model — \(Int(downloadProgress * 100))%"
+        }
+        return "Finish Setting Up \(AppIdentity.current.displayName)…"
+    }
+
+    /// The Accessibility screen's "Try it in Notes" demo: real insertion into a
+    /// real app is the product's actual value, and the old preview-only practice
+    /// never demonstrated it.
+    func openNotesForInsertionDemo() {
+        guard let notesURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Notes") else {
+            AppLogger.shared.log(.warning, "notes demo: Notes.app not found")
+            return
+        }
+        _ = fileOpener(notesURL)
     }
 
     func openIssueReportWindow() {
@@ -3098,9 +3389,10 @@ final class AppState {
     }
 
     private func handleASRModelOperationFailure(for modelID: ASRModelID, error: Error, fallbackToReadyState: Bool) {
+        let message = Self.friendlyModelDownloadMessage(for: error) ?? error.localizedDescription
         downloadProgress = 0
         lastFailedASRModelID = modelID
-        lastFailedASRModelError = error.localizedDescription
+        lastFailedASRModelError = message
 
         if fallbackToReadyState, loadedASRModelID != nil {
             phase = .ready
@@ -3110,7 +3402,7 @@ final class AppState {
         }
 
         phase = .error
-        lastError = error.localizedDescription
+        lastError = message
         statusText = "Download failed"
     }
 
@@ -3160,7 +3452,7 @@ final class AppState {
             clearRetryableRecordingError()
         }
         if isOnboardingBlockingRecordingStart {
-            AppLogger.shared.log(.debug, "start recording ignored while onboarding setup is active")
+            AppLogger.shared.log(.debug, "start recording ignored on the onboarding welcome screen")
             showTransientIndicatorError("Finish setup first", restoreState: .idle, duration: 1.2)
             return
         }
@@ -3170,8 +3462,9 @@ final class AppState {
             showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             return
         }
+        let resolvedDestination = destination ?? currentDictationDestination
         if !hasMicPermission {
-            await refreshPermissions(requestMicrophone: true)
+            await refreshPermissions(requestMicrophone: true, askSurface: .dictationAttempt)
         }
         guard hasMicPermission else {
             lastError = "Microphone permission not granted"
@@ -3183,17 +3476,25 @@ final class AppState {
             return
         }
 
-        if !hasAccessibilityPermission {
-            await refreshPermissions(promptAccessibility: true)
-        }
-        guard hasAccessibilityPermission else {
-            lastError = "Accessibility permission not granted"
-            statusText = "Accessibility required"
-            AppLogger.shared.log(.warning, "accessibility permission denied before recording")
-            analytics.track(.dictationBlocked(reason: .accessibilityDenied))
-            playSoundFeedback(.error)
-            showTransientIndicatorError("Enable Accessibility for dictation")
-            return
+        // Practice dictations never insert into another app, so Accessibility is
+        // deliberately NOT required (or prompted for) — the whole point of the
+        // Speak screen is a first dictation before the scary permission ask.
+        if resolvedDestination != .onboardingPractice {
+            if !hasAccessibilityPermission {
+                // Suppress the modal system prompt while the Permiso overlay is up:
+                // two competing Accessibility grant UIs at once confuse the exact
+                // moment the user is trying to grant.
+                await refreshPermissions(promptAccessibility: !accessibilityOnboarding.isPresenting)
+            }
+            guard hasAccessibilityPermission else {
+                lastError = "Accessibility permission not granted"
+                statusText = "Accessibility required"
+                AppLogger.shared.log(.warning, "accessibility permission denied before recording")
+                analytics.track(.dictationBlocked(reason: .accessibilityDenied))
+                playSoundFeedback(.error)
+                showTransientIndicatorError("Enable Accessibility for dictation")
+                return
+            }
         }
         // Speculatively warm the local LLM while the user speaks, so cleanup runs
         // against an already-loaded model instead of paying the cold start on the
@@ -3334,7 +3635,12 @@ final class AppState {
                     source: context.source
                 )
             case .onboardingPractice:
-                await completeOnboardingPracticeDictation(rawText: rawText, sessionID: sessionID)
+                await completeOnboardingPracticeDictation(
+                    rawText: rawText,
+                    sessionID: sessionID,
+                    duration: duration,
+                    source: context.source
+                )
             }
         } catch {
             if destination == .onboardingPractice {
@@ -3343,6 +3649,7 @@ final class AppState {
                     message: error.localizedDescription,
                     severity: .error
                 )
+                recordOnboardingPracticeAttempt(outcome: .error)
             }
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
             analytics.track(.error(type: .transcription, code: .unknown))
@@ -3470,7 +3777,8 @@ final class AppState {
         duration: TimeInterval,
         llmOutcome: MagicFormatPolishOutcome?,
         source: RecordingSource,
-        frontmostAppBundleID: String?
+        frontmostAppBundleID: String?,
+        destination: SuniyeAnalytics.DictationDestination = .systemInsertion
     ) {
         // Pure function of the polish outcome — no live settings reads here (they
         // could have changed across the insertion suspension points, and the
@@ -3483,7 +3791,7 @@ final class AppState {
             charCount: finalText.count,
             audioDurationMs: Int(duration * 1000),
             source: AnalyticsMapping.source(source),
-            destination: .systemInsertion,
+            destination: destination,
             asrModel: SafeLabel(selectedASRModelID.rawValue),
             asrFamily: SafeLabel(ASRModelCatalog.entry(for: selectedASRModelID).family.rawValue),
             // The model's language coverage from the catalog (e.g. "english",
@@ -3511,10 +3819,20 @@ final class AppState {
         analytics.track(.dictationCompleted(metrics))
     }
 
-    private func completeOnboardingPracticeDictation(rawText: String, sessionID: UUID) async {
+    private func completeOnboardingPracticeDictation(
+        rawText: String,
+        sessionID: UUID,
+        duration: TimeInterval,
+        source: RecordingSource
+    ) async {
         var finalText = rawText
+        var llmOutcome: MagicFormatPolishOutcome?
         if !finalText.isEmpty {
-            finalText = await postProcessTextIfEnabled(rawText).trimmingCharacters(in: .whitespacesAndNewlines)
+            dictationTiming.llmStart = .now()
+            let outcome = await polishOutcome(rawText)
+            dictationTiming.llmEnd = .now()
+            llmOutcome = outcome
+            finalText = outcome.text.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         onboardingPracticeText = finalText
@@ -3524,18 +3842,40 @@ final class AppState {
                 ? "No speech detected. Try a short phrase."
                 : "Practice mode captured audio, but there was no text to preview."
             onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
+            recordOnboardingPracticeAttempt(outcome: rawText.isEmpty ? .emptyAudio : .error)
             AppLogger.shared.log(.warning, "onboarding practice produced empty text")
             playSoundFeedback(.error)
         } else {
+            onboardingPracticeSucceeded = true
             onboardingPracticeResult = OnboardingPracticeResult(
-                message: "Captured locally. You can finish onboarding whenever you're ready.",
+                message: "That's it — this works in any app.",
                 severity: .success
             )
             let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+            recordOnboardingPracticeAttempt(outcome: .success)
+            // The user's first-ever dictation now shows up in the funnel: same
+            // dense metrics event as real dictations, with the practice
+            // destination (numeric metrics only — never transcript content).
+            emitDictationCompleted(
+                finalText: finalText,
+                wordCount: wordCount,
+                duration: duration,
+                llmOutcome: llmOutcome,
+                source: source,
+                frontmostAppBundleID: nil,
+                destination: .onboardingPractice
+            )
             AppLogger.shared.log(.info, "onboarding practice transcription complete words=\(wordCount)")
             didCompleteDictation = true
         }
         completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation)
+    }
+
+    /// Counts a practice attempt and reports its outcome. Attempt numbers are
+    /// capped so a pathological retry loop cannot inflate the metric.
+    private func recordOnboardingPracticeAttempt(outcome: PracticeOutcome) {
+        onboardingPracticeAttempts = min(onboardingPracticeAttempts + 1, 10)
+        analytics.track(.onboardingPracticeResult(outcome: outcome, attempt: onboardingPracticeAttempts))
     }
 
     /// Runs the Edit Mode LLM step: rewrite the selection per the spoken instruction,
@@ -3612,7 +3952,9 @@ final class AppState {
 
     private func requireAccessibilityForInsertion() async throws {
         if !hasAccessibilityPermission {
-            await refreshPermissions(promptAccessibility: true)
+            // Same de-stacking rule as the recording path: never pop the modal
+            // system prompt on top of an active Permiso overlay session.
+            await refreshPermissions(promptAccessibility: !accessibilityOnboarding.isPresenting)
         }
         guard hasAccessibilityPermission else {
             throw NSError(domain: "Suniye", code: 1, userInfo: [NSLocalizedDescriptionKey: "Accessibility permission not granted"])
@@ -3646,6 +3988,10 @@ final class AppState {
         if destination == .onboardingPractice {
             onboardingPracticeText = ""
             onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
+            let audioOutcome = AnalyticsMapping.audioOutcome(outcome)
+            recordOnboardingPracticeAttempt(
+                outcome: audioOutcome == .silent || audioOutcome == .tooShort ? .emptyAudio : .error
+            )
         }
         AppLogger.shared.log(.warning, "audio capture rejected outcome=\(String(describing: outcome))")
         analytics.track(.audioCaptureFailed(outcome: AnalyticsMapping.audioOutcome(outcome)))
@@ -3691,15 +4037,37 @@ final class AppState {
         updateChannel = settings.updateChannel
         accessibilityDragHelperEnabled = settings.accessibilityDragHelperEnabled
         shareAnalyticsEnabled = settings.shareAnalyticsEnabled
-        hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
-        hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
+        firstLaunchRecorded = settings.firstLaunchRecorded
+        lastKnownAccessibilityGranted = settings.lastKnownAccessibilityGranted
+        magicFormatNudgeDismissed = settings.magicFormatNudgeDismissed
+
+        let needsProgressMigration = settings.onboardingProgress == nil
+        onboardingProgress = settings.onboardingProgress ?? OnboardingProgress.migrating(
+            hasSeenOnboardingWelcome: settings.hasSeenOnboardingWelcome,
+            hasCompletedCoreOnboarding: settings.hasCompletedCoreOnboarding,
+            legacyUserShowsUsage: legacyUserShowsUsage(settings: settings)
+        )
         isHydratingGeneralSettings = false
         // A persisted collision (e.g. hand-edited settings) would silently kill Edit Mode.
         if editModeHotkeyConfiguration != nil, editModeHotkeyConfiguration == hotkeyConfiguration {
             editModeHotkeyConfiguration = nil
         }
         applyUpdateChannelToController()
-        normalizeOnboardingSettingsIfNeeded(loadedSettings: settings)
+        if needsProgressMigration {
+            persistGeneralSettings()
+        }
+    }
+
+    /// The legacy auto-complete heuristic for installs that predate the
+    /// onboarding flags: only real usage signals count. The old version also
+    /// keyed on `autoSubmitEnabled`/`echoCancellationEnabled`, which meant a
+    /// future default flip could have silently skipped onboarding for every
+    /// fresh install.
+    private func legacyUserShowsUsage(settings: GeneralSettings) -> Bool {
+        isModelInstalled
+            || !recentResults.isEmpty
+            || settings.preferredInputDeviceID != nil
+            || settings.hotkeyConfiguration != .globe
     }
 
     private func persistGeneralSettings() {
@@ -3718,42 +4086,19 @@ final class AppState {
             hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,
             liveTranscriptionPreviewEnabled: liveTranscriptionPreviewEnabled,
             floatingIndicatorPlacement: floatingIndicatorPlacement,
+            // Legacy Bools still written (derived) so a downgraded build keeps
+            // working; `onboardingProgress` wins on load in this build.
             hasSeenOnboardingWelcome: hasSeenOnboardingWelcome,
             hasCompletedCoreOnboarding: hasCompletedCoreOnboarding,
+            onboardingProgress: onboardingProgress,
+            firstLaunchRecorded: firstLaunchRecorded,
+            lastKnownAccessibilityGranted: lastKnownAccessibilityGranted,
+            magicFormatNudgeDismissed: magicFormatNudgeDismissed,
             selectedASRModelID: selectedASRModelID,
             updateChannel: updateChannel,
             accessibilityDragHelperEnabled: accessibilityDragHelperEnabled,
             shareAnalyticsEnabled: shareAnalyticsEnabled
         )
-    }
-
-    private func normalizeOnboardingSettingsIfNeeded(loadedSettings: GeneralSettings) {
-        let needsNormalization = loadedSettings.hasSeenOnboardingWelcome == nil
-            || loadedSettings.hasCompletedCoreOnboarding == nil
-            || (loadedSettings.hasCompletedCoreOnboarding == true && loadedSettings.hasSeenOnboardingWelcome != true)
-
-        guard needsNormalization else {
-            return
-        }
-
-        let shouldMarkComplete = shouldAutoCompleteOnboardingForLegacyUser
-        let normalizedComplete = loadedSettings.hasCompletedCoreOnboarding ?? shouldMarkComplete
-        let normalizedWelcome = loadedSettings.hasSeenOnboardingWelcome ?? (normalizedComplete || shouldMarkComplete)
-
-        hasSeenOnboardingWelcome = normalizedWelcome
-        hasCompletedCoreOnboarding = normalizedComplete
-        persistGeneralSettings()
-    }
-
-    private var shouldAutoCompleteOnboardingForLegacyUser: Bool {
-        if isModelInstalled || !recentResults.isEmpty {
-            return true
-        }
-
-        return selectedInputDeviceID != nil
-            || autoSubmitEnabled
-            || echoCancellationEnabled
-            || hotkeyConfiguration != .globe
     }
 
     private func loadLLMSettings() {
@@ -4071,7 +4416,7 @@ final class AppState {
     }
 
     private var currentDictationDestination: DictationDestination {
-        activeOnboardingStep == .practice ? .onboardingPractice : .systemInsertion
+        activeOnboardingStep == .speak ? .onboardingPractice : .systemInsertion
     }
 
     private func clearActiveDictationSession(sessionID: UUID? = nil) {
@@ -4162,10 +4507,11 @@ final class AppState {
         }
     }
 
+    /// Derived rule, not an enumerated step list: only the welcome screen blocks
+    /// the hotkey. The Speak screen hosts the practice dictation and the
+    /// Accessibility screen allows real dictation (e.g. the Notes demo).
     private var isOnboardingBlockingRecordingStart: Bool {
         activeOnboardingStep == .welcome
-            || activeOnboardingStep == .setup
-            || activeOnboardingStep == .magicFormat
     }
 
     private var modelDownloadETAText: String? {
@@ -4197,15 +4543,6 @@ final class AppState {
         }
 
         return "About \(formatted) left"
-    }
-
-    private func refreshOnboardingProgressIfNeeded() {
-        guard activeOnboardingStep == .setup,
-              !hasCompletedCoreOnboarding,
-              isOnboardingSetupComplete else {
-            return
-        }
-        showMagicFormatOnboarding()
     }
 
     private func handleAudioLevelsUpdate(_ levels: [Float]) {

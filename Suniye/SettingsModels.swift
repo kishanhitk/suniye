@@ -341,8 +341,23 @@ struct GeneralSettings: Codable, Equatable {
     var hideFloatingIndicatorWhenIdle: Bool = false
     var liveTranscriptionPreviewEnabled: Bool = false
     var floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil
+    /// Legacy onboarding flags. Still written (derived from `onboardingProgress`)
+    /// so a downgraded build keeps working; `onboardingProgress` wins on load.
     var hasSeenOnboardingWelcome: Bool? = nil
     var hasCompletedCoreOnboarding: Bool? = nil
+    /// Single persisted onboarding position; nil only for settings written by
+    /// older builds (migrated on load from the two legacy Bools above).
+    var onboardingProgress: OnboardingProgress? = nil
+    /// Set the first time an `app_launch` event ships, so `first_launch` counts
+    /// each install exactly once (quitting on the welcome screen used to
+    /// re-count as a new install on every relaunch).
+    var firstLaunchRecorded: Bool = false
+    /// Last observed Accessibility trust state. When this is true but
+    /// AXIsProcessTrusted() is false, the grant went stale (app update / TCC
+    /// reset) and the drag overlay would mislead — we show toggle-off/on copy.
+    var lastKnownAccessibilityGranted: Bool = false
+    /// The post-onboarding Magic Format nudge card was dismissed; never re-nag.
+    var magicFormatNudgeDismissed: Bool = false
     var selectedASRModelID: ASRModelID = .parakeetV3
     var updateChannel: UpdateChannel = .stable
     /// Gates the Permiso drag-to-grant overlay for Accessibility onboarding.
@@ -366,6 +381,10 @@ struct GeneralSettings: Codable, Equatable {
         floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil,
         hasSeenOnboardingWelcome: Bool? = nil,
         hasCompletedCoreOnboarding: Bool? = nil,
+        onboardingProgress: OnboardingProgress? = nil,
+        firstLaunchRecorded: Bool = false,
+        lastKnownAccessibilityGranted: Bool = false,
+        magicFormatNudgeDismissed: Bool = false,
         selectedASRModelID: ASRModelID = .parakeetV3,
         updateChannel: UpdateChannel = .stable,
         accessibilityDragHelperEnabled: Bool = true,
@@ -383,6 +402,10 @@ struct GeneralSettings: Codable, Equatable {
         self.floatingIndicatorPlacement = floatingIndicatorPlacement
         self.hasSeenOnboardingWelcome = hasSeenOnboardingWelcome
         self.hasCompletedCoreOnboarding = hasCompletedCoreOnboarding
+        self.onboardingProgress = onboardingProgress
+        self.firstLaunchRecorded = firstLaunchRecorded
+        self.lastKnownAccessibilityGranted = lastKnownAccessibilityGranted
+        self.magicFormatNudgeDismissed = magicFormatNudgeDismissed
         self.selectedASRModelID = selectedASRModelID
         self.updateChannel = updateChannel
         self.accessibilityDragHelperEnabled = accessibilityDragHelperEnabled
@@ -402,6 +425,10 @@ struct GeneralSettings: Codable, Equatable {
         case floatingIndicatorPlacement
         case hasSeenOnboardingWelcome
         case hasCompletedCoreOnboarding
+        case onboardingProgress
+        case firstLaunchRecorded
+        case lastKnownAccessibilityGranted
+        case magicFormatNudgeDismissed
         case selectedASRModelID
         case updateChannel
         case accessibilityDragHelperEnabled
@@ -422,6 +449,13 @@ struct GeneralSettings: Codable, Equatable {
         floatingIndicatorPlacement = try container.decodeIfPresent(FloatingIndicatorPlacement.self, forKey: .floatingIndicatorPlacement)
         hasSeenOnboardingWelcome = try container.decodeIfPresent(Bool.self, forKey: .hasSeenOnboardingWelcome)
         hasCompletedCoreOnboarding = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedCoreOnboarding)
+        // Raw-string decode so an unknown future case degrades to nil (legacy
+        // migration) instead of failing the whole settings blob.
+        let storedOnboardingProgress = try container.decodeIfPresent(String.self, forKey: .onboardingProgress)
+        onboardingProgress = storedOnboardingProgress.flatMap(OnboardingProgress.init(rawValue:))
+        firstLaunchRecorded = try container.decodeIfPresent(Bool.self, forKey: .firstLaunchRecorded) ?? false
+        lastKnownAccessibilityGranted = try container.decodeIfPresent(Bool.self, forKey: .lastKnownAccessibilityGranted) ?? false
+        magicFormatNudgeDismissed = try container.decodeIfPresent(Bool.self, forKey: .magicFormatNudgeDismissed) ?? false
         let storedASRModelID = try container.decodeIfPresent(String.self, forKey: .selectedASRModelID)
         selectedASRModelID = storedASRModelID.flatMap(ASRModelID.init(rawValue:)) ?? .parakeetV3
         let storedUpdateChannel = try container.decodeIfPresent(String.self, forKey: .updateChannel)

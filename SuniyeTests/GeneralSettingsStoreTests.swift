@@ -98,6 +98,52 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.load().accessibilityDragHelperEnabled)
     }
 
+    func testOnboardingProgressAndNewFlagsRoundTrip() {
+        let suite = "dev.suniye.tests.general.onboarding.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+
+        let settings = GeneralSettings(
+            onboardingProgress: .speakReached,
+            firstLaunchRecorded: true,
+            lastKnownAccessibilityGranted: true,
+            magicFormatNudgeDismissed: true
+        )
+        store.save(settings)
+        let loaded = store.load()
+
+        XCTAssertEqual(loaded.onboardingProgress, .speakReached)
+        XCTAssertTrue(loaded.firstLaunchRecorded)
+        XCTAssertTrue(loaded.lastKnownAccessibilityGranted)
+        XCTAssertTrue(loaded.magicFormatNudgeDismissed)
+    }
+
+    func testLegacyBlobDecodesNilProgressAndFalseFlags() {
+        let suite = "dev.suniye.tests.general.onboarding.legacy.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        defaults.set(Data(#"{"hasSeenOnboardingWelcome": true, "hasCompletedCoreOnboarding": false}"#.utf8), forKey: "general")
+
+        let loaded = store.load()
+
+        XCTAssertNil(loaded.onboardingProgress, "older blobs must trigger the Bool migration path")
+        XCTAssertFalse(loaded.firstLaunchRecorded)
+        XCTAssertFalse(loaded.lastKnownAccessibilityGranted)
+        XCTAssertFalse(loaded.magicFormatNudgeDismissed)
+    }
+
+    func testUnknownOnboardingProgressValueDegradesToNil() {
+        let suite = "dev.suniye.tests.general.onboarding.future.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        defaults.set(Data(#"{"onboardingProgress": "futureState", "autoSubmitEnabled": true}"#.utf8), forKey: "general")
+
+        let loaded = store.load()
+
+        XCTAssertNil(loaded.onboardingProgress, "a future enum case must not fail the whole settings blob")
+        XCTAssertTrue(loaded.autoSubmitEnabled)
+    }
+
     func testHotkeyDisplayStringsMatchUIExamples() {
         XCTAssertEqual(HotkeyConfiguration.globe.displayString, "Globe")
         XCTAssertEqual(

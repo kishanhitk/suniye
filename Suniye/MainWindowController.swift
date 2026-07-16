@@ -59,6 +59,16 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         AppLogger.shared.log(.info, "main window became key; refreshing permission status")
         appState?.refreshPermissionStatus()
     }
+
+    func windowWillClose(_ notification: Notification) {
+        // Revert to a pure menu-bar app when the window closes — but keep the
+        // Dock icon (a second resume affordance) while onboarding is unfinished.
+        guard appState?.onboardingProgress.isFinished ?? true else {
+            return
+        }
+        AppLogger.shared.log(.info, "main window closing; reverting activation policy")
+        NSApp.setActivationPolicy(.accessory)
+    }
 }
 
 struct MainWindowRootView: View {

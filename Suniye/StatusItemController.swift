@@ -7,6 +7,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let appIdentity = AppIdentity.current
     private let statusItem: NSStatusItem
 
+    private let finishSetupItem = NSMenuItem(title: "", action: #selector(openMainWindow), keyEquivalent: "")
     private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openMainWindow), keyEquivalent: "o")
     private let copyLastTranscriptItem = NSMenuItem(title: "Copy Last Transcript", action: #selector(copyLastTranscript), keyEquivalent: "")
     private let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
@@ -31,6 +32,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
+        finishSetupItem.target = self
         openSettingsItem.target = self
         copyLastTranscriptItem.target = self
         checkUpdatesItem.target = self
@@ -38,6 +40,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         reportIssueItem.target = self
         quitItem.target = self
 
+        // The abandonment-recovery affordance: a user who closes the window
+        // mid-setup must see a labeled way back (with live download progress),
+        // not a normal-looking menu that silently does nothing.
+        menu.addItem(finishSetupItem)
         menu.addItem(openSettingsItem)
         menu.addItem(copyLastTranscriptItem)
         menu.addItem(.separator())
@@ -60,6 +66,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private func refresh() {
         let phase = appState.phase
+
+        if let setupTitle = appState.setupMenuItemTitle {
+            finishSetupItem.isHidden = false
+            finishSetupItem.title = setupTitle
+            finishSetupItem.attributedTitle = NSAttributedString(
+                string: setupTitle,
+                attributes: [.font: NSFont.menuFont(ofSize: 0).withBoldTrait()]
+            )
+        } else {
+            finishSetupItem.isHidden = true
+        }
 
         checkUpdatesItem.target = self
 
@@ -157,5 +174,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func quitApp() {
         AppLogger.shared.log(.info, "menu action: quit app")
         NSApplication.shared.terminate(nil)
+    }
+}
+
+private extension NSFont {
+    func withBoldTrait() -> NSFont {
+        NSFontManager.shared.convert(self, toHaveTrait: .boldFontMask)
     }
 }
