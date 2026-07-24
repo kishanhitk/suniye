@@ -68,7 +68,12 @@ struct HistoryPage: View {
                     detail: "Completed dictation sessions will appear here with relative time, duration, copy, and delete actions."
                 )
             } else {
-                VStack(spacing: 0) {
+                // Must stay lazy: history is unbounded and these rows are
+                // variable height, so an eager stack builds and lays out every
+                // stored transcript on every update — tens of seconds of first
+                // paint at tens of thousands of sessions. Measurements in the
+                // commit that introduced this.
+                LazyVStack(spacing: 0) {
                     ForEach(appState.recentResults) { result in
                         TranscriptHistoryRow(
                             result: result,
