@@ -36,6 +36,7 @@ targets:
         excludes:
           - Frameworks/**
           - LocalLLM/**
+          - BrowserExtension/**
           - Vendor/Permiso/PERMISO_UPSTREAM.md
     info:
       path: Suniye/Info.plist
@@ -47,6 +48,7 @@ targets:
         LSUIElement: true
         NSMicrophoneUsageDescription: Suniye needs microphone access to capture dictation.
         NSSpeechRecognitionUsageDescription: Suniye uses on-device speech recognition to transcribe your dictation.
+        NSAppleEventsUsageDescription: Suniye uses Apple Events to carry out the voice commands you ask for in Command Mode (e.g. scripting an app).
         SuniyeIssueReportEndpointURL: https://suniye.kishans.in/api/issue-reports
         SuniyeAnalyticsEndpointURL: https://ingest.suniye.kishans.in/api/v1/events
         SuniyeBuildChannel: $(SUNIYE_BUILD_CHANNEL)
@@ -107,6 +109,20 @@ targets:
             exit 1
           else
             echo "Skipping local LLM helper embed; helper not found at ${HELPER_SOURCE}."
+          fi
+      - name: Embed Browser Extension
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          SRC="${SRCROOT}/Suniye/BrowserExtension"
+          DEST="${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Resources/BrowserExtension"
+          if [[ -d "${SRC}" ]]; then
+            rm -rf "${DEST}"
+            mkdir -p "$(dirname "${DEST}")"
+            /usr/bin/ditto "${SRC}" "${DEST}"
+            echo "Embedded browser extension: ${DEST}"
+          else
+            echo "Skipping browser extension embed; not found at ${SRC}."
           fi
   SuniyeTests:
     type: bundle.unit-test

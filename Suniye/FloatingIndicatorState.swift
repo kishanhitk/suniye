@@ -24,7 +24,13 @@ enum FloatingIndicatorMetrics {
     static let previewShadowPadding: CGFloat = 16
 
     static func pillSize(source: FloatingIndicatorState.Source) -> CGSize {
-        source == .editHotkey ? editModeListeningPillSize : listeningPillSize
+        switch source {
+        case .editHotkey:
+            // Edit Mode prepends a pencil icon, so it is slightly wider.
+            return editModeListeningPillSize
+        case .hotkey, .manual, .command:
+            return listeningPillSize
+        }
     }
 
     /// Combined panel size. The panel is bottom-anchored and its content is
@@ -64,6 +70,7 @@ enum FloatingIndicatorState: Equatable {
         case hotkey
         case manual
         case editHotkey
+        case command
     }
 
     /// Lifecycle of the live-preview bubble during a listening session.

@@ -77,7 +77,9 @@ enum TargetCategoryMapper {
 enum AnalyticsMapping {
     static func source(_ source: FloatingIndicatorState.Source) -> SuniyeAnalytics.DictationSource {
         switch source {
-        case .hotkey, .editHotkey: return .hotkey
+        // Command Mode is hotkey-triggered but emits its own command_* events, not
+        // dictation_completed — this mapping is only reached on dictation emits.
+        case .hotkey, .editHotkey, .command: return .hotkey
         case .manual: return .manual
         }
     }
@@ -106,6 +108,18 @@ enum AnalyticsMapping {
         case .noAudioArriving: return .noAudioArriving
         case .maximumDurationReached: return .maximumDurationReached
         case .systemSleep: return .systemSleep
+        }
+    }
+
+    /// The agent loop's terminal state → the analytics vocabulary. Exhaustive, so
+    /// a new `AgentOutcome` case must be classified rather than silently bucketed.
+    static func commandOutcome(_ outcome: AgentOutcome) -> CommandOutcome {
+        switch outcome {
+        case .completed: return .completed
+        case .stalled: return .stalled
+        case .stepLimit: return .stepLimit
+        case .cancelled: return .cancelled
+        case .brainFailure: return .brainFailure
         }
     }
 

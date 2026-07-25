@@ -139,14 +139,35 @@ final class ChatCompletionClient {
     }
 }
 
-private struct ChatCompletionResponse: Decodable {
+// Internal (not private) so `extractText` — the response-shape tolerance that
+// keeps reasoning / function-calling models from decoding as malformedResponse —
+// is directly unit-testable with canned JSON.
+struct ChatCompletionResponse: Decodable {
     struct Choice: Decodable {
         let message: Message?
         let text: String?
     }
 
     struct Message: Decodable {
-        let content: Content
+        // Optional: reasoning models and native function-calling replies send
+        // `"content": null`, which a non-optional field would fail to decode —
+        // sinking the whole response as malformedResponse even when a usable
+        // answer is present in `tool_calls`.
+        let content: Content?
+        let toolCalls: [ToolCallDTO]?
+
+        enum CodingKeys: String, CodingKey {
+            case content
+            case toolCalls = "tool_calls"
+        }
+    }
+
+    struct ToolCallDTO: Decodable {
+        struct Function: Decodable {
+            let name: String?
+            let arguments: String?
+        }
+        let function: Function?
     }
 
     enum Content: Decodable {
@@ -188,11 +209,19 @@ private struct ChatCompletionResponse: Decodable {
         guard let first = response.choices.first else {
             throw LLMPostProcessorError.malformedResponse
         }
-        if let messageText = first.message?.content.text, !messageText.isEmpty {
+        if let messageText = first.message?.content?.text, !messageText.isEmpty {
             return messageText
         }
         if let text = first.text, !text.isEmpty {
             return text
+        }
+        // Native function/tool call (content is null in this shape): reconstruct
+        // the {"tool","arguments"} JSON the agent's ToolCallParser expects, so a
+        // model that function-calls instead of emitting text still drives the loop.
+        if let function = first.message?.toolCalls?.first?.function,
+           let name = function.name, !name.isEmpty {
+            let arguments = (function.arguments.map { $0.isEmpty ? "{}" : $0 }) ?? "{}"
+            return "{\"tool\":\"\(name)\",\"arguments\":\(arguments)}"
         }
         throw LLMPostProcessorError.malformedResponse
     }

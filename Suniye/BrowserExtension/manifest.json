@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Suniye Browser Control",
+  "version": "0.0.8",
+  "description": "Lets the Suniye app read and act on your browser during voice commands. Connects only to 127.0.0.1 on your Mac — nothing leaves your device.",
+  "minimum_chrome_version": "120",
+  "background": { "service_worker": "background.js" },
+  "permissions": ["scripting", "tabs", "alarms", "debugger"],
+  "host_permissions": ["<all_urls>"]
+}

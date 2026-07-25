@@ -6,7 +6,9 @@ protocol HotkeyServiceProtocol: AnyObject {
     var onHotkeyUp: (() -> Void)? { get set }
     var onEditModeHotkeyDown: (() -> Void)? { get set }
     var onEditModeHotkeyUp: (() -> Void)? { get set }
-    func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?)
+    var onCommandHotkeyDown: (() -> Void)? { get set }
+    var onCommandHotkeyUp: (() -> Void)? { get set }
+    func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?, commandConfiguration: HotkeyConfiguration?)
     func stopMonitoring()
 }
 
@@ -22,12 +24,15 @@ final class HotkeyService: HotkeyServiceProtocol {
     enum Slot: UInt32 {
         case dictation = 1
         case editMode = 2
+        case command = 3
     }
 
     var onHotkeyDown: (() -> Void)?
     var onHotkeyUp: (() -> Void)?
     var onEditModeHotkeyDown: (() -> Void)?
     var onEditModeHotkeyUp: (() -> Void)?
+    var onCommandHotkeyDown: (() -> Void)?
+    var onCommandHotkeyUp: (() -> Void)?
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
@@ -36,7 +41,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     private var heldSlots: Set<Slot> = []
     private var globeSlot: Slot?
 
-    func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?) {
+    func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?, commandConfiguration: HotkeyConfiguration?) {
         stopMonitoring()
 
         register(configuration, for: .dictation)
@@ -45,6 +50,13 @@ final class HotkeyService: HotkeyServiceProtocol {
                 AppLogger.shared.log(.warning, "edit mode hotkey ignored: matches dictation hotkey")
             } else {
                 register(editModeConfiguration, for: .editMode)
+            }
+        }
+        if let commandConfiguration {
+            if commandConfiguration == configuration || commandConfiguration == editModeConfiguration {
+                AppLogger.shared.log(.warning, "command hotkey ignored: matches dictation or edit-mode hotkey")
+            } else {
+                register(commandConfiguration, for: .command)
             }
         }
     }
@@ -210,6 +222,8 @@ final class HotkeyService: HotkeyServiceProtocol {
             return onHotkeyDown
         case .editMode:
             return onEditModeHotkeyDown
+        case .command:
+            return onCommandHotkeyDown
         }
     }
 
@@ -219,6 +233,8 @@ final class HotkeyService: HotkeyServiceProtocol {
             return onHotkeyUp
         case .editMode:
             return onEditModeHotkeyUp
+        case .command:
+            return onCommandHotkeyUp
         }
     }
 }

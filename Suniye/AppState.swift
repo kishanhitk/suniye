@@ -413,11 +413,17 @@ final class AppState {
             guard !isHydratingGeneralSettings else {
                 return
             }
-            // Collision policy lives at this settings boundary: the Edit Mode slot always yields.
+            // Collision policy lives at this settings boundary: the Edit Mode and
+            // Command Mode slots always yield to dictation.
             if editModeHotkeyConfiguration == hotkeyConfiguration {
                 editModeHotkeyConfiguration = nil
                 AppLogger.shared.log(.warning, "edit mode hotkey cleared: matched new dictation hotkey")
                 showTransientIndicatorError("Edit Mode shortcut cleared: it matched dictation")
+            }
+            if commandHotkeyConfiguration == hotkeyConfiguration {
+                commandHotkeyConfiguration = nil
+                AppLogger.shared.log(.warning, "command hotkey cleared: matched new dictation hotkey")
+                showTransientIndicatorError("Command Mode shortcut cleared: it matched dictation")
             }
             persistGeneralSettings()
             if runtimeServicesEnabled {
@@ -435,6 +441,26 @@ final class AppState {
                 editModeHotkeyConfiguration = oldValue == hotkeyConfiguration ? nil : oldValue
                 AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches dictation hotkey")
                 showTransientIndicatorError("Edit Mode shortcut must differ from dictation")
+                return
+            }
+            persistGeneralSettings()
+            if runtimeServicesEnabled {
+                wireHotkey()
+            }
+            onStateChange?()
+        }
+    }
+    /// Command Mode shortcut; nil means Command Mode is disabled. Must differ from
+    /// both the dictation and Edit Mode shortcuts.
+    var commandHotkeyConfiguration: HotkeyConfiguration? {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != commandHotkeyConfiguration else {
+                return
+            }
+            if let config = commandHotkeyConfiguration, config == hotkeyConfiguration || config == editModeHotkeyConfiguration {
+                commandHotkeyConfiguration = oldValue.flatMap { ($0 == hotkeyConfiguration || $0 == editModeHotkeyConfiguration) ? nil : $0 }
+                AppLogger.shared.log(.warning, "command hotkey rejected: matches dictation or edit-mode hotkey")
+                showTransientIndicatorError("Command Mode shortcut must differ from dictation and Edit Mode")
                 return
             }
             persistGeneralSettings()
@@ -1469,6 +1495,15 @@ final class AppState {
     private var overlayErrorResetTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
+    /// The in-flight Command Mode agent, held so the Esc kill-switch can cancel it.
+    private var activeCommandAgent: CommandModeAgent?
+    /// Global Esc monitor, live only while a command runs (`NSEvent.removeMonitor` token).
+    private var commandModeEscMonitor: Any?
+    /// Localhost bridge the Chrome extension connects to (nil when browser control is off).
+    /// Constructed + started in `bootstrap()` so its state closure can capture self.
+    private var browserBridge: BrowserBridge?
+    /// Mirrors `browserBridge` connection state for the UI / tool gating (observable).
+    private(set) var browserExtensionConnected = false
     private var isHydratingLLMSettings = false
     private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
@@ -1477,6 +1512,8 @@ final class AppState {
         case systemInsertion
         case onboardingPractice
         case editRewrite(selectedText: String?)
+        /// KIS-168: the transcript is a task for the Command Mode agent.
+        case command
     }
 
     init(
@@ -1655,6 +1692,7 @@ final class AppState {
             "sound_feedback": .bool(soundFeedbackEnabled),
             "magic_format_enabled": .bool(llmEnabled),
             "magic_format_provider": .label(AnalyticsMapping.cleanupProvider(llmProvider)),
+            "command_mode_enabled": .bool(commandHotkeyConfiguration != nil),
             "update_channel": .label(SafeLabel(updateChannel.rawValue)),
         ])
     }
@@ -1682,6 +1720,7 @@ final class AppState {
         if floatingIndicatorEnabled {
             floatingIndicatorController.start()
         }
+        await startBrowserBridgeIfEnabled()
         statusText = "Checking permissions..."
         await refreshPermissions()
 
@@ -1711,6 +1750,69 @@ final class AppState {
         startOnboardingIfNeeded()
         setFloatingIndicatorState(.idle)
         AppLogger.shared.log(.info, "bootstrap done")
+    }
+
+    // MARK: - Browser control (Command Mode)
+
+    /// Phase A gate: browser control is on for Debug/Preview builds (dogfooding) or
+    /// when `SUNIYE_BROWSER_CONTROL=1`. A user-facing toggle lands in Phase D.
+    private static var browserControlEnabledForBuild: Bool {
+        if ProcessInfo.processInfo.environment["SUNIYE_BROWSER_CONTROL"] == "1" { return true }
+        #if DEBUG
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    /// Starts the localhost bridge the Chrome extension connects to, and writes a
+    /// paired copy of the extension (with `pairing.json`) for load-unpacked install.
+    private func startBrowserBridgeIfEnabled() async {
+        guard runtimeServicesEnabled, Self.browserControlEnabledForBuild, browserBridge == nil else { return }
+        let bridge = BrowserBridge(config: .standard()) { [weak self] connected in
+            Task { @MainActor in
+                self?.browserExtensionConnected = connected
+                AppLogger.shared.log(.info, "browser extension \(connected ? "connected" : "disconnected")")
+            }
+        }
+        browserBridge = bridge
+        do {
+            try await bridge.start()
+            let port = await bridge.port ?? 0
+            let token = await bridge.pairingToken
+            BrowserExtensionInstaller.installPaired(port: port, token: token)
+        } catch {
+            AppLogger.shared.log(.warning, "browser bridge start failed: \(error)")
+            browserBridge = nil
+        }
+    }
+
+    /// Reveal the paired extension folder in Finder for the load-unpacked flow.
+    func setUpBrowserExtension() {
+        BrowserExtensionInstaller.revealForInstall()
+    }
+
+    func stopBrowserBridge() async {
+        await browserBridge?.stop()
+    }
+
+    /// Confirmation gate for risky web actions (v1 safety): a consequential page
+    /// action — click a submit/buy/checkout/delete control — pauses for the user
+    /// to Allow or Cancel. Login/payment targets are hard-refused in the extension.
+    func confirmBrowserAction(_ description: String) -> Bool {
+        // The dialog steals app focus from the browser; hand it back afterwards or
+        // the routing surface would see Suniye frontmost and flip to native mid-run.
+        let previousApp = NSWorkspace.shared.frontmostApplication
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Allow this web action?"
+        alert.informativeText = "Suniye wants to \(description) on the current page."
+        alert.addButton(withTitle: "Allow")
+        alert.addButton(withTitle: "Cancel")
+        AppLogger.shared.log(.info, "command mode confirm requested: \(description)")
+        let allowed = alert.runModal() == .alertFirstButtonReturn
+        previousApp?.activate()
+        return allowed
     }
 
     func startOnboardingIfNeeded() {
@@ -3051,8 +3153,26 @@ final class AppState {
             }
         }
 
-        hotkeyService.startMonitoring(configuration: hotkeyConfiguration, editModeConfiguration: editModeHotkeyConfiguration)
-        AppLogger.shared.log(.info, "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off")")
+        hotkeyService.onCommandHotkeyDown = { [weak self] in
+            AppLogger.shared.log(.debug, "command hotkey callback: down")
+            Task { @MainActor in
+                await self?.beginCommandModeFlow()
+            }
+        }
+
+        hotkeyService.onCommandHotkeyUp = { [weak self] in
+            AppLogger.shared.log(.debug, "command hotkey callback: up")
+            Task { @MainActor in
+                await self?.finishCommandModeRecording()
+            }
+        }
+
+        hotkeyService.startMonitoring(
+            configuration: hotkeyConfiguration,
+            editModeConfiguration: editModeHotkeyConfiguration,
+            commandConfiguration: commandHotkeyConfiguration
+        )
+        AppLogger.shared.log(.info, "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off") command=\(commandHotkeyConfiguration?.displayString ?? "off")")
     }
 
     private func orderedInstalledASRModelIDs(excluding excludedModelIDs: Set<ASRModelID> = []) -> [ASRModelID] {
@@ -3153,6 +3273,35 @@ final class AppState {
     /// Edit Mode hotkey up: transcribe the instruction and run the rewrite.
     func finishEditModeRecording() async {
         await stopRecordingAndTranscribe(trigger: .editHotkey)
+    }
+
+    /// Command Mode hotkey down: record the spoken task; the `.command` destination
+    /// routes the transcript to the agent.
+    func beginCommandModeFlow() async {
+        guard isEditModeAvailable else {
+            lastError = "Command Mode needs a working Magic Format provider"
+            statusText = "Magic Format required"
+            AppLogger.shared.log(.warning, "command mode blocked: magic format not ready")
+            analytics.track(.commandBlocked(reason: .magicFormatUnavailable))
+            playSoundFeedback(.error)
+            showTransientIndicatorError("Set up Magic Format to use Command Mode")
+            return
+        }
+        if phase == .error, canRetryRecordingAfterError {
+            clearRetryableRecordingError()
+        }
+        guard phase == .ready else {
+            AppLogger.shared.log(.debug, "command mode start ignored in phase=\(phase.rawValue)")
+            analytics.track(.commandBlocked(reason: .wrongPhase))
+            showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
+            return
+        }
+        await beginRecordingFlow(trigger: .command, destination: .command)
+    }
+
+    /// Command Mode hotkey up: transcribe the task and run the agent.
+    func finishCommandModeRecording() async {
+        await stopRecordingAndTranscribe(trigger: .command)
     }
 
     private func beginRecordingFlow(trigger: RecordingSource, destination: DictationDestination? = nil) async {
@@ -3322,6 +3471,13 @@ final class AppState {
                     selectedText: selectedText,
                     sessionID: sessionID,
                     duration: duration
+                )
+            case .command:
+                await finishCommandModeSession(
+                    task: rawText,
+                    sessionID: sessionID,
+                    duration: duration,
+                    frontmostAppBundleID: context.frontmostAppBundleID
                 )
             case .systemInsertion:
                 try await completeSystemDictation(
@@ -3586,6 +3742,180 @@ final class AppState {
         }
     }
 
+    /// Run the on-device Command Mode agent on the spoken task. Everything is
+    /// main-actor isolated; the agent's awaits (LLM) yield the main actor so the UI
+    /// stays live. Command Mode is NOT dictation — it never writes to recentResults.
+    /// (Phase 2 replaces the Magic-Format `rewrite` brain with a dedicated
+    /// grammar-constrained inference path.)
+    private func finishCommandModeSession(task: String, sessionID: UUID, duration: TimeInterval, frontmostAppBundleID: String?) async {
+        let spokenDurationMs = Int(duration * 1000)
+        guard !task.isEmpty else {
+            AppLogger.shared.log(.warning, "command mode produced empty task")
+            emitCommandCompleted(outcome: .emptyCommand, spokenDurationMs: spokenDurationMs, agentRuntimeMs: 0, frontmostAppBundleID: frontmostAppBundleID)
+            failDictationSession(sessionID: sessionID, lastErrorMessage: nil, indicatorMessage: "No command heard")
+            return
+        }
+        AppLogger.shared.log(.info, "command mode task=\"\(task.prefix(80))\"")
+        setFloatingIndicatorState(.processing(message: "Working…"))
+
+        let request = makeMagicFormatRequest()
+        let generator = ClosureAgentTextGenerator { [magicFormatCoordinator] instructions, userText in
+            try await magicFormatCoordinator.commandInference(instructions: instructions, userText: userText, request: request)
+        }
+        let typer = ClosureTextTyping { [textInsertionService] text in
+            try? textInsertionService.insertText(text)
+        }
+        // Routing surface: read_screen/click/focus/type act on the native AX tree,
+        // OR — when a browser is frontmost and the extension is connected — on the
+        // web page (snapshot + trusted CDP), with a confirmation on risky web actions.
+        let reader = AXTreeReader()
+        let surface = RoutingCommandSurface(
+            native: reader,
+            browser: browserBridge.map { BrowserSnapshotReader(transport: $0) },
+            transport: browserBridge,
+            nativeTyper: typer,
+            keyPoster: SystemKeyChordPoster(),
+            frontmostBundleID: { NSWorkspace.shared.frontmostApplication?.bundleIdentifier },
+            // Route to the extension ONLY for the browser that actually hosts it
+            // (Chrome incl. Beta/Dev/Canary). A coarse "any browser" match would
+            // act on a BACKGROUND Chrome tab while e.g. Safari is frontmost.
+            isBrowser: { ($0 ?? "").lowercased().hasPrefix("com.google.chrome") },
+            confirmRisky: { [weak self] description in self?.confirmBrowserAction(description) ?? false }
+        )
+        var tools: [AgentTool] = [
+            ReadScreenTool(reader: surface),
+            OpenAppTool(launcher: SystemAppLauncher()),
+            ClickTool(surface: surface),
+            FocusTool(surface: surface),
+            TypeTextTool(surface: surface),
+            PressKeysTool(surface: surface),
+            RunAppleScriptTool(),
+            FinishTool(),
+        ]
+        // Browser-only verbs, offered only when the extension is connected so the
+        // prompt catalog (toolNames-driven) stays clean on machines without it.
+        if let bridge = browserBridge, await bridge.isConnected {
+            tools.append(BrowserReadTextTool(transport: bridge))
+            tools.append(BrowserNavigateTool(transport: bridge))
+        }
+        let registry = AgentToolRegistry(tools: tools)
+        let agent = CommandModeAgent(
+            brain: LocalLLMAgentBrain(generator: generator),
+            registry: registry,
+            screenReader: surface,
+            maxSteps: 50,
+            onStep: { [weak self] step in
+                AppLogger.shared.log(.info, "command step: tool=\(step.toolCall.name) args=\(step.toolCall.arguments) result=\(step.result?.output ?? "-") error=\(step.error ?? "-")")
+                // Live action log: name the action only (never the typed text,
+                // script body, or element) so the on-screen pill can't leak content.
+                self?.setFloatingIndicatorState(.processing(message: Self.commandStepLabel(for: step.toolCall)))
+            }
+        )
+
+        // Arm the Esc kill-switch and time the run for metrics.
+        activeCommandAgent = agent
+        installCommandModeKillSwitch()
+        let startedAt = DispatchTime.now()
+        let result = await agent.run(task: task)
+        let runtimeMs = Int((DispatchTime.now().uptimeNanoseconds &- startedAt.uptimeNanoseconds) / 1_000_000)
+        removeCommandModeKillSwitch()
+        activeCommandAgent = nil
+
+        AppLogger.shared.log(.info, "command mode done outcome=\(result.outcome) steps=\(result.stepCount) tools=\(result.toolInvocations) invalid=\(result.invalidActions): \(result.summary)")
+        emitCommandCompleted(
+            outcome: AnalyticsMapping.commandOutcome(result.outcome),
+            stepCount: result.stepCount,
+            toolInvocations: result.toolInvocations,
+            invalidActions: result.invalidActions,
+            spokenDurationMs: spokenDurationMs,
+            agentRuntimeMs: runtimeMs,
+            frontmostAppBundleID: frontmostAppBundleID
+        )
+        // A cancelled run tears down quietly — no success chime.
+        completeDictationSession(sessionID: sessionID, playSuccessSound: result.outcome != .cancelled)
+    }
+
+    // MARK: - Command Mode kill-switch + telemetry
+
+    /// Esc while the agent is running cancels it. The agent is main-actor isolated
+    /// but `await`s inside its loop, so this main-actor callback lands between steps
+    /// and trips the loop's cooperative cancel flag. No-op when nothing is running.
+    func cancelCommandMode() {
+        guard let agent = activeCommandAgent else { return }
+        AppLogger.shared.log(.info, "command mode cancel requested (Esc)")
+        agent.cancel()
+    }
+
+    /// The target app is frontmost during a command (Suniye is a menu-bar
+    /// accessory), so a GLOBAL Esc monitor is what catches the kill-switch. It
+    /// requires Accessibility — already gated by Command Mode. Global monitors
+    /// observe without consuming, which is fine here: Esc also reaching the app is
+    /// harmless next to cancelling the agent. Installed only for a run's duration.
+    private func installCommandModeKillSwitch() {
+        removeCommandModeKillSwitch()
+        commandModeEscMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53 else { return } // 53 = Esc
+            // AppKit event monitors fire on the main thread.
+            MainActor.assumeIsolated { self?.cancelCommandMode() }
+        }
+    }
+
+    private func removeCommandModeKillSwitch() {
+        if let monitor = commandModeEscMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        commandModeEscMonitor = nil
+    }
+
+    /// A short present-tense label for the live action log in the floating pill.
+    /// Names only the action — never the typed text, script body, or element —
+    /// so the on-screen log can't surface content. Pure, so it is unit-testable.
+    nonisolated static func commandStepLabel(for call: ToolCall) -> String {
+        switch call.name {
+        case "open_app": return "Opening \(call.arguments["name"] ?? "app")"
+        case "read_screen": return "Reading the screen"
+        case "click": return "Clicking"
+        case "focus": return "Selecting a field"
+        case "type_text": return "Typing"
+        case "press_keys": return "Pressing \(call.arguments["keys"] ?? "keys")"
+        case "run_applescript": return "Running a script"
+        // Host only: a full URL can carry query content (search terms) into the pill.
+        case "browser_navigate": return "Opening \(call.arguments["url"].flatMap { URL(string: $0)?.host } ?? "a page")"
+        case "browser_read_text": return "Reading the page"
+        case "finish": return "Done"
+        default: return "Working…"
+        }
+    }
+
+    /// Emits the single `command_completed` metric. Content-free: counts, the
+    /// terminal outcome, the requested brain provider, and the target app's coarse
+    /// category — never the spoken task, tool arguments, or screen text. The brain
+    /// provider is the *requested* Magic Format provider (Command Mode shares that
+    /// stack until a dedicated brain lands); the effective provider/model aren't
+    /// surfaced by the string-in/out inference seam yet.
+    private func emitCommandCompleted(
+        outcome: CommandOutcome,
+        stepCount: Int = 0,
+        toolInvocations: Int = 0,
+        invalidActions: Int = 0,
+        spokenDurationMs: Int,
+        agentRuntimeMs: Int,
+        frontmostAppBundleID: String?
+    ) {
+        let metrics = CommandMetrics(
+            outcome: outcome,
+            stepCount: stepCount,
+            toolInvocations: toolInvocations,
+            invalidActions: invalidActions,
+            brainProvider: AnalyticsMapping.cleanupProvider(llmProvider),
+            brainModel: nil,
+            targetCategory: TargetCategoryMapper.category(for: frontmostAppBundleID),
+            spokenDurationMs: spokenDurationMs,
+            agentRuntimeMs: agentRuntimeMs
+        )
+        analytics.track(.commandCompleted(metrics))
+    }
+
     /// Shared success epilogue for every dictation/edit session.
     private func completeDictationSession(sessionID: UUID, playSuccessSound: Bool) {
         if playSuccessSound {
@@ -3682,6 +4012,7 @@ final class AppState {
         autoSubmitEnabled = settings.autoSubmitEnabled
         hotkeyConfiguration = settings.hotkeyConfiguration
         editModeHotkeyConfiguration = settings.editModeHotkeyConfiguration
+        commandHotkeyConfiguration = settings.commandHotkeyConfiguration
         echoCancellationEnabled = settings.echoCancellationEnabled
         soundFeedbackEnabled = settings.soundFeedbackEnabled
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
@@ -3694,9 +4025,12 @@ final class AppState {
         hasSeenOnboardingWelcome = settings.hasSeenOnboardingWelcome ?? false
         hasCompletedCoreOnboarding = settings.hasCompletedCoreOnboarding ?? false
         isHydratingGeneralSettings = false
-        // A persisted collision (e.g. hand-edited settings) would silently kill Edit Mode.
+        // A persisted collision (e.g. hand-edited settings) would silently kill a mode.
         if editModeHotkeyConfiguration != nil, editModeHotkeyConfiguration == hotkeyConfiguration {
             editModeHotkeyConfiguration = nil
+        }
+        if let command = commandHotkeyConfiguration, command == hotkeyConfiguration || command == editModeHotkeyConfiguration {
+            commandHotkeyConfiguration = nil
         }
         applyUpdateChannelToController()
         normalizeOnboardingSettingsIfNeeded(loadedSettings: settings)
@@ -3713,6 +4047,7 @@ final class AppState {
             autoSubmitEnabled: autoSubmitEnabled,
             hotkeyConfiguration: hotkeyConfiguration,
             editModeHotkeyConfiguration: editModeHotkeyConfiguration,
+            commandHotkeyConfiguration: commandHotkeyConfiguration,
             echoCancellationEnabled: echoCancellationEnabled,
             soundFeedbackEnabled: soundFeedbackEnabled,
             hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,

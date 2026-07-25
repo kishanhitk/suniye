@@ -565,14 +565,18 @@ final class StubHotkeyService: HotkeyServiceProtocol {
     var onHotkeyUp: (() -> Void)?
     var onEditModeHotkeyDown: (() -> Void)?
     var onEditModeHotkeyUp: (() -> Void)?
+    var onCommandHotkeyDown: (() -> Void)?
+    var onCommandHotkeyUp: (() -> Void)?
     private(set) var startMonitoringCallCount = 0
     private(set) var lastConfiguration: HotkeyConfiguration?
     private(set) var lastEditModeConfiguration: HotkeyConfiguration?
+    private(set) var lastCommandConfiguration: HotkeyConfiguration?
 
-    func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?) {
+    func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?, commandConfiguration: HotkeyConfiguration?) {
         startMonitoringCallCount += 1
         lastConfiguration = configuration
         lastEditModeConfiguration = editModeConfiguration
+        lastCommandConfiguration = commandConfiguration
     }
 
     func stopMonitoring() {}
@@ -868,4 +872,21 @@ final class StubIssueReportUploadService: IssueReportUploadServiceProtocol {
         submissions.append((payload, diagnosticsURL))
         return try result.get()
     }
+}
+
+/// A CommandActing surface for tool tests — records click/focus/type and returns
+/// the native-style output strings, no live AX or browser.
+@MainActor
+final class FakeCommandSurface: CommandActing {
+    var activeKind: CommandSurfaceKind = .native
+    var screen = "Frontmost app: Finder"
+    private(set) var clicks: [String] = []
+    private(set) var focuses: [String] = []
+    private(set) var typed: [String] = []
+    private(set) var pressed: [String] = []
+    func readScreen() async -> String { screen }
+    func click(id: String) async -> ToolResult { clicks.append(id); return ToolResult(output: "clicked \(id)", isTerminal: false) }
+    func focus(id: String) async -> ToolResult { focuses.append(id); return ToolResult(output: "focused \(id)", isTerminal: false) }
+    func typeText(_ text: String) async -> ToolResult { typed.append(text); return ToolResult(output: "typed \(text.count) chars", isTerminal: false) }
+    func pressKeys(_ chord: String) async -> ToolResult { pressed.append(chord); return ToolResult(output: "pressed \(chord)", isTerminal: false) }
 }

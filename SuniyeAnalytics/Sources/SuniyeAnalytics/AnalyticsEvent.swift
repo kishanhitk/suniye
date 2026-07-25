@@ -23,6 +23,11 @@ public enum AnalyticsEvent: Sendable {
     /// free) — an ASR/cleanup accuracy proxy that arrives after `dictation_completed`.
     case dictationEdited(editRateBucket: Int)
 
+    /// One completed Command Mode run (the voice-driven cross-app agent).
+    case commandCompleted(CommandMetrics)
+    /// A Command Mode run that couldn't start (permissions / phase / provider).
+    case commandBlocked(reason: CommandBlockedReason)
+
     case audioCaptureFailed(outcome: AudioOutcome)
     case audioCaptureInterrupted(reason: AudioInterruptionReason)
     case audioBackendUsed(backend: SafeLabel, fallbackOccurred: Bool, rung: Int)
@@ -52,6 +57,8 @@ public enum AnalyticsEvent: Sendable {
         case .dictationCancelled: return "dictation_cancelled"
         case .dictationEmpty: return "dictation_empty"
         case .dictationEdited: return "dictation_edited"
+        case .commandCompleted: return "command_completed"
+        case .commandBlocked: return "command_blocked"
         case .audioCaptureFailed: return "audio_capture_failed"
         case .audioCaptureInterrupted: return "audio_capture_interrupted"
         case .audioBackendUsed: return "audio_backend_used"
@@ -89,6 +96,10 @@ public enum AnalyticsEvent: Sendable {
             return [:]
         case let .dictationEdited(editRateBucket):
             return ["edit_rate_bucket": .int(editRateBucket)]
+        case let .commandCompleted(metrics):
+            return metrics.props
+        case let .commandBlocked(reason):
+            return ["reason": .label(reason)]
         case let .audioCaptureFailed(outcome):
             return ["outcome": .label(outcome)]
         case let .audioCaptureInterrupted(reason):

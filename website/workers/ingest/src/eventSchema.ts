@@ -53,6 +53,13 @@ const boolNum = (...keys: string[]): NumPick => (p) => {
 // across event types. If an event ever needs two aliased keys at once, give the
 // second its own appended slot (the loser is otherwise recoverable only from the
 // blob20 props backstop).
+//
+// COMMAND MODE (command_completed / command_blocked): these ingest with no new
+// slots — `outcome` rides blob15 (already aliased with model_download/audio
+// outcome), `target_category` rides blob11, and `command_blocked.reason` rides
+// blob14. Doubles are full (20/20), so the command numerics (step_count,
+// tool_invocations, invalid_actions, spoken_duration_ms, agent_runtime_ms) and
+// brain_provider/brain_model live in the blob20 props JSON until one earns a slot.
 const BLOB_FIELDS: StrPick[] = [
   () => undefined,                                // blob2 = session_id — set explicitly (event top-level field, not props)
   () => undefined,                                // blob3 = app_version — set explicitly (batch envelope, not props)
