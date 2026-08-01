@@ -1806,6 +1806,9 @@ final class AppState {
             onboardingStartedAt = nowProvider()
         }
         activeOnboardingStep = step
+        if step == .welcome {
+            startOnboardingModelDownloadIfNeeded()
+        }
     }
 
     /// Single forward transition used by the onboarding UI.
@@ -1823,8 +1826,8 @@ final class AppState {
     }
 
     /// "Get Started": persists progress and starts the required ASR model
-    /// download in the background, so download time overlaps the mic grant and
-    /// the first dictation instead of blocking on its own wizard screen.
+    /// download if Welcome did not already start it. Download time overlaps the
+    /// mic grant and the first dictation instead of blocking on its own screen.
     func beginOnboardingSetup() {
         guard activeOnboardingStep == .welcome else {
             return
@@ -1840,6 +1843,18 @@ final class AppState {
         if !isModelInstalled, activeASRModelOperationID == nil {
             startModelDownload()
         }
+    }
+
+    private func startOnboardingModelDownloadIfNeeded() {
+        guard !isModelInstalled, activeASRModelOperationID == nil else {
+            return
+        }
+        guard let message = modelDownloadDiskSpaceMessage() else {
+            startModelDownload()
+            return
+        }
+        onboardingDiskSpaceMessage = message
+        onStateChange?()
     }
 
     func advanceOnboardingFromSpeak() {

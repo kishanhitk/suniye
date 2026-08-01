@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// The 3-screen onboarding flow. Screen order is the product thesis:
-/// 1. Welcome       — value + one click that starts the model download in the background
+/// 1. Welcome       — value + starts the model download in the background
 /// 2. Speak         — mic grant + first successful dictation (the aha), before any scary ask
 /// 3. Type Anywhere — the Accessibility ask, made after value is demonstrated
 struct OnboardingView: View {

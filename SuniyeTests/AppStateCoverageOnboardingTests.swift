@@ -165,6 +165,17 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
 
     // MARK: - Transitions
 
+    func testWelcomeStartsModelDownloadBeforeLeavingWelcome() {
+        let modelManager = StubModelManager()
+        let appState = freshOnboardingState(modelManager: modelManager)
+
+        appState.startOnboardingIfNeeded()
+
+        XCTAssertEqual(appState.activeOnboardingStep, .welcome)
+        XCTAssertEqual(appState.phase, .downloadingModel)
+        XCTAssertEqual(appState.activeASRModelOperationID, .parakeetV3)
+    }
+
     func testGetStartedAdvancesToSpeakPersistsAndStartsDownload() {
         let modelManager = StubModelManager()
         let store = TestGeneralSettingsStore()
@@ -353,7 +364,7 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
         let appState = freshOnboardingState()
         appState.startOnboardingIfNeeded()
 
-        XCTAssertEqual(appState.setupMenuItemTitle, "Finish Setting Up Suniye…")
+        XCTAssertEqual(appState.setupMenuItemTitle, "Downloading speech model — 0%")
 
         appState.phase = .downloadingModel
         appState.downloadProgress = 0.47

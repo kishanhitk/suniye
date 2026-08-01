@@ -64,7 +64,7 @@ If you are updating from an older ad hoc-signed Suniye release, macOS may ask fo
 After that, Suniye shows a short first-run onboarding flow that covers setup, an optional Magic Format choice, and a practice dictation.
 
 During setup:
-- Suniye downloads the currently selected speech model.
+- Suniye starts downloading the currently selected speech model when the Welcome screen opens.
 - Fresh installs default to `Parakeet TDT 0.6B v3`.
 - After required setup, you can optionally enable Magic Format with Apple Intelligence or download the recommended Local Model.
 - The Local Model download is optional and continues while you try dictation; it never blocks finishing onboarding.
