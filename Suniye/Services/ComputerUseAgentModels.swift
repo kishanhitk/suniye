@@ -17,15 +17,18 @@ struct ComputerUseAgentTask: Codable, Equatable, Sendable {
     let instruction: String
     let applicationID: String
     let includeScreenshot: Bool
+    let sessionID: UUID
 
     init(
         instruction: String,
         applicationID: String,
-        includeScreenshot: Bool = true
+        includeScreenshot: Bool = true,
+        sessionID: UUID = UUID()
     ) {
         self.instruction = instruction
         self.applicationID = applicationID
         self.includeScreenshot = includeScreenshot
+        self.sessionID = sessionID
     }
 }
 

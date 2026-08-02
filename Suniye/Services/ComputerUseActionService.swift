@@ -36,6 +36,8 @@ final class ComputerUseActionService: ComputerUseActionServicing {
     private let semanticActionPerformer: ComputerUseSemanticActionPerforming
     private let targetValidator: ComputerUseTargetValidating
     private let permissionManager: ComputerUsePermissionManaging
+    private let approvalStore: ComputerUseApprovalStoring
+    private let policy: ComputerUsePolicyChecking
     private let dateProvider: () -> Date
 
     init(
@@ -44,6 +46,8 @@ final class ComputerUseActionService: ComputerUseActionServicing {
         semanticActionPerformer: ComputerUseSemanticActionPerforming = SystemComputerUseAccessibilityReader(),
         targetValidator: ComputerUseTargetValidating = SystemComputerUseTargetValidator(),
         permissionManager: ComputerUsePermissionManaging = SystemComputerUsePermissionService(),
+        approvalStore: ComputerUseApprovalStoring = ComputerUseApprovalStore(),
+        policy: ComputerUsePolicyChecking = ComputerUsePolicyService(),
         dateProvider: @escaping () -> Date = Date.init
     ) {
         self.inputEventPoster = inputEventPoster
@@ -51,6 +55,8 @@ final class ComputerUseActionService: ComputerUseActionServicing {
         self.semanticActionPerformer = semanticActionPerformer
         self.targetValidator = targetValidator
         self.permissionManager = permissionManager
+        self.approvalStore = approvalStore
+        self.policy = policy
         self.dateProvider = dateProvider
     }
 
@@ -64,7 +70,11 @@ final class ComputerUseActionService: ComputerUseActionServicing {
         guard !cancellation.isCancelled else {
             throw ComputerUseActionError.cancelled
         }
-        guard approval.scope == .once else {
+        guard isApprovalValid(
+            action: action,
+            observation: observation,
+            approval: approval
+        ) else {
             throw ComputerUseActionError.approvalRequired
         }
         guard approval.requestID == requestID,
@@ -125,6 +135,31 @@ final class ComputerUseActionService: ComputerUseActionServicing {
             target: observation.target,
             completedAt: dateProvider()
         )
+    }
+
+    private func isApprovalValid(
+        action: ComputerUseAction,
+        observation: ComputerUseObservation,
+        approval: ComputerUseApprovalGrant
+    ) -> Bool {
+        guard case let .allowed(scopes) = policy.evaluate(
+            application: observation.target.application,
+            action: action
+        ), scopes.contains(approval.scope) else {
+            return false
+        }
+
+        switch approval.scope {
+        case .once:
+            return true
+        case .session, .always:
+            return approvalStore.rememberedScope(
+                applicationBundleIdentifier: observation.target.application.bundleIdentifier,
+                risk: action.risk,
+                sessionID: approval.sessionID,
+                now: dateProvider()
+            ) == approval.scope
+        }
     }
 
 }

@@ -10,7 +10,7 @@ struct ComputerUseActionPanel: View {
 
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text("Every action requires a one-time approval.")
+                        Text("Every action requires approval. Longer approval scopes appear only when policy allows them.")
                             .font(AppTypography.subheadline)
                             .foregroundStyle(MainWindowPalette.secondaryText)
 
@@ -130,7 +130,7 @@ private struct SemanticCandidate {
 
 struct ComputerUseApprovalCard: View {
     let request: ComputerUseApprovalRequest
-    let allow: () -> Void
+    let allow: (ComputerUseApprovalScope) -> Void
     let deny: () -> Void
     let stop: () -> Void
 
@@ -164,8 +164,12 @@ struct ComputerUseApprovalCard: View {
                 }
 
                 HStack(spacing: 10) {
-                    Button("Allow Once", action: allow)
+                    ForEach(ComputerUseApprovalScope.allCases.filter(request.allowedScopes.contains), id: \.self) { scope in
+                        Button(scope.title) {
+                            allow(scope)
+                        }
                         .buttonStyle(.borderedProminent)
+                    }
                     Button("Deny", action: deny)
                         .buttonStyle(.bordered)
                     Button("Stop Session", action: stop)

@@ -50,7 +50,7 @@ struct ComputerUsePage: View {
             if let request = coordinator.pendingApproval {
                 ComputerUseApprovalCard(
                     request: request,
-                    allow: coordinator.approvePendingAction,
+                    allow: coordinator.approvePendingAction(scope:),
                     deny: coordinator.denyPendingAction,
                     stop: coordinator.stopPendingAction
                 )
@@ -62,7 +62,7 @@ struct ComputerUsePage: View {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "lock.shield")
                         .foregroundStyle(.green)
-                    Text("Phase 2 allows one bounded action at a time. Every action requires your approval.")
+                    Text("Every bounded action requires your approval. Persistent scopes are controlled by app policy.")
                         .font(AppTypography.subheadline)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)

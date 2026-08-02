@@ -3,6 +3,7 @@ import Foundation
 actor ComputerUseAgent {
     private let modelClient: ComputerUseModelClient
     private let approvalService: ComputerUseApprovalRequesting
+    private let approvalAuthorizer: ComputerUseApprovalAuthorizing?
     private let observationService: ComputerUseObservationServicing
     private let actionService: ComputerUseActionServicing
     private let interventionMonitor: ComputerUseInterventionMonitoring
@@ -13,6 +14,7 @@ actor ComputerUseAgent {
     init(
         modelClient: ComputerUseModelClient,
         approvalService: ComputerUseApprovalRequesting = DenyAllComputerUseApprovalService(),
+        approvalAuthorizer: ComputerUseApprovalAuthorizing? = nil,
         observationService: ComputerUseObservationServicing,
         actionService: ComputerUseActionServicing,
         interventionMonitor: ComputerUseInterventionMonitoring = SystemComputerUseInterventionMonitor(),
@@ -27,6 +29,7 @@ actor ComputerUseAgent {
     ) {
         self.modelClient = modelClient
         self.approvalService = approvalService
+        self.approvalAuthorizer = approvalAuthorizer
         self.observationService = observationService
         self.actionService = actionService
         self.interventionMonitor = interventionMonitor
@@ -113,6 +116,7 @@ actor ComputerUseAgent {
     private enum ActionAttemptResult {
         case succeeded(ComputerUseActionResult)
         case retryableFailure(String)
+        case blocked(String)
         case denied
         case stopped
         case userIntervened(String)
@@ -251,7 +255,8 @@ actor ComputerUseAgent {
             decision: decision,
             observation: observation,
             state: state,
-            cancellation: cancellation
+            cancellation: cancellation,
+            sessionID: task.sessionID
         )
     }
 
@@ -259,7 +264,8 @@ actor ComputerUseAgent {
         decision: ComputerUseModelDecision,
         observation: ComputerUseObservation,
         state: RunState,
-        cancellation: ComputerUseCancellationToken
+        cancellation: ComputerUseCancellationToken,
+        sessionID: UUID
     ) async -> LoopResult {
         var state = state
 
@@ -315,8 +321,20 @@ actor ComputerUseAgent {
             switch await attemptAction(
                 action: action,
                 observation: observation,
-                cancellation: cancellation
+                cancellation: cancellation,
+                sessionID: sessionID
             ) {
+            case let .blocked(message):
+                return .finish(
+                    result(
+                        phase: .blocked,
+                        message: message,
+                        question: nil,
+                        observation: observation,
+                        actionResults: state.actionResults,
+                        failureCount: state.failureCount
+                    )
+                )
             case let .retryableFailure(message):
                 return retryAfterFailure(
                     message: message,
@@ -436,7 +454,8 @@ actor ComputerUseAgent {
     private func attemptAction(
         action: ComputerUseAction,
         observation: ComputerUseObservation,
-        cancellation: ComputerUseCancellationToken
+        cancellation: ComputerUseCancellationToken,
+        sessionID: UUID
     ) async -> ActionAttemptResult {
         do {
             try ComputerUseActionPolicy.validate(action: action, observation: observation)
@@ -450,10 +469,33 @@ actor ComputerUseAgent {
             target: observation.target,
             risk: action.risk,
             reason: "The Computer Use model proposed this action for the current task.",
+            sessionID: sessionID,
             observationGeneration: observation.generation
         )
+        let preparedRequest: ComputerUseApprovalRequest
+        if let approvalAuthorizer {
+            do {
+                preparedRequest = try await approvalAuthorizer.prepare(approvalRequest)
+                if let rememberedScope = try await approvalAuthorizer.rememberedScope(
+                    for: preparedRequest
+                ) {
+                    return await executeApprovedAction(
+                        action: action,
+                        observation: observation,
+                        approvalRequest: preparedRequest,
+                        scope: rememberedScope,
+                        cancellation: cancellation
+                    )
+                }
+            } catch {
+                return .blocked(localizedMessage(error))
+            }
+        } else {
+            preparedRequest = approvalRequest
+        }
+
         let approval = await approvalService.requestApproval(
-            approvalRequest,
+            preparedRequest,
             cancellation: cancellation
         )
         if isCancelled(cancellation) {
@@ -467,16 +509,47 @@ actor ComputerUseAgent {
             return .stopped
         case .allowOnce, .allowForSession, .allowAlways:
             guard let scope = approval.scope,
-                  approvalRequest.allowedScopes.contains(scope) else {
+                  preparedRequest.allowedScopes.contains(scope) else {
                 return .retryableFailure(
                     ComputerUsePolicyError.approvalScopeNotAllowed.localizedDescription
                 )
             }
-            if let intervention = interventionMonitor.check(target: observation.target) {
-                return .userIntervened(intervention.message)
-            }
+            return await executeApprovedAction(
+                action: action,
+                observation: observation,
+                approvalRequest: preparedRequest,
+                scope: scope,
+                cancellation: cancellation
+            )
+        }
+    }
 
-            let grant = ComputerUseApprovalGrant(
+    private func executeApprovedAction(
+        action: ComputerUseAction,
+        observation: ComputerUseObservation,
+        approvalRequest: ComputerUseApprovalRequest,
+        scope: ComputerUseApprovalScope,
+        cancellation: ComputerUseCancellationToken
+    ) async -> ActionAttemptResult {
+        guard !isCancelled(cancellation) else {
+            return .cancelled
+        }
+        if let intervention = interventionMonitor.check(target: observation.target) {
+            return .userIntervened(intervention.message)
+        }
+
+        let grant: ComputerUseApprovalGrant
+        if let approvalAuthorizer {
+            do {
+                grant = try await approvalAuthorizer.grant(
+                    for: approvalRequest,
+                    scope: scope
+                )
+            } catch {
+                return .blocked(localizedMessage(error))
+            }
+        } else {
+            grant = ComputerUseApprovalGrant(
                 requestID: approvalRequest.id,
                 scope: scope,
                 applicationID: observation.target.application.id,
@@ -485,25 +558,26 @@ actor ComputerUseAgent {
                 action: action,
                 sessionID: approvalRequest.sessionID
             )
-            do {
-                let actionResult = try actionService.execute(
-                    action: action,
-                    observation: observation,
-                    approval: grant,
-                    requestID: approvalRequest.id,
-                    cancellation: cancellation
-                )
-                return .succeeded(actionResult)
-            } catch {
-                if isCancelled(cancellation) || isCancellation(error) {
-                    return .cancelled
-                }
-                if let actionError = error as? ComputerUseActionError,
-                   actionError == .targetNotFrontmost {
-                    return .userIntervened(actionError.localizedDescription)
-                }
-                return .retryableFailure(localizedMessage(error))
+        }
+
+        do {
+            let actionResult = try actionService.execute(
+                action: action,
+                observation: observation,
+                approval: grant,
+                requestID: approvalRequest.id,
+                cancellation: cancellation
+            )
+            return .succeeded(actionResult)
+        } catch {
+            if isCancelled(cancellation) || isCancellation(error) {
+                return .cancelled
             }
+            if let actionError = error as? ComputerUseActionError,
+               actionError == .targetNotFrontmost {
+                return .userIntervened(actionError.localizedDescription)
+            }
+            return .retryableFailure(localizedMessage(error))
         }
     }
 

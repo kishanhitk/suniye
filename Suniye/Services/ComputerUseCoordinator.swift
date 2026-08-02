@@ -73,10 +73,12 @@ enum ComputerUseCoordinatorPhase: Equatable {
     case requestingPermission
     case ready
     case observing
+    case runningAgent
     case observed
     case requestingApproval
     case acting
     case actionCompleted
+    case agentCompleted
     case actionFailed
     case failed
 }
@@ -87,8 +89,16 @@ enum ComputerUseCoordinatorPhase: Equatable {
 /// `ComputerUsePlatformRunner` so platform work does not block SwiftUI rendering.
 @MainActor
 @Observable
-final class ComputerUseCoordinator {
+final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
     private let runner: ComputerUsePlatformRunner
+    private let observationService: ComputerUseObservationServicing
+    private let actionService: ComputerUseActionServicing
+    private let interventionMonitor: ComputerUseInterventionMonitoring
+    private let approvalPolicyService: ComputerUseApprovalPolicyService
+    private let approvalAuthorizer: ComputerUseApprovalAuthorizing
+    private let sessionID: UUID
+    private let agentLimits: ComputerUseAgentLimits
+    private var modelClient: ComputerUseModelClient?
 
     var phase: ComputerUseCoordinatorPhase = .idle
     var applications: [ComputerUseApplication] = []
@@ -103,6 +113,8 @@ final class ComputerUseCoordinator {
     var pendingApproval: ComputerUseApprovalRequest?
     var actionText = ""
     var lastActionResult: ComputerUseActionResult?
+    var agentInstruction = ""
+    var agentResult: ComputerUseAgentResult?
 
     @ObservationIgnored private var activeOperationID: UUID?
     @ObservationIgnored private var activeCancellation: ComputerUseCancellationToken?
@@ -110,22 +122,57 @@ final class ComputerUseCoordinator {
     @ObservationIgnored private var permissionTask: Task<Void, Never>?
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var actionTask: Task<Void, Never>?
+    @ObservationIgnored private var agentTask: Task<Void, Never>?
+    @ObservationIgnored private lazy var agent: ComputerUseAgent = makeAgent(
+        modelClient: modelClient,
+        limits: agentLimits
+    )
+    @ObservationIgnored private var agentApprovalContinuations: [UUID: CheckedContinuation<ComputerUseApprovalDecision, Never>] = [:]
 
     init(
         applicationCatalog: ComputerUseApplicationCatalog? = nil,
         permissionManager: ComputerUsePermissionManaging? = nil,
         observationService: ComputerUseObservationServicing? = nil,
-        actionService: ComputerUseActionServicing? = nil
+        actionService: ComputerUseActionServicing? = nil,
+        approvalStore: ComputerUseApprovalStoring? = nil,
+        policy: ComputerUsePolicyChecking? = nil,
+        auditRecorder: ComputerUseAuditRecording? = nil,
+        modelClient: ComputerUseModelClient? = nil,
+        interventionMonitor: ComputerUseInterventionMonitoring? = nil,
+        agentLimits: ComputerUseAgentLimits = ComputerUseAgentLimits()
     ) {
         let resolvedCatalog = applicationCatalog ?? SystemComputerUseApplicationCatalog()
         let resolvedPermissionManager = permissionManager ?? SystemComputerUsePermissionService()
+        let resolvedApprovalStore = approvalStore ?? ComputerUseApprovalStore()
+        let resolvedPolicy = policy ?? ComputerUsePolicyService()
+        let resolvedAuditRecorder = auditRecorder ?? AppLoggerComputerUseAuditRecorder()
+        approvalPolicyService = ComputerUseApprovalPolicyService(
+            policy: resolvedPolicy,
+            store: resolvedApprovalStore,
+            auditRecorder: resolvedAuditRecorder
+        )
+        approvalAuthorizer = ComputerUseApprovalPolicyActor(
+            policyService: ComputerUseApprovalPolicyService(
+                policy: resolvedPolicy,
+                store: resolvedApprovalStore,
+                auditRecorder: resolvedAuditRecorder
+            )
+        )
+        sessionID = UUID()
+        self.agentLimits = agentLimits
         let resolvedObservationService = observationService ?? ComputerUseObservationService(
             applicationCatalog: resolvedCatalog,
             permissionManager: resolvedPermissionManager
         )
         let resolvedActionService = actionService ?? ComputerUseActionService(
-            permissionManager: resolvedPermissionManager
+            permissionManager: resolvedPermissionManager,
+            approvalStore: resolvedApprovalStore,
+            policy: resolvedPolicy
         )
+        self.observationService = resolvedObservationService
+        self.actionService = resolvedActionService
+        self.interventionMonitor = interventionMonitor ?? SystemComputerUseInterventionMonitor()
+        self.modelClient = modelClient
 
         runner = ComputerUsePlatformRunner(
             applicationCatalog: resolvedCatalog,
@@ -150,9 +197,26 @@ final class ComputerUseCoordinator {
         switch phase {
         case .loadingApplications, .requestingPermission, .observing, .requestingApproval, .acting:
             true
-        case .idle, .ready, .observed, .actionCompleted, .actionFailed, .failed:
+        case .runningAgent:
+            true
+        case .idle, .ready, .observed, .actionCompleted, .agentCompleted, .actionFailed, .failed:
             false
         }
+    }
+
+    var canRunAgent: Bool {
+        guard let selectedApplicationID,
+              !selectedApplicationID.isEmpty,
+              !isBusy,
+              modelClient != nil,
+              permissionSnapshot.canReadAccessibility else {
+            return false
+        }
+        return !includeScreenshot || permissionSnapshot.canCaptureScreen
+    }
+
+    var isModelConfigured: Bool {
+        modelClient != nil
     }
 
     var canRequestAction: Bool {
@@ -184,6 +248,8 @@ final class ComputerUseCoordinator {
             return "Ready to inspect"
         case .observing:
             return "Reading app state"
+        case .runningAgent:
+            return "Computer Use is working"
         case .observed:
             return "Observation captured"
         case .requestingApproval:
@@ -192,6 +258,8 @@ final class ComputerUseCoordinator {
             return "Performing approved action"
         case .actionCompleted:
             return "Action completed"
+        case .agentCompleted:
+            return "Computer Use finished"
         case .actionFailed:
             return "Action failed"
         case .failed:
@@ -201,6 +269,57 @@ final class ComputerUseCoordinator {
 
     func start() {
         refresh()
+    }
+
+    func configureModel(_ modelClient: ComputerUseModelClient?) {
+        guard !isBusy else {
+            return
+        }
+        self.modelClient = modelClient
+        agent = makeAgent(modelClient: modelClient, limits: agentLimits)
+    }
+
+    func startAgent() {
+        let instruction = agentInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !instruction.isEmpty else {
+            phase = .actionFailed
+            errorMessage = "Enter a task for Computer Use."
+            return
+        }
+        guard canRunAgent,
+              let selectedApplicationID else {
+            return
+        }
+
+        cancelActiveOperation()
+        let operationID = UUID()
+        let cancellation = ComputerUseCancellationToken()
+        let agent = self.agent
+        let task = ComputerUseAgentTask(
+            instruction: instruction,
+            applicationID: selectedApplicationID,
+            includeScreenshot: includeScreenshot,
+            sessionID: sessionID
+        )
+        activeOperationID = operationID
+        activeCancellation = cancellation
+        observation = nil
+        pendingApproval = nil
+        agentResult = nil
+        lastActionResult = nil
+        errorMessage = nil
+        phase = .runningAgent
+
+        agentTask = Task { [weak self] in
+            let result = await agent.run(task: task, cancellation: cancellation)
+            guard !Task.isCancelled else {
+                return
+            }
+            guard let self, self.activeOperationID == operationID else {
+                return
+            }
+            self.applyAgentResult(result)
+        }
     }
 
     func refresh() {
@@ -372,32 +491,91 @@ final class ComputerUseCoordinator {
             return
         }
 
-        pendingApproval = ComputerUseApprovalRequest(
+        let request = ComputerUseApprovalRequest(
             id: UUID(),
             action: action,
             target: observation.target,
             risk: action.risk,
-            reason: "Suniye will send this action to the selected app."
+            reason: "Suniye will send this action to the selected app.",
+            sessionID: sessionID,
+            observationGeneration: observation.generation
         )
+        do {
+            pendingApproval = try approvalPolicyService.prepare(request)
+        } catch {
+            pendingApproval = nil
+            phase = .actionFailed
+            errorMessage = localizedMessage(error)
+            return
+        }
         errorMessage = nil
         phase = .requestingApproval
     }
 
+    func requestApproval(
+        _ request: ComputerUseApprovalRequest,
+        cancellation: ComputerUseCancellationToken
+    ) async -> ComputerUseApprovalDecision {
+        guard !cancellation.isCancelled, !Task.isCancelled else {
+            return .stopSession
+        }
+
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard !cancellation.isCancelled else {
+                    continuation.resume(returning: .stopSession)
+                    return
+                }
+                agentApprovalContinuations[request.id] = continuation
+                pendingApproval = request
+                errorMessage = nil
+                phase = .requestingApproval
+            }
+        } onCancel: { [weak self] in
+            cancellation.cancel()
+            Task { @MainActor [weak self] in
+                self?.resolveAgentApproval(
+                    requestID: request.id,
+                    decision: .stopSession
+                )
+            }
+        }
+    }
+
     func approvePendingAction() {
+        approvePendingAction(scope: .once)
+    }
+
+    func approvePendingAction(scope: ComputerUseApprovalScope) {
         guard let request = pendingApproval,
-              let observation,
               phase == .requestingApproval else {
             return
         }
 
-        let grant = ComputerUseApprovalGrant(
-            requestID: request.id,
-            scope: .once,
-            applicationID: observation.target.application.id,
-            windowID: observation.target.window.id,
-            observationGeneration: observation.generation,
-            action: request.action
-        )
+        if agentApprovalContinuations[request.id] != nil {
+            guard request.allowedScopes.contains(scope) else {
+                errorMessage = ComputerUsePolicyError.approvalScopeNotAllowed.localizedDescription
+                return
+            }
+            _ = resolveAgentApproval(
+                requestID: request.id,
+                decision: decision(for: scope)
+            )
+            return
+        }
+
+        guard let observation else {
+            return
+        }
+
+        let grant: ComputerUseApprovalGrant
+        do {
+            grant = try approvalPolicyService.grant(for: request, scope: scope)
+        } catch {
+            phase = .actionFailed
+            errorMessage = localizedMessage(error)
+            return
+        }
         let operationID = UUID()
         let cancellation = ComputerUseCancellationToken()
         let observationRunner = runner
@@ -451,6 +629,12 @@ final class ComputerUseCoordinator {
     }
 
     func denyPendingAction() {
+        if let pendingApproval {
+            approvalPolicyService.recordDenied(for: pendingApproval)
+            if resolveAgentApproval(requestID: pendingApproval.id, decision: .deny) {
+                return
+            }
+        }
         pendingApproval = nil
         phase = observation == nil ? .ready : .observed
     }
@@ -465,6 +649,7 @@ final class ComputerUseCoordinator {
     }
 
     func cancel() {
+        resolveAllAgentApprovals(with: .stopSession)
         cancelActiveOperation()
         refreshTask?.cancel()
         permissionTask?.cancel()
@@ -516,7 +701,77 @@ final class ComputerUseCoordinator {
         activeCancellation?.cancel()
         observationTask?.cancel()
         actionTask?.cancel()
+        agentTask?.cancel()
         activeCancellation = nil
         activeOperationID = nil
+    }
+
+    private func applyAgentResult(_ result: ComputerUseAgentResult) {
+        agentResult = result
+        observation = result.latestObservation
+        lastActionResult = result.actionResults.last
+        activeCancellation = nil
+        agentTask = nil
+        phase = .agentCompleted
+        if result.phase == .failed {
+            errorMessage = result.message
+        }
+    }
+
+    private func makeAgent(
+        modelClient: ComputerUseModelClient?,
+        limits: ComputerUseAgentLimits
+    ) -> ComputerUseAgent {
+        ComputerUseAgent(
+            modelClient: modelClient ?? UnconfiguredComputerUseModelClient(),
+            approvalService: self,
+            approvalAuthorizer: approvalAuthorizer,
+            observationService: observationService,
+            actionService: actionService,
+            interventionMonitor: interventionMonitor,
+            limits: limits
+        )
+    }
+
+    private func decision(for scope: ComputerUseApprovalScope) -> ComputerUseApprovalDecision {
+        switch scope {
+        case .once:
+            return .allowOnce
+        case .session:
+            return .allowForSession
+        case .always:
+            return .allowAlways
+        }
+    }
+
+    @discardableResult
+    private func resolveAgentApproval(
+        requestID: UUID,
+        decision: ComputerUseApprovalDecision
+    ) -> Bool {
+        guard let continuation = agentApprovalContinuations.removeValue(forKey: requestID) else {
+            return false
+        }
+        if pendingApproval?.id == requestID {
+            pendingApproval = nil
+        }
+        continuation.resume(returning: decision)
+        if phase == .requestingApproval {
+            phase = .runningAgent
+        }
+        return true
+    }
+
+    private func resolveAllAgentApprovals(
+        with decision: ComputerUseApprovalDecision
+    ) {
+        let requestIDs = Array(agentApprovalContinuations.keys)
+        for requestID in requestIDs {
+            _ = resolveAgentApproval(requestID: requestID, decision: decision)
+        }
+    }
+
+    private func localizedMessage(_ error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 }

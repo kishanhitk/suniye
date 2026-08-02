@@ -111,6 +111,9 @@ final class ComputerUseApprovalStore: ComputerUseApprovalStoring {
                 )
             case .always:
                 var records = validAlwaysApprovals(now: Date())
+                sessionApprovals = sessionApprovals.filter {
+                    $0.applicationBundleIdentifier != bundleIdentifier || $0.risk != risk
+                }
                 records.removeAll {
                     $0.applicationBundleIdentifier == bundleIdentifier && $0.risk == risk
                 }

@@ -183,6 +183,18 @@ final class ComputerUseApprovalPolicyService {
         store.endSession(sessionID)
     }
 
+    func recordDenied(for request: ComputerUseApprovalRequest) {
+        guard let prepared = try? preparedRequest(request, recordRequest: false) else {
+            return
+        }
+        record(
+            kind: .approvalResolved,
+            outcome: .denied,
+            request: prepared,
+            scope: nil
+        )
+    }
+
     private func preparedRequest(
         _ request: ComputerUseApprovalRequest,
         recordRequest: Bool
