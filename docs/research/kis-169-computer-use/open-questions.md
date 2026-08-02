@@ -60,3 +60,14 @@
 - Which app policy settings need user-facing controls before persistent approval is enabled?
 - What expiry duration and reset UX should always approvals use?
 - Should policy and approval audit records remain local only, or may aggregate redacted telemetry leave the Mac?
+
+## Phase 5B status and remaining gates
+
+- `[Resolved for the desktop prototype]` The first provider is the user-selected explicit API Endpoint already used by Suniye's Magic Format settings.
+- `[Resolved for the desktop prototype]` A model run reaches the main-actor coordinator through an actor-safe approval continuation. The model cannot mutate SwiftUI state directly.
+- `[Resolved for the desktop prototype]` The response protocol is a strict Codable decision object with action, completed, ask-user, blocked, and retryable-failure outcomes.
+- `[Resolved for the desktop prototype]` Screenshot upload is a separate session choice and defaults to disabled.
+- `[Unknown]` A live provider's actual multimodal support, prompt reliability, response latency, and cancellation behavior still need a manual test.
+- `[Unknown]` The current Core Graphics screenshot adapter must still be compared with ScreenCaptureKit on macOS 14 and later.
+- `[Deferred]` Browser-specific control needs its own tab, DOM, extension, download, and upload contract.
+- `[Deferred]` A separate native helper is not needed by the current same-process Swift design. Revisit it only if live permission, blocking, crash-isolation, or entitlement tests show a requirement.

@@ -331,7 +331,7 @@ The current Suniye source provides these capabilities:
 
 These capabilities are useful building blocks. They do not form a Computer Use loop.
 
-### Suniye must add
+### Suniye gaps at initial inspection
 
 The new capability needs these additions:
 
@@ -350,6 +350,16 @@ The new capability needs these additions:
 - `[Verified]` A separate browser adapter is absent.
 
 The existing `TextInsertionService` can inform the text-entry design. It cannot serve as the complete action service.
+
+### Current staged implementation
+
+- `[Verified]` Phases 0 and 1 add app discovery, target windows, bounded AX serialization, screenshot capture, permissions, preview, and cancellation.
+- `[Verified]` Phase 2 adds bounded click, key, scroll, text, and semantic AX actions with fresh-observation validation.
+- `[Verified]` Phase 3 adds the actor-isolated observe-decide-approve-act loop and intervention checks.
+- `[Verified]` Phase 4 adds denied/forbidden policy outcomes, scoped approvals, revocation, and redacted audit records.
+- `[Verified]` Phase 5 adds a separate typed remote model client, coordinator integration, explicit API settings mapping, and screenshot-upload consent.
+- `[Deferred]` Browser-specific control remains a separate adapter. The current desktop path does not infer browser DOM or tab state from screenshots.
+- `[Deferred]` A separate native helper is not part of the current same-process Swift design. The inspected helper's source and exact runtime contract remain unavailable.
 
 ## Independent Swift architecture for Suniye
 
@@ -378,7 +388,9 @@ flowchart LR
 - `[Proposed]` Policy runs before every action, even after a previous approval.
 - `[Proposed]` The session uses a target identity that includes the app, process, window, and observation generation.
 
-The existing `AppState` should start and stop the coordinator. It should not own the new loop’s internal details.
+The main-window Computer Use page starts and stops the coordinator. `AppState` supplies the
+existing API settings and keychain-derived model configuration. It does not own the loop's
+internal details.
 
 ## Evidence limits
 

@@ -1,8 +1,8 @@
 # KIS-169 independent Swift implementation plan
 
 Status: Phase 0 observation, Phase 1 preview, Phase 2 approved actions, Phase 3 typed agent loop,
-the Phase 4 policy boundary, and the Phase 5A model transport are added. Coordinator agent
-integration, browser control, and native helper remain unimplemented.
+Phase 4 policy, Phase 5A model transport, and Phase 5B coordinator/model integration are added.
+Browser control and a separate native helper remain unimplemented.
 
 ## Goal
 
@@ -22,8 +22,8 @@ The capability should observe a selected app, ask a model for one safe action, r
 ## Proposed service boundaries
 
 The observation, permission, action, approval, agent, intervention, policy, storage, audit, and
-model transport boundaries are implemented as typed seams. The live transport is configured by
-injection; coordinator integration and production configuration remain unimplemented.
+model transport boundaries are implemented as typed seams. The coordinator now connects the
+transport to the existing explicit API Endpoint settings and keychain.
 
 - `ComputerUseCoordinator`: `@MainActor` lifecycle, UI state, user stop, and approval presentation.
 - `ComputerUseAgent`: session state and model/action loop behind an async interface.
@@ -495,8 +495,9 @@ Implementation added:
 - `Suniye/Services/ComputerUseInterventionMonitor.swift` checks the frontmost process and current key window through injected discovery boundaries.
 - `SuniyeTests/ComputerUsePhase3Tests.swift` covers model value validation, completed and blocked outcomes, retries, action results and failure feedback, approval decisions, limits, cancellation, and intervention; `ComputerUsePhase3TestSupport.swift` keeps the fakes and observation fixtures separate.
 
-Phase 3 has no live model client and no coordinator integration. The default model fails closed with
-`notConfigured`; a future provider must honor the cancellation token and the privacy policy.
+Phase 3 has a default model that fails closed with `notConfigured`. Phase 5B supplies the live
+transport through the coordinator only when the user has configured an explicit API Endpoint.
+The provider must honor the cancellation token and the privacy policy.
 
 ### Phase 4: Risk policy boundary
 
@@ -509,7 +510,7 @@ Implementation added:
 - `SuniyeTests/ComputerUsePhase4PolicyTests.swift` covers policy decisions, persistence, expiry, revocation, exact grants, and audit redaction.
 
 Persistent approval is opt-in by policy configuration and is never enabled for text entry. The
-coordinator UI and agent provider will consume this boundary in Phase 5.
+coordinator and agent consume this boundary in Phase 5B.
 
 ### Phase 5A: Model transport
 
@@ -521,20 +522,27 @@ Implementation added:
 
 The transport fails closed for invalid configuration, requires an HTTP(S) endpoint and API key,
 does not put typed action text in the prompt history, and excludes screenshots unless the caller
-explicitly enables upload. It is not yet connected to the coordinator or production settings.
+explicitly enables upload. Phase 5B connects it to the coordinator and existing API settings.
 
-### Phase 4: Risk policy
+### Phase 5B: Coordinator and model settings
 
-Add action risk classes, persistent approvals, audit records, and hard blocks.
+Implementation added:
 
-Define revocation, retention, secret masking, and export behavior before enabling persistent approval.
+- `Suniye/Services/ComputerUseAgentApproval.swift` isolates policy preparation, remembered-scope lookup, and grant creation behind an actor-safe seam.
+- `Suniye/Services/ComputerUseCoordinator.swift` now owns the agent task, shared session identity, approval continuations, cancellation, result publication, and remote model configuration.
+- `Suniye/Services/ComputerUseModelConfigurationFactory.swift` maps only an explicitly selected API Endpoint, valid model settings, and a non-empty key to the Computer Use transport.
+- `Suniye/Views/MainWindow/ComputerUseAgentPanel.swift` adds the task editor, model status, run action, screenshot-upload consent, and terminal question display.
+- `Suniye/Views/MainWindow/MainWindowView.swift` passes the existing model configuration into the Computer Use page.
+- `SuniyeTests/ComputerUsePhase5CoordinatorTests.swift` covers approval presentation, cancellation, and session-scope reuse.
+- `SuniyeTests/ComputerUseModelConfigurationTests.swift` covers provider gating, key trimming, model mapping, and screenshot opt-in.
 
-Use the DMG reference as the policy contract to compare against: app policy must distinguish
-allowed, denied, and forbidden targets; approval must define session and always-persistent scopes;
-user stop and user intervention must map to cancellation; and approval/tool telemetry must not
-capture screenshots or raw typed secrets. These are reference-backed requirements, not copied code.
+The remote model is not configured for automatic, local, or missing-key settings. Accessibility
+is required before an agent run. Screen Recording is required only when the local observation
+includes a screenshot. Uploading that screenshot is a separate session-only consent choice and
+defaults to disabled. A live provider run and live WindowServer action still need manual macOS
+validation.
 
-### Phase 5: Browser adapter
+### Later: Browser adapter
 
 Design browser control as a separate capability after desktop behavior is stable.
 
@@ -551,4 +559,5 @@ Do not infer DOM or tab state from a desktop screenshot. Define a browser-specif
 - Browser control is a separate adapter.
 - Phase 0 remains read-only.
 - Phase 2 actions require one-time approval and fresh observation state.
-- No live coordinator model run, browser code, or native helper is enabled.
+- The desktop coordinator model run is connected behind explicit API settings and approval.
+- Browser code and a separate native helper are not enabled because their contracts remain unverified.

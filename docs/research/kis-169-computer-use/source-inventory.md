@@ -248,8 +248,26 @@ Phase 5A added the independent model transport files:
 Phase 5A also extends `Suniye/Services/ChatCompletionClient.swift` with a raw request-body
 transport path and regenerates the Xcode project.
 
-Status: `[Verified]` by focused model transport tests. The transport is not yet connected to the
-coordinator or production settings.
+Status: `[Verified]` by focused model transport tests. Phase 5A is the transport boundary; Phase
+5B connects it to the coordinator and production settings.
+
+Phase 5B added the coordinator/model integration files:
+
+- `Suniye/Services/ComputerUseAgentApproval.swift`;
+- `Suniye/Services/ComputerUseModelConfigurationFactory.swift`;
+- `Suniye/Views/MainWindow/ComputerUseAgentPanel.swift`;
+- `SuniyeTests/ComputerUsePhase5CoordinatorTests.swift`;
+- `SuniyeTests/ComputerUseModelConfigurationTests.swift`.
+
+Phase 5B also extends `Suniye/AppState.swift`,
+`Suniye/Services/ComputerUseCoordinator.swift`,
+`Suniye/Services/ComputerUseModelClient.swift`,
+`Suniye/Views/MainWindow/ComputerUsePage.swift`, and
+`Suniye/Views/MainWindow/MainWindowView.swift`.
+
+Status: `[Verified]` by focused coordinator, model, and configuration tests. The desktop path is
+connected to an explicit API Endpoint configuration. A live provider run, live WindowServer
+action, browser adapter, and separate native helper remain `[Unknown]` or intentionally deferred.
 
 These files establish the current state machine, permissions, Accessibility insertion, model seams, settings surface, build source of truth, and test seams.
 

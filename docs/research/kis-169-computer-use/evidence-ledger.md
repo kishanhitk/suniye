@@ -449,3 +449,41 @@ Sources: local Git status and `git push` output.
 
 - `[Verified]` Commit `316fd30` contains the Phase 5A model transport slice.
 - `[Verified]` The Phase 5A slice was pushed to `origin/kis-169-computer-use` after focused tests and quality review.
+
+### Entry 35: Phase 5B coordinator and approval integration
+
+Sources: `Suniye/Services/ComputerUseCoordinator.swift`,
+`Suniye/Services/ComputerUseAgent.swift`,
+`Suniye/Services/ComputerUseAgentApproval.swift`, and
+`SuniyeTests/ComputerUsePhase5CoordinatorTests.swift`.
+
+- `[Verified]` The coordinator now owns an agent task and passes one session identifier through every model-proposed action in that run.
+- `[Verified]` The coordinator presents agent approval requests through a checked continuation and resumes the agent only after Allow, Deny, Stop, or cancellation.
+- `[Verified]` Agent approval requests are prepared by policy before presentation, and persistent scopes are granted through the same policy boundary used by manual actions.
+- `[Verified]` The action service rechecks policy and remembered scope before it accepts a session or always grant.
+- `[Verified]` Session approval reuse, user approval, and cancellation are covered by deterministic coordinator tests.
+- `[Corrected]` The first coordinator test exposed a race where the UI phase became visible before the continuation was registered. Registration now occurs before publishing the pending request.
+- `[Corrected]` The first approval handler required a coordinator observation that agent runs intentionally keep inside the agent. Agent approvals now resolve before the manual-action path and use the agent's fresh observation.
+
+### Entry 36: Phase 5B model settings and consent UI
+
+Sources: `Suniye/Services/ComputerUseModelConfigurationFactory.swift`,
+`Suniye/AppState.swift`, `Suniye/Services/ComputerUseModelClient.swift`,
+`Suniye/Views/MainWindow/ComputerUseAgentPanel.swift`, and
+`Suniye/Views/MainWindow/MainWindowView.swift`.
+
+- `[Verified]` The production coordinator receives a model only when the user enables the existing API Endpoint provider, has valid endpoint/model settings, and has a non-empty keychain key.
+- `[Verified]` Automatic, local, disabled, invalid, and missing-key settings fail closed to no configured Computer Use model.
+- `[Verified]` Accessibility remains required for an agent run. Screen Recording is required only when the local observation includes a screenshot.
+- `[Verified]` Screenshot upload is disabled by default and can be enabled only through a visible session UI toggle.
+- `[Verified]` The model task editor, connection status, run control, upload consent, terminal result, and user question are now visible in the Computer Use page.
+- `[Inferred]` The configured endpoint may receive AX text whenever the user runs the agent. The UI discloses this boundary, but a live provider test is still required.
+- `[Unknown]` Reliability of the prompt and decision schema across real providers and target applications remains unverified.
+
+### Entry 37: Phase 5B repository handoff
+
+Sources: local Git status, focused test output, `git commit`, and `git push` output.
+
+- `[Verified]` Commit `ae6274d` contains the coordinator agent, approval, and policy integration slice.
+- `[Verified]` Commit `6a1f6d3` contains the configured model connection, screenshot-consent UI, and configuration tests.
+- `[Verified]` Both Phase 5B code commits were pushed to `origin/kis-169-computer-use`.
