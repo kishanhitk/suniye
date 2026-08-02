@@ -68,6 +68,7 @@ enum AppTypography {
     static let sidebarLabel = googleSans(size: 13)
     static let sidebarLabelSelected = googleSans(size: 13, weight: .semibold)
     static let pageTitle = googleSans(size: 17, weight: .semibold)
+    static let onboardingTitle = googleSans(size: 20, weight: .semibold)
     static let sectionHeading = googleSans(size: 13, weight: .semibold)
     static let body = googleSans(size: 13)
     static let bodyMedium = googleSans(size: 13, weight: .medium)
@@ -85,6 +86,7 @@ enum AppTypography {
 }
 
 enum AppMetrics {
+    static let onboardingBrandIconSize: CGFloat = 64
     static let sidebarWidth: CGFloat = 208
     static let sidebarBrandTop: CGFloat = 24
     static let sidebarBrandHorizontal: CGFloat = 24

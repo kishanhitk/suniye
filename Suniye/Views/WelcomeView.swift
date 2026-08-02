@@ -2,48 +2,43 @@ import SwiftUI
 
 struct WelcomeView: View {
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Voice to text,\nanywhere on your Mac")
-                .font(.custom("Google Sans", fixedSize: 22).weight(.semibold))
+        VStack(spacing: 24) {
+            Text("Write at the speed of thought.")
+                .font(AppTypography.onboardingTitle)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 18) {
                 benefitRow(
                     icon: "lock.shield",
-                    title: "Private by design",
-                    detail: "Your voice stays on your Mac."
+                    title: "Private by design"
                 )
                 benefitRow(
                     icon: "bolt.fill",
-                    title: "No cloud delay",
-                    detail: "Super-low latency. Near-instant dictation."
+                    title: "No cloud delay"
                 )
                 benefitRow(
                     icon: "wifi.slash",
-                    title: "Works offline",
-                    detail: "Keep dictating without an internet connection."
+                    title: "Works offline"
                 )
             }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 64)
         }
     }
 
-    private func benefitRow(icon: String, title: LocalizedStringKey, detail: LocalizedStringKey) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+    private func benefitRow(icon: String, title: LocalizedStringKey) -> some View {
+        VStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(MainWindowPalette.secondaryText)
-                .frame(width: 20)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(AppTypography.bodyMedium)
-                    .foregroundStyle(Color.primary)
-                Text(detail)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-            }
+            Text(title)
+                .font(AppTypography.subheadlineSemibold)
+                .foregroundStyle(Color.primary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity)
     }
 }
