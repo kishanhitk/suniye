@@ -67,6 +67,10 @@
 - `[Resolved for the desktop prototype]` A model run reaches the main-actor coordinator through an actor-safe approval continuation. The model cannot mutate SwiftUI state directly.
 - `[Resolved for the desktop prototype]` The response protocol is a strict Codable decision object with action, completed, ask-user, blocked, and retryable-failure outcomes.
 - `[Resolved for the desktop prototype]` Screenshot upload is a separate session choice and defaults to disabled.
+- `[Verified]` Deterministic validation covers the coordinator's approval, policy, cancellation,
+  stale-operation, and terminal-result paths. The full suite reports 1,077 passed, 1 skipped,
+  and 0 failed tests.
+- `[Verified]` The gated coverage report passes at 95.02% (13,803/14,526 lines), and the E2E preflight and smoke build pass.
 - `[Unknown]` A live provider's actual multimodal support, prompt reliability, response latency, and cancellation behavior still need a manual test.
 - `[Unknown]` The current Core Graphics screenshot adapter must still be compared with ScreenCaptureKit on macOS 14 and later.
 - `[Deferred]` Browser-specific control needs its own tab, DOM, extension, download, and upload contract.

@@ -18,6 +18,10 @@ The desktop path is connected. It still requires a configured API Endpoint model
 and Screen Recording when screenshots are enabled. Browser control and a separate native helper
 remain out of scope until their contracts are verified.
 
+Validation is green for the staged desktop path: 1,078 tests ran with 1,077 passed, 1 skipped,
+and 0 failures. Gated line coverage is 95.02% (13,803/14,526). The E2E preflight and smoke build
+also pass. Live provider behavior and WindowServer interaction still require manual validation.
+
 ## Files
 
 - `evidence-ledger.md` records findings in small updates.

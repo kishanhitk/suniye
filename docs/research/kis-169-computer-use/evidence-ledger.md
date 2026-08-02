@@ -487,3 +487,19 @@ Sources: local Git status, focused test output, `git commit`, and `git push` out
 - `[Verified]` Commit `ae6274d` contains the coordinator agent, approval, and policy integration slice.
 - `[Verified]` Commit `6a1f6d3` contains the configured model connection, screenshot-consent UI, and configuration tests.
 - `[Verified]` Both Phase 5B code commits were pushed to `origin/kis-169-computer-use`.
+
+### Entry 38: Phase 5B validation and coverage handoff
+
+Sources: `SuniyeTests/ComputerUsePhase5CoordinatorTests.swift`,
+`scripts/coverage_exclusions.txt`, `scripts/e2e_preflight.sh`, `scripts/e2e_smoke.sh`,
+the full `xcodebuild` result bundle, and local Git push output.
+
+- `[Verified]` Coordinator tests cover policy denial, approval-scope rejection, persistent
+  approval, canceled actions, canceled permission work, stale operation results, and blocked
+  or failed agent terminal results.
+- `[Verified]` The full suite reports 1,078 tests, with 1,077 passed, 1 skipped, and 0 failed.
+- `[Verified]` The gated coverage report passes at 95.02% (13,803/14,526 lines). The new SwiftUI
+  agent panel is excluded as render-only, with its coordinator behavior covered by tests.
+- `[Verified]` `scripts/e2e_preflight.sh` and `scripts/e2e_smoke.sh` pass.
+- `[Verified]` Commit `edf2abd` contains the coverage-hardening tests and render-only coverage rationale. It is pushed to `origin/kis-169-computer-use`.
+- `[Unknown]` These checks do not verify a live provider response, real Accessibility trees, Screen Recording capture, or native input against a real target app.

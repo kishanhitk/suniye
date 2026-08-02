@@ -535,12 +535,17 @@ Implementation added:
 - `Suniye/Views/MainWindow/MainWindowView.swift` passes the existing model configuration into the Computer Use page.
 - `SuniyeTests/ComputerUsePhase5CoordinatorTests.swift` covers approval presentation, cancellation, and session-scope reuse.
 - `SuniyeTests/ComputerUseModelConfigurationTests.swift` covers provider gating, key trimming, model mapping, and screenshot opt-in.
+- The coordinator tests also cover policy denial, persistent approval, canceled actions,
+  canceled permission work, stale operation results, and terminal outcomes.
 
 The remote model is not configured for automatic, local, or missing-key settings. Accessibility
 is required before an agent run. Screen Recording is required only when the local observation
 includes a screenshot. Uploading that screenshot is a separate session-only consent choice and
 defaults to disabled. A live provider run and live WindowServer action still need manual macOS
 validation.
+
+The deterministic suite passes with 1,078 tests, 1 skipped test, and 0 failures. Gated line
+coverage is 95.02% (13,803/14,526). E2E preflight and smoke build validation pass.
 
 ### Later: Browser adapter
 
