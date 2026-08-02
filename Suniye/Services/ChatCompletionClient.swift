@@ -50,12 +50,26 @@ enum ChatCompletionRequestFactory {
         payload: ChatCompletionPayload,
         timeoutSeconds: Double
     ) throws -> URLRequest {
+        try makeRequest(
+            endpointURL: endpointURL,
+            apiKey: apiKey,
+            requestBody: JSONEncoder().encode(payload),
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    static func makeRequest(
+        endpointURL: URL,
+        apiKey: String,
+        requestBody: Data,
+        timeoutSeconds: Double
+    ) throws -> URLRequest {
         var request = URLRequest(url: endpointURL)
         request.httpMethod = "POST"
         request.timeoutInterval = timeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONEncoder().encode(payload)
+        request.httpBody = requestBody
         return request
     }
 }
@@ -73,10 +87,25 @@ final class ChatCompletionClient {
         payload: ChatCompletionPayload,
         timeoutSeconds: Double
     ) async throws -> String {
+        let requestBody = try JSONEncoder().encode(payload)
+        return try await complete(
+            endpointURL: endpointURL,
+            apiKey: apiKey,
+            requestBody: requestBody,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    func complete(
+        endpointURL: URL,
+        apiKey: String,
+        requestBody: Data,
+        timeoutSeconds: Double
+    ) async throws -> String {
         let request = try ChatCompletionRequestFactory.makeRequest(
             endpointURL: endpointURL,
             apiKey: apiKey,
-            payload: payload,
+            requestBody: requestBody,
             timeoutSeconds: timeoutSeconds
         )
 

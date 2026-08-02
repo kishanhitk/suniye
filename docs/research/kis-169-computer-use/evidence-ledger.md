@@ -428,3 +428,17 @@ Sources: local Git status and `git push` output.
 - `[Verified]` Commit `4d9161e` contains the Phase 4 safety policy slice.
 - `[Verified]` Branch `kis-169-computer-use` tracks `origin/kis-169-computer-use`.
 - `[Verified]` The Phase 4 branch state was pushed after tests and quality review.
+
+### Entry 33: Phase 5A model transport
+
+Sources: `Suniye/Services/ComputerUseModelClient.swift`,
+`Suniye/Services/ChatCompletionClient.swift`, and
+`SuniyeTests/ComputerUsePhase5ModelTests.swift`.
+
+- `[Verified]` The transport validates an HTTP(S) endpoint, non-empty model ID, API key, timeout, and token limit before sending a request.
+- `[Verified]` The model prompt includes the task, target metadata, Accessibility text and elements, and safe action summaries.
+- `[Verified]` Typed action text is represented by its character count in recent action history.
+- `[Verified]` Screenshot data is sent as an image content part only when the caller opts into screenshot upload.
+- `[Verified]` Provider output must decode as one of the typed Computer Use decisions and pass non-empty message validation.
+- `[Inferred]` This transport can serve the Phase 3 model-client seam without coupling it to the existing dictation formatter.
+- `[Unknown]` The final product model, prompt, provider endpoint, and remote observation consent UX remain open until coordinator integration.

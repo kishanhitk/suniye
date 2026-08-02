@@ -1,8 +1,8 @@
 # KIS-169 independent Swift implementation plan
 
 Status: Phase 0 observation, Phase 1 preview, Phase 2 approved actions, Phase 3 typed agent loop,
-and the Phase 4 policy boundary are added. A live model provider, coordinator agent integration,
-browser control, and native helper remain unimplemented.
+the Phase 4 policy boundary, and the Phase 5A model transport are added. Coordinator agent
+integration, browser control, and native helper remain unimplemented.
 
 ## Goal
 
@@ -21,9 +21,9 @@ The capability should observe a selected app, ask a model for one safe action, r
 
 ## Proposed service boundaries
 
-The observation, permission, action, approval, agent, intervention, policy, storage, and audit
-boundaries are implemented as typed seams. The model client has only an unconfigured default and
-test doubles; live model and coordinator integration remain unimplemented.
+The observation, permission, action, approval, agent, intervention, policy, storage, audit, and
+model transport boundaries are implemented as typed seams. The live transport is configured by
+injection; coordinator integration and production configuration remain unimplemented.
 
 - `ComputerUseCoordinator`: `@MainActor` lifecycle, UI state, user stop, and approval presentation.
 - `ComputerUseAgent`: session state and model/action loop behind an async interface.
@@ -511,6 +511,18 @@ Implementation added:
 Persistent approval is opt-in by policy configuration and is never enabled for text entry. The
 coordinator UI and agent provider will consume this boundary in Phase 5.
 
+### Phase 5A: Model transport
+
+Implementation added:
+
+- `Suniye/Services/ComputerUseModelClient.swift` builds a typed chat-completion request from the task, redacted action history, Accessibility observation, and optional screenshot.
+- `Suniye/Services/ChatCompletionClient.swift` now accepts an already-encoded request body while preserving the existing text-only API.
+- `SuniyeTests/ComputerUsePhase5ModelTests.swift` covers configuration validation, prompt redaction, screenshot opt-in, JSON parsing, request encoding, and malformed provider output.
+
+The transport fails closed for invalid configuration, requires an HTTP(S) endpoint and API key,
+does not put typed action text in the prompt history, and excludes screenshots unless the caller
+explicitly enables upload. It is not yet connected to the coordinator or production settings.
+
 ### Phase 4: Risk policy
 
 Add action risk classes, persistent approvals, audit records, and hard blocks.
@@ -539,4 +551,4 @@ Do not infer DOM or tab state from a desktop screenshot. Define a browser-specif
 - Browser control is a separate adapter.
 - Phase 0 remains read-only.
 - Phase 2 actions require one-time approval and fresh observation state.
-- No live model provider, coordinator agent integration, or browser code is enabled.
+- No live coordinator model run, browser code, or native helper is enabled.

@@ -240,6 +240,17 @@ Phase 4 also extends the approval models and regenerates the Xcode project.
 Status: `[Verified]` by the Phase 4 focused policy test run. The policy boundary is not yet
 wired to the coordinator or a live model provider.
 
+Phase 5A added the independent model transport files:
+
+- `Suniye/Services/ComputerUseModelClient.swift`;
+- `SuniyeTests/ComputerUsePhase5ModelTests.swift`.
+
+Phase 5A also extends `Suniye/Services/ChatCompletionClient.swift` with a raw request-body
+transport path and regenerates the Xcode project.
+
+Status: `[Verified]` by focused model transport tests. The transport is not yet connected to the
+coordinator or production settings.
+
 These files establish the current state machine, permissions, Accessibility insertion, model seams, settings surface, build source of truth, and test seams.
 
 Status: `[Verified]` by source inspection.
