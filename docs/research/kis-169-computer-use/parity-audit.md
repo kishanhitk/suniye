@@ -30,12 +30,12 @@ and a separate browser adapter.
 |---|---|---|---|
 | App discovery | Running `NSRunningApplication` records with process identity | `list_apps` returns app records and targetable windows; `launch_app` is public | Partial |
 | Window discovery | On-screen layer-zero windows from `CGWindowListCopyWindowInfo`; user can select a window | `list_windows`, app-owned window objects, and window rehydration by id | Partial |
-| Window activation | Explicit “Bring Forward” UX and activation before an agent run | `activate_window`; input methods also activate their target | Partial; live TCC test pending |
+| Window activation | Explicit “Bring Forward” UX and activation before an agent run | `activate_window`; input methods also activate their target | Partial; Suniye self-target passes, cross-process TCC test pending |
 | AX observation | Bounded tree, indexes, roles, values, bounds, enabled/focused/selected state, exposed actions | AX tree text, focused/selected/document state, refetchable tree, optional diff | Partial |
 | Screenshot | Optional bounded PNG from the selected window with an id, dimensions, origin, and z-order | Stable screenshot ids, dimensions, origin, z-order, and related transient captures | Partial |
 | Coordinate actions | Window-relative click, click count, mouse button, drag, and positioned scroll | Window-relative coordinate click, drag, and scroll | Broad parity |
 | Keyboard and text | Key chords, text insertion, AX set value, text selection | `press_key`, `type_text`, `set_value`, `select_text` | Broad parity |
-| Accessibility actions | Indexed clicks, typed AX actions, and arbitrary exposed AX action names | Indexed click and arbitrary exposed `perform_secondary_action` | Broad desktop parity; native behavior still needs live validation |
+| Accessibility actions | Indexed clicks, typed AX actions, and arbitrary exposed AX action names | Indexed click and arbitrary exposed `perform_secondary_action` | Broad desktop parity; self-target observation passes, cross-process behavior pending |
 | Model loop | Observe, decide, approve, act, settle, re-observe; bounded retries and limits | State capture, one action, settle/refetch, and next decision | Broad conceptual parity |
 | Approval and safety | Once/session/always policy scopes, revocation, redacted audit, stop, and intervention guard | App policy, approval bridge, confirmation taxonomy, handoff rules | Partial; product taxonomies differ |
 | Permissions | Accessibility and Screen Recording checks and request buttons | Native session permission states and helper-owned permission lifecycle | Partial |
@@ -110,5 +110,5 @@ unknown implementation detail.
    `list_apps`/`launch_app` surface.
 2. Decide whether helper isolation is required. If yes, define and test one versioned Swift IPC
    contract before adding a helper target.
-3. Run live macOS tests with Accessibility and Screen Recording on a deterministic target app.
+3. Run live macOS tests with Screen Recording and a safe cross-process target app.
 4. Design browser control as a separate adapter after a separate browser audit.

@@ -167,6 +167,20 @@ struct DetailScrollContainer<Content: View>: View {
     }
 }
 
+enum NativePopupPickerMenuSync {
+    static func validItemIndices(itemCount: Int, menuItemCount: Int) -> Range<Int> {
+        let count = min(max(itemCount, 0), max(menuItemCount, 0))
+        return 0..<count
+    }
+
+    static func validSelectedIndex(_ index: Int, menuItemCount: Int) -> Int? {
+        guard index >= 0, index < menuItemCount else {
+            return nil
+        }
+        return index
+    }
+}
+
 struct NativePopupPicker<Item: Hashable>: NSViewRepresentable {
     let items: [Item]
     @Binding var selection: Item
@@ -208,12 +222,22 @@ struct NativePopupPicker<Item: Hashable>: NSViewRepresentable {
             nsView.addItems(withTitles: titles)
         }
 
-        for (index, item) in items.enumerated() {
-            nsView.item(at: index)?.isEnabled = isEnabled(item)
+        let nativeItems = nsView.itemArray
+        for index in NativePopupPickerMenuSync.validItemIndices(
+            itemCount: items.count,
+            menuItemCount: nativeItems.count
+        ) {
+            let item = items[index]
+            nativeItems[index].isEnabled = isEnabled(item)
         }
 
-        if let selectedIndex = items.firstIndex(of: selection), nsView.indexOfSelectedItem != selectedIndex {
-            nsView.selectItem(at: selectedIndex)
+        if let selectedIndex = items.firstIndex(of: selection),
+           let validSelectedIndex = NativePopupPickerMenuSync.validSelectedIndex(
+               selectedIndex,
+               menuItemCount: nativeItems.count
+           ),
+           nsView.indexOfSelectedItem != validSelectedIndex {
+            nsView.select(nativeItems[validSelectedIndex])
         }
     }
 

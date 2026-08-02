@@ -408,8 +408,11 @@ internal details.
   API's text-selection behavior, through typed Swift models and native adapters.
 - `[Partial]` Reference-level transient screenshot caching and state diffs are not yet part of the
   Suniye contract. Indexed click and dynamic secondary AX action names are now represented.
-- `[Unknown]` Real multi-display coordinate behavior, target-app activation under TCC, and the
-  reference's exact state-revision implementation require live macOS tests.
+- `[Verified]` The live `@Computer` path activates a selected Suniye window, captures an
+  Accessibility-only observation, presents an approval card, and returns safely after denial.
+- `[Unknown]` Real multi-display coordinates, Screen Recording capture, cross-process activation,
+  native input delivery, and the reference's exact state-revision implementation require further
+  live macOS tests.
 
 ## Evidence limits
 
@@ -421,7 +424,7 @@ internal details.
 ## Research limitation
 
 The reference target could not be used as a target for Computer Use in this inspection. Prior local
-evidence reports that the reference refuses its own app for safety. The Suniye UI still needs a
-separate live Computer Use E2E run with a deterministic safe target.
+evidence reports that the reference refuses its own app for safety. Suniye's separate live E2E used
+Suniye itself as a deterministic safe target and is recorded in `e2e-computer.md`.
 
 Static bundle and helper evidence support the architecture above.

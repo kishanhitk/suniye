@@ -83,13 +83,15 @@
 - `[Resolved for the desktop prototype]` The response protocol is a strict Codable decision object with action, completed, ask-user, blocked, and retryable-failure outcomes.
 - `[Resolved for the desktop prototype]` Screenshot upload is a separate session choice and defaults to disabled.
 - `[Verified]` Deterministic validation covers the coordinator's approval, policy, cancellation,
-  stale-operation, and terminal-result paths. The full suite reports 1,085 passed, 1 skipped,
+  stale-operation, and terminal-result paths. The full suite reports 1,088 passed, 1 skipped,
   and 0 failed tests.
-- `[Verified]` The gated coverage report passes at 95.01% (14,439/15,197 lines) at the 95% floor.
-- `[Verified]` The focused Computer Use suite reports 28 passed tests and 0 failures.
+- `[Verified]` The gated coverage report passes at 95.10% (14,453/15,197 lines) at the 95% floor.
+- `[Verified]` The focused regression suite reports 3 passed tests and 0 failures.
 - `[Unknown]` A live provider's actual multimodal support, prompt reliability, response latency, and cancellation behavior still need a manual test.
 - `[Unknown]` The current Core Graphics screenshot adapter must still be compared with ScreenCaptureKit on macOS 14 and later.
-- `[Unknown]` Live WindowServer activation, Accessibility tree capture, native event delivery, and
-  permission-state behavior still need the planned `@Computer` E2E test.
+- `[Verified]` The live `@Computer` E2E validates Suniye navigation, target/window selection,
+  same-process activation, Accessibility-only capture, approval presentation, and denial.
+- `[Unknown]` Screen Recording capture, cross-process activation, and native input delivery still
+  need a safe live target with the required permissions.
 - `[Deferred]` Browser-specific control needs its own tab, DOM, extension, download, and upload contract.
 - `[Deferred]` A separate native helper is not needed by the current same-process Swift design. Revisit it only if live permission, blocking, crash-isolation, or entitlement tests show a requirement.

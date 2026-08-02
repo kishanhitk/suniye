@@ -5,7 +5,8 @@ Phase 4 policy, Phase 5A model transport, Phase 5B coordinator/model integration
 desktop parity correction are added.
 Browser control and a separate native helper remain unimplemented. Installed-app launch, transient
 screenshot caching, and reference-specific state diffs remain open. The strict maintainability
-review is complete; live Computer Use E2E validation remains pending.
+review is complete. A live `@Computer` run validates the Suniye self-target path; provider,
+screenshot, and cross-process validation remain open.
 
 ## Goal
 
@@ -558,15 +559,16 @@ Implementation added:
 The remote model is not configured for automatic, local, or missing-key settings. Accessibility
 is required before an agent run. Screen Recording is required only when the local observation
 includes a screenshot. Uploading that screenshot is a separate session-only consent choice and
-defaults to disabled. A live provider run and live WindowServer action still need manual macOS
-validation.
+defaults to disabled. The live E2E validates same-process activation and Accessibility-only
+observation. A provider run, screenshot capture, and cross-process native input still need manual
+macOS validation.
 
 The current prompt describes the expanded typed action forms and the window-relative coordinate
 origin. It does not claim to reproduce the reference's unknown server prompt or provider choice.
 
-The deterministic suite passes with 1,086 tests, 1,085 passed, 1 skipped, and 0 failures. Gated
-line coverage is 95.01% (14,439/15,197), above the documented 95% floor. The focused Computer
-Use suite passes 28 tests. Live provider and WindowServer validation remain open.
+The deterministic suite passes with 1,089 tests, 1,088 passed, 1 skipped, and 0 failures. Gated
+line coverage is 95.10% (14,453/15,197), above the documented 95% floor. The focused regression
+suite passes 3 tests. The live E2E result is recorded in `e2e-computer.md`.
 
 ### Later: Browser adapter
 

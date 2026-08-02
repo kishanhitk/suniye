@@ -22,10 +22,12 @@ The desktop path is connected. It still requires a configured API Endpoint model
 and Screen Recording when screenshots are enabled. It is not full runtime parity: browser control,
 helper IPC, transient screenshot caching, and installed-app launch remain open or deferred.
 
-Validation is green for the reviewed desktop path: 1,086 tests ran with 1,085 passed, 1 skipped,
-and 0 failures. Gated line coverage is 95.01% (14,439/15,197) at the documented 95% threshold.
-The focused Computer Use suite passes 28 tests. Live provider behavior and WindowServer
-interaction still require manual validation.
+The final post-E2E run reports 1,089 tests with 1,088 passed, 1 skipped, and 0 failures. Gated
+line coverage is 95.10% (14,453/15,197) at the documented 95% threshold. The focused regression
+suite passes 3 tests. The live
+`@Computer` run passes navigation, target/window selection, same-process activation,
+Accessibility-only observation, and approval denial. Provider behavior, screenshot capture, and
+cross-process input still require separate validation.
 
 ## Files
 
@@ -34,6 +36,7 @@ interaction still require manual validation.
 - `architecture.md` explains the observed Computer Use design.
 - `implementation-plan.md` proposes an independent Swift design for Suniye.
 - `open-questions.md` records gaps that need a decision or a live test.
+- `e2e-computer.md` records the live `@Computer` run, failures, fixes, and remaining unknowns.
 - `parity-audit.md` is the current reference-to-Suniye parity matrix and corrective-slice record.
 - `parity-audit-dmg-agent.md` is the detailed raw DMG audit used as supporting evidence.
 
@@ -49,5 +52,5 @@ This work does not copy source code from the inspected artifact.
 
 This work does not add browser control or a native helper.
 
-The Phase 0 through Phase 5B slices and the current parity slice are ready for the reviewed
-commit. The live Computer Use E2E result will be recorded separately.
+The Phase 0 through Phase 5B slices and the current parity slice are committed after review. The
+post-E2E corrective slice and E2E record are ready for the next commit.

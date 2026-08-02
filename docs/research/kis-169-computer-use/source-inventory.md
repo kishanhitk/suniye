@@ -77,19 +77,21 @@ The current parity slice extends the desktop path with these boundaries:
   always-allowed approval management.
 - `docs/research/kis-169-computer-use/parity-audit.md` records the reference comparison.
 
-Status: `[Verified]` by focused tests and source inspection. Real WindowServer activation remains
-`[Unknown]` until the Computer Use E2E run with permissions.
+Status: `[Verified]` by focused tests, source inspection, and the live `@Computer` run for the
+Suniye self-target. Cross-process WindowServer activation remains `[Unknown]`.
 
 ### Reviewed validation
 
-- The full macOS test run reports 1,085 passed, 1 skipped, and 0 failed tests.
-- The gated coverage report is 95.01% (14,439/15,197 lines) at a 95% threshold.
-- The focused Computer Use suite reports 28 passed tests and 0 failures.
+- The full macOS test run reports 1,088 passed, 1 skipped, and 0 failed tests.
+- The gated coverage report is 95.10% (14,453/15,197 lines) at a 95% threshold.
+- The focused regression suite reports 3 passed tests and 0 failures.
 - Strict review split the large Phase 2 test file, removed a coordinate force unwrap, improved
   failure diagnostics, and aligned public action keys with the inspected reference contract.
+- The live `@Computer` run validates navigation, target/window pickers, same-process activation,
+  Accessibility-only observation, and approval denial.
 
-Status: `[Verified]` by `xcodebuild`, `xccov`, and local source inspection. Live `@Computer`
-interaction remains `[Unknown]` until the E2E run.
+Status: `[Verified]` by `xcodebuild`, `xccov`, local source inspection, and the live `@Computer`
+run. Provider, Screen Recording, and cross-process behavior remain `[Unknown]`.
 
 ### Native helper
 

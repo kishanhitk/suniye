@@ -571,3 +571,40 @@ Sources: the focused `xcodebuild` run, the full `xcodebuild` result bundle at
 - `[Verified]` Gated line coverage is 95.01% (14,439/15,197 lines) at the documented 95% threshold.
 - `[Unknown]` Live provider behavior, WindowServer interaction, Accessibility capture, native
   event delivery, and permission prompts remain unverified until the planned `@Computer` E2E run.
+
+### Entry 43: Live `@Computer` E2E and corrective fixes
+
+Sources: `docs/research/kis-169-computer-use/e2e-computer.md`, the installed build at
+`/Users/kishan/Applications/Suniye.app`, the Computer Use skill's `node_repl` session, and the
+macOS diagnostic reports.
+
+- `[Verified]` The live Suniye UI exposes the Computer Use page, target picker, window picker,
+  Bring Forward control, permission rows, screenshot toggle, observation preview, task editor,
+  typed action buttons, and semantic Accessibility actions.
+- `[Verified]` Accessibility-only observation succeeds for a selected Suniye window when Screen
+  Recording is not granted and screenshot inclusion is off.
+- `[Verified]` A benign action request presents Allow Once, Deny, and Stop Session. Deny returns to
+  the observation state without posting the native click.
+- `[Corrected]` The first live navigation crash came from indexed `NSPopUpButton` item lookup
+  during a SwiftUI/native menu count mismatch. The picker now uses bounded `itemArray` updates.
+- `[Corrected]` The first live Bring Forward crash came from re-entrant AX raising of Suniye's
+  own window. The activation service now skips that call for the current process after AppKit
+  activation and keeps AX raising for other processes.
+- `[Verified]` The final live run remained alive through navigation, same-process activation,
+  observation, approval presentation, and denial.
+- `[Unknown]` Screen Recording capture, live model behavior, cross-process activation, and native
+  input delivery remain unverified.
+
+### Entry 44: Post-E2E final validation
+
+Sources: the final `xcodebuild` result bundle at `.derivedData/coverage.post-e2e-final.xcresult`,
+`xcrun xcresulttool`, `scripts/coverage_report.sh`, `scripts/e2e_preflight.sh`,
+`scripts/e2e_smoke.sh`, and the second strict quality review.
+
+- `[Verified]` The full suite reports 1,088 passed, 1 skipped, and 0 failed tests, for 1,089 total.
+- `[Verified]` Gated line coverage is 95.10% (14,453/15,197 lines) at the 95% threshold.
+- `[Verified]` E2E preflight and smoke build checks pass.
+- `[Verified]` The focused regression suite covers the popup mismatch and own-process activation
+  policy with 3 passing tests.
+- `[Verified]` No reviewed production or test file exceeds 1,000 lines, and `git diff --check`
+  reports no whitespace errors.

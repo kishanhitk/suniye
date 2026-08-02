@@ -1,5 +1,15 @@
 import AppKit
 import ApplicationServices
+import Foundation
+
+enum ComputerUseWindowActivationPolicy {
+    static func shouldUseAccessibilityRaise(
+        targetProcessIdentifier: Int32,
+        currentProcessIdentifier: Int32
+    ) -> Bool {
+        targetProcessIdentifier != currentProcessIdentifier
+    }
+}
 
 struct SystemComputerUseWindowActivator: ComputerUseWindowActivating {
     private let runningApplicationProvider: (Int32) -> NSRunningApplication?
@@ -16,6 +26,15 @@ struct SystemComputerUseWindowActivator: ComputerUseWindowActivating {
         guard let application = runningApplicationProvider(target.application.processIdentifier),
               application.activate(options: [.activateAllWindows]) else {
             return false
+        }
+
+        // Raising our own window through AX re-enters AppKit's accessibility path and can
+        // trap while AppKit is ordering the window. Activation already brings this app forward.
+        guard ComputerUseWindowActivationPolicy.shouldUseAccessibilityRaise(
+            targetProcessIdentifier: target.application.processIdentifier,
+            currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier
+        ) else {
+            return true
         }
 
         let applicationElement = AXUIElementCreateApplication(target.application.processIdentifier)
