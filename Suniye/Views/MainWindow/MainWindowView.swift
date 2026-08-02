@@ -62,7 +62,10 @@ struct MainWindowView: View {
             case .dashboard:
                 DashboardPage(appState: appState) { selection = $0 }
             case .computerUse:
-                ComputerUsePage(coordinator: computerUseCoordinator)
+                ComputerUsePage(
+                    coordinator: computerUseCoordinator,
+                    remoteModelConfiguration: appState.computerUseRemoteModelConfiguration
+                )
             case .history:
                 HistoryPage(appState: appState)
             case .model:

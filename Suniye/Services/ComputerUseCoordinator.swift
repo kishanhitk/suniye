@@ -115,6 +115,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
     var lastActionResult: ComputerUseActionResult?
     var agentInstruction = ""
     var agentResult: ComputerUseAgentResult?
+    var allowRemoteScreenshotUpload = false
 
     @ObservationIgnored private var activeOperationID: UUID?
     @ObservationIgnored private var activeCancellation: ComputerUseCancellationToken?
@@ -123,6 +124,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var actionTask: Task<Void, Never>?
     @ObservationIgnored private var agentTask: Task<Void, Never>?
+    @ObservationIgnored private var remoteModelConfiguration: ComputerUseRemoteModelConfiguration?
     @ObservationIgnored private lazy var agent: ComputerUseAgent = makeAgent(
         modelClient: modelClient,
         limits: agentLimits
@@ -208,7 +210,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         guard let selectedApplicationID,
               !selectedApplicationID.isEmpty,
               !isBusy,
-              modelClient != nil,
+              isModelConfigured,
               permissionSnapshot.canReadAccessibility else {
             return false
         }
@@ -216,7 +218,10 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
     }
 
     var isModelConfigured: Bool {
-        modelClient != nil
+        guard modelClient != nil else {
+            return false
+        }
+        return remoteModelConfiguration?.validationMessage == nil
     }
 
     var canRequestAction: Bool {
@@ -275,7 +280,29 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         guard !isBusy else {
             return
         }
+        remoteModelConfiguration = nil
         self.modelClient = modelClient
+        agent = makeAgent(modelClient: modelClient, limits: agentLimits)
+    }
+
+    func configureRemoteModel(_ configuration: ComputerUseRemoteModelConfiguration?) {
+        guard !isBusy else {
+            return
+        }
+        remoteModelConfiguration = configuration
+        modelClient = configuration.map { makeRemoteModelClient(configuration: $0) }
+        agent = makeAgent(modelClient: modelClient, limits: agentLimits)
+    }
+
+    func setRemoteScreenshotUploadAllowed(_ allowed: Bool) {
+        guard !isBusy else {
+            return
+        }
+        allowRemoteScreenshotUpload = allowed
+        guard let remoteModelConfiguration else {
+            return
+        }
+        modelClient = makeRemoteModelClient(configuration: remoteModelConfiguration)
         agent = makeAgent(modelClient: modelClient, limits: agentLimits)
     }
 
@@ -730,6 +757,14 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
             actionService: actionService,
             interventionMonitor: interventionMonitor,
             limits: limits
+        )
+    }
+
+    private func makeRemoteModelClient(
+        configuration: ComputerUseRemoteModelConfiguration
+    ) -> ComputerUseModelClient {
+        OpenAICompatibleComputerUseModelClient(
+            configuration: configuration.withScreenshotUpload(allowRemoteScreenshotUpload)
         )
     }
 

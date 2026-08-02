@@ -779,6 +779,13 @@ final class AppState {
         magicFormatSetupState.detail
     }
 
+    var computerUseRemoteModelConfiguration: ComputerUseRemoteModelConfiguration? {
+        ComputerUseModelConfigurationFactory.make(
+            settings: currentLLMSettings(),
+            apiKey: try? keychainService.getLLMKey()
+        )
+    }
+
     var llmSelectedModelIdPreview: String {
         currentLLMSettings().validatedModelId ?? ""
     }

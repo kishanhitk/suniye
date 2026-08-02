@@ -45,6 +45,18 @@ struct ComputerUseRemoteModelConfiguration: Equatable, Sendable {
         }
         return nil
     }
+
+    func withScreenshotUpload(_ allowed: Bool) -> Self {
+        Self(
+            endpointURL: endpointURL,
+            modelID: modelID,
+            apiKey: apiKey,
+            systemPrompt: systemPrompt,
+            timeoutSeconds: timeoutSeconds,
+            maxTokens: maxTokens,
+            allowsScreenshotUpload: allowed
+        )
+    }
 }
 
 enum ComputerUseRemoteModelDefaults {

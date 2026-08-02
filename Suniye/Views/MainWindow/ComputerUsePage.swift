@@ -3,6 +3,15 @@ import SwiftUI
 
 struct ComputerUsePage: View {
     @Bindable var coordinator: ComputerUseCoordinator
+    let remoteModelConfiguration: ComputerUseRemoteModelConfiguration?
+
+    init(
+        coordinator: ComputerUseCoordinator,
+        remoteModelConfiguration: ComputerUseRemoteModelConfiguration? = nil
+    ) {
+        self.coordinator = coordinator
+        self.remoteModelConfiguration = remoteModelConfiguration
+    }
 
     var body: some View {
         DetailScrollContainer {
@@ -24,12 +33,29 @@ struct ComputerUsePage: View {
                     detail: "Reading the selected window. No input event will be posted.",
                     progress: nil
                 )
+            } else if coordinator.phase == .runningAgent {
+                InlineStatusBanner(
+                    icon: "sparkles",
+                    tint: .accentColor,
+                    title: coordinator.phaseTitle,
+                    detail: "Reading the selected app and waiting for the next model decision. Approval is required before each action.",
+                    progress: nil
+                )
             } else if coordinator.phase == .acting {
                 InlineStatusBanner(
                     icon: "hand.tap",
                     tint: .accentColor,
                     title: coordinator.phaseTitle,
                     detail: "Executing the approved action. Cancel is available.",
+                    progress: nil
+                )
+            } else if coordinator.phase == .agentCompleted,
+                      let result = coordinator.agentResult {
+                InlineStatusBanner(
+                    icon: result.phase == .completed ? "checkmark.circle.fill" : "info.circle",
+                    tint: result.phase == .completed ? .green : .orange,
+                    title: coordinator.phaseTitle,
+                    detail: result.message,
                     progress: nil
                 )
             } else if coordinator.phase == .actionCompleted,
@@ -45,6 +71,10 @@ struct ComputerUsePage: View {
 
             permissions
             targetSelection
+            ComputerUseAgentPanel(
+                coordinator: coordinator,
+                remoteModelConfiguration: remoteModelConfiguration
+            )
             observationPreview
 
             if let request = coordinator.pendingApproval {
@@ -70,7 +100,11 @@ struct ComputerUsePage: View {
             }
         }
         .onAppear {
+            coordinator.configureRemoteModel(remoteModelConfiguration)
             coordinator.start()
+        }
+        .onChange(of: remoteModelConfiguration) { _, configuration in
+            coordinator.configureRemoteModel(configuration)
         }
         .onDisappear {
             coordinator.cancel()
