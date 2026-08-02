@@ -126,7 +126,7 @@ enum ComputerUseSemanticAction: String, Codable, Equatable, Sendable, CaseIterab
     case raise = "AXRaise"
 }
 
-enum ComputerUseActionRisk: String, Codable, Equatable, Sendable {
+enum ComputerUseActionRisk: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
     case click
     case keyPress
     case scroll
@@ -288,14 +288,46 @@ private extension ComputerUseKeyModifiers {
     }
 }
 
-enum ComputerUseApprovalScope: String, Codable, Equatable, Sendable {
+enum ComputerUseApprovalScope: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
     case once
+    case session
+    case always
+
+    var title: String {
+        switch self {
+        case .once:
+            return "Allow Once"
+        case .session:
+            return "Allow for Session"
+        case .always:
+            return "Always Allow"
+        }
+    }
+
+    var isPersistent: Bool {
+        self != .once
+    }
 }
 
 enum ComputerUseApprovalDecision: Equatable, Sendable {
     case allowOnce
+    case allowForSession
+    case allowAlways
     case deny
     case stopSession
+
+    var scope: ComputerUseApprovalScope? {
+        switch self {
+        case .allowOnce:
+            return .once
+        case .allowForSession:
+            return .session
+        case .allowAlways:
+            return .always
+        case .deny, .stopSession:
+            return nil
+        }
+    }
 }
 
 struct ComputerUseApprovalRequest: Codable, Equatable, Sendable, Identifiable {
@@ -304,9 +336,35 @@ struct ComputerUseApprovalRequest: Codable, Equatable, Sendable, Identifiable {
     let target: ComputerUseTarget
     let risk: ComputerUseActionRisk
     let reason: String
+    let sessionID: UUID
+    let observationGeneration: UInt64
+    let allowedScopes: Set<ComputerUseApprovalScope>
+
+    init(
+        id: UUID,
+        action: ComputerUseAction,
+        target: ComputerUseTarget,
+        risk: ComputerUseActionRisk,
+        reason: String,
+        sessionID: UUID = UUID(),
+        observationGeneration: UInt64 = 0,
+        allowedScopes: Set<ComputerUseApprovalScope> = [.once]
+    ) {
+        self.id = id
+        self.action = action
+        self.target = target
+        self.risk = risk
+        self.reason = reason
+        self.sessionID = sessionID
+        self.observationGeneration = observationGeneration
+        self.allowedScopes = allowedScopes
+    }
 
     var textPreview: String? {
-        action.textPreview
+        guard let text = action.textPreview else {
+            return nil
+        }
+        return "(\(text.count) characters hidden)"
     }
 }
 
@@ -317,6 +375,25 @@ struct ComputerUseApprovalGrant: Codable, Equatable, Sendable {
     let windowID: UInt32
     let observationGeneration: UInt64
     let action: ComputerUseAction
+    let sessionID: UUID
+
+    init(
+        requestID: UUID,
+        scope: ComputerUseApprovalScope,
+        applicationID: String,
+        windowID: UInt32,
+        observationGeneration: UInt64,
+        action: ComputerUseAction,
+        sessionID: UUID = UUID()
+    ) {
+        self.requestID = requestID
+        self.scope = scope
+        self.applicationID = applicationID
+        self.windowID = windowID
+        self.observationGeneration = observationGeneration
+        self.action = action
+        self.sessionID = sessionID
+    }
 }
 
 struct ComputerUseActionResult: Codable, Equatable, Sendable {

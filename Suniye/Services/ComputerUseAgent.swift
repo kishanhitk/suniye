@@ -449,7 +449,8 @@ actor ComputerUseAgent {
             action: action,
             target: observation.target,
             risk: action.risk,
-            reason: "The Computer Use model proposed this action for the current task."
+            reason: "The Computer Use model proposed this action for the current task.",
+            observationGeneration: observation.generation
         )
         let approval = await approvalService.requestApproval(
             approvalRequest,
@@ -464,18 +465,25 @@ actor ComputerUseAgent {
             return .denied
         case .stopSession:
             return .stopped
-        case .allowOnce:
+        case .allowOnce, .allowForSession, .allowAlways:
+            guard let scope = approval.scope,
+                  approvalRequest.allowedScopes.contains(scope) else {
+                return .retryableFailure(
+                    ComputerUsePolicyError.approvalScopeNotAllowed.localizedDescription
+                )
+            }
             if let intervention = interventionMonitor.check(target: observation.target) {
                 return .userIntervened(intervention.message)
             }
 
             let grant = ComputerUseApprovalGrant(
                 requestID: approvalRequest.id,
-                scope: .once,
+                scope: scope,
                 applicationID: observation.target.application.id,
                 windowID: observation.target.window.id,
                 observationGeneration: observation.generation,
-                action: action
+                action: action,
+                sessionID: approvalRequest.sessionID
             )
             do {
                 let actionResult = try actionService.execute(

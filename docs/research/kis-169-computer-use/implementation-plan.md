@@ -1,8 +1,8 @@
 # KIS-169 independent Swift implementation plan
 
-Status: Phase 0 observation, Phase 1 preview, Phase 2 approved actions, and the Phase 3 typed
-agent loop are added. A live model provider, browser control, and native helper remain
-unimplemented.
+Status: Phase 0 observation, Phase 1 preview, Phase 2 approved actions, Phase 3 typed agent loop,
+and the Phase 4 policy boundary are added. A live model provider, coordinator agent integration,
+browser control, and native helper remain unimplemented.
 
 ## Goal
 
@@ -21,9 +21,9 @@ The capability should observe a selected app, ask a model for one safe action, r
 
 ## Proposed service boundaries
 
-The observation, permission, action, one-time approval, agent, and intervention boundaries are
-implemented as typed seams. The model client has only an unconfigured default and test doubles;
-persistent approval remains a design proposal.
+The observation, permission, action, approval, agent, intervention, policy, storage, and audit
+boundaries are implemented as typed seams. The model client has only an unconfigured default and
+test doubles; live model and coordinator integration remain unimplemented.
 
 - `ComputerUseCoordinator`: `@MainActor` lifecycle, UI state, user stop, and approval presentation.
 - `ComputerUseAgent`: session state and model/action loop behind an async interface.
@@ -35,6 +35,8 @@ persistent approval remains a design proposal.
 - `ComputerUseApprovalService`: one-time, session, and app-scoped approval decisions.
 - `ComputerUseInterventionMonitor`: frontmost app, target window, and user stop signals.
 - `ComputerUsePolicy`: action risk classification and hard safety blocks.
+- `ComputerUseApprovalStore`: session-memory and app/risk-scoped persistent approval records.
+- `ComputerUseAuditRecording`: redacted approval and policy audit events.
 
 Use protocols for all boundaries.
 
@@ -496,6 +498,19 @@ Implementation added:
 Phase 3 has no live model client and no coordinator integration. The default model fails closed with
 `notConfigured`; a future provider must honor the cancellation token and the privacy policy.
 
+### Phase 4: Risk policy boundary
+
+Implementation added:
+
+- `Suniye/Services/ComputerUsePolicyService.swift` distinguishes allowed, denied, and forbidden applications and derives permitted approval scopes from action risk.
+- `Suniye/Services/ComputerUseApprovalStore.swift` keeps session approvals in memory and persists only app bundle identifier, action risk, scope, and optional expiry for always approvals.
+- `Suniye/Services/ComputerUseAudit.swift` records approval and policy outcomes with action summaries that never include typed text.
+- `Suniye/Services/ComputerUseActionModels.swift` now carries session identity, observation generation, allowed scopes, and redacted text previews.
+- `SuniyeTests/ComputerUsePhase4PolicyTests.swift` covers policy decisions, persistence, expiry, revocation, exact grants, and audit redaction.
+
+Persistent approval is opt-in by policy configuration and is never enabled for text entry. The
+coordinator UI and agent provider will consume this boundary in Phase 5.
+
 ### Phase 4: Risk policy
 
 Add action risk classes, persistent approvals, audit records, and hard blocks.
@@ -524,4 +539,4 @@ Do not infer DOM or tab state from a desktop screenshot. Define a browser-specif
 - Browser control is a separate adapter.
 - Phase 0 remains read-only.
 - Phase 2 actions require one-time approval and fresh observation state.
-- No live model provider, persistent approval, or browser code is enabled.
+- No live model provider, coordinator agent integration, or browser code is enabled.

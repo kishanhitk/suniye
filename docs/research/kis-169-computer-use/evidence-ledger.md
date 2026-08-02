@@ -401,3 +401,22 @@ Sources: the mounted DMG paths
 - `[Inferred]` Suniye’s Phase 3 typed model, approval, action, and observation seams follow the same useful separation, while keeping the implementation independent.
 - `[Corrected]` Suniye’s Phase 3 one-time approval is not yet equivalent to the DMG’s app-policy and session/always-persistent approval layer. That comparison belongs to Phase 4.
 - `[Unknown]` The readable DMG JavaScript does not expose the complete model prompt or the hidden service’s internal agent loop. We must not claim exact parity for those parts.
+
+### Entry 31: Phase 4 policy boundary
+
+Sources: `Suniye/Services/ComputerUsePolicyService.swift`,
+`Suniye/Services/ComputerUseApprovalStore.swift`,
+`Suniye/Services/ComputerUseAudit.swift`,
+`Suniye/Services/ComputerUseActionModels.swift`, and
+`SuniyeTests/ComputerUsePhase4PolicyTests.swift`.
+
+- `[Verified]` Suniye now represents allowed, denied, and forbidden application policy outcomes.
+- `[Verified]` The policy always permits one-time approval and can opt selected action risks into session and always scopes.
+- `[Verified]` Text entry cannot receive persistent approval through the policy service.
+- `[Verified]` Session approvals remain in memory and are removed when the session ends.
+- `[Verified]` Always approvals persist only bundle identifier, action risk, scope, and optional expiry.
+- `[Verified]` Expired and revoked always approvals are removed and are not returned.
+- `[Verified]` Approval requests carry session identity, observation generation, and allowed scopes.
+- `[Verified]` Approval and policy audit records contain redacted action summaries and do not contain typed text or screenshots.
+- `[Inferred]` The boundary is ready for coordinator and agent integration, but those callers must use `prepare` and `grant` for policy re-evaluation.
+- `[Unknown]` The final product defaults, expiry duration, user settings, and remote telemetry policy remain open.

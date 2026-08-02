@@ -95,7 +95,7 @@ final class ComputerUsePhase2ModelTests: XCTestCase {
             ),
             result
         )
-        XCTAssertEqual(request.textPreview, "hello")
+        XCTAssertEqual(request.textPreview, "(5 characters hidden)")
         XCTAssertEqual(ComputerUseApprovalScope.once, .once)
         XCTAssertEqual(ComputerUseApprovalDecision.allowOnce, .allowOnce)
         XCTAssertEqual(ComputerUseApprovalDecision.deny, .deny)

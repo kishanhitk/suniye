@@ -53,3 +53,10 @@
 - How should `ComputerUseAgentResult` events connect to the main-actor coordinator without allowing the model to mutate views?
 - Which model response schema and prompt produce reliable typed actions for each supported target app?
 - Should action failures be shown to the user before the agent retries, or should the first release stop after one failure?
+
+## Phase 4 integration gates
+
+- Which action risks may receive session or always approval in the product default policy?
+- Which app policy settings need user-facing controls before persistent approval is enabled?
+- What expiry duration and reset UX should always approvals use?
+- Should policy and approval audit records remain local only, or may aggregate redacted telemetry leave the Mac?

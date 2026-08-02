@@ -228,6 +228,18 @@ adapter from the coverage gate.
 Status: `[Verified]` by the Phase 3 full test and coverage run. The model client is an
 unconfigured default plus test doubles; no live provider is connected.
 
+Phase 4 added these policy and safety files:
+
+- `Suniye/Services/ComputerUsePolicyService.swift`;
+- `Suniye/Services/ComputerUseApprovalStore.swift`;
+- `Suniye/Services/ComputerUseAudit.swift`;
+- `SuniyeTests/ComputerUsePhase4PolicyTests.swift`.
+
+Phase 4 also extends the approval models and regenerates the Xcode project.
+
+Status: `[Verified]` by the Phase 4 focused policy test run. The policy boundary is not yet
+wired to the coordinator or a live model provider.
+
 These files establish the current state machine, permissions, Accessibility insertion, model seams, settings surface, build source of truth, and test seams.
 
 Status: `[Verified]` by source inspection.
