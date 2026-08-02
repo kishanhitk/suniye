@@ -608,3 +608,12 @@ Sources: the final `xcodebuild` result bundle at `.derivedData/coverage.post-e2e
   policy with 3 passing tests.
 - `[Verified]` No reviewed production or test file exceeds 1,000 lines, and `git diff --check`
   reports no whitespace errors.
+
+### Entry 45: Corrective slice repository handoff
+
+Sources: local Git status, `git log`, `git push`, and `git ls-remote`.
+
+- `[Verified]` Commit `f15a04d` contains the native picker and own-process activation fixes, their
+  regression tests, and the live E2E record.
+- `[Verified]` The branch `kis-169-computer-use` is clean and tracks
+  `origin/kis-169-computer-use` at commit `f15a04d`.

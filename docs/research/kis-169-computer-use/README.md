@@ -52,5 +52,5 @@ This work does not copy source code from the inspected artifact.
 
 This work does not add browser control or a native helper.
 
-The Phase 0 through Phase 5B slices and the current parity slice are committed after review. The
-post-E2E corrective slice and E2E record are ready for the next commit.
+The Phase 0 through Phase 5B slices, the current parity slice, and the post-E2E corrective slice
+are committed after review and pushed to `origin/kis-169-computer-use`.
