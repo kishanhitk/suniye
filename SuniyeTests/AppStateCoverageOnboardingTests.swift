@@ -306,21 +306,6 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
         XCTAssertFalse(onboardingStepEvents(spy).contains { $0.step == .completed })
     }
 
-    func testReplayOnboardingRestartsFromWelcome() {
-        let store = TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .finished))
-        let appState = makeTestAppState(generalSettingsStore: store)
-        appState.startOnboardingIfNeeded()
-        XCTAssertNil(appState.activeOnboardingStep)
-
-        appState.replayOnboarding()
-
-        XCTAssertEqual(appState.activeOnboardingStep, .welcome)
-        XCTAssertEqual(appState.onboardingProgress, .notStarted)
-        XCTAssertEqual(store.latest.onboardingProgress, .notStarted)
-        XCTAssertEqual(appState.onboardingPracticeAttempts, 0)
-        XCTAssertFalse(appState.onboardingPracticeSucceeded)
-    }
-
     // MARK: - Practice display state
 
     func testOnboardingPracticeLevelsFollowIndicatorState() {

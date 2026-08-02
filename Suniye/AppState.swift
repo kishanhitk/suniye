@@ -1931,21 +1931,6 @@ final class AppState {
         activeOnboardingStep = nil
     }
 
-    /// Support/recovery path (Settings → General): re-runs the flow from the
-    /// welcome screen without touching `firstLaunchRecorded` or history.
-    func replayOnboarding() {
-        setOnboardingProgress(.notStarted)
-        onboardingStepsTracked = []
-        onboardingResumedPending = false
-        onboardingPracticeSucceeded = false
-        onboardingPracticeAttempts = 0
-        onboardingPracticeText = ""
-        onboardingPracticeResult = nil
-        onboardingDiskSpaceMessage = nil
-        onboardingStartedAt = nil
-        startOnboardingIfNeeded()
-    }
-
     private func setOnboardingProgress(_ progress: OnboardingProgress) {
         onboardingProgress = progress
     }

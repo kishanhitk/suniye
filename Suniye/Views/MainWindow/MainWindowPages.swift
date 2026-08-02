@@ -666,29 +666,6 @@ struct GeneralPage: View {
             }
 
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Setup")
-
-                SurfaceCard {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Setup Walkthrough")
-                                .font(AppTypography.body)
-                            Text("Replay the first-run setup: permissions, the speech model, and a practice dictation.")
-                                .font(AppTypography.subheadline)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                        }
-
-                        Spacer(minLength: 12)
-
-                        Button("Show Setup Again") {
-                            appState.replayOnboarding()
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
                 SectionHeading(title: "About")
 
                 SurfaceCard {
