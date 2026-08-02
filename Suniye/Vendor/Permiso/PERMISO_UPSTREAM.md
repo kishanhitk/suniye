@@ -16,17 +16,9 @@ we want to be able to audit and patch ourselves when macOS shifts.
 
 ## Local modifications
 
-One deliberate delta (re-apply after any upstream re-sync):
-
-- `PermisoAssistant.swift`: added a `public var onDismiss: (() -> Void)?` hook, fired at the
-  end of `dismiss()` when an active overlay was torn down. The overlay's back chevron calls
-  `PermisoAssistant.dismiss()` directly, so without this hook the owning wrapper
-  (`AccessibilityOnboarding.swift`) could not observe user dismissals — its `isPresenting`
-  latch stayed set and the Enable button silently no-opped until the 300s safety timeout.
-
-Everything else is copied unchanged. Prefer the wrapper in
-`Suniye/Services/AccessibilityOnboarding.swift` for any further fixes, so re-syncing
-upstream stays close to a clean copy.
+None. Files are copied unchanged. Keep it that way — if a fix is needed, prefer a wrapper
+in `Suniye/Services/AccessibilityOnboarding.swift` over editing vendored code, so re-syncing
+upstream stays a clean copy.
 
 ## How it's used
 

@@ -1289,14 +1289,13 @@ final class AppState {
     }
 
     /// Post-onboarding Magic Format nudge: shown once, after the user has real
-    /// dictations to judge the value against, only on hardware where at least
-    /// one provider could actually run. Replaces the old forced wizard step.
+    /// dictations to judge the value against. The setup page checks provider
+    /// availability after the user opens it.
     var shouldShowMagicFormatNudge: Bool {
         onboardingProgress.isFinished
             && !llmEnabled
             && !magicFormatNudgeDismissed
             && recentResults.count >= 3
-            && (isLocalGemmaProviderSelectable || appleMagicFormatAvailability.isAvailable)
     }
 
     /// Impression tracking for the nudge (idempotent per app run) — the
@@ -1489,7 +1488,7 @@ final class AppState {
     private let micAuthorizationStatusProvider: () -> AVAuthorizationStatus
     private let micAccessRequester: () async -> Bool
     /// Injectable free-disk probe for the onboarding download preflight.
-    private let availableDiskCapacityProvider: () -> Int64?
+    private let availableDiskCapacityProvider: () async -> Int64?
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
     private let temporaryFileCleanupScheduler: (URL) -> Void
     private let magicFormatSlowWarningDelaySeconds: TimeInterval
@@ -1527,14 +1526,43 @@ final class AppState {
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
     private var localGemmaDownloadStartedAt: Date?
+    private var localGemmaDownloadCancelled = false {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != localGemmaDownloadCancelled else {
+                return
+            }
+            persistGeneralSettings()
+        }
+    }
     private var isHydratingLLMSettings = false
     private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
     private let llmE2EMode: LLME2EMode
     private enum DictationDestination: Equatable {
         case systemInsertion
+        case clipboardOnly
         case onboardingPractice
         case editRewrite(selectedText: String?)
+
+        var needsAccessibility: Bool {
+            switch self {
+            case .systemInsertion, .editRewrite:
+                true
+            case .clipboardOnly, .onboardingPractice:
+                false
+            }
+        }
+
+        var analyticsDestination: SuniyeAnalytics.DictationDestination {
+            switch self {
+            case .systemInsertion, .editRewrite:
+                .systemInsertion
+            case .clipboardOnly:
+                .clipboard
+            case .onboardingPractice:
+                .onboardingPractice
+            }
+        }
     }
 
     init(
@@ -1569,7 +1597,7 @@ final class AppState {
         accessibilityOnboarding: AccessibilityOnboardingPresenting? = nil,
         micAuthorizationStatusProvider: @escaping () -> AVAuthorizationStatus = { AVCaptureDevice.authorizationStatus(for: .audio) },
         micAccessRequester: @escaping () async -> Bool = { await AVCaptureDevice.requestAccess(for: .audio) },
-        availableDiskCapacityProvider: (() -> Int64?)? = nil,
+        availableDiskCapacityProvider: (() async -> Int64?)? = nil,
         issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { defaultName in
             let panel = NSSavePanel()
             panel.nameFieldStringValue = defaultName
@@ -1633,12 +1661,16 @@ final class AppState {
         self.accessibilityOnboarding = accessibilityOnboarding ?? PermisoAccessibilityOnboarding()
         self.micAuthorizationStatusProvider = micAuthorizationStatusProvider
         self.micAccessRequester = micAccessRequester
-        self.availableDiskCapacityProvider = availableDiskCapacityProvider ?? { [modelManager] in
-            guard let root = try? modelManager.modelsRootDirectoryURL(),
-                  let values = try? root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]) else {
+        let modelsRootDirectory = try? modelManager.modelsRootDirectoryURL()
+        self.availableDiskCapacityProvider = availableDiskCapacityProvider ?? {
+            guard let modelsRootDirectory else {
                 return nil
             }
-            return values.volumeAvailableCapacityForImportantUsage
+            return await Task.detached(priority: .utility) {
+                try? modelsRootDirectory.resourceValues(
+                    forKeys: [.volumeAvailableCapacityForImportantUsageKey]
+                ).volumeAvailableCapacityForImportantUsage
+            }.value
         }
         self.issueReportDiagnosticsDestinationPicker = issueReportDiagnosticsDestinationPicker
         self.temporaryFileCleanupScheduler = temporaryFileCleanupScheduler
@@ -1812,10 +1844,10 @@ final class AppState {
     }
 
     /// Single forward transition used by the onboarding UI.
-    func advanceOnboarding() {
+    func advanceOnboarding() async {
         switch activeOnboardingStep {
         case .welcome:
-            beginOnboardingSetup()
+            await beginOnboardingSetup()
         case .speak:
             advanceOnboardingFromSpeak()
         case .typeAnywhere:
@@ -1828,12 +1860,12 @@ final class AppState {
     /// "Get Started": persists progress and starts the required ASR model
     /// download if Welcome did not already start it. Download time overlaps the
     /// mic grant and the first dictation instead of blocking on its own screen.
-    func beginOnboardingSetup() {
+    func beginOnboardingSetup() async {
         guard activeOnboardingStep == .welcome else {
             return
         }
         onboardingDiskSpaceMessage = nil
-        if !isModelInstalled, let message = modelDownloadDiskSpaceMessage() {
+        if !isModelInstalled, let message = await modelDownloadDiskSpaceMessage() {
             onboardingDiskSpaceMessage = message
             onStateChange?()
             return
@@ -1849,12 +1881,17 @@ final class AppState {
         guard !isModelInstalled, activeASRModelOperationID == nil else {
             return
         }
-        guard let message = modelDownloadDiskSpaceMessage() else {
-            startModelDownload()
-            return
+        Task { @MainActor [weak self] in
+            guard let self, !isModelInstalled, activeASRModelOperationID == nil else {
+                return
+            }
+            guard let message = await modelDownloadDiskSpaceMessage() else {
+                startModelDownload()
+                return
+            }
+            onboardingDiskSpaceMessage = message
+            onStateChange?()
         }
-        onboardingDiskSpaceMessage = message
-        onStateChange?()
     }
 
     func advanceOnboardingFromSpeak() {
@@ -1927,10 +1964,10 @@ final class AppState {
         isModelInstalled && (phase == .ready || phase == .recording || phase == .transcribing)
     }
 
-    private func modelDownloadDiskSpaceMessage() -> String? {
+    private func modelDownloadDiskSpaceMessage() async -> String? {
         let neededBytes = modelManager.expectedDownloadSizeBytes(for: selectedASRModelID) * 2
         guard neededBytes > 0,
-              let available = availableDiskCapacityProvider(),
+              let available = await availableDiskCapacityProvider(),
               available < neededBytes else {
             return nil
         }
@@ -2445,6 +2482,7 @@ final class AppState {
 
         let modelID = localLLMModelManager.preferredModelID
         let entry = localGemmaCatalogEntry(for: modelID)
+        localGemmaDownloadCancelled = false
         localGemmaInstallState = .downloading(LocalLLMDownloadProgress(
             fractionCompleted: 0,
             downloadedBytes: 0,
@@ -2499,16 +2537,14 @@ final class AppState {
         }
     }
 
-    /// Self-heal for the worst Magic Format failure mode: the user chose the
-    /// local model, the 3.43 GB download died after they moved on, and every
-    /// dictation would silently insert raw text forever. Resuming is safe —
-    /// the user explicitly opted into this download, and size/SHA validation
-    /// already guards correctness.
+    /// Self-heal an interrupted local model download after bootstrap. An
+    /// explicit Cancel is persisted, so the user stays in control of resume.
     func resumeInterruptedLocalGemmaDownloadIfNeeded() {
         guard llmEnabled,
               llmProvider == .localGemma,
               localLLMModelManager.isHardwareSupported,
               !localGemmaInstallState.isInstalled,
+              !localGemmaDownloadCancelled,
               canStartLocalGemmaDownload else {
             return
         }
@@ -2520,6 +2556,7 @@ final class AppState {
         guard canCancelLocalGemmaDownload else {
             return
         }
+        localGemmaDownloadCancelled = true
         localGemmaDownloadTask?.cancel()
         localLLMModelManager.cancelDownload()
     }
@@ -2674,6 +2711,9 @@ final class AppState {
                             self?.downloadProgress = progress
                         }
                     }
+                    guard await modelManager.isSystemManagedAssetInstalled(modelID) else {
+                        throw AppStateError.modelValidationFailed
+                    }
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
                     modelDownloadStartedAt = nil
                     phase = .loading
@@ -2689,7 +2729,7 @@ final class AppState {
                 lastFailedASRModelError = nil
                 AppLogger.shared.log(.info, "system-managed model ready id=\(modelID.rawValue)")
             } catch {
-                if phase == .downloadingModel {
+                if modelDownloadStartedAt != nil {
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .failed, startedAt: modelDownloadStartedAt)
                 }
                 handleASRModelOperationFailure(
@@ -2731,12 +2771,13 @@ final class AppState {
 
                 phase = .loading
                 statusText = "Validating model..."
-                trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
-                modelDownloadStartedAt = nil
 
                 guard modelManager.isInstalled(modelID) else {
                     throw AppStateError.modelValidationFailed
                 }
+
+                trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
+                modelDownloadStartedAt = nil
 
                 if autoSelect {
                     do {
@@ -3494,7 +3535,7 @@ final class AppState {
         // Practice dictations never insert into another app, so Accessibility is
         // deliberately NOT required (or prompted for) — the whole point of the
         // Speak screen is a first dictation before the scary permission ask.
-        if resolvedDestination != .onboardingPractice {
+        if resolvedDestination.needsAccessibility {
             if !hasAccessibilityPermission {
                 // Suppress the modal system prompt while the Permiso overlay is up:
                 // two competing Accessibility grant UIs at once confuse the exact
@@ -3516,7 +3557,7 @@ final class AppState {
         // critical path. Fire-and-forget; idempotent and self-evicting. Edit Mode
         // sessions pass through here too, so the rewrite also starts warm.
         prewarmLocalLLMIfEligible()
-        await startRecording(trigger: trigger, destination: destination)
+        await startRecording(trigger: trigger, destination: resolvedDestination)
     }
 
     /// Warm the local Gemma runtime iff Magic Format is enabled and will actually
@@ -3536,7 +3577,7 @@ final class AppState {
         )
     }
 
-    private func startRecording(trigger: RecordingSource, destination: DictationDestination? = nil) async {
+    private func startRecording(trigger: RecordingSource, destination: DictationDestination) async {
         guard phase == .ready else {
             return
         }
@@ -3549,7 +3590,7 @@ final class AppState {
             id: sessionID,
             source: trigger,
             startedAt: Date(),
-            destination: destination ?? currentDictationDestination,
+            destination: destination,
             frontmostAppBundleID: frontmostAppBundleIDProvider()
         )
         activeDictationSession = .starting(context)
@@ -3639,15 +3680,16 @@ final class AppState {
                     sessionID: sessionID,
                     duration: duration
                 )
-            case .systemInsertion:
-                try await completeSystemDictation(
+            case .systemInsertion, .clipboardOnly:
+                try await completeDictation(
                     rawText: rawText,
                     sessionID: sessionID,
                     duration: duration,
                     sampleCount: samples.count,
                     sampleRate: sampleRate,
                     frontmostAppBundleID: context.frontmostAppBundleID,
-                    source: context.source
+                    source: context.source,
+                    destination: destination
                 )
             case .onboardingPractice:
                 await completeOnboardingPracticeDictation(
@@ -3676,17 +3718,19 @@ final class AppState {
         }
     }
 
-    private func completeSystemDictation(
+    private func completeDictation(
         rawText: String,
         sessionID: UUID,
         duration: TimeInterval,
         sampleCount: Int,
         sampleRate: Int,
         frontmostAppBundleID: String?,
-        source: RecordingSource
+        source: RecordingSource,
+        destination: DictationDestination
     ) async throws {
+        let usesSystemInsertion = destination == .systemInsertion
         let rawParse = AppState.parseSubmitCommand(from: rawText)
-        var shouldSubmit = rawParse.shouldSubmit
+        var shouldSubmit = usesSystemInsertion && rawParse.shouldSubmit
         var finalText = rawParse.text
         var llmOutcome: MagicFormatPolishOutcome?
 
@@ -3697,10 +3741,10 @@ final class AppState {
             llmOutcome = outcome
             let polishedParse = AppState.parseSubmitCommand(from: outcome.text)
             finalText = polishedParse.text
-            shouldSubmit = shouldSubmit || polishedParse.shouldSubmit
+            shouldSubmit = shouldSubmit || (usesSystemInsertion && polishedParse.shouldSubmit)
         }
 
-        if autoSubmitEnabled && !finalText.isEmpty {
+        if usesSystemInsertion && autoSubmitEnabled && !finalText.isEmpty {
             shouldSubmit = true
         }
 
@@ -3710,19 +3754,24 @@ final class AppState {
         let wasLLMPolished = llmOutcome?.ran ?? false
         var didCompleteDictation = false
 
-        if !finalText.isEmpty || shouldSubmit {
+        if usesSystemInsertion && (!finalText.isEmpty || shouldSubmit) {
             try await requireAccessibilityForInsertion()
         }
 
         if !finalText.isEmpty {
-            editLearningService.finalizeActiveSession()
-            let insertionText = DictationInsertionTextFormatter.textForInsertion(
-                finalText,
-                insertionContext: textInsertionService.captureInsertionContext()
-            )
-            try textInsertionService.insertText(insertionText)
+            if usesSystemInsertion {
+                editLearningService.finalizeActiveSession()
+                let insertionText = DictationInsertionTextFormatter.textForInsertion(
+                    finalText,
+                    insertionContext: textInsertionService.captureInsertionContext()
+                )
+                try textInsertionService.insertText(insertionText)
+                beginEditLearningTracking(insertedText: insertionText)
+            } else {
+                textInsertionService.copyTextToClipboard(finalText)
+                AppLogger.shared.log(.info, "transcription copied to clipboard words=\(wordCount)")
+            }
             dictationTiming.inserted = .now()
-            beginEditLearningTracking(insertedText: insertionText)
             recentResults.insert(
                 RecentResult(
                     id: UUID(),
@@ -3733,11 +3782,13 @@ final class AppState {
                 ),
                 at: 0
             )
-            AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
+            if usesSystemInsertion {
+                AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
+            }
             didCompleteDictation = true
         }
 
-        if shouldSubmit {
+        if usesSystemInsertion && shouldSubmit {
             if !finalText.isEmpty {
                 try? await Task.sleep(nanoseconds: 120_000_000)
             }
@@ -3759,7 +3810,8 @@ final class AppState {
                 duration: duration,
                 llmOutcome: llmOutcome,
                 source: source,
-                frontmostAppBundleID: frontmostAppBundleID
+                frontmostAppBundleID: frontmostAppBundleID,
+                destination: destination.analyticsDestination
             )
         }
 
@@ -4052,9 +4104,12 @@ final class AppState {
         updateChannel = settings.updateChannel
         accessibilityDragHelperEnabled = settings.accessibilityDragHelperEnabled
         shareAnalyticsEnabled = settings.shareAnalyticsEnabled
-        firstLaunchRecorded = settings.firstLaunchRecorded
+        let needsFirstLaunchMigration = settings.onboardingProgress == nil
+            && (settings.hasSeenOnboardingWelcome == true || settings.hasCompletedCoreOnboarding == true)
+        firstLaunchRecorded = settings.firstLaunchRecorded || needsFirstLaunchMigration
         lastKnownAccessibilityGranted = settings.lastKnownAccessibilityGranted
         magicFormatNudgeDismissed = settings.magicFormatNudgeDismissed
+        localGemmaDownloadCancelled = settings.localGemmaDownloadCancelled
 
         let needsProgressMigration = settings.onboardingProgress == nil
         onboardingProgress = settings.onboardingProgress ?? OnboardingProgress.migrating(
@@ -4068,7 +4123,7 @@ final class AppState {
             editModeHotkeyConfiguration = nil
         }
         applyUpdateChannelToController()
-        if needsProgressMigration {
+        if needsProgressMigration || needsFirstLaunchMigration {
             persistGeneralSettings()
         }
     }
@@ -4109,6 +4164,7 @@ final class AppState {
             firstLaunchRecorded: firstLaunchRecorded,
             lastKnownAccessibilityGranted: lastKnownAccessibilityGranted,
             magicFormatNudgeDismissed: magicFormatNudgeDismissed,
+            localGemmaDownloadCancelled: localGemmaDownloadCancelled,
             selectedASRModelID: selectedASRModelID,
             updateChannel: updateChannel,
             accessibilityDragHelperEnabled: accessibilityDragHelperEnabled,
@@ -4431,7 +4487,10 @@ final class AppState {
     }
 
     private var currentDictationDestination: DictationDestination {
-        activeOnboardingStep == .speak ? .onboardingPractice : .systemInsertion
+        if activeOnboardingStep == .speak {
+            return .onboardingPractice
+        }
+        return hasAccessibilityPermission ? .systemInsertion : .clipboardOnly
     }
 
     private func clearActiveDictationSession(sessionID: UUID? = nil) {

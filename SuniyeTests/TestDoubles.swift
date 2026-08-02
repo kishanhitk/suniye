@@ -60,6 +60,7 @@ final class TestGeneralSettingsStore: GeneralSettingsStoreProtocol {
 
 final class SpyTextInsertionService: TextInsertionServiceProtocol {
     private(set) var insertedTexts: [String] = []
+    private(set) var copiedTexts: [String] = []
     private(set) var submitCallCount = 0
     var insertionContext: TextInsertionContext?
     var insertError: Error?
@@ -79,6 +80,10 @@ final class SpyTextInsertionService: TextInsertionServiceProtocol {
             throw insertError
         }
         insertedTexts.append(text)
+    }
+
+    func copyTextToClipboard(_ text: String) {
+        copiedTexts.append(text)
     }
 
     func submitActiveInput() throws {
@@ -178,6 +183,7 @@ final class StubModelManager: ModelManagerProtocol {
     var lastDeletedModelID: ASRModelID?
     var lastDownloadedModelID: ASRModelID?
     var downloadResult: Result<Void, Error> = .success(())
+    var installsModelAfterDownload = true
     var recognizerConfigs: [ASRModelID: RecognizerConfig] = [
         .parakeetV3: RecognizerConfig(
             modelID: .parakeetV3,
@@ -291,7 +297,9 @@ final class StubModelManager: ModelManagerProtocol {
     func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {
         progress(1)
         try downloadResult.get()
-        installedModelIDs.insert(modelID)
+        if installsModelAfterDownload {
+            installedModelIDs.insert(modelID)
+        }
         lastDownloadedModelID = modelID
     }
 
@@ -726,6 +734,7 @@ final class SpyAccessibilityOnboarding: AccessibilityOnboardingPresenting {
             return
         }
         isPresenting = false
+        pendingOnGranted = nil
         let onEnded = pendingOnEnded
         pendingOnEnded = nil
         onEnded?(outcome)
@@ -767,7 +776,7 @@ func makeTestAppState(
     accessibilityOnboarding: AccessibilityOnboardingPresenting? = nil,
     micAuthorizationStatusProvider: (() -> AVAuthorizationStatus)? = nil,
     micAccessRequester: (() async -> Bool)? = nil,
-    availableDiskCapacityProvider: (() -> Int64?)? = nil,
+    availableDiskCapacityProvider: (() async -> Int64?)? = nil,
     issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
     magicFormatSlowWarningDelaySeconds: TimeInterval = 5,

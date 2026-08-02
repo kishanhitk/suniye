@@ -358,6 +358,9 @@ struct GeneralSettings: Codable, Equatable {
     var lastKnownAccessibilityGranted: Bool = false
     /// The post-onboarding Magic Format nudge card was dismissed; never re-nag.
     var magicFormatNudgeDismissed: Bool = false
+    /// The user canceled the local model download. Bootstrap must not restart it
+    /// until the user chooses Download again.
+    var localGemmaDownloadCancelled: Bool = false
     var selectedASRModelID: ASRModelID = .parakeetV3
     var updateChannel: UpdateChannel = .stable
     /// Gates the Permiso drag-to-grant overlay for Accessibility onboarding.
@@ -385,6 +388,7 @@ struct GeneralSettings: Codable, Equatable {
         firstLaunchRecorded: Bool = false,
         lastKnownAccessibilityGranted: Bool = false,
         magicFormatNudgeDismissed: Bool = false,
+        localGemmaDownloadCancelled: Bool = false,
         selectedASRModelID: ASRModelID = .parakeetV3,
         updateChannel: UpdateChannel = .stable,
         accessibilityDragHelperEnabled: Bool = true,
@@ -406,6 +410,7 @@ struct GeneralSettings: Codable, Equatable {
         self.firstLaunchRecorded = firstLaunchRecorded
         self.lastKnownAccessibilityGranted = lastKnownAccessibilityGranted
         self.magicFormatNudgeDismissed = magicFormatNudgeDismissed
+        self.localGemmaDownloadCancelled = localGemmaDownloadCancelled
         self.selectedASRModelID = selectedASRModelID
         self.updateChannel = updateChannel
         self.accessibilityDragHelperEnabled = accessibilityDragHelperEnabled
@@ -429,6 +434,7 @@ struct GeneralSettings: Codable, Equatable {
         case firstLaunchRecorded
         case lastKnownAccessibilityGranted
         case magicFormatNudgeDismissed
+        case localGemmaDownloadCancelled
         case selectedASRModelID
         case updateChannel
         case accessibilityDragHelperEnabled
@@ -456,6 +462,7 @@ struct GeneralSettings: Codable, Equatable {
         firstLaunchRecorded = try container.decodeIfPresent(Bool.self, forKey: .firstLaunchRecorded) ?? false
         lastKnownAccessibilityGranted = try container.decodeIfPresent(Bool.self, forKey: .lastKnownAccessibilityGranted) ?? false
         magicFormatNudgeDismissed = try container.decodeIfPresent(Bool.self, forKey: .magicFormatNudgeDismissed) ?? false
+        localGemmaDownloadCancelled = try container.decodeIfPresent(Bool.self, forKey: .localGemmaDownloadCancelled) ?? false
         let storedASRModelID = try container.decodeIfPresent(String.self, forKey: .selectedASRModelID)
         selectedASRModelID = storedASRModelID.flatMap(ASRModelID.init(rawValue:)) ?? .parakeetV3
         let storedUpdateChannel = try container.decodeIfPresent(String.self, forKey: .updateChannel)

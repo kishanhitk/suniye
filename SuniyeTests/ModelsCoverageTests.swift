@@ -87,7 +87,9 @@ final class OnboardingProgressMigrationTests: XCTestCase {
         XCTAssertEqual(migrated(false, false, usage: true), .notStarted)
         XCTAssertEqual(migrated(false, false, usage: false), .notStarted)
         XCTAssertEqual(migrated(false, nil, usage: true), .notStarted)
+        XCTAssertEqual(migrated(false, nil, usage: false), .notStarted)
         XCTAssertEqual(migrated(nil, false, usage: true), .notStarted)
+        XCTAssertEqual(migrated(nil, false, usage: false), .notStarted)
     }
 }
 
@@ -369,4 +371,3 @@ final class MainWindowSectionCoverageTests: XCTestCase {
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-llm"]), .style)
     }
 }
-

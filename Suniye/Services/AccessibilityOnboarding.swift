@@ -34,9 +34,9 @@ protocol AccessibilityOnboardingPresenting: AnyObject {
 /// user drags Suniye into the Accessibility list. A safety timeout guards against a leaked timer
 /// if the user wanders off.
 ///
-/// The overlay's own back chevron dismisses `PermisoAssistant` directly; the assistant's
-/// `onDismiss` hook keeps this wrapper's `isPresenting` in sync so the Enable button is
-/// immediately re-pressable (previously it silently no-opped until the 300s timeout).
+/// The overlay's own back chevron dismisses `PermisoAssistant` directly. The wrapper
+/// repairs its presentation latch when the user presses Enable again, so a stale
+/// overlay state cannot block the flow until the 300s timeout.
 @MainActor
 final class PermisoAccessibilityOnboarding: AccessibilityOnboardingPresenting {
     private let isTrusted: () -> Bool
@@ -78,9 +78,6 @@ final class PermisoAccessibilityOnboarding: AccessibilityOnboardingPresenting {
         isPresenting = true
         self.onEnded = onEnded
         AppLogger.shared.log(.info, "accessibility onboarding: presenting Permiso overlay")
-        PermisoAssistant.shared.onDismiss = { [weak self] in
-            self?.handleExternalDismiss()
-        }
         PermisoAssistant.shared.present(panel: .accessibility)
         startPolling(onGranted: onGranted)
     }
@@ -89,24 +86,11 @@ final class PermisoAccessibilityOnboarding: AccessibilityOnboardingPresenting {
         end(.dismissed)
     }
 
-    /// The overlay was dismissed by Permiso itself (back chevron). Sync our state
-    /// without re-entering `PermisoAssistant.dismiss()`.
-    private func handleExternalDismiss() {
-        guard isPresenting else {
-            return
-        }
-        AppLogger.shared.log(.info, "accessibility onboarding: overlay dismissed by user")
-        stopPolling()
-        isPresenting = false
-        fireEnded(.dismissed)
-    }
-
     private func end(_ outcome: AccessibilityOnboardingEnd) {
         guard isPresenting else {
             return
         }
         stopPolling()
-        PermisoAssistant.shared.onDismiss = nil
         PermisoAssistant.shared.dismiss()
         isPresenting = false
         fireEnded(outcome)

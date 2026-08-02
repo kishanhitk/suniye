@@ -107,7 +107,8 @@ final class GeneralSettingsStoreTests: XCTestCase {
             onboardingProgress: .speakReached,
             firstLaunchRecorded: true,
             lastKnownAccessibilityGranted: true,
-            magicFormatNudgeDismissed: true
+            magicFormatNudgeDismissed: true,
+            localGemmaDownloadCancelled: true
         )
         store.save(settings)
         let loaded = store.load()
@@ -116,6 +117,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertTrue(loaded.firstLaunchRecorded)
         XCTAssertTrue(loaded.lastKnownAccessibilityGranted)
         XCTAssertTrue(loaded.magicFormatNudgeDismissed)
+        XCTAssertTrue(loaded.localGemmaDownloadCancelled)
     }
 
     func testLegacyBlobDecodesNilProgressAndFalseFlags() {

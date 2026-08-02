@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The 3-screen onboarding flow. Screen order is the product thesis:
 /// 1. Welcome       — value + starts the model download in the background
-/// 2. Speak         — mic grant + first successful dictation (the aha), before any scary ask
+/// 2. Prepare/Try   — prerequisites first, then the first successful dictation
 /// 3. Type Anywhere — the Accessibility ask, made after value is demonstrated
 struct OnboardingView: View {
     @Bindable var appState: AppState
@@ -139,12 +139,12 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Speak (the aha screen)
+    // MARK: - Prepare / Try (the aha screen)
 
     private var speakContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Say something")
+                Text(canPracticeOnboarding ? "Try your first dictation" : "Prepare Suniye")
                     .font(AppTypography.pageTitle)
                 Text(speakSubtitle)
                     .font(AppTypography.body)
@@ -157,10 +157,13 @@ struct OnboardingView: View {
             }
 
             if !appState.asrModelReady {
-                modelStatusCard
+                modelStatusLine
             }
 
-            practiceTextArea
+            if canPracticeOnboarding {
+                practicePrompt
+                transcriptPreview
+            }
 
             if appState.isOnboardingPracticeRecording {
                 practiceStatusLabel("Listening...", color: .accentColor)
@@ -174,13 +177,20 @@ struct OnboardingView: View {
     }
 
     private var speakSubtitle: String {
+        if !appState.hasMicPermission && !appState.asrModelReady {
+            return "Allow microphone access while the speech model prepares on your Mac."
+        }
         if !appState.hasMicPermission {
-            return "One permission and you can watch your words appear."
+            return "Allow microphone access to try your first dictation."
         }
         if !appState.asrModelReady {
-            return "The speech model is almost ready — everything stays on your Mac."
+            return "The speech model is preparing on your Mac."
         }
-        return "Hold \(appState.hotkeyConfiguration.displayString) and try the phrase below."
+        return "Hold \(appState.hotkeyConfiguration.displayString) and say:"
+    }
+
+    private var canPracticeOnboarding: Bool {
+        appState.hasMicPermission && appState.asrModelReady
     }
 
     private var microphoneCard: some View {
@@ -222,107 +232,95 @@ struct OnboardingView: View {
     }
 
     @ViewBuilder
-    private var modelStatusCard: some View {
-        SurfaceCard(padding: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                if appState.phase == .downloadingModel {
-                    HStack {
-                        Text("Preparing the speech model")
-                            .font(AppTypography.body)
-                        Spacer()
-                        Text(verbatim: "\(Int(appState.downloadProgress * 100))%")
-                            .font(AppTypography.codeCaption)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                    }
+    private var modelStatusLine: some View {
+        HStack(spacing: 8) {
+            if appState.phase == .downloadingModel {
+                ProgressView(value: appState.downloadProgress)
+                    .progressViewStyle(.linear)
+                    .frame(width: 76)
 
-                    ProgressView(value: appState.downloadProgress)
-                        .progressViewStyle(.linear)
+                Text("Downloading speech model")
 
-                    HStack(spacing: 8) {
-                        (mixedMonoNumberText(ByteCountFormatter.string(
-                            fromByteCount: Int64(Double(appState.modelExpectedByteCount) * appState.downloadProgress),
-                            countStyle: .file
-                        ))
-                        + Text(" of ")
-                            .font(AppTypography.caption)
-                        + mixedMonoNumberText(appState.modelExpectedSizeText))
+                Spacer(minLength: 4)
 
-                        Spacer(minLength: 12)
+                Text(verbatim: "\(Int(appState.downloadProgress * 100))%")
+                    .font(AppTypography.codeCaption)
 
-                        mixedMonoNumberText(appState.modelDownloadETAStatusText)
-
-                        Button("Cancel") {
-                            appState.cancelASRModelDownload()
-                        }
-                        .buttonStyle(.plain)
-                        .font(AppTypography.caption)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
-                        .underline()
-                        .disabled(!appState.canCancelASRModelDownload)
-                        .accessibilityLabel("Cancel the model download")
-                    }
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-                } else if appState.phase == .loading {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .controlSize(.mini)
-                        Text("Setting up the speech model...")
-                            .font(AppTypography.body)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                    }
-                } else if appState.phase == .error {
-                    if let error = appState.lastError, !error.isEmpty {
-                        Text(error)
-                            .font(AppTypography.caption)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Button("Retry Download") {
-                        appState.startModelDownload()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                } else {
-                    HStack {
-                        Text("Speech model")
-                            .font(AppTypography.body)
-                        Spacer()
-                        Button("Download") {
-                            appState.startModelDownload()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                    }
-                    Text("A one-time download so transcription runs offline on your Mac.")
-                        .font(AppTypography.caption)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
+                Button("Cancel") {
+                    appState.cancelASRModelDownload()
                 }
+                .buttonStyle(.plain)
+                .underline()
+                .disabled(!appState.canCancelASRModelDownload)
+                .accessibilityLabel("Cancel the model download")
+            } else if appState.phase == .loading {
+                ProgressView()
+                    .controlSize(.mini)
+                Text("Loading speech model")
+            } else if appState.phase == .error {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+
+                Text("Speech model is not ready")
+
+                Spacer(minLength: 4)
+
+                Button("Retry") {
+                    appState.startModelDownload()
+                }
+                .buttonStyle(.plain)
+                .underline()
+            } else {
+                Text("Speech model is not ready")
+
+                Spacer(minLength: 4)
+
+                Button("Download") {
+                    appState.startModelDownload()
+                }
+                .buttonStyle(.plain)
+                .underline()
             }
         }
+        .font(AppTypography.caption)
+        .foregroundStyle(MainWindowPalette.secondaryText)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
     }
 
-    private var practicePlaceholder: String {
-        if !appState.hasMicPermission || !appState.asrModelReady {
-            return "Your words will appear here..."
-        }
-        return "Hold \(appState.hotkeyConfiguration.displayString) and say: \u{201C}Send the report by Friday morning.\u{201D}"
+    private var transcriptPlaceholder: String {
+        "Your words will appear here after you speak."
     }
 
-    private var practiceTextArea: some View {
+    private var practicePrompt: some View {
+        Text("\u{201C}Send the report by Friday morning.\u{201D}")
+            .font(AppTypography.body)
+            .foregroundStyle(MainWindowPalette.secondaryText)
+            .padding(.leading, 2)
+    }
+
+    private var transcriptPreview: some View {
         let isActive = appState.isOnboardingPracticeRecording
 
-        return ScrollView {
-            Text(appState.onboardingPracticeText.isEmpty
-                 ? practicePlaceholder
-                 : appState.onboardingPracticeText)
-                .font(AppTypography.body)
-                .foregroundStyle(appState.onboardingPracticeText.isEmpty
-                    ? MainWindowPalette.tertiaryText
-                    : Color.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Transcript preview")
+                    .font(AppTypography.bodyMedium)
+            }
+
+            ScrollView {
+                Text(appState.onboardingPracticeText.isEmpty
+                     ? transcriptPlaceholder
+                     : appState.onboardingPracticeText)
+                    .font(AppTypography.body)
+                    .foregroundStyle(appState.onboardingPracticeText.isEmpty
+                        ? MainWindowPalette.tertiaryText
+                        : Color.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: 82)
         }
-        .frame(height: 140)
+        .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(MainWindowPalette.cardBackground)
@@ -332,6 +330,8 @@ struct OnboardingView: View {
                 .stroke(isActive ? Color.accentColor : MainWindowPalette.cardStroke,
                         lineWidth: isActive ? 1.5 : 1)
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Read-only transcript preview")
         .animation(.easeInOut(duration: 0.2), value: isActive)
     }
 
@@ -352,11 +352,11 @@ struct OnboardingView: View {
     private var typeAnywhereContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Put your words in any app")
+                Text("Dictate anywhere")
                     .font(AppTypography.pageTitle)
                 Text(appState.hasAccessibilityPermission
-                     ? "Accessibility is on — dictation lands wherever your cursor is."
-                     : "Accessibility permission lets \(appIdentity.displayName) type what you say directly into Mail, Slack — anywhere your cursor is.")
+                     ? "Hold \(appState.hotkeyConfiguration.displayString) in any app to dictate."
+                     : "Allow \(appIdentity.displayName) to type into the app you are using.")
                     .font(AppTypography.body)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -368,7 +368,7 @@ struct OnboardingView: View {
                         Image(systemName: "hand.raised")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(MainWindowPalette.secondaryText)
-                        Text("Accessibility")
+                        Text(appState.hasAccessibilityPermission ? "Ready to dictate" : "Type into any app")
                             .font(AppTypography.bodyMedium)
                         Spacer(minLength: 12)
 
@@ -386,7 +386,7 @@ struct OnboardingView: View {
                                 .controlSize(.small)
                                 .accessibilityLabel("Open System Settings to enable Accessibility")
 
-                                Button("Enable") {
+                                Button("Allow Access") {
                                     appState.beginAccessibilityOnboarding(askSurface: .onboarding)
                                 }
                                 .buttonStyle(.borderedProminent)
@@ -398,14 +398,14 @@ struct OnboardingView: View {
 
                     if appState.hasAccessibilityPermission {
                         HStack(spacing: 10) {
-                            Text("Try a real one: open Notes, click into a note, and hold \(appState.hotkeyConfiguration.displayString).")
+                            Text("Try it in Notes. Click into a note and hold \(appState.hotkeyConfiguration.displayString).")
                                 .font(AppTypography.caption)
                                 .foregroundStyle(MainWindowPalette.secondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
 
                             Spacer(minLength: 8)
 
-                            Button("Open Notes") {
+                            Button("Try in Notes") {
                                 appState.openNotesForInsertionDemo()
                             }
                             .buttonStyle(.bordered)
@@ -441,7 +441,7 @@ struct OnboardingView: View {
         case .welcome:
             VStack(spacing: 10) {
                 Button {
-                    appState.beginOnboardingSetup()
+                    Task { await appState.beginOnboardingSetup() }
                 } label: {
                     Text("Get Started")
                         .frame(maxWidth: .infinity)
@@ -454,24 +454,26 @@ struct OnboardingView: View {
             }
 
         case .speak:
-            HStack {
-                if !appState.onboardingPracticeSucceeded, showsSpeakEscapeHatch {
-                    Button("Skip for now") {
+            if canPracticeOnboarding || showsSpeakEscapeHatch {
+                HStack {
+                    if !appState.onboardingPracticeSucceeded, showsSpeakEscapeHatch {
+                        Button("Skip for now") {
+                            appState.advanceOnboardingFromSpeak()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isDictationInFlight)
+                        .accessibilityHint("Continue without a practice dictation")
+                    }
+
+                    Spacer()
+
+                    Button("Continue") {
                         appState.advanceOnboardingFromSpeak()
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(isDictationInFlight)
-                    .accessibilityHint("Continue without a practice dictation")
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!appState.onboardingPracticeSucceeded || isDictationInFlight)
+                    .keyboardShortcut(.defaultAction)
                 }
-
-                Spacer()
-
-                Button("Continue") {
-                    appState.advanceOnboardingFromSpeak()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!appState.onboardingPracticeSucceeded || isDictationInFlight)
-                .keyboardShortcut(.defaultAction)
             }
 
         case .typeAnywhere:
@@ -481,7 +483,7 @@ struct OnboardingView: View {
                         appState.finishOnboarding()
                     }
                     .buttonStyle(.bordered)
-                    .accessibilityHint("Finish without Accessibility; dictations go to the clipboard")
+                    .accessibilityHint("Finish setup and copy dictations to the clipboard until access is allowed")
                 }
 
                 Spacer()
@@ -506,39 +508,6 @@ struct OnboardingView: View {
         appState.onboardingPracticeAttempts >= 1 || appState.hasMicPermissionBeenDenied
     }
 
-    private func mixedMonoNumberText(_ value: String) -> Text {
-        let monoCharacterSet = CharacterSet.decimalDigits.union(CharacterSet(charactersIn: "%.,:/+-"))
-        var segments: [(String, Bool)] = []
-        var current = ""
-        var currentIsMono = false
-
-        for character in value {
-            let isMono = character.unicodeScalars.allSatisfy { monoCharacterSet.contains($0) }
-
-            if current.isEmpty {
-                current = String(character)
-                currentIsMono = isMono
-                continue
-            }
-
-            if isMono == currentIsMono {
-                current.append(character)
-            } else {
-                segments.append((current, currentIsMono))
-                current = String(character)
-                currentIsMono = isMono
-            }
-        }
-
-        if !current.isEmpty {
-            segments.append((current, currentIsMono))
-        }
-
-        return segments.reduce(Text("")) { partial, segment in
-            partial + Text(verbatim: segment.0)
-                .font(segment.1 ? AppTypography.codeCaption : AppTypography.caption)
-        }
-    }
 }
 
 private extension OnboardingPracticeResult.Severity {

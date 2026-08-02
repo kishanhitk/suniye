@@ -472,7 +472,12 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
                 self.taskLock.lock()
                 self.activeTask = task
                 self.taskLock.unlock()
-                task.resume()
+
+                if Task.isCancelled {
+                    task.cancel()
+                } else {
+                    task.resume()
+                }
             }
         }, onCancel: {
             taskLock.lock()

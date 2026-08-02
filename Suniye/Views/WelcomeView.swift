@@ -28,7 +28,7 @@ struct WelcomeView: View {
         }
     }
 
-    private func benefitRow(icon: String, title: String, detail: String) -> some View {
+    private func benefitRow(icon: String, title: LocalizedStringKey, detail: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .medium))

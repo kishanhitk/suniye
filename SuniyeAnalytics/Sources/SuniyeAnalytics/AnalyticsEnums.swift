@@ -9,7 +9,7 @@ public enum DictationSource: String, Sendable, CaseIterable {
 }
 
 public enum DictationDestination: String, Sendable, CaseIterable {
-    case systemInsertion, onboardingPractice, unknown
+    case systemInsertion, clipboard, onboardingPractice, unknown
 }
 
 public enum InsertionMethod: String, Sendable, CaseIterable {

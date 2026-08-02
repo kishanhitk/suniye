@@ -264,6 +264,22 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         XCTAssertTrue(modelDownloads(spy).contains { $0.kind == .asr && $0.outcome == .failed })
     }
 
+    func testASRDownloadValidationFailureDoesNotEmitCompleted() async {
+        let spy = SpyAnalytics()
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = []
+        modelManager.installsModelAfterDownload = false
+        let appState = makeTestAppState(modelManager: modelManager, analytics: spy)
+        appState.phase = .needsModel
+
+        appState.startModelDownload()
+        await waitUntilFunnel { appState.phase == .error }
+
+        let downloads = modelDownloads(spy)
+        XCTAssertFalse(downloads.contains { $0.outcome == .completed })
+        XCTAssertTrue(downloads.contains { $0.kind == .asr && $0.outcome == .failed })
+    }
+
     func testASRDownloadCancelEmitsCanceledAndRestoresNeedsModel() async {
         let spy = SpyAnalytics()
         let modelManager = GatedModelManager()
@@ -313,7 +329,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         XCTAssertFalse(appState.shouldShowMagicFormatNudge)
     }
 
-    func testNudgeHiddenWhenMFEnabledOrUnfinishedOrUnsupported() {
+    func testNudgeHiddenWhenMFEnabledOrUnfinishedAndShownForAPIUsers() {
         let enabled = nudgeReadyState()
         enabled.llmEnabled = true
         XCTAssertFalse(enabled.shouldShowMagicFormatNudge)
@@ -322,6 +338,10 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
             generalSettingsStore: TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .speakReached))
         )
         XCTAssertFalse(unfinished.shouldShowMagicFormatNudge)
+
+        let apiUser = nudgeReadyState()
+        apiUser.llmProvider = .openAICompatible
+        XCTAssertTrue(apiUser.shouldShowMagicFormatNudge, "API users can still benefit from Magic Format")
 
         let unsupportedManager = StubLocalLLMModelManager()
         unsupportedManager.isHardwareSupported = false
@@ -332,7 +352,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         unsupported.recentResults = (0 ..< 5).map {
             RecentResult(id: UUID(), text: "s\($0)", createdAt: Date(), durationSeconds: 1, wasLLMPolished: false)
         }
-        XCTAssertFalse(unsupported.shouldShowMagicFormatNudge, "Intel + no Apple Intelligence must never see the nudge")
+        XCTAssertTrue(unsupported.shouldShowMagicFormatNudge, "Local model availability must not hide the nudge")
     }
 
     func testNudgeImpressionTrackedOncePerRun() {
@@ -460,7 +480,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
 
     // MARK: - Disk preflight message
 
-    func testDiskShortfallMessageMentionsRequiredSpace() {
+    func testDiskShortfallMessageMentionsRequiredSpace() async {
         let modelManager = StubModelManager()
         modelManager.installedModelIDs = []
         let appState = makeTestAppState(
@@ -470,7 +490,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.phase = .needsModel
         appState.startOnboardingIfNeeded()
 
-        appState.beginOnboardingSetup()
+        await appState.beginOnboardingSetup()
 
         XCTAssertEqual(appState.activeOnboardingStep, .welcome)
         XCTAssertTrue(appState.onboardingDiskSpaceMessage?.contains("free") == true)

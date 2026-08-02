@@ -6,6 +6,7 @@ import Foundation
 protocol TextInsertionServiceProtocol {
     func captureInsertionContext() -> TextInsertionContext?
     func insertText(_ text: String) throws
+    func copyTextToClipboard(_ text: String)
     func submitActiveInput() throws
     func makeFocusedFieldValueProvider() -> (() -> String?)?
 }
@@ -94,6 +95,12 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         scheduleClipboardRestore(previousItems, to: pasteboard)
 
         try postKey(pasteKeyCode(), flags: .maskCommand)
+    }
+
+    func copyTextToClipboard(_ text: String) {
+        let pasteboard = pasteboardProvider()
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
     }
 
     private func scheduleClipboardRestore(_ previousItems: ClipboardSnapshot, to pasteboard: NSPasteboard) {

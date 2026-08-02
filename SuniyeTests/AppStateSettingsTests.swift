@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import SuniyeAnalytics
 import XCTest
 @testable import Suniye
 
@@ -218,6 +219,19 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(generalSettingsStore.latest.firstLaunchRecorded, true)
     }
 
+    func testLegacyOnboardingStateMarksFirstLaunchAsRecorded() {
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                hasSeenOnboardingWelcome: true,
+                hasCompletedCoreOnboarding: false
+            )
+        )
+
+        _ = makeTestAppState(generalSettingsStore: generalSettingsStore)
+
+        XCTAssertTrue(generalSettingsStore.latest.firstLaunchRecorded)
+    }
+
     func testChosenGemmaDownloadResumesAtBootstrap() async {
         // The user chose the local model during setup, the download died after
         // they moved on: bootstrap must self-heal instead of silently inserting
@@ -227,12 +241,29 @@ final class AppStateSettingsTests: XCTestCase {
         appState.llmEnabled = true
         appState.llmProvider = .localGemma
 
-        appState.resumeInterruptedLocalGemmaDownloadIfNeeded()
+        await appState.bootstrap()
         for _ in 0 ..< 20 {
             await Task.yield()
         }
 
         XCTAssertEqual(localManager.downloadCallCount, 1)
+    }
+
+    func testCanceledGemmaDownloadDoesNotResumeAtBootstrap() async {
+        let localManager = StubLocalLLMModelManager()
+        let settings = TestGeneralSettingsStore(
+            value: GeneralSettings(localGemmaDownloadCancelled: true)
+        )
+        let appState = makeTestAppState(
+            localLLMModelManager: localManager,
+            generalSettingsStore: settings
+        )
+        appState.llmEnabled = true
+        appState.llmProvider = .localGemma
+
+        await appState.bootstrap()
+
+        XCTAssertEqual(localManager.downloadCallCount, 0)
     }
 
     func testGemmaResumeSkippedWhenInstalledOrNotChosen() {
@@ -472,6 +503,38 @@ final class AppStateSettingsTests: XCTestCase {
 
         XCTAssertEqual(textInsertionService.insertedTexts, [" strong "])
         XCTAssertEqual(appState.recentResults.first?.text, "Strong.")
+    }
+
+    func testDictationCopiesToClipboardWithoutAccessibility() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("Hello without access")
+        let textInsertionService = SpyTextInsertionService()
+        let spy = SpyAnalytics()
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            textInsertionService: textInsertionService,
+            analytics: spy
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = false
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(textInsertionService.copiedTexts, ["Hello without access"])
+        XCTAssertTrue(textInsertionService.insertedTexts.isEmpty)
+        XCTAssertEqual(appState.recentResults.first?.text, "Hello without access")
+        let metrics = spy.trackedEvents.compactMap { event -> DictationMetrics? in
+            if case let .dictationCompleted(value) = event { return value }
+            return nil
+        }.last
+        XCTAssertEqual(metrics?.destination, .clipboard)
     }
 
     func testSoundFeedbackEnabledPlaysSuccessForCompletedDictation() async {
