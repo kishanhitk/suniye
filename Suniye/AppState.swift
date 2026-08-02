@@ -1487,6 +1487,9 @@ final class AppState {
     /// (the real AVCaptureDevice statics cannot be driven headless in CI).
     private let micAuthorizationStatusProvider: () -> AVAuthorizationStatus
     private let micAccessRequester: () async -> Bool
+    /// Injectable Accessibility TCC seam for route selection after the user grants
+    /// access in System Settings while Suniye is inactive.
+    private let accessibilityTrustProvider: () -> Bool
     /// Injectable free-disk probe for the onboarding download preflight.
     private let availableDiskCapacityProvider: () async -> Int64?
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
@@ -1597,6 +1600,7 @@ final class AppState {
         accessibilityOnboarding: AccessibilityOnboardingPresenting? = nil,
         micAuthorizationStatusProvider: @escaping () -> AVAuthorizationStatus = { AVCaptureDevice.authorizationStatus(for: .audio) },
         micAccessRequester: @escaping () async -> Bool = { await AVCaptureDevice.requestAccess(for: .audio) },
+        accessibilityTrustProvider: @escaping () -> Bool = { AXIsProcessTrusted() },
         availableDiskCapacityProvider: (() async -> Int64?)? = nil,
         issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { defaultName in
             let panel = NSSavePanel()
@@ -1661,6 +1665,7 @@ final class AppState {
         self.accessibilityOnboarding = accessibilityOnboarding ?? PermisoAccessibilityOnboarding()
         self.micAuthorizationStatusProvider = micAuthorizationStatusProvider
         self.micAccessRequester = micAccessRequester
+        self.accessibilityTrustProvider = accessibilityTrustProvider
         let modelsRootDirectory = try? modelManager.modelsRootDirectoryURL()
         self.availableDiskCapacityProvider = availableDiskCapacityProvider ?? {
             guard let modelsRootDirectory else {
@@ -2006,7 +2011,7 @@ final class AppState {
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             hasAccessibilityPermission = AXIsProcessTrustedWithOptions(options)
         } else {
-            hasAccessibilityPermission = AXIsProcessTrusted()
+            hasAccessibilityPermission = accessibilityTrustProvider()
         }
 
         if !priorMic, hasMicPermission {
@@ -2018,6 +2023,18 @@ final class AppState {
         updateLastKnownAccessibilityGranted()
 
         AppLogger.shared.log(.info, "permissions: mic=\(hasMicPermission) ax=\(hasAccessibilityPermission)")
+        onStateChange?()
+    }
+
+    /// Re-reads Accessibility without changing microphone state. This matters when
+    /// the user grants access in System Settings while Suniye is not active.
+    private func refreshAccessibilityPermission() {
+        let wasGranted = hasAccessibilityPermission
+        hasAccessibilityPermission = accessibilityTrustProvider()
+        if !wasGranted, hasAccessibilityPermission {
+            analytics.track(.permissionTransition(kind: .accessibility, granted: true))
+        }
+        updateLastKnownAccessibilityGranted()
         onStateChange?()
     }
 
@@ -3518,10 +3535,15 @@ final class AppState {
             showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             return
         }
-        let resolvedDestination = destination ?? currentDictationDestination
         if !hasMicPermission {
             await refreshPermissions(requestMicrophone: true, askSurface: .dictationAttempt)
         }
+        // Re-read Accessibility before choosing the normal dictation route. The user
+        // can grant it in System Settings while Suniye is not active.
+        if destination == nil && activeOnboardingStep != .speak {
+            refreshAccessibilityPermission()
+        }
+        let resolvedDestination = destination ?? currentDictationDestination
         guard hasMicPermission else {
             lastError = "Microphone permission not granted"
             statusText = "Permission required"

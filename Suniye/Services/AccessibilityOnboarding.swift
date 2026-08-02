@@ -35,18 +35,22 @@ protocol AccessibilityOnboardingPresenting: AnyObject {
 /// if the user wanders off.
 ///
 /// The overlay's own back chevron dismisses `PermisoAssistant` directly. The wrapper
-/// repairs its presentation latch when the user presses Enable again, so a stale
-/// overlay state cannot block the flow until the 300s timeout.
+/// observes that window close so it can stop polling and report `.dismissed` at once.
 @MainActor
 final class PermisoAccessibilityOnboarding: AccessibilityOnboardingPresenting {
     private let isTrusted: () -> Bool
     private let pollInterval: TimeInterval
     private let safetyTimeout: TimeInterval
     private let nowProvider: () -> Date
+    private let presentOverlay: @MainActor () -> Void
+    private let dismissOverlay: @MainActor () -> Void
+    private let windowNotificationCenter: NotificationCenter
+    private let overlayWindowMatcher: @MainActor (NSWindow) -> Bool
 
     private var pollTimer: Timer?
     private var deadline: Date?
     private var onEnded: ((AccessibilityOnboardingEnd) -> Void)?
+    private var overlayCloseObserver: NSObjectProtocol?
 
     private(set) var isPresenting = false
 
@@ -54,12 +58,25 @@ final class PermisoAccessibilityOnboarding: AccessibilityOnboardingPresenting {
         isTrusted: @escaping () -> Bool = { AXIsProcessTrusted() },
         pollInterval: TimeInterval = 0.5,
         safetyTimeout: TimeInterval = 300,
-        nowProvider: @escaping () -> Date = Date.init
+        nowProvider: @escaping () -> Date = Date.init,
+        presentOverlay: @escaping @MainActor () -> Void = { PermisoAssistant.shared.present(panel: .accessibility) },
+        dismissOverlay: @escaping @MainActor () -> Void = { PermisoAssistant.shared.dismiss() },
+        windowNotificationCenter: NotificationCenter = .default,
+        overlayWindowMatcher: @escaping @MainActor (NSWindow) -> Bool = { window in
+            window is NSPanel
+                && window.styleMask.contains(.borderless)
+                && window.level == .statusBar
+                && window.frame.size == NSSize(width: 530, height: 109)
+        }
     ) {
         self.isTrusted = isTrusted
         self.pollInterval = pollInterval
         self.safetyTimeout = safetyTimeout
         self.nowProvider = nowProvider
+        self.presentOverlay = presentOverlay
+        self.dismissOverlay = dismissOverlay
+        self.windowNotificationCenter = windowNotificationCenter
+        self.overlayWindowMatcher = overlayWindowMatcher
     }
 
     func present(onGranted: @escaping () -> Void, onEnded: @escaping (AccessibilityOnboardingEnd) -> Void) {
@@ -78,7 +95,8 @@ final class PermisoAccessibilityOnboarding: AccessibilityOnboardingPresenting {
         isPresenting = true
         self.onEnded = onEnded
         AppLogger.shared.log(.info, "accessibility onboarding: presenting Permiso overlay")
-        PermisoAssistant.shared.present(panel: .accessibility)
+        observeOverlayDismissal()
+        presentOverlay()
         startPolling(onGranted: onGranted)
     }
 
@@ -91,9 +109,38 @@ final class PermisoAccessibilityOnboarding: AccessibilityOnboardingPresenting {
             return
         }
         stopPolling()
-        PermisoAssistant.shared.dismiss()
+        stopObservingOverlayDismissal()
+        dismissOverlay()
         isPresenting = false
         fireEnded(outcome)
+    }
+
+    private func observeOverlayDismissal() {
+        stopObservingOverlayDismissal()
+        overlayCloseObserver = windowNotificationCenter.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let window = notification.object as? NSWindow else {
+                return
+            }
+            Task { @MainActor in
+                guard let self,
+                      self.isPresenting,
+                      self.overlayWindowMatcher(window) else {
+                    return
+                }
+                self.end(.dismissed)
+            }
+        }
+    }
+
+    private func stopObservingOverlayDismissal() {
+        if let overlayCloseObserver {
+            windowNotificationCenter.removeObserver(overlayCloseObserver)
+            self.overlayCloseObserver = nil
+        }
     }
 
     private func fireEnded(_ outcome: AccessibilityOnboardingEnd) {

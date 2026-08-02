@@ -1,3 +1,4 @@
+import AppKit
 import SuniyeAnalytics
 import XCTest
 @testable import Suniye
@@ -156,5 +157,33 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
         onboarding.simulateGrant()
 
         XCTAssertEqual(store.latest.lastKnownAccessibilityGranted, true)
+    }
+
+    func testPermisoBackDismissesWrapperImmediately() async {
+        let notificationCenter = NotificationCenter()
+        var dismissCallCount = 0
+        var ended: AccessibilityOnboardingEnd?
+        let onboarding = PermisoAccessibilityOnboarding(
+            isTrusted: { false },
+            pollInterval: 60,
+            presentOverlay: {},
+            dismissOverlay: { dismissCallCount += 1 },
+            windowNotificationCenter: notificationCenter,
+            overlayWindowMatcher: { _ in true }
+        )
+        let overlayWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 530, height: 109),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: true
+        )
+
+        onboarding.present(onGranted: {}, onEnded: { ended = $0 })
+        notificationCenter.post(name: NSWindow.willCloseNotification, object: overlayWindow)
+        await Task.yield()
+
+        XCTAssertEqual(ended, .dismissed)
+        XCTAssertFalse(onboarding.isPresenting)
+        XCTAssertEqual(dismissCallCount, 1)
     }
 }

@@ -526,7 +526,8 @@ final class AppStateSettingsTests: XCTestCase {
             transcriptionService: transcriptionService,
             audioCaptureService: audioCapture,
             textInsertionService: textInsertionService,
-            analytics: spy
+            analytics: spy,
+            accessibilityTrustProvider: { false }
         )
         appState.phase = .ready
         appState.hasMicPermission = true
@@ -547,6 +548,31 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(metrics?.destination, .clipboard)
     }
 
+    func testDictationRefreshesAccessibilityBeforeChoosingInsertionDestination() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("Hello after grant")
+        let textInsertionService = SpyTextInsertionService()
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            textInsertionService: textInsertionService,
+            accessibilityTrustProvider: { true }
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = false
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(textInsertionService.insertedTexts, ["Hello after grant"])
+        XCTAssertTrue(textInsertionService.copiedTexts.isEmpty)
+    }
+
     func testClipboardFailureDoesNotRecordDictation() async {
         let audioCapture = StubAudioCaptureService()
         audioCapture.stopCaptureResult = makeValidCapturedAudio()
@@ -557,7 +583,8 @@ final class AppStateSettingsTests: XCTestCase {
         let appState = makeTestAppState(
             transcriptionService: transcriptionService,
             audioCaptureService: audioCapture,
-            textInsertionService: textInsertionService
+            textInsertionService: textInsertionService,
+            accessibilityTrustProvider: { false }
         )
         appState.phase = .ready
         appState.hasMicPermission = true

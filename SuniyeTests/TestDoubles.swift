@@ -780,6 +780,7 @@ func makeTestAppState(
     accessibilityOnboarding: AccessibilityOnboardingPresenting? = nil,
     micAuthorizationStatusProvider: (() -> AVAuthorizationStatus)? = nil,
     micAccessRequester: (() async -> Bool)? = nil,
+    accessibilityTrustProvider: (() -> Bool)? = nil,
     availableDiskCapacityProvider: (() async -> Int64?)? = nil,
     issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
@@ -821,6 +822,7 @@ func makeTestAppState(
         // the stored Bools or per-test providers, never live TCC.
         micAuthorizationStatusProvider: micAuthorizationStatusProvider ?? { .notDetermined },
         micAccessRequester: micAccessRequester ?? { false },
+        accessibilityTrustProvider: accessibilityTrustProvider ?? { true },
         availableDiskCapacityProvider: availableDiskCapacityProvider ?? { nil },
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
