@@ -503,3 +503,71 @@ the full `xcodebuild` result bundle, and local Git push output.
 - `[Verified]` `scripts/e2e_preflight.sh` and `scripts/e2e_smoke.sh` pass.
 - `[Verified]` Commit `edf2abd` contains the coverage-hardening tests and render-only coverage rationale. It is pushed to `origin/kis-169-computer-use`.
 - `[Unknown]` These checks do not verify a live provider response, real Accessibility trees, Screen Recording capture, or native input against a real target app.
+
+### Entry 39: Reference parity audit
+
+Sources: the mounted reference `sky-window2-api.md`, `sky-window-api.md`, the mounted Computer
+Use safety skill, the detailed `parity-audit-dmg-agent.md`, and current Suniye source inspection.
+
+- `[Verified]` The reference exposes app/window records, window state capture, window-relative
+  coordinate actions, indexed value actions, drag, dynamic secondary Accessibility actions, and
+  explicit window activation.
+- `[Verified]` The reference has separate native client/service boundaries and public evidence of
+  framed JSON-RPC and XPC transport names. The exact server-side model loop and sender-auth rules
+  remain hidden.
+- `[Verified]` The reference browser surface is a separate plugin with tab, DOM, extension, and
+  CDP concepts. Desktop app control is not browser-control parity.
+- `[Verified]` Suniye's parity matrix is recorded in `parity-audit.md`. It distinguishes broad
+  desktop-loop parity from missing helper IPC, state diffs, screenshot identifiers, indexed click
+  and scroll, installed-app launch, and browser control.
+
+### Entry 40: Corrective desktop parity slice
+
+Sources: `Suniye/Services/ComputerUseActionModels.swift`, `ComputerUseActionService.swift`,
+`ComputerUsePlatformRunner.swift`, `ComputerUseWindowActivationService.swift`,
+`ComputerUseCoordinator.swift`, `ComputerUsePage.swift`, and focused test output.
+
+- `[Verified]` Coordinate actions use points relative to the selected window and convert to screen
+  coordinates only inside the native action service.
+- `[Verified]` The action boundary supports click count/button, positioned scroll, drag, AX value
+  setting, and text selection with bounded validation and cancellation checks.
+- `[Verified]` The UI lists target windows, provides an explicit Bring Forward action, and shows
+  always-allowed approvals with revocation confirmation.
+- `[Verified]` Agent startup activates the explicit target window once. Later frontmost/window
+  changes remain intervention failures.
+- `[Corrected]` Live frontmost-process state is now the source of truth for key-window marking;
+  stale `ComputerUseApplication.isActive` values cannot authorize a background target.
+- `[Corrected]` Always-approval UI refreshes after persistence rather than before the grant is
+  stored.
+- `[Verified]` The focused Computer Use test set reports 47 tests passed and 0 failures after the
+  corrective slice.
+- `[Unknown]` Real AX activation, multi-display coordinate conversion, native event delivery, and
+  live provider behavior still require the planned Computer Use E2E run.
+
+### Entry 41: Strict quality review corrections
+
+Sources: the thermo-nuclear code quality review instructions, local source inspection, `git diff
+--check`, and the current test target.
+
+- `[Verified]` The oversized Phase 2 test file was split into focused action, support, and
+  coordinator files. No production Computer Use file or test file in the reviewed slice exceeds
+  the review's 1,000-line maintainability limit.
+- `[Corrected]` Scroll-coordinate decoding no longer force unwraps an optional value.
+- `[Corrected]` Test failure diagnostics now interpolate the expected value instead of printing a
+  literal placeholder.
+- `[Corrected]` Public action keys use the inspected reference names, while mouse-button aliases
+  remain accepted at the decode boundary.
+- `[Corrected]` Dynamic Accessibility action names are matched case-insensitively and the exact
+  exposed native action name is used for execution.
+- `[Verified]` `git diff --check` reports no whitespace errors.
+
+### Entry 42: Final deterministic validation before live E2E
+
+Sources: the focused `xcodebuild` run, the full `xcodebuild` result bundle at
+`.derivedData/coverage.run2.xcresult`, `xcrun xcresulttool`, and `scripts/coverage_report.sh`.
+
+- `[Verified]` The focused Computer Use suite reports 28 passed tests and 0 failures.
+- `[Verified]` The full suite reports 1,085 passed, 1 skipped, and 0 failed tests, for 1,086 total.
+- `[Verified]` Gated line coverage is 95.01% (14,439/15,197 lines) at the documented 95% threshold.
+- `[Unknown]` Live provider behavior, WindowServer interaction, Accessibility capture, native
+  event delivery, and permission prompts remain unverified until the planned `@Computer` E2E run.

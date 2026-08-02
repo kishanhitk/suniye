@@ -55,6 +55,18 @@ struct SystemComputerUseAccessibilityReader: ComputerUseAccessibilityReading {
         return try builder.build(root: windowElement, shouldCancel: shouldCancel)
     }
 
+    static func resolveWindowElement(
+        in applicationElement: AXUIElement,
+        target: ComputerUseWindow,
+        shouldCancel: () -> Bool
+    ) -> AXUIElement? {
+        SystemComputerUseAccessibilityReader().resolveWindow(
+            in: applicationElement,
+            target: target,
+            shouldCancel: shouldCancel
+        )
+    }
+
     private func resolveWindow(
         in applicationElement: AXUIElement,
         target: ComputerUseWindow,
@@ -198,7 +210,7 @@ struct SystemComputerUseAccessibilityReader: ComputerUseAccessibilityReading {
 
 extension SystemComputerUseAccessibilityReader: ComputerUseSemanticActionPerforming {
     func perform(
-        action: ComputerUseSemanticAction,
+        action: String,
         elementIndex: Int,
         target: ComputerUseTarget,
         cancellation: ComputerUseCancellationToken
@@ -228,9 +240,176 @@ extension SystemComputerUseAccessibilityReader: ComputerUseSemanticActionPerform
         guard !cancellation.isCancelled else {
             throw ComputerUseActionError.cancelled
         }
-        guard AXUIElementPerformAction(element, action.rawValue as CFString) == .success else {
-            throw ComputerUseActionError.semanticActionFailed(action.rawValue)
+        guard AXUIElementPerformAction(element, action as CFString) == .success else {
+            throw ComputerUseActionError.semanticActionFailed(action)
         }
+    }
+}
+
+extension SystemComputerUseAccessibilityReader: ComputerUseValueActionPerforming {
+    func setValue(
+        _ value: String,
+        elementIndex: Int,
+        target: ComputerUseTarget,
+        cancellation: ComputerUseCancellationToken
+    ) throws {
+        let element = try resolveActionElement(
+            elementIndex: elementIndex,
+            target: target,
+            cancellation: cancellation
+        )
+        var isSettable = DarwinBoolean(false)
+        guard AXUIElementIsAttributeSettable(
+            element,
+            kAXValueAttribute as CFString,
+            &isSettable
+        ) == .success,
+        isSettable.boolValue else {
+            throw ComputerUseActionError.accessibilityValueActionFailed("value is not editable")
+        }
+
+        guard !cancellation.isCancelled else {
+            throw ComputerUseActionError.cancelled
+        }
+        guard AXUIElementSetAttributeValue(
+            element,
+            kAXValueAttribute as CFString,
+            value as CFTypeRef
+        ) == .success else {
+            throw ComputerUseActionError.accessibilityValueActionFailed("set value")
+        }
+    }
+
+    func selectText(
+        _ text: String,
+        elementIndex: Int,
+        prefix: String?,
+        suffix: String?,
+        selectionType: ComputerUseTextSelectionType,
+        target: ComputerUseTarget,
+        cancellation: ComputerUseCancellationToken
+    ) throws {
+        let element = try resolveActionElement(
+            elementIndex: elementIndex,
+            target: target,
+            cancellation: cancellation
+        )
+        guard let value = stringAttribute(kAXValueAttribute as CFString, from: element) else {
+            throw ComputerUseActionError.textSelectionFailed("the element has no text value")
+        }
+        guard let match = findTextRange(
+            text,
+            in: value,
+            prefix: prefix,
+            suffix: suffix
+        ) else {
+            throw ComputerUseActionError.textSelectionFailed("text was not found")
+        }
+
+        var range = match
+        switch selectionType {
+        case .text:
+            break
+        case .cursorBefore:
+            range.length = 0
+        case .cursorAfter:
+            range.location += range.length
+            range.length = 0
+        }
+
+        guard !cancellation.isCancelled else {
+            throw ComputerUseActionError.cancelled
+        }
+        var cfRange = CFRange(location: range.location, length: range.length)
+        guard let selectionValue = AXValueCreate(.cfRange, &cfRange),
+              AXUIElementSetAttributeValue(
+                  element,
+                  kAXSelectedTextRangeAttribute as CFString,
+                  selectionValue
+              ) == .success else {
+            throw ComputerUseActionError.textSelectionFailed("the element does not expose a selectable text range")
+        }
+    }
+
+    private func resolveActionElement(
+        elementIndex: Int,
+        target: ComputerUseTarget,
+        cancellation: ComputerUseCancellationToken
+    ) throws -> AXUIElement {
+        guard !cancellation.isCancelled else {
+            throw ComputerUseActionError.cancelled
+        }
+
+        let applicationElement = AXUIElementCreateApplication(target.application.processIdentifier)
+        guard let windowElement = resolveWindow(
+            in: applicationElement,
+            target: target.window,
+            shouldCancel: { cancellation.isCancelled }
+        ) else {
+            throw ComputerUseActionError.accessibilityValueActionFailed("target window not found")
+        }
+
+        let builder = ComputerUseAXTreeBuilder(configuration: .default)
+        guard let element = try builder.element(
+            at: elementIndex,
+            root: windowElement,
+            shouldCancel: { cancellation.isCancelled }
+        ) else {
+            throw ComputerUseActionError.accessibilityValueActionFailed("element \(elementIndex) not found")
+        }
+        return element
+    }
+
+    private func findTextRange(
+        _ text: String,
+        in value: String,
+        prefix: String?,
+        suffix: String?
+    ) -> CFRange? {
+        let source = value as NSString
+        let target = text as NSString
+        var searchLocation = 0
+
+        while searchLocation <= source.length {
+            let remaining = NSRange(
+                location: searchLocation,
+                length: source.length - searchLocation
+            )
+            let match = source.range(of: target as String, options: [], range: remaining)
+            guard match.location != NSNotFound else {
+                return nil
+            }
+
+            let prefixMatches = prefix.map { expected in
+                guard match.location >= expected.utf16.count else {
+                    return false
+                }
+                return source.substring(
+                    with: NSRange(
+                        location: match.location - expected.utf16.count,
+                        length: expected.utf16.count
+                    )
+                ) == expected
+            } ?? true
+            let suffixMatches = suffix.map { expected in
+                let suffixLocation = match.location + match.length
+                guard suffixLocation + expected.utf16.count <= source.length else {
+                    return false
+                }
+                return source.substring(
+                    with: NSRange(
+                        location: suffixLocation,
+                        length: expected.utf16.count
+                    )
+                ) == expected
+            } ?? true
+
+            if prefixMatches && suffixMatches {
+                return CFRange(location: match.location, length: match.length)
+            }
+            searchLocation = match.location + max(match.length, 1)
+        }
+        return nil
     }
 }
 

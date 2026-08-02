@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 
+/// A point relative to the top-left corner of the selected window.
 struct ComputerUsePoint: Codable, Equatable, Sendable {
     let x: Double
     let y: Double
@@ -8,6 +9,35 @@ struct ComputerUsePoint: Codable, Equatable, Sendable {
     var cgPoint: CGPoint {
         CGPoint(x: x, y: y)
     }
+}
+
+enum ComputerUseMouseButton: String, Codable, Equatable, Sendable, CaseIterable {
+    case left
+    case right
+    case middle
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self).lowercased()
+        switch value {
+        case "left", "l":
+            self = .left
+        case "right", "r":
+            self = .right
+        case "middle", "m":
+            self = .middle
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: try decoder.singleValueContainer(),
+                debugDescription: "Unsupported mouse button: \(value)"
+            )
+        }
+    }
+}
+
+enum ComputerUseTextSelectionType: String, Codable, Equatable, Sendable, CaseIterable {
+    case text
+    case cursorBefore = "cursor_before"
+    case cursorAfter = "cursor_after"
 }
 
 enum ComputerUseNamedKey: String, Codable, Equatable, Sendable {
@@ -128,21 +158,27 @@ enum ComputerUseSemanticAction: String, Codable, Equatable, Sendable, CaseIterab
 
 enum ComputerUseActionRisk: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
     case click
+    case drag
     case keyPress
     case scroll
     case textEntry
+    case textSelection
     case semanticAccessibility
 
     var title: String {
         switch self {
         case .click:
             return "Click"
+        case .drag:
+            return "Drag"
         case .keyPress:
             return "Key press"
         case .scroll:
             return "Scroll"
         case .textEntry:
             return "Text entry"
+        case .textSelection:
+            return "Text selection"
         case .semanticAccessibility:
             return "Accessibility action"
         }
@@ -150,10 +186,40 @@ enum ComputerUseActionRisk: String, Codable, Equatable, Hashable, Sendable, Case
 }
 
 enum ComputerUseAction: Codable, Equatable, Sendable {
-    case click(point: ComputerUsePoint)
+    case click(
+        point: ComputerUsePoint,
+        clickCount: Int = 1,
+        mouseButton: ComputerUseMouseButton = .left,
+        screenshotID: String? = nil
+    )
+    case clickElement(
+        elementIndex: Int,
+        clickCount: Int = 1,
+        mouseButton: ComputerUseMouseButton = .left,
+        screenshotID: String? = nil
+    )
     case keyPress(key: ComputerUseKey, modifiers: ComputerUseKeyModifiers)
-    case scroll(horizontal: Double, vertical: Double)
+    case scroll(
+        horizontal: Double,
+        vertical: Double,
+        point: ComputerUsePoint? = nil,
+        screenshotID: String? = nil
+    )
     case typeText(String)
+    case setValue(elementIndex: Int, value: String)
+    case drag(
+        from: ComputerUsePoint,
+        to: ComputerUsePoint,
+        screenshotID: String? = nil
+    )
+    case selectText(
+        elementIndex: Int,
+        text: String,
+        prefix: String? = nil,
+        suffix: String? = nil,
+        selectionType: ComputerUseTextSelectionType = .text
+    )
+    case secondaryAction(elementIndex: Int, action: String)
     case semantic(elementIndex: Int, action: ComputerUseSemanticAction)
 
     private enum CodingKeys: String, CodingKey {
@@ -164,9 +230,20 @@ enum ComputerUseAction: Codable, Equatable, Sendable {
         case modifiers
         case horizontal
         case vertical
+        case clickCount = "click_count"
+        case mouseButton = "mouse_button"
         case text
-        case elementIndex
+        case value
+        case fromX = "from_x"
+        case fromY = "from_y"
+        case toX = "to_x"
+        case toY = "to_y"
+        case elementIndex = "element_index"
+        case prefix
+        case suffix
+        case selectionType = "selection_type"
         case action
+        case screenshotID = "screenshotId"
     }
 
     private enum Kind: String, Codable {
@@ -174,6 +251,10 @@ enum ComputerUseAction: Codable, Equatable, Sendable {
         case keyPress = "key_press"
         case scroll
         case typeText = "type_text"
+        case setValue = "set_value"
+        case drag
+        case selectText = "select_text"
+        case secondaryAction = "perform_secondary_action"
         case semantic
     }
 
@@ -181,11 +262,29 @@ enum ComputerUseAction: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         switch try container.decode(Kind.self, forKey: .kind) {
         case .click:
+            if let elementIndex = try container.decodeIfPresent(Int.self, forKey: .elementIndex) {
+                self = .clickElement(
+                    elementIndex: elementIndex,
+                    clickCount: try container.decodeIfPresent(Int.self, forKey: .clickCount) ?? 1,
+                    mouseButton: try container.decodeIfPresent(
+                        ComputerUseMouseButton.self,
+                        forKey: .mouseButton
+                    ) ?? .left,
+                    screenshotID: try container.decodeIfPresent(String.self, forKey: .screenshotID)
+                )
+                return
+            }
             self = .click(
                 point: ComputerUsePoint(
                     x: try container.decode(Double.self, forKey: .x),
                     y: try container.decode(Double.self, forKey: .y)
-                )
+                ),
+                clickCount: try container.decodeIfPresent(Int.self, forKey: .clickCount) ?? 1,
+                mouseButton: try container.decodeIfPresent(
+                    ComputerUseMouseButton.self,
+                    forKey: .mouseButton
+                ) ?? .left,
+                screenshotID: try container.decodeIfPresent(String.self, forKey: .screenshotID)
             )
         case .keyPress:
             self = .keyPress(
@@ -196,12 +295,62 @@ enum ComputerUseAction: Codable, Equatable, Sendable {
                 ) ?? ComputerUseKeyModifiers()
             )
         case .scroll:
+            let pointX = try container.decodeIfPresent(Double.self, forKey: .x)
+            let pointY = try container.decodeIfPresent(Double.self, forKey: .y)
+            guard (pointX == nil) == (pointY == nil) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .x,
+                    in: container,
+                    debugDescription: "x and y must be provided together for a positioned scroll"
+                )
+            }
+            let point: ComputerUsePoint?
+            if let pointX, let pointY {
+                point = ComputerUsePoint(x: pointX, y: pointY)
+            } else {
+                point = nil
+            }
             self = .scroll(
                 horizontal: try container.decode(Double.self, forKey: .horizontal),
-                vertical: try container.decode(Double.self, forKey: .vertical)
+                vertical: try container.decode(Double.self, forKey: .vertical),
+                point: point,
+                screenshotID: try container.decodeIfPresent(String.self, forKey: .screenshotID)
             )
         case .typeText:
             self = .typeText(try container.decode(String.self, forKey: .text))
+        case .setValue:
+            self = .setValue(
+                elementIndex: try container.decode(Int.self, forKey: .elementIndex),
+                value: try container.decode(String.self, forKey: .value)
+            )
+        case .drag:
+            self = .drag(
+                from: ComputerUsePoint(
+                    x: try container.decode(Double.self, forKey: .fromX),
+                    y: try container.decode(Double.self, forKey: .fromY)
+                ),
+                to: ComputerUsePoint(
+                    x: try container.decode(Double.self, forKey: .toX),
+                    y: try container.decode(Double.self, forKey: .toY)
+                ),
+                screenshotID: try container.decodeIfPresent(String.self, forKey: .screenshotID)
+            )
+        case .selectText:
+            self = .selectText(
+                elementIndex: try container.decode(Int.self, forKey: .elementIndex),
+                text: try container.decode(String.self, forKey: .text),
+                prefix: try container.decodeIfPresent(String.self, forKey: .prefix),
+                suffix: try container.decodeIfPresent(String.self, forKey: .suffix),
+                selectionType: try container.decodeIfPresent(
+                    ComputerUseTextSelectionType.self,
+                    forKey: .selectionType
+                ) ?? .text
+            )
+        case .secondaryAction:
+            self = .secondaryAction(
+                elementIndex: try container.decode(Int.self, forKey: .elementIndex),
+                action: try container.decode(String.self, forKey: .action)
+            )
         case .semantic:
             self = .semantic(
                 elementIndex: try container.decode(Int.self, forKey: .elementIndex),
@@ -213,21 +362,57 @@ enum ComputerUseAction: Codable, Equatable, Sendable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case let .click(point):
+        case let .click(point, clickCount, mouseButton, screenshotID):
             try container.encode(Kind.click, forKey: .kind)
             try container.encode(point.x, forKey: .x)
             try container.encode(point.y, forKey: .y)
+            try container.encode(clickCount, forKey: .clickCount)
+            try container.encode(mouseButton, forKey: .mouseButton)
+            try container.encodeIfPresent(screenshotID, forKey: .screenshotID)
+        case let .clickElement(elementIndex, clickCount, mouseButton, screenshotID):
+            try container.encode(Kind.click, forKey: .kind)
+            try container.encode(elementIndex, forKey: .elementIndex)
+            try container.encode(clickCount, forKey: .clickCount)
+            try container.encode(mouseButton, forKey: .mouseButton)
+            try container.encodeIfPresent(screenshotID, forKey: .screenshotID)
         case let .keyPress(key, modifiers):
             try container.encode(Kind.keyPress, forKey: .kind)
             try container.encode(key, forKey: .key)
             try container.encode(modifiers, forKey: .modifiers)
-        case let .scroll(horizontal, vertical):
+        case let .scroll(horizontal, vertical, point, screenshotID):
             try container.encode(Kind.scroll, forKey: .kind)
             try container.encode(horizontal, forKey: .horizontal)
             try container.encode(vertical, forKey: .vertical)
+            if let point {
+                try container.encode(point.x, forKey: .x)
+                try container.encode(point.y, forKey: .y)
+            }
+            try container.encodeIfPresent(screenshotID, forKey: .screenshotID)
         case let .typeText(text):
             try container.encode(Kind.typeText, forKey: .kind)
             try container.encode(text, forKey: .text)
+        case let .setValue(elementIndex, value):
+            try container.encode(Kind.setValue, forKey: .kind)
+            try container.encode(elementIndex, forKey: .elementIndex)
+            try container.encode(value, forKey: .value)
+        case let .drag(from, to, screenshotID):
+            try container.encode(Kind.drag, forKey: .kind)
+            try container.encode(from.x, forKey: .fromX)
+            try container.encode(from.y, forKey: .fromY)
+            try container.encode(to.x, forKey: .toX)
+            try container.encode(to.y, forKey: .toY)
+            try container.encodeIfPresent(screenshotID, forKey: .screenshotID)
+        case let .selectText(elementIndex, text, prefix, suffix, selectionType):
+            try container.encode(Kind.selectText, forKey: .kind)
+            try container.encode(elementIndex, forKey: .elementIndex)
+            try container.encode(text, forKey: .text)
+            try container.encodeIfPresent(prefix, forKey: .prefix)
+            try container.encodeIfPresent(suffix, forKey: .suffix)
+            try container.encode(selectionType, forKey: .selectionType)
+        case let .secondaryAction(elementIndex, action):
+            try container.encode(Kind.secondaryAction, forKey: .kind)
+            try container.encode(elementIndex, forKey: .elementIndex)
+            try container.encode(action, forKey: .action)
         case let .semantic(elementIndex, action):
             try container.encode(Kind.semantic, forKey: .kind)
             try container.encode(elementIndex, forKey: .elementIndex)
@@ -237,14 +422,20 @@ enum ComputerUseAction: Codable, Equatable, Sendable {
 
     var risk: ComputerUseActionRisk {
         switch self {
-        case .click:
+        case .click, .clickElement:
             return .click
+        case .drag:
+            return .drag
         case .keyPress:
             return .keyPress
         case .scroll:
             return .scroll
-        case .typeText:
+        case .typeText, .setValue:
             return .textEntry
+        case .selectText:
+            return .textSelection
+        case .secondaryAction:
+            return .semanticAccessibility
         case .semantic:
             return .semanticAccessibility
         }
@@ -252,25 +443,42 @@ enum ComputerUseAction: Codable, Equatable, Sendable {
 
     var summary: String {
         switch self {
-        case let .click(point):
-            return "Click at \(Int(point.x)), \(Int(point.y))"
+        case let .click(point, clickCount, mouseButton, _):
+            let count = clickCount == 1 ? "" : " x\(clickCount)"
+            return "Click \(mouseButton.rawValue)\(count) at \(Int(point.x)), \(Int(point.y))"
+        case let .clickElement(elementIndex, clickCount, mouseButton, _):
+            let count = clickCount == 1 ? "" : " x\(clickCount)"
+            return "Click \(mouseButton.rawValue)\(count) on element \(elementIndex)"
         case let .keyPress(key, modifiers):
             let prefix = modifiers.displayName.isEmpty ? "" : "\(modifiers.displayName) + "
             return "Press \(prefix)\(key.displayName)"
-        case let .scroll(horizontal, vertical):
+        case let .scroll(horizontal, vertical, point, _):
+            if let point {
+                return "Scroll at \(Int(point.x)), \(Int(point.y)): \(Int(horizontal)), \(Int(vertical))"
+            }
             return "Scroll \(Int(horizontal)), \(Int(vertical))"
         case let .typeText(text):
             return "Type \(text.count) characters"
+        case let .setValue(elementIndex, value):
+            return "Set value of element \(elementIndex) (\(value.count) characters)"
+        case let .drag(from, to, _):
+            return "Drag from \(Int(from.x)), \(Int(from.y)) to \(Int(to.x)), \(Int(to.y))"
+        case let .selectText(elementIndex, text, _, _, selectionType):
+            return "Select \(selectionType.rawValue) in element \(elementIndex) (\(text.count) characters)"
+        case let .secondaryAction(elementIndex, action):
+            return "\(action) on element \(elementIndex)"
         case let .semantic(elementIndex, action):
             return "\(action.rawValue) on element \(elementIndex)"
         }
     }
 
     var textPreview: String? {
-        guard case let .typeText(text) = self else {
+        switch self {
+        case let .typeText(text), let .setValue(_, text), let .selectText(_, text, _, _, _):
+            return text
+        default:
             return nil
         }
-        return text
     }
 }
 
@@ -412,7 +620,10 @@ enum ComputerUseActionError: LocalizedError, Equatable, Sendable {
     case unsupportedKey(String)
     case eventCreationFailed
     case semanticActionFailed(String)
+    case accessibilityValueActionFailed(String)
+    case textSelectionFailed(String)
     case textInsertionFailed(String)
+    case staleScreenshot
 
     var errorDescription: String? {
         switch self {
@@ -434,14 +645,30 @@ enum ComputerUseActionError: LocalizedError, Equatable, Sendable {
             return "macOS could not create the requested input event."
         case let .semanticActionFailed(action):
             return "The Accessibility action failed: \(action)."
+        case let .accessibilityValueActionFailed(message):
+            return "The Accessibility value action failed: \(message)."
+        case let .textSelectionFailed(message):
+            return "Text selection failed: \(message)."
         case let .textInsertionFailed(message):
             return "Text entry failed: \(message)."
+        case .staleScreenshot:
+            return "The screenshot used for this action is no longer current."
         }
     }
 }
 
 protocol ComputerUseInputEventPosting {
-    func click(at point: ComputerUsePoint, cancellation: ComputerUseCancellationToken) throws
+    func click(
+        at point: ComputerUsePoint,
+        mouseButton: ComputerUseMouseButton,
+        clickCount: Int,
+        cancellation: ComputerUseCancellationToken
+    ) throws
+    func drag(
+        from start: ComputerUsePoint,
+        to end: ComputerUsePoint,
+        cancellation: ComputerUseCancellationToken
+    ) throws
     func keyPress(
         key: ComputerUseKey,
         modifiers: ComputerUseKeyModifiers,
@@ -450,14 +677,34 @@ protocol ComputerUseInputEventPosting {
     func scroll(
         horizontal: Double,
         vertical: Double,
+        at point: ComputerUsePoint?,
         cancellation: ComputerUseCancellationToken
     ) throws
 }
 
 protocol ComputerUseSemanticActionPerforming {
     func perform(
-        action: ComputerUseSemanticAction,
+        action: String,
         elementIndex: Int,
+        target: ComputerUseTarget,
+        cancellation: ComputerUseCancellationToken
+    ) throws
+}
+
+protocol ComputerUseValueActionPerforming {
+    func setValue(
+        _ value: String,
+        elementIndex: Int,
+        target: ComputerUseTarget,
+        cancellation: ComputerUseCancellationToken
+    ) throws
+
+    func selectText(
+        _ text: String,
+        elementIndex: Int,
+        prefix: String?,
+        suffix: String?,
+        selectionType: ComputerUseTextSelectionType,
         target: ComputerUseTarget,
         cancellation: ComputerUseCancellationToken
     ) throws

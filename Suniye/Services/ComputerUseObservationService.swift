@@ -48,7 +48,17 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
         }
 
         let windows = windowDiscovery.listWindows(for: application)
-        guard let window = windows.first(where: \.isKeyWindow) ?? windows.first else {
+        let window: ComputerUseWindow
+        if let preferredWindowID = configuration.preferredWindowID {
+            guard let preferredWindow = windows.first(where: { $0.id == preferredWindowID }) else {
+                throw ComputerUseObservationError.windowNotFound(preferredWindowID)
+            }
+            window = preferredWindow
+        } else if let keyWindow = windows.first(where: \.isKeyWindow) {
+            window = keyWindow
+        } else if let firstWindow = windows.first {
+            window = firstWindow
+        } else {
             throw ComputerUseObservationError.noWindow(applicationID)
         }
 

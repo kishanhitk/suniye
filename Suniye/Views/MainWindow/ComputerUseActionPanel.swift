@@ -86,6 +86,34 @@ struct ComputerUseActionPanel: View {
                                 }
                             }
                         }
+
+                        if !secondaryCandidates.isEmpty {
+                            CardDivider()
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Other Accessibility actions")
+                                    .font(AppTypography.subheadlineSemibold)
+
+                                ForEach(Array(secondaryCandidates.enumerated()), id: \.offset) { _, candidate in
+                                    Button {
+                                        coordinator.requestAction(
+                                            .secondaryAction(
+                                                elementIndex: candidate.elementIndex,
+                                                action: candidate.action
+                                            )
+                                        )
+                                    } label: {
+                                        HStack {
+                                            Text(candidate.title)
+                                            Spacer(minLength: 8)
+                                            Image(systemName: "arrow.right")
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(!coordinator.canRequestAction)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -97,7 +125,7 @@ struct ComputerUseActionPanel: View {
             return nil
         }
         let bounds = observation.target.window.bounds.cgRect
-        return ComputerUsePoint(x: bounds.midX, y: bounds.midY)
+        return ComputerUsePoint(x: bounds.width / 2, y: bounds.height / 2)
     }
 
     private var semanticCandidates: [SemanticCandidate] {
@@ -120,11 +148,38 @@ struct ComputerUseActionPanel: View {
         .prefix(8)
         .map { $0 }
     }
+
+    private var secondaryCandidates: [SecondaryCandidate] {
+        guard let observation = coordinator.observation else {
+            return []
+        }
+
+        let knownActions = Set(ComputerUseSemanticAction.allCases.map(\.rawValue))
+        return observation.accessibility.elements.flatMap { element in
+            element.actions
+                .filter { !knownActions.contains($0) }
+                .map { action in
+                    SecondaryCandidate(
+                        elementIndex: element.index,
+                        action: action,
+                        title: "\(element.index) · \(element.role ?? "element") · \(action)"
+                    )
+                }
+        }
+        .prefix(8)
+        .map { $0 }
+    }
 }
 
 private struct SemanticCandidate {
     let elementIndex: Int
     let action: ComputerUseSemanticAction
+    let title: String
+}
+
+private struct SecondaryCandidate {
+    let elementIndex: Int
+    let action: String
     let title: String
 }
 

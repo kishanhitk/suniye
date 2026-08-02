@@ -4,6 +4,7 @@ import SwiftUI
 struct ComputerUsePage: View {
     @Bindable var coordinator: ComputerUseCoordinator
     let remoteModelConfiguration: ComputerUseRemoteModelConfiguration?
+    @State private var approvalToRemove: ComputerUseApprovalRecord?
 
     init(
         coordinator: ComputerUseCoordinator,
@@ -31,6 +32,14 @@ struct ComputerUsePage: View {
                     tint: .accentColor,
                     title: coordinator.phaseTitle,
                     detail: "Reading the selected window. No input event will be posted.",
+                    progress: nil
+                )
+            } else if coordinator.phase == .activatingWindow {
+                InlineStatusBanner(
+                    icon: "macwindow.badge.plus",
+                    tint: .accentColor,
+                    title: coordinator.phaseTitle,
+                    detail: "Bringing the selected window to the front before control starts.",
                     progress: nil
                 )
             } else if coordinator.phase == .runningAgent {
@@ -70,6 +79,7 @@ struct ComputerUsePage: View {
             }
 
             permissions
+            alwaysAllowedApprovals
             targetSelection
             ComputerUseAgentPanel(
                 coordinator: coordinator,
@@ -115,7 +125,7 @@ struct ComputerUsePage: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 DetailPageTitle(title: "Computer Use")
-                Text("Inspect a running app and approve one controlled action at a time.")
+                Text("Inspect a running app window and approve one controlled action at a time.")
                     .font(AppTypography.body)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -160,6 +170,71 @@ struct ComputerUsePage: View {
         }
     }
 
+    private var alwaysAllowedApprovals: some View {
+        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+            SectionHeading(title: "Always allowed")
+
+            SurfaceCard {
+                if coordinator.alwaysApprovals.isEmpty {
+                    Text("No app actions are always allowed.")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(coordinator.alwaysApprovals.enumerated()), id: \.element.id) { index, record in
+                            HStack(alignment: .center, spacing: 12) {
+                                Image(systemName: "checkmark.shield.fill")
+                                    .foregroundStyle(.green)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(record.applicationBundleIdentifier)
+                                        .font(AppTypography.bodyMedium)
+                                    Text(record.risk.title)
+                                        .font(AppTypography.subheadline)
+                                        .foregroundStyle(MainWindowPalette.secondaryText)
+                                }
+                                Spacer(minLength: 12)
+                                Button("Remove") {
+                                    approvalToRemove = record
+                                }
+                                .buttonStyle(.bordered)
+                            }
+
+                            if index < coordinator.alwaysApprovals.count - 1 {
+                                CardDivider()
+                                    .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            "Remove always-allowed action?",
+            isPresented: Binding(
+                get: { approvalToRemove != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        approvalToRemove = nil
+                    }
+                }
+            )
+        ) {
+            if let record = approvalToRemove {
+                Button("Remove", role: .destructive) {
+                    coordinator.revokeAlwaysApproval(record)
+                    approvalToRemove = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                approvalToRemove.map {
+                    "Suniye will ask before using \($0.risk.title.lowercased()) in \($0.applicationBundleIdentifier) again."
+                } ?? "Suniye will ask before the action again."
+            )
+        }
+    }
+
     private var targetSelection: some View {
         VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
             SectionHeading(title: "Target")
@@ -170,7 +245,7 @@ struct ComputerUsePage: View {
                         HStack(spacing: 10) {
                             Image(systemName: "macwindow.on.rectangle")
                                 .foregroundStyle(MainWindowPalette.secondaryText)
-                            Text("No eligible running apps were found.")
+                            Text("No eligible running app windows were found.")
                                 .font(AppTypography.body)
                                 .foregroundStyle(MainWindowPalette.secondaryText)
                             Spacer(minLength: 8)
@@ -204,6 +279,34 @@ struct ComputerUsePage: View {
                                 Text(application.bundleIdentifier)
                                     .font(AppTypography.codeCaption)
                                     .foregroundStyle(MainWindowPalette.tertiaryText)
+                            }
+                        }
+
+                        if !coordinator.windows.isEmpty {
+                            HStack(spacing: 12) {
+                                Text("Window")
+                                    .font(AppTypography.body)
+                                Spacer(minLength: 12)
+                                NativePopupPicker(
+                                    items: coordinator.windowIDs,
+                                    selection: selectedWindowBinding,
+                                    title: windowTitle(for:)
+                                )
+                                .frame(maxWidth: 320)
+                                .disabled(coordinator.isBusy)
+                            }
+
+                            HStack(spacing: 8) {
+                                Image(systemName: "info.circle")
+                                    .foregroundStyle(MainWindowPalette.tertiaryText)
+                                Text("Control is limited to the selected window. Bring it forward before an action.")
+                                    .font(AppTypography.subheadline)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 8)
+                                Button("Bring Forward", action: coordinator.activateSelectedWindow)
+                                    .buttonStyle(.bordered)
+                                    .disabled(coordinator.isBusy)
                             }
                         }
                     }
@@ -249,7 +352,7 @@ struct ComputerUsePage: View {
                             .foregroundStyle(Color.secondary.opacity(0.72))
                         Text("No observation yet")
                             .font(AppTypography.bodyMedium)
-                        Text("Select a running app and capture its current window state.")
+                        Text("Select a running app window and capture its current state.")
                             .font(AppTypography.subheadline)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                             .multilineTextAlignment(.center)
@@ -267,8 +370,23 @@ struct ComputerUsePage: View {
         )
     }
 
+    private var selectedWindowBinding: Binding<UInt32> {
+        Binding(
+            get: { coordinator.selectedWindowID ?? coordinator.windowIDs.first ?? 0 },
+            set: { coordinator.selectWindow($0) }
+        )
+    }
+
     private func applicationTitle(for identifier: String) -> String {
         coordinator.applications.first { $0.id == identifier }?.displayName ?? identifier
+    }
+
+    private func windowTitle(for identifier: UInt32) -> String {
+        guard let window = coordinator.windows.first(where: { $0.id == identifier }) else {
+            return "Window \(identifier)"
+        }
+        let title = window.title?.isEmpty == false ? (window.title ?? "Untitled") : "Untitled"
+        return "\(title) · \(window.id)"
     }
 }
 
@@ -346,7 +464,7 @@ private struct ComputerUseObservationPreview: View {
                let image = NSImage(data: screenshot.data) {
                 SurfaceCard(padding: 12) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Screenshot · \(screenshot.width) × \(screenshot.height)")
+                        Text("Screenshot · \(screenshot.width) × \(screenshot.height) · \(screenshot.id.prefix(8))")
                             .font(AppTypography.subheadlineSemibold)
 
                         Image(nsImage: image)

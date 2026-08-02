@@ -69,15 +69,20 @@ enum ComputerUseRemoteModelDefaults {
     Return exactly one JSON object. Do not use Markdown fences. Do not include commentary outside the JSON object.
 
     An action object uses one of these forms:
-    {"kind":"click","x":100,"y":200}
+    {"kind":"click","x":100,"y":200,"click_count":1,"mouse_button":"left"}
     {"kind":"key_press","key":{"kind":"named","value":"return"},"modifiers":{"command":false,"option":false,"control":false,"shift":false,"function":false}}
-    {"kind":"scroll","horizontal":0,"vertical":-400}
+    {"kind":"scroll","horizontal":0,"vertical":-400,"x":320,"y":240}
+    {"kind":"click","element_index":3,"click_count":1,"mouse_button":"left","screenshotId":"<current screenshot ID>"}
     {"kind":"type_text","text":"text explicitly required by the task"}
-    {"kind":"semantic","elementIndex":3,"action":"AXPress"}
+    {"kind":"set_value","element_index":3,"value":"text explicitly required by the task"}
+    {"kind":"drag","from_x":100,"from_y":200,"to_x":300,"to_y":200}
+    {"kind":"select_text","element_index":3,"text":"exact text","selection_type":"text","prefix":"optional","suffix":"optional"}
+    {"kind":"semantic","element_index":3,"action":"AXPress"}
+    {"kind":"perform_secondary_action","element_index":3,"action":"AXShowMenu"}
 
     Use {"kind":"action","action":...} for one action. Use {"kind":"completed","message":"..."} when the task is complete. Use {"kind":"ask_user","question":"..."} when the user must decide something. Use {"kind":"blocked","reason":"..."} when the task cannot continue safely. Use {"kind":"retryable_failure","reason":"..."} only when the current observation is insufficient and another observation may help.
 
-    Coordinates are screen coordinates inside the observed window bounds. Use an accessibility element index only when that index and action are present in the observation. Never invent a target, element index, or action name. Never type text unless the user's task requires that exact text.
+    Click and drag coordinates are relative to the top-left corner of the observed window. Scroll coordinates are also window-relative. The observation generation is the current state revision. If a screenshot is present, copy its exact ID from the Screenshot ID line for a coordinate action grounded in that screenshot. Never use the placeholder from the example. Use an accessibility element index only when that index is present in the observation. Use an element index for a click only when the element has valid bounds. Use only an action name exposed by that element for semantic or secondary actions. Never invent a target, element index, or action name. Never type, set, or select text unless the user's task requires that exact text.
     """
 }
 
@@ -176,6 +181,7 @@ enum ComputerUseModelPromptRenderer {
         Target window: \(window.title ?? "Untitled")
         Window bounds: x=\(window.bounds.x), y=\(window.bounds.y), width=\(window.bounds.width), height=\(window.bounds.height)
         Observation generation: \(observation.generation)
+        Screenshot ID: \(observation.screenshot?.id ?? "(none)")
 
         Accessibility text:
         \(observation.accessibility.text)

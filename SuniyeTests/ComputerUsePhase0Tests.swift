@@ -58,6 +58,28 @@ final class ComputerUsePhase0Tests: XCTestCase {
         XCTAssertEqual(windowDiscovery.lastApplication?.id, application.id)
     }
 
+    func testObservationUsesTheSelectedWindowWhenProvided() throws {
+        let application = makeApplication()
+        let firstWindow = makeWindow(id: 1, isKeyWindow: true)
+        let selectedWindow = makeWindow(id: 2, isKeyWindow: false)
+        let axReader = StubAccessibilityReader()
+        let service = makeObservationService(
+            application: application,
+            windows: [firstWindow, selectedWindow],
+            axReader: axReader
+        )
+        var configuration = ComputerUseObservationConfiguration.default
+        configuration.preferredWindowID = selectedWindow.id
+
+        _ = try service.observe(
+            applicationID: application.id,
+            includeScreenshot: false,
+            configuration: configuration
+        )
+
+        XCTAssertEqual(axReader.lastWindow?.id, selectedWindow.id)
+    }
+
     func testObservationFailsBeforeDiscoveryWhenAccessibilityIsMissing() {
         let application = makeApplication()
         let windowDiscovery = StubWindowDiscovery(windows: [makeWindow()])
@@ -161,6 +183,7 @@ final class ComputerUsePhase0Tests: XCTestCase {
             .applicationNotFound("missing"),
             .applicationNotRunning("stopped"),
             .noWindow("empty"),
+            .windowNotFound(42),
             .accessibilityNotTrusted,
             .accessibilityWindowNotFound("untitled"),
             .accessibilityReadFailed("AXRole"),
@@ -294,6 +317,28 @@ final class ComputerUsePhase0Tests: XCTestCase {
         XCTAssertEqual(windows[0].bounds, ComputerUseRect(x: 10, y: 20, width: 300, height: 200))
     }
 
+    func testWindowDiscoveryDoesNotUseStaleApplicationActivity() {
+        let application = makeApplication()
+        let discovery = SystemComputerUseWindowDiscovery(
+            windowInfoProvider: {
+                [[
+                    kCGWindowOwnerPID as String: NSNumber(value: application.processIdentifier),
+                    kCGWindowNumber as String: NSNumber(value: 42),
+                    kCGWindowLayer as String: NSNumber(value: 0),
+                    kCGWindowBounds as String: [
+                        "X": CGFloat(10),
+                        "Y": CGFloat(20),
+                        "Width": CGFloat(300),
+                        "Height": CGFloat(200),
+                    ],
+                ]]
+            },
+            frontmostProcessIdentifierProvider: { 999 }
+        )
+
+        XCTAssertFalse(discovery.listWindows(for: application)[0].isKeyWindow)
+    }
+
     func testApplicationIDsIncludeProcessIdentity() {
         XCTAssertEqual(
             SystemComputerUseApplicationCatalog.applicationID(
@@ -323,6 +368,10 @@ final class ComputerUsePhase0Tests: XCTestCase {
         XCTAssertEqual(screenshot.mimeType, "image/png")
         XCTAssertEqual(screenshot.width, 1)
         XCTAssertEqual(screenshot.height, 1)
+        XCTAssertFalse(screenshot.id.isEmpty)
+        XCTAssertEqual(screenshot.originX, 10)
+        XCTAssertEqual(screenshot.originY, 20)
+        XCTAssertEqual(screenshot.zIndex, 0)
         XCTAssertFalse(screenshot.data.isEmpty)
     }
 

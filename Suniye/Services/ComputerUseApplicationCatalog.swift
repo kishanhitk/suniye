@@ -100,8 +100,7 @@ final class SystemComputerUseWindowDiscovery: ComputerUseWindowDiscovering {
         }
 
         let orderedWindows = windows.filter(\.isOnScreen)
-        let appIsFrontmost = application.isActive
-            || frontmostProcessIdentifierProvider() == application.processIdentifier
+        let appIsFrontmost = frontmostProcessIdentifierProvider() == application.processIdentifier
 
         return orderedWindows.enumerated().map { index, window in
             ComputerUseWindow(

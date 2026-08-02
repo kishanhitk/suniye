@@ -62,6 +62,35 @@ These files establish the public macOS target, action inputs, app policy, approv
 
 Status: `[Verified]` by source inspection.
 
+## Corrective parity slice
+
+The current parity slice extends the desktop path with these boundaries:
+
+- `Suniye/Services/ComputerUsePlatformRunner.swift` isolates platform discovery, activation,
+  permission, observation, approval-store, and action calls from the MainActor coordinator.
+- `Suniye/Services/ComputerUseWindowActivationService.swift` owns AppKit and Accessibility window
+  activation for an explicitly selected target.
+- `Suniye/Services/ComputerUseActionModels.swift` and `ComputerUseActionService.swift` add bounded
+  click metadata, indexed clicks, positioned scroll, drag, AX value setting, text selection, and
+  dynamic Accessibility actions. Coordinate actions can validate a screenshot ID.
+- `Suniye/Views/MainWindow/ComputerUsePage.swift` adds window selection, Bring Forward, and
+  always-allowed approval management.
+- `docs/research/kis-169-computer-use/parity-audit.md` records the reference comparison.
+
+Status: `[Verified]` by focused tests and source inspection. Real WindowServer activation remains
+`[Unknown]` until the Computer Use E2E run with permissions.
+
+### Reviewed validation
+
+- The full macOS test run reports 1,085 passed, 1 skipped, and 0 failed tests.
+- The gated coverage report is 95.01% (14,439/15,197 lines) at a 95% threshold.
+- The focused Computer Use suite reports 28 passed tests and 0 failures.
+- Strict review split the large Phase 2 test file, removed a coordinate force unwrap, improved
+  failure diagnostics, and aligned public action keys with the inspected reference contract.
+
+Status: `[Verified]` by `xcodebuild`, `xccov`, and local source inspection. Live `@Computer`
+interaction remains `[Unknown]` until the E2E run.
+
 ### Native helper
 
 Inspected bundle path:
@@ -206,6 +235,8 @@ Phase 2 added these source files and boundaries:
 - `Suniye/Services/ComputerUseActionService.swift`;
 - `Suniye/Services/ComputerUseInputEventService.swift`;
 - `Suniye/Views/MainWindow/ComputerUseActionPanel.swift`;
+- `SuniyeTests/ComputerUsePhase2ActionTests.swift`;
+- `SuniyeTests/ComputerUsePhase2TestSupport.swift`;
 - `SuniyeTests/ComputerUsePhase2Tests.swift`.
 
 Phase 2 also extends `ComputerUseCoordinator.swift` and

@@ -2,7 +2,46 @@ import CoreGraphics
 import Foundation
 
 struct SystemComputerUseInputEventPoster: ComputerUseInputEventPosting {
-    func click(at point: ComputerUsePoint, cancellation: ComputerUseCancellationToken) throws {
+    func click(
+        at point: ComputerUsePoint,
+        mouseButton: ComputerUseMouseButton,
+        clickCount: Int,
+        cancellation: ComputerUseCancellationToken
+    ) throws {
+        guard !cancellation.isCancelled else {
+            throw ComputerUseActionError.cancelled
+        }
+
+        let button = mouseButton.cgButton
+        for _ in 0 ..< clickCount {
+            guard let down = CGEvent(
+                mouseEventSource: nil,
+                mouseType: mouseButton.downEvent,
+                mouseCursorPosition: point.cgPoint,
+                mouseButton: button
+            ),
+            let up = CGEvent(
+                mouseEventSource: nil,
+                mouseType: mouseButton.upEvent,
+                mouseCursorPosition: point.cgPoint,
+                mouseButton: button
+            ) else {
+                throw ComputerUseActionError.eventCreationFailed
+            }
+
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+            guard !cancellation.isCancelled else {
+                throw ComputerUseActionError.cancelled
+            }
+        }
+    }
+
+    func drag(
+        from start: ComputerUsePoint,
+        to end: ComputerUsePoint,
+        cancellation: ComputerUseCancellationToken
+    ) throws {
         guard !cancellation.isCancelled else {
             throw ComputerUseActionError.cancelled
         }
@@ -10,26 +49,31 @@ struct SystemComputerUseInputEventPoster: ComputerUseInputEventPosting {
         guard let down = CGEvent(
             mouseEventSource: nil,
             mouseType: .leftMouseDown,
-            mouseCursorPosition: point.cgPoint,
+            mouseCursorPosition: start.cgPoint,
+            mouseButton: .left
+        ),
+        let dragged = CGEvent(
+            mouseEventSource: nil,
+            mouseType: .leftMouseDragged,
+            mouseCursorPosition: end.cgPoint,
             mouseButton: .left
         ),
         let up = CGEvent(
             mouseEventSource: nil,
             mouseType: .leftMouseUp,
-            mouseCursorPosition: point.cgPoint,
+            mouseCursorPosition: end.cgPoint,
             mouseButton: .left
         ) else {
             throw ComputerUseActionError.eventCreationFailed
         }
 
         down.post(tap: .cghidEventTap)
-        defer {
-            up.post(tap: .cghidEventTap)
-        }
-
         guard !cancellation.isCancelled else {
+            up.post(tap: .cghidEventTap)
             throw ComputerUseActionError.cancelled
         }
+        dragged.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
     }
 
     func keyPress(
@@ -71,6 +115,7 @@ struct SystemComputerUseInputEventPoster: ComputerUseInputEventPosting {
     func scroll(
         horizontal: Double,
         vertical: Double,
+        at point: ComputerUsePoint?,
         cancellation: ComputerUseCancellationToken
     ) throws {
         guard !cancellation.isCancelled else {
@@ -78,6 +123,18 @@ struct SystemComputerUseInputEventPoster: ComputerUseInputEventPosting {
         }
         guard horizontal.isFinite, vertical.isFinite else {
             throw ComputerUseActionError.invalidAction("scroll values must be finite")
+        }
+
+        if let point {
+            guard let move = CGEvent(
+                mouseEventSource: nil,
+                mouseType: .mouseMoved,
+                mouseCursorPosition: point.cgPoint,
+                mouseButton: .left
+            ) else {
+                throw ComputerUseActionError.eventCreationFailed
+            }
+            move.post(tap: .cghidEventTap)
         }
 
         let horizontalQuantity = Int32(clamping: Int(horizontal.rounded()))
@@ -137,6 +194,41 @@ struct SystemComputerUseInputEventPoster: ComputerUseInputEventPosting {
             case .pageDown:
                 return 121
             }
+        }
+    }
+}
+
+private extension ComputerUseMouseButton {
+    var cgButton: CGMouseButton {
+        switch self {
+        case .left:
+            return .left
+        case .right:
+            return .right
+        case .middle:
+            return .center
+        }
+    }
+
+    var downEvent: CGEventType {
+        switch self {
+        case .left:
+            return .leftMouseDown
+        case .right:
+            return .rightMouseDown
+        case .middle:
+            return .otherMouseDown
+        }
+    }
+
+    var upEvent: CGEventType {
+        switch self {
+        case .left:
+            return .leftMouseUp
+        case .right:
+            return .rightMouseUp
+        case .middle:
+            return .otherMouseUp
         }
     }
 }

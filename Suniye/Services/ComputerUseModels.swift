@@ -83,10 +83,34 @@ struct ComputerUseAXSnapshot: Codable, Equatable, Sendable {
 }
 
 struct ComputerUseScreenshot: Codable, Equatable, Sendable {
+    let id: String
     let data: Data
     let mimeType: String
     let width: Int
     let height: Int
+    let originX: Double
+    let originY: Double
+    let zIndex: Int
+
+    init(
+        id: String = UUID().uuidString,
+        data: Data,
+        mimeType: String,
+        width: Int,
+        height: Int,
+        originX: Double = 0,
+        originY: Double = 0,
+        zIndex: Int = 0
+    ) {
+        self.id = id
+        self.data = data
+        self.mimeType = mimeType
+        self.width = width
+        self.height = height
+        self.originX = originX
+        self.originY = originY
+        self.zIndex = zIndex
+    }
 }
 
 struct ComputerUseObservation: Codable, Equatable, Sendable {
@@ -103,6 +127,7 @@ struct ComputerUseObservationConfiguration: Equatable, Sendable {
     var maxTextLength: Int = 100_000
     var includeElementBounds: Bool = true
     var redactSensitiveValues: Bool = true
+    var preferredWindowID: UInt32? = nil
 
     static let `default` = ComputerUseObservationConfiguration()
 }
@@ -135,6 +160,7 @@ enum ComputerUseObservationError: LocalizedError, Equatable, Sendable {
     case applicationNotFound(String)
     case applicationNotRunning(String)
     case noWindow(String)
+    case windowNotFound(UInt32)
     case accessibilityNotTrusted
     case accessibilityWindowNotFound(String)
     case accessibilityReadFailed(String)
@@ -151,6 +177,8 @@ enum ComputerUseObservationError: LocalizedError, Equatable, Sendable {
             return "The application is not running: \(identifier)."
         case let .noWindow(identifier):
             return "The application has no visible window: \(identifier)."
+        case let .windowNotFound(windowID):
+            return "The selected window is no longer available: \(windowID)."
         case .accessibilityNotTrusted:
             return "Accessibility permission is required to read this application."
         case let .accessibilityWindowNotFound(title):
@@ -193,6 +221,10 @@ protocol ComputerUseApplicationCatalog {
 
 protocol ComputerUseWindowDiscovering {
     func listWindows(for application: ComputerUseApplication) -> [ComputerUseWindow]
+}
+
+protocol ComputerUseWindowActivating {
+    func activate(target: ComputerUseTarget) -> Bool
 }
 
 protocol ComputerUseAccessibilityReading {

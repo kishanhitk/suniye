@@ -154,10 +154,12 @@ actor ComputerUseAgent {
         state.iteration += 1
         let observation: ComputerUseObservation
         do {
+            var observationConfiguration = ComputerUseObservationConfiguration.default
+            observationConfiguration.preferredWindowID = task.windowID
             observation = try observationService.observe(
                 applicationID: task.applicationID,
                 includeScreenshot: task.includeScreenshot,
-                configuration: .default,
+                configuration: observationConfiguration,
                 cancellation: cancellation
             )
             state.latestObservation = observation

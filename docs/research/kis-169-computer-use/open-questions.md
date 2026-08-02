@@ -45,6 +45,21 @@
 - Does the existing clipboard-preserving text insertion path protect clipboard state during an approved text action?
 - Is a one-time approval card sufficient for the first local integration, or does the product need a separate persistent approval service later?
 
+### Corrective parity status
+
+- `[Resolved for the current desktop prototype]` The target UI can select a specific visible
+  window, and the user can explicitly bring it forward before control.
+- `[Resolved for the current desktop prototype]` The typed action boundary covers click metadata,
+  positioned scroll, drag, set value, and text selection.
+- `[Resolved for the current desktop prototype]` Always-allowed approvals have visible revocation
+  UX and refresh after persistence.
+- `[Unknown]` The selected-window activation path still needs a live Accessibility test across
+  multiple target applications.
+- `[Resolved for the current desktop prototype]` Indexed clicks, dynamic secondary AX actions,
+  and screenshot IDs are part of the typed action and policy contracts.
+- `[Unknown]` Reference-level transient screenshot caching and state diffs are not yet implemented
+  in Suniye.
+
 ## Phase 3 integration gates
 
 - Which model provider may receive screenshots, AX text, action results, and failure messages?
@@ -68,10 +83,13 @@
 - `[Resolved for the desktop prototype]` The response protocol is a strict Codable decision object with action, completed, ask-user, blocked, and retryable-failure outcomes.
 - `[Resolved for the desktop prototype]` Screenshot upload is a separate session choice and defaults to disabled.
 - `[Verified]` Deterministic validation covers the coordinator's approval, policy, cancellation,
-  stale-operation, and terminal-result paths. The full suite reports 1,077 passed, 1 skipped,
+  stale-operation, and terminal-result paths. The full suite reports 1,085 passed, 1 skipped,
   and 0 failed tests.
-- `[Verified]` The gated coverage report passes at 95.02% (13,803/14,526 lines), and the E2E preflight and smoke build pass.
+- `[Verified]` The gated coverage report passes at 95.01% (14,439/15,197 lines) at the 95% floor.
+- `[Verified]` The focused Computer Use suite reports 28 passed tests and 0 failures.
 - `[Unknown]` A live provider's actual multimodal support, prompt reliability, response latency, and cancellation behavior still need a manual test.
 - `[Unknown]` The current Core Graphics screenshot adapter must still be compared with ScreenCaptureKit on macOS 14 and later.
+- `[Unknown]` Live WindowServer activation, Accessibility tree capture, native event delivery, and
+  permission-state behavior still need the planned `@Computer` E2E test.
 - `[Deferred]` Browser-specific control needs its own tab, DOM, extension, download, and upload contract.
 - `[Deferred]` A separate native helper is not needed by the current same-process Swift design. Revisit it only if live permission, blocking, crash-isolation, or entitlement tests show a requirement.

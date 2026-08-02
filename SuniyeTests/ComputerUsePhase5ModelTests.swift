@@ -36,6 +36,33 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             invalidScheme.validationMessage,
             "The Computer Use model endpoint must use HTTP or HTTPS."
         )
+
+        let missingModel = ComputerUseRemoteModelConfiguration(
+            endpointURL: endpoint,
+            modelID: " ",
+            apiKey: "key"
+        )
+        XCTAssertEqual(missingModel.validationMessage, "A Computer Use model ID is required.")
+        let invalidTimeout = ComputerUseRemoteModelConfiguration(
+            endpointURL: endpoint,
+            modelID: "model",
+            apiKey: "key",
+            timeoutSeconds: 121
+        )
+        XCTAssertEqual(
+            invalidTimeout.validationMessage,
+            "The Computer Use model timeout must be between 1 and 120 seconds."
+        )
+        let invalidTokenLimit = ComputerUseRemoteModelConfiguration(
+            endpointURL: endpoint,
+            modelID: "model",
+            apiKey: "key",
+            maxTokens: 4_097
+        )
+        XCTAssertEqual(
+            invalidTokenLimit.validationMessage,
+            "The Computer Use model token limit must be between 32 and 4,096."
+        )
     }
 
     func testPromptRendererRedactsTypedActionContentAndControlsScreenshotUpload() {
@@ -79,6 +106,56 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             includeScreenshot: true
         )
         XCTAssertEqual(multimodal.screenshot, screenshot)
+    }
+
+    func testPromptRendererIncludesAvailableAccessibilityFields() {
+        let base = makePhase3Observation(generation: 9)
+        let richElement = ComputerUseAXElement(
+            index: 2,
+            role: "AXTextField",
+            subrole: "AXSearchField",
+            title: "Search",
+            description: "Search field",
+            value: "query",
+            isEnabled: true,
+            isFocused: true,
+            isSelected: true,
+            bounds: ComputerUseRect(x: 10, y: 20, width: 200, height: 30),
+            actions: ["AXPress", "AXShowMenu"],
+            childIndexes: []
+        )
+        let observation = ComputerUseObservation(
+            generation: base.generation,
+            capturedAt: base.capturedAt,
+            target: base.target,
+            accessibility: ComputerUseAXSnapshot(
+                text: "",
+                elements: [richElement],
+                wasTruncated: false
+            ),
+            screenshot: nil
+        )
+
+        let prompt = ComputerUseModelPromptRenderer.render(
+            request: ComputerUseModelRequest(
+                instruction: "Inspect the field.",
+                observation: observation,
+                recentActionResults: [],
+                iteration: 1
+            ),
+            includeScreenshot: false
+        ).text
+
+        XCTAssertTrue(prompt.contains("role=AXTextField"))
+        XCTAssertTrue(prompt.contains("subrole=AXSearchField"))
+        XCTAssertTrue(prompt.contains("title=\"Search\""))
+        XCTAssertTrue(prompt.contains("description=\"Search field\""))
+        XCTAssertTrue(prompt.contains("value=\"query\""))
+        XCTAssertTrue(prompt.contains("enabled=true"))
+        XCTAssertTrue(prompt.contains("focused=true"))
+        XCTAssertTrue(prompt.contains("selected=true"))
+        XCTAssertTrue(prompt.contains("bounds=10.0,20.0,200.0,30.0"))
+        XCTAssertTrue(prompt.contains("actions=AXPress,AXShowMenu"))
     }
 
     func testDecisionParserAcceptsDirectAndFencedJSON() throws {

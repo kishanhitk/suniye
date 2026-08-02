@@ -358,6 +358,10 @@ The existing `TextInsertionService` can inform the text-entry design. It cannot 
 - `[Verified]` Phase 3 adds the actor-isolated observe-decide-approve-act loop and intervention checks.
 - `[Verified]` Phase 4 adds denied/forbidden policy outcomes, scoped approvals, revocation, and redacted audit records.
 - `[Verified]` Phase 5 adds a separate typed remote model client, coordinator integration, explicit API settings mapping, and screenshot-upload consent.
+- `[Verified]` The current parity slice adds bounded click metadata, indexed clicks, positioned
+  scroll, drag, AX value setting, text selection, dynamic AX actions, screenshot IDs, selected-window
+  targeting, explicit window activation, and always-allowed approval management.
+- `[Verified]` The current frontmost check uses live frontmost-process state. A stale application discovery record does not grant control to a background app.
 - `[Deferred]` Browser-specific control remains a separate adapter. The current desktop path does not infer browser DOM or tab state from screenshots.
 - `[Deferred]` A separate native helper is not part of the current same-process Swift design. The inspected helper's source and exact runtime contract remain unavailable.
 
@@ -392,6 +396,21 @@ The main-window Computer Use page starts and stops the coordinator. `AppState` s
 existing API settings and keychain-derived model configuration. It does not own the loop's
 internal details.
 
+## Corrective parity update: 2026-08-03
+
+- `[Verified]` The mounted `sky-window2-api.md` reference documents explicit window records,
+  window-relative coordinates, `set_value`, `drag`, `perform_secondary_action`, and
+  `activate_window`.
+- `[Verified]` Suniye now exposes the selected window in the session UI and provides an explicit
+  Bring Forward path. Agent startup activates the selected window once, then the intervention
+  monitor still stops the run if the user changes the frontmost app or window.
+- `[Verified]` Suniye supports the reference's common coordinate and value actions, plus the older
+  API's text-selection behavior, through typed Swift models and native adapters.
+- `[Partial]` Reference-level transient screenshot caching and state diffs are not yet part of the
+  Suniye contract. Indexed click and dynamic secondary AX action names are now represented.
+- `[Unknown]` Real multi-display coordinate behavior, target-app activation under TCC, and the
+  reference's exact state-revision implementation require live macOS tests.
+
 ## Evidence limits
 
 - `[Verified]` Static bundle inspection exposes public wrappers, strings, resources, and transport code.
@@ -401,6 +420,8 @@ internal details.
 
 ## Research limitation
 
-Computer Use could not be tested through the Codex desktop UI in this inspection. Prior local evidence reports that Computer Use refuses the `com.openai.codex` app for safety. I did not retry that blocked path.
+The reference target could not be used as a target for Computer Use in this inspection. Prior local
+evidence reports that the reference refuses its own app for safety. The Suniye UI still needs a
+separate live Computer Use E2E run with a deterministic safe target.
 
 Static bundle and helper evidence support the architecture above.

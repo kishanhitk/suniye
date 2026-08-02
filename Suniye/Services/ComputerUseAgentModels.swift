@@ -16,17 +16,20 @@ enum ComputerUseAgentPhase: String, Codable, Equatable, Sendable {
 struct ComputerUseAgentTask: Codable, Equatable, Sendable {
     let instruction: String
     let applicationID: String
+    let windowID: UInt32?
     let includeScreenshot: Bool
     let sessionID: UUID
 
     init(
         instruction: String,
         applicationID: String,
+        windowID: UInt32? = nil,
         includeScreenshot: Bool = true,
         sessionID: UUID = UUID()
     ) {
         self.instruction = instruction
         self.applicationID = applicationID
+        self.windowID = windowID
         self.includeScreenshot = includeScreenshot
         self.sessionID = sessionID
     }

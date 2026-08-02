@@ -1,76 +1,11 @@
 import Foundation
 import Observation
 
-private actor ComputerUsePlatformRunner {
-    private let applicationCatalog: ComputerUseApplicationCatalog
-    private let permissionManager: ComputerUsePermissionManaging
-    private let observationService: ComputerUseObservationServicing
-    private let actionService: ComputerUseActionServicing
-
-    init(
-        applicationCatalog: ComputerUseApplicationCatalog,
-        permissionManager: ComputerUsePermissionManaging,
-        observationService: ComputerUseObservationServicing,
-        actionService: ComputerUseActionServicing
-    ) {
-        self.applicationCatalog = applicationCatalog
-        self.permissionManager = permissionManager
-        self.observationService = observationService
-        self.actionService = actionService
-    }
-
-    func listApplications() -> [ComputerUseApplication] {
-        applicationCatalog.listApplications()
-    }
-
-    func permissionSnapshot() -> ComputerUsePermissionSnapshot {
-        permissionManager.snapshot()
-    }
-
-    @discardableResult
-    func requestAccessibility() -> Bool {
-        permissionManager.requestAccessibility()
-    }
-
-    @discardableResult
-    func requestScreenRecording() -> Bool {
-        permissionManager.requestScreenRecording()
-    }
-
-    func observe(
-        applicationID: String,
-        includeScreenshot: Bool,
-        cancellation: ComputerUseCancellationToken
-    ) throws -> ComputerUseObservation {
-        try observationService.observe(
-            applicationID: applicationID,
-            includeScreenshot: includeScreenshot,
-            configuration: .default,
-            cancellation: cancellation
-        )
-    }
-
-    func execute(
-        action: ComputerUseAction,
-        observation: ComputerUseObservation,
-        approval: ComputerUseApprovalGrant,
-        requestID: UUID,
-        cancellation: ComputerUseCancellationToken
-    ) throws -> ComputerUseActionResult {
-        try actionService.execute(
-            action: action,
-            observation: observation,
-            approval: approval,
-            requestID: requestID,
-            cancellation: cancellation
-        )
-    }
-}
-
 enum ComputerUseCoordinatorPhase: Equatable {
     case idle
     case loadingApplications
     case requestingPermission
+    case activatingWindow
     case ready
     case observing
     case runningAgent
@@ -103,6 +38,9 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
     var phase: ComputerUseCoordinatorPhase = .idle
     var applications: [ComputerUseApplication] = []
     var selectedApplicationID: String?
+    var windows: [ComputerUseWindow] = []
+    var selectedWindowID: UInt32?
+    var alwaysApprovals: [ComputerUseApprovalRecord] = []
     var permissionSnapshot = ComputerUsePermissionSnapshot(
         accessibility: .notGranted,
         screenRecording: .notGranted
@@ -121,6 +59,8 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
     @ObservationIgnored private var activeCancellation: ComputerUseCancellationToken?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var permissionTask: Task<Void, Never>?
+    @ObservationIgnored private var alwaysApprovalTask: Task<Void, Never>?
+    @ObservationIgnored private var windowTask: Task<Void, Never>?
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var actionTask: Task<Void, Never>?
     @ObservationIgnored private var agentTask: Task<Void, Never>?
@@ -133,6 +73,8 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
 
     init(
         applicationCatalog: ComputerUseApplicationCatalog? = nil,
+        windowDiscovery: ComputerUseWindowDiscovering? = nil,
+        windowActivator: ComputerUseWindowActivating? = nil,
         permissionManager: ComputerUsePermissionManaging? = nil,
         observationService: ComputerUseObservationServicing? = nil,
         actionService: ComputerUseActionServicing? = nil,
@@ -144,6 +86,8 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         agentLimits: ComputerUseAgentLimits = ComputerUseAgentLimits()
     ) {
         let resolvedCatalog = applicationCatalog ?? SystemComputerUseApplicationCatalog()
+        let resolvedWindowDiscovery = windowDiscovery ?? SystemComputerUseWindowDiscovery()
+        let resolvedWindowActivator = windowActivator ?? SystemComputerUseWindowActivator()
         let resolvedPermissionManager = permissionManager ?? SystemComputerUsePermissionService()
         let resolvedApprovalStore = approvalStore ?? ComputerUseApprovalStore()
         let resolvedPolicy = policy ?? ComputerUsePolicyService()
@@ -178,7 +122,10 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
 
         runner = ComputerUsePlatformRunner(
             applicationCatalog: resolvedCatalog,
+            windowDiscovery: resolvedWindowDiscovery,
+            windowActivator: resolvedWindowActivator,
             permissionManager: resolvedPermissionManager,
+            approvalStore: resolvedApprovalStore,
             observationService: resolvedObservationService,
             actionService: resolvedActionService
         )
@@ -188,6 +135,10 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         applications.map(\.id)
     }
 
+    var windowIDs: [UInt32] {
+        windows.map(\.id)
+    }
+
     var selectedApplication: ComputerUseApplication? {
         guard let selectedApplicationID else {
             return nil
@@ -195,9 +146,16 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         return applications.first { $0.id == selectedApplicationID }
     }
 
+    var selectedWindow: ComputerUseWindow? {
+        guard let selectedWindowID else {
+            return nil
+        }
+        return windows.first { $0.id == selectedWindowID }
+    }
+
     var isBusy: Bool {
         switch phase {
-        case .loadingApplications, .requestingPermission, .observing, .requestingApproval, .acting:
+        case .loadingApplications, .requestingPermission, .activatingWindow, .observing, .requestingApproval, .acting:
             true
         case .runningAgent:
             true
@@ -249,6 +207,8 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
             return "Finding running apps"
         case .requestingPermission:
             return "Waiting for permission"
+        case .activatingWindow:
+            return "Bringing window forward"
         case .ready:
             return "Ready to inspect"
         case .observing:
@@ -322,9 +282,11 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         let operationID = UUID()
         let cancellation = ComputerUseCancellationToken()
         let agent = self.agent
+        let selectedWindowID = self.selectedWindowID
         let task = ComputerUseAgentTask(
             instruction: instruction,
             applicationID: selectedApplicationID,
+            windowID: selectedWindowID,
             includeScreenshot: includeScreenshot,
             sessionID: sessionID
         )
@@ -337,7 +299,26 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         errorMessage = nil
         phase = .runningAgent
 
+        let observationRunner = runner
         agentTask = Task { [weak self] in
+            if let selectedWindowID {
+                let activated = await observationRunner.activateWindow(
+                    applicationID: selectedApplicationID,
+                    windowID: selectedWindowID
+                )
+                guard activated, !Task.isCancelled else {
+                    guard !Task.isCancelled,
+                          let self,
+                          self.activeOperationID == operationID else {
+                        return
+                    }
+                    self.phase = .failed
+                    self.errorMessage = "The selected window could not be brought to the front."
+                    self.activeCancellation = nil
+                    return
+                }
+            }
+
             let result = await agent.run(task: task, cancellation: cancellation)
             guard !Task.isCancelled else {
                 return
@@ -366,7 +347,12 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         refreshTask = Task { [weak self] in
             async let applications = observationRunner.listApplications()
             async let permissions = observationRunner.permissionSnapshot()
-            let (loadedApplications, loadedPermissions) = await (applications, permissions)
+            async let approvals = observationRunner.listAlwaysApprovals()
+            let (loadedApplications, loadedPermissions, loadedApprovals) = await (
+                applications,
+                permissions,
+                approvals
+            )
 
             guard !Task.isCancelled else {
                 return
@@ -378,7 +364,14 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
 
             self.applications = loadedApplications
             self.permissionSnapshot = loadedPermissions
+            self.alwaysApprovals = loadedApprovals
             self.reconcileSelection()
+            if let selectedApplicationID = self.selectedApplicationID {
+                self.windows = await observationRunner.listWindows(applicationID: selectedApplicationID)
+            } else {
+                self.windows = []
+            }
+            self.reconcileWindowSelection()
             self.phase = .ready
         }
     }
@@ -399,6 +392,32 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
             }
 
             self.permissionSnapshot = permissions
+        }
+    }
+
+    func refreshAlwaysApprovals() {
+        alwaysApprovalTask?.cancel()
+        let observationRunner = runner
+        alwaysApprovalTask = Task { [weak self] in
+            let approvals = await observationRunner.listAlwaysApprovals()
+            guard !Task.isCancelled else {
+                return
+            }
+            self?.alwaysApprovals = approvals
+        }
+    }
+
+    func revokeAlwaysApproval(_ record: ComputerUseApprovalRecord) {
+        guard !isBusy else {
+            return
+        }
+        let observationRunner = runner
+        Task { [weak self] in
+            await observationRunner.revokeAlwaysApproval(record)
+            guard !Task.isCancelled else {
+                return
+            }
+            self?.refreshAlwaysApprovals()
         }
     }
 
@@ -435,11 +454,70 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
 
         cancelActiveOperation()
         selectedApplicationID = identifier
+        selectedWindowID = nil
+        windows = []
         observation = nil
         errorMessage = nil
         pendingApproval = nil
         lastActionResult = nil
         phase = .ready
+        loadWindows(for: identifier)
+    }
+
+    func selectWindow(_ identifier: UInt32) {
+        guard !isBusy,
+              windows.contains(where: { $0.id == identifier }) else {
+            return
+        }
+        guard selectedWindowID != identifier else {
+            return
+        }
+
+        cancelActiveOperation()
+        selectedWindowID = identifier
+        observation = nil
+        errorMessage = nil
+        pendingApproval = nil
+        lastActionResult = nil
+        phase = .ready
+    }
+
+    func activateSelectedWindow() {
+        guard !isBusy,
+              let selectedApplicationID,
+              let selectedWindowID else {
+            return
+        }
+
+        windowTask?.cancel()
+        let operationID = UUID()
+        activeOperationID = operationID
+        phase = .activatingWindow
+        errorMessage = nil
+
+        let observationRunner = runner
+        windowTask = Task { [weak self] in
+            let activated = await observationRunner.activateWindow(
+                applicationID: selectedApplicationID,
+                windowID: selectedWindowID
+            )
+            guard !Task.isCancelled else {
+                return
+            }
+            guard let self,
+                  self.activeOperationID == operationID else {
+                return
+            }
+            guard activated else {
+                self.phase = .failed
+                self.errorMessage = "The selected window could not be brought to the front."
+                return
+            }
+
+            self.windows = await observationRunner.listWindows(applicationID: selectedApplicationID)
+            self.reconcileWindowSelection()
+            self.phase = .ready
+        }
     }
 
     func observeSelectedApplication() {
@@ -454,6 +532,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         let operationID = UUID()
         let cancellation = ComputerUseCancellationToken()
         let captureScreenshot = includeScreenshot
+        let selectedWindowID = self.selectedWindowID
         activeOperationID = operationID
         activeCancellation = cancellation
         phase = .observing
@@ -467,6 +546,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
             do {
                 let result = try await observationRunner.observe(
                     applicationID: selectedApplicationID,
+                    windowID: selectedWindowID,
                     includeScreenshot: captureScreenshot,
                     cancellation: cancellation
                 )
@@ -603,6 +683,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
             errorMessage = localizedMessage(error)
             return
         }
+        let refreshApprovalsAfterAction = scope == .always
         let operationID = UUID()
         let cancellation = ComputerUseCancellationToken()
         let observationRunner = runner
@@ -622,6 +703,9 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
                     requestID: request.id,
                     cancellation: cancellation
                 )
+                if refreshApprovalsAfterAction {
+                    self?.refreshAlwaysApprovals()
+                }
 
                 guard !Task.isCancelled else {
                     return
@@ -634,6 +718,9 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
                 self.phase = .actionCompleted
                 self.activeCancellation = nil
             } catch {
+                if refreshApprovalsAfterAction {
+                    self?.refreshAlwaysApprovals()
+                }
                 guard !Task.isCancelled else {
                     return
                 }
@@ -680,6 +767,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         cancelActiveOperation()
         refreshTask?.cancel()
         permissionTask?.cancel()
+        alwaysApprovalTask?.cancel()
         pendingApproval = nil
 
         if isBusy {
@@ -721,7 +809,38 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         }
 
         selectedApplicationID = applications.first?.id
+        windows = []
+        selectedWindowID = nil
         observation = nil
+    }
+
+    private func loadWindows(for applicationID: String) {
+        windowTask?.cancel()
+        let observationRunner = runner
+        windowTask = Task { [weak self] in
+            let loadedWindows = await observationRunner.listWindows(applicationID: applicationID)
+            guard !Task.isCancelled else {
+                return
+            }
+            guard let self,
+                  self.selectedApplicationID == applicationID else {
+                return
+            }
+            self.windows = loadedWindows
+            self.reconcileWindowSelection()
+        }
+    }
+
+    private func reconcileWindowSelection() {
+        guard !windows.isEmpty else {
+            selectedWindowID = nil
+            return
+        }
+        if let selectedWindowID,
+           windows.contains(where: { $0.id == selectedWindowID }) {
+            return
+        }
+        selectedWindowID = windows.first(where: \.isKeyWindow)?.id ?? windows[0].id
     }
 
     private func cancelActiveOperation() {
@@ -729,6 +848,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         observationTask?.cancel()
         actionTask?.cancel()
         agentTask?.cancel()
+        windowTask?.cancel()
         activeCancellation = nil
         activeOperationID = nil
     }
@@ -739,6 +859,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         lastActionResult = result.actionResults.last
         activeCancellation = nil
         agentTask = nil
+        refreshAlwaysApprovals()
         phase = .agentCompleted
         if result.phase == .failed {
             errorMessage = result.message

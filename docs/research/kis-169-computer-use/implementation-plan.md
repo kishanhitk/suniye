@@ -1,8 +1,11 @@
 # KIS-169 independent Swift implementation plan
 
 Status: Phase 0 observation, Phase 1 preview, Phase 2 approved actions, Phase 3 typed agent loop,
-Phase 4 policy, Phase 5A model transport, and Phase 5B coordinator/model integration are added.
-Browser control and a separate native helper remain unimplemented.
+Phase 4 policy, Phase 5A model transport, Phase 5B coordinator/model integration, and the current
+desktop parity correction are added.
+Browser control and a separate native helper remain unimplemented. Installed-app launch, transient
+screenshot caching, and reference-specific state diffs remain open. The strict maintainability
+review is complete; live Computer Use E2E validation remains pending.
 
 ## Goal
 
@@ -37,6 +40,10 @@ transport to the existing explicit API Endpoint settings and keychain.
 - `ComputerUsePolicy`: action risk classification and hard safety blocks.
 - `ComputerUseApprovalStore`: session-memory and app/risk-scoped persistent approval records.
 - `ComputerUseAuditRecording`: redacted approval and policy audit events.
+
+The current action contract also carries a screenshot ID for coordinate-grounded click, scroll, and
+drag requests. The policy rejects an ID that does not match the latest observation. The reference
+has a richer transient screenshot cache; Suniye keeps one bounded screenshot per observation.
 
 Use protocols for all boundaries.
 
@@ -466,8 +473,7 @@ Add click, key press, scroll, text entry, and semantic AX actions.
 
 Require approval for every action.
 
-Start with click, key press, scroll, text entry, and a semantic AX adapter behind a test seam.
-Defer drag, set value, and select text until each has a focused integration test.
+The current action boundary also covers drag, set value, and select text behind test seams.
 
 Implementation added:
 
@@ -477,10 +483,21 @@ Implementation added:
 - `Suniye/Services/ComputerUseAccessibilityReader.swift` resolves the observed AX element index and performs the approved semantic action.
 - `Suniye/Services/ComputerUseCoordinator.swift` exposes request, allow once, deny, stop, and cancel transitions. It requires a fresh observation after an action completes.
 - `Suniye/Views/MainWindow/ComputerUseActionPanel.swift` presents bounded action controls and the approval card.
-- `SuniyeTests/ComputerUsePhase2Tests.swift` covers action models, policy, service seams, target validation, approval flow, failures, and cancellation.
+- `SuniyeTests/ComputerUsePhase2ActionTests.swift`, `ComputerUsePhase2TestSupport.swift`, and
+  `ComputerUsePhase2Tests.swift` cover action models, policy, service seams, target validation,
+  approval flow, failures, and cancellation.
 
 Phase 2 does not call a model. The controls are deterministic user-driven test surfaces for the
 native action and approval boundaries.
+
+The parity correction adds a platform runner, selected-window activation, window-relative
+coordinate conversion, and always-allowed approval management. Agent startup may activate the
+explicitly selected window once. The intervention monitor remains responsible for detecting a
+later user takeover.
+
+Installed-app launch, transient screenshot caching, reference-specific state diffs, and helper IPC
+remain separate work items. Indexed click and dynamic secondary Accessibility actions are now in
+the desktop action contract.
 
 ### Phase 3: Agent loop
 
@@ -544,8 +561,12 @@ includes a screenshot. Uploading that screenshot is a separate session-only cons
 defaults to disabled. A live provider run and live WindowServer action still need manual macOS
 validation.
 
-The deterministic suite passes with 1,078 tests, 1 skipped test, and 0 failures. Gated line
-coverage is 95.02% (13,803/14,526). E2E preflight and smoke build validation pass.
+The current prompt describes the expanded typed action forms and the window-relative coordinate
+origin. It does not claim to reproduce the reference's unknown server prompt or provider choice.
+
+The deterministic suite passes with 1,086 tests, 1,085 passed, 1 skipped, and 0 failures. Gated
+line coverage is 95.01% (14,439/15,197), above the documented 95% floor. The focused Computer
+Use suite passes 28 tests. Live provider and WindowServer validation remain open.
 
 ### Later: Browser adapter
 
