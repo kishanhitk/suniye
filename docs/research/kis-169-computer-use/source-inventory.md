@@ -190,6 +190,16 @@ Phase 0 added these source files:
 
 Status: `[Verified]` by the Phase 0 build and test run.
 
+Phase 1 added these source files:
+
+- `Suniye/Services/ComputerUseCoordinator.swift`;
+- `Suniye/Views/MainWindow/ComputerUsePage.swift`;
+- `SuniyeTests/ComputerUsePhase1Tests.swift`.
+
+Phase 1 also adds the `computerUse` main-window section and regenerates the Xcode project.
+
+Status: `[Verified]` by the Phase 1 build and targeted test run.
+
 These files establish the current state machine, permissions, Accessibility insertion, model seams, settings surface, build source of truth, and test seams.
 
 Status: `[Verified]` by source inspection.

@@ -4,6 +4,7 @@ import XCTest
 final class MainWindowSectionTests: XCTestCase {
     func testLaunchArgumentsRouteToExpectedSections() {
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-dashboard"]), .dashboard)
+        XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-computer-use"]), .computerUse)
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-history"]), .history)
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-model"]), .model)
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-style"]), .style)

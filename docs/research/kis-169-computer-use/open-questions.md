@@ -33,4 +33,5 @@
 - Does `CGWindowListCreateImage` capture the selected window after Screen Recording grant?
 - Does AX window geometry match CG window geometry for the target apps?
 - Which target apps expose a complete enough AX tree for the first read-only preview?
-- Should Phase 1 use a target picker or only the current frontmost application?
+- Phase 1 currently uses a target picker. Does that remain the right product policy after live testing?
+- Does running discovery and observation behind the Phase 1 actor boundary behave correctly for real AX targets?

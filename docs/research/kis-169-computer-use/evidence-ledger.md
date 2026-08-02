@@ -313,3 +313,21 @@ Sources: new Phase 0 files under `Suniye/Services/` and `SuniyeTests/ComputerUse
 - `[Verified]` Phase 0 uses `CGWindowListCreateImage` for the screenshot adapter.
 - `[Unknown]` The final Suniye screenshot API remains open until a live macOS 14 permission test compares Core Graphics and ScreenCaptureKit.
 - `[Verified]` Phase 0 does not implement the DMG’s native pipe, Apple Event bridge, model loop, or action wrappers.
+
+### Entry 26: Phase 1 read-only surface
+
+Sources: `Suniye/Services/ComputerUseCoordinator.swift`,
+`Suniye/Views/MainWindow/ComputerUsePage.swift`,
+`Suniye/MainWindowSection.swift`, and `SuniyeTests/ComputerUsePhase1Tests.swift`.
+
+- `[Verified]` Suniye now exposes a dedicated Computer Use main-window section.
+- `[Verified]` The Phase 1 surface lists eligible running applications and lets the user select one.
+- `[Verified]` The Phase 1 surface shows Accessibility and Screen Recording permission state.
+- `[Verified]` The Phase 1 surface can request both permissions through the Phase 0 permission service.
+- `[Verified]` The Phase 1 surface can capture and preview the selected window's AX text and optional screenshot.
+- `[Verified]` The Phase 1 surface supports cancellation without publishing an in-flight observation.
+- `[Verified]` Discovery and observation run behind an actor boundary instead of directly in the SwiftUI view.
+- `[Verified]` Twelve deterministic Phase 1 coordinator tests pass.
+- `[Verified]` Phase 1 adds no model call, input action, approval flow, browser adapter, or native helper.
+- `[Inferred]` The dedicated coordinator can later host approval presentation and agent-session state without coupling those concerns to `AppState`.
+- `[Unknown]` Live AX, Screen Recording, and target-window behavior has not yet been validated through the Phase 1 UI.

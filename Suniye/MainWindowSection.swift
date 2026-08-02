@@ -2,6 +2,7 @@ import Foundation
 
 enum MainWindowSection: String, CaseIterable, Hashable, Codable {
     case dashboard
+    case computerUse
     case history
     case model
     case style
@@ -11,6 +12,8 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
         switch self {
         case .dashboard:
             return "Dashboard"
+        case .computerUse:
+            return "Computer Use"
         case .history:
             return "History"
         case .model:
@@ -26,6 +29,8 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
         switch self {
         case .dashboard:
             return "square.grid.2x2"
+        case .computerUse:
+            return "cursorarrow.click.2"
         case .history:
             return "clock"
         case .model:
@@ -38,7 +43,12 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
     }
 
     var launchArgument: String {
-        "--open-\(rawValue)"
+        switch self {
+        case .computerUse:
+            return "--open-computer-use"
+        default:
+            return "--open-\(rawValue)"
+        }
     }
 
     var accessibilityIdentifier: String {

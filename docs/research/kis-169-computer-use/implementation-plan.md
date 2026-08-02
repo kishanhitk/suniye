@@ -1,6 +1,6 @@
 # KIS-169 independent Swift implementation plan
 
-Status: Phase 0 observation implementation added. Model control and desktop actions remain unimplemented.
+Status: Phase 0 observation and Phase 1 read-only preview implementation added. Model control and desktop actions remain unimplemented.
 
 ## Goal
 
@@ -19,7 +19,8 @@ The capability should observe a selected app, ask a model for one safe action, r
 
 ## Proposed service boundaries
 
-These boundaries are design proposals, not code changes.
+The observation and permission boundaries are implemented. The agent, model, action,
+approval, and intervention boundaries remain design proposals.
 
 - `ComputerUseCoordinator`: `@MainActor` lifecycle, UI state, user stop, and approval presentation.
 - `ComputerUseAgent`: session state and model/action loop behind an async interface.
@@ -438,6 +439,15 @@ Add target selection, AX text, screenshot preview, permission UX, and cancel.
 Do not execute model actions yet.
 
 Add a target picker and an observation preview. Let the user inspect the selected app, window, AX text, and screenshot before any action is possible.
+
+Implementation added:
+
+- `Suniye/Services/ComputerUseCoordinator.swift` runs discovery and observation behind a main-actor UI state boundary.
+- `Suniye/Views/MainWindow/ComputerUsePage.swift` provides target selection, permission requests, observation preview, and cancel.
+- `Suniye/MainWindowSection.swift` adds the Computer Use navigation surface.
+- `SuniyeTests/ComputerUsePhase1Tests.swift` covers loading, permission gating, observation, cancellation, and target changes.
+
+The Phase 1 surface is read-only. It does not post input events or call a model.
 
 ### Phase 2: Controlled actions
 
