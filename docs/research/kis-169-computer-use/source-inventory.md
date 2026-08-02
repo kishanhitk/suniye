@@ -214,6 +214,20 @@ Phase 2 also extends `ComputerUseCoordinator.swift` and
 Status: `[Verified]` by the Phase 2 build and focused test run. The native event adapter and
 SwiftUI action panel remain platform-bound or render-only paths.
 
+Phase 3 added these source files and boundaries:
+
+- `Suniye/Services/ComputerUseAgentModels.swift`;
+- `Suniye/Services/ComputerUseAgent.swift`;
+- `Suniye/Services/ComputerUseInterventionMonitor.swift`;
+- `SuniyeTests/ComputerUsePhase3Tests.swift`.
+- `SuniyeTests/ComputerUsePhase3TestSupport.swift`.
+
+Phase 3 also regenerates the Xcode project and excludes only the live WindowServer intervention
+adapter from the coverage gate.
+
+Status: `[Verified]` by the Phase 3 full test and coverage run. The model client is an
+unconfigured default plus test doubles; no live provider is connected.
+
 These files establish the current state machine, permissions, Accessibility insertion, model seams, settings surface, build source of truth, and test seams.
 
 Status: `[Verified]` by source inspection.

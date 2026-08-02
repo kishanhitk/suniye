@@ -44,3 +44,12 @@
 - Do target applications expose the observed element indexes consistently during semantic action resolution?
 - Does the existing clipboard-preserving text insertion path protect clipboard state during an approved text action?
 - Is a one-time approval card sufficient for the first local integration, or does the product need a separate persistent approval service later?
+
+## Phase 3 integration gates
+
+- Which model provider may receive screenshots, AX text, action results, and failure messages?
+- Does the local-first promise require a fully local Computer Use model, or can the user choose a remote provider with explicit disclosure?
+- What request timeout and provider cancellation contract enforces the agent duration limit while a model request is in flight?
+- How should `ComputerUseAgentResult` events connect to the main-actor coordinator without allowing the model to mutate views?
+- Which model response schema and prompt produce reliable typed actions for each supported target app?
+- Should action failures be shown to the user before the agent retries, or should the first release stop after one failure?

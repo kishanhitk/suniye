@@ -1,6 +1,8 @@
 # KIS-169 independent Swift implementation plan
 
-Status: Phase 0 observation, Phase 1 preview, and Phase 2 approved-action implementation added. Model control, browser control, and native helper work remain unimplemented.
+Status: Phase 0 observation, Phase 1 preview, Phase 2 approved actions, and the Phase 3 typed
+agent loop are added. A live model provider, browser control, and native helper remain
+unimplemented.
 
 ## Goal
 
@@ -19,8 +21,9 @@ The capability should observe a selected app, ask a model for one safe action, r
 
 ## Proposed service boundaries
 
-The observation, permission, action, and one-time approval boundaries are implemented. The
-agent, model, persistent approval, and intervention boundaries remain design proposals.
+The observation, permission, action, one-time approval, agent, and intervention boundaries are
+implemented as typed seams. The model client has only an unconfigured default and test doubles;
+persistent approval remains a design proposal.
 
 - `ComputerUseCoordinator`: `@MainActor` lifecycle, UI state, user stop, and approval presentation.
 - `ComputerUseAgent`: session state and model/action loop behind an async interface.
@@ -483,11 +486,26 @@ Add the model interface, action validation, re-observation, limits, and user int
 
 Use a fake model in tests. Do not connect a remote model until the privacy decision and approval UX are complete.
 
+Implementation added:
+
+- `Suniye/Services/ComputerUseAgentModels.swift` defines terminal outcomes, typed model requests and decisions, failure feedback, cancellation-aware model and approval protocols, and bounded session limits.
+- `Suniye/Services/ComputerUseAgent.swift` runs one actor-isolated loop. It observes fresh state, checks intervention, requests one typed decision, validates it, obtains one-time approval, executes through the Phase 2 action service, records failures, waits for UI settlement, and re-observes.
+- `Suniye/Services/ComputerUseInterventionMonitor.swift` checks the frontmost process and current key window through injected discovery boundaries.
+- `SuniyeTests/ComputerUsePhase3Tests.swift` covers model value validation, completed and blocked outcomes, retries, action results and failure feedback, approval decisions, limits, cancellation, and intervention; `ComputerUsePhase3TestSupport.swift` keeps the fakes and observation fixtures separate.
+
+Phase 3 has no live model client and no coordinator integration. The default model fails closed with
+`notConfigured`; a future provider must honor the cancellation token and the privacy policy.
+
 ### Phase 4: Risk policy
 
 Add action risk classes, persistent approvals, audit records, and hard blocks.
 
 Define revocation, retention, secret masking, and export behavior before enabling persistent approval.
+
+Use the DMG reference as the policy contract to compare against: app policy must distinguish
+allowed, denied, and forbidden targets; approval must define session and always-persistent scopes;
+user stop and user intervention must map to cancellation; and approval/tool telemetry must not
+capture screenshots or raw typed secrets. These are reference-backed requirements, not copied code.
 
 ### Phase 5: Browser adapter
 
@@ -506,4 +524,4 @@ Do not infer DOM or tab state from a desktop screenshot. Define a browser-specif
 - Browser control is a separate adapter.
 - Phase 0 remains read-only.
 - Phase 2 actions require one-time approval and fresh observation state.
-- No model, agent loop, persistent approval, or browser code is enabled.
+- No live model provider, persistent approval, or browser code is enabled.

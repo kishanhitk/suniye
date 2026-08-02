@@ -360,7 +360,44 @@ Sources: `Suniye/Services/ComputerUseActionModels.swift`,
 - `[Verified]` Native input events are isolated behind `ComputerUseInputEventPosting`; text entry reuses the existing clipboard-preserving insertion service; semantic actions use `AXUIElementPerformAction` through the Accessibility adapter.
 - `[Verified]` The coordinator creates an approval request for each action and supports Allow Once, Deny, Stop Session, and Cancel transitions.
 - `[Verified]` A completed action disables further action requests until a fresh observation is captured.
-- `[Verified]` Fourteen deterministic Phase 2 tests pass across models, policy, action service, target validation, approval, failure, and cancellation paths.
+- `[Verified]` Fifteen deterministic Phase 2 tests pass across models, policy, action service, target validation, approval, failure, and cancellation paths.
 - `[Verified]` Phase 2 does not call a model, add browser control, or add a native helper process.
 - `[Inferred]` Keeping native event posting and semantic AX execution behind separate protocols leaves a testable action service and preserves a future helper-process seam.
 - `[Unknown]` Live `CGEvent` posting, coordinate-system alignment, clipboard restoration, and real semantic-action behavior still require manual macOS validation.
+
+### Entry 29: Phase 3 typed agent loop
+
+Sources: `Suniye/Services/ComputerUseAgentModels.swift`,
+`Suniye/Services/ComputerUseAgent.swift`,
+`Suniye/Services/ComputerUseInterventionMonitor.swift`, and
+`SuniyeTests/ComputerUsePhase3Tests.swift`.
+
+- `[Verified]` Suniye now has a typed model request containing the instruction, fresh observation, successful action results, bounded failure feedback, and iteration number.
+- `[Verified]` Model decisions are typed as action, completed, ask-user, blocked, or retryable-failure values. Empty terminal messages are rejected before they drive the loop.
+- `[Verified]` The agent uses an actor-isolated loop with fresh observation before each model request and after each successful action.
+- `[Verified]` The agent requires one-time approval before every model-proposed action and passes the shared cancellation token to the model, approval, and action boundaries.
+- `[Verified]` The agent bounds successful actions, repeated failures, and loop duration checks. It stops for cancellation, denial, user stop, frontmost-app changes, target-window changes, and target-not-frontmost action errors.
+- `[Verified]` Model and action failure messages are retained in the next model request instead of being discarded.
+- `[Verified]` The default model client fails closed with `notConfigured`; Phase 3 does not make a network or local model call.
+- `[Verified]` The live intervention adapter checks the frontmost process and current key window through the existing window-discovery boundary.
+- `[Verified]` Phase 3 deterministic tests pass for model values, decisions, retries, approvals, actions, limits, cancellation, and intervention.
+- `[Inferred]` The typed model and approval protocols are the seam for a future local or remote provider, but the provider privacy contract must be decided first.
+- `[Unknown]` The exact model, prompt, response schema, timeout behavior during an in-flight provider request, and coordinator event bridge remain open.
+
+### Entry 30: DMG reference used for Phase 3 comparison
+
+Sources: the mounted DMG paths
+`ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/@oai/sky/dist/project/cua/sky_js/src/targets/mac/client.js`,
+`computer-use-policy.js`, `native-pipe.js`, `get_app_state.js`, `window_result.js`, and
+`errors.js`.
+
+- `[Verified]` The DMG public macOS client uses request types named `ComputerUseIPCListAppsRequest`, `ComputerUseIPCAppPolicyRequest`, `ComputerUseIPCAppGetSkyshotRequest`, `ComputerUseIPCAppPerformActionRequest`, and `ComputerUseIPCAppStartRequest`.
+- `[Verified]` The DMG client defaults to API version `CodexComputerUseIPC-2` and a 120-second request timeout.
+- `[Verified]` The DMG public action wrappers call one shared `performAction` transport path. The readable wrappers expose click, drag, secondary Accessibility action, key press, scroll, set value, select text, and text entry.
+- `[Verified]` The DMG policy wrapper requests an app policy before a tool action and distinguishes allowed, denied, and forbidden decisions.
+- `[Verified]` The DMG policy wrapper can ask for session or always-persistent approval, records approval telemetry, and maps user-stopped and user-intervened server errors to a canceled tool result.
+- `[Verified]` The DMG native pipe serializes JSON-RPC requests, assigns a request deadline, frames messages with a length prefix, validates response shape, and rejects oversized frames.
+- `[Verified]` The DMG `get_app_state` wrapper turns native state into an app, screenshot, and text result. App-specific instructions may be prefixed to the returned text.
+- `[Inferred]` Suniye’s Phase 3 typed model, approval, action, and observation seams follow the same useful separation, while keeping the implementation independent.
+- `[Corrected]` Suniye’s Phase 3 one-time approval is not yet equivalent to the DMG’s app-policy and session/always-persistent approval layer. That comparison belongs to Phase 4.
+- `[Unknown]` The readable DMG JavaScript does not expose the complete model prompt or the hidden service’s internal agent loop. We must not claim exact parity for those parts.
