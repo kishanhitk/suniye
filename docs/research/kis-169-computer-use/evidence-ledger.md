@@ -420,3 +420,11 @@ Sources: `Suniye/Services/ComputerUsePolicyService.swift`,
 - `[Verified]` Approval and policy audit records contain redacted action summaries and do not contain typed text or screenshots.
 - `[Inferred]` The boundary is ready for coordinator and agent integration, but those callers must use `prepare` and `grant` for policy re-evaluation.
 - `[Unknown]` The final product defaults, expiry duration, user settings, and remote telemetry policy remain open.
+
+### Entry 32: Phase 4 repository handoff
+
+Sources: local Git status and `git push` output.
+
+- `[Verified]` Commit `4d9161e` contains the Phase 4 safety policy slice.
+- `[Verified]` Branch `kis-169-computer-use` tracks `origin/kis-169-computer-use`.
+- `[Verified]` The Phase 4 branch state was pushed after tests and quality review.
