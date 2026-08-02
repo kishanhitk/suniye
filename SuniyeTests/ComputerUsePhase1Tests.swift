@@ -204,6 +204,24 @@ final class ComputerUsePhase1Tests: XCTestCase {
         XCTAssertNil(coordinator.errorMessage)
     }
 
+    func testRefreshClearsPreviousObservation() async {
+        let permissions = Phase1StubPermissionManager(
+            snapshot: ComputerUsePermissionSnapshot(accessibility: .granted, screenRecording: .granted)
+        )
+        let coordinator = makeCoordinator(permissionManager: permissions)
+
+        coordinator.start()
+        await waitUntil { coordinator.phase == .ready }
+        coordinator.observeSelectedApplication()
+        await waitUntil { coordinator.phase == .observed }
+
+        coordinator.refresh()
+
+        XCTAssertNil(coordinator.observation)
+        await waitUntil { coordinator.phase == .ready }
+        XCTAssertNil(coordinator.observation)
+    }
+
     func testPermissionRequestsAreIgnoredWhileObservationIsBusy() async {
         let permissions = Phase1StubPermissionManager(
             snapshot: ComputerUsePermissionSnapshot(accessibility: .granted, screenRecording: .granted)
@@ -227,6 +245,33 @@ final class ComputerUsePhase1Tests: XCTestCase {
 
         XCTAssertEqual(permissions.accessibilityRequestCount, 0)
         XCTAssertEqual(permissions.screenRecordingRequestCount, 0)
+        coordinator.cancel()
+    }
+
+    func testSelectingAnotherApplicationIsIgnoredWhileObservationIsBusy() async {
+        let first = makeApplication(id: "com.example.first", name: "First App", active: true)
+        let second = makeApplication(id: "com.example.second", name: "Second App")
+        let permissions = Phase1StubPermissionManager(
+            snapshot: ComputerUsePermissionSnapshot(accessibility: .granted, screenRecording: .granted)
+        )
+        let started = expectation(description: "observation started")
+        let coordinator = makeCoordinator(
+            applications: [first, second],
+            permissionManager: permissions,
+            observationService: Phase1BlockingObservationService {
+                started.fulfill()
+            }
+        )
+
+        coordinator.start()
+        await waitUntil { coordinator.phase == .ready }
+        coordinator.observeSelectedApplication()
+        await fulfillment(of: [started], timeout: 1)
+
+        coordinator.selectApplication(second.id)
+
+        XCTAssertEqual(coordinator.selectedApplicationID, first.id)
+        XCTAssertEqual(coordinator.phase, .observing)
         coordinator.cancel()
     }
 

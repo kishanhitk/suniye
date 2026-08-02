@@ -30,4 +30,4 @@ This work does not copy ChatGPT code.
 
 This work does not add model control, desktop actions, approvals, or browser control.
 
-The Phase 0 slice is committed. Phase 1 changes are currently uncommitted. No push has been performed.
+The Phase 0 and Phase 1 slices are committed. No push has been performed.

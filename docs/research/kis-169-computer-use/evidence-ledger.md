@@ -284,7 +284,7 @@ Sources: new Phase 0 files under `Suniye/Services/` and `SuniyeTests/ComputerUse
 
 - `[Verified]` Suniye now has Codable value types for applications, windows, targets, AX elements, observations, screenshots, permissions, and observation errors.
 - `[Verified]` Suniye keeps raw AX objects inside the Accessibility adapter.
-- `[Verified]` Suniye lists running applications by exact bundle identifier.
+- `[Verified]` Suniye lists running applications with both bundle identifiers and process-scoped selection IDs.
 - `[Verified]` Suniye discovers visible layer-zero windows through `CGWindowListCopyWindowInfo`.
 - `[Verified]` Suniye marks a frontmost window as a key-window candidate.
 - `[Verified]` Suniye reads the target AX window and serializes a bounded tree with deterministic indexes.
@@ -295,7 +295,7 @@ Sources: new Phase 0 files under `Suniye/Services/` and `SuniyeTests/ComputerUse
 - `[Verified]` Suniye supports cancellation before and during observation.
 - `[Verified]` Suniye rejects an observation when its target application is missing or has no window.
 - `[Verified]` Suniye assigns a new observation generation only after successful capture.
-- `[Verified]` Sixteen deterministic Phase 0 tests pass.
+- `[Verified]` Seventeen deterministic Phase 0 tests pass.
 - `[Verified]` The app target builds after XcodeGen regeneration.
 - `[Verified]` Phase 0 adds no model call, input action, approval flow, browser adapter, or SwiftUI control surface.
 - `[Inferred]` The observation DTOs can support a later actor or process boundary without passing raw AppKit or AX objects.
@@ -327,7 +327,19 @@ Sources: `Suniye/Services/ComputerUseCoordinator.swift`,
 - `[Verified]` The Phase 1 surface can capture and preview the selected window's AX text and optional screenshot.
 - `[Verified]` The Phase 1 surface supports cancellation without publishing an in-flight observation.
 - `[Verified]` Discovery and observation run behind an actor boundary instead of directly in the SwiftUI view.
-- `[Verified]` Twelve deterministic Phase 1 coordinator tests pass.
+- `[Verified]` Fourteen deterministic Phase 1 coordinator tests pass.
 - `[Verified]` Phase 1 adds no model call, input action, approval flow, browser adapter, or native helper.
 - `[Inferred]` The dedicated coordinator can later host approval presentation and agent-session state without coupling those concerns to `AppState`.
 - `[Unknown]` Live AX, Screen Recording, and target-window behavior has not yet been validated through the Phase 1 UI.
+
+### Entry 27: Thermo-nuclear quality review
+
+Review scope: the full Computer Use diff from main through the Phase 1 commits.
+
+- `[Fixed]` The Phase 1 preview now uses Swift interpolation for window titles, generations, IDs, element counts, screenshot dimensions, and bounds.
+- `[Fixed]` System application IDs now include the bundle identifier and process identifier. A bundle identifier alone is not a unique live target.
+- `[Fixed]` Refresh clears the previous observation before loading a new application snapshot.
+- `[Fixed]` The Accessibility adapter isolates its required Core Foundation casts behind explicit type-ID guards.
+- `[Verified]` The actor boundary, service seams, and file sizes remain suitable for the next phase. No changed production file exceeds 1,000 lines.
+- `[Retained]` The permission enum still has a future unavailable state, but the current system provider reports only granted or not granted.
+- `[Unknown]` Live permission prompts, real AX trees, and screenshot behavior still require manual macOS validation.

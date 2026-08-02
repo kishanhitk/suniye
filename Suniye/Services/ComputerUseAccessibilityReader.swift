@@ -2,6 +2,22 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
+private func computerUseAXElement(from value: AnyObject?) -> AXUIElement? {
+    guard let value,
+          CFGetTypeID(value) == AXUIElementGetTypeID() else {
+        return nil
+    }
+    return value as! AXUIElement
+}
+
+private func computerUseAXValue(from value: AnyObject?) -> AXValue? {
+    guard let value,
+          CFGetTypeID(value) == AXValueGetTypeID() else {
+        return nil
+    }
+    return value as! AXValue
+}
+
 struct SystemComputerUseAccessibilityReader: ComputerUseAccessibilityReading {
     private let accessibilityTrustProvider: () -> Bool
 
@@ -55,8 +71,8 @@ struct SystemComputerUseAccessibilityReader: ComputerUseAccessibilityReading {
             kAXFocusedWindowAttribute as CFString,
             on: applicationElement
         ),
-           target.isKeyWindow {
-            let focusedWindow = focusedWindowValue as! AXUIElement
+           target.isKeyWindow,
+           let focusedWindow = computerUseAXElement(from: focusedWindowValue) {
             if matches(focusedWindow, target: target) {
                 return focusedWindow
             }
@@ -126,12 +142,7 @@ struct SystemComputerUseAccessibilityReader: ComputerUseAccessibilityReading {
         guard let values = value as? [AnyObject] else {
             return []
         }
-        return values.compactMap { value in
-            guard CFGetTypeID(value) == AXUIElementGetTypeID() else {
-                return nil
-            }
-            return (value as! AXUIElement)
-        }
+        return values.compactMap(computerUseAXElement)
     }
 
     fileprivate func stringAttribute(_ attribute: CFString, from element: AXUIElement) -> String? {
@@ -154,12 +165,12 @@ struct SystemComputerUseAccessibilityReader: ComputerUseAccessibilityReading {
         var value: AnyObject?
         guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
               let value,
-              CFGetTypeID(value) == AXValueGetTypeID() else {
+              let axValue = computerUseAXValue(from: value) else {
             return nil
         }
 
         var point = CGPoint.zero
-        guard AXValueGetValue(value as! AXValue, .cgPoint, &point) else {
+        guard AXValueGetValue(axValue, .cgPoint, &point) else {
             return nil
         }
         return point
@@ -169,12 +180,12 @@ struct SystemComputerUseAccessibilityReader: ComputerUseAccessibilityReading {
         var value: AnyObject?
         guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
               let value,
-              CFGetTypeID(value) == AXValueGetTypeID() else {
+              let axValue = computerUseAXValue(from: value) else {
             return nil
         }
 
         var size = CGSize.zero
-        guard AXValueGetValue(value as! AXValue, .cgSize, &size) else {
+        guard AXValueGetValue(axValue, .cgSize, &size) else {
             return nil
         }
         return size
@@ -324,12 +335,7 @@ private final class ComputerUseAXTreeBuilder {
         guard let values = value as? [AnyObject] else {
             return []
         }
-        return values.compactMap { value in
-            guard CFGetTypeID(value) == AXUIElementGetTypeID() else {
-                return nil
-            }
-            return (value as! AXUIElement)
-        }
+        return values.compactMap(computerUseAXElement)
     }
 
     private func bounds(of element: AXUIElement) -> ComputerUseRect? {

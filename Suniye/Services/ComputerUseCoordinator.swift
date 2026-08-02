@@ -165,6 +165,7 @@ final class ComputerUseCoordinator {
         activeOperationID = operationID
         phase = .loadingApplications
         errorMessage = nil
+        observation = nil
 
         let observationRunner = runner
         refreshTask = Task { [weak self] in
@@ -225,6 +226,10 @@ final class ComputerUseCoordinator {
     }
 
     func selectApplication(_ identifier: String) {
+        guard !isBusy else {
+            return
+        }
+
         guard applications.contains(where: { $0.id == identifier }) else {
             return
         }

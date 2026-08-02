@@ -294,6 +294,26 @@ final class ComputerUsePhase0Tests: XCTestCase {
         XCTAssertEqual(windows[0].bounds, ComputerUseRect(x: 10, y: 20, width: 300, height: 200))
     }
 
+    func testApplicationIDsIncludeProcessIdentity() {
+        XCTAssertEqual(
+            SystemComputerUseApplicationCatalog.applicationID(
+                bundleIdentifier: "com.example.notes",
+                processIdentifier: 1234
+            ),
+            "com.example.notes#1234"
+        )
+        XCTAssertNotEqual(
+            SystemComputerUseApplicationCatalog.applicationID(
+                bundleIdentifier: "com.example.notes",
+                processIdentifier: 1234
+            ),
+            SystemComputerUseApplicationCatalog.applicationID(
+                bundleIdentifier: "com.example.notes",
+                processIdentifier: 5678
+            )
+        )
+    }
+
     func testScreenshotServiceEncodesInjectedImageAsPNG() throws {
         let image = makeTestImage()
         let service = CoreGraphicsComputerUseScreenshotService { _, _ in image }

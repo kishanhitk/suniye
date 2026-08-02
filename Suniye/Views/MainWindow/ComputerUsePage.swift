@@ -126,6 +126,7 @@ struct ComputerUsePage: View {
                                 title: applicationTitle(for:)
                             )
                             .frame(maxWidth: 320)
+                            .disabled(coordinator.isBusy)
                         }
 
                         if let application = coordinator.selectedApplication {
@@ -257,23 +258,23 @@ private struct ComputerUseObservationPreview: View {
                         Text(observation.target.application.displayName)
                             .font(AppTypography.bodyMedium)
                         if let title = observation.target.window.title {
-                            Text("· (title)")
+                            Text("· \(title)")
                                 .font(AppTypography.body)
                                 .foregroundStyle(MainWindowPalette.secondaryText)
                         }
                         Spacer(minLength: 8)
-                        StatusPill(title: "Generation (observation.generation)", tint: .accentColor)
+                        StatusPill(title: "Generation \(observation.generation)", tint: .accentColor)
                     }
 
                     HStack(spacing: 16) {
-                        observationMeta(title: "Window", value: "(observation.target.window.id)")
+                        observationMeta(title: "Window", value: "\(observation.target.window.id)")
                         observationMeta(
                             title: "Bounds",
                             value: format(bounds: observation.target.window.bounds)
                         )
                         observationMeta(
                             title: "Elements",
-                            value: "(observation.accessibility.elements.count)"
+                            value: "\(observation.accessibility.elements.count)"
                         )
                     }
                 }
@@ -283,7 +284,7 @@ private struct ComputerUseObservationPreview: View {
                let image = NSImage(data: screenshot.data) {
                 SurfaceCard(padding: 12) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Screenshot · (screenshot.width) × (screenshot.height)")
+                        Text("Screenshot · \(screenshot.width) × \(screenshot.height)")
                             .font(AppTypography.subheadlineSemibold)
 
                         Image(nsImage: image)
@@ -332,7 +333,7 @@ private struct ComputerUseObservationPreview: View {
     }
 
     private func format(bounds: ComputerUseRect) -> String {
-        "(Int(bounds.width)) × (Int(bounds.height))"
+        "\(Int(bounds.width)) × \(Int(bounds.height))"
     }
 }
 

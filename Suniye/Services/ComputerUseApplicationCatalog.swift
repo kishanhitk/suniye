@@ -24,7 +24,7 @@ final class SystemComputerUseApplicationCatalog: ComputerUseApplicationCatalog {
     }
 
     func application(withID identifier: String) -> ComputerUseApplication? {
-        listApplications().first { $0.id == identifier || $0.bundleIdentifier == identifier }
+        listApplications().first { $0.id == identifier }
     }
 
     private static func makeApplication(_ application: NSRunningApplication) -> ComputerUseApplication? {
@@ -35,7 +35,10 @@ final class SystemComputerUseApplicationCatalog: ComputerUseApplicationCatalog {
         }
 
         return ComputerUseApplication(
-            id: bundleIdentifier,
+            id: Self.applicationID(
+                bundleIdentifier: bundleIdentifier,
+                processIdentifier: application.processIdentifier
+            ),
             bundleIdentifier: bundleIdentifier,
             displayName: application.localizedName ?? bundleIdentifier,
             processIdentifier: application.processIdentifier,
@@ -43,6 +46,10 @@ final class SystemComputerUseApplicationCatalog: ComputerUseApplicationCatalog {
             isActive: application.isActive,
             launchDate: application.launchDate
         )
+    }
+
+    static func applicationID(bundleIdentifier: String, processIdentifier: Int32) -> String {
+        "\(bundleIdentifier)#\(processIdentifier)"
     }
 }
 
