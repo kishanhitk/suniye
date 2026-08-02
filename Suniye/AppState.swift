@@ -3768,7 +3768,7 @@ final class AppState {
                 try textInsertionService.insertText(insertionText)
                 beginEditLearningTracking(insertedText: insertionText)
             } else {
-                textInsertionService.copyTextToClipboard(finalText)
+                try textInsertionService.copyTextToClipboard(finalText)
                 AppLogger.shared.log(.info, "transcription copied to clipboard words=\(wordCount)")
             }
             dictationTiming.inserted = .now()
@@ -4104,8 +4104,11 @@ final class AppState {
         updateChannel = settings.updateChannel
         accessibilityDragHelperEnabled = settings.accessibilityDragHelperEnabled
         shareAnalyticsEnabled = settings.shareAnalyticsEnabled
+        let legacyUserHasUsage = legacyUserShowsUsage(settings: settings)
         let needsFirstLaunchMigration = settings.onboardingProgress == nil
-            && (settings.hasSeenOnboardingWelcome == true || settings.hasCompletedCoreOnboarding == true)
+            && (settings.hasSeenOnboardingWelcome == true
+                || settings.hasCompletedCoreOnboarding == true
+                || legacyUserHasUsage)
         firstLaunchRecorded = settings.firstLaunchRecorded || needsFirstLaunchMigration
         lastKnownAccessibilityGranted = settings.lastKnownAccessibilityGranted
         magicFormatNudgeDismissed = settings.magicFormatNudgeDismissed
@@ -4115,7 +4118,7 @@ final class AppState {
         onboardingProgress = settings.onboardingProgress ?? OnboardingProgress.migrating(
             hasSeenOnboardingWelcome: settings.hasSeenOnboardingWelcome,
             hasCompletedCoreOnboarding: settings.hasCompletedCoreOnboarding,
-            legacyUserShowsUsage: legacyUserShowsUsage(settings: settings)
+            legacyUserShowsUsage: legacyUserHasUsage
         )
         isHydratingGeneralSettings = false
         // A persisted collision (e.g. hand-edited settings) would silently kill Edit Mode.

@@ -232,6 +232,16 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertTrue(generalSettingsStore.latest.firstLaunchRecorded)
     }
 
+    func testLegacyUsageWithoutOnboardingFlagsMarksFirstLaunchAsRecorded() {
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(preferredInputDeviceID: "built-in-microphone")
+        )
+
+        _ = makeTestAppState(generalSettingsStore: generalSettingsStore)
+
+        XCTAssertTrue(generalSettingsStore.latest.firstLaunchRecorded)
+    }
+
     func testChosenGemmaDownloadResumesAtBootstrap() async {
         // The user chose the local model during setup, the download died after
         // they moved on: bootstrap must self-heal instead of silently inserting
@@ -535,6 +545,32 @@ final class AppStateSettingsTests: XCTestCase {
             return nil
         }.last
         XCTAssertEqual(metrics?.destination, .clipboard)
+    }
+
+    func testClipboardFailureDoesNotRecordDictation() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("Clipboard failure")
+        let textInsertionService = SpyTextInsertionService()
+        textInsertionService.copyError = FakeError(message: "clipboard unavailable")
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            textInsertionService: textInsertionService
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = false
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertTrue(textInsertionService.copiedTexts.isEmpty)
+        XCTAssertTrue(appState.recentResults.isEmpty)
+        XCTAssertEqual(appState.lastError, "Transcription failed: clipboard unavailable")
     }
 
     func testSoundFeedbackEnabledPlaysSuccessForCompletedDictation() async {

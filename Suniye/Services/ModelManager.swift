@@ -246,7 +246,9 @@ final class ModelManager: ModelManagerProtocol {
                 throw ModelError.invalidResponse
             }
 
+            try Task.checkCancellation()
             try extract(archive: archiveURL, into: stagingContainer)
+            try Task.checkCancellation()
         case let .remoteFiles(files):
             try await downloadRemoteFiles(files, into: stagedModelDirectory, progress: progress)
         case .systemManaged:
@@ -254,8 +256,10 @@ final class ModelManager: ModelManagerProtocol {
             return
         }
 
+        try Task.checkCancellation()
         try Self.validateInstall(entry, at: stagedModelDirectory)
         let liveModelDirectory = modelsRootDirectory.appendingPathComponent(entry.directoryName, isDirectory: true)
+        try Task.checkCancellation()
         try Self.replaceInstalledModel(at: liveModelDirectory, with: stagedModelDirectory)
         progress(1)
     }

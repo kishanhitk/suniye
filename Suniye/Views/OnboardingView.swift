@@ -503,9 +503,11 @@ struct OnboardingView: View {
     }
 
     /// The Speak screen must never trap anyone: the escape hatch appears after a
-    /// failed attempt, or when the mic was denied (no practice is possible).
+    /// failed attempt, a persistent model error, or when the mic was denied.
     private var showsSpeakEscapeHatch: Bool {
-        appState.onboardingPracticeAttempts >= 1 || appState.hasMicPermissionBeenDenied
+        appState.onboardingPracticeAttempts >= 1
+            || appState.phase == .error
+            || appState.hasMicPermissionBeenDenied
     }
 
 }

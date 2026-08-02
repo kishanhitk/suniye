@@ -64,6 +64,7 @@ final class SpyTextInsertionService: TextInsertionServiceProtocol {
     private(set) var submitCallCount = 0
     var insertionContext: TextInsertionContext?
     var insertError: Error?
+    var copyError: Error?
     var submitError: Error?
     var fieldValueProvider: (() -> String?)?
 
@@ -82,7 +83,10 @@ final class SpyTextInsertionService: TextInsertionServiceProtocol {
         insertedTexts.append(text)
     }
 
-    func copyTextToClipboard(_ text: String) {
+    func copyTextToClipboard(_ text: String) throws {
+        if let copyError {
+            throw copyError
+        }
         copiedTexts.append(text)
     }
 

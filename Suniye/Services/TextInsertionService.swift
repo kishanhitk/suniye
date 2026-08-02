@@ -6,7 +6,7 @@ import Foundation
 protocol TextInsertionServiceProtocol {
     func captureInsertionContext() -> TextInsertionContext?
     func insertText(_ text: String) throws
-    func copyTextToClipboard(_ text: String)
+    func copyTextToClipboard(_ text: String) throws
     func submitActiveInput() throws
     func makeFocusedFieldValueProvider() -> (() -> String?)?
 }
@@ -26,11 +26,14 @@ final class TextInsertionService: TextInsertionServiceProtocol {
 
     enum InsertError: LocalizedError {
         case cannotCreateEvent
+        case cannotCopyToClipboard
 
         var errorDescription: String? {
             switch self {
             case .cannotCreateEvent:
                 return "Unable to generate keyboard event"
+            case .cannotCopyToClipboard:
+                return "Unable to copy transcription to the clipboard"
             }
         }
     }
@@ -97,10 +100,12 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         try postKey(pasteKeyCode(), flags: .maskCommand)
     }
 
-    func copyTextToClipboard(_ text: String) {
+    func copyTextToClipboard(_ text: String) throws {
         let pasteboard = pasteboardProvider()
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        guard pasteboard.setString(text, forType: .string) else {
+            throw InsertError.cannotCopyToClipboard
+        }
     }
 
     private func scheduleClipboardRestore(_ previousItems: ClipboardSnapshot, to pasteboard: NSPasteboard) {
