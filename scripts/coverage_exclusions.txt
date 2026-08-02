@@ -49,4 +49,5 @@ Suniye/Views/MainWindow/MainWindowPages.swift         # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowView.swift          # SwiftUI render only
 Suniye/Views/MainWindow/ComputerUsePage.swift         # SwiftUI render only; coordinator logic is tested separately
 Suniye/Views/MainWindow/ComputerUseActionPanel.swift # SwiftUI render only; action requests delegate to the coordinator.
+Suniye/Views/MainWindow/ComputerUseAgentPanel.swift   # SwiftUI render only; task and consent logic live in the coordinator.
 Suniye/Views/MainWindow/MagicFormatProviderPresentation.swift  # SwiftUI render only
