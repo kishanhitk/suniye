@@ -26,6 +26,7 @@ Suniye/Services/ComputerUseApplicationCatalog.swift # NSWorkspace and NSRunningA
 Suniye/Services/ComputerUseAccessibilityReader.swift # live AXUIElement traversal; requires Accessibility trust and a target application.
 Suniye/Services/ComputerUsePermissionService.swift # TCC permission checks and system prompts; injected behavior is covered by ComputerUsePhase0Tests.
 Suniye/Services/ComputerUseScreenshotService.swift # CGWindowListCreateImage and PNG capture; the live path requires WindowServer and Screen Recording.
+Suniye/Services/ComputerUseInputEventService.swift # native CGEvent posting; platform-bound path is covered through the action-service seam.
 
 # --- Window-server bound UI shells (logic lives in state/services) ---
 Suniye/Services/LearningToastPresenter.swift          # transient NSPanel toast
@@ -46,4 +47,5 @@ Suniye/Views/MainWindow/MainWindowComponents.swift    # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowPages.swift         # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowView.swift          # SwiftUI render only
 Suniye/Views/MainWindow/ComputerUsePage.swift         # SwiftUI render only; coordinator logic is tested separately
+Suniye/Views/MainWindow/ComputerUseActionPanel.swift # SwiftUI render only; action requests delegate to the coordinator.
 Suniye/Views/MainWindow/MagicFormatProviderPresentation.swift  # SwiftUI render only

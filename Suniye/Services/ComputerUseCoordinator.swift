@@ -1,19 +1,22 @@
 import Foundation
 import Observation
 
-private actor ComputerUseObservationRunner {
+private actor ComputerUsePlatformRunner {
     private let applicationCatalog: ComputerUseApplicationCatalog
     private let permissionManager: ComputerUsePermissionManaging
     private let observationService: ComputerUseObservationServicing
+    private let actionService: ComputerUseActionServicing
 
     init(
         applicationCatalog: ComputerUseApplicationCatalog,
         permissionManager: ComputerUsePermissionManaging,
-        observationService: ComputerUseObservationServicing
+        observationService: ComputerUseObservationServicing,
+        actionService: ComputerUseActionServicing
     ) {
         self.applicationCatalog = applicationCatalog
         self.permissionManager = permissionManager
         self.observationService = observationService
+        self.actionService = actionService
     }
 
     func listApplications() -> [ComputerUseApplication] {
@@ -46,6 +49,22 @@ private actor ComputerUseObservationRunner {
             cancellation: cancellation
         )
     }
+
+    func execute(
+        action: ComputerUseAction,
+        observation: ComputerUseObservation,
+        approval: ComputerUseApprovalGrant,
+        requestID: UUID,
+        cancellation: ComputerUseCancellationToken
+    ) throws -> ComputerUseActionResult {
+        try actionService.execute(
+            action: action,
+            observation: observation,
+            approval: approval,
+            requestID: requestID,
+            cancellation: cancellation
+        )
+    }
 }
 
 enum ComputerUseCoordinatorPhase: Equatable {
@@ -55,17 +74,21 @@ enum ComputerUseCoordinatorPhase: Equatable {
     case ready
     case observing
     case observed
+    case requestingApproval
+    case acting
+    case actionCompleted
+    case actionFailed
     case failed
 }
 
-/// Main-actor state for the Phase 1 read-only Computer Use surface.
+/// Main-actor state for the Phase 2 approved-action Computer Use surface.
 ///
-/// Native discovery and observation run through `ComputerUseObservationRunner`
-/// so Accessibility and WindowServer work does not block SwiftUI rendering.
+/// Native discovery, observation, and action execution run through
+/// `ComputerUsePlatformRunner` so platform work does not block SwiftUI rendering.
 @MainActor
 @Observable
 final class ComputerUseCoordinator {
-    private let runner: ComputerUseObservationRunner
+    private let runner: ComputerUsePlatformRunner
 
     var phase: ComputerUseCoordinatorPhase = .idle
     var applications: [ComputerUseApplication] = []
@@ -77,17 +100,22 @@ final class ComputerUseCoordinator {
     var observation: ComputerUseObservation?
     var errorMessage: String?
     var includeScreenshot = true
+    var pendingApproval: ComputerUseApprovalRequest?
+    var actionText = ""
+    var lastActionResult: ComputerUseActionResult?
 
     @ObservationIgnored private var activeOperationID: UUID?
     @ObservationIgnored private var activeCancellation: ComputerUseCancellationToken?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var permissionTask: Task<Void, Never>?
     @ObservationIgnored private var observationTask: Task<Void, Never>?
+    @ObservationIgnored private var actionTask: Task<Void, Never>?
 
     init(
         applicationCatalog: ComputerUseApplicationCatalog? = nil,
         permissionManager: ComputerUsePermissionManaging? = nil,
-        observationService: ComputerUseObservationServicing? = nil
+        observationService: ComputerUseObservationServicing? = nil,
+        actionService: ComputerUseActionServicing? = nil
     ) {
         let resolvedCatalog = applicationCatalog ?? SystemComputerUseApplicationCatalog()
         let resolvedPermissionManager = permissionManager ?? SystemComputerUsePermissionService()
@@ -95,11 +123,15 @@ final class ComputerUseCoordinator {
             applicationCatalog: resolvedCatalog,
             permissionManager: resolvedPermissionManager
         )
+        let resolvedActionService = actionService ?? ComputerUseActionService(
+            permissionManager: resolvedPermissionManager
+        )
 
-        runner = ComputerUseObservationRunner(
+        runner = ComputerUsePlatformRunner(
             applicationCatalog: resolvedCatalog,
             permissionManager: resolvedPermissionManager,
-            observationService: resolvedObservationService
+            observationService: resolvedObservationService,
+            actionService: resolvedActionService
         )
     }
 
@@ -116,16 +148,23 @@ final class ComputerUseCoordinator {
 
     var isBusy: Bool {
         switch phase {
-        case .loadingApplications, .requestingPermission, .observing:
+        case .loadingApplications, .requestingPermission, .observing, .requestingApproval, .acting:
             true
-        case .idle, .ready, .observed, .failed:
+        case .idle, .ready, .observed, .actionCompleted, .actionFailed, .failed:
             false
         }
+    }
+
+    var canRequestAction: Bool {
+        phase == .observed
+            && observation != nil
+            && permissionSnapshot.canReadAccessibility
     }
 
     var canObserve: Bool {
         guard let selectedApplicationID,
               !selectedApplicationID.isEmpty,
+              !isBusy,
               permissionSnapshot.canReadAccessibility else {
             return false
         }
@@ -147,6 +186,14 @@ final class ComputerUseCoordinator {
             return "Reading app state"
         case .observed:
             return "Observation captured"
+        case .requestingApproval:
+            return "Approval required"
+        case .acting:
+            return "Performing approved action"
+        case .actionCompleted:
+            return "Action completed"
+        case .actionFailed:
+            return "Action failed"
         case .failed:
             return "Observation failed"
         }
@@ -157,7 +204,7 @@ final class ComputerUseCoordinator {
     }
 
     func refresh() {
-        cancelActiveObservation()
+        cancelActiveOperation()
         refreshTask?.cancel()
         permissionTask?.cancel()
 
@@ -166,6 +213,8 @@ final class ComputerUseCoordinator {
         phase = .loadingApplications
         errorMessage = nil
         observation = nil
+        pendingApproval = nil
+        lastActionResult = nil
 
         let observationRunner = runner
         refreshTask = Task { [weak self] in
@@ -238,10 +287,12 @@ final class ComputerUseCoordinator {
             return
         }
 
-        cancelActiveObservation()
+        cancelActiveOperation()
         selectedApplicationID = identifier
         observation = nil
         errorMessage = nil
+        pendingApproval = nil
+        lastActionResult = nil
         phase = .ready
     }
 
@@ -252,7 +303,7 @@ final class ComputerUseCoordinator {
 
         refreshTask?.cancel()
         permissionTask?.cancel()
-        cancelActiveObservation()
+        cancelActiveOperation()
 
         let operationID = UUID()
         let cancellation = ComputerUseCancellationToken()
@@ -262,6 +313,8 @@ final class ComputerUseCoordinator {
         phase = .observing
         observation = nil
         errorMessage = nil
+        pendingApproval = nil
+        lastActionResult = nil
 
         let observationRunner = runner
         observationTask = Task { [weak self] in
@@ -306,10 +359,116 @@ final class ComputerUseCoordinator {
         }
     }
 
+    func requestAction(_ action: ComputerUseAction) {
+        guard let observation, canRequestAction else {
+            return
+        }
+
+        do {
+            try ComputerUseActionPolicy.validate(action: action, observation: observation)
+        } catch {
+            phase = .actionFailed
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            return
+        }
+
+        pendingApproval = ComputerUseApprovalRequest(
+            id: UUID(),
+            action: action,
+            target: observation.target,
+            risk: action.risk,
+            reason: "Suniye will send this action to the selected app."
+        )
+        errorMessage = nil
+        phase = .requestingApproval
+    }
+
+    func approvePendingAction() {
+        guard let request = pendingApproval,
+              let observation,
+              phase == .requestingApproval else {
+            return
+        }
+
+        let grant = ComputerUseApprovalGrant(
+            requestID: request.id,
+            scope: .once,
+            applicationID: observation.target.application.id,
+            windowID: observation.target.window.id,
+            observationGeneration: observation.generation,
+            action: request.action
+        )
+        let operationID = UUID()
+        let cancellation = ComputerUseCancellationToken()
+        let observationRunner = runner
+        activeOperationID = operationID
+        activeCancellation = cancellation
+        pendingApproval = nil
+        lastActionResult = nil
+        errorMessage = nil
+        phase = .acting
+
+        actionTask = Task { [weak self] in
+            do {
+                let result = try await observationRunner.execute(
+                    action: request.action,
+                    observation: observation,
+                    approval: grant,
+                    requestID: request.id,
+                    cancellation: cancellation
+                )
+
+                guard !Task.isCancelled else {
+                    return
+                }
+                guard let self, self.activeOperationID == operationID else {
+                    return
+                }
+
+                self.lastActionResult = result
+                self.phase = .actionCompleted
+                self.activeCancellation = nil
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+                guard let self, self.activeOperationID == operationID else {
+                    return
+                }
+
+                if let actionError = error as? ComputerUseActionError,
+                   actionError == .cancelled {
+                    self.phase = self.observation == nil ? .ready : .observed
+                    self.activeCancellation = nil
+                    return
+                }
+
+                self.phase = .actionFailed
+                self.errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                self.activeCancellation = nil
+            }
+        }
+    }
+
+    func denyPendingAction() {
+        pendingApproval = nil
+        phase = observation == nil ? .ready : .observed
+    }
+
+    func stopPendingAction() {
+        pendingApproval = nil
+        cancel()
+        observation = nil
+        lastActionResult = nil
+        errorMessage = nil
+        phase = .ready
+    }
+
     func cancel() {
-        cancelActiveObservation()
+        cancelActiveOperation()
         refreshTask?.cancel()
         permissionTask?.cancel()
+        pendingApproval = nil
 
         if isBusy {
             phase = .ready
@@ -317,7 +476,7 @@ final class ComputerUseCoordinator {
     }
 
     private func requestPermission(
-        _ request: @escaping (ComputerUseObservationRunner) async -> Bool
+        _ request: @escaping (ComputerUsePlatformRunner) async -> Bool
     ) {
         permissionTask?.cancel()
         let observationRunner = runner
@@ -353,9 +512,10 @@ final class ComputerUseCoordinator {
         observation = nil
     }
 
-    private func cancelActiveObservation() {
+    private func cancelActiveOperation() {
         activeCancellation?.cancel()
         observationTask?.cancel()
+        actionTask?.cancel()
         activeCancellation = nil
         activeOperationID = nil
     }

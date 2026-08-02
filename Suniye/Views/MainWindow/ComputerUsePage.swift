@@ -24,17 +24,45 @@ struct ComputerUsePage: View {
                     detail: "Reading the selected window. No input event will be posted.",
                     progress: nil
                 )
+            } else if coordinator.phase == .acting {
+                InlineStatusBanner(
+                    icon: "hand.tap",
+                    tint: .accentColor,
+                    title: coordinator.phaseTitle,
+                    detail: "Executing the approved action. Cancel is available.",
+                    progress: nil
+                )
+            } else if coordinator.phase == .actionCompleted,
+                      let result = coordinator.lastActionResult {
+                InlineStatusBanner(
+                    icon: "checkmark.circle.fill",
+                    tint: .green,
+                    title: coordinator.phaseTitle,
+                    detail: result.action.summary,
+                    progress: nil
+                )
             }
 
             permissions
             targetSelection
             observationPreview
 
+            if let request = coordinator.pendingApproval {
+                ComputerUseApprovalCard(
+                    request: request,
+                    allow: coordinator.approvePendingAction,
+                    deny: coordinator.denyPendingAction,
+                    stop: coordinator.stopPendingAction
+                )
+            }
+
+            ComputerUseActionPanel(coordinator: coordinator)
+
             SurfaceCard {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "lock.shield")
                         .foregroundStyle(.green)
-                    Text("Phase 1 is read-only. Suniye will not click, type, scroll, drag, or submit anything.")
+                    Text("Phase 2 allows one bounded action at a time. Every action requires your approval.")
                         .font(AppTypography.subheadline)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -53,7 +81,7 @@ struct ComputerUsePage: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 DetailPageTitle(title: "Computer Use")
-                Text("Inspect a running app before desktop control is enabled.")
+                Text("Inspect a running app and approve one controlled action at a time.")
                     .font(AppTypography.body)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)

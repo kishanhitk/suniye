@@ -200,6 +200,20 @@ Phase 1 also adds the `computerUse` main-window section and regenerates the Xcod
 
 Status: `[Verified]` by the Phase 1 build and targeted test run.
 
+Phase 2 added these source files and boundaries:
+
+- `Suniye/Services/ComputerUseActionModels.swift`;
+- `Suniye/Services/ComputerUseActionService.swift`;
+- `Suniye/Services/ComputerUseInputEventService.swift`;
+- `Suniye/Views/MainWindow/ComputerUseActionPanel.swift`;
+- `SuniyeTests/ComputerUsePhase2Tests.swift`.
+
+Phase 2 also extends `ComputerUseCoordinator.swift` and
+`ComputerUseAccessibilityReader.swift`, and regenerates the Xcode project.
+
+Status: `[Verified]` by the Phase 2 build and focused test run. The native event adapter and
+SwiftUI action panel remain platform-bound or render-only paths.
+
 These files establish the current state machine, permissions, Accessibility insertion, model seams, settings surface, build source of truth, and test seams.
 
 Status: `[Verified]` by source inspection.

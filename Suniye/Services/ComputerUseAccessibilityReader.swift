@@ -7,7 +7,9 @@ private func computerUseAXElement(from value: AnyObject?) -> AXUIElement? {
           CFGetTypeID(value) == AXUIElementGetTypeID() else {
         return nil
     }
-    return value as! AXUIElement
+    // The CF type-ID check makes this bridge safe. Swift cannot express this
+    // Core Foundation type relationship with a non-forced cast.
+    return unsafeBitCast(value, to: AXUIElement.self)
 }
 
 private func computerUseAXValue(from value: AnyObject?) -> AXValue? {
@@ -15,7 +17,9 @@ private func computerUseAXValue(from value: AnyObject?) -> AXValue? {
           CFGetTypeID(value) == AXValueGetTypeID() else {
         return nil
     }
-    return value as! AXValue
+    // The CF type-ID check makes this bridge safe. Swift cannot express this
+    // Core Foundation type relationship with a non-forced cast.
+    return unsafeBitCast(value, to: AXValue.self)
 }
 
 struct SystemComputerUseAccessibilityReader: ComputerUseAccessibilityReading {
@@ -192,6 +196,44 @@ struct SystemComputerUseAccessibilityReader: ComputerUseAccessibilityReading {
     }
 }
 
+extension SystemComputerUseAccessibilityReader: ComputerUseSemanticActionPerforming {
+    func perform(
+        action: ComputerUseSemanticAction,
+        elementIndex: Int,
+        target: ComputerUseTarget,
+        cancellation: ComputerUseCancellationToken
+    ) throws {
+        guard !cancellation.isCancelled else {
+            throw ComputerUseActionError.cancelled
+        }
+
+        let applicationElement = AXUIElementCreateApplication(target.application.processIdentifier)
+        guard let windowElement = resolveWindow(
+            in: applicationElement,
+            target: target.window,
+            shouldCancel: { cancellation.isCancelled }
+        ) else {
+            throw ComputerUseActionError.semanticActionFailed("target window not found")
+        }
+
+        let builder = ComputerUseAXTreeBuilder(configuration: .default)
+        guard let element = try builder.element(
+            at: elementIndex,
+            root: windowElement,
+            shouldCancel: { cancellation.isCancelled }
+        ) else {
+            throw ComputerUseActionError.semanticActionFailed("element \(elementIndex) not found")
+        }
+
+        guard !cancellation.isCancelled else {
+            throw ComputerUseActionError.cancelled
+        }
+        guard AXUIElementPerformAction(element, action.rawValue as CFString) == .success else {
+            throw ComputerUseActionError.semanticActionFailed(action.rawValue)
+        }
+    }
+}
+
 private final class ComputerUseAXTreeBuilder {
     private let configuration: ComputerUseObservationConfiguration
     private let reader = SystemComputerUseAccessibilityReader()
@@ -223,6 +265,62 @@ private final class ComputerUseAXTreeBuilder {
             elements: elements,
             wasTruncated: wasTruncated
         )
+    }
+
+    func element(
+        at targetIndex: Int,
+        root: AXUIElement,
+        shouldCancel: () -> Bool
+    ) throws -> AXUIElement? {
+        guard targetIndex >= 0 else {
+            return nil
+        }
+
+        var nextIndex = 0
+        return try find(
+            targetIndex: targetIndex,
+            element: root,
+            depth: 0,
+            nextIndex: &nextIndex,
+            shouldCancel: shouldCancel
+        )
+    }
+
+    private func find(
+        targetIndex: Int,
+        element: AXUIElement,
+        depth: Int,
+        nextIndex: inout Int,
+        shouldCancel: () -> Bool
+    ) throws -> AXUIElement? {
+        guard !shouldCancel() else {
+            throw ComputerUseObservationError.cancelled
+        }
+        guard nextIndex < configuration.maxElements else {
+            return nil
+        }
+
+        let currentIndex = nextIndex
+        nextIndex += 1
+        if currentIndex == targetIndex {
+            return element
+        }
+        guard depth < configuration.maxDepth else {
+            return nil
+        }
+
+        for child in children(of: element) {
+            if let match = try find(
+                targetIndex: targetIndex,
+                element: child,
+                depth: depth + 1,
+                nextIndex: &nextIndex,
+                shouldCancel: shouldCancel
+            ) {
+                return match
+            }
+        }
+        return nil
     }
 
     private func append(

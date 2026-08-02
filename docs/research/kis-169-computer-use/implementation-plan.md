@@ -1,6 +1,6 @@
 # KIS-169 independent Swift implementation plan
 
-Status: Phase 0 observation and Phase 1 read-only preview implementation added. Model control and desktop actions remain unimplemented.
+Status: Phase 0 observation, Phase 1 preview, and Phase 2 approved-action implementation added. Model control, browser control, and native helper work remain unimplemented.
 
 ## Goal
 
@@ -19,14 +19,15 @@ The capability should observe a selected app, ask a model for one safe action, r
 
 ## Proposed service boundaries
 
-The observation and permission boundaries are implemented. The agent, model, action,
-approval, and intervention boundaries remain design proposals.
+The observation, permission, action, and one-time approval boundaries are implemented. The
+agent, model, persistent approval, and intervention boundaries remain design proposals.
 
 - `ComputerUseCoordinator`: `@MainActor` lifecycle, UI state, user stop, and approval presentation.
 - `ComputerUseAgent`: session state and model/action loop behind an async interface.
 - `ComputerUseModelClient`: typed multimodal request and validated decision response.
 - `ComputerUseObservationService`: app discovery, window target, AX text, and screenshot.
 - `ComputerUseActionService`: semantic AX actions and input events.
+- `ComputerUseInputEventService`: native `CGEvent` click, key, and scroll adapters.
 - `ComputerUsePermissionService`: Accessibility and Screen Recording checks and request flow.
 - `ComputerUseApprovalService`: one-time, session, and app-scoped approval decisions.
 - `ComputerUseInterventionMonitor`: frontmost app, target window, and user stop signals.
@@ -35,6 +36,11 @@ approval, and intervention boundaries remain design proposals.
 Use protocols for all boundaries.
 
 Keep platform APIs behind those protocols.
+
+Phase 2 keeps `ComputerUseActionService` behind `ComputerUseActionServicing`. The coordinator
+creates an approval request from a validated action. The action service checks the permission,
+frontmost process, current window, observation generation, and action policy before it calls a
+native adapter. The current approval scope is one action only.
 
 ### Suggested Swift ownership
 
@@ -455,7 +461,21 @@ Add click, key press, scroll, text entry, and semantic AX actions.
 
 Require approval for every action.
 
-Start with click, key press, scroll, and text entry. Add drag, set value, select text, and semantic actions only after each has a focused integration test.
+Start with click, key press, scroll, text entry, and a semantic AX adapter behind a test seam.
+Defer drag, set value, and select text until each has a focused integration test.
+
+Implementation added:
+
+- `Suniye/Services/ComputerUseActionModels.swift` defines typed actions, keys, modifiers, approval requests, grants, results, and errors.
+- `Suniye/Services/ComputerUseActionService.swift` validates actions and binds execution to the exact approval request, Accessibility permission, the selected frontmost process, the current key window, and the observation generation.
+- `Suniye/Services/ComputerUseInputEventService.swift` owns native `CGEvent` posting for click, key, and scroll actions.
+- `Suniye/Services/ComputerUseAccessibilityReader.swift` resolves the observed AX element index and performs the approved semantic action.
+- `Suniye/Services/ComputerUseCoordinator.swift` exposes request, allow once, deny, stop, and cancel transitions. It requires a fresh observation after an action completes.
+- `Suniye/Views/MainWindow/ComputerUseActionPanel.swift` presents bounded action controls and the approval card.
+- `SuniyeTests/ComputerUsePhase2Tests.swift` covers action models, policy, service seams, target validation, approval flow, failures, and cancellation.
+
+Phase 2 does not call a model. The controls are deterministic user-driven test surfaces for the
+native action and approval boundaries.
 
 ### Phase 3: Agent loop
 
@@ -475,7 +495,7 @@ Design browser control as a separate capability after desktop behavior is stable
 
 Do not infer DOM or tab state from a desktop screenshot. Define a browser-specific observation and action protocol after a separate browser audit.
 
-## Definition of done for this design phase
+## Definition of done for the research and staged implementation
 
 - The DMG findings are recorded in the evidence ledger.
 - Every important claim has a status label.
@@ -485,4 +505,5 @@ Do not infer DOM or tab state from a desktop screenshot. Define a browser-specif
 - Native helper use is a decision gate, not an assumption.
 - Browser control is a separate adapter.
 - Phase 0 remains read-only.
-- No model, action, approval, or browser code is enabled.
+- Phase 2 actions require one-time approval and fresh observation state.
+- No model, agent loop, persistent approval, or browser code is enabled.

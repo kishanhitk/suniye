@@ -1,14 +1,14 @@
 # KIS-169 Computer Use research
 
-This folder records the Computer Use research and the Phase 0 and Phase 1 implementation for Suniye.
+This folder records the Computer Use research and the Phase 0 through Phase 2 implementation for Suniye.
 
 The source artifact is `/Users/kishan/Downloads/ChatGPT (1).dmg`.
 
 The research uses read-only DMG inspection and Suniye source inspection.
 
-Phase 0 adds a read-only Swift observation service. Phase 1 adds a read-only target picker,
-permission surface, observation preview, and cancellation flow. Neither phase adds model calls
-or desktop actions.
+Phase 0 adds a read-only Swift observation service. Phase 1 adds a target picker, permission
+surface, observation preview, and cancellation flow. Phase 2 adds bounded desktop actions with
+one-time approval. The model loop, browser control, and native helper remain unimplemented.
 
 ## Files
 
@@ -28,6 +28,6 @@ or desktop actions.
 
 This work does not copy ChatGPT code.
 
-This work does not add model control, desktop actions, approvals, or browser control.
+This work does not add model control, browser control, or a native helper.
 
-The Phase 0 and Phase 1 slices are committed. No push has been performed.
+The Phase 0, Phase 1, and Phase 2 slices are committed. No push has been performed.

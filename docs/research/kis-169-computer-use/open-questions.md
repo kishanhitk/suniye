@@ -35,3 +35,12 @@
 - Which target apps expose a complete enough AX tree for the first read-only preview?
 - Phase 1 currently uses a target picker. Does that remain the right product policy after live testing?
 - Does running discovery and observation behind the Phase 1 actor boundary behave correctly for real AX targets?
+
+## Phase 2 live validation
+
+- Does the `CGEvent` event tap post click, key, and scroll events after the required macOS permissions are granted?
+- Do AX window bounds and `CGEvent` screen coordinates use the same origin and display scale for each target app?
+- Does a target remain safe to act on when its window moves, resizes, or changes key-window state after observation?
+- Do target applications expose the observed element indexes consistently during semantic action resolution?
+- Does the existing clipboard-preserving text insertion path protect clipboard state during an approved text action?
+- Is a one-time approval card sufficient for the first local integration, or does the product need a separate persistent approval service later?

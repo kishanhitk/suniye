@@ -343,3 +343,24 @@ Review scope: the full Computer Use diff from main through the Phase 1 commits.
 - `[Verified]` The actor boundary, service seams, and file sizes remain suitable for the next phase. No changed production file exceeds 1,000 lines.
 - `[Retained]` The permission enum still has a future unavailable state, but the current system provider reports only granted or not granted.
 - `[Unknown]` Live permission prompts, real AX trees, and screenshot behavior still require manual macOS validation.
+
+### Entry 28: Phase 2 bounded actions and approval
+
+Sources: `Suniye/Services/ComputerUseActionModels.swift`,
+`Suniye/Services/ComputerUseActionService.swift`,
+`Suniye/Services/ComputerUseInputEventService.swift`,
+`Suniye/Services/ComputerUseCoordinator.swift`,
+`Suniye/Services/ComputerUseAccessibilityReader.swift`,
+`Suniye/Views/MainWindow/ComputerUseActionPanel.swift`, and
+`SuniyeTests/ComputerUsePhase2Tests.swift`.
+
+- `[Verified]` Suniye now has typed click, key press, scroll, text entry, and semantic Accessibility actions.
+- `[Verified]` The action policy rejects non-finite or out-of-bounds clicks, oversized scroll values, invalid character keys, empty or oversized text, and stale or unsupported semantic element references.
+- `[Verified]` The action service checks the exact approval request ID, Accessibility permission, frontmost process identity, current key-window identity, observation generation, approval scope, and cancellation before native execution.
+- `[Verified]` Native input events are isolated behind `ComputerUseInputEventPosting`; text entry reuses the existing clipboard-preserving insertion service; semantic actions use `AXUIElementPerformAction` through the Accessibility adapter.
+- `[Verified]` The coordinator creates an approval request for each action and supports Allow Once, Deny, Stop Session, and Cancel transitions.
+- `[Verified]` A completed action disables further action requests until a fresh observation is captured.
+- `[Verified]` Fourteen deterministic Phase 2 tests pass across models, policy, action service, target validation, approval, failure, and cancellation paths.
+- `[Verified]` Phase 2 does not call a model, add browser control, or add a native helper process.
+- `[Inferred]` Keeping native event posting and semantic AX execution behind separate protocols leaves a testable action service and preserves a future helper-process seam.
+- `[Unknown]` Live `CGEvent` posting, coordinate-system alignment, clipboard restoration, and real semantic-action behavior still require manual macOS validation.
