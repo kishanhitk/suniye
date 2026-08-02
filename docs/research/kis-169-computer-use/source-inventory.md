@@ -1,0 +1,205 @@
+# KIS-169 source inventory
+
+This file maps the research notes to the inspected sources.
+
+## DMG
+
+Source:
+
+`/Users/kishan/Downloads/ChatGPT (1).dmg`
+
+The image was mounted read-only at:
+
+`/tmp/suniye-chatgpt-dmg-mount`
+
+The selected JavaScript files were extracted to:
+
+`/tmp/suniye-cua-inspect`
+
+These temporary paths are inspection paths. They are not Suniye dependencies.
+
+### Main app metadata
+
+Inspected bundle path:
+
+`ChatGPT.app/Contents/Info.plist`
+
+Useful fields:
+
+- bundle identifier `com.openai.codex`;
+- display name ChatGPT;
+- build `26.727.51351`;
+- minimum macOS `12.0`;
+- Apple Events usage description;
+- application group for the Computer Use helper;
+- no App Sandbox entitlement.
+
+Status: `[Verified]` by plist and entitlement inspection.
+
+### JavaScript API and transport
+
+Inspected package path:
+
+`ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/@oai/sky`
+
+Useful files:
+
+- `package.json`;
+- `README.md`;
+- `docs/sky-window-api.md`;
+- `docs/sky-window2-api.md`;
+- `docs/sky-full-desktop-api.md`;
+- `dist/project/cua/sky_js/src/targets/mac/client.js`;
+- `dist/project/cua/sky_js/src/targets/mac/create_client.js`;
+- `dist/project/cua/sky_js/src/targets/mac/native-pipe.js`;
+- `dist/project/cua/sky_js/src/targets/mac/computer-use-policy.js`;
+- `dist/project/cua/sky_js/src/targets/mac/errors.js`;
+- `dist/project/cua/sky_js/src/targets/mac/window_result.js`;
+- macOS action wrapper files;
+- macOS TypeScript declaration files.
+
+These files establish the public macOS target, action inputs, app policy, approval bridge, error names, and Unix transport.
+
+Status: `[Verified]` by source inspection.
+
+### Native helper
+
+Inspected bundle path:
+
+`ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/@oai/sky/Codex Computer Use.app`
+
+Useful items:
+
+- `Contents/Info.plist`;
+- `Contents/MacOS/SkyComputerUseService`;
+- `Contents/Resources/Package_ComputerUse.bundle`;
+- `Contents/Resources/Package_Appshot.bundle`;
+- `Contents/Resources/SkyComputerUseClient.app`;
+- `Contents/Resources/CUALockScreenGuardian.app`.
+
+The helper executable was inspected with `file`, `otool`, `codesign`, and `strings`.
+
+Status:
+
+- framework links and named native components: `[Verified]`;
+- source-level implementation: `[Unknown]`;
+- exact native operation path: `[Unknown]`.
+
+### Capture bridge
+
+Inspected extracted file:
+
+`worker.js`
+
+Useful symbols and behavior:
+
+- `computer-use-worker`;
+- `ComputerUseIPCAppStartCaptureRequest`;
+- `ComputerUseIPCAppNextCaptureUpdateRequest`;
+- Apple Event request construction;
+- screenshot URL validation;
+- capture update polling;
+- stale attachment-generation handling;
+- completed and failed update handling.
+
+Status: `[Verified]` for readable worker behavior. Native helper behavior remains `[Unknown]`.
+
+### Host bridge
+
+Inspected extracted files:
+
+- `main-dcXtv3U5.js`;
+- `app-initial-iBPGfcXU.js`;
+- `src-CLstCQVF.js`.
+
+Useful behavior:
+
+- loading `sky.node`;
+- frontmost-window lookup;
+- helper process lookup and launch;
+- `computer-use-frontmost-window`;
+- `computer-use-start-capture`;
+- foreground appshot context;
+- permission error classification.
+
+Status: `[Verified]` for readable host behavior.
+
+### App-specific guidance
+
+Inspected path:
+
+`Package_ComputerUse.bundle/Resources/AppInstructions`
+
+Files include:
+
+- `AppleMusic.md`;
+- `Clock.md`;
+- `iPhone Mirroring.md`;
+- `Notion.md`;
+- `Numbers.md`;
+- `Slack.md`;
+- `Spotify.md`.
+
+Status: `[Verified]` that the bundle contains app-specific guidance. The complete runtime selection policy is `[Unknown]`.
+
+### Browser assets
+
+Inspected extracted files:
+
+- `browser-N_xc8tjF.js`;
+- `browser-use-settings-BMRbLPpa.js`;
+- `browser-use-settings-B3B8gSK5.js`;
+- `computer-use-settings-BXahkuOI.js`.
+
+These files show separate in-app browser settings, extension setup, browser references, and download/upload approval settings.
+
+Status:
+
+- separate product surface: `[Verified]`;
+- exact browser wire protocol: `[Unknown]`.
+
+## Suniye
+
+The Suniye source was inspected in this worktree. The following files were central:
+
+- `Suniye/AppState.swift`;
+- `Suniye/Services/TextInsertionService.swift`;
+- `Suniye/Services/EditModeService.swift`;
+- `Suniye/Services/AccessibilityOnboarding.swift`;
+- `Suniye/Services/LLMPostProcessor.swift`;
+- `Suniye/Services/ChatCompletionClient.swift`;
+- `Suniye/Services/MagicFormatCoordinator.swift`;
+- `Suniye/Services/LocalGemmaLlamaCppClient.swift`;
+- `Suniye/MainWindowSection.swift`;
+- `Suniye/Views/MainWindow/MainWindowView.swift`;
+- `Suniye/Views/MainWindow/MainWindowPages.swift`;
+- `Suniye/Info.plist`;
+- `project.yml`;
+- `SuniyeTests/TestDoubles.swift`;
+- `scripts/coverage_exclusions.txt`.
+
+Phase 0 added these source files:
+
+- `Suniye/Services/ComputerUseModels.swift`;
+- `Suniye/Services/ComputerUseApplicationCatalog.swift`;
+- `Suniye/Services/ComputerUseObservationService.swift`;
+- `Suniye/Services/ComputerUseAccessibilityReader.swift`;
+- `Suniye/Services/ComputerUsePermissionService.swift`;
+- `Suniye/Services/ComputerUseScreenshotService.swift`;
+- `SuniyeTests/ComputerUsePhase0Tests.swift`.
+
+Status: `[Verified]` by the Phase 0 build and test run.
+
+These files establish the current state machine, permissions, Accessibility insertion, model seams, settings surface, build source of truth, and test seams.
+
+Status: `[Verified]` by source inspection.
+
+## Trace rule
+
+Use `evidence-ledger.md` for claim status.
+
+Use `architecture.md` for system understanding.
+
+Use `implementation-plan.md` for proposed Suniye work.
+
+Use `open-questions.md` for unresolved decisions.

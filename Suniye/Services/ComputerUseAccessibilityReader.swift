@@ -1,0 +1,412 @@
+import ApplicationServices
+import CoreGraphics
+import Foundation
+
+struct SystemComputerUseAccessibilityReader: ComputerUseAccessibilityReading {
+    private let accessibilityTrustProvider: () -> Bool
+
+    init(accessibilityTrustProvider: @escaping () -> Bool = { AXIsProcessTrusted() }) {
+        self.accessibilityTrustProvider = accessibilityTrustProvider
+    }
+
+    func read(
+        application: ComputerUseApplication,
+        window: ComputerUseWindow,
+        configuration: ComputerUseObservationConfiguration,
+        shouldCancel: () -> Bool
+    ) throws -> ComputerUseAXSnapshot {
+        guard !shouldCancel() else {
+            throw ComputerUseObservationError.cancelled
+        }
+        guard accessibilityTrustProvider() else {
+            throw ComputerUseObservationError.accessibilityNotTrusted
+        }
+
+        let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
+        guard let windowElement = resolveWindow(
+            in: applicationElement,
+            target: window,
+            shouldCancel: shouldCancel
+        ) else {
+            throw ComputerUseObservationError.accessibilityWindowNotFound(window.title ?? "untitled")
+        }
+
+        let builder = ComputerUseAXTreeBuilder(configuration: configuration)
+        return try builder.build(root: windowElement, shouldCancel: shouldCancel)
+    }
+
+    private func resolveWindow(
+        in applicationElement: AXUIElement,
+        target: ComputerUseWindow,
+        shouldCancel: () -> Bool
+    ) -> AXUIElement? {
+        guard !shouldCancel() else {
+            return nil
+        }
+
+        let windows = axElements(
+            from: copyAttribute(kAXWindowsAttribute as CFString, on: applicationElement)
+        )
+        guard !windows.isEmpty else {
+            return nil
+        }
+
+        if let focusedWindowValue = copyAttribute(
+            kAXFocusedWindowAttribute as CFString,
+            on: applicationElement
+        ),
+           target.isKeyWindow {
+            let focusedWindow = focusedWindowValue as! AXUIElement
+            if matches(focusedWindow, target: target) {
+                return focusedWindow
+            }
+        }
+
+        let titleMatches = windows.filter { element in
+            guard let targetTitle = target.title,
+                  !targetTitle.isEmpty,
+                  let title = stringAttribute(kAXTitleAttribute as CFString, from: element) else {
+                return false
+            }
+            return title == targetTitle
+        }
+        if titleMatches.count == 1 {
+            return titleMatches[0]
+        }
+
+        let boundsMatches = windows.filter { matches($0, target: target) }
+        if boundsMatches.count == 1 {
+            return boundsMatches[0]
+        }
+
+        if windows.count == 1 {
+            return windows[0]
+        }
+
+        return nil
+    }
+
+    private func matches(_ element: AXUIElement, target: ComputerUseWindow) -> Bool {
+        guard let position = pointAttribute(kAXPositionAttribute as CFString, from: element),
+              let size = sizeAttribute(kAXSizeAttribute as CFString, from: element) else {
+            return false
+        }
+
+        let targetRect = target.bounds.cgRect
+        let elementRect = CGRect(
+            x: position.x,
+            y: position.y,
+            width: size.width,
+            height: size.height
+        )
+        return approximatelyEqual(elementRect, targetRect)
+    }
+
+    private func approximatelyEqual(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        let tolerance: CGFloat = 3
+        return abs(lhs.minX - rhs.minX) <= tolerance
+            && abs(lhs.minY - rhs.minY) <= tolerance
+            && abs(lhs.width - rhs.width) <= tolerance
+            && abs(lhs.height - rhs.height) <= tolerance
+    }
+
+    private func copyAttribute(_ attribute: CFString, on element: AXUIElement) -> AnyObject? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else {
+            return nil
+        }
+        return value
+    }
+
+    private func axElements(from value: AnyObject?) -> [AXUIElement] {
+        if let elements = value as? [AXUIElement] {
+            return elements
+        }
+
+        guard let values = value as? [AnyObject] else {
+            return []
+        }
+        return values.compactMap { value in
+            guard CFGetTypeID(value) == AXUIElementGetTypeID() else {
+                return nil
+            }
+            return (value as! AXUIElement)
+        }
+    }
+
+    fileprivate func stringAttribute(_ attribute: CFString, from element: AXUIElement) -> String? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else {
+            return nil
+        }
+        return value as? String
+    }
+
+    fileprivate func boolAttribute(_ attribute: CFString, from element: AXUIElement) -> Bool? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else {
+            return nil
+        }
+        return (value as? Bool) ?? (value as? NSNumber)?.boolValue
+    }
+
+    fileprivate func pointAttribute(_ attribute: CFString, from element: AXUIElement) -> CGPoint? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXValueGetTypeID() else {
+            return nil
+        }
+
+        var point = CGPoint.zero
+        guard AXValueGetValue(value as! AXValue, .cgPoint, &point) else {
+            return nil
+        }
+        return point
+    }
+
+    fileprivate func sizeAttribute(_ attribute: CFString, from element: AXUIElement) -> CGSize? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXValueGetTypeID() else {
+            return nil
+        }
+
+        var size = CGSize.zero
+        guard AXValueGetValue(value as! AXValue, .cgSize, &size) else {
+            return nil
+        }
+        return size
+    }
+}
+
+private final class ComputerUseAXTreeBuilder {
+    private let configuration: ComputerUseObservationConfiguration
+    private let reader = SystemComputerUseAccessibilityReader()
+    private var elements: [ComputerUseAXElement] = []
+    private var lines: [String] = []
+    private var wasTruncated = false
+
+    init(configuration: ComputerUseObservationConfiguration) {
+        self.configuration = configuration
+    }
+
+    func build(
+        root: AXUIElement,
+        shouldCancel: () -> Bool
+    ) throws -> ComputerUseAXSnapshot {
+        _ = try append(root, depth: 0, indent: "", shouldCancel: shouldCancel)
+
+        var text = lines.joined(separator: "\n")
+        if wasTruncated {
+            text += "\n[truncated]"
+        }
+        if text.count > configuration.maxTextLength {
+            text = String(text.prefix(configuration.maxTextLength)) + "\n[truncated]"
+            wasTruncated = true
+        }
+
+        return ComputerUseAXSnapshot(
+            text: text,
+            elements: elements,
+            wasTruncated: wasTruncated
+        )
+    }
+
+    private func append(
+        _ element: AXUIElement,
+        depth: Int,
+        indent: String,
+        shouldCancel: () -> Bool
+    ) throws -> Int? {
+        guard !shouldCancel() else {
+            throw ComputerUseObservationError.cancelled
+        }
+        guard elements.count < configuration.maxElements else {
+            wasTruncated = true
+            return nil
+        }
+
+        let index = elements.count
+        elements.append(
+            ComputerUseAXElement(
+                index: index,
+                role: nil,
+                subrole: nil,
+                title: nil,
+                description: nil,
+                value: nil,
+                isEnabled: nil,
+                isFocused: false,
+                isSelected: false,
+                bounds: nil,
+                actions: [],
+                childIndexes: []
+            )
+        )
+        lines.append("")
+
+        let role = reader.stringAttribute(kAXRoleAttribute as CFString, from: element)
+        let subrole = reader.stringAttribute(kAXSubroleAttribute as CFString, from: element)
+        let title = reader.stringAttribute(kAXTitleAttribute as CFString, from: element)
+        let description = reader.stringAttribute(kAXDescriptionAttribute as CFString, from: element)
+        let sensitive = configuration.redactSensitiveValues && Self.isSensitiveRole(role)
+        let rawValue = reader.stringAttribute(kAXValueAttribute as CFString, from: element)
+        let value: String? = sensitive
+            ? "[redacted]"
+            : rawValue.flatMap { Self.shortValue($0) }
+        let isEnabled = reader.boolAttribute(kAXEnabledAttribute as CFString, from: element)
+        let isFocused = reader.boolAttribute(kAXFocusedAttribute as CFString, from: element) ?? false
+        let isSelected = reader.boolAttribute(kAXSelectedAttribute as CFString, from: element) ?? false
+        let bounds = configuration.includeElementBounds
+            ? bounds(of: element)
+            : nil
+        let actions = actionNames(of: element)
+
+        var childIndexes: [Int] = []
+        if depth >= configuration.maxDepth {
+            if !children(of: element).isEmpty {
+                wasTruncated = true
+            }
+        } else {
+            for child in children(of: element) {
+                guard let childIndex = try append(
+                    child,
+                    depth: depth + 1,
+                    indent: indent + "  ",
+                    shouldCancel: shouldCancel
+                ) else {
+                    break
+                }
+                childIndexes.append(childIndex)
+            }
+        }
+
+        elements[index] = ComputerUseAXElement(
+            index: index,
+            role: role,
+            subrole: subrole,
+            title: title,
+            description: description,
+            value: value,
+            isEnabled: isEnabled,
+            isFocused: isFocused,
+            isSelected: isSelected,
+            bounds: bounds,
+            actions: actions,
+            childIndexes: childIndexes
+        )
+        lines[index] = formatLine(
+            index: index,
+            indent: indent,
+            role: role,
+            title: title,
+            description: description,
+            value: value,
+            isEnabled: isEnabled,
+            isFocused: isFocused,
+            isSelected: isSelected,
+            actions: actions
+        )
+
+        return index
+    }
+
+    private func children(of element: AXUIElement) -> [AXUIElement] {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &value) == .success else {
+            return []
+        }
+        if let elements = value as? [AXUIElement] {
+            return elements
+        }
+        guard let values = value as? [AnyObject] else {
+            return []
+        }
+        return values.compactMap { value in
+            guard CFGetTypeID(value) == AXUIElementGetTypeID() else {
+                return nil
+            }
+            return (value as! AXUIElement)
+        }
+    }
+
+    private func bounds(of element: AXUIElement) -> ComputerUseRect? {
+        guard let position = reader.pointAttribute(kAXPositionAttribute as CFString, from: element),
+              let size = reader.sizeAttribute(kAXSizeAttribute as CFString, from: element) else {
+            return nil
+        }
+        return ComputerUseRect(
+            x: position.x,
+            y: position.y,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    private func actionNames(of element: AXUIElement) -> [String] {
+        var names: CFArray?
+        guard AXUIElementCopyActionNames(element, &names) == .success,
+              let names else {
+            return []
+        }
+        return (names as? [String]) ?? []
+    }
+
+    private func formatLine(
+        index: Int,
+        indent: String,
+        role: String?,
+        title: String?,
+        description: String?,
+        value: String?,
+        isEnabled: Bool?,
+        isFocused: Bool,
+        isSelected: Bool,
+        actions: [String]
+    ) -> String {
+        var parts = ["[\(index)]"]
+        if let role {
+            parts.append("role=\(role)")
+        }
+        if let title = Self.shortValue(title) {
+            parts.append("title=\"\(title)\"")
+        }
+        if let description = Self.shortValue(description) {
+            parts.append("description=\"\(description)\"")
+        }
+        if let value = Self.shortValue(value) {
+            parts.append("value=\"\(value)\"")
+        }
+        if let isEnabled {
+            parts.append("enabled=\(isEnabled)")
+        }
+        if isFocused {
+            parts.append("focused=true")
+        }
+        if isSelected {
+            parts.append("selected=true")
+        }
+        if !actions.isEmpty {
+            parts.append("actions=\(actions.joined(separator: ","))")
+        }
+        return indent + parts.joined(separator: " ")
+    }
+
+    private static func isSensitiveRole(_ role: String?) -> Bool {
+        guard let role else {
+            return false
+        }
+        return role == "AXPasswordField"
+            || role.localizedCaseInsensitiveContains("password")
+    }
+
+    private static func shortValue(_ value: String?) -> String? {
+        guard let value, !value.isEmpty else {
+            return nil
+        }
+        let normalized = value.replacingOccurrences(of: "\n", with: " ")
+        return String(normalized.prefix(512))
+    }
+}
