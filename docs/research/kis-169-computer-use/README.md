@@ -35,5 +35,5 @@ This work does not copy ChatGPT code.
 
 This work does not add model control, browser control, or a native helper.
 
-The Phase 0 through Phase 4 slices are committed after review and pushed to
-`origin/kis-169-computer-use`. Phase 5A is under review in the worktree.
+The Phase 0 through Phase 5A slices are committed after review and pushed to
+`origin/kis-169-computer-use`.

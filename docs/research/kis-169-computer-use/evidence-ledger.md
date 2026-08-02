@@ -442,3 +442,10 @@ Sources: `Suniye/Services/ComputerUseModelClient.swift`,
 - `[Verified]` Provider output must decode as one of the typed Computer Use decisions and pass non-empty message validation.
 - `[Inferred]` This transport can serve the Phase 3 model-client seam without coupling it to the existing dictation formatter.
 - `[Unknown]` The final product model, prompt, provider endpoint, and remote observation consent UX remain open until coordinator integration.
+
+### Entry 34: Phase 5A repository handoff
+
+Sources: local Git status and `git push` output.
+
+- `[Verified]` Commit `316fd30` contains the Phase 5A model transport slice.
+- `[Verified]` The Phase 5A slice was pushed to `origin/kis-169-computer-use` after focused tests and quality review.
