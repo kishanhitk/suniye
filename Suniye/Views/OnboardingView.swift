@@ -31,8 +31,7 @@ struct OnboardingView: View {
                     removal: .move(edge: .leading).combined(with: .opacity)
                 ))
 
-            Spacer()
-            Spacer()
+            Spacer(minLength: 24)
 
             navigationButtons
                 .frame(maxWidth: 420)
@@ -71,9 +70,9 @@ struct OnboardingView: View {
     }
 
     private var onboardingBrandHeader: some View {
-        let iconSize: CGFloat = step == .welcome ? 64 : 48
+        let iconSize = AppMetrics.onboardingBrandIconSize
 
-        return VStack(spacing: step == .welcome ? 10 : 6) {
+        return VStack(spacing: 10) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .interpolation(.high)
@@ -142,13 +141,15 @@ struct OnboardingView: View {
     // MARK: - Prepare / Try (the aha screen)
 
     private var speakContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .center, spacing: 6) {
                 Text(canPracticeOnboarding ? "Try your first dictation" : "Prepare Suniye")
-                    .font(AppTypography.pageTitle)
+                    .font(AppTypography.onboardingTitle)
+                    .multilineTextAlignment(.center)
                 Text(speakSubtitle)
                     .font(AppTypography.body)
                     .foregroundStyle(MainWindowPalette.secondaryText)
+                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -173,7 +174,7 @@ struct OnboardingView: View {
                 practiceStatusLabel(result.message, color: result.severity.color)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var speakSubtitle: String {
@@ -198,7 +199,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     Image(systemName: "mic")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(MainWindowPalette.secondaryText)
                     Text("Microphone")
                         .font(AppTypography.bodyMedium)
@@ -296,7 +297,8 @@ struct OnboardingView: View {
         Text("\u{201C}Send the report by Friday morning.\u{201D}")
             .font(AppTypography.body)
             .foregroundStyle(MainWindowPalette.secondaryText)
-            .padding(.leading, 2)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var transcriptPreview: some View {
@@ -350,15 +352,17 @@ struct OnboardingView: View {
     // MARK: - Type Anywhere (Accessibility, post-aha)
 
     private var typeAnywhereContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .center, spacing: 6) {
                 Text("Dictate anywhere")
-                    .font(AppTypography.pageTitle)
+                    .font(AppTypography.onboardingTitle)
+                    .multilineTextAlignment(.center)
                 Text(appState.hasAccessibilityPermission
                      ? "Hold \(appState.hotkeyConfiguration.displayString) in any app to dictate."
                      : "Allow \(appIdentity.displayName) to type into the app you are using.")
                     .font(AppTypography.body)
                     .foregroundStyle(MainWindowPalette.secondaryText)
+                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -366,7 +370,7 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
                         Image(systemName: "hand.raised")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(size: 20, weight: .semibold))
                             .foregroundStyle(MainWindowPalette.secondaryText)
                         Text(appState.hasAccessibilityPermission ? "Ready to dictate" : "Type into any app")
                             .font(AppTypography.bodyMedium)
@@ -430,7 +434,7 @@ struct OnboardingView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     // MARK: - Navigation
@@ -455,46 +459,52 @@ struct OnboardingView: View {
 
         case .speak:
             if canPracticeOnboarding || showsSpeakEscapeHatch {
-                HStack {
-                    if !appState.onboardingPracticeSucceeded, showsSpeakEscapeHatch {
-                        Button("Skip for now") {
-                            appState.advanceOnboardingFromSpeak()
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(isDictationInFlight)
-                        .accessibilityHint("Continue without a practice dictation")
-                    }
-
-                    Spacer()
-
-                    Button("Continue") {
+                VStack(spacing: 8) {
+                    Button {
                         appState.advanceOnboardingFromSpeak()
+                    } label: {
+                        Text("Continue")
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(!appState.onboardingPracticeSucceeded || isDictationInFlight)
                     .keyboardShortcut(.defaultAction)
+
+                    if !appState.onboardingPracticeSucceeded, showsSpeakEscapeHatch {
+                        Button("Skip for now") {
+                            appState.advanceOnboardingFromSpeak()
+                        }
+                        .buttonStyle(.plain)
+                        .font(AppTypography.caption)
+                        .disabled(isDictationInFlight)
+                        .accessibilityHint("Continue without a practice dictation")
+                    }
                 }
+                .frame(maxWidth: .infinity)
             }
 
         case .typeAnywhere:
-            HStack {
-                if !appState.hasAccessibilityPermission {
-                    Button("Later — I'll paste with ⌘V") {
-                        appState.finishOnboarding()
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityHint("Finish setup and copy dictations to the clipboard until access is allowed")
-                }
-
-                Spacer()
-
-                Button("Finish") {
+            VStack(spacing: 8) {
+                Button {
                     appState.finishOnboarding()
+                } label: {
+                    Text("Finish")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!appState.hasAccessibilityPermission)
                 .keyboardShortcut(.defaultAction)
+
+                if !appState.hasAccessibilityPermission {
+                    Button("Later — I'll paste with ⌘V") {
+                        appState.finishOnboarding()
+                    }
+                    .buttonStyle(.plain)
+                    .font(AppTypography.caption)
+                    .accessibilityHint("Finish setup and copy dictations to the clipboard until access is allowed")
+                }
             }
+            .frame(maxWidth: .infinity)
         }
     }
 
