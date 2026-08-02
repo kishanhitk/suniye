@@ -9,7 +9,7 @@ public enum DictationSource: String, Sendable, CaseIterable {
 }
 
 public enum DictationDestination: String, Sendable, CaseIterable {
-    case systemInsertion, onboardingPractice, unknown
+    case systemInsertion, clipboard, onboardingPractice, unknown
 }
 
 public enum InsertionMethod: String, Sendable, CaseIterable {
@@ -78,6 +78,38 @@ public enum PermissionKind: String, Sendable, CaseIterable {
 
 public enum OnboardingStepName: String, Sendable, CaseIterable {
     case welcome, setup, magicFormat = "magic_format", practice, completed
+    // Appended (append-only wire contract) for the 3-screen flow: `speak` is the
+    // mic + first-dictation screen, `type_anywhere` the deferred Accessibility ask.
+    // `setup`/`magic_format`/`practice` remain for historical rows only.
+    case speak
+    case typeAnywhere = "type_anywhere"
+}
+
+/// Which UI surface initiated an explicit permission ask.
+public enum PermissionAskSurface: String, Sendable, CaseIterable {
+    case onboarding, settings, dashboard
+    case dictationAttempt = "dictation_attempt"
+    case insertion
+}
+
+/// How an explicit permission ask ended. Overlay cases are Permiso-specific:
+/// the user backed out of the drag helper, or its safety timeout fired.
+public enum PermissionAskOutcome: String, Sendable, CaseIterable {
+    case granted, denied
+    case overlayDismissed = "overlay_dismissed"
+    case overlayTimeout = "overlay_timeout"
+}
+
+/// Outcome of one onboarding practice dictation attempt. Content-free.
+public enum PracticeOutcome: String, Sendable, CaseIterable {
+    case success
+    case emptyAudio = "empty_audio"
+    case error
+}
+
+/// Lifecycle of the post-onboarding Magic Format nudge card.
+public enum MFNudgeAction: String, Sendable, CaseIterable {
+    case shown, dismissed, opened
 }
 
 public enum ModelKind: String, Sendable, CaseIterable {

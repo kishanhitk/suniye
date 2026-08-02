@@ -8,25 +8,42 @@ struct WelcomeView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(spacing: 14) {
-                benefitRow(icon: "lock.shield", text: "Private — runs on your device")
-                benefitRow(icon: "bolt.fill", text: "Works offline after setup")
-                benefitRow(icon: "macwindow.on.rectangle", text: "Works in every app")
-                benefitRow(icon: "chart.bar.xaxis", text: "Anonymous stats help improve it — off anytime")
+            VStack(alignment: .leading, spacing: 14) {
+                benefitRow(
+                    icon: "lock.shield",
+                    title: "Private by design",
+                    detail: "Your voice stays on your Mac."
+                )
+                benefitRow(
+                    icon: "bolt.fill",
+                    title: "No cloud delay",
+                    detail: "Super-low latency. Near-instant dictation."
+                )
+                benefitRow(
+                    icon: "wifi.slash",
+                    title: "Works offline",
+                    detail: "Keep dictating without an internet connection."
+                )
             }
         }
     }
 
-    private func benefitRow(icon: String, text: String) -> some View {
-        HStack(spacing: 10) {
+    private func benefitRow(icon: String, title: LocalizedStringKey, detail: LocalizedStringKey) -> some View {
+        HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(MainWindowPalette.secondaryText)
                 .frame(width: 20)
-            Text(text)
-                .font(AppTypography.body)
-                .foregroundStyle(MainWindowPalette.secondaryText)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(AppTypography.bodyMedium)
+                    .foregroundStyle(Color.primary)
+                Text(detail)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+            }
         }
-        .fixedSize()
+        .fixedSize(horizontal: false, vertical: true)
     }
 }

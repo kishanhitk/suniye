@@ -28,7 +28,23 @@ public enum AnalyticsEvent: Sendable {
     case audioBackendUsed(backend: SafeLabel, fallbackOccurred: Bool, rung: Int)
 
     case permissionTransition(kind: PermissionKind, granted: Bool)
-    case onboardingStep(step: OnboardingStepName, granted: Bool?)
+    /// A permission was explicitly asked for (system prompt shown, Permiso overlay
+    /// presented, or Settings deep-link offered after denial) and resolved.
+    /// `permission_transition` stays the passive state-change signal; this one
+    /// gives grant-rate-at-ask-time per surface.
+    case permissionRequest(kind: PermissionKind, surface: PermissionAskSurface, outcome: PermissionAskOutcome)
+    /// `resumed` is true when the step was re-shown by launch resume rather than
+    /// reached by a user action in this session.
+    case onboardingStep(step: OnboardingStepName, granted: Bool?, resumed: Bool?)
+    /// One practice dictation attempt on the Speak screen. `attempt` is 1-based
+    /// and capped by the caller; outcome is a closed enum — never content.
+    case onboardingPracticeResult(outcome: PracticeOutcome, attempt: Int)
+    /// Fired exactly once from finishOnboarding(): the state the user exited
+    /// onboarding in, plus wall-clock duration of the final onboarding session.
+    case onboardingOutcome(durationMs: Int?, practiced: Bool, micGranted: Bool, axGranted: Bool, modelReady: Bool)
+    /// Post-onboarding Magic Format nudge card lifecycle (impressions are the
+    /// denominator for nudge-conversion analysis).
+    case mfNudge(action: MFNudgeAction)
 
     case modelChanged(kind: ModelKind, model: SafeLabel)
     case modelDownload(kind: ModelKind, model: SafeLabel, outcome: ModelDownloadOutcome, durationMs: Int?)
@@ -56,7 +72,11 @@ public enum AnalyticsEvent: Sendable {
         case .audioCaptureInterrupted: return "audio_capture_interrupted"
         case .audioBackendUsed: return "audio_backend_used"
         case .permissionTransition: return "permission_transition"
+        case .permissionRequest: return "permission_request"
         case .onboardingStep: return "onboarding_step"
+        case .onboardingPracticeResult: return "onboarding_practice_result"
+        case .onboardingOutcome: return "onboarding_outcome"
+        case .mfNudge: return "mf_nudge"
         case .modelChanged: return "model_changed"
         case .modelDownload: return "model_download"
         case .modelLoad: return "model_load"
@@ -97,10 +117,28 @@ public enum AnalyticsEvent: Sendable {
             return ["backend": .label(backend), "fallback_occurred": .bool(fallbackOccurred), "rung": .int(rung)]
         case let .permissionTransition(kind, granted):
             return ["kind": .label(kind), "granted": .bool(granted)]
-        case let .onboardingStep(step, granted):
+        case let .permissionRequest(kind, surface, outcome):
+            // `kind` and `outcome` land in typed AE slots; `surface` rides the
+            // blob20 props-JSON backstop until it earns a slot.
+            return ["kind": .label(kind), "surface": .label(surface), "outcome": .label(outcome)]
+        case let .onboardingStep(step, granted, resumed):
             var out: [String: AnalyticsValue] = ["step": .label(step)]
             if let granted { out["granted"] = .bool(granted) }
+            if let resumed { out["resumed"] = .bool(resumed) }
             return out
+        case let .onboardingPracticeResult(outcome, attempt):
+            return ["outcome": .label(outcome), "attempt": .int(attempt)]
+        case let .onboardingOutcome(durationMs, practiced, micGranted, axGranted, modelReady):
+            var out: [String: AnalyticsValue] = [
+                "practiced": .bool(practiced),
+                "mic_granted": .bool(micGranted),
+                "ax_granted": .bool(axGranted),
+                "model_ready": .bool(modelReady),
+            ]
+            if let durationMs { out["duration_ms"] = .int(durationMs) }
+            return out
+        case let .mfNudge(action):
+            return ["action": .label(action)]
         case let .modelChanged(kind, model):
             return ["kind": .label(kind), "model": .label(model)]
         case let .modelDownload(kind, model, outcome, durationMs):

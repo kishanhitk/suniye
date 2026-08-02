@@ -15,6 +15,10 @@ final class TextInsertionServiceMoreTests: XCTestCase {
             TextInsertionService.InsertError.cannotCreateEvent.localizedDescription,
             "Unable to generate keyboard event"
         )
+        XCTAssertEqual(
+            TextInsertionService.InsertError.cannotCopyToClipboard.localizedDescription,
+            "Unable to copy transcription to the clipboard"
+        )
     }
 
     // MARK: - captureInsertionContext guard paths

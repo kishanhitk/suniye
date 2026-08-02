@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SuniyeAnalytics
 @testable import Suniye
@@ -59,9 +60,11 @@ final class TestGeneralSettingsStore: GeneralSettingsStoreProtocol {
 
 final class SpyTextInsertionService: TextInsertionServiceProtocol {
     private(set) var insertedTexts: [String] = []
+    private(set) var copiedTexts: [String] = []
     private(set) var submitCallCount = 0
     var insertionContext: TextInsertionContext?
     var insertError: Error?
+    var copyError: Error?
     var submitError: Error?
     var fieldValueProvider: (() -> String?)?
 
@@ -78,6 +81,13 @@ final class SpyTextInsertionService: TextInsertionServiceProtocol {
             throw insertError
         }
         insertedTexts.append(text)
+    }
+
+    func copyTextToClipboard(_ text: String) throws {
+        if let copyError {
+            throw copyError
+        }
+        copiedTexts.append(text)
     }
 
     func submitActiveInput() throws {
@@ -177,6 +187,7 @@ final class StubModelManager: ModelManagerProtocol {
     var lastDeletedModelID: ASRModelID?
     var lastDownloadedModelID: ASRModelID?
     var downloadResult: Result<Void, Error> = .success(())
+    var installsModelAfterDownload = true
     var recognizerConfigs: [ASRModelID: RecognizerConfig] = [
         .parakeetV3: RecognizerConfig(
             modelID: .parakeetV3,
@@ -290,7 +301,9 @@ final class StubModelManager: ModelManagerProtocol {
     func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {
         progress(1)
         try downloadResult.get()
-        installedModelIDs.insert(modelID)
+        if installsModelAfterDownload {
+            installedModelIDs.insert(modelID)
+        }
         lastDownloadedModelID = modelID
     }
 
@@ -686,25 +699,49 @@ final class SpyAccessibilityOnboarding: AccessibilityOnboardingPresenting {
     private(set) var dismissCallCount = 0
     private(set) var isPresenting = false
     private var pendingOnGranted: (() -> Void)?
+    private var pendingOnEnded: ((AccessibilityOnboardingEnd) -> Void)?
 
-    func present(onGranted: @escaping () -> Void) {
+    func present(onGranted: @escaping () -> Void, onEnded: @escaping (AccessibilityOnboardingEnd) -> Void) {
         presentCallCount += 1
         isPresenting = true
         pendingOnGranted = onGranted
+        pendingOnEnded = onEnded
     }
 
     func dismiss() {
         dismissCallCount += 1
-        isPresenting = false
-        pendingOnGranted = nil
+        end(.dismissed)
     }
 
     /// Simulate the user dragging the app in and the poller detecting the grant.
     func simulateGrant() {
-        isPresenting = false
         let onGranted = pendingOnGranted
         pendingOnGranted = nil
+        end(.granted)
         onGranted?()
+    }
+
+    /// Simulate the user backing out of the overlay (back chevron / close).
+    func simulateUserDismiss() {
+        pendingOnGranted = nil
+        end(.dismissed)
+    }
+
+    /// Simulate the 300s safety timeout firing with no grant.
+    func simulateTimeout() {
+        pendingOnGranted = nil
+        end(.timedOut)
+    }
+
+    private func end(_ outcome: AccessibilityOnboardingEnd) {
+        guard isPresenting else {
+            return
+        }
+        isPresenting = false
+        pendingOnGranted = nil
+        let onEnded = pendingOnEnded
+        pendingOnEnded = nil
+        onEnded?(outcome)
     }
 }
 
@@ -741,6 +778,10 @@ func makeTestAppState(
     frontmostAppBundleIDProvider: @escaping () -> String? = { nil },
     fileOpener: @escaping (URL) -> Bool = { _ in true },
     accessibilityOnboarding: AccessibilityOnboardingPresenting? = nil,
+    micAuthorizationStatusProvider: (() -> AVAuthorizationStatus)? = nil,
+    micAccessRequester: (() async -> Bool)? = nil,
+    accessibilityTrustProvider: (() -> Bool)? = nil,
+    availableDiskCapacityProvider: (() async -> Int64?)? = nil,
     issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
     magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
@@ -777,6 +818,12 @@ func makeTestAppState(
         frontmostAppBundleIDProvider: frontmostAppBundleIDProvider,
         fileOpener: fileOpener,
         accessibilityOnboarding: accessibilityOnboarding ?? SpyAccessibilityOnboarding(),
+        // Tests default to "not determined": permission state is then driven via
+        // the stored Bools or per-test providers, never live TCC.
+        micAuthorizationStatusProvider: micAuthorizationStatusProvider ?? { .notDetermined },
+        micAccessRequester: micAccessRequester ?? { false },
+        accessibilityTrustProvider: accessibilityTrustProvider ?? { true },
+        availableDiskCapacityProvider: availableDiskCapacityProvider ?? { nil },
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
         magicFormatSlowWarningDelaySeconds: magicFormatSlowWarningDelaySeconds,

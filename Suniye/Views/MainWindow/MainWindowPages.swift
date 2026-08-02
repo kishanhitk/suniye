@@ -22,6 +22,16 @@ struct DashboardPage: View {
                 }
             }
 
+            if appState.shouldShowMagicFormatNudge {
+                MagicFormatNudgeCard(
+                    onSetUp: { onNavigate(appState.openMagicFormatSetupFromNudge()) },
+                    onDismiss: { appState.dismissMagicFormatNudge() }
+                )
+                .onAppear {
+                    appState.magicFormatNudgeDidShow()
+                }
+            }
+
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 DashboardMetricCard(icon: "waveform", iconTint: .blue, value: "\(appState.sessionCount)", label: "Sessions")
                 DashboardMetricCard(icon: "calendar", iconTint: .orange, value: "\(appState.todaySessionCount)", label: "Today")
@@ -33,10 +43,20 @@ struct DashboardPage: View {
                 SectionHeading(title: "Recent")
 
                 if appState.recentResultsPreview.isEmpty {
+                    // The only post-onboarding surface that teaches the app's
+                    // single interaction — never a dead "nothing here yet".
                     SurfaceCard {
-                        Text("No transcription sessions yet.")
-                            .font(AppTypography.body)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
+                        HStack(spacing: 10) {
+                            Image(systemName: "waveform")
+                                .font(AppTypography.bodyMedium)
+                                .foregroundStyle(Color.accentColor)
+                            (Text("Hold ")
+                                + Text(appState.hotkeyConfiguration.displayString)
+                                    .font(AppTypography.codeBodyMedium)
+                                + Text(" in any app to dictate — sessions show up here."))
+                                .font(AppTypography.body)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                        }
                     }
                 } else {
                     VStack(spacing: 0) {
@@ -48,6 +68,54 @@ struct DashboardPage: View {
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/// Post-onboarding Magic Format pitch, shown once the user has real dictations
+/// to judge it against (replaces the old forced wizard step). The before/after
+/// snippet makes the 3.43 GB value proposition concrete.
+struct MagicFormatNudgeCard: View {
+    let onSetUp: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        SurfaceCard(padding: 14) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(AppTypography.bodyMedium)
+                        .foregroundStyle(Color.accentColor)
+                    Text("Make dictations cleaner")
+                        .font(AppTypography.bodyMedium)
+                    Spacer(minLength: 0)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\u{201C}so um send the report friday\u{201D}")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(MainWindowPalette.tertiaryText)
+                        .strikethrough(color: MainWindowPalette.tertiaryText)
+                    Text("\u{201C}Send the report by Friday.\u{201D}")
+                        .font(AppTypography.caption)
+                        .foregroundStyle(Color.primary)
+                }
+
+                Text("Magic Format fixes punctuation and filler words on your Mac, before text is pasted.")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    Button("Set Up Magic Format", action: onSetUp)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    Button("Not Now", action: onDismiss)
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    Spacer(minLength: 0)
                 }
             }
         }
@@ -593,6 +661,29 @@ struct GeneralPage: View {
                         }
                         .buttonStyle(.link)
                         .font(AppTypography.subheadline)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
+                SectionHeading(title: "Setup")
+
+                SurfaceCard {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Setup Walkthrough")
+                                .font(AppTypography.body)
+                            Text("Replay the first-run setup: permissions, the speech model, and a practice dictation.")
+                                .font(AppTypography.subheadline)
+                                .foregroundStyle(MainWindowPalette.secondaryText)
+                        }
+
+                        Spacer(minLength: 12)
+
+                        Button("Show Setup Again") {
+                            appState.replayOnboarding()
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
             }

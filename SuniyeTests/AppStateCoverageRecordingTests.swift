@@ -204,7 +204,7 @@ final class AppStateCoverageRecordingTests: XCTestCase {
             sampleRate: 16_000
         )
         let appState = readyAppState(audioCapture: audioCapture)
-        appState.activeOnboardingStep = .practice
+        appState.activeOnboardingStep = .speak
         await startRecording(appState, audioCapture: audioCapture)
 
         appState.stopRecordingFromUI()

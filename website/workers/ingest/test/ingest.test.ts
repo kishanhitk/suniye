@@ -266,6 +266,34 @@ describe("buildDataPoint slot registry", () => {
     expect(backstop.audio_backend).toBe("core_audio");
     expect(backstop.input_sample_rate).toBe(48000);
   });
+
+  test("onboarding redesign events map to appended aliases", () => {
+    // permission_request: kind → blob16, outcome → blob15; surface rides blob20 only.
+    const pr = buildDataPoint(event("permission_request", { kind: "microphone", surface: "onboarding", outcome: "denied" }), b({ device }), "");
+    expect(pr.blobs[15]).toBe("microphone"); // blob16 = kind (wins over device chip)
+    expect(pr.blobs[14]).toBe("denied");     // blob15 = outcome
+    expect(JSON.parse(pr.blobs[19] as string).surface).toBe("onboarding");
+
+    // onboarding_practice_result: attempt → double15, outcome → blob15.
+    const practice = buildDataPoint(event("onboarding_practice_result", { outcome: "empty_audio", attempt: 3 }), b({ device }), "");
+    expect(practice.blobs[14]).toBe("empty_audio"); // blob15 = outcome
+    expect(practice.doubles[14]).toBe(3);           // double15 = attempt
+
+    // onboarding_step resumed → double17 (no granted on the same event).
+    const step = buildDataPoint(event("onboarding_step", { step: "speak", resumed: true }), b({ device }), "");
+    expect(step.blobs[13]).toBe("speak"); // blob14 = step (not device arch)
+    expect(step.doubles[16]).toBe(1);     // double17 = resumed
+
+    // onboarding_outcome: practiced → double17, duration_ms → double14; booleans in blob20.
+    const outcome = buildDataPoint(
+      event("onboarding_outcome", { duration_ms: 61_000, practiced: true, mic_granted: true, ax_granted: false, model_ready: true }),
+      b({ device }),
+      ""
+    );
+    expect(outcome.doubles[13]).toBe(61_000); // double14 = duration_ms
+    expect(outcome.doubles[16]).toBe(1);      // double17 = practiced
+    expect(JSON.parse(outcome.blobs[19] as string).ax_granted).toBe(false);
+  });
 });
 
 describe("ingestConfigFromEnv", () => {

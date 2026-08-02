@@ -75,10 +75,32 @@ final class AppStateAnalyticsTests: XCTestCase {
         XCTAssertTrue(spy.trackedEventNames.contains("update_action"))
     }
 
-    func testOnboardingCompletionEmitted() {
+    func testOnboardingCompletionEmittedAtFinish() {
+        let spy = SpyAnalytics()
+        let appState = makeTestAppState(
+            generalSettingsStore: TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .typeAnywhereReached)),
+            analytics: spy
+        )
+        appState.startOnboardingIfNeeded()
+
+        appState.finishOnboarding()
+
+        XCTAssertTrue(spy.trackedEventNames.contains("onboarding_step"))
+        XCTAssertTrue(spy.trackedEventNames.contains("onboarding_outcome"))
+    }
+
+    func testMagicFormatToggleEmitsFeatureToggled() {
         let spy = SpyAnalytics()
         let appState = makeTestAppState(analytics: spy)
-        appState.completeCoreOnboarding()
-        XCTAssertTrue(spy.trackedEventNames.contains("onboarding_step"))
+
+        appState.llmEnabled = true
+
+        let toggles = spy.trackedEvents.compactMap { event -> (feature: TrackableFeature, enabled: Bool)? in
+            if case let .featureToggled(feature, enabled) = event {
+                return (feature, enabled)
+            }
+            return nil
+        }
+        XCTAssertTrue(toggles.contains { $0.feature == .magicFormat && $0.enabled })
     }
 }
