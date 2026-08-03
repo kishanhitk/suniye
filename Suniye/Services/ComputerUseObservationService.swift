@@ -1,33 +1,44 @@
 import Foundation
 
+private let computerUseLaunchWindowPollIntervalNanoseconds: UInt64 = 100_000_000
+private let computerUseLaunchWindowPollAttempts = 20
+
 final class ComputerUseObservationService: ComputerUseObservationServicing {
     private let applicationCatalog: ComputerUseApplicationCatalog
     private let windowDiscovery: ComputerUseWindowDiscovering
+    private let windowActivator: ComputerUseWindowActivating
     private let accessibilityReader: ComputerUseAccessibilityReading
     private let screenshotCapturer: ComputerUseScreenshotCapturing
     private let permissionManager: ComputerUsePermissionManaging
     private let dateProvider: () -> Date
+    private let launchWindowPollIntervalNanoseconds: UInt64
+    private let launchWindowPollAttempts: Int
     private var nextGeneration: UInt64 = 0
 
     init(
         applicationCatalog: ComputerUseApplicationCatalog = SystemComputerUseApplicationCatalog(),
         windowDiscovery: ComputerUseWindowDiscovering = SystemComputerUseWindowDiscovery(),
+        windowActivator: ComputerUseWindowActivating = SystemComputerUseWindowActivator(),
         accessibilityReader: ComputerUseAccessibilityReading = SystemComputerUseAccessibilityReader(),
         screenshotCapturer: ComputerUseScreenshotCapturing = CoreGraphicsComputerUseScreenshotService(),
         permissionManager: ComputerUsePermissionManaging = SystemComputerUsePermissionService(),
-        dateProvider: @escaping () -> Date = Date.init
+        dateProvider: @escaping () -> Date = Date.init,
+        launchWindowPollIntervalNanoseconds: UInt64 = computerUseLaunchWindowPollIntervalNanoseconds,
+        launchWindowPollAttempts: Int = computerUseLaunchWindowPollAttempts
     ) {
         self.applicationCatalog = applicationCatalog
         self.windowDiscovery = windowDiscovery
+        self.windowActivator = windowActivator
         self.accessibilityReader = accessibilityReader
         self.screenshotCapturer = screenshotCapturer
         self.permissionManager = permissionManager
         self.dateProvider = dateProvider
+        self.launchWindowPollIntervalNanoseconds = launchWindowPollIntervalNanoseconds
+        self.launchWindowPollAttempts = max(1, launchWindowPollAttempts)
     }
 
     func observe(
         applicationID: String,
-        includeScreenshot: Bool = true,
         configuration: ComputerUseObservationConfiguration = .default,
         cancellation: ComputerUseCancellationToken = ComputerUseCancellationToken()
     ) throws -> ComputerUseObservation {
@@ -36,7 +47,6 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
         }
         return try observe(
             application: application,
-            includeScreenshot: includeScreenshot,
             configuration: configuration,
             cancellation: cancellation
         )
@@ -44,7 +54,6 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
 
     func observeTarget(
         applicationIdentifier: String?,
-        includeScreenshot: Bool,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) async throws -> ComputerUseObservation {
@@ -53,6 +62,7 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
         }
 
         let application: ComputerUseApplication
+        var wasLaunched = false
         if let applicationIdentifier {
             if let resolvedApplication = applicationCatalog.resolveApplication(
                 identifier: applicationIdentifier
@@ -63,6 +73,7 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
                     identifier: applicationIdentifier
                 ) {
                     application = launchedApplication
+                    wasLaunched = true
                 } else {
                     throw ComputerUseObservationError.applicationNotRunning(applicationIdentifier)
                 }
@@ -70,6 +81,7 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
                 identifier: applicationIdentifier
             ) {
                 application = launchedApplication
+                wasLaunched = true
             } else {
                 throw ComputerUseObservationError.applicationNotFound(applicationIdentifier)
             }
@@ -79,17 +91,44 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
             throw ComputerUseObservationError.applicationNotFound("frontmost application")
         }
 
+        if wasLaunched {
+            try await waitForVisibleWindow(application: application, cancellation: cancellation)
+        }
+
         return try observe(
             application: application,
-            includeScreenshot: includeScreenshot,
             configuration: configuration,
             cancellation: cancellation
         )
     }
 
+    private func waitForVisibleWindow(
+        application: ComputerUseApplication,
+        cancellation: ComputerUseCancellationToken
+    ) async throws {
+        for attempt in 0..<launchWindowPollAttempts {
+            guard !Task.isCancelled, !cancellation.isCancelled else {
+                throw ComputerUseObservationError.cancelled
+            }
+
+            if !windowDiscovery.listWindows(for: application).isEmpty {
+                return
+            }
+
+            guard attempt + 1 < launchWindowPollAttempts else {
+                throw ComputerUseObservationError.noWindow(application.id)
+            }
+
+            do {
+                try await Task.sleep(nanoseconds: launchWindowPollIntervalNanoseconds)
+            } catch is CancellationError {
+                throw ComputerUseObservationError.cancelled
+            }
+        }
+    }
+
     private func observe(
         application: ComputerUseApplication,
-        includeScreenshot: Bool,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) throws -> ComputerUseObservation {
@@ -104,17 +143,19 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
 
         let windows = windowDiscovery.listWindows(for: application)
         let window: ComputerUseWindow
-        if let preferredWindowID = configuration.preferredWindowID {
-            guard let preferredWindow = windows.first(where: { $0.id == preferredWindowID }) else {
-                throw ComputerUseObservationError.windowNotFound(preferredWindowID)
-            }
-            window = preferredWindow
-        } else if let keyWindow = windows.first(where: \.isKeyWindow) {
+        if let keyWindow = windows.first(where: \.isKeyWindow) {
             window = keyWindow
         } else if let firstWindow = windows.first {
             window = firstWindow
         } else {
             throw ComputerUseObservationError.noWindow(application.id)
+        }
+
+        if configuration.activateTarget {
+            let target = ComputerUseTarget(application: application, window: window)
+            guard windowActivator.activate(target: target) else {
+                throw ComputerUseObservationError.targetActivationFailed(application.bundleIdentifier)
+            }
         }
 
         let accessibility = try accessibilityReader.read(
@@ -127,15 +168,10 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
             throw ComputerUseObservationError.cancelled
         }
 
-        let screenshot: ComputerUseScreenshot?
-        if includeScreenshot {
-            guard permissions.canCaptureScreen else {
-                throw ComputerUseObservationError.screenRecordingNotGranted
-            }
-            screenshot = try screenshotCapturer.capture(window: window)
-        } else {
-            screenshot = nil
+        guard permissions.canCaptureScreen else {
+            throw ComputerUseObservationError.screenRecordingNotGranted
         }
+        let screenshot = try screenshotCapturer.capture(window: window)
 
         guard !cancellation.isCancelled else {
             throw ComputerUseObservationError.cancelled

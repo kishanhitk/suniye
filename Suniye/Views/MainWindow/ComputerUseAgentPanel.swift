@@ -12,7 +12,7 @@ struct ComputerUseAgentPanel: View {
                 VStack(alignment: .leading, spacing: 14) {
                     modelStatus
 
-                    Text("The agent sends accessibility text to the configured endpoint. A screenshot is sent only when you allow it below.")
+                    Text("The agent sends the current Accessibility state and screenshot to the configured endpoint.")
                         .font(AppTypography.subheadline)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -31,17 +31,6 @@ struct ComputerUseAgentPanel: View {
                         .disabled(coordinator.isBusy)
 
                     HStack(alignment: .top, spacing: 12) {
-                        Toggle(
-                            "Allow screenshot upload",
-                            isOn: Binding(
-                                get: { coordinator.allowRemoteScreenshotUpload },
-                                set: coordinator.setRemoteScreenshotUploadAllowed
-                            )
-                        )
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .disabled(remoteModelConfiguration == nil || coordinator.isBusy)
-
                         Spacer(minLength: 12)
 
                         Button {

@@ -55,3 +55,34 @@ own process. `ComputerUseWindowActivationTests` covers that policy.
 - `[Deferred]` Browser control and helper IPC remain outside this E2E.
 - `[Not exercised]` Installed-app launch is implemented behind the async application-catalog seam,
   but this safe UI run did not launch a third-party application.
+
+## Superseding live safe-target check — 2026-08-03
+
+The earlier run above is historical: it exercised the temporary window picker, approval card, and
+screenshot toggle before the parity cleanup. The current installed Preview build was tested with
+the Computer Use skill against Calculator only.
+
+- `[Verified]` The current Computer Use page opens without the removed window picker, Bring
+  Forward control, approval card, or screenshot-choice control.
+- `[Verified]` A task that asks Calculator to evaluate `17 × 19` completes automatically and
+  reports `323` without a manual approval step.
+- `[Verified]` The app remains responsive after the task completes.
+- `[Not exercised]` No third-party app, browser, purchase, login, external message, or destructive
+  action was used.
+- `[Unknown]` Live provider configuration, Screen Recording capture, cross-process input, helper
+  IPC, and browser extension behavior remain unverified.
+
+## Final installed Preview check — 2026-08-03
+
+- `[Verified]` `./scripts/build_app.sh Debug --preview --install-user` installed a fresh build at
+  `/Users/kishan/Applications/Suniye Preview.app`.
+- `[Verified]` After quitting and reopening that path, the Computer Use page opened without the
+  removed window picker, Bring Forward control, screenshot toggle, manual action controls, or
+  approval card.
+- `[Verified]` With Calculator selected and the observation captured, the task
+  `Read the Calculator result and report it. Do not change the calculator.` completed
+  automatically and the UI reported `Computer Use finished The Calculator result is 323`.
+- `[Not exercised]` The task did not change Calculator state and did not touch a browser or any
+  third-party/destructive workflow.
+- `[Unknown]` This confirms one configured-provider path, not full provider parity. Helper IPC,
+  Screen Recording consent, cross-process input, and browser extension behavior remain open.

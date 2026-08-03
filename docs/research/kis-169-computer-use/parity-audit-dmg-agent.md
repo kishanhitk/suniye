@@ -1117,3 +1117,14 @@ IDs for screenshot-grounded coordinate actions, selected-window activation, and 
 The historical gaps in the earlier sections remain valid as audit-time findings. The remaining
 desktop gaps are installed-app launch, transient screenshot caching, reference-specific state diffs,
 helper IPC, and live macOS validation.
+
+## Superseding Suniye cleanup note — 2026-08-03
+
+- `[Verified]` The DMG Mac wrappers forward app-scoped operations to the native service and do not
+  define a user-facing window picker, cached element validator, or local action-loop limit.
+- `[Implemented]` Suniye removes those local extras while retaining the internal native window
+  resolver needed to operate macOS Accessibility and screenshots.
+- `[Implemented]` Suniye's Preview path uses automatic authorization, always includes the
+  observation screenshot, and removes the duplicate structured element prompt rendering.
+- `[Unknown]` Static inspection still cannot establish the native helper's internal AX traversal,
+  screenshot implementation, complete prompt, or server-side loop.

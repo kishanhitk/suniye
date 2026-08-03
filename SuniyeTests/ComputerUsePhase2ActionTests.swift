@@ -14,18 +14,16 @@ final class ComputerUsePhase2ModelTests: XCTestCase {
         )
         let actions: [ComputerUseAction] = [
             .click(
-                point: ComputerUsePoint(x: 12.5, y: 24.25),
-                screenshotID: "shot-1"
+                point: ComputerUsePoint(x: 12.5, y: 24.25)
             ),
             .keyPress(key: .named(.returnKey), modifiers: modifiers),
             .keyPress(key: .character("a"), modifiers: ComputerUseKeyModifiers()),
-            .scroll(horizontal: 4, vertical: -8),
+            .scroll(elementIndex: 0, direction: .up),
             .typeText("secret text"),
             .setValue(elementIndex: 2, value: "new value"),
             .drag(
                 from: ComputerUsePoint(x: 10, y: 20),
-                to: ComputerUsePoint(x: 100, y: 120),
-                screenshotID: "shot-1"
+                to: ComputerUsePoint(x: 100, y: 120)
             ),
             .selectText(
                 elementIndex: 2,
@@ -36,7 +34,7 @@ final class ComputerUsePhase2ModelTests: XCTestCase {
             ),
             .clickElement(elementIndex: 3, clickCount: 2, mouseButton: .right),
             .secondaryAction(elementIndex: 3, action: "AXShowMenu"),
-            .semantic(elementIndex: 3, action: .press),
+            .secondaryAction(elementIndex: 3, action: "AXPress"),
         ]
 
         for action in actions {
@@ -49,7 +47,7 @@ final class ComputerUsePhase2ModelTests: XCTestCase {
         let referenceClick = try JSONDecoder().decode(
             ComputerUseAction.self,
             from: Data(
-                #"{"kind":"click","element_index":3,"click_count":2,"mouse_button":"r","screenshotId":"shot-1"}"#.utf8
+                #"{"kind":"click","element_index":3,"click_count":2,"mouse_button":"r"}"#.utf8
             )
         )
         XCTAssertEqual(
@@ -57,10 +55,36 @@ final class ComputerUsePhase2ModelTests: XCTestCase {
             .clickElement(
                 elementIndex: 3,
                 clickCount: 2,
-                mouseButton: .right,
-                screenshotID: "shot-1"
+                mouseButton: .right
             )
         )
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                ComputerUseAction.self,
+                from: Data(#"{"kind":"click","x":1,"y":2,"mouse_button":2}"#.utf8)
+            ),
+            .click(
+                point: ComputerUsePoint(x: 1, y: 2),
+                mouseButton: .middle
+            )
+        )
+        XCTAssertEqual(ComputerUsePoint(x: 3, y: 4).cgPoint, CGPoint(x: 3, y: 4))
+        for invalidButton in ["3", "side"] {
+            XCTAssertThrowsError(
+                try JSONDecoder().decode(
+                    ComputerUseAction.self,
+                    from: Data(
+                        #"{"kind":"click","x":1,"y":2,"mouse_button":\#(invalidButton)}"#.utf8
+                    )
+                )
+            )
+        }
+        for direction in ["left", "right"] {
+            let raw = #"{"kind":"scroll","element_index":1,"direction":"\#(direction)"}"#
+            XCTAssertNoThrow(
+                try JSONDecoder().decode(ComputerUseAction.self, from: Data(raw.utf8))
+            )
+        }
 
         let encodedReferenceAction = try JSONEncoder().encode(referenceClick)
         let encodedReferenceJSON = try XCTUnwrap(String(data: encodedReferenceAction, encoding: .utf8))
@@ -77,13 +101,22 @@ final class ComputerUsePhase2ModelTests: XCTestCase {
         XCTAssertEqual(actions[6].risk, .drag)
         XCTAssertEqual(actions[7].risk, .textSelection)
         XCTAssertEqual(actions[8].risk, .click)
-        XCTAssertEqual(actions[9].risk, .semanticAccessibility)
-        XCTAssertEqual(actions[10].risk, .semanticAccessibility)
-        XCTAssertEqual(actions[4].textPreview, "secret text")
-        XCTAssertEqual(actions[5].textPreview, "new value")
-        XCTAssertEqual(actions[7].textPreview, "secret")
-        XCTAssertNil(actions[0].textPreview)
+        XCTAssertEqual(actions[9].risk, .secondaryAccessibility)
+        XCTAssertEqual(actions[10].risk, .secondaryAccessibility)
 
+        let referenceScroll = ComputerUseAction.scroll(
+            elementIndex: 3,
+            direction: .down,
+            pages: 2
+        )
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                ComputerUseAction.self,
+                from: JSONEncoder().encode(referenceScroll)
+            ),
+            referenceScroll
+        )
+        XCTAssertEqual(referenceScroll.summary, "Scroll down 2.0x on element 3")
         XCTAssertEqual(ComputerUseKey.named(.forwardDelete).displayName, "Forward Delete")
         XCTAssertEqual(ComputerUseKey.character("a").displayName, "a")
         XCTAssertEqual(
@@ -104,8 +137,7 @@ final class ComputerUsePhase2ModelTests: XCTestCase {
             id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!,
             action: action,
             target: observation.target,
-            risk: action.risk,
-            reason: "The user approved this exact text entry."
+            risk: action.risk
         )
         let grant = ComputerUseApprovalGrant(
             requestID: request.id,
@@ -142,38 +174,16 @@ final class ComputerUsePhase2ModelTests: XCTestCase {
             ),
             result
         )
-        XCTAssertEqual(request.textPreview, "(5 characters hidden)")
         XCTAssertEqual(ComputerUseApprovalScope.once, .once)
-        XCTAssertEqual(ComputerUseApprovalDecision.allowOnce, .allowOnce)
-        XCTAssertEqual(ComputerUseApprovalDecision.deny, .deny)
-        XCTAssertEqual(ComputerUseApprovalDecision.stopSession, .stopSession)
     }
 
-    func testPresentationValuesAndMalformedReferenceActions() throws {
-        for risk in ComputerUseActionRisk.allCases {
-            XCTAssertFalse(risk.title.isEmpty)
-        }
-        XCTAssertEqual(
-            ComputerUseApprovalScope.allCases.map(\.title),
-            ["Allow Once", "Allow for Session", "Always Allow"]
-        )
-        XCTAssertFalse(ComputerUseApprovalScope.once.isPersistent)
-        XCTAssertTrue(ComputerUseApprovalScope.session.isPersistent)
-        XCTAssertTrue(ComputerUseApprovalScope.always.isPersistent)
-        XCTAssertEqual(ComputerUseApprovalDecision.allowOnce.scope, .once)
-        XCTAssertEqual(ComputerUseApprovalDecision.allowForSession.scope, .session)
-        XCTAssertEqual(ComputerUseApprovalDecision.allowAlways.scope, .always)
-        XCTAssertNil(ComputerUseApprovalDecision.deny.scope)
-        XCTAssertNil(ComputerUseApprovalDecision.stopSession.scope)
-
+    func testMalformedReferenceActions() throws {
         let request = ComputerUseApprovalRequest(
             id: UUID(),
             action: .click(point: ComputerUsePoint(x: 1, y: 1)),
             target: makePhase2Observation().target,
-            risk: .click,
-            reason: "Click"
+            risk: .click
         )
-        XCTAssertNil(request.textPreview)
 
         for (rawValue, expected) in [("left", ComputerUseMouseButton.left), ("l", .left),
                                      ("middle", .middle), ("m", .middle)] {
@@ -196,9 +206,36 @@ final class ComputerUsePhase2ModelTests: XCTestCase {
             )
         )
 
+        XCTAssertThrowsError(try ComputerUseKey.parseChord(""))
+        XCTAssertThrowsError(try ComputerUseKey.parseChord("Command+"))
+        XCTAssertThrowsError(try ComputerUseKey.parseChord("Super+Unknown+a"))
+        XCTAssertEqual(
+            try ComputerUseKey.parseChord("Control_L+less").key,
+            .character(",")
+        )
+
+        let namedKeys: [String: ComputerUseNamedKey] = [
+            "Tab": .tab,
+            "Escape": .escape,
+            "space": .space,
+            "BackSpace": .delete,
+            "Delete": .forwardDelete,
+            "Left": .arrowLeft,
+            "Right": .arrowRight,
+            "Down": .arrowDown,
+            "Up": .arrowUp,
+            "Home": .home,
+            "End": .end,
+            "Page_Up": .pageUp,
+            "Page_Down": .pageDown,
+        ]
+        for (rawKey, expectedKey) in namedKeys {
+            XCTAssertEqual(try ComputerUseKey.parseChord(rawKey).key, .named(expectedKey))
+        }
+
         let malformedActions = [
             #"{"kind":"click","x":1}"#,
-            #"{"kind":"scroll","horizontal":0,"vertical":0,"x":1}"#,
+            #"{"kind":"scroll","element_index":1,"direction":"side"}"#,
             #"{"kind":"type_text"}"#,
             #"{"kind":"set_value","element_index":1}"#,
             #"{"kind":"drag","from_x":1,"from_y":1,"to_x":2}"#,
@@ -225,145 +262,14 @@ final class ComputerUsePhase2ModelTests: XCTestCase {
             .invalidAction("bad bounds"),
             .unsupportedKey("?") ,
             .eventCreationFailed,
-            .semanticActionFailed("AXPress"),
+            .secondaryActionFailed("AXPress"),
             .accessibilityValueActionFailed("not editable"),
             .textSelectionFailed("not found"),
             .textInsertionFailed("clipboard unavailable"),
-            .staleScreenshot,
         ]
 
         for error in errors {
             XCTAssertFalse(error.localizedDescription.isEmpty)
-        }
-    }
-}
-
-final class ComputerUsePhase2PolicyTests: XCTestCase {
-    func testPolicyAcceptsSupportedActionsFromTheObservation() throws {
-        let observation = makePhase2Observation()
-
-        let actions: [ComputerUseAction] = [
-            .click(point: ComputerUsePoint(x: 100, y: 100)),
-            .keyPress(key: .named(.returnKey), modifiers: ComputerUseKeyModifiers()),
-            .keyPress(key: .character("a"), modifiers: ComputerUseKeyModifiers()),
-            .scroll(horizontal: 0, vertical: -400),
-            .typeText("hello"),
-            .setValue(elementIndex: 0, value: "hello"),
-            .drag(
-                from: ComputerUsePoint(x: 10, y: 10),
-                to: ComputerUsePoint(x: 200, y: 200)
-            ),
-            .selectText(elementIndex: 0, text: "hello"),
-            .clickElement(elementIndex: 0),
-            .secondaryAction(elementIndex: 0, action: "AXPress"),
-            .semantic(elementIndex: 0, action: .press),
-            .semantic(elementIndex: 1, action: .increment),
-        ]
-
-        for action in actions {
-            XCTAssertNoThrow(try ComputerUseActionPolicy.validate(action: action, observation: observation))
-        }
-    }
-
-    func testPolicyRejectsOutOfBoundsAndNonFiniteClicks() {
-        let observation = makePhase2Observation()
-
-        assertActionError(.invalidAction("click must be inside the target window")) {
-            try ComputerUseActionPolicy.validate(
-                action: .click(point: ComputerUsePoint(x: 640.1, y: 100)),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("click must be inside the target window")) {
-            try ComputerUseActionPolicy.validate(
-                action: .click(point: ComputerUsePoint(x: .nan, y: 100)),
-                observation: observation
-            )
-        }
-    }
-
-    func testPolicyRejectsInvalidKeysScrollTextAndSemanticActions() {
-        let observation = makePhase2Observation()
-
-        assertActionError(.invalidAction("character key must contain one character")) {
-            try ComputerUseActionPolicy.validate(
-                action: .keyPress(key: .character("ab"), modifiers: ComputerUseKeyModifiers()),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("scroll values exceed the allowed range")) {
-            try ComputerUseActionPolicy.validate(
-                action: .scroll(horizontal: 5_001, vertical: 0),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("scroll values exceed the allowed range")) {
-            try ComputerUseActionPolicy.validate(
-                action: .scroll(horizontal: .infinity, vertical: 0),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("text must contain between 1 and 10,000 characters")) {
-            try ComputerUseActionPolicy.validate(
-                action: .typeText(""),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("text must contain between 1 and 10,000 characters")) {
-            try ComputerUseActionPolicy.validate(
-                action: .typeText(String(repeating: "x", count: 10_001)),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("element index is not in the observation")) {
-            try ComputerUseActionPolicy.validate(
-                action: .semantic(elementIndex: 99, action: .press),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("the element does not expose AXPress")) {
-            try ComputerUseActionPolicy.validate(
-                action: .semantic(elementIndex: 1, action: .press),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("the element does not expose AXShowMenu")) {
-            try ComputerUseActionPolicy.validate(
-                action: .secondaryAction(elementIndex: 1, action: "AXShowMenu"),
-                observation: observation
-            )
-        }
-
-        let disabledElement = ComputerUseAXElement(
-            index: 0,
-            role: "AXButton",
-            subrole: nil,
-            title: "OK",
-            description: nil,
-            value: nil,
-            isEnabled: false,
-            isFocused: false,
-            isSelected: false,
-            bounds: nil,
-            actions: ["AXPress"],
-            childIndexes: []
-        )
-        let disabledObservation = ComputerUseObservation(
-            generation: observation.generation,
-            capturedAt: observation.capturedAt,
-            target: observation.target,
-            accessibility: ComputerUseAXSnapshot(
-                text: "disabled",
-                elements: [disabledElement],
-                wasTruncated: false
-            ),
-            screenshot: nil
-        )
-        assertActionError(.invalidAction("the element is disabled")) {
-            try ComputerUseActionPolicy.validate(
-                action: .semantic(elementIndex: 0, action: .press),
-                observation: disabledObservation
-            )
         }
     }
 }
@@ -373,12 +279,12 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
         let observation = makePhase2Observation()
         let input = Phase2StubInputEventPoster()
         let text = Phase2StubTextInserter()
-        let semantic = Phase2StubSemanticActionPerformer()
+        let secondary = Phase2StubSecondaryActionPerformer()
         let value = Phase2StubValueActionPerformer()
         let service = ComputerUseActionService(
             inputEventPoster: input,
             textInserter: text,
-            semanticActionPerformer: semantic,
+            secondaryActionPerformer: secondary,
             valueActionPerformer: value,
             targetActivator: Phase2StubWindowActivator(),
             permissionManager: Phase2StubPermissionManager(granted: true),
@@ -390,7 +296,7 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
             key: .named(.returnKey),
             modifiers: ComputerUseKeyModifiers(command: true)
         )
-        let scroll = ComputerUseAction.scroll(horizontal: 2, vertical: -400)
+        let scroll = ComputerUseAction.scroll(elementIndex: 0, direction: .up)
         let type = ComputerUseAction.typeText("hello")
         let setValue = ComputerUseAction.setValue(elementIndex: 0, value: "new value")
         let drag = ComputerUseAction.drag(
@@ -408,10 +314,9 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
             mouseButton: .right
         )
         let secondaryAction = ComputerUseAction.secondaryAction(
-            elementIndex: 0,
+            elementIndex: 99,
             action: "axpress"
         )
-        let semanticAction = ComputerUseAction.semantic(elementIndex: 0, action: .press)
 
         for action in [
             click,
@@ -423,7 +328,6 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
             selectText,
             elementClick,
             secondaryAction,
-            semanticAction,
         ] {
             let grant = makePhase2Grant(action: action, observation: observation)
             let result = try service.execute(
@@ -449,8 +353,12 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
         XCTAssertEqual(input.keys.count, 1)
         XCTAssertEqual(input.keys[0].key, keyKey(key))
         XCTAssertEqual(
+            input.keys[0].targetProcessIdentifier,
+            observation.target.application.processIdentifier
+        )
+        XCTAssertEqual(
             input.scrolls,
-            [Phase2StubInputEventPoster.ScrollCall(horizontal: 2, vertical: -400)]
+            [Phase2StubInputEventPoster.ScrollCall(horizontal: 0, vertical: -400)]
         )
         XCTAssertEqual(text.insertedTexts, ["hello"])
         XCTAssertEqual(
@@ -479,10 +387,176 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
             ]
         )
         XCTAssertEqual(
-            semantic.actions,
+            secondary.actions,
             [
-                Phase2StubSemanticActionPerformer.ActionCall(action: "AXPress", elementIndex: 0),
-                Phase2StubSemanticActionPerformer.ActionCall(action: "AXPress", elementIndex: 0),
+                Phase2StubSecondaryActionPerformer.ActionCall(action: "axpress", elementIndex: 99),
+            ]
+        )
+    }
+
+    func testActionServiceValidatesTransportShapeWithoutInspectingCachedElements() {
+        let observation = makePhase2Observation()
+        let service = ComputerUseActionService(
+            inputEventPoster: Phase2StubInputEventPoster(),
+            textInserter: Phase2StubTextInserter(),
+            secondaryActionPerformer: Phase2StubSecondaryActionPerformer(),
+            targetActivator: Phase2StubWindowActivator(),
+            permissionManager: Phase2StubPermissionManager(granted: true)
+        )
+
+        let unknownElementAction = ComputerUseAction.secondaryAction(
+            elementIndex: 1234,
+            action: "AXWhatever"
+        )
+        let unknownElementGrant = makePhase2Grant(
+            action: unknownElementAction,
+            observation: observation
+        )
+        XCTAssertNoThrow(
+            try service.execute(
+                action: unknownElementAction,
+                observation: observation,
+                approval: unknownElementGrant,
+                requestID: unknownElementGrant.requestID,
+                cancellation: ComputerUseCancellationToken()
+            )
+        )
+
+        let invalidClick = ComputerUseAction.click(
+            point: ComputerUsePoint(x: .nan, y: 1)
+        )
+        let invalidClickGrant = makePhase2Grant(action: invalidClick, observation: observation)
+        assertActionError(.invalidAction("click coordinates must be finite")) {
+            _ = try service.execute(
+                action: invalidClick,
+                observation: observation,
+                approval: invalidClickGrant,
+                requestID: invalidClickGrant.requestID,
+                cancellation: ComputerUseCancellationToken()
+            )
+        }
+
+        let invalidScroll = ComputerUseAction.scroll(
+            elementIndex: 999,
+            direction: .down,
+            pages: 0
+        )
+        let invalidScrollGrant = makePhase2Grant(action: invalidScroll, observation: observation)
+        assertActionError(.invalidAction("pages must be a finite number greater than 0")) {
+            _ = try service.execute(
+                action: invalidScroll,
+                observation: observation,
+                approval: invalidScrollGrant,
+                requestID: invalidScrollGrant.requestID,
+                cancellation: ComputerUseCancellationToken()
+            )
+        }
+
+        let invalidClickCount = ComputerUseAction.click(
+            point: ComputerUsePoint(x: 1, y: 1),
+            clickCount: 0
+        )
+        let invalidClickCountGrant = makePhase2Grant(
+            action: invalidClickCount,
+            observation: observation
+        )
+        assertActionError(.invalidAction("click count must be at least 1")) {
+            _ = try service.execute(
+                action: invalidClickCount,
+                observation: observation,
+                approval: invalidClickCountGrant,
+                requestID: invalidClickCountGrant.requestID,
+                cancellation: ComputerUseCancellationToken()
+            )
+        }
+
+        let invalidElementClickCount = ComputerUseAction.clickElement(
+            elementIndex: 999,
+            clickCount: 0
+        )
+        let invalidElementClickCountGrant = makePhase2Grant(
+            action: invalidElementClickCount,
+            observation: observation
+        )
+        assertActionError(.invalidAction("click count must be at least 1")) {
+            _ = try service.execute(
+                action: invalidElementClickCount,
+                observation: observation,
+                approval: invalidElementClickCountGrant,
+                requestID: invalidElementClickCountGrant.requestID,
+                cancellation: ComputerUseCancellationToken()
+            )
+        }
+
+        let invalidDrag = ComputerUseAction.drag(
+            from: ComputerUsePoint(x: .nan, y: 1),
+            to: ComputerUsePoint(x: 2, y: 3)
+        )
+        let invalidDragGrant = makePhase2Grant(action: invalidDrag, observation: observation)
+        assertActionError(.invalidAction("drag coordinates must be finite")) {
+            _ = try service.execute(
+                action: invalidDrag,
+                observation: observation,
+                approval: invalidDragGrant,
+                requestID: invalidDragGrant.requestID,
+                cancellation: ComputerUseCancellationToken()
+            )
+        }
+    }
+
+    func testActionServiceDelegatesUnknownIndexedClicksAndHorizontalScrolls() throws {
+        let observation = makePhase2Observation()
+        let input = Phase2StubInputEventPoster()
+        let secondary = Phase2StubSecondaryActionPerformer()
+        let service = ComputerUseActionService(
+            inputEventPoster: input,
+            textInserter: Phase2StubTextInserter(),
+            secondaryActionPerformer: secondary,
+            targetActivator: Phase2StubWindowActivator(),
+            permissionManager: Phase2StubPermissionManager(granted: true)
+        )
+
+        let indexedClick = ComputerUseAction.clickElement(
+            elementIndex: 999,
+            clickCount: 2
+        )
+        let clickGrant = makePhase2Grant(action: indexedClick, observation: observation)
+        _ = try service.execute(
+            action: indexedClick,
+            observation: observation,
+            approval: clickGrant,
+            requestID: clickGrant.requestID,
+            cancellation: ComputerUseCancellationToken()
+        )
+
+        for direction in [ComputerUseScrollDirection.left, .right] {
+            let scroll = ComputerUseAction.scroll(
+                elementIndex: 999,
+                direction: direction,
+                pages: 1.5
+            )
+            let grant = makePhase2Grant(action: scroll, observation: observation)
+            _ = try service.execute(
+                action: scroll,
+                observation: observation,
+                approval: grant,
+                requestID: grant.requestID,
+                cancellation: ComputerUseCancellationToken()
+            )
+        }
+
+        XCTAssertEqual(
+            secondary.actions,
+            [
+                Phase2StubSecondaryActionPerformer.ActionCall(action: "AXPress", elementIndex: 999),
+                Phase2StubSecondaryActionPerformer.ActionCall(action: "AXPress", elementIndex: 999),
+            ]
+        )
+        XCTAssertEqual(
+            input.scrolls,
+            [
+                Phase2StubInputEventPoster.ScrollCall(horizontal: -600, vertical: 0),
+                Phase2StubInputEventPoster.ScrollCall(horizontal: 600, vertical: 0),
             ]
         )
     }
@@ -495,10 +569,33 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
         let service = ComputerUseActionService(
             inputEventPoster: Phase2StubInputEventPoster(),
             textInserter: Phase2StubTextInserter(),
-            semanticActionPerformer: Phase2StubSemanticActionPerformer(),
+            secondaryActionPerformer: Phase2StubSecondaryActionPerformer(),
             targetActivator: targetActivator,
             permissionManager: permission
         )
+
+        let policyBlockedService = ComputerUseActionService(
+            inputEventPoster: Phase2StubInputEventPoster(),
+            textInserter: Phase2StubTextInserter(),
+            secondaryActionPerformer: Phase2StubSecondaryActionPerformer(),
+            targetActivator: targetActivator,
+            permissionManager: permission,
+            policy: ComputerUsePolicyService(
+                configuration: ComputerUsePolicyConfiguration(
+                    deniedBundleIdentifiers: [observation.target.application.bundleIdentifier]
+                )
+            )
+        )
+        let policyGrant = makePhase2Grant(action: action, observation: observation)
+        assertActionError(.approvalRequired) {
+            _ = try policyBlockedService.execute(
+                action: action,
+                observation: observation,
+                approval: policyGrant,
+                requestID: policyGrant.requestID,
+                cancellation: ComputerUseCancellationToken()
+            )
+        }
 
         let staleGrant = ComputerUseApprovalGrant(
             requestID: UUID(),
@@ -575,7 +672,7 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
         let service = ComputerUseActionService(
             inputEventPoster: Phase2StubInputEventPoster(),
             textInserter: text,
-            semanticActionPerformer: Phase2StubSemanticActionPerformer(),
+            secondaryActionPerformer: Phase2StubSecondaryActionPerformer(),
             targetActivator: Phase2StubWindowActivator(),
             permissionManager: Phase2StubPermissionManager(granted: true)
         )
@@ -592,12 +689,23 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
             )
         }
 
+        text.insertError = ComputerUseActionError.cancelled
+        assertActionError(.cancelled) {
+            _ = try service.execute(
+                action: type,
+                observation: observation,
+                approval: textGrant,
+                requestID: textGrant.requestID,
+                cancellation: ComputerUseCancellationToken()
+            )
+        }
+
         let input = Phase2StubInputEventPoster()
         input.error = ComputerUseActionError.eventCreationFailed
         let eventService = ComputerUseActionService(
             inputEventPoster: input,
             textInserter: Phase2StubTextInserter(),
-            semanticActionPerformer: Phase2StubSemanticActionPerformer(),
+            secondaryActionPerformer: Phase2StubSecondaryActionPerformer(),
             targetActivator: Phase2StubWindowActivator(),
             permissionManager: Phase2StubPermissionManager(granted: true)
         )
@@ -614,118 +722,13 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
         }
     }
 
-    func testPolicyRejectsInvalidExpandedActions() {
-        let observation = makePhase2Observation()
-
-        assertActionError(.invalidAction("click count must be between 1 and 3")) {
-            try ComputerUseActionPolicy.validate(
-                action: .click(point: ComputerUsePoint(x: 10, y: 10), clickCount: 4),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("drag points must be inside the target window")) {
-            try ComputerUseActionPolicy.validate(
-                action: .drag(
-                    from: ComputerUsePoint(x: 10, y: 10),
-                    to: ComputerUsePoint(x: 700, y: 10)
-                ),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("value must contain between 1 and 10,000 characters")) {
-            try ComputerUseActionPolicy.validate(
-                action: .setValue(elementIndex: 0, value: ""),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("selected text must contain between 1 and 10,000 characters")) {
-            try ComputerUseActionPolicy.validate(
-                action: .selectText(elementIndex: 0, text: ""),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("text selection context is too large")) {
-            try ComputerUseActionPolicy.validate(
-                action: .selectText(
-                    elementIndex: 0,
-                    text: "hello",
-                    prefix: String(repeating: "x", count: 2_001)
-                ),
-                observation: observation
-            )
-        }
-        assertActionError(.invalidAction("element bounds must be inside the target window")) {
-            let noBoundsElement = ComputerUseAXElement(
-                index: 2,
-                role: "AXButton",
-                subrole: nil,
-                title: "No bounds",
-                description: nil,
-                value: nil,
-                isEnabled: true,
-                isFocused: false,
-                isSelected: false,
-                bounds: nil,
-                actions: ["AXPress"],
-                childIndexes: []
-            )
-            let noBoundsObservation = ComputerUseObservation(
-                generation: observation.generation,
-                capturedAt: observation.capturedAt,
-                target: observation.target,
-                accessibility: ComputerUseAXSnapshot(
-                    text: "no bounds",
-                    elements: [noBoundsElement],
-                    wasTruncated: false
-                ),
-                screenshot: nil
-            )
-            try ComputerUseActionPolicy.validate(
-                action: .clickElement(elementIndex: 2),
-                observation: noBoundsObservation
-            )
-        }
-
-        let screenshotObservation = ComputerUseObservation(
-            generation: observation.generation,
-            capturedAt: observation.capturedAt,
-            target: observation.target,
-            accessibility: observation.accessibility,
-            screenshot: ComputerUseScreenshot(
-                id: "shot-1",
-                data: Data(),
-                mimeType: "image/png",
-                width: 1,
-                height: 1
-            )
-        )
-        XCTAssertNoThrow(
-            try ComputerUseActionPolicy.validate(
-                action: .click(
-                    point: ComputerUsePoint(x: 10, y: 10),
-                    screenshotID: "shot-1"
-                ),
-                observation: screenshotObservation
-            )
-        )
-        assertActionError(.staleScreenshot) {
-            try ComputerUseActionPolicy.validate(
-                action: .click(
-                    point: ComputerUsePoint(x: 10, y: 10),
-                    screenshotID: "old-shot"
-                ),
-                observation: screenshotObservation
-            )
-        }
-    }
-
     func testActionServiceActivatesTheObservedTargetBeforeInput() throws {
         let observation = makePhase2Observation()
         let activator = Phase2StubWindowActivator()
         let service = ComputerUseActionService(
             inputEventPoster: Phase2StubInputEventPoster(),
             textInserter: Phase2StubTextInserter(),
-            semanticActionPerformer: Phase2StubSemanticActionPerformer(),
+            secondaryActionPerformer: Phase2StubSecondaryActionPerformer(),
             targetActivator: activator,
             permissionManager: Phase2StubPermissionManager(granted: true)
         )

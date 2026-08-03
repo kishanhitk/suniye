@@ -30,10 +30,6 @@ protocol ComputerUseAuditRecording: AnyObject {
     func record(_ record: ComputerUseAuditRecord)
 }
 
-final class NoopComputerUseAuditRecorder: ComputerUseAuditRecording {
-    func record(_ record: ComputerUseAuditRecord) {}
-}
-
 final class AppLoggerComputerUseAuditRecorder: ComputerUseAuditRecording {
     func record(_ record: ComputerUseAuditRecord) {
         let scope = record.approvalScope?.rawValue ?? "none"

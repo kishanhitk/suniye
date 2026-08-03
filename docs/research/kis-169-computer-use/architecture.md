@@ -353,6 +353,9 @@ The existing `TextInsertionService` can inform the text-entry design. It cannot 
 
 ### Current staged implementation
 
+The bullets in this historical section describe the incremental implementation before the
+superseding correction below. The correction section is authoritative for the current branch.
+
 - `[Verified]` Phases 0 and 1 add app discovery, target windows, bounded AX serialization, screenshot capture, permissions, preview, and cancellation.
 - `[Verified]` Phase 2 adds bounded click, key, scroll, text, and semantic AX actions with fresh-observation validation.
 - `[Verified]` Phase 3 adds the actor-isolated observe-decide-approve-act loop and intervention checks.
@@ -428,3 +431,19 @@ evidence reports that the reference refuses its own app for safety. Suniye's sep
 Suniye itself as a deterministic safe target and is recorded in `e2e-computer.md`.
 
 Static bundle and helper evidence support the architecture above.
+
+## Superseding implementation correction — 2026-08-03
+
+- `[Verified]` The Mac client surface is app-scoped. Suniye's concrete window record is now an
+  internal adapter detail used to resolve AX, capture the app window, activate it, and translate
+  coordinates; it is not exposed as a user-selected session target.
+- `[Verified]` The agent runs without local action, failure, or duration counters. It re-observes
+  after each successful action and ends on a model terminal decision, a platform/provider error,
+  cancellation, or provider timeout.
+- `[Verified]` The action service does not inspect the cached observation to approve an element
+  index or Accessibility action name. It forwards those identifiers to the native Accessibility
+  adapter, matching the inspected Mac client boundary.
+- `[Verified]` Screenshots are captured on every macOS observation and are part of the model
+  request. The model prompt contains Accessibility text, not a duplicate structured element dump.
+- `[Unknown]` The native helper's full process boundary, IPC authentication, model loop, and
+  browser adapter remain outside static evidence.

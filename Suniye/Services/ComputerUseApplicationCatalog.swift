@@ -34,18 +34,16 @@ final class SystemComputerUseApplicationCatalog: ComputerUseApplicationCatalog {
 
     func resolveApplication(identifier: String) -> ComputerUseApplication? {
         let applications = listAvailableApplications()
-        let normalizedIdentifier = Self.normalizedIdentifier(identifier)
         return applications.first { application in
             application.id == identifier
                 || application.bundleIdentifier == identifier
-                || application.bundleIdentifier == normalizedIdentifier
                 || application.displayName.localizedCaseInsensitiveCompare(identifier) == .orderedSame
         }
     }
 
     func activeApplication() -> ComputerUseApplication? {
         let applications = listApplications()
-        return applications.first(where: \.isActive) ?? applications.first
+        return applications.first(where: \.isActive)
     }
 
     func listAvailableApplications() -> [ComputerUseApplication] {
@@ -112,13 +110,12 @@ final class SystemComputerUseApplicationCatalog: ComputerUseApplicationCatalog {
             displayName: application.localizedName ?? bundleIdentifier,
             processIdentifier: application.processIdentifier,
             isRunning: true,
-            isActive: application.isActive,
-            launchDate: application.launchDate
+            isActive: application.isActive
         )
     }
 
-    static func applicationID(bundleIdentifier: String, processIdentifier: Int32) -> String {
-        "\(bundleIdentifier)#\(processIdentifier)"
+    static func applicationID(bundleIdentifier: String, processIdentifier _: Int32) -> String {
+        bundleIdentifier
     }
 
     private static func makeInstalledApplication(_ url: URL) -> ComputerUseApplication? {
@@ -137,16 +134,8 @@ final class SystemComputerUseApplicationCatalog: ComputerUseApplicationCatalog {
             displayName: displayName,
             processIdentifier: 0,
             isRunning: false,
-            isActive: false,
-            launchDate: nil
+            isActive: false
         )
-    }
-
-    private static func normalizedIdentifier(_ identifier: String) -> String {
-        guard let separator = identifier.firstIndex(of: "#") else {
-            return identifier
-        }
-        return String(identifier[..<separator])
     }
 
     static func defaultInstalledApplicationURLs() -> [URL] {
@@ -227,12 +216,11 @@ final class SystemComputerUseWindowDiscovery: ComputerUseWindowDiscovering {
                 layer: window.layer,
                 isOnScreen: window.isOnScreen,
                 // CGWindowList returns front-to-back ordering for this query.
-                // This is a fallback marker. AX remains the source of truth
-                // when the observation service resolves the window.
+                // AX remains the source of truth when the observation service
+                // resolves the window.
                 isKeyWindow: appIsFrontmost && index == 0
             )
         }
-
     }
 
     private func numberValue(_ value: Any?) -> NSNumber? {

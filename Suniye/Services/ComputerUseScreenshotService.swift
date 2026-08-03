@@ -30,10 +30,7 @@ struct CoreGraphicsComputerUseScreenshotService: ComputerUseScreenshotCapturing 
             data: data,
             mimeType: "image/png",
             width: image.width,
-            height: image.height,
-            originX: window.bounds.x,
-            originY: window.bounds.y,
-            zIndex: window.layer
+            height: image.height
         )
     }
 

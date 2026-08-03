@@ -35,7 +35,7 @@ final class ComputerUseModelConfigurationTests: XCTestCase {
         )
     }
 
-    func testFactoryMapsConfiguredModelWithoutEnablingScreenshotUpload() throws {
+    func testFactoryMapsConfiguredModel() throws {
         let settings = LLMSettings(
             isEnabled: true,
             provider: .openAICompatible,
@@ -56,14 +56,8 @@ final class ComputerUseModelConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.endpointURL.absoluteString, "https://example.com/v1/chat/completions")
         XCTAssertEqual(configuration.modelID, "ui-model")
         XCTAssertEqual(configuration.apiKey, "secret")
-        XCTAssertEqual(configuration.timeoutSeconds, 8)
-        XCTAssertEqual(configuration.maxTokens, 256)
-        XCTAssertFalse(configuration.allowsScreenshotUpload)
+        XCTAssertEqual(configuration.timeoutSeconds, ComputerUseRemoteModelDefaults.timeoutSeconds)
+        XCTAssertEqual(configuration.maxTokens, ComputerUseRemoteModelDefaults.maxTokens)
         XCTAssertNil(configuration.validationMessage)
-
-        let uploadConfiguration = configuration.withScreenshotUpload(true)
-        XCTAssertTrue(uploadConfiguration.allowsScreenshotUpload)
-        XCTAssertEqual(uploadConfiguration.modelID, configuration.modelID)
-        XCTAssertEqual(uploadConfiguration.apiKey, configuration.apiKey)
     }
 }

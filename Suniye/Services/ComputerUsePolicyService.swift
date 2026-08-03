@@ -4,13 +4,6 @@ enum ComputerUsePolicyDecision: Equatable, Sendable {
     case allowed(approvalScopes: Set<ComputerUseApprovalScope>)
     case denied(reason: String)
     case forbidden(reason: String)
-
-    var allowedApprovalScopes: Set<ComputerUseApprovalScope> {
-        guard case let .allowed(scopes) = self else {
-            return []
-        }
-        return scopes
-    }
 }
 
 struct ComputerUsePolicyConfiguration: Codable, Equatable, Sendable {
@@ -81,14 +74,11 @@ struct ComputerUsePolicyService: ComputerUsePolicyChecking {
 enum ComputerUsePolicyError: LocalizedError, Equatable, Sendable {
     case applicationDenied(String)
     case applicationForbidden(String)
-    case approvalScopeNotAllowed
 
     var errorDescription: String? {
         switch self {
         case let .applicationDenied(reason), let .applicationForbidden(reason):
             return reason
-        case .approvalScopeNotAllowed:
-            return "The requested approval scope is not allowed for this action."
         }
     }
 }
@@ -111,39 +101,9 @@ final class ComputerUseApprovalPolicyService {
         self.dateProvider = dateProvider
     }
 
-    func prepare(_ request: ComputerUseApprovalRequest) throws -> ComputerUseApprovalRequest {
-        try preparedRequest(request, recordRequest: true)
-    }
-
-    func rememberedScope(for request: ComputerUseApprovalRequest) throws -> ComputerUseApprovalScope? {
-        let prepared = try preparedRequest(request, recordRequest: false)
-        guard let scope = store.rememberedScope(
-            applicationBundleIdentifier: prepared.target.application.bundleIdentifier,
-            risk: prepared.risk,
-            sessionID: prepared.sessionID,
-            now: dateProvider()
-        ) else {
-            return nil
-        }
-        guard prepared.allowedScopes.contains(scope) else {
-            store.revoke(
-                applicationBundleIdentifier: prepared.target.application.bundleIdentifier,
-                risk: prepared.risk
-            )
-            return nil
-        }
-        return scope
-    }
-
-    func grant(
-        for request: ComputerUseApprovalRequest,
-        scope: ComputerUseApprovalScope
-    ) throws -> ComputerUseApprovalGrant {
-        let prepared = try preparedRequest(request, recordRequest: false)
-        guard prepared.allowedScopes.contains(scope) else {
-            throw ComputerUsePolicyError.approvalScopeNotAllowed
-        }
-
+    func authorize(_ request: ComputerUseApprovalRequest) throws -> ComputerUseApprovalGrant {
+        let prepared = try preparedRequest(request)
+        let scope = rememberedScope(for: prepared) ?? .once
         store.save(
             scope: scope,
             applicationBundleIdentifier: prepared.target.application.bundleIdentifier,
@@ -169,52 +129,43 @@ final class ComputerUseApprovalPolicyService {
         return grant
     }
 
-    func revoke(
-        applicationBundleIdentifier: String? = nil,
-        risk: ComputerUseActionRisk? = nil
-    ) {
-        store.revoke(
-            applicationBundleIdentifier: applicationBundleIdentifier,
-            risk: risk
-        )
-    }
-
-    func endSession(_ sessionID: UUID) {
-        store.endSession(sessionID)
-    }
-
-    func recordDenied(for request: ComputerUseApprovalRequest) {
-        guard let prepared = try? preparedRequest(request, recordRequest: false) else {
-            return
+    private func rememberedScope(
+        for prepared: ComputerUseApprovalRequest
+    ) -> ComputerUseApprovalScope? {
+        guard let scope = store.rememberedScope(
+            applicationBundleIdentifier: prepared.target.application.bundleIdentifier,
+            risk: prepared.risk,
+            sessionID: prepared.sessionID,
+            now: dateProvider()
+        ) else {
+            return nil
         }
-        record(
-            kind: .approvalResolved,
-            outcome: .denied,
-            request: prepared,
-            scope: nil
-        )
+        guard prepared.allowedScopes.contains(scope) else {
+            store.revoke(
+                applicationBundleIdentifier: prepared.target.application.bundleIdentifier,
+                risk: prepared.risk
+            )
+            return nil
+        }
+        return scope
     }
 
     private func preparedRequest(
-        _ request: ComputerUseApprovalRequest,
-        recordRequest: Bool
+        _ request: ComputerUseApprovalRequest
     ) throws -> ComputerUseApprovalRequest {
         switch policy.evaluate(application: request.target.application, action: request.action) {
         case let .allowed(scopes):
-            if recordRequest {
-                record(
-                    kind: .approvalRequested,
-                    outcome: .allowed,
-                    request: request,
-                    scope: nil
-                )
-            }
+            record(
+                kind: .approvalRequested,
+                outcome: .allowed,
+                request: request,
+                scope: nil
+            )
             return ComputerUseApprovalRequest(
                 id: request.id,
                 action: request.action,
                 target: request.target,
                 risk: request.risk,
-                reason: request.reason,
                 sessionID: request.sessionID,
                 observationGeneration: request.observationGeneration,
                 allowedScopes: scopes

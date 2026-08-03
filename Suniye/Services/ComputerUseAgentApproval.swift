@@ -1,18 +1,25 @@
 import Foundation
 
 protocol ComputerUseApprovalAuthorizing: Sendable {
-    func prepare(
+    func authorize(
         _ request: ComputerUseApprovalRequest
-    ) async throws -> ComputerUseApprovalRequest
-
-    func rememberedScope(
-        for request: ComputerUseApprovalRequest
-    ) async throws -> ComputerUseApprovalScope?
-
-    func grant(
-        for request: ComputerUseApprovalRequest,
-        scope: ComputerUseApprovalScope
     ) async throws -> ComputerUseApprovalGrant
+}
+
+struct ComputerUseAutomaticApprovalAuthorizer: ComputerUseApprovalAuthorizing {
+    func authorize(
+        _ request: ComputerUseApprovalRequest
+    ) async throws -> ComputerUseApprovalGrant {
+        ComputerUseApprovalGrant(
+            requestID: request.id,
+            scope: .once,
+            applicationID: request.target.application.id,
+            windowID: request.target.window.id,
+            observationGeneration: request.observationGeneration,
+            action: request.action,
+            sessionID: request.sessionID
+        )
+    }
 }
 
 actor ComputerUseApprovalPolicyActor: ComputerUseApprovalAuthorizing {
@@ -22,22 +29,9 @@ actor ComputerUseApprovalPolicyActor: ComputerUseApprovalAuthorizing {
         self.policyService = policyService
     }
 
-    func prepare(
+    func authorize(
         _ request: ComputerUseApprovalRequest
-    ) async throws -> ComputerUseApprovalRequest {
-        try policyService.prepare(request)
-    }
-
-    func rememberedScope(
-        for request: ComputerUseApprovalRequest
-    ) async throws -> ComputerUseApprovalScope? {
-        try policyService.rememberedScope(for: request)
-    }
-
-    func grant(
-        for request: ComputerUseApprovalRequest,
-        scope: ComputerUseApprovalScope
     ) async throws -> ComputerUseApprovalGrant {
-        try policyService.grant(for: request, scope: scope)
+        try policyService.authorize(request)
     }
 }

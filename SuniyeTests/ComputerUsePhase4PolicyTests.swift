@@ -16,7 +16,7 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
         XCTAssertEqual(
             policy.evaluate(
                 application: observation.target.application,
-                action: .scroll(horizontal: 0, vertical: -10)
+                action: .scroll(elementIndex: 0, direction: .up)
             ),
             .allowed(approvalScopes: [.once, .session, .always])
         )
@@ -52,9 +52,19 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
         XCTAssertEqual(
             policy.evaluate(
                 application: application,
-                action: .scroll(horizontal: 0, vertical: -1)
+                action: .scroll(elementIndex: 0, direction: .up)
             ),
             .allowed(approvalScopes: [.once, .session, .always])
+        )
+    }
+
+    func testPolicyForbidsApplicationsWithoutBundleIdentifiers() {
+        XCTAssertEqual(
+            ComputerUsePolicyService().evaluate(
+                application: application(bundleIdentifier: "   "),
+                action: .click(point: ComputerUsePoint(x: 10, y: 10))
+            ),
+            .forbidden(reason: "The target application has no bundle identifier.")
         )
     }
 
@@ -159,10 +169,9 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
         let sessionID = UUID()
         let request = ComputerUseApprovalRequest(
             id: UUID(),
-            action: .scroll(horizontal: 0, vertical: -10),
+            action: .scroll(elementIndex: 0, direction: .up),
             target: observation.target,
             risk: .scroll,
-            reason: "Scroll the target.",
             sessionID: sessionID,
             observationGeneration: observation.generation
         )
@@ -177,9 +186,14 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
             store: store
         )
 
-        let prepared = try service.prepare(request)
-        XCTAssertEqual(prepared.allowedScopes, [.once, .session, .always])
-        let grant = try service.grant(for: prepared, scope: .session)
+        store.save(
+            scope: .session,
+            applicationBundleIdentifier: observation.target.application.bundleIdentifier,
+            risk: .scroll,
+            sessionID: sessionID,
+            expiresAt: nil
+        )
+        let grant = try service.authorize(request)
         XCTAssertEqual(grant.requestID, request.id)
         XCTAssertEqual(grant.scope, .session)
         XCTAssertEqual(grant.applicationID, observation.target.application.id)
@@ -187,7 +201,7 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
         XCTAssertEqual(grant.observationGeneration, observation.generation)
         XCTAssertEqual(grant.action, request.action)
         XCTAssertEqual(grant.sessionID, sessionID)
-        XCTAssertEqual(try service.rememberedScope(for: request), .session)
+        XCTAssertEqual(grant.scope, .session)
     }
 
     func testApprovalPolicyRecordsOnlyRedactedAuditData() throws {
@@ -197,7 +211,6 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
             action: .typeText("private-value-that-must-not-be-logged"),
             target: observation.target,
             risk: .textEntry,
-            reason: "Enter text.",
             observationGeneration: observation.generation
         )
         let recorder = MemoryComputerUseAuditRecorder()
@@ -210,8 +223,7 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
             dateProvider: { Date(timeIntervalSince1970: 15_000) }
         )
 
-        let prepared = try service.prepare(request)
-        _ = try service.grant(for: prepared, scope: .once)
+        _ = try service.authorize(request)
 
         XCTAssertEqual(recorder.records.map(\.kind), [.approvalRequested, .approvalResolved])
         XCTAssertEqual(recorder.records.map(\.outcome), [.allowed, .accepted])
@@ -220,7 +232,7 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
         XCTAssertTrue(recorder.records.allSatisfy { $0.timestamp == Date(timeIntervalSince1970: 15_000) })
     }
 
-    func testApprovalPolicyRejectsDeniedForbiddenAndUnsupportedScope() {
+    func testApprovalPolicyRejectsDeniedAndForbiddenApplications() {
         let observation = makePhase3Observation(generation: 1)
         let defaults = isolatedDefaults()
         let store = ComputerUseApprovalStore(userDefaults: defaults, storageKey: "phase4.approvals")
@@ -236,12 +248,11 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
             action: .click(point: ComputerUsePoint(x: 10, y: 10)),
             target: observation.target,
             risk: .click,
-            reason: "Click the target.",
             observationGeneration: observation.generation
         )
 
         assertPolicyError(.applicationDenied("Computer Use is blocked from using Target App by policy.")) {
-            _ = try service.prepare(request)
+            _ = try service.authorize(request)
         }
 
         let forbiddenService = ComputerUseApprovalPolicyService(
@@ -253,30 +264,8 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
             store: store
         )
         assertPolicyError(.applicationForbidden("Computer Use is not allowed to use Target App for safety reasons.")) {
-            _ = try forbiddenService.prepare(request)
+            _ = try forbiddenService.authorize(request)
         }
-
-        let allowedService = ComputerUseApprovalPolicyService(
-            policy: ComputerUsePolicyService(),
-            store: store
-        )
-        assertPolicyError(.approvalScopeNotAllowed) {
-            _ = try allowedService.grant(for: request, scope: .always)
-        }
-    }
-
-    func testApprovalRequestHidesTextBeforeItReachesApprovalUI() {
-        let observation = makePhase3Observation(generation: 1)
-        let request = ComputerUseApprovalRequest(
-            id: UUID(),
-            action: .typeText("do-not-show-this-secret"),
-            target: observation.target,
-            risk: .textEntry,
-            reason: "Enter text."
-        )
-
-        XCTAssertEqual(request.textPreview, "(23 characters hidden)")
-        XCTAssertFalse(request.textPreview?.contains("do-not-show") == true)
     }
 
     private func application(bundleIdentifier: String) -> ComputerUseApplication {
@@ -286,8 +275,7 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
             displayName: "Target App",
             processIdentifier: 42,
             isRunning: true,
-            isActive: true,
-            launchDate: nil
+            isActive: true
         )
     }
 

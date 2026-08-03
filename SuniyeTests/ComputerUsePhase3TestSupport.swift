@@ -2,12 +2,39 @@ import Foundation
 @testable import Suniye
 
 final class Phase3StubApplicationCatalog: ComputerUseApplicationCatalog {
+    private let targetApplication = ComputerUseApplication(
+        id: "target#42",
+        bundleIdentifier: "com.example.target",
+        displayName: "Target",
+        processIdentifier: 42,
+        isRunning: true,
+        isActive: true
+    )
+
     func listApplications() -> [ComputerUseApplication] {
-        []
+        [targetApplication]
     }
 
     func application(withID identifier: String) -> ComputerUseApplication? {
-        nil
+        targetApplication.id == identifier || targetApplication.bundleIdentifier == identifier
+            ? targetApplication
+            : nil
+    }
+}
+
+final class Phase3InstructionApplicationCatalog: ComputerUseApplicationCatalog {
+    let applications: [ComputerUseApplication]
+
+    init(applications: [ComputerUseApplication]) {
+        self.applications = applications
+    }
+
+    func listApplications() -> [ComputerUseApplication] {
+        applications
+    }
+
+    func application(withID identifier: String) -> ComputerUseApplication? {
+        applications.first { $0.id == identifier || $0.bundleIdentifier == identifier }
     }
 }
 
@@ -41,25 +68,6 @@ final class Phase3ScriptedModelClient: ComputerUseModelClient {
     }
 }
 
-final class Phase3StubApprovalService: ComputerUseApprovalRequesting {
-    private var decisions: [ComputerUseApprovalDecision]
-    private(set) var requests: [ComputerUseApprovalRequest] = []
-    var onRequest: ((ComputerUseApprovalRequest) -> Void)?
-
-    init(decisions: [ComputerUseApprovalDecision]) {
-        self.decisions = decisions
-    }
-
-    func requestApproval(
-        _ request: ComputerUseApprovalRequest,
-        cancellation: ComputerUseCancellationToken
-    ) async -> ComputerUseApprovalDecision {
-        requests.append(request)
-        onRequest?(request)
-        return decisions.isEmpty ? .deny : decisions.removeFirst()
-    }
-}
-
 final class Phase3StubObservationService: ComputerUseObservationServicing {
     private var results: [ComputerUseObservation]
     let error: Error?
@@ -78,7 +86,6 @@ final class Phase3StubObservationService: ComputerUseObservationServicing {
 
     func observe(
         applicationID: String,
-        includeScreenshot: Bool,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) throws -> ComputerUseObservation {
@@ -145,24 +152,6 @@ final class Phase3StubWindowDiscovery: ComputerUseWindowDiscovering {
     }
 }
 
-final class Phase3Clock {
-    private var values: [Date]
-    private var last: Date
-
-    init(values: [Date]) {
-        self.values = values
-        last = values.last ?? Date(timeIntervalSince1970: 0)
-    }
-
-    func next() -> Date {
-        if values.isEmpty {
-            return last
-        }
-        last = values.removeFirst()
-        return last
-    }
-}
-
 enum Phase3TestError: Error {
     case sleepFailed
 }
@@ -174,8 +163,7 @@ func makePhase3Observation(generation: UInt64) -> ComputerUseObservation {
         displayName: "Target App",
         processIdentifier: 42,
         isRunning: true,
-        isActive: true,
-        launchDate: nil
+        isActive: true
     )
     let window = ComputerUseWindow(
         id: 7,

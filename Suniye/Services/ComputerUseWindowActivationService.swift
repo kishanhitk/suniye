@@ -24,7 +24,7 @@ struct SystemComputerUseWindowActivator: ComputerUseWindowActivating {
 
     func activate(target: ComputerUseTarget) -> Bool {
         guard let application = runningApplicationProvider(target.application.processIdentifier),
-              application.activate(options: [.activateAllWindows]) else {
+              application.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) else {
             return false
         }
 
@@ -43,9 +43,12 @@ struct SystemComputerUseWindowActivator: ComputerUseWindowActivating {
             target: target.window,
             shouldCancel: { false }
         ) else {
-            return false
+            return true
         }
 
-        return AXUIElementPerformAction(windowElement, kAXRaiseAction as CFString) == .success
+        // App activation is sufficient for PID-targeted input. Some native apps
+        // expose a window that can be read but do not accept AXRaise.
+        _ = AXUIElementPerformAction(windowElement, kAXRaiseAction as CFString)
+        return true
     }
 }

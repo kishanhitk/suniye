@@ -43,7 +43,6 @@ struct ComputerUseApplication: Codable, Equatable, Identifiable, Sendable {
     let processIdentifier: Int32
     let isRunning: Bool
     let isActive: Bool
-    let launchDate: Date?
 }
 
 struct ComputerUseWindow: Codable, Equatable, Identifiable, Sendable {
@@ -83,33 +82,21 @@ struct ComputerUseAXSnapshot: Codable, Equatable, Sendable {
 }
 
 struct ComputerUseScreenshot: Codable, Equatable, Sendable {
-    let id: String
     let data: Data
     let mimeType: String
     let width: Int
     let height: Int
-    let originX: Double
-    let originY: Double
-    let zIndex: Int
 
     init(
-        id: String = UUID().uuidString,
         data: Data,
         mimeType: String,
         width: Int,
-        height: Int,
-        originX: Double = 0,
-        originY: Double = 0,
-        zIndex: Int = 0
+        height: Int
     ) {
-        self.id = id
         self.data = data
         self.mimeType = mimeType
         self.width = width
         self.height = height
-        self.originX = originX
-        self.originY = originY
-        self.zIndex = zIndex
     }
 }
 
@@ -127,7 +114,7 @@ struct ComputerUseObservationConfiguration: Equatable, Sendable {
     var maxTextLength: Int = 100_000
     var includeElementBounds: Bool = true
     var redactSensitiveValues: Bool = true
-    var preferredWindowID: UInt32? = nil
+    var activateTarget: Bool = false
 
     static let `default` = ComputerUseObservationConfiguration()
 }
@@ -150,7 +137,7 @@ struct ComputerUsePermissionSnapshot: Codable, Equatable, Sendable {
         screenRecording == .granted
     }
 
-    var canObserveWithScreenshot: Bool {
+    var canObserve: Bool {
         canReadAccessibility && canCaptureScreen
     }
 }
@@ -160,12 +147,12 @@ enum ComputerUseObservationError: LocalizedError, Equatable, Sendable {
     case applicationNotFound(String)
     case applicationNotRunning(String)
     case noWindow(String)
-    case windowNotFound(UInt32)
     case accessibilityNotTrusted
     case accessibilityWindowNotFound(String)
     case accessibilityReadFailed(String)
     case screenRecordingNotGranted
     case screenshotUnavailable
+    case targetActivationFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -177,8 +164,6 @@ enum ComputerUseObservationError: LocalizedError, Equatable, Sendable {
             return "The application is not running: \(identifier)."
         case let .noWindow(identifier):
             return "The application has no visible window: \(identifier)."
-        case let .windowNotFound(windowID):
-            return "The selected window is no longer available: \(windowID)."
         case .accessibilityNotTrusted:
             return "Accessibility permission is required to read this application."
         case let .accessibilityWindowNotFound(title):
@@ -189,6 +174,8 @@ enum ComputerUseObservationError: LocalizedError, Equatable, Sendable {
             return "Screen Recording permission is required to capture this window."
         case .screenshotUnavailable:
             return "The target window screenshot is not available."
+        case let .targetActivationFailed(identifier):
+            return "The target application window could not be activated: \(identifier)."
         }
     }
 }
@@ -230,7 +217,7 @@ extension ComputerUseApplicationCatalog {
 
     func activeApplication() -> ComputerUseApplication? {
         let applications = listApplications()
-        return applications.first(where: \.isActive) ?? applications.first
+        return applications.first(where: \.isActive)
     }
 
     func listAvailableApplications() -> [ComputerUseApplication] {
@@ -274,14 +261,12 @@ protocol ComputerUsePermissionManaging {
 protocol ComputerUseObservationServicing {
     func observe(
         applicationID: String,
-        includeScreenshot: Bool,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) throws -> ComputerUseObservation
 
     func observeTarget(
         applicationIdentifier: String?,
-        includeScreenshot: Bool,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) async throws -> ComputerUseObservation
@@ -290,7 +275,6 @@ protocol ComputerUseObservationServicing {
 extension ComputerUseObservationServicing {
     func observeTarget(
         applicationIdentifier: String?,
-        includeScreenshot: Bool,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) async throws -> ComputerUseObservation {
@@ -299,7 +283,6 @@ extension ComputerUseObservationServicing {
         }
         return try observe(
             applicationID: applicationIdentifier,
-            includeScreenshot: includeScreenshot,
             configuration: configuration,
             cancellation: cancellation
         )

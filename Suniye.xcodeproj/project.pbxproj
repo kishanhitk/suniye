@@ -41,7 +41,6 @@
 		215E19912E87EF7181ABDD72 /* ComputerUseScreenshotService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2EA805B9F793165E0DA71AB /* ComputerUseScreenshotService.swift */; };
 		237D0D22A1C786814988A96F /* LocalLLMModelManagerMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665F43A799AF8C25D0302526 /* LocalLLMModelManagerMoreTests.swift */; };
 		2B9DC39F27DDB3A27AA51D6C /* AnalyticsSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3DF52035E54A48042A83D42 /* AnalyticsSupportTests.swift */; };
-		2DF0F3BB7CC39BA88330F285 /* ComputerUseActionPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 991998AAF1D342D87DE79EC6 /* ComputerUseActionPanel.swift */; };
 		2F26AC16FB79AE512FE16982 /* ComputerUsePhase2ActionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA9398D558E18F63DF60E14F /* ComputerUsePhase2ActionTests.swift */; };
 		2FD2254875BF111D3522E161 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2ECDB4CFB11C5B9831460F /* HistoryStore.swift */; };
 		305CB2DFC0FA4FD60803A30D /* libsherpa-onnx-c-api.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 75E6194F3E61C3D677F93DA9 /* libsherpa-onnx-c-api.dylib */; };
@@ -367,7 +366,6 @@
 		9533DC2ADACA45E2568AF2F0 /* NativePopupPickerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePopupPickerTests.swift; sourceTree = "<group>"; };
 		96753F72AB64EA4C792D7AB5 /* AppleFoundationModelsPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessor.swift; sourceTree = "<group>"; };
 		98B58C8F7A33FE14A72479F5 /* RoutingTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTranscriptionService.swift; sourceTree = "<group>"; };
-		991998AAF1D342D87DE79EC6 /* ComputerUseActionPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseActionPanel.swift; sourceTree = "<group>"; };
 		9A249CCF166D734E2BC0B3C9 /* ComputerUseAccessibilityReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseAccessibilityReader.swift; sourceTree = "<group>"; };
 		9B6CA4E65A17384B97489860 /* ComputerUsePlatformRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUsePlatformRunner.swift; sourceTree = "<group>"; };
 		9BBFD6E9D4C2C4027471C54A /* ComputerUseActionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseActionModels.swift; sourceTree = "<group>"; };
@@ -634,7 +632,6 @@
 		1D6CCCC695CE3C1A1ECFD563 /* MainWindow */ = {
 			isa = PBXGroup;
 			children = (
-				991998AAF1D342D87DE79EC6 /* ComputerUseActionPanel.swift */,
 				1EB75DF1F025C5C47BFAC6BF /* ComputerUseAgentPanel.swift */,
 				D046C54F7103B1B9296E2A4E /* ComputerUsePage.swift */,
 				7822658531989BA498E467C7 /* MagicFormatComponents.swift */,
@@ -933,7 +930,6 @@
 				8026BDFF0398AE05E7C479C9 /* ChatCompletionClient.swift in Sources */,
 				9E30E5471E850FFB01DA2BF5 /* ComputerUseAccessibilityReader.swift in Sources */,
 				5D10735A11E4308E49E8A59D /* ComputerUseActionModels.swift in Sources */,
-				2DF0F3BB7CC39BA88330F285 /* ComputerUseActionPanel.swift in Sources */,
 				5DC6B15541C02823AB13E0A7 /* ComputerUseActionService.swift in Sources */,
 				F64EAB4A79FD99211643D2E3 /* ComputerUseAgent.swift in Sources */,
 				E0D65DDEFB836B572E15B109 /* ComputerUseAgentApproval.swift in Sources */,

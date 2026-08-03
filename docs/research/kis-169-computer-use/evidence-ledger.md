@@ -640,3 +640,74 @@ validation commands.
 - `[Verified]` `scripts/e2e_preflight.sh` and `scripts/e2e_smoke.sh` pass.
 - `[Unknown]` Live third-party app launch, cross-process activation and input, Screen Recording
   capture, browser control, helper IPC, and the complete provider/model loop remain unverified.
+
+### Entry 47: Automatic execution and removal of unverified target heuristics
+
+Sources: the mounted reference `sky-window-api.md`, the Computer Use confirmation document, the
+current Suniye coordinator/action boundary, the current Suniye application catalog, and the
+focused Computer Use test run.
+
+- `[Corrected]` Suniye's area/title window-priority heuristic was not supported by the inspected
+  reference. Window discovery now preserves the native CGWindowList order.
+- `[Implemented]` The Preview coordinator no longer exposes an interactive approval mode, pending
+  approval continuation, or always-approval UI state. Actions run automatically after the task
+  starts, as required by the current testing mode.
+- `[Retained]` The lower action boundary still prepares and grants a one-time policy scope, then
+  revalidates policy, permission, target identity, observation generation, and action shape before
+  native execution.
+- `[Verified]` The focused Computer Use suite reports 63 passed tests and 0 failures after this
+  cleanup.
+- `[Unknown]` The exact model-side confirmation taxonomy and host orchestration in the reference
+  remain unavailable in the DMG. Automatic Preview execution is a local product/testing default,
+  not a claim that every reference action is confirmation-free.
+
+### Entry 48: Removal of the temporary manual action surface
+
+Sources: the mounted DMG macOS client/action wrappers, the current Suniye coordinator and page,
+the focused Computer Use test run, and the thermo-nuclear quality review.
+
+- `[Verified]` The inspected DMG exposes Computer Use actions as app-scoped model/tool calls. It
+  does not expose a Suniye-style “click center”, “press Return”, text-entry, or arbitrary AX-action
+  panel in the macOS client contract.
+- `[Implemented]` The temporary manual action panel, the coordinator's direct `requestAction`
+  path, action-only phases, and the old interactive approval branches are removed from the current
+  Preview surface.
+- `[Retained]` Typed action models, native input/Accessibility services, automatic policy grants,
+  stale-observation checks, per-action target activation, cancellation, and agent re-observation
+  remain because they are part of the model-driven execution boundary.
+- `[Verified]` The focused suite reports 67 passing tests and 0 failures after the removal.
+- `[Unknown]` The reference's complete host UI and model-side orchestration remain unavailable;
+  this cleanup removes only the verified-extra manual surface, not the reference-backed native
+  action and policy boundaries.
+
+### Entry 49: Final non-reference execution-path cleanup
+
+Sources: the mounted macOS reference client and policy wrapper, the current Suniye Computer Use
+services and page, the final `xcodebuild` result bundle at
+`.derivedData/cleanup-final-3.xcresult`, `scripts/coverage_report.sh`,
+`scripts/e2e_preflight.sh`, `scripts/e2e_smoke.sh`, the Preview install, and the final
+`node_repl` Computer Use run.
+
+- `[Implemented]` Removed the deterministic task matcher, hard-coded Bluetooth target, target
+  lock and frontmost intervention monitor, first-app fallback, Chrome-specific prompt, manual
+  approval/action surface, cached AX-element and exposed-action prevalidation, local agent
+  action/failure/time caps, duplicate structured AX prompt rendering, remote screenshot-upload
+  consent, Windows-only screenshot metadata, and user-facing window picker/Bring Forward UI.
+- `[Retained]` The current desktop path remains app-scoped: applications are discovered and
+  resolved through the macOS catalog, concrete windows are resolved internally for AX and input,
+  observations always include a PNG screenshot, model decisions select an app or emit one
+  canonical action/terminal decision, actions are automatically approved in the Preview testing
+  path, and cancellation plus stale-observation identity checks remain at the execution boundary.
+- `[Verified]` The full suite reports 1,080 tests executed, 1 skipped, and 0 failures. Gated line
+  coverage is 95.02% (13,672/14,389 lines) at the 95% threshold.
+- `[Verified]` E2E preflight and smoke checks pass. The Debug Preview build installs at
+  `/Users/kishan/Applications/Suniye Preview.app`.
+- `[Verified]` After relaunching the installed Preview, the Computer Use page no longer shows
+  the removed window picker, Bring Forward control, screenshot toggle, manual action controls,
+  or approval card. Accessibility and Screen Recording permission rows remain visible.
+- `[Verified]` The safe live Calculator task completed automatically through the configured model:
+  `Read the Calculator result and report it. Do not change the calculator.` The UI reported
+  `Computer Use finished The Calculator result is 323`; the Calculator remained at `17 × 19 = 323`.
+- `[Unknown]` The DMG does not expose the complete native helper implementation, server/model
+  loop, or browser-extension route. Cross-process third-party input, fresh Screen Recording
+  consent, and browser/cart behavior remain unverified in this run.

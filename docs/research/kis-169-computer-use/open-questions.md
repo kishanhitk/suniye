@@ -101,3 +101,21 @@
   need a safe live target with the required permissions.
 - `[Deferred]` Browser-specific control needs its own tab, DOM, extension, download, and upload contract.
 - `[Deferred]` A separate native helper is not needed by the current same-process Swift design. Revisit it only if live permission, blocking, crash-isolation, or entitlement tests show a requirement.
+
+## Superseding resolutions — 2026-08-03
+
+- `[Resolved for the current testing path]` Actions execute automatically after a task starts;
+  the Preview surface does not ask for per-action approval. The policy actor remains for app
+  policy, audit, and a future approval UX.
+- `[Resolved for the current Mac surface]` There is no user-facing window picker, Bring Forward
+  control, target lock, or frontmost intervention monitor. Native adapters still resolve and
+  activate the concrete window required by macOS APIs.
+- `[Resolved for the current Mac observation]` Screenshots are always captured and included. The
+  user does not choose whether the model receives the observation screenshot in this path.
+- `[Resolved for the current action boundary]` Indexed element and arbitrary Accessibility action
+  names are sent to the native adapter without cached observation prevalidation.
+- `[Resolved for the current agent loop]` Local action, failure, and duration caps are removed;
+  explicit cancellation, model/provider termination, platform errors, and provider timeout remain
+  terminal boundaries.
+- `[Unknown]` The complete helper IPC contract, server-side model loop/prompt, and browser
+  extension behavior remain unknown.

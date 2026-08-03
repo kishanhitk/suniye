@@ -15,21 +15,15 @@ enum ComputerUseAgentPhase: String, Codable, Equatable, Sendable {
 struct ComputerUseAgentTask: Codable, Equatable, Sendable {
     let instruction: String
     let applicationID: String?
-    let windowID: UInt32?
-    let includeScreenshot: Bool
     let sessionID: UUID
 
     init(
         instruction: String,
         applicationID: String? = nil,
-        windowID: UInt32? = nil,
-        includeScreenshot: Bool = true,
         sessionID: UUID = UUID()
     ) {
         self.instruction = instruction
         self.applicationID = applicationID
-        self.windowID = applicationID == nil ? nil : windowID
-        self.includeScreenshot = includeScreenshot
         self.sessionID = sessionID
     }
 }
@@ -61,7 +55,7 @@ struct ComputerUseModelRequest: Codable, Equatable, Sendable {
 
 enum ComputerUseModelDecision: Codable, Equatable, Sendable {
     case action(ComputerUseAction)
-    case target(application: String, windowID: UInt32? = nil)
+    case target(application: String)
     case completed(message: String)
     case askUser(question: String)
     case blocked(reason: String)
@@ -74,7 +68,6 @@ enum ComputerUseModelDecision: Codable, Equatable, Sendable {
         case question
         case reason
         case app
-        case windowID = "window_id"
     }
 
     private enum Kind: String, Codable {
@@ -92,10 +85,7 @@ enum ComputerUseModelDecision: Codable, Equatable, Sendable {
         case .action:
             self = .action(try container.decode(ComputerUseAction.self, forKey: .action))
         case .target:
-            self = .target(
-                application: try container.decode(String.self, forKey: .app),
-                windowID: try container.decodeIfPresent(UInt32.self, forKey: .windowID)
-            )
+            self = .target(application: try container.decode(String.self, forKey: .app))
         case .completed:
             self = .completed(message: try container.decode(String.self, forKey: .message))
         case .askUser:
@@ -113,10 +103,9 @@ enum ComputerUseModelDecision: Codable, Equatable, Sendable {
         case let .action(action):
             try container.encode(Kind.action, forKey: .kind)
             try container.encode(action, forKey: .action)
-        case let .target(application, windowID):
+        case let .target(application):
             try container.encode(Kind.target, forKey: .kind)
             try container.encode(application, forKey: .app)
-            try container.encodeIfPresent(windowID, forKey: .windowID)
         case let .completed(message):
             try container.encode(Kind.completed, forKey: .kind)
             try container.encode(message, forKey: .message)
@@ -136,7 +125,7 @@ enum ComputerUseModelDecision: Codable, Equatable, Sendable {
         switch self {
         case .action:
             return nil
-        case let .target(application, _):
+        case let .target(application):
             return Self.nonEmptyMessage(application, label: "target application")
         case let .completed(message):
             return Self.nonEmptyMessage(message, label: "completion message")
@@ -153,41 +142,6 @@ enum ComputerUseModelDecision: Codable, Equatable, Sendable {
         value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "The model returned an empty \(label)."
             : nil
-    }
-}
-
-struct ComputerUseAgentLimits: Codable, Equatable, Sendable {
-    let maxActions: Int
-    let maxFailures: Int
-    let maxDuration: TimeInterval
-    let settleDelay: TimeInterval
-
-    init(
-        maxActions: Int = 20,
-        maxFailures: Int = 3,
-        maxDuration: TimeInterval = 300,
-        settleDelay: TimeInterval = 0.15
-    ) {
-        self.maxActions = maxActions
-        self.maxFailures = maxFailures
-        self.maxDuration = maxDuration
-        self.settleDelay = settleDelay
-    }
-
-    var validationMessage: String? {
-        guard maxActions > 0 else {
-            return "maxActions must be greater than zero"
-        }
-        guard maxFailures > 0 else {
-            return "maxFailures must be greater than zero"
-        }
-        guard maxDuration.isFinite, maxDuration > 0 else {
-            return "maxDuration must be finite and greater than zero"
-        }
-        guard settleDelay.isFinite, settleDelay >= 0 else {
-            return "settleDelay must be finite and non-negative"
-        }
-        return nil
     }
 }
 
@@ -224,27 +178,11 @@ protocol ComputerUseModelClient {
     ) async throws -> ComputerUseModelDecision
 }
 
-protocol ComputerUseApprovalRequesting {
-    func requestApproval(
-        _ request: ComputerUseApprovalRequest,
-        cancellation: ComputerUseCancellationToken
-    ) async -> ComputerUseApprovalDecision
-}
-
 struct UnconfiguredComputerUseModelClient: ComputerUseModelClient {
     func decide(
         request: ComputerUseModelRequest,
         cancellation: ComputerUseCancellationToken
     ) async throws -> ComputerUseModelDecision {
         throw ComputerUseModelError.notConfigured
-    }
-}
-
-struct DenyAllComputerUseApprovalService: ComputerUseApprovalRequesting {
-    func requestApproval(
-        _ request: ComputerUseApprovalRequest,
-        cancellation: ComputerUseCancellationToken
-    ) async -> ComputerUseApprovalDecision {
-        .deny
     }
 }

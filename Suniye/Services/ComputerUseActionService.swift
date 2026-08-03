@@ -1,9 +1,10 @@
+import ApplicationServices
 import Foundation
 
 final class ComputerUseActionService: ComputerUseActionServicing {
     private let inputEventPoster: ComputerUseInputEventPosting
     private let textInserter: TextInsertionServiceProtocol
-    private let semanticActionPerformer: ComputerUseSemanticActionPerforming
+    private let secondaryActionPerformer: ComputerUseSecondaryActionPerforming
     private let valueActionPerformer: ComputerUseValueActionPerforming
     private let targetActivator: ComputerUseWindowActivating
     private let permissionManager: ComputerUsePermissionManaging
@@ -14,7 +15,7 @@ final class ComputerUseActionService: ComputerUseActionServicing {
     init(
         inputEventPoster: ComputerUseInputEventPosting = SystemComputerUseInputEventPoster(),
         textInserter: TextInsertionServiceProtocol = TextInsertionService(),
-        semanticActionPerformer: ComputerUseSemanticActionPerforming = SystemComputerUseAccessibilityReader(),
+        secondaryActionPerformer: ComputerUseSecondaryActionPerforming = SystemComputerUseAccessibilityReader(),
         valueActionPerformer: ComputerUseValueActionPerforming = SystemComputerUseAccessibilityReader(),
         targetActivator: ComputerUseWindowActivating = SystemComputerUseWindowActivator(),
         permissionManager: ComputerUsePermissionManaging = SystemComputerUsePermissionService(),
@@ -24,7 +25,7 @@ final class ComputerUseActionService: ComputerUseActionServicing {
     ) {
         self.inputEventPoster = inputEventPoster
         self.textInserter = textInserter
-        self.semanticActionPerformer = semanticActionPerformer
+        self.secondaryActionPerformer = secondaryActionPerformer
         self.valueActionPerformer = valueActionPerformer
         self.targetActivator = targetActivator
         self.permissionManager = permissionManager
@@ -43,6 +44,7 @@ final class ComputerUseActionService: ComputerUseActionServicing {
         guard !cancellation.isCancelled else {
             throw ComputerUseActionError.cancelled
         }
+        try validateActionShape(action)
         guard isApprovalValid(
             action: action,
             observation: observation,
@@ -57,7 +59,6 @@ final class ComputerUseActionService: ComputerUseActionServicing {
               approval.action == action else {
             throw ComputerUseActionError.staleApproval
         }
-        try ComputerUseActionPolicy.validate(action: action, observation: observation)
         guard permissionManager.snapshot().canReadAccessibility else {
             throw ComputerUseActionError.permissionRequired
         }
@@ -66,34 +67,36 @@ final class ComputerUseActionService: ComputerUseActionServicing {
         }
 
         switch action {
-        case let .click(point, clickCount, mouseButton, _):
+        case let .click(point, clickCount, mouseButton):
             try inputEventPoster.click(
                 at: screenPoint(point, in: observation.target.window),
                 mouseButton: mouseButton,
                 clickCount: clickCount,
                 cancellation: cancellation
             )
-        case let .clickElement(elementIndex, clickCount, mouseButton, _):
-            guard let element = observation.accessibility.elements.first(where: { $0.index == elementIndex }),
-                  let point = computerUseElementCenter(element, in: observation.target.window) else {
-                throw ComputerUseActionError.invalidAction("element does not expose bounds for a coordinate click")
-            }
-            try inputEventPoster.click(
-                at: screenPoint(point, in: observation.target.window),
-                mouseButton: mouseButton,
+        case let .clickElement(elementIndex, clickCount, mouseButton):
+            try clickElement(
+                elementIndex: elementIndex,
                 clickCount: clickCount,
+                mouseButton: mouseButton,
+                observation: observation,
                 cancellation: cancellation
             )
         case let .keyPress(key, modifiers):
             try inputEventPoster.keyPress(
                 key: key,
                 modifiers: modifiers,
+                targetProcessIdentifier: observation.target.application.processIdentifier,
                 cancellation: cancellation
             )
-        case let .scroll(horizontal, vertical, point, _):
+        case let .scroll(elementIndex, direction, pages):
+            let point = observation.accessibility.elements
+                .first(where: { $0.index == elementIndex })
+                .flatMap { computerUseElementCenter($0, in: observation.target.window) }
+            let delta = direction.eventDelta(pages: pages)
             try inputEventPoster.scroll(
-                horizontal: horizontal,
-                vertical: vertical,
+                horizontal: delta.horizontal,
+                vertical: delta.vertical,
                 at: point.map { screenPoint($0, in: observation.target.window) },
                 cancellation: cancellation
             )
@@ -102,7 +105,10 @@ final class ComputerUseActionService: ComputerUseActionServicing {
                 guard !cancellation.isCancelled else {
                     throw ComputerUseActionError.cancelled
                 }
-                try textInserter.insertText(text)
+                try textInserter.insertTextForComputerUse(
+                    text,
+                    targetProcessIdentifier: observation.target.application.processIdentifier
+                )
             } catch let error as ComputerUseActionError {
                 throw error
             } catch {
@@ -115,7 +121,7 @@ final class ComputerUseActionService: ComputerUseActionServicing {
                 target: observation.target,
                 cancellation: cancellation
             )
-        case let .drag(from, to, _):
+        case let .drag(from, to):
             try inputEventPoster.drag(
                 from: screenPoint(from, in: observation.target.window),
                 to: screenPoint(to, in: observation.target.window),
@@ -132,20 +138,8 @@ final class ComputerUseActionService: ComputerUseActionServicing {
                 cancellation: cancellation
             )
         case let .secondaryAction(elementIndex, action):
-            let canonicalAction = try ComputerUseActionPolicy.resolvedAction(
-                action,
-                elementIndex: elementIndex,
-                observation: observation
-            )
-            try semanticActionPerformer.perform(
-                action: canonicalAction,
-                elementIndex: elementIndex,
-                target: observation.target,
-                cancellation: cancellation
-            )
-        case let .semantic(elementIndex, semanticAction):
-            try semanticActionPerformer.perform(
-                action: semanticAction.rawValue,
+            try secondaryActionPerformer.perform(
+                action: action,
                 elementIndex: elementIndex,
                 target: observation.target,
                 cancellation: cancellation
@@ -170,6 +164,66 @@ final class ComputerUseActionService: ComputerUseActionServicing {
             x: window.bounds.x + point.x,
             y: window.bounds.y + point.y
         )
+    }
+
+    private func validateActionShape(_ action: ComputerUseAction) throws {
+        switch action {
+        case let .click(point, clickCount, _):
+            guard clickCount >= 1 else {
+                throw ComputerUseActionError.invalidAction("click count must be at least 1")
+            }
+            guard point.x.isFinite, point.y.isFinite else {
+                throw ComputerUseActionError.invalidAction("click coordinates must be finite")
+            }
+        case let .clickElement(_, clickCount, _):
+            guard clickCount >= 1 else {
+                throw ComputerUseActionError.invalidAction("click count must be at least 1")
+            }
+        case .keyPress, .typeText:
+            break
+        case let .scroll(_, _, pages):
+            guard pages.isFinite, pages > 0 else {
+                throw ComputerUseActionError.invalidAction("pages must be a finite number greater than 0")
+            }
+        case .setValue, .selectText, .secondaryAction:
+            break
+        case let .drag(from, to):
+            guard from.x.isFinite, from.y.isFinite, to.x.isFinite, to.y.isFinite else {
+                throw ComputerUseActionError.invalidAction("drag coordinates must be finite")
+            }
+        }
+    }
+
+    private func clickElement(
+        elementIndex: Int,
+        clickCount: Int,
+        mouseButton: ComputerUseMouseButton,
+        observation: ComputerUseObservation,
+        cancellation: ComputerUseCancellationToken
+    ) throws {
+        if mouseButton != .left,
+           let element = observation.accessibility.elements.first(where: { $0.index == elementIndex }),
+           let point = computerUseElementCenter(element, in: observation.target.window) {
+            try inputEventPoster.click(
+                at: screenPoint(point, in: observation.target.window),
+                mouseButton: mouseButton,
+                clickCount: clickCount,
+                cancellation: cancellation
+            )
+            return
+        }
+
+        for _ in 0 ..< clickCount {
+            guard !cancellation.isCancelled else {
+                throw ComputerUseActionError.cancelled
+            }
+            try secondaryActionPerformer.perform(
+                action: kAXPressAction as String,
+                elementIndex: elementIndex,
+                target: observation.target,
+                cancellation: cancellation
+            )
+        }
     }
 
     private func isApprovalValid(
@@ -199,164 +253,18 @@ final class ComputerUseActionService: ComputerUseActionServicing {
 
 }
 
-enum ComputerUseActionPolicy {
-    static func validate(
-        action: ComputerUseAction,
-        observation: ComputerUseObservation
-    ) throws {
-        switch action {
-        case let .click(point, clickCount, _, screenshotID):
-            try validateScreenshot(screenshotID, observation: observation)
-            guard clickCount >= 1, clickCount <= 3 else {
-                throw ComputerUseActionError.invalidAction("click count must be between 1 and 3")
-            }
-            guard isInsideWindow(point, observation.target.window) else {
-                throw ComputerUseActionError.invalidAction("click must be inside the target window")
-            }
-        case let .clickElement(elementIndex, clickCount, _, screenshotID):
-            try validateScreenshot(screenshotID, observation: observation)
-            guard clickCount >= 1, clickCount <= 3 else {
-                throw ComputerUseActionError.invalidAction("click count must be between 1 and 3")
-            }
-            let element = try validateElement(
-                index: elementIndex,
-                observation: observation,
-                actionDescription: "click"
-            )
-            guard computerUseElementCenter(element, in: observation.target.window) != nil else {
-                throw ComputerUseActionError.invalidAction("element bounds must be inside the target window")
-            }
-        case let .keyPress(key, _):
-            if case let .character(value) = key,
-               value.count != 1 {
-                throw ComputerUseActionError.invalidAction("character key must contain one character")
-            }
-        case let .scroll(horizontal, vertical, point, screenshotID):
-            try validateScreenshot(screenshotID, observation: observation)
-            guard horizontal.isFinite,
-                  vertical.isFinite,
-                  abs(horizontal) <= 5_000,
-                  abs(vertical) <= 5_000 else {
-                throw ComputerUseActionError.invalidAction("scroll values exceed the allowed range")
-            }
-            if let point, !isInsideWindow(point, observation.target.window) {
-                throw ComputerUseActionError.invalidAction("scroll point must be inside the target window")
-            }
-        case let .typeText(text):
-            guard !text.isEmpty, text.count <= 10_000 else {
-                throw ComputerUseActionError.invalidAction("text must contain between 1 and 10,000 characters")
-            }
-        case let .setValue(elementIndex, value):
-            _ = try validateElement(
-                index: elementIndex,
-                observation: observation,
-                actionDescription: "set value"
-            )
-            guard !value.isEmpty, value.count <= 10_000 else {
-                throw ComputerUseActionError.invalidAction("value must contain between 1 and 10,000 characters")
-            }
-        case let .drag(from, to, screenshotID):
-            try validateScreenshot(screenshotID, observation: observation)
-            guard isInsideWindow(from, observation.target.window),
-                  isInsideWindow(to, observation.target.window) else {
-                throw ComputerUseActionError.invalidAction("drag points must be inside the target window")
-            }
-        case let .selectText(elementIndex, text, prefix, suffix, _):
-            _ = try validateElement(
-                index: elementIndex,
-                observation: observation,
-                actionDescription: "select text"
-            )
-            guard !text.isEmpty, text.count <= 10_000 else {
-                throw ComputerUseActionError.invalidAction("selected text must contain between 1 and 10,000 characters")
-            }
-            guard (prefix?.count ?? 0) <= 2_000,
-                  (suffix?.count ?? 0) <= 2_000 else {
-                throw ComputerUseActionError.invalidAction("text selection context is too large")
-            }
-        case let .secondaryAction(elementIndex, action):
-            let element = try validateElement(
-                index: elementIndex,
-                observation: observation,
-                actionDescription: nil
-            )
-            guard !action.isEmpty, action.count <= 256 else {
-                throw ComputerUseActionError.invalidAction("Accessibility action name is invalid")
-            }
-            guard resolvedAction(action, on: element) != nil else {
-                throw ComputerUseActionError.invalidAction("the element does not expose \(action)")
-            }
-        case let .semantic(elementIndex, semanticAction):
-            let element = try validateElement(index: elementIndex, observation: observation, actionDescription: nil)
-            guard element.actions.contains(semanticAction.rawValue) else {
-                throw ComputerUseActionError.invalidAction("the element does not expose \(semanticAction.rawValue)")
-            }
-        }
-    }
-
-    private static func isInsideWindow(
-        _ point: ComputerUsePoint,
-        _ window: ComputerUseWindow
-    ) -> Bool {
-        point.x.isFinite
-            && point.y.isFinite
-            && CGRect(
-                origin: .zero,
-                size: CGSize(width: window.bounds.width, height: window.bounds.height)
-            ).contains(point.cgPoint)
-    }
-
-    private static func validateScreenshot(
-        _ screenshotID: String?,
-        observation: ComputerUseObservation
-    ) throws {
-        guard let screenshotID else {
-            return
-        }
-        guard observation.screenshot?.id == screenshotID else {
-            throw ComputerUseActionError.staleScreenshot
-        }
-    }
-
-    private static func validateElement(
-        index: Int,
-        observation: ComputerUseObservation,
-        actionDescription: String?
-    ) throws -> ComputerUseAXElement {
-        guard let element = observation.accessibility.elements.first(where: { $0.index == index }) else {
-            throw ComputerUseActionError.invalidAction("element index is not in the observation")
-        }
-        guard element.isEnabled != false else {
-            if let actionDescription {
-                throw ComputerUseActionError.invalidAction("the element is disabled for \(actionDescription)")
-            }
-            throw ComputerUseActionError.invalidAction("the element is disabled")
-        }
-        return element
-    }
-
-    fileprivate static func resolvedAction(
-        _ requestedAction: String,
-        elementIndex: Int,
-        observation: ComputerUseObservation
-    ) throws -> String {
-        let element = try validateElement(
-            index: elementIndex,
-            observation: observation,
-            actionDescription: nil
-        )
-        guard let action = resolvedAction(requestedAction, on: element) else {
-            throw ComputerUseActionError.invalidAction("the element does not expose \(requestedAction)")
-        }
-        return action
-    }
-
-    private static func resolvedAction(
-        _ requestedAction: String,
-        on element: ComputerUseAXElement
-    ) -> String? {
-        element.actions.first {
-            $0.caseInsensitiveCompare(requestedAction) == .orderedSame
+private extension ComputerUseScrollDirection {
+    func eventDelta(pages: Double) -> (horizontal: Double, vertical: Double) {
+        let amount = pages * 400
+        switch self {
+        case .up:
+            return (0, -amount)
+        case .down:
+            return (0, amount)
+        case .left:
+            return (-amount, 0)
+        case .right:
+            return (amount, 0)
         }
     }
 }
@@ -377,8 +285,5 @@ fileprivate func computerUseElementCenter(
         x: bounds.x - window.bounds.x + bounds.width / 2,
         y: bounds.y - window.bounds.y + bounds.height / 2
     )
-    return CGRect(
-        origin: .zero,
-        size: CGSize(width: window.bounds.width, height: window.bounds.height)
-    ).contains(point.cgPoint) ? point : nil
+    return point
 }

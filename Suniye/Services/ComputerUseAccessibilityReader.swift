@@ -208,7 +208,7 @@ struct SystemComputerUseAccessibilityReader: ComputerUseAccessibilityReading {
     }
 }
 
-extension SystemComputerUseAccessibilityReader: ComputerUseSemanticActionPerforming {
+extension SystemComputerUseAccessibilityReader: ComputerUseSecondaryActionPerforming {
     func perform(
         action: String,
         elementIndex: Int,
@@ -225,7 +225,7 @@ extension SystemComputerUseAccessibilityReader: ComputerUseSemanticActionPerform
             target: target.window,
             shouldCancel: { cancellation.isCancelled }
         ) else {
-            throw ComputerUseActionError.semanticActionFailed("target window not found")
+            throw ComputerUseActionError.secondaryActionFailed("target window not found")
         }
 
         let builder = ComputerUseAXTreeBuilder(configuration: .default)
@@ -234,14 +234,14 @@ extension SystemComputerUseAccessibilityReader: ComputerUseSemanticActionPerform
             root: windowElement,
             shouldCancel: { cancellation.isCancelled }
         ) else {
-            throw ComputerUseActionError.semanticActionFailed("element \(elementIndex) not found")
+            throw ComputerUseActionError.secondaryActionFailed("element \(elementIndex) not found")
         }
 
         guard !cancellation.isCancelled else {
             throw ComputerUseActionError.cancelled
         }
         guard AXUIElementPerformAction(element, action as CFString) == .success else {
-            throw ComputerUseActionError.semanticActionFailed(action)
+            throw ComputerUseActionError.secondaryActionFailed(action)
         }
     }
 }

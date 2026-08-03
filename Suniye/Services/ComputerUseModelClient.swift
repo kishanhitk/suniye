@@ -7,7 +7,6 @@ struct ComputerUseRemoteModelConfiguration: Equatable, Sendable {
     let systemPrompt: String
     let timeoutSeconds: Double
     let maxTokens: Int
-    let allowsScreenshotUpload: Bool
 
     init(
         endpointURL: URL,
@@ -15,8 +14,7 @@ struct ComputerUseRemoteModelConfiguration: Equatable, Sendable {
         apiKey: String,
         systemPrompt: String = ComputerUseRemoteModelDefaults.systemPrompt,
         timeoutSeconds: Double = ComputerUseRemoteModelDefaults.timeoutSeconds,
-        maxTokens: Int = ComputerUseRemoteModelDefaults.maxTokens,
-        allowsScreenshotUpload: Bool = false
+        maxTokens: Int = ComputerUseRemoteModelDefaults.maxTokens
     ) {
         self.endpointURL = endpointURL
         self.modelID = modelID
@@ -24,7 +22,6 @@ struct ComputerUseRemoteModelConfiguration: Equatable, Sendable {
         self.systemPrompt = systemPrompt
         self.timeoutSeconds = timeoutSeconds
         self.maxTokens = maxTokens
-        self.allowsScreenshotUpload = allowsScreenshotUpload
     }
 
     var validationMessage: String? {
@@ -46,44 +43,35 @@ struct ComputerUseRemoteModelConfiguration: Equatable, Sendable {
         return nil
     }
 
-    func withScreenshotUpload(_ allowed: Bool) -> Self {
-        Self(
-            endpointURL: endpointURL,
-            modelID: modelID,
-            apiKey: apiKey,
-            systemPrompt: systemPrompt,
-            timeoutSeconds: timeoutSeconds,
-            maxTokens: maxTokens,
-            allowsScreenshotUpload: allowed
-        )
-    }
 }
 
 enum ComputerUseRemoteModelDefaults {
     static let timeoutSeconds = 120.0
-    static let maxTokens = 512
+    // Reasoning-capable providers can spend the first tokens on hidden
+    // reasoning. Keep enough output budget for the final action JSON.
+    static let maxTokens = 2_048
 
     static let systemPrompt = """
     You are a desktop UI planning model. Complete the user's task by inspecting the current observation and proposing one next step.
 
     Return exactly one JSON object. Do not use Markdown fences. Do not include commentary outside the JSON object.
 
-    An action object uses one of these forms:
-    {"kind":"click","x":100,"y":200,"click_count":1,"mouse_button":"left"}
-    {"kind":"key_press","key":{"kind":"named","value":"return"},"modifiers":{"command":false,"option":false,"control":false,"shift":false,"function":false}}
-    {"kind":"scroll","horizontal":0,"vertical":-400,"x":320,"y":240}
-    {"kind":"click","element_index":3,"click_count":1,"mouse_button":"left","screenshotId":"<current screenshot ID>"}
-    {"kind":"type_text","text":"text explicitly required by the task"}
-    {"kind":"set_value","element_index":3,"value":"text explicitly required by the task"}
-    {"kind":"drag","from_x":100,"from_y":200,"to_x":300,"to_y":200}
-    {"kind":"select_text","element_index":3,"text":"exact text","selection_type":"text","prefix":"optional","suffix":"optional"}
-    {"kind":"semantic","element_index":3,"action":"AXPress"}
-    {"kind":"perform_secondary_action","element_index":3,"action":"AXShowMenu"}
+    An action decision has this form. The nested action uses one of these forms:
+    {"kind":"action","action":{"kind":"click","x":100,"y":200,"click_count":1,"mouse_button":"left"}}
+    {"kind":"action","action":{"kind":"press_key","key":"Return"}}
+    {"kind":"action","action":{"kind":"scroll","element_index":3,"direction":"down","pages":1}}
+    {"kind":"action","action":{"kind":"click","element_index":3,"click_count":1,"mouse_button":"left"}}
+    {"kind":"action","action":{"kind":"type_text","text":"text explicitly required by the task"}}
+    {"kind":"action","action":{"kind":"set_value","element_index":3,"value":"text explicitly required by the task"}}
+    {"kind":"action","action":{"kind":"drag","from_x":100,"from_y":200,"to_x":300,"to_y":200}}
+    {"kind":"action","action":{"kind":"select_text","element_index":3,"text":"exact text","selection_type":"text","prefix":"optional","suffix":"optional"}}
+    {"kind":"action","action":{"kind":"perform_secondary_action","element_index":3,"action":"AXPress"}}
+    {"kind":"action","action":{"kind":"perform_secondary_action","element_index":3,"action":"AXShowMenu"}}
 
-    Use {"kind":"target","app":"com.google.Chrome"} when the task requires another application. Use the exact bundle identifier or display name from Available applications. The host refreshes state for that application and launches it when needed. A target decision does not perform input.
+    Use a target decision with the exact bundle identifier or display name from Available applications when the task requires another application. The host refreshes state for that application and launches it when needed. A target decision does not perform input.
     Use {"kind":"action","action":...} for one action. Use {"kind":"completed","message":"..."} when the task is complete. Use {"kind":"ask_user","question":"..."} when the user must decide something. Use {"kind":"blocked","reason":"..."} when the task cannot continue safely. Use {"kind":"retryable_failure","reason":"..."} only when the current observation is insufficient and another observation may help.
 
-    Click and drag coordinates are relative to the top-left corner of the observed window. Scroll coordinates are also window-relative. The observation generation is the current state revision. If a screenshot is present, copy its exact ID from the Screenshot ID line for a coordinate action grounded in that screenshot. Never use the placeholder from the example. Use an accessibility element index only when that index is present in the observation. Use an element index for a click only when the element has valid bounds. Use only an action name exposed by that element for semantic or secondary actions. Never invent a target, element index, or action name. Never type, set, or select text unless the user's task requires that exact text.
+    Click and drag coordinates are relative to the top-left corner of the observed window. Scroll targets an accessibility element and uses direction up, down, left, or right plus a positive page count. Use an accessibility element index only when that index is present in the observation. Use only an action name exposed by that element for secondary actions. Never invent a target, element index, or action name. Never type, set, or select text unless the user's task requires that exact text.
     """
 }
 
@@ -156,16 +144,9 @@ struct ComputerUseRenderedModelPrompt: Equatable, Sendable {
 }
 
 enum ComputerUseModelPromptRenderer {
-    static func render(
-        request: ComputerUseModelRequest,
-        includeScreenshot: Bool
-    ) -> ComputerUseRenderedModelPrompt {
+    static func render(request: ComputerUseModelRequest) -> ComputerUseRenderedModelPrompt {
         let observation = request.observation
         let target = observation.target
-        let window = target.window
-        let elements = observation.accessibility.elements
-            .map(renderElement)
-            .joined(separator: "\n")
         let actionResults = request.recentActionResults
             .map { "- \($0.action.summary) at \($0.completedAt.ISO8601Format())" }
             .joined(separator: "\n")
@@ -173,7 +154,6 @@ enum ComputerUseModelPromptRenderer {
             .map { "- \($0)" }
             .joined(separator: "\n")
         let availableApplications = request.availableApplications
-            .prefix(100)
             .map {
                 "- \($0.displayName) (\($0.bundleIdentifier)); running=\($0.isRunning)"
             }
@@ -183,21 +163,12 @@ enum ComputerUseModelPromptRenderer {
         User task:
         \(request.instruction)
 
-        Observation iteration: \(request.iteration)
         Target application: \(target.application.displayName) (\(target.application.bundleIdentifier))
-        Target window: \(window.title ?? "Untitled")
-        Window bounds: x=\(window.bounds.x), y=\(window.bounds.y), width=\(window.bounds.width), height=\(window.bounds.height)
-        Observation generation: \(observation.generation)
-        Screenshot ID: \(observation.screenshot?.id ?? "(none)")
-
         Available applications:
         \(availableApplications.isEmpty ? "(none)" : availableApplications)
 
         Accessibility text:
         \(observation.accessibility.text)
-
-        Accessibility elements:
-        \(elements.isEmpty ? "(none)" : elements)
 
         Recent completed actions:
         \(actionResults.isEmpty ? "(none)" : actionResults)
@@ -208,46 +179,10 @@ enum ComputerUseModelPromptRenderer {
 
         return ComputerUseRenderedModelPrompt(
             text: text,
-            screenshot: includeScreenshot ? observation.screenshot : nil
+            screenshot: observation.screenshot
         )
     }
 
-    private static func renderElement(_ element: ComputerUseAXElement) -> String {
-        var fields = ["[\(element.index)]"]
-        if let role = element.role {
-            fields.append("role=\(role)")
-        }
-        if let subrole = element.subrole {
-            fields.append("subrole=\(subrole)")
-        }
-        if let title = element.title {
-            fields.append("title=\"\(title)\"")
-        }
-        if let description = element.description {
-            fields.append("description=\"\(description)\"")
-        }
-        if let value = element.value {
-            fields.append("value=\"\(value)\"")
-        }
-        if let isEnabled = element.isEnabled {
-            fields.append("enabled=\(isEnabled)")
-        }
-        if element.isFocused {
-            fields.append("focused=true")
-        }
-        if element.isSelected {
-            fields.append("selected=true")
-        }
-        if let bounds = element.bounds {
-            fields.append(
-                "bounds=\(bounds.x),\(bounds.y),\(bounds.width),\(bounds.height)"
-            )
-        }
-        if !element.actions.isEmpty {
-            fields.append("actions=\(element.actions.joined(separator: ","))")
-        }
-        return fields.joined(separator: " ")
-    }
 }
 
 enum ComputerUseModelDecisionParser {
@@ -258,9 +193,7 @@ enum ComputerUseModelDecisionParser {
         }
 
         let json = stripMarkdownFence(from: normalized)
-        guard let data = json.data(using: .utf8) else {
-            throw ComputerUseModelError.invalidResponse("the response was not valid UTF-8 JSON")
-        }
+        let data = Data(json.utf8)
 
         let decision: ComputerUseModelDecision
         do {
@@ -280,9 +213,6 @@ enum ComputerUseModelDecisionParser {
         }
 
         var lines = value.components(separatedBy: .newlines)
-        guard !lines.isEmpty else {
-            return value
-        }
         lines.removeFirst()
         if lines.last?.trimmingCharacters(in: .whitespacesAndNewlines) == "```" {
             lines.removeLast()
@@ -314,10 +244,7 @@ final class OpenAICompatibleComputerUseModelClient: ComputerUseModelClient {
             throw CancellationError()
         }
 
-        let rendered = ComputerUseModelPromptRenderer.render(
-            request: request,
-            includeScreenshot: configuration.allowsScreenshotUpload
-        )
+        let rendered = ComputerUseModelPromptRenderer.render(request: request)
         let content: ComputerUseChatCompletionContent
         if let screenshot = rendered.screenshot {
             let dataURL = "data:\(screenshot.mimeType);base64,\(screenshot.data.base64EncodedString())"

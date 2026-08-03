@@ -7,27 +7,26 @@ The source artifact is `/Users/kishan/Downloads/ChatGPT (1).dmg`.
 
 The research uses read-only DMG inspection and Suniye source inspection.
 
-Phase 0 adds a read-only Swift observation service. Phase 1 adds a target picker, permission
-surface, observation preview, and cancellation flow. Phase 2 adds bounded desktop actions with
-one-time approval. Phase 3 adds a typed agent loop with re-observation, limits, and cancellation.
+Phase 0 adds a Swift observation service. Phase 1 adds app discovery, permissions, preview, and
+cancellation. Phase 2 adds desktop actions with policy-backed grants. Phase 3 adds a typed agent
+loop with re-observation and cancellation.
 Phase 4 adds app policy, scoped approval storage, revocation, and redacted audit records.
 Phase 5A adds an independent OpenAI-compatible model transport and strict decision parsing.
-Phase 5B connects that transport to the coordinator and existing API settings, adds coordinator
-approval continuations, and adds a task UI with screenshot-upload consent disabled by default.
-The current parity slice adds the reference action shapes that fit the existing process boundary,
-window selection and activation, screenshot identity checks, indexed clicks, dynamic Accessibility
-actions, and always-allowed approval management.
+Phase 5B connects that transport to the coordinator and existing API settings, with automatic
+action execution in the Preview surface. The current parity slice adds the reference action shapes
+that fit the existing process boundary, window selection and activation, screenshot identity
+checks, indexed clicks, dynamic Accessibility actions, and target switching without deterministic
+instruction matching. The 2026-08-03 cleanup removes the temporary manual action panel and
+interactive approval state; the task path is now model decision -> policy authorization -> native
+action -> fresh observation.
 
-The desktop path is connected. It still requires a configured API Endpoint model, Accessibility,
-and Screen Recording when screenshots are enabled. The agent can resolve and launch installed apps
-through the application catalog. It is not full runtime parity: browser control, helper IPC, and
-transient screenshot caching remain open or deferred.
+The desktop path is connected. It requires a configured API Endpoint model, Accessibility, and
+Screen Recording because every macOS observation includes a screenshot. The agent can resolve and
+launch installed apps through the application catalog. It is not full runtime parity: browser
+control, helper IPC, and transient screenshot caching remain open or deferred.
 
-The final post-E2E run reports 1,089 tests with 1,088 passed, 1 skipped, and 0 failures. Gated
-line coverage is 95.08% (14,455/15,203) at the documented 95% threshold. The focused Computer Use
-regression classes pass. The live
-`@Computer` run passes navigation, target/window selection, same-process activation,
-Accessibility-only observation, and approval denial. Provider behavior, screenshot capture, and
+The current cleanup validation is recorded in the final evidence-ledger entry after the full test,
+coverage, build, and live safe-target checks. Provider behavior, Screen Recording capture, and
 cross-process input still require separate validation.
 
 ## Files
@@ -54,5 +53,38 @@ This work does not copy source code from the inspected artifact.
 
 This work does not add browser control or a native helper.
 
-The Phase 0 through Phase 5B slices, the current parity slice, and the post-E2E corrective slice
-are committed after review and pushed to `origin/kis-169-computer-use`.
+The Phase 0 through Phase 5B slices, the parity cleanup, and the post-E2E validation are recorded
+as separate evidence entries. Git handoff status is reported with the final commit.
+
+## Superseding parity correction — 2026-08-03
+
+- `[Verified]` The inspected macOS contract is app-scoped. Suniye no longer exposes a macOS
+  window picker, Bring Forward control, target lock, frontmost intervention monitor, or first-app
+  fallback. Native window resolution remains internal because AX and screenshot APIs still need a
+  concrete window.
+- `[Verified]` Indexed element operations are delegated to the native Accessibility boundary.
+  Suniye retains only transport-shape checks that protect native adapters: finite coordinates,
+  positive scroll pages, and a positive click count for the local event loop.
+- `[Verified]` The local action, failure, and duration caps, deterministic instruction matcher,
+  manual action panel, interactive approval UI, and remote screenshot-upload toggle are removed.
+  The default agent authorizer grants actions automatically; the hidden policy service remains the
+  app-policy and audit seam.
+- `[Verified]` macOS observations always capture and attach a screenshot. Windows-only screenshot
+  identifiers and coordinate metadata are not part of Suniye's model contract.
+- `[Verified]` The model prompt contains native Accessibility text and the screenshot, without a
+  second serialized Accessibility-element table or internal window metadata.
+- `[Unknown]` The complete native helper, IPC, host model loop, exact prompt, and browser extension
+  behavior remain unavailable from the inspected artifact.
+
+## Final cleanup validation — 2026-08-03
+
+- `[Verified]` The final full suite reports 1,080 tests executed, 1 skipped, and 0 failures;
+  gated coverage is 95.02% (13,672/14,389 lines).
+- `[Verified]` E2E preflight and smoke pass, and the installed Preview is
+  `/Users/kishan/Applications/Suniye Preview.app`.
+- `[Verified]` A fresh Preview process no longer exposes the removed target lock, window picker,
+  Bring Forward control, screenshot choice, manual action surface, or approval card.
+- `[Verified]` The configured model completed a safe read-only Calculator task and reported the
+  existing result `323` for `17 × 19`.
+- `[Unknown]` Helper IPC, the reference server/model loop and prompt, Screen Recording consent,
+  cross-process third-party input, and browser control remain outside this validation.

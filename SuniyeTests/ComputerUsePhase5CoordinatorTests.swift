@@ -4,12 +4,13 @@ import XCTest
 
 @MainActor
 final class ComputerUsePhase5CoordinatorTests: XCTestCase {
-    func testAgentApprovalIsPresentedByCoordinatorAndCompletesAfterUserApproval() async {
+    func testAgentExecutesActionsWithoutAnApprovalPrompt() async {
         let observation = makePhase3Observation(generation: 21)
+        let action = ComputerUseAction.scroll(elementIndex: 0, direction: .up)
         let model = Phase3ScriptedModelClient(
             decisions: [
-                .action(.scroll(horizontal: 0, vertical: -100)),
-                .completed(message: "Finished."),
+                .action(action),
+                .completed(message: "Finished automatically."),
             ]
         )
         let actionService = Phase3StubActionService()
@@ -18,101 +19,18 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
             observation: observation,
             actionService: actionService
         )
-        coordinator.includeScreenshot = false
         coordinator.agentInstruction = "Scroll down and finish the task."
 
         coordinator.start()
         await waitForPhase(coordinator, .ready)
         coordinator.startAgent()
-        await waitForPhase(coordinator, .requestingApproval)
-
-        guard let request = coordinator.pendingApproval else {
-            return XCTFail("Expected an approval request")
-        }
-        XCTAssertEqual(request.allowedScopes, [.once])
-        XCTAssertEqual(request.observationGeneration, observation.generation)
-
-        coordinator.approvePendingAction()
         await waitForPhase(coordinator, .agentCompleted)
 
         XCTAssertEqual(coordinator.agentResult?.phase, .completed)
-        XCTAssertEqual(coordinator.agentResult?.message, "Finished.")
-        XCTAssertEqual(actionService.actions, [.scroll(horizontal: 0, vertical: -100)])
-        XCTAssertNil(coordinator.pendingApproval)
+        XCTAssertEqual(actionService.actions, [action])
     }
 
-    func testCancelResolvesPendingAgentApproval() async {
-        let model = Phase3ScriptedModelClient(
-            decisions: [.action(.click(point: ComputerUsePoint(x: 20, y: 20)))]
-        )
-        let coordinator = makeCoordinator(
-            model: model,
-            observation: makePhase3Observation(generation: 22),
-            actionService: Phase3StubActionService()
-        )
-        coordinator.includeScreenshot = false
-        coordinator.agentInstruction = "Click the target and stop."
-
-        coordinator.start()
-        await waitForPhase(coordinator, .ready)
-        coordinator.startAgent()
-        await waitForPhase(coordinator, .requestingApproval)
-
-        coordinator.cancel()
-        await waitForPhase(coordinator, .ready)
-
-        XCTAssertNil(coordinator.pendingApproval)
-        XCTAssertNil(coordinator.agentResult)
-    }
-
-    func testSessionApprovalIsReusedByTheAgentWithoutAnotherPrompt() async {
-        let observation = makePhase3Observation(generation: 23)
-        let store = ComputerUseApprovalStore(
-            userDefaults: isolatedDefaults(),
-            storageKey: "phase5.session.approvals"
-        )
-        let policy = ComputerUsePolicyService(
-            configuration: ComputerUsePolicyConfiguration(
-                persistentApprovalRisks: [.scroll]
-            )
-        )
-        let action = ComputerUseAction.scroll(horizontal: 0, vertical: -100)
-        let firstModel = Phase3ScriptedModelClient(
-            decisions: [.action(action), .completed(message: "First run.")]
-        )
-        let actionService = Phase3StubActionService()
-        let coordinator = makeCoordinator(
-            model: firstModel,
-            observation: observation,
-            actionService: actionService,
-            store: store,
-            policy: policy
-        )
-        coordinator.includeScreenshot = false
-        coordinator.agentInstruction = "Scroll down and finish the task."
-
-        coordinator.start()
-        await waitForPhase(coordinator, .ready)
-        coordinator.startAgent()
-        await waitForPhase(coordinator, .requestingApproval)
-        XCTAssertEqual(coordinator.pendingApproval?.allowedScopes, [.once, .session, .always])
-
-        coordinator.approvePendingAction(scope: .session)
-        await waitForPhase(coordinator, .agentCompleted)
-
-        let secondModel = Phase3ScriptedModelClient(
-            decisions: [.action(action), .completed(message: "Second run.")]
-        )
-        coordinator.configureModel(secondModel)
-        coordinator.startAgent()
-        await waitForPhase(coordinator, .agentCompleted)
-
-        XCTAssertEqual(coordinator.agentResult?.message, "Second run.")
-        XCTAssertEqual(actionService.actions, [action, action])
-        XCTAssertNil(coordinator.pendingApproval)
-    }
-
-    func testRemoteModelConfigurationAndScreenshotConsentAreSessionScoped() async {
+    func testRemoteModelConfigurationIsSessionScoped() async {
         let coordinator = makeCoordinator(
             model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
             observation: makePhase3Observation(generation: 24),
@@ -126,25 +44,16 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
 
         coordinator.start()
         await waitForPhase(coordinator, .ready)
-        XCTAssertFalse(coordinator.canRunAgent)
+        XCTAssertTrue(coordinator.canRunAgent)
 
         coordinator.configureRemoteModel(configuration)
         XCTAssertTrue(coordinator.isModelConfigured)
-        coordinator.includeScreenshot = false
         XCTAssertTrue(coordinator.canRunAgent)
         coordinator.selectedApplicationID = nil
-        coordinator.selectedWindowID = nil
         XCTAssertTrue(coordinator.canRunAgent)
-
-        coordinator.setRemoteScreenshotUploadAllowed(true)
-        XCTAssertTrue(coordinator.allowRemoteScreenshotUpload)
-        coordinator.setRemoteScreenshotUploadAllowed(false)
-        XCTAssertFalse(coordinator.allowRemoteScreenshotUpload)
 
         coordinator.configureRemoteModel(nil)
         XCTAssertFalse(coordinator.isModelConfigured)
-        coordinator.setRemoteScreenshotUploadAllowed(true)
-        XCTAssertTrue(coordinator.allowRemoteScreenshotUpload)
         coordinator.configureModel(
             Phase3ScriptedModelClient(decisions: [.completed(message: "unused")])
         )
@@ -157,7 +66,6 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
             observation: makePhase3Observation(generation: 25),
             actionService: Phase3StubActionService()
         )
-        blockedCoordinator.includeScreenshot = false
         blockedCoordinator.agentInstruction = "Try the task."
         blockedCoordinator.start()
         await waitForPhase(blockedCoordinator, .ready)
@@ -168,20 +76,22 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
 
         let failedCoordinator = makeCoordinator(
             model: Phase3ScriptedModelClient(
-                decisions: [.retryableFailure(reason: "Not enough state.")]
+                decisions: [
+                    .retryableFailure(reason: "Not enough state."),
+                    .completed(message: "Recovered."),
+                ]
             ),
             observation: makePhase3Observation(generation: 26),
-            actionService: Phase3StubActionService(),
-            agentLimits: ComputerUseAgentLimits(maxFailures: 1, settleDelay: 0)
+            actionService: Phase3StubActionService()
         )
-        failedCoordinator.includeScreenshot = false
         failedCoordinator.agentInstruction = "Try the task."
         failedCoordinator.start()
         await waitForPhase(failedCoordinator, .ready)
         failedCoordinator.startAgent()
         await waitForPhase(failedCoordinator, .agentCompleted)
-        XCTAssertEqual(failedCoordinator.agentResult?.phase, .failed)
-        XCTAssertEqual(failedCoordinator.errorMessage, failedCoordinator.agentResult?.message)
+        XCTAssertEqual(failedCoordinator.agentResult?.phase, .completed)
+        XCTAssertEqual(failedCoordinator.agentResult?.failureCount, 1)
+        XCTAssertNil(failedCoordinator.errorMessage)
     }
 
     func testCoordinatorGuardsConfigurationAndAgentState() async {
@@ -201,13 +111,12 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         coordinator.phase = .runningAgent
         coordinator.configureModel(nil)
         coordinator.configureRemoteModel(configuration)
-        coordinator.setRemoteScreenshotUploadAllowed(true)
         coordinator.phase = .ready
 
         coordinator.configureModel(nil)
         coordinator.agentInstruction = "  "
         coordinator.startAgent()
-        XCTAssertEqual(coordinator.phase, .actionFailed)
+        XCTAssertEqual(coordinator.phase, .failed)
         XCTAssertEqual(coordinator.errorMessage, "Enter a task for Computer Use.")
 
         coordinator.phase = .ready
@@ -218,8 +127,7 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         coordinator.configureModel(
             Phase3ScriptedModelClient(decisions: [.completed(message: "unused")])
         )
-        coordinator.includeScreenshot = true
-        XCTAssertFalse(coordinator.canRunAgent)
+        XCTAssertTrue(coordinator.canRunAgent)
 
         coordinator.phase = .runningAgent
         XCTAssertEqual(coordinator.phaseTitle, "Computer Use is working")
@@ -227,7 +135,7 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.phaseTitle, "Computer Use finished")
     }
 
-    func testCoordinatorHandlesPolicyAndApprovalGuards() async {
+    func testCoordinatorSurfacesPolicyDenial() async {
         let observation = makePhase3Observation(generation: 28)
         let deniedPolicy = ComputerUsePolicyService(
             configuration: ComputerUsePolicyConfiguration(
@@ -235,167 +143,24 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
             )
         )
         let deniedCoordinator = makeCoordinator(
-            model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
+            model: Phase3ScriptedModelClient(
+                decisions: [.action(.scroll(elementIndex: 0, direction: .up))]
+            ),
             observation: observation,
             actionService: Phase3StubActionService(),
             policy: deniedPolicy
         )
 
-        deniedCoordinator.includeScreenshot = false
         deniedCoordinator.start()
         await waitForPhase(deniedCoordinator, .ready)
-        deniedCoordinator.observeSelectedApplication()
-        await waitForPhase(deniedCoordinator, .observed)
-        deniedCoordinator.requestAction(.scroll(horizontal: 0, vertical: -10))
-        XCTAssertEqual(deniedCoordinator.phase, .actionFailed)
-        XCTAssertEqual(
-            deniedCoordinator.errorMessage,
-            "Computer Use is blocked from using Target App by policy."
-        )
-
-        let coordinator = makeCoordinator(
-            model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
-            observation: observation,
-            actionService: Phase3StubActionService()
-        )
-        coordinator.includeScreenshot = false
-        coordinator.start()
-        await waitForPhase(coordinator, .ready)
-        coordinator.approvePendingAction()
-        coordinator.requestAction(.scroll(horizontal: 0, vertical: -10))
-        coordinator.observeSelectedApplication()
-        await waitForPhase(coordinator, .observed)
-        coordinator.requestAction(.scroll(horizontal: 0, vertical: -10))
-        coordinator.observation = nil
-        coordinator.approvePendingAction()
-        XCTAssertEqual(coordinator.phase, .requestingApproval)
-
-        coordinator.observation = observation
-        coordinator.approvePendingAction(scope: .session)
-        XCTAssertEqual(coordinator.phase, .actionFailed)
-        XCTAssertEqual(
-            coordinator.errorMessage,
-            ComputerUsePolicyError.approvalScopeNotAllowed.localizedDescription
-        )
-
-        let request = ComputerUseApprovalRequest(
-            id: UUID(),
-            action: .scroll(horizontal: 0, vertical: -10),
-            target: observation.target,
-            risk: .scroll,
-            reason: "Test approval",
-            observationGeneration: observation.generation
-        )
-        coordinator.observation = nil
-        coordinator.phase = .requestingApproval
-        coordinator.pendingApproval = request
-        coordinator.approvePendingAction()
-        XCTAssertEqual(coordinator.phase, .requestingApproval)
-
-        let cancellation = ComputerUseCancellationToken()
-        cancellation.cancel()
-        let decision = await coordinator.requestApproval(request, cancellation: cancellation)
-        XCTAssertEqual(decision, .stopSession)
-    }
-
-    func testCoordinatorAgentApprovalDenialAndPersistentApproval() async {
-        let observation = makePhase3Observation(generation: 29)
-        let deniedModel = Phase3ScriptedModelClient(
-            decisions: [.action(.scroll(horizontal: 0, vertical: -10))]
-        )
-        let deniedCoordinator = makeCoordinator(
-            model: deniedModel,
-            observation: observation,
-            actionService: Phase3StubActionService()
-        )
-        deniedCoordinator.includeScreenshot = false
-        deniedCoordinator.agentInstruction = "Scroll and stop."
-        deniedCoordinator.start()
-        await waitForPhase(deniedCoordinator, .ready)
+        deniedCoordinator.agentInstruction = "Scroll in the target app."
         deniedCoordinator.startAgent()
-        await waitForPhase(deniedCoordinator, .requestingApproval)
-        deniedCoordinator.approvePendingAction(scope: .session)
-        XCTAssertEqual(
-            deniedCoordinator.errorMessage,
-            ComputerUsePolicyError.approvalScopeNotAllowed.localizedDescription
-        )
-        deniedCoordinator.denyPendingAction()
         await waitForPhase(deniedCoordinator, .agentCompleted)
         XCTAssertEqual(deniedCoordinator.agentResult?.phase, .blocked)
-
-        let policy = ComputerUsePolicyService(
-            configuration: ComputerUsePolicyConfiguration(persistentApprovalRisks: [.scroll])
+        XCTAssertEqual(
+            deniedCoordinator.agentResult?.message,
+            "Computer Use is blocked from using Target App by policy."
         )
-        let persistentCoordinator = makeCoordinator(
-            model: Phase3ScriptedModelClient(
-                decisions: [
-                    .action(.scroll(horizontal: 0, vertical: -10)),
-                    .completed(message: "Finished.")
-                ]
-            ),
-            observation: observation,
-            actionService: Phase3StubActionService(),
-            policy: policy
-        )
-        persistentCoordinator.includeScreenshot = false
-        persistentCoordinator.agentInstruction = "Scroll and finish."
-        persistentCoordinator.start()
-        await waitForPhase(persistentCoordinator, .ready)
-        persistentCoordinator.startAgent()
-        await waitForPhase(persistentCoordinator, .requestingApproval)
-        persistentCoordinator.approvePendingAction(scope: .always)
-        await waitForPhase(persistentCoordinator, .agentCompleted)
-        XCTAssertEqual(persistentCoordinator.agentResult?.phase, .completed)
-    }
-
-    func testCoordinatorReturnsToObservationAfterCanceledAction() async {
-        let observation = makePhase3Observation(generation: 30)
-        let coordinator = makeCoordinator(
-            model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
-            observation: observation,
-            actionService: Phase3StubActionService(errors: [ComputerUseActionError.cancelled])
-        )
-        coordinator.includeScreenshot = false
-        coordinator.start()
-        await waitForPhase(coordinator, .ready)
-        coordinator.observeSelectedApplication()
-        await waitForPhase(coordinator, .observed)
-        coordinator.requestAction(.scroll(horizontal: 0, vertical: -10))
-        coordinator.approvePendingAction()
-        await waitForPhase(coordinator, .observed)
-
-        XCTAssertNil(coordinator.lastActionResult)
-        XCTAssertNil(coordinator.errorMessage)
-    }
-
-    func testCoordinatorIgnoresCanceledActionResult() async {
-        let started = expectation(description: "action started")
-        let release = DispatchSemaphore(value: 0)
-        let actionService = Phase3StubActionService()
-        actionService.onExecute = { _ in
-            started.fulfill()
-            release.wait()
-        }
-        let coordinator = makeCoordinator(
-            model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
-            observation: makePhase3Observation(generation: 31),
-            actionService: actionService
-        )
-        coordinator.includeScreenshot = false
-        coordinator.start()
-        await waitForPhase(coordinator, .ready)
-        coordinator.observeSelectedApplication()
-        await waitForPhase(coordinator, .observed)
-        coordinator.requestAction(.scroll(horizontal: 0, vertical: -10))
-        coordinator.approvePendingAction()
-
-        await fulfillment(of: [started], timeout: 1)
-        coordinator.cancel()
-        release.signal()
-        await waitForPhase(coordinator, .ready)
-        try? await Task.sleep(nanoseconds: 30_000_000)
-
-        XCTAssertNil(coordinator.lastActionResult)
     }
 
     func testCoordinatorIgnoresCanceledAndStalePermissionResults() async {
@@ -410,7 +175,6 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
             actionService: Phase3StubActionService(),
             permissionManager: permissionManager
         )
-        coordinator.includeScreenshot = false
         coordinator.start()
         await waitForPhase(coordinator, .ready)
 
@@ -432,7 +196,6 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
             actionService: Phase3StubActionService(),
             permissionManager: stalePermissionManager
         )
-        staleCoordinator.includeScreenshot = false
         staleCoordinator.agentInstruction = "Finish the task."
         staleCoordinator.start()
         await waitForPhase(staleCoordinator, .ready)
@@ -451,27 +214,16 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         observation: ComputerUseObservation,
         actionService: ComputerUseActionServicing,
         permissionManager: ComputerUsePermissionManaging = Phase5PermissionManager(),
-        store: ComputerUseApprovalStoring? = nil,
-        policy: ComputerUsePolicyChecking? = nil,
-        agentLimits: ComputerUseAgentLimits = ComputerUseAgentLimits(settleDelay: 0)
+        policy: ComputerUsePolicyChecking? = nil
     ) -> ComputerUseCoordinator {
         ComputerUseCoordinator(
             applicationCatalog: Phase5ApplicationCatalog(application: observation.target.application),
             permissionManager: permissionManager,
             observationService: Phase3StubObservationService(result: observation),
             actionService: actionService,
-            approvalStore: store,
             policy: policy,
-            modelClient: model,
-            agentLimits: agentLimits
+            modelClient: model
         )
-    }
-
-    private func isolatedDefaults() -> UserDefaults {
-        let suiteName = "Suniye-Phase5-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
     }
 
     private func waitForPhase(
@@ -516,7 +268,7 @@ private final class Phase5PermissionManager: ComputerUsePermissionManaging {
     func snapshot() -> ComputerUsePermissionSnapshot {
         ComputerUsePermissionSnapshot(
             accessibility: .granted,
-            screenRecording: .notGranted
+            screenRecording: .granted
         )
     }
 
@@ -554,7 +306,7 @@ private final class Phase5BlockingPermissionManager: ComputerUsePermissionManagi
     func snapshot() -> ComputerUsePermissionSnapshot {
         ComputerUsePermissionSnapshot(
             accessibility: .granted,
-            screenRecording: .notGranted
+            screenRecording: .granted
         )
     }
 

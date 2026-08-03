@@ -6,9 +6,22 @@ import Foundation
 protocol TextInsertionServiceProtocol {
     func captureInsertionContext() -> TextInsertionContext?
     func insertText(_ text: String) throws
+    func insertTextForComputerUse(
+        _ text: String,
+        targetProcessIdentifier: Int32
+    ) throws
     func copyTextToClipboard(_ text: String) throws
     func submitActiveInput() throws
     func makeFocusedFieldValueProvider() -> (() -> String?)?
+}
+
+extension TextInsertionServiceProtocol {
+    func insertTextForComputerUse(
+        _ text: String,
+        targetProcessIdentifier: Int32
+    ) throws {
+        try insertText(text)
+    }
 }
 
 struct TextInsertionContext: Equatable {
@@ -44,6 +57,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     var focusedTextSnapshotProvider: ((AXUIElement) -> FocusedTextSnapshot?)?
     var selectedTextSetter: ((AXUIElement, String) -> Bool)?
     var keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)?
+    var computerUseTextPoster: ((String, Int32) throws -> Void)?
     var pasteKeyCodeProvider: (() -> CGKeyCode?)?
     var clipboardRestoreDelay: TimeInterval = 0.45
 
@@ -89,6 +103,42 @@ final class TextInsertionService: TextInsertionServiceProtocol {
             return
         }
 
+        try insertTextUsingClipboardPaste(text)
+    }
+
+    func insertTextForComputerUse(
+        _ text: String,
+        targetProcessIdentifier: Int32
+    ) throws {
+        if let computerUseTextPoster {
+            try computerUseTextPoster(text, targetProcessIdentifier)
+            return
+        }
+        guard !text.isEmpty, targetProcessIdentifier > 0 else {
+            throw InsertError.cannotCreateEvent
+        }
+
+        let unicodeCharacters = Array(text.utf16)
+        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) else {
+            throw InsertError.cannotCreateEvent
+        }
+
+        unicodeCharacters.withUnsafeBufferPointer { buffer in
+            down.keyboardSetUnicodeString(
+                stringLength: buffer.count,
+                unicodeString: buffer.baseAddress
+            )
+            up.keyboardSetUnicodeString(
+                stringLength: buffer.count,
+                unicodeString: buffer.baseAddress
+            )
+        }
+        down.postToPid(targetProcessIdentifier)
+        up.postToPid(targetProcessIdentifier)
+    }
+
+    private func insertTextUsingClipboardPaste(_ text: String) throws {
         let pasteboard = pasteboardProvider()
         let previousItems = Self.clipboardSnapshot(from: pasteboard.pasteboardItems ?? [])
 

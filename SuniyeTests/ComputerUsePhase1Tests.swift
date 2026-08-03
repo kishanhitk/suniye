@@ -47,7 +47,7 @@ final class ComputerUsePhase1Tests: XCTestCase {
             (.ready, "Ready to inspect"),
             (.observing, "Reading app state"),
             (.observed, "Observation captured"),
-            (.failed, "Observation failed"),
+            (.failed, "Computer Use failed"),
         ]
 
         for (phase, title) in expectedTitles {
@@ -92,7 +92,7 @@ final class ComputerUsePhase1Tests: XCTestCase {
         coordinator.refreshPermissions()
         await waitUntil { coordinator.permissionSnapshot.accessibility == .granted }
 
-        XCTAssertFalse(coordinator.permissionSnapshot.canObserveWithScreenshot)
+        XCTAssertFalse(coordinator.permissionSnapshot.canObserve)
     }
 
     func testObservationPublishesReadOnlyResult() async {
@@ -343,8 +343,7 @@ final class ComputerUsePhase1Tests: XCTestCase {
             displayName: name,
             processIdentifier: 42,
             isRunning: true,
-            isActive: active,
-            launchDate: nil
+            isActive: active
         )
     }
 
@@ -451,7 +450,6 @@ private final class Phase1StubObservationService: ComputerUseObservationServicin
 
     func observe(
         applicationID: String,
-        includeScreenshot: Bool,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) throws -> ComputerUseObservation {
@@ -476,7 +474,6 @@ private final class Phase1BlockingObservationService: ComputerUseObservationServ
 
     func observe(
         applicationID: String,
-        includeScreenshot: Bool,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) throws -> ComputerUseObservation {

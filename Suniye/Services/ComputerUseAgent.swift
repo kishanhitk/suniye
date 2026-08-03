@@ -2,24 +2,18 @@ import Foundation
 
 actor ComputerUseAgent {
     private let modelClient: ComputerUseModelClient
-    private let approvalService: ComputerUseApprovalRequesting
-    private let approvalAuthorizer: ComputerUseApprovalAuthorizing?
+    private let approvalAuthorizer: ComputerUseApprovalAuthorizing
     private let applicationCatalog: ComputerUseApplicationCatalog
     private let observationService: ComputerUseObservationServicing
     private let actionService: ComputerUseActionServicing
-    private let limits: ComputerUseAgentLimits
-    private let dateProvider: () -> Date
     private let sleep: (TimeInterval) async throws -> Void
 
     init(
         modelClient: ComputerUseModelClient,
-        approvalService: ComputerUseApprovalRequesting = DenyAllComputerUseApprovalService(),
-        approvalAuthorizer: ComputerUseApprovalAuthorizing? = nil,
+        approvalAuthorizer: ComputerUseApprovalAuthorizing = ComputerUseAutomaticApprovalAuthorizer(),
         applicationCatalog: ComputerUseApplicationCatalog = SystemComputerUseApplicationCatalog(),
         observationService: ComputerUseObservationServicing,
         actionService: ComputerUseActionServicing,
-        limits: ComputerUseAgentLimits = ComputerUseAgentLimits(),
-        dateProvider: @escaping () -> Date = Date.init,
         sleep: @escaping (TimeInterval) async throws -> Void = { delay in
             guard delay > 0 else {
                 return
@@ -28,13 +22,10 @@ actor ComputerUseAgent {
         }
     ) {
         self.modelClient = modelClient
-        self.approvalService = approvalService
         self.approvalAuthorizer = approvalAuthorizer
         self.applicationCatalog = applicationCatalog
         self.observationService = observationService
         self.actionService = actionService
-        self.limits = limits
-        self.dateProvider = dateProvider
         self.sleep = sleep
     }
 
@@ -66,21 +57,21 @@ actor ComputerUseAgent {
                 failureCount: 0
             )
         }
-        if let limitsError = limits.validationMessage {
-            return result(
-                phase: .failed,
-                message: "Invalid Computer Use limits: \(limitsError).",
-                question: nil,
-                observation: nil,
-                actionResults: [],
-                failureCount: 0
-            )
+        let requestedApplication = task.applicationID.flatMap {
+            applicationCatalog.resolveApplication(identifier: $0)
         }
+        let initialApplicationID = requestedApplication?.id ?? task.applicationID
+        let initialTargetDescription = requestedApplication?.bundleIdentifier
+            ?? initialApplicationID
+            ?? "frontmost"
+
+        AppLogger.shared.log(
+            .info,
+            "computer_use agent start target=\(initialTargetDescription)"
+        )
 
         var state = RunState(
-            startedAt: dateProvider(),
-            applicationID: task.applicationID,
-            windowID: task.windowID
+            applicationID: initialApplicationID
         )
         while true {
             switch await advance(
@@ -97,27 +88,20 @@ actor ComputerUseAgent {
     }
 
     private struct RunState {
-        let startedAt: Date
         var applicationID: String?
-        var windowID: UInt32?
         var latestObservation: ComputerUseObservation?
         var actionResults: [ComputerUseActionResult] = []
         var failureMessages: [String] = []
         var failureCount = 0
         var iteration = 0
 
-        init(startedAt: Date, applicationID: String?, windowID: UInt32?) {
-            self.startedAt = startedAt
+        init(applicationID: String?) {
             self.applicationID = applicationID
-            self.windowID = windowID
         }
 
         mutating func recordFailure(_ message: String) {
             failureCount += 1
             failureMessages.append(message)
-            if failureMessages.count > 3 {
-                failureMessages.removeFirst(failureMessages.count - 3)
-            }
         }
     }
 
@@ -130,8 +114,6 @@ actor ComputerUseAgent {
         case succeeded(ComputerUseActionResult)
         case retryableFailure(String)
         case blocked(String)
-        case denied
-        case stopped
         case cancelled
     }
 
@@ -151,26 +133,13 @@ actor ComputerUseAgent {
                 )
             )
         }
-        if dateProvider().timeIntervalSince(state.startedAt) >= limits.maxDuration {
-            return .finish(
-                result(
-                    phase: .failed,
-                    message: "The Computer Use time limit was reached.",
-                    question: nil,
-                    observation: state.latestObservation,
-                    actionResults: state.actionResults,
-                    failureCount: state.failureCount
-                )
-            )
-        }
         state.iteration += 1
         let observation: ComputerUseObservation
         do {
             var observationConfiguration = ComputerUseObservationConfiguration.default
-            observationConfiguration.preferredWindowID = state.windowID
+            observationConfiguration.activateTarget = true
             observation = try await observationService.observeTarget(
                 applicationIdentifier: state.applicationID,
-                includeScreenshot: task.includeScreenshot,
                 configuration: observationConfiguration,
                 cancellation: cancellation
             )
@@ -319,9 +288,8 @@ actor ComputerUseAgent {
                 state: &state,
                 observation: observation
             )
-        case let .target(application, windowID):
+        case let .target(application):
             state.applicationID = application.trimmingCharacters(in: .whitespacesAndNewlines)
-            state.windowID = windowID
             return .continueWith(state)
         case let .action(action):
             switch await attemptAction(
@@ -347,28 +315,6 @@ actor ComputerUseAgent {
                     state: &state,
                     observation: observation
                 )
-            case .denied:
-                return .finish(
-                    result(
-                        phase: .blocked,
-                        message: "The user denied the proposed action.",
-                        question: nil,
-                        observation: observation,
-                        actionResults: state.actionResults,
-                        failureCount: state.failureCount
-                    )
-                )
-            case .stopped:
-                return .finish(
-                    result(
-                        phase: .cancelled,
-                        message: "The user stopped the Computer Use session.",
-                        question: nil,
-                        observation: observation,
-                        actionResults: state.actionResults,
-                        failureCount: state.failureCount
-                    )
-                )
             case .cancelled:
                 return .finish(
                     cancelledResult(
@@ -379,32 +325,8 @@ actor ComputerUseAgent {
                 )
             case let .succeeded(actionResult):
                 state.actionResults.append(actionResult)
-                if state.actionResults.count >= limits.maxActions {
-                    return .finish(
-                        result(
-                            phase: .failed,
-                            message: "The Computer Use action limit was reached.",
-                            question: nil,
-                            observation: observation,
-                            actionResults: state.actionResults,
-                            failureCount: state.failureCount
-                        )
-                    )
-                }
-                if dateProvider().timeIntervalSince(state.startedAt) >= limits.maxDuration {
-                    return .finish(
-                        result(
-                            phase: .failed,
-                            message: "The Computer Use time limit was reached.",
-                            question: nil,
-                            observation: observation,
-                            actionResults: state.actionResults,
-                            failureCount: state.failureCount
-                        )
-                    )
-                }
                 do {
-                    try await sleep(limits.settleDelay)
+                    try await sleep(0.15)
                 } catch {
                     if isCancelled(cancellation) || isCancellation(error) {
                         return .finish(
@@ -433,16 +355,6 @@ actor ComputerUseAgent {
         observation: ComputerUseObservation
     ) -> LoopResult {
         state.recordFailure(message)
-        guard state.failureCount < limits.maxFailures else {
-            return .finish(
-                failureLimitResult(
-                    message: message,
-                    observation: observation,
-                    actionResults: state.actionResults,
-                    failureCount: state.failureCount
-                )
-            )
-        }
         return .continueWith(state)
     }
 
@@ -452,111 +364,30 @@ actor ComputerUseAgent {
         cancellation: ComputerUseCancellationToken,
         sessionID: UUID
     ) async -> ActionAttemptResult {
-        do {
-            try ComputerUseActionPolicy.validate(action: action, observation: observation)
-        } catch {
-            return .retryableFailure(localizedMessage(error))
-        }
-
         let approvalRequest = ComputerUseApprovalRequest(
             id: UUID(),
             action: action,
             target: observation.target,
             risk: action.risk,
-            reason: "The Computer Use model proposed this action for the current task.",
             sessionID: sessionID,
             observationGeneration: observation.generation
         )
-        let preparedRequest: ComputerUseApprovalRequest
-        if let approvalAuthorizer {
-            do {
-                preparedRequest = try await approvalAuthorizer.prepare(approvalRequest)
-                if let rememberedScope = try await approvalAuthorizer.rememberedScope(
-                    for: preparedRequest
-                ) {
-                    return await executeApprovedAction(
-                        action: action,
-                        observation: observation,
-                        approvalRequest: preparedRequest,
-                        scope: rememberedScope,
-                        cancellation: cancellation
-                    )
-                }
-            } catch {
-                return .blocked(localizedMessage(error))
-            }
-        } else {
-            preparedRequest = approvalRequest
+        let approval: ComputerUseApprovalGrant
+        do {
+            approval = try await approvalAuthorizer.authorize(approvalRequest)
+        } catch {
+            return .blocked(localizedMessage(error))
         }
 
-        let approval = await approvalService.requestApproval(
-            preparedRequest,
-            cancellation: cancellation
-        )
-        if isCancelled(cancellation) {
-            return .cancelled
-        }
-
-        switch approval {
-        case .deny:
-            return .denied
-        case .stopSession:
-            return .stopped
-        case .allowOnce, .allowForSession, .allowAlways:
-            guard let scope = approval.scope,
-                  preparedRequest.allowedScopes.contains(scope) else {
-                return .retryableFailure(
-                    ComputerUsePolicyError.approvalScopeNotAllowed.localizedDescription
-                )
-            }
-            return await executeApprovedAction(
-                action: action,
-                observation: observation,
-                approvalRequest: preparedRequest,
-                scope: scope,
-                cancellation: cancellation
-            )
-        }
-    }
-
-    private func executeApprovedAction(
-        action: ComputerUseAction,
-        observation: ComputerUseObservation,
-        approvalRequest: ComputerUseApprovalRequest,
-        scope: ComputerUseApprovalScope,
-        cancellation: ComputerUseCancellationToken
-    ) async -> ActionAttemptResult {
         guard !isCancelled(cancellation) else {
             return .cancelled
-        }
-
-        let grant: ComputerUseApprovalGrant
-        if let approvalAuthorizer {
-            do {
-                grant = try await approvalAuthorizer.grant(
-                    for: approvalRequest,
-                    scope: scope
-                )
-            } catch {
-                return .blocked(localizedMessage(error))
-            }
-        } else {
-            grant = ComputerUseApprovalGrant(
-                requestID: approvalRequest.id,
-                scope: scope,
-                applicationID: observation.target.application.id,
-                windowID: observation.target.window.id,
-                observationGeneration: observation.generation,
-                action: action,
-                sessionID: approvalRequest.sessionID
-            )
         }
 
         do {
             let actionResult = try actionService.execute(
                 action: action,
                 observation: observation,
-                approval: grant,
+                approval: approval,
                 requestID: approvalRequest.id,
                 cancellation: cancellation
             )
@@ -588,22 +419,6 @@ actor ComputerUseAgent {
 
     private func localizedMessage(_ error: Error) -> String {
         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-    }
-
-    private func failureLimitResult(
-        message: String,
-        observation: ComputerUseObservation,
-        actionResults: [ComputerUseActionResult],
-        failureCount: Int
-    ) -> ComputerUseAgentResult {
-        return result(
-            phase: .failed,
-            message: "\(message) The Computer Use failure limit was reached.",
-            question: nil,
-            observation: observation,
-            actionResults: actionResults,
-            failureCount: failureCount
-        )
     }
 
     private func cancelledResult(

@@ -18,8 +18,16 @@ enum ComputerUseModelConfigurationFactory {
             endpointURL: endpointURL,
             modelID: modelID,
             apiKey: apiKey,
-            timeoutSeconds: settings.timeoutSeconds,
-            maxTokens: settings.maxTokens
+            // General text calls use short limits. Computer Use needs enough time
+            // to inspect a window and produce a structured action.
+            timeoutSeconds: max(
+                settings.timeoutSeconds,
+                ComputerUseRemoteModelDefaults.timeoutSeconds
+            ),
+            maxTokens: max(
+                settings.maxTokens,
+                ComputerUseRemoteModelDefaults.maxTokens
+            )
         )
     }
 }

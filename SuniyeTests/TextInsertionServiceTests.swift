@@ -113,6 +113,25 @@ final class TextInsertionServiceTests: XCTestCase {
         XCTAssertEqual(postedFlags, [.maskCommand])
     }
 
+    func testComputerUseInsertionTargetsTheObservedProcessWithUnicodeText() throws {
+        let service = TextInsertionService()
+        var postedText: String?
+        var postedProcessIdentifier: Int32?
+
+        service.computerUseTextPoster = { text, processIdentifier in
+            postedText = text
+            postedProcessIdentifier = processIdentifier
+        }
+
+        try service.insertTextForComputerUse(
+            "flipkart.com",
+            targetProcessIdentifier: 42
+        )
+
+        XCTAssertEqual(postedText, "flipkart.com")
+        XCTAssertEqual(postedProcessIdentifier, 42)
+    }
+
     func testInsertTextStillRestoresClipboardWhenPasteKeyPostingThrows() throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))

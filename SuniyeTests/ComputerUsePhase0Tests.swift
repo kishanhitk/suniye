@@ -26,8 +26,8 @@ final class ComputerUsePhase0Tests: XCTestCase {
             now: Date(timeIntervalSince1970: 123)
         )
 
-        let first = try service.observe(applicationID: application.id, includeScreenshot: true)
-        let second = try service.observe(applicationID: application.id, includeScreenshot: false)
+        let first = try service.observe(applicationID: application.id)
+        let second = try service.observe(applicationID: application.id)
 
         XCTAssertEqual(first.generation, 1)
         XCTAssertEqual(second.generation, 2)
@@ -35,7 +35,7 @@ final class ComputerUsePhase0Tests: XCTestCase {
         XCTAssertEqual(first.target.window, window)
         XCTAssertEqual(first.accessibility, axSnapshot)
         XCTAssertEqual(first.screenshot, screenshot)
-        XCTAssertNil(second.screenshot)
+        XCTAssertEqual(second.screenshot, screenshot)
         XCTAssertEqual(first.capturedAt, Date(timeIntervalSince1970: 123))
     }
 
@@ -52,32 +52,57 @@ final class ComputerUsePhase0Tests: XCTestCase {
             windowDiscovery: windowDiscovery
         )
 
-        _ = try service.observe(applicationID: application.id, includeScreenshot: false)
+        _ = try service.observe(applicationID: application.id)
 
         XCTAssertEqual(axReader.lastWindow?.id, keyWindow.id)
         XCTAssertEqual(windowDiscovery.lastApplication?.id, application.id)
     }
 
-    func testObservationUsesTheSelectedWindowWhenProvided() throws {
+    func testAgentObservationActivatesTheResolvedWindowBeforeReading() throws {
         let application = makeApplication()
-        let firstWindow = makeWindow(id: 1, isKeyWindow: true)
-        let selectedWindow = makeWindow(id: 2, isKeyWindow: false)
-        let axReader = StubAccessibilityReader()
+        let window = makeWindow(isKeyWindow: false)
+        let windowActivator = StubWindowActivator()
         let service = makeObservationService(
             application: application,
-            windows: [firstWindow, selectedWindow],
-            axReader: axReader
+            windows: [window],
+            windowActivator: windowActivator
         )
         var configuration = ComputerUseObservationConfiguration.default
-        configuration.preferredWindowID = selectedWindow.id
+        configuration.activateTarget = true
 
         _ = try service.observe(
             applicationID: application.id,
-            includeScreenshot: false,
             configuration: configuration
         )
 
-        XCTAssertEqual(axReader.lastWindow?.id, selectedWindow.id)
+        XCTAssertEqual(
+            windowActivator.lastTarget,
+            ComputerUseTarget(application: application, window: window)
+        )
+    }
+
+    func testAgentObservationReportsWindowActivationFailure() {
+        let application = makeApplication()
+        let windowActivator = StubWindowActivator(shouldActivate: false)
+        let service = makeObservationService(
+            application: application,
+            windows: [makeWindow()],
+            windowActivator: windowActivator
+        )
+        var configuration = ComputerUseObservationConfiguration.default
+        configuration.activateTarget = true
+
+        XCTAssertThrowsError(
+            try service.observe(
+                applicationID: application.id,
+                configuration: configuration
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? ComputerUseObservationError,
+                .targetActivationFailed(application.bundleIdentifier)
+            )
+        }
     }
 
     func testObservationFailsBeforeDiscoveryWhenAccessibilityIsMissing() {
@@ -93,13 +118,13 @@ final class ComputerUsePhase0Tests: XCTestCase {
             windowDiscovery: windowDiscovery
         )
 
-        XCTAssertThrowsError(try service.observe(applicationID: application.id, includeScreenshot: false)) { error in
+        XCTAssertThrowsError(try service.observe(applicationID: application.id)) { error in
             XCTAssertEqual(error as? ComputerUseObservationError, .accessibilityNotTrusted)
         }
         XCTAssertNil(windowDiscovery.lastApplication)
     }
 
-    func testObservationRequiresScreenRecordingOnlyForScreenshot() throws {
+    func testObservationRequiresScreenRecording() throws {
         let application = makeApplication()
         let service = makeObservationService(
             application: application,
@@ -110,12 +135,9 @@ final class ComputerUsePhase0Tests: XCTestCase {
             )
         )
 
-        XCTAssertThrowsError(try service.observe(applicationID: application.id, includeScreenshot: true)) { error in
+        XCTAssertThrowsError(try service.observe(applicationID: application.id)) { error in
             XCTAssertEqual(error as? ComputerUseObservationError, .screenRecordingNotGranted)
         }
-
-        let observation = try service.observe(applicationID: application.id, includeScreenshot: false)
-        XCTAssertNil(observation.screenshot)
     }
 
     func testObservationReportsUnknownApplication() {
@@ -127,7 +149,7 @@ final class ComputerUsePhase0Tests: XCTestCase {
             permissionManager: StubPermissionManager(snapshot: readyPermissions)
         )
 
-        XCTAssertThrowsError(try service.observe(applicationID: "com.example.missing", includeScreenshot: false)) { error in
+        XCTAssertThrowsError(try service.observe(applicationID: "com.example.missing")) { error in
             XCTAssertEqual(
                 error as? ComputerUseObservationError,
                 .applicationNotFound("com.example.missing")
@@ -139,7 +161,7 @@ final class ComputerUsePhase0Tests: XCTestCase {
         let application = makeApplication()
         let service = makeObservationService(application: application, windows: [])
 
-        XCTAssertThrowsError(try service.observe(applicationID: application.id, includeScreenshot: false)) { error in
+        XCTAssertThrowsError(try service.observe(applicationID: application.id)) { error in
             XCTAssertEqual(error as? ComputerUseObservationError, .noWindow(application.id))
         }
     }
@@ -152,12 +174,11 @@ final class ComputerUsePhase0Tests: XCTestCase {
             displayName: application.displayName,
             processIdentifier: application.processIdentifier,
             isRunning: false,
-            isActive: false,
-            launchDate: application.launchDate
+            isActive: false
         )
         let service = makeObservationService(application: application, windows: [makeWindow()])
 
-        XCTAssertThrowsError(try service.observe(applicationID: application.id, includeScreenshot: false)) { error in
+        XCTAssertThrowsError(try service.observe(applicationID: application.id)) { error in
             XCTAssertEqual(error as? ComputerUseObservationError, .applicationNotRunning(application.id))
         }
     }
@@ -169,17 +190,15 @@ final class ComputerUsePhase0Tests: XCTestCase {
             displayName: "Browser",
             processIdentifier: 1234,
             isRunning: false,
-            isActive: false,
-            launchDate: nil
+            isActive: false
         )
         let running = ComputerUseApplication(
-            id: "com.example.browser#1234",
+            id: stopped.bundleIdentifier,
             bundleIdentifier: stopped.bundleIdentifier,
             displayName: stopped.displayName,
             processIdentifier: stopped.processIdentifier,
             isRunning: true,
-            isActive: false,
-            launchDate: nil
+            isActive: false
         )
         let catalog = LaunchingApplicationCatalog(stopped: stopped, running: running)
         let service = ComputerUseObservationService(
@@ -192,13 +211,52 @@ final class ComputerUsePhase0Tests: XCTestCase {
 
         let observation = try await service.observeTarget(
             applicationIdentifier: stopped.bundleIdentifier,
-            includeScreenshot: false,
             configuration: .default,
             cancellation: ComputerUseCancellationToken()
         )
 
         XCTAssertTrue(catalog.didLaunch)
         XCTAssertEqual(observation.target.application, running)
+    }
+
+    func testObservationWaitsForAWindowAfterLaunchingAnApplication() async throws {
+        let stopped = ComputerUseApplication(
+            id: "com.example.calculator",
+            bundleIdentifier: "com.example.calculator",
+            displayName: "Calculator",
+            processIdentifier: 1234,
+            isRunning: false,
+            isActive: false
+        )
+        let running = ComputerUseApplication(
+            id: stopped.bundleIdentifier,
+            bundleIdentifier: stopped.bundleIdentifier,
+            displayName: stopped.displayName,
+            processIdentifier: stopped.processIdentifier,
+            isRunning: true,
+            isActive: false
+        )
+        let window = makeWindow()
+        let catalog = LaunchingApplicationCatalog(stopped: stopped, running: running)
+        let windowDiscovery = SequencedWindowDiscovery(windows: [[], [window]])
+        let service = ComputerUseObservationService(
+            applicationCatalog: catalog,
+            windowDiscovery: windowDiscovery,
+            accessibilityReader: StubAccessibilityReader(),
+            screenshotCapturer: StubScreenshotCapturer(),
+            permissionManager: StubPermissionManager(snapshot: readyPermissions),
+            launchWindowPollIntervalNanoseconds: 0,
+            launchWindowPollAttempts: 2
+        )
+
+        let observation = try await service.observeTarget(
+            applicationIdentifier: stopped.bundleIdentifier,
+            configuration: .default,
+            cancellation: ComputerUseCancellationToken()
+        )
+
+        XCTAssertEqual(windowDiscovery.callCount, 3)
+        XCTAssertEqual(observation.target.window, window)
     }
 
     func testObservationPropagatesScreenshotFailure() {
@@ -211,7 +269,7 @@ final class ComputerUsePhase0Tests: XCTestCase {
             permissionManager: StubPermissionManager(snapshot: readyPermissions)
         )
 
-        XCTAssertThrowsError(try service.observe(applicationID: application.id, includeScreenshot: true)) { error in
+        XCTAssertThrowsError(try service.observe(applicationID: application.id)) { error in
             XCTAssertEqual(error as? ComputerUseObservationError, .screenshotUnavailable)
         }
     }
@@ -222,12 +280,12 @@ final class ComputerUsePhase0Tests: XCTestCase {
             .applicationNotFound("missing"),
             .applicationNotRunning("stopped"),
             .noWindow("empty"),
-            .windowNotFound(42),
             .accessibilityNotTrusted,
             .accessibilityWindowNotFound("untitled"),
             .accessibilityReadFailed("AXRole"),
             .screenRecordingNotGranted,
             .screenshotUnavailable,
+            .targetActivationFailed("target"),
         ]
 
         for error in errors {
@@ -239,7 +297,7 @@ final class ComputerUsePhase0Tests: XCTestCase {
         let ready = readyPermissions
         XCTAssertTrue(ready.canReadAccessibility)
         XCTAssertTrue(ready.canCaptureScreen)
-        XCTAssertTrue(ready.canObserveWithScreenshot)
+        XCTAssertTrue(ready.canObserve)
 
         let incomplete = ComputerUsePermissionSnapshot(
             accessibility: .granted,
@@ -247,7 +305,7 @@ final class ComputerUsePhase0Tests: XCTestCase {
         )
         XCTAssertTrue(incomplete.canReadAccessibility)
         XCTAssertFalse(incomplete.canCaptureScreen)
-        XCTAssertFalse(incomplete.canObserveWithScreenshot)
+        XCTAssertFalse(incomplete.canObserve)
     }
 
     func testRectDetectsEmptyGeometry() {
@@ -265,7 +323,6 @@ final class ComputerUsePhase0Tests: XCTestCase {
         XCTAssertThrowsError(
             try service.observe(
                 applicationID: application.id,
-                includeScreenshot: false,
                 configuration: .default,
                 cancellation: cancellation
             )
@@ -287,7 +344,6 @@ final class ComputerUsePhase0Tests: XCTestCase {
         XCTAssertThrowsError(
             try service.observe(
                 applicationID: application.id,
-                includeScreenshot: false,
                 configuration: .default,
                 cancellation: cancellation
             )
@@ -378,23 +434,54 @@ final class ComputerUsePhase0Tests: XCTestCase {
         XCTAssertFalse(discovery.listWindows(for: application)[0].isKeyWindow)
     }
 
-    func testApplicationIDsIncludeProcessIdentity() {
+    func testWindowDiscoveryPreservesTheNativeFrontToBackOrder() {
+        let application = makeApplication()
+        let discovery = SystemComputerUseWindowDiscovery(
+            windowInfoProvider: {
+                [
+                    [
+                        kCGWindowOwnerPID as String: NSNumber(value: application.processIdentifier),
+                        kCGWindowNumber as String: NSNumber(value: 1),
+                        kCGWindowLayer as String: NSNumber(value: 0),
+                        kCGWindowName as String: "Window",
+                        kCGWindowBounds as String: [
+                            "X": CGFloat(10),
+                            "Y": CGFloat(20),
+                            "Width": CGFloat(66),
+                            "Height": CGFloat(20),
+                        ],
+                    ],
+                    [
+                        kCGWindowOwnerPID as String: NSNumber(value: application.processIdentifier),
+                        kCGWindowNumber as String: NSNumber(value: 2),
+                        kCGWindowLayer as String: NSNumber(value: 0),
+                        kCGWindowName as String: "Main",
+                        kCGWindowBounds as String: [
+                            "X": CGFloat(20),
+                            "Y": CGFloat(30),
+                            "Width": CGFloat(1200),
+                            "Height": CGFloat(951),
+                        ],
+                    ],
+                ]
+            },
+            frontmostProcessIdentifierProvider: { application.processIdentifier }
+        )
+
+        let windows = discovery.listWindows(for: application)
+
+        XCTAssertEqual(windows.map(\.id), [1, 2])
+        XCTAssertEqual(windows.first?.title, "Window")
+        XCTAssertTrue(windows.first?.isKeyWindow == true)
+    }
+
+    func testApplicationIDsUseTheReferenceBundleIdentifier() {
         XCTAssertEqual(
             SystemComputerUseApplicationCatalog.applicationID(
                 bundleIdentifier: "com.example.notes",
                 processIdentifier: 1234
             ),
-            "com.example.notes#1234"
-        )
-        XCTAssertNotEqual(
-            SystemComputerUseApplicationCatalog.applicationID(
-                bundleIdentifier: "com.example.notes",
-                processIdentifier: 1234
-            ),
-            SystemComputerUseApplicationCatalog.applicationID(
-                bundleIdentifier: "com.example.notes",
-                processIdentifier: 5678
-            )
+            "com.example.notes"
         )
     }
 
@@ -407,10 +494,6 @@ final class ComputerUsePhase0Tests: XCTestCase {
         XCTAssertEqual(screenshot.mimeType, "image/png")
         XCTAssertEqual(screenshot.width, 1)
         XCTAssertEqual(screenshot.height, 1)
-        XCTAssertFalse(screenshot.id.isEmpty)
-        XCTAssertEqual(screenshot.originX, 10)
-        XCTAssertEqual(screenshot.originY, 20)
-        XCTAssertEqual(screenshot.zIndex, 0)
         XCTAssertFalse(screenshot.data.isEmpty)
     }
 
@@ -426,11 +509,13 @@ final class ComputerUsePhase0Tests: XCTestCase {
         permissionSnapshot: ComputerUsePermissionSnapshot = ComputerUsePermissionSnapshot(accessibility: .granted, screenRecording: .granted),
         axReader: StubAccessibilityReader? = nil,
         windowDiscovery: StubWindowDiscovery? = nil,
+        windowActivator: StubWindowActivator? = nil,
         now: Date = Date(timeIntervalSince1970: 0)
     ) -> ComputerUseObservationService {
         ComputerUseObservationService(
             applicationCatalog: StubApplicationCatalog(applications: [application]),
             windowDiscovery: windowDiscovery ?? StubWindowDiscovery(windows: windows),
+            windowActivator: windowActivator ?? StubWindowActivator(),
             accessibilityReader: axReader ?? StubAccessibilityReader(snapshot: axSnapshot),
             screenshotCapturer: StubScreenshotCapturer(screenshot: screenshot),
             permissionManager: StubPermissionManager(snapshot: permissionSnapshot),
@@ -445,8 +530,7 @@ final class ComputerUsePhase0Tests: XCTestCase {
             displayName: "Notes",
             processIdentifier: 1234,
             isRunning: true,
-            isActive: true,
-            launchDate: Date(timeIntervalSince1970: 1)
+            isActive: true
         )
     }
 
@@ -539,6 +623,34 @@ private final class StubWindowDiscovery: ComputerUseWindowDiscovering {
     func listWindows(for application: ComputerUseApplication) -> [ComputerUseWindow] {
         lastApplication = application
         return windows
+    }
+}
+
+private final class SequencedWindowDiscovery: ComputerUseWindowDiscovering {
+    private let windowSequences: [[ComputerUseWindow]]
+    private(set) var callCount = 0
+
+    init(windows: [[ComputerUseWindow]]) {
+        self.windowSequences = windows
+    }
+
+    func listWindows(for application: ComputerUseApplication) -> [ComputerUseWindow] {
+        defer { callCount += 1 }
+        return windowSequences[min(callCount, windowSequences.count - 1)]
+    }
+}
+
+private final class StubWindowActivator: ComputerUseWindowActivating {
+    let shouldActivate: Bool
+    private(set) var lastTarget: ComputerUseTarget?
+
+    init(shouldActivate: Bool = true) {
+        self.shouldActivate = shouldActivate
+    }
+
+    func activate(target: ComputerUseTarget) -> Bool {
+        lastTarget = target
+        return shouldActivate
     }
 }
 

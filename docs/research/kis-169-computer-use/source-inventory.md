@@ -62,7 +62,20 @@ These files establish the public macOS target, action inputs, app policy, approv
 
 Status: `[Verified]` by source inspection.
 
-## Corrective parity slice
+## Superseding source inventory correction — 2026-08-03
+
+- `[Verified]` The current production surface does not contain the removed action panel, target
+  lock/intervention monitor, screenshot-choice state, cached element/action policy, or local agent
+  limits.
+- `[Verified]` `ComputerUseCoordinator` owns app-level UI/session state; internal window discovery
+  remains in `ComputerUseObservationService`, `ComputerUseAccessibilityReader`, screenshot capture,
+  and window activation adapters.
+- `[Verified]` `ComputerUseModelClient` sends Accessibility text and the observation screenshot;
+  the former duplicate element renderer and internal window metadata are removed.
+- `[Unknown]` No source inventory can establish the inspected artifact's full native helper or
+  server-side model implementation.
+
+## Corrective parity slice (historical implementation record)
 
 The current parity slice extends the desktop path with these boundaries:
 
@@ -72,9 +85,9 @@ The current parity slice extends the desktop path with these boundaries:
   activation for an explicitly selected target.
 - `Suniye/Services/ComputerUseActionModels.swift` and `ComputerUseActionService.swift` add bounded
   click metadata, indexed clicks, positioned scroll, drag, AX value setting, text selection, and
-  dynamic Accessibility actions. Coordinate actions can validate a screenshot ID.
+  dynamic secondary Accessibility actions. Coordinate actions can validate a screenshot ID.
 - `Suniye/Views/MainWindow/ComputerUsePage.swift` adds window selection, Bring Forward, and
-  always-allowed approval management.
+  the optional local screenshot control.
 - `docs/research/kis-169-computer-use/parity-audit.md` records the reference comparison.
 
 Status: `[Verified]` by focused tests, source inspection, and the live `@Computer` run for the
@@ -236,7 +249,6 @@ Phase 2 added these source files and boundaries:
 - `Suniye/Services/ComputerUseActionModels.swift`;
 - `Suniye/Services/ComputerUseActionService.swift`;
 - `Suniye/Services/ComputerUseInputEventService.swift`;
-- `Suniye/Views/MainWindow/ComputerUseActionPanel.swift`;
 - `SuniyeTests/ComputerUsePhase2ActionTests.swift`;
 - `SuniyeTests/ComputerUsePhase2TestSupport.swift`;
 - `SuniyeTests/ComputerUsePhase2Tests.swift`.
@@ -245,18 +257,18 @@ Phase 2 also extends `ComputerUseCoordinator.swift` and
 `ComputerUseAccessibilityReader.swift`, and regenerates the Xcode project.
 
 Status: `[Verified]` by the Phase 2 build and focused test run. The native event adapter and
-SwiftUI action panel remain platform-bound or render-only paths.
+Accessibility action boundary remain platform-bound paths. The temporary SwiftUI manual action
+panel was removed in the 2026-08-03 parity cleanup; current actions enter through the agent loop.
 
 Phase 3 added these source files and boundaries:
 
 - `Suniye/Services/ComputerUseAgentModels.swift`;
 - `Suniye/Services/ComputerUseAgent.swift`;
-- `Suniye/Services/ComputerUseInterventionMonitor.swift`;
 - `SuniyeTests/ComputerUsePhase3Tests.swift`.
 - `SuniyeTests/ComputerUsePhase3TestSupport.swift`.
 
-Phase 3 also regenerates the Xcode project and excludes only the live WindowServer intervention
-adapter from the coverage gate.
+Phase 3 also regenerates the Xcode project. Live WindowServer behavior remains outside the
+headless coverage gate where the current exclusion file documents it.
 
 Status: `[Verified]` by the Phase 3 full test and coverage run. The model client is an
 unconfigured default plus test doubles; no live provider is connected.

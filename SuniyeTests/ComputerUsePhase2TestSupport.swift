@@ -15,6 +15,7 @@ final class Phase2StubInputEventPoster: ComputerUseInputEventPosting {
     struct KeyCall: Equatable {
         let key: ComputerUseKey
         let modifiers: ComputerUseKeyModifiers
+        let targetProcessIdentifier: Int32
     }
 
     struct ScrollCall: Equatable {
@@ -65,6 +66,7 @@ final class Phase2StubInputEventPoster: ComputerUseInputEventPosting {
     func keyPress(
         key: ComputerUseKey,
         modifiers: ComputerUseKeyModifiers,
+        targetProcessIdentifier: Int32,
         cancellation: ComputerUseCancellationToken
     ) throws {
         if let error {
@@ -73,7 +75,13 @@ final class Phase2StubInputEventPoster: ComputerUseInputEventPosting {
         guard !cancellation.isCancelled else {
             throw ComputerUseActionError.cancelled
         }
-        keys.append(KeyCall(key: key, modifiers: modifiers))
+        keys.append(
+            KeyCall(
+                key: key,
+                modifiers: modifiers,
+                targetProcessIdentifier: targetProcessIdentifier
+            )
+        )
     }
 
     func scroll(
@@ -165,7 +173,7 @@ final class Phase2StubTextInserter: TextInsertionServiceProtocol {
     func makeFocusedFieldValueProvider() -> (() -> String?)? { nil }
 }
 
-final class Phase2StubSemanticActionPerformer: ComputerUseSemanticActionPerforming {
+final class Phase2StubSecondaryActionPerformer: ComputerUseSecondaryActionPerforming {
     struct ActionCall: Equatable {
         let action: String
         let elementIndex: Int
@@ -260,7 +268,6 @@ final class Phase2StubObservationService: ComputerUseObservationServicing {
 
     func observe(
         applicationID: String,
-        includeScreenshot: Bool,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) throws -> ComputerUseObservation {
@@ -297,30 +304,6 @@ final class Phase2StubActionService: ComputerUseActionServicing {
     }
 }
 
-final class Phase2BlockingActionService: ComputerUseActionServicing {
-    let onStart: () -> Void
-    private(set) var executeCount = 0
-
-    init(onStart: @escaping () -> Void) {
-        self.onStart = onStart
-    }
-
-    func execute(
-        action: ComputerUseAction,
-        observation: ComputerUseObservation,
-        approval: ComputerUseApprovalGrant,
-        requestID: UUID,
-        cancellation: ComputerUseCancellationToken
-    ) throws -> ComputerUseActionResult {
-        executeCount += 1
-        onStart()
-        while !cancellation.isCancelled {
-            Thread.sleep(forTimeInterval: 0.005)
-        }
-        throw ComputerUseActionError.cancelled
-    }
-}
-
 func makePhase2Application() -> ComputerUseApplication {
     ComputerUseApplication(
         id: "com.example.target#42",
@@ -328,8 +311,7 @@ func makePhase2Application() -> ComputerUseApplication {
         displayName: "Target App",
         processIdentifier: 42,
         isRunning: true,
-        isActive: true,
-        launchDate: nil
+        isActive: true
     )
 }
 

@@ -65,7 +65,7 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         )
     }
 
-    func testPromptRendererRedactsTypedActionContentAndControlsScreenshotUpload() {
+    func testPromptRendererRedactsTypedActionContentAndIncludesTheObservationScreenshot() {
         let observation = makePhase3Observation(generation: 8)
         let screenshot = ComputerUseScreenshot(
             data: Data([0x01, 0x02, 0x03]),
@@ -94,24 +94,15 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             iteration: 2
         )
 
-        let textOnly = ComputerUseModelPromptRenderer.render(
-            request: request,
-            includeScreenshot: false
-        )
-        XCTAssertNil(textOnly.screenshot)
-        XCTAssertTrue(textOnly.text.contains("Type 12 characters"))
-        XCTAssertFalse(textOnly.text.contains("secret-value"))
-        XCTAssertTrue(textOnly.text.contains("Available applications:"))
-        XCTAssertTrue(textOnly.text.contains("Target App (com.example.target)"))
-
-        let multimodal = ComputerUseModelPromptRenderer.render(
-            request: request,
-            includeScreenshot: true
-        )
-        XCTAssertEqual(multimodal.screenshot, screenshot)
+        let rendered = ComputerUseModelPromptRenderer.render(request: request)
+        XCTAssertEqual(rendered.screenshot, screenshot)
+        XCTAssertTrue(rendered.text.contains("Type 12 characters"))
+        XCTAssertFalse(rendered.text.contains("secret-value"))
+        XCTAssertTrue(rendered.text.contains("Available applications:"))
+        XCTAssertTrue(rendered.text.contains("Target App (com.example.target)"))
     }
 
-    func testPromptRendererIncludesAvailableAccessibilityFields() {
+    func testPromptRendererIncludesNativeAccessibilityText() {
         let base = makePhase3Observation(generation: 9)
         let richElement = ComputerUseAXElement(
             index: 2,
@@ -132,7 +123,7 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             capturedAt: base.capturedAt,
             target: base.target,
             accessibility: ComputerUseAXSnapshot(
-                text: "",
+                text: "Search field: query (AXTextField, focused, selected, enabled)",
                 elements: [richElement],
                 wasTruncated: false
             ),
@@ -145,23 +136,15 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
                 observation: observation,
                 recentActionResults: [],
                 iteration: 1
-            ),
-            includeScreenshot: false
+            )
         ).text
 
-        XCTAssertTrue(prompt.contains("role=AXTextField"))
-        XCTAssertTrue(prompt.contains("subrole=AXSearchField"))
-        XCTAssertTrue(prompt.contains("title=\"Search\""))
-        XCTAssertTrue(prompt.contains("description=\"Search field\""))
-        XCTAssertTrue(prompt.contains("value=\"query\""))
-        XCTAssertTrue(prompt.contains("enabled=true"))
-        XCTAssertTrue(prompt.contains("focused=true"))
-        XCTAssertTrue(prompt.contains("selected=true"))
-        XCTAssertTrue(prompt.contains("bounds=10.0,20.0,200.0,30.0"))
-        XCTAssertTrue(prompt.contains("actions=AXPress,AXShowMenu"))
+        XCTAssertTrue(prompt.contains("Search field: query (AXTextField, focused, selected, enabled)"))
+        XCTAssertFalse(prompt.contains("role=AXTextField"))
+        XCTAssertFalse(prompt.contains("bounds=10.0,20.0,200.0,30.0"))
     }
 
-    func testDecisionParserAcceptsDirectAndFencedJSON() throws {
+    func testDecisionParserAcceptsCanonicalAndFencedJSON() throws {
         let action = ComputerUseAction.click(point: ComputerUsePoint(x: 10, y: 20))
         let encodedAction = try JSONEncoder().encode(
             ComputerUseModelDecision.action(action)
@@ -186,6 +169,28 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             ),
             .target(application: "com.google.Chrome")
         )
+        XCTAssertEqual(
+            try ComputerUseModelDecisionParser.parse(
+                #"{"kind":"action","action":{"kind":"press_key","key":"Control_L+a"}}"#
+            ),
+            .action(
+                .keyPress(
+                    key: .character("a"),
+                    modifiers: ComputerUseKeyModifiers(control: true)
+                )
+            )
+        )
+        XCTAssertEqual(
+            try ComputerUseModelDecisionParser.parse(
+                #"{"kind":"action","action":{"kind":"press_key","key":"Control_L+greater"}}"#
+            ),
+            .action(
+                .keyPress(
+                    key: .character("."),
+                    modifiers: ComputerUseKeyModifiers(control: true, shift: true)
+                )
+            )
+        )
     }
 
     func testDecisionParserRejectsMalformedAndEmptyDecisions() {
@@ -195,7 +200,7 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         assertInvalidResponse("{\"kind\":\"target\",\"app\":\" \"}")
     }
 
-    func testModelClientSendsTextAndOptionalScreenshotAndParsesDecision() async throws {
+    func testModelClientSendsTextAndScreenshotAndParsesDecision() async throws {
         let endpoint = URL(string: "https://example.com/v1/chat/completions")!
         let observation = makePhase3Observation(generation: 12)
         let screenshot = ComputerUseScreenshot(
@@ -224,6 +229,10 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
                 ) as? [String: Any]
             )
             XCTAssertEqual(body["model"] as? String, "vision-model")
+            XCTAssertEqual(
+                body["max_tokens"] as? Int,
+                ComputerUseRemoteModelDefaults.maxTokens
+            )
             let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
             XCTAssertEqual(messages[0]["role"] as? String, "system")
             let content = try XCTUnwrap(messages[1]["content"] as? [[String: Any]])
@@ -240,8 +249,7 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             configuration: ComputerUseRemoteModelConfiguration(
                 endpointURL: endpoint,
                 modelID: "vision-model",
-                apiKey: "test-key",
-                allowsScreenshotUpload: true
+                apiKey: "test-key"
             ),
             completionClient: makeCompletionClient()
         )
@@ -253,7 +261,7 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         XCTAssertEqual(decision, .completed(message: "Done."))
     }
 
-    func testModelClientDoesNotSendScreenshotWithoutExplicitUploadPermission() async throws {
+    func testModelClientSendsAvailableScreenshot() async throws {
         let endpoint = URL(string: "https://example.com/v1/chat/completions")!
         let observation = makePhase3Observation(generation: 13)
         let request = ComputerUseModelRequest(
@@ -277,10 +285,12 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             let body = try XCTUnwrap(
                 try JSONSerialization.jsonObject(
                     with: try XCTUnwrap(ComputerUseModelURLProtocol.bodyData(from: request))
-                ) as? [String: Any]
-            )
+            ) as? [String: Any]
+        )
             let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
-            XCTAssertTrue(messages[1]["content"] is String)
+            let content = try XCTUnwrap(messages[1]["content"] as? [[String: Any]])
+            XCTAssertEqual(content[0]["type"] as? String, "text")
+            XCTAssertEqual(content[1]["type"] as? String, "image_url")
             return try Self.response(
                 for: request,
                 decision: .blocked(reason: "No action is needed.")
