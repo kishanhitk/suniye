@@ -86,3 +86,37 @@ the Computer Use skill against Calculator only.
   third-party/destructive workflow.
 - `[Unknown]` This confirms one configured-provider path, not full provider parity. Helper IPC,
   Screen Recording consent, cross-process input, and browser extension behavior remain open.
+
+## Direct voice integration check — 2026-08-03
+
+- `[Verified]` The source-level route is connected from the existing AppState dictation lifecycle
+  to the visible Computer Use coordinator.
+- `[Verified]` Signed focused tests confirm that a transcribed voice task bypasses normal text
+  insertion and starts or queues the Computer Use agent through the coordinator seam.
+- `[Not exercised]` A live microphone task was not run in this pass.
+- `[Unknown]` Live ASR output, model request timing, Screen Recording capture, and the behavior of
+  a voice task while a provider is unavailable still need manual validation.
+
+### Manual voice test
+
+1. Open `/Users/kishan/Applications/Suniye Preview.app`.
+2. Configure `Model → API Endpoint` and save a supported model/key.
+3. Open `Computer Use`, grant the displayed Accessibility and Screen Recording permissions, and
+   select a harmless read-only desktop task.
+4. Hold the normal Suniye dictation hotkey, speak the task, and release.
+5. Confirm that the transcript is not inserted into the focused app and that the agent starts
+   automatically or shows a clear queued/preparation state.
+6. Leave Computer Use and repeat ordinary dictation to confirm the normal insertion route.
+
+Browser tasks should use the browser extension path and are not evidence for this desktop voice
+route.
+
+### Refreshed Preview UI smoke — 2026-08-03
+
+- `[Verified]` After reinstalling and relaunching `/Users/kishan/Applications/Suniye Preview.app`,
+  the Computer Use page exposes the direct voice instruction: “Hold your dictation hotkey, speak
+  a task, and release. The agent starts automatically after transcription.”
+- `[Verified]` The refreshed page still shows the configured model and Computer Use permission
+  rows, and does not expose the removed manual action or approval controls.
+- `[Not exercised]` This UI smoke did not record microphone audio, submit a voice task, or send a
+  model request.

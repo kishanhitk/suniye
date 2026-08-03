@@ -4,13 +4,16 @@ import SwiftUI
 struct ComputerUsePage: View {
     @Bindable var coordinator: ComputerUseCoordinator
     let remoteModelConfiguration: ComputerUseRemoteModelConfiguration?
+    let onVoiceTaskHandlerChange: ((any ComputerUseVoiceTaskHandling)?) -> Void
 
     init(
         coordinator: ComputerUseCoordinator,
-        remoteModelConfiguration: ComputerUseRemoteModelConfiguration? = nil
+        remoteModelConfiguration: ComputerUseRemoteModelConfiguration? = nil,
+        onVoiceTaskHandlerChange: @escaping ((any ComputerUseVoiceTaskHandling)?) -> Void = { _ in }
     ) {
         self.coordinator = coordinator
         self.remoteModelConfiguration = remoteModelConfiguration
+        self.onVoiceTaskHandlerChange = onVoiceTaskHandlerChange
     }
 
     var body: some View {
@@ -72,6 +75,7 @@ struct ComputerUsePage: View {
             }
         }
         .onAppear {
+            onVoiceTaskHandlerChange(coordinator)
             coordinator.configureRemoteModel(remoteModelConfiguration)
             coordinator.start()
         }
@@ -79,6 +83,7 @@ struct ComputerUsePage: View {
             coordinator.configureRemoteModel(configuration)
         }
         .onDisappear {
+            onVoiceTaskHandlerChange(nil)
             coordinator.cancel()
         }
     }

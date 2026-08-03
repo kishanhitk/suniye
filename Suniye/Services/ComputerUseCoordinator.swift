@@ -19,7 +19,7 @@ enum ComputerUseCoordinatorPhase: Equatable {
 /// `ComputerUsePlatformRunner` so platform work does not block SwiftUI rendering.
 @MainActor
 @Observable
-final class ComputerUseCoordinator {
+final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     private let runner: ComputerUsePlatformRunner
     private let applicationCatalog: ComputerUseApplicationCatalog
     private let observationService: ComputerUseObservationServicing
@@ -39,6 +39,9 @@ final class ComputerUseCoordinator {
     var errorMessage: String?
     var agentInstruction = ""
     var agentResult: ComputerUseAgentResult?
+    var isVoiceTaskPending: Bool {
+        pendingVoiceInstruction != nil
+    }
 
     @ObservationIgnored private var activeOperationID: UUID?
     @ObservationIgnored private var activeCancellation: ComputerUseCancellationToken?
@@ -47,6 +50,7 @@ final class ComputerUseCoordinator {
     @ObservationIgnored private var observationTask: Task<Void, Never>?
     @ObservationIgnored private var agentTask: Task<Void, Never>?
     @ObservationIgnored private var remoteModelConfiguration: ComputerUseRemoteModelConfiguration?
+    private var pendingVoiceInstruction: String?
     @ObservationIgnored private lazy var agent: ComputerUseAgent = makeAgent(
         modelClient: modelClient
     )
@@ -185,6 +189,7 @@ final class ComputerUseCoordinator {
         remoteModelConfiguration = nil
         self.modelClient = modelClient
         agent = makeAgent(modelClient: modelClient)
+        startPendingVoiceTaskIfPossible()
     }
 
     func configureRemoteModel(_ configuration: ComputerUseRemoteModelConfiguration?) {
@@ -194,6 +199,28 @@ final class ComputerUseCoordinator {
         remoteModelConfiguration = configuration
         modelClient = configuration.map { makeRemoteModelClient(configuration: $0) }
         agent = makeAgent(modelClient: modelClient)
+        startPendingVoiceTaskIfPossible()
+    }
+
+    func submitVoiceTask(_ instruction: String) -> ComputerUseVoiceTaskSubmission {
+        let trimmedInstruction = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedInstruction.isEmpty else {
+            return .rejected(message: "No Computer Use task was transcribed.")
+        }
+
+        guard phase != .runningAgent, phase != .observing else {
+            return .rejected(message: "Computer Use is already working.")
+        }
+
+        agentInstruction = trimmedInstruction
+        pendingVoiceInstruction = trimmedInstruction
+        if canRunAgent {
+            startPendingVoiceTaskIfPossible()
+            return .started
+        } else {
+            errorMessage = voiceTaskWaitingMessage
+            return .queued
+        }
     }
 
     func startAgent() {
@@ -207,6 +234,7 @@ final class ComputerUseCoordinator {
             return
         }
 
+        pendingVoiceInstruction = nil
         cancelActiveOperation()
         let operationID = UUID()
         let cancellation = ComputerUseCancellationToken()
@@ -267,6 +295,7 @@ final class ComputerUseCoordinator {
             self.permissionSnapshot = loadedPermissions
             self.reconcileSelection()
             self.phase = .ready
+            self.startPendingVoiceTaskIfPossible()
         }
     }
 
@@ -286,6 +315,7 @@ final class ComputerUseCoordinator {
             }
 
             self.permissionSnapshot = permissions
+            self.startPendingVoiceTaskIfPossible()
         }
     }
 
@@ -390,6 +420,7 @@ final class ComputerUseCoordinator {
         cancelActiveOperation()
         refreshTask?.cancel()
         permissionTask?.cancel()
+        pendingVoiceInstruction = nil
 
         if isBusy {
             phase = .ready
@@ -420,6 +451,7 @@ final class ComputerUseCoordinator {
 
             self.permissionSnapshot = permissions
             self.phase = .ready
+            self.startPendingVoiceTaskIfPossible()
         }
     }
 
@@ -450,6 +482,25 @@ final class ComputerUseCoordinator {
         if result.phase == .failed {
             errorMessage = result.message
         }
+    }
+
+    private func startPendingVoiceTaskIfPossible() {
+        guard let pendingInstruction = pendingVoiceInstruction, canRunAgent else {
+            return
+        }
+        agentInstruction = pendingInstruction
+        pendingVoiceInstruction = nil
+        startAgent()
+    }
+
+    private var voiceTaskWaitingMessage: String {
+        if isBusy {
+            return "Voice task captured. Computer Use is still preparing."
+        }
+        if !isModelConfigured {
+            return "Voice task captured. Connect a model to run it."
+        }
+        return "Voice task captured. Grant Computer Use permissions to run it."
     }
 
     private func makeAgent(

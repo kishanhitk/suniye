@@ -1504,6 +1504,7 @@ final class AppState {
     private let magicFormatSlowWarningDelaySeconds: TimeInterval
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
+    @ObservationIgnored private weak var computerUseVoiceTaskHandler: (any ComputerUseVoiceTaskHandling)?
 
     private struct DictationSessionContext {
         let id: UUID
@@ -1552,13 +1553,14 @@ final class AppState {
         case systemInsertion
         case clipboardOnly
         case onboardingPractice
+        case computerUseTask
         case editRewrite(selectedText: String?)
 
         var needsAccessibility: Bool {
             switch self {
             case .systemInsertion, .editRewrite:
                 true
-            case .clipboardOnly, .onboardingPractice:
+            case .clipboardOnly, .onboardingPractice, .computerUseTask:
                 false
             }
         }
@@ -1571,6 +1573,8 @@ final class AppState {
                 .clipboard
             case .onboardingPractice:
                 .onboardingPractice
+            case .computerUseTask:
+                .unknown
             }
         }
     }
@@ -3225,6 +3229,13 @@ final class AppState {
         }
     }
 
+    /// Registers the visible Computer Use page as the destination for the next
+    /// ordinary dictation session. The weak reference keeps global dictation
+    /// state from owning a window-scoped coordinator.
+    func setComputerUseVoiceTaskHandler(_ handler: (any ComputerUseVoiceTaskHandling)?) {
+        computerUseVoiceTaskHandler = handler
+    }
+
     func startUpdateController() {
         AppLogger.shared.log(.info, "sparkle updater start")
         appUpdateController.start()
@@ -3720,6 +3731,11 @@ final class AppState {
                     source: context.source,
                     destination: destination
                 )
+            case .computerUseTask:
+                completeComputerUseVoiceTask(
+                    rawText: rawText,
+                    sessionID: sessionID
+                )
             case .onboardingPractice:
                 await completeOnboardingPracticeDictation(
                     rawText: rawText,
@@ -3745,6 +3761,43 @@ final class AppState {
                 indicatorMessage: "Transcription failed"
             )
         }
+    }
+
+    private func completeComputerUseVoiceTask(
+        rawText: String,
+        sessionID: UUID
+    ) {
+        guard !rawText.isEmpty else {
+            failDictationSession(
+                sessionID: sessionID,
+                lastErrorMessage: "No Computer Use task was transcribed.",
+                indicatorMessage: "No task heard"
+            )
+            return
+        }
+        guard let handler = computerUseVoiceTaskHandler else {
+            failDictationSession(
+                sessionID: sessionID,
+                lastErrorMessage: "Computer Use is no longer active.",
+                indicatorMessage: "Computer Use is no longer active"
+            )
+            return
+        }
+
+        switch handler.submitVoiceTask(rawText) {
+        case .started, .queued:
+            break
+        case let .rejected(message):
+            failDictationSession(
+                sessionID: sessionID,
+                lastErrorMessage: message,
+                indicatorMessage: message
+            )
+            return
+        }
+        let wordCount = rawText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+        AppLogger.shared.log(.info, "voice Computer Use task submitted words=\(wordCount)")
+        completeDictationSession(sessionID: sessionID, playSuccessSound: true)
     }
 
     private func completeDictation(
@@ -4521,6 +4574,9 @@ final class AppState {
     private var currentDictationDestination: DictationDestination {
         if activeOnboardingStep == .speak {
             return .onboardingPractice
+        }
+        if computerUseVoiceTaskHandler != nil {
+            return .computerUseTask
         }
         return hasAccessibilityPermission ? .systemInsertion : .clipboardOnly
     }

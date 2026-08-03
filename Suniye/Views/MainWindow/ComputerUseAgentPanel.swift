@@ -17,6 +17,23 @@ struct ComputerUseAgentPanel: View {
                         .foregroundStyle(MainWindowPalette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
 
+                    Label(
+                        "Hold your dictation hotkey, speak a task, and release. The agent starts automatically after transcription.",
+                        systemImage: "mic"
+                    )
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    if coordinator.isVoiceTaskPending {
+                        Label(
+                            "Voice task captured; waiting for Computer Use to become ready.",
+                            systemImage: "hourglass"
+                        )
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(.orange)
+                    }
+
                     TextEditor(text: $coordinator.agentInstruction)
                         .font(AppTypography.body)
                         .frame(minHeight: 96)

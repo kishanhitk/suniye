@@ -81,6 +81,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed st
 | **Dashboard** | Sessions, words dictated, total time, and recent activity — at a glance |
 | **History** | Searchable log of past transcriptions; copy or delete any entry |
 | **Magic Format** | Optional AI cleanup for punctuation, capitalization, and formatting |
+| **Computer Use (Preview)** | Speak a desktop task from the Computer Use page and let the configured agent inspect and operate the selected app |
 | **Per-app prompts** | Give each app its own Magic Format style — terse in chat, prose in notes |
 | **Edit Mode** | Select text anywhere, hold a second shortcut, and speak an instruction (“make this formal”) to rewrite it in place |
 | **Live preview** | Watch a partial transcript appear in the floating indicator as you speak |
@@ -95,6 +96,16 @@ Turn a raw transcript into polished text on your terms. It's off until you turn 
 1. **Apple Intelligence** — on supported Macs, nothing leaves the machine.
 2. **A local model** — a small on-device formatter (Gemma) that works fully offline.
 3. **Your own provider** — bring an OpenAI-compatible key; only text (never audio) is sent, and only if you choose this.
+
+### Computer Use — speak a desktop task
+
+Open **Computer Use**, configure an API Endpoint in **Model** settings, and grant the displayed
+Accessibility and Screen Recording permissions. Then hold the normal Suniye dictation hotkey,
+speak a task, and release. The transcript is sent directly to the Computer Use agent instead of
+being inserted at the current cursor. The page also keeps a manual task field for testing.
+
+Computer Use is a Preview feature. Desktop observation and actions require macOS permissions, and
+an explicitly configured model endpoint. Browser tasks use a separate extension path.
 
 ## Choose your speech model
 
@@ -114,7 +125,7 @@ Suniye ships a curated catalog instead of a single fixed recognizer — from App
 
 - Transcription happens **entirely on your Mac**. Audio is processed in memory and never sent anywhere.
 - The only network calls are model downloads, update checks, optional pseudonymous usage stats (counts and timings — never your words, and opt-out in Settings), and issue reports you explicitly submit.
-- With Magic Format's on-device options, cleanup stays local too. Only the optional API provider sends text (never audio) off your Mac — and it's off by default.
+- With Magic Format's on-device options, cleanup stays local too. Only the optional API provider sends text (never audio) off your Mac — and it's off by default. Computer Use sends its task text and captured desktop state to the explicitly configured endpoint when you run it.
 
 ---
 

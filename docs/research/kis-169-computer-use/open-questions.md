@@ -119,3 +119,16 @@
   terminal boundaries.
 - `[Unknown]` The complete helper IPC contract, server-side model loop/prompt, and browser
   extension behavior remain unknown.
+
+## Direct voice follow-up — 2026-08-03
+
+- `[Resolved for the current desktop surface]` The visible Computer Use page is the explicit
+  routing context for the existing Suniye hold-to-talk shortcut; no phrase matcher or extra global
+  voice mode is used.
+- `[Resolved for the current desktop surface]` A spoken task is sent raw to the Computer Use
+  coordinator and is not inserted into the focused app or passed through Magic Format.
+- `[Unknown]` Does live local ASR produce reliable task boundaries for long Computer Use requests?
+- `[Unknown]` How should microphone interruption, provider timeout, and page navigation be shown
+  during a live voice task?
+- `[Deferred]` Browser voice tasks should be validated through the separate browser extension path,
+  not by extending the desktop routing seam.

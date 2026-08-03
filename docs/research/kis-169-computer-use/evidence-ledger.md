@@ -711,3 +711,40 @@ services and page, the final `xcodebuild` result bundle at
 - `[Unknown]` The DMG does not expose the complete native helper implementation, server/model
   loop, or browser-extension route. Cross-process third-party input, fresh Screen Recording
   consent, and browser/cart behavior remain unverified in this run.
+
+### Entry 50: Direct voice-to-Computer Use integration
+
+Sources: `Suniye/AppState.swift`,
+`Suniye/Services/ComputerUseCoordinator.swift`,
+`Suniye/Services/ComputerUseVoiceTaskHandling.swift`, the direct-voice focused tests, the final
+`xcodebuild` result bundle at `.derivedData/direct-voice-final-3.xcresult`,
+`scripts/coverage_report.sh`, `scripts/e2e_preflight.sh`, and `scripts/e2e_smoke.sh`.
+
+- `[Implemented]` The visible Computer Use page registers a weak main-actor task handler with the
+  existing AppState dictation pipeline.
+- `[Implemented]` A normal Suniye hold-to-talk session routes its raw local transcript directly to
+  Computer Use while that page is visible. It bypasses Magic Format, text insertion, clipboard
+  output, submit-key handling, and dictation history.
+- `[Implemented]` The coordinator reports started, queued, or rejected submissions; restores the
+  captured voice instruction before launch; queues while model/apps/permissions prepare; and
+  rejects overlapping observation or agent work without canceling the active operation.
+- `[Implemented]` Leaving the Computer Use page unregisters the handler and cancels queued work.
+- `[Verified]` The focused voice and coordinator tests pass in a signed macOS test run.
+- `[Verified]` The full suite reports 1,087 passed, 1 skipped, and 0 failed tests, for 1,088 total.
+- `[Verified]` Gated line coverage is 95.04% (13,769/14,487 lines), above the documented 95%
+  threshold.
+- `[Verified]` E2E preflight and smoke checks pass.
+- `[Unknown]` Live microphone capture, live provider behavior after voice submission, Screen
+  Recording capture, cross-process desktop input, and browser-extension routing remain open.
+
+### Entry 51: Refreshed Preview voice UX smoke
+
+Sources: the installed `/Users/kishan/Applications/Suniye Preview.app`, the Computer Use
+`node_repl` session, and `docs/research/kis-169-computer-use/e2e-computer.md`.
+
+- `[Verified]` The refreshed Preview build launches and opens the Computer Use page.
+- `[Verified]` The page exposes the direct voice instruction, configured model status, and
+  Accessibility/Screen Recording rows.
+- `[Verified]` The refreshed page does not expose the removed manual action or approval controls.
+- `[Not exercised]` No microphone recording, voice submission, provider request, or third-party
+  app action was performed in this smoke check.

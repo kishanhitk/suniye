@@ -605,6 +605,27 @@ The deterministic suite passes with 1,089 tests, 1,088 passed, 1 skipped, and 0 
 line coverage is 95.08% (14,455/15,203), above the documented 95% floor. The focused Computer Use
 regression classes also pass. The live E2E result is recorded in `e2e-computer.md`.
 
+## Current direct voice integration — 2026-08-03
+
+The direct voice path is implemented as a narrow bridge from the existing dictation pipeline to
+the existing Computer Use coordinator. The detailed design and evidence boundary are in
+`direct-voice-integration-plan.md`.
+
+- `[Implemented]` The visible Computer Use page registers a weak
+  `ComputerUseVoiceTaskHandling` handler with `AppState`.
+- `[Implemented]` The existing Suniye hold-to-talk session transcribes locally and routes the raw
+  task directly to Computer Use while that page is visible.
+- `[Implemented]` Computer Use tasks bypass Magic Format, focused-app insertion, clipboard output,
+  submit-key handling, and dictation history.
+- `[Implemented]` The coordinator starts immediately when ready, queues while model/apps/
+  permissions are preparing, and rejects overlapping work without canceling the active task.
+- `[Implemented]` The page explains the voice gesture and exposes queued-task status while keeping
+  the manual task editor as a fallback.
+- `[Verified]` Focused signed tests cover direct submission, rejection, automatic start, queued
+  model configuration, captured-instruction precedence, and empty-task validation.
+- `[Unknown]` Live microphone capture, provider behavior after voice submission, and browser
+  extension routing remain unverified.
+
 ### Later: Browser adapter
 
 Design browser control as a separate capability after desktop behavior is stable.

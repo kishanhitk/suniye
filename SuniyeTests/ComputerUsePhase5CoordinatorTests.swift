@@ -30,6 +30,114 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         XCTAssertEqual(actionService.actions, [action])
     }
 
+    func testVoiceTaskStartsAgentAutomatically() async {
+        let coordinator = makeCoordinator(
+            model: Phase3ScriptedModelClient(
+                decisions: [.completed(message: "Finished from voice.")]
+            ),
+            observation: makePhase3Observation(generation: 23),
+            actionService: Phase3StubActionService()
+        )
+
+        coordinator.start()
+        await waitForPhase(coordinator, .ready)
+        XCTAssertEqual(
+            coordinator.submitVoiceTask("Read the current app state."),
+            .started
+        )
+        await waitForPhase(coordinator, .agentCompleted)
+
+        XCTAssertEqual(coordinator.agentInstruction, "Read the current app state.")
+        XCTAssertEqual(coordinator.agentResult?.message, "Finished from voice.")
+        XCTAssertFalse(coordinator.isVoiceTaskPending)
+    }
+
+    func testQueuedVoiceTaskUsesCapturedInstructionAfterModelConnects() async {
+        let coordinator = makeCoordinator(
+            model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
+            observation: makePhase3Observation(generation: 34),
+            actionService: Phase3StubActionService()
+        )
+
+        coordinator.start()
+        await waitForPhase(coordinator, .ready)
+        coordinator.configureModel(nil)
+
+        XCTAssertEqual(
+            coordinator.submitVoiceTask("  Read the current app state.  "),
+            .queued
+        )
+        XCTAssertTrue(coordinator.isVoiceTaskPending)
+        coordinator.agentInstruction = "A later manual edit."
+
+        coordinator.configureModel(
+            Phase3ScriptedModelClient(decisions: [.completed(message: "Finished queued voice task.")])
+        )
+        await waitForPhase(coordinator, .agentCompleted)
+
+        XCTAssertEqual(coordinator.agentInstruction, "Read the current app state.")
+        XCTAssertEqual(coordinator.agentResult?.message, "Finished queued voice task.")
+        XCTAssertFalse(coordinator.isVoiceTaskPending)
+    }
+
+    func testVoiceTaskRejectsEmptyInstruction() {
+        let coordinator = makeCoordinator(
+            model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
+            observation: makePhase3Observation(generation: 35),
+            actionService: Phase3StubActionService()
+        )
+
+        XCTAssertEqual(
+            coordinator.submitVoiceTask(" \n "),
+            .rejected(message: "No Computer Use task was transcribed.")
+        )
+        XCTAssertEqual(coordinator.phase, .idle)
+        XCTAssertFalse(coordinator.isVoiceTaskPending)
+    }
+
+    func testVoiceTaskReportsPreparationAndPermissionWaits() async {
+        let coordinator = makeCoordinator(
+            model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
+            observation: makePhase3Observation(generation: 36),
+            actionService: Phase3StubActionService()
+        )
+
+        coordinator.start()
+        await waitForPhase(coordinator, .ready)
+        coordinator.phase = .loadingApplications
+        XCTAssertEqual(
+            coordinator.submitVoiceTask("Wait for startup."),
+            .queued
+        )
+        XCTAssertEqual(
+            coordinator.errorMessage,
+            "Voice task captured. Computer Use is still preparing."
+        )
+        coordinator.cancel()
+
+        coordinator.phase = .ready
+        coordinator.permissionSnapshot = ComputerUsePermissionSnapshot(
+            accessibility: .notGranted,
+            screenRecording: .notGranted
+        )
+        XCTAssertEqual(
+            coordinator.submitVoiceTask("Wait for permission."),
+            .queued
+        )
+        XCTAssertEqual(
+            coordinator.errorMessage,
+            "Voice task captured. Grant Computer Use permissions to run it."
+        )
+        coordinator.cancel()
+
+        coordinator.phase = .runningAgent
+        XCTAssertEqual(
+            coordinator.submitVoiceTask("Do not interrupt."),
+            .rejected(message: "Computer Use is already working.")
+        )
+        XCTAssertEqual(coordinator.phase, .runningAgent)
+    }
+
     func testRemoteModelConfigurationIsSessionScoped() async {
         let coordinator = makeCoordinator(
             model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),

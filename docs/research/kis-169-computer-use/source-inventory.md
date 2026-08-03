@@ -318,6 +318,22 @@ These files establish the current state machine, permissions, Accessibility inse
 
 Status: `[Verified]` by source inspection.
 
+## Direct voice integration slice — 2026-08-03
+
+The current implementation adds these files and references:
+
+- `Suniye/Services/ComputerUseVoiceTaskHandling.swift`;
+- `Suniye/Services/ComputerUseCoordinator.swift`;
+- `Suniye/AppState.swift`;
+- `Suniye/Views/MainWindow/ComputerUsePage.swift`;
+- `Suniye/Views/MainWindow/ComputerUseAgentPanel.swift`;
+- `Suniye/Views/MainWindow/MainWindowView.swift`;
+- `SuniyeTests/AppStateComputerUseVoiceTests.swift`;
+- `SuniyeTests/ComputerUsePhase5CoordinatorTests.swift`.
+
+Status: `[Verified]` by signed build and focused tests. Live microphone and provider execution
+remain `[Unknown]`.
+
 ## Trace rule
 
 Use `evidence-ledger.md` for claim status.

@@ -23,7 +23,9 @@ action -> fresh observation.
 The desktop path is connected. It requires a configured API Endpoint model, Accessibility, and
 Screen Recording because every macOS observation includes a screenshot. The agent can resolve and
 launch installed apps through the application catalog. It is not full runtime parity: browser
-control, helper IPC, and transient screenshot caching remain open or deferred.
+control, helper IPC, and transient screenshot caching remain open or deferred. Direct voice
+submission is now connected through the existing Suniye hold-to-talk flow while the Computer Use
+page is visible; its design is recorded in `direct-voice-integration-plan.md`.
 
 The current cleanup validation is recorded in the final evidence-ledger entry after the full test,
 coverage, build, and live safe-target checks. Provider behavior, Screen Recording capture, and
@@ -36,6 +38,8 @@ cross-process input still require separate validation.
 - `architecture.md` explains the observed Computer Use design.
 - `implementation-plan.md` proposes an independent Swift design for Suniye.
 - `open-questions.md` records gaps that need a decision or a live test.
+- `direct-voice-integration-plan.md` records the direct voice routing seam, lifecycle, UX, and
+  manual validation plan.
 - `e2e-computer.md` records the live `@Computer` run, failures, fixes, and remaining unknowns.
 - `parity-audit.md` is the current reference-to-Suniye parity matrix and corrective-slice record.
 - `target-scope-implementation.md` records the target-lock correction and its validation boundary.
@@ -88,3 +92,15 @@ as separate evidence entries. Git handoff status is reported with the final comm
   existing result `323` for `17 × 19`.
 - `[Unknown]` Helper IPC, the reference server/model loop and prompt, Screen Recording consent,
   cross-process third-party input, and browser control remain outside this validation.
+
+## Direct voice implementation — 2026-08-03
+
+- `[Verified]` The existing dictation pipeline routes a raw local transcript to Computer Use only
+  while the Computer Use page is visible.
+- `[Verified]` The route bypasses text insertion, Magic Format, clipboard output, and dictation
+  history, and the coordinator can start, queue, or reject the task through a typed seam.
+- `[Verified]` The final full suite reports 1,087 passed, 1 skipped, and 0 failed tests; gated
+  coverage is 95.04% (13,769/14,487 lines).
+- `[Verified]` E2E preflight and smoke pass.
+- `[Unknown]` Live microphone capture and provider execution through this voice route still need a
+  manual macOS test.

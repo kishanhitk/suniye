@@ -64,7 +64,10 @@ struct MainWindowView: View {
             case .computerUse:
                 ComputerUsePage(
                     coordinator: computerUseCoordinator,
-                    remoteModelConfiguration: appState.computerUseRemoteModelConfiguration
+                    remoteModelConfiguration: appState.computerUseRemoteModelConfiguration,
+                    onVoiceTaskHandlerChange: { handler in
+                        appState.setComputerUseVoiceTaskHandler(handler)
+                    }
                 )
             case .history:
                 HistoryPage(appState: appState)
