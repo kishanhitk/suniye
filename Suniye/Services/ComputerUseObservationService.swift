@@ -31,15 +31,70 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
         configuration: ComputerUseObservationConfiguration = .default,
         cancellation: ComputerUseCancellationToken = ComputerUseCancellationToken()
     ) throws -> ComputerUseObservation {
+        guard let application = applicationCatalog.application(withID: applicationID) else {
+            throw ComputerUseObservationError.applicationNotFound(applicationID)
+        }
+        return try observe(
+            application: application,
+            includeScreenshot: includeScreenshot,
+            configuration: configuration,
+            cancellation: cancellation
+        )
+    }
+
+    func observeTarget(
+        applicationIdentifier: String?,
+        includeScreenshot: Bool,
+        configuration: ComputerUseObservationConfiguration,
+        cancellation: ComputerUseCancellationToken
+    ) async throws -> ComputerUseObservation {
         guard !cancellation.isCancelled else {
             throw ComputerUseObservationError.cancelled
         }
 
-        guard let application = applicationCatalog.application(withID: applicationID) else {
-            throw ComputerUseObservationError.applicationNotFound(applicationID)
+        let application: ComputerUseApplication
+        if let applicationIdentifier {
+            if let resolvedApplication = applicationCatalog.resolveApplication(
+                identifier: applicationIdentifier
+            ) {
+                if resolvedApplication.isRunning {
+                    application = resolvedApplication
+                } else if let launchedApplication = await applicationCatalog.launchApplication(
+                    identifier: applicationIdentifier
+                ) {
+                    application = launchedApplication
+                } else {
+                    throw ComputerUseObservationError.applicationNotRunning(applicationIdentifier)
+                }
+            } else if let launchedApplication = await applicationCatalog.launchApplication(
+                identifier: applicationIdentifier
+            ) {
+                application = launchedApplication
+            } else {
+                throw ComputerUseObservationError.applicationNotFound(applicationIdentifier)
+            }
+        } else if let activeApplication = applicationCatalog.activeApplication() {
+            application = activeApplication
+        } else {
+            throw ComputerUseObservationError.applicationNotFound("frontmost application")
         }
+
+        return try observe(
+            application: application,
+            includeScreenshot: includeScreenshot,
+            configuration: configuration,
+            cancellation: cancellation
+        )
+    }
+
+    private func observe(
+        application: ComputerUseApplication,
+        includeScreenshot: Bool,
+        configuration: ComputerUseObservationConfiguration,
+        cancellation: ComputerUseCancellationToken
+    ) throws -> ComputerUseObservation {
         guard application.isRunning else {
-            throw ComputerUseObservationError.applicationNotRunning(applicationID)
+            throw ComputerUseObservationError.applicationNotRunning(application.bundleIdentifier)
         }
 
         let permissions = permissionManager.snapshot()
@@ -59,7 +114,7 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
         } else if let firstWindow = windows.first {
             window = firstWindow
         } else {
-            throw ComputerUseObservationError.noWindow(applicationID)
+            throw ComputerUseObservationError.noWindow(application.id)
         }
 
         let accessibility = try accessibilityReader.read(

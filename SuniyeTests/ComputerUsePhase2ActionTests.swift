@@ -221,7 +221,7 @@ final class ComputerUsePhase2ModelTests: XCTestCase {
             .approvalRequired,
             .staleApproval,
             .permissionRequired,
-            .targetNotFrontmost,
+            .targetActivationFailed,
             .invalidAction("bad bounds"),
             .unsupportedKey("?") ,
             .eventCreationFailed,
@@ -380,7 +380,7 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
             textInserter: text,
             semanticActionPerformer: semantic,
             valueActionPerformer: value,
-            targetValidator: Phase2StubTargetValidator(isCurrent: true),
+            targetActivator: Phase2StubWindowActivator(),
             permissionManager: Phase2StubPermissionManager(granted: true),
             dateProvider: { Date(timeIntervalSince1970: 3_000) }
         )
@@ -487,16 +487,16 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
         )
     }
 
-    func testActionServiceEnforcesApprovalPermissionAndCurrentTarget() {
+    func testActionServiceEnforcesApprovalPermissionAndTargetActivation() {
         let observation = makePhase2Observation()
         let action = ComputerUseAction.click(point: ComputerUsePoint(x: 50, y: 50))
         let permission = Phase2StubPermissionManager(granted: true)
-        let target = Phase2StubTargetValidator(isCurrent: true)
+        let targetActivator = Phase2StubWindowActivator()
         let service = ComputerUseActionService(
             inputEventPoster: Phase2StubInputEventPoster(),
             textInserter: Phase2StubTextInserter(),
             semanticActionPerformer: Phase2StubSemanticActionPerformer(),
-            targetValidator: target,
+            targetActivator: targetActivator,
             permissionManager: permission
         )
 
@@ -542,9 +542,9 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
         }
 
         permission.setGranted(true)
-        target.isCurrent = false
+        targetActivator.result = false
         let targetGrant = makePhase2Grant(action: action, observation: observation)
-        assertActionError(.targetNotFrontmost) {
+        assertActionError(.targetActivationFailed) {
             _ = try service.execute(
                 action: action,
                 observation: observation,
@@ -576,7 +576,7 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
             inputEventPoster: Phase2StubInputEventPoster(),
             textInserter: text,
             semanticActionPerformer: Phase2StubSemanticActionPerformer(),
-            targetValidator: Phase2StubTargetValidator(isCurrent: true),
+            targetActivator: Phase2StubWindowActivator(),
             permissionManager: Phase2StubPermissionManager(granted: true)
         )
         let type = ComputerUseAction.typeText("hello")
@@ -598,7 +598,7 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
             inputEventPoster: input,
             textInserter: Phase2StubTextInserter(),
             semanticActionPerformer: Phase2StubSemanticActionPerformer(),
-            targetValidator: Phase2StubTargetValidator(isCurrent: true),
+            targetActivator: Phase2StubWindowActivator(),
             permissionManager: Phase2StubPermissionManager(granted: true)
         )
         let click = ComputerUseAction.click(point: ComputerUsePoint(x: 50, y: 50))
@@ -719,34 +719,30 @@ final class ComputerUsePhase2ServiceTests: XCTestCase {
         }
     }
 
-    func testTargetValidatorRequiresFrontmostProcessAndCurrentWindow() {
-        let application = makePhase2Observation().target.application
-        let window = makePhase2Observation().target.window
-        let discovery = Phase2StubWindowDiscovery(windows: [window])
-        var frontmostProcessIdentifier: Int32? = application.processIdentifier
-        let validator = SystemComputerUseTargetValidator(
-            windowDiscovery: discovery,
-            frontmostProcessIdentifierProvider: { frontmostProcessIdentifier }
+    func testActionServiceActivatesTheObservedTargetBeforeInput() throws {
+        let observation = makePhase2Observation()
+        let activator = Phase2StubWindowActivator()
+        let service = ComputerUseActionService(
+            inputEventPoster: Phase2StubInputEventPoster(),
+            textInserter: Phase2StubTextInserter(),
+            semanticActionPerformer: Phase2StubSemanticActionPerformer(),
+            targetActivator: activator,
+            permissionManager: Phase2StubPermissionManager(granted: true)
         )
-        let target = ComputerUseTarget(application: application, window: window)
-
-        XCTAssertTrue(validator.isCurrent(target: target))
-        frontmostProcessIdentifier = 999
-        XCTAssertFalse(validator.isCurrent(target: target))
-        frontmostProcessIdentifier = application.processIdentifier
-        discovery.windows = []
-        XCTAssertFalse(validator.isCurrent(target: target))
-
-        let nonKeyWindow = ComputerUseWindow(
-            id: window.id,
-            title: window.title,
-            ownerProcessIdentifier: window.ownerProcessIdentifier,
-            bounds: window.bounds,
-            layer: window.layer,
-            isOnScreen: window.isOnScreen,
-            isKeyWindow: false
+        let action = ComputerUseAction.keyPress(
+            key: .named(.escape),
+            modifiers: ComputerUseKeyModifiers()
         )
-        discovery.windows = [nonKeyWindow]
-        XCTAssertFalse(validator.isCurrent(target: target))
+        let grant = makePhase2Grant(action: action, observation: observation)
+
+        _ = try service.execute(
+            action: action,
+            observation: observation,
+            approval: grant,
+            requestID: grant.requestID,
+            cancellation: ComputerUseCancellationToken()
+        )
+
+        XCTAssertEqual(activator.targets, [observation.target])
     }
 }

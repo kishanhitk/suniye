@@ -1,41 +1,11 @@
-import AppKit
 import Foundation
-
-struct SystemComputerUseTargetValidator: ComputerUseTargetValidating {
-    private let windowDiscovery: ComputerUseWindowDiscovering
-    private let frontmostProcessIdentifierProvider: () -> Int32?
-
-    init(
-        windowDiscovery: ComputerUseWindowDiscovering = SystemComputerUseWindowDiscovery(),
-        frontmostProcessIdentifierProvider: @escaping () -> Int32? = {
-            NSWorkspace.shared.frontmostApplication?.processIdentifier
-        }
-    ) {
-        self.windowDiscovery = windowDiscovery
-        self.frontmostProcessIdentifierProvider = frontmostProcessIdentifierProvider
-    }
-
-    func isCurrent(target: ComputerUseTarget) -> Bool {
-        guard frontmostProcessIdentifierProvider() == target.application.processIdentifier else {
-            return false
-        }
-
-        guard let currentWindow = windowDiscovery
-            .listWindows(for: target.application)
-            .first(where: { $0.id == target.window.id }) else {
-            return false
-        }
-
-        return currentWindow.isKeyWindow
-    }
-}
 
 final class ComputerUseActionService: ComputerUseActionServicing {
     private let inputEventPoster: ComputerUseInputEventPosting
     private let textInserter: TextInsertionServiceProtocol
     private let semanticActionPerformer: ComputerUseSemanticActionPerforming
     private let valueActionPerformer: ComputerUseValueActionPerforming
-    private let targetValidator: ComputerUseTargetValidating
+    private let targetActivator: ComputerUseWindowActivating
     private let permissionManager: ComputerUsePermissionManaging
     private let approvalStore: ComputerUseApprovalStoring
     private let policy: ComputerUsePolicyChecking
@@ -46,7 +16,7 @@ final class ComputerUseActionService: ComputerUseActionServicing {
         textInserter: TextInsertionServiceProtocol = TextInsertionService(),
         semanticActionPerformer: ComputerUseSemanticActionPerforming = SystemComputerUseAccessibilityReader(),
         valueActionPerformer: ComputerUseValueActionPerforming = SystemComputerUseAccessibilityReader(),
-        targetValidator: ComputerUseTargetValidating = SystemComputerUseTargetValidator(),
+        targetActivator: ComputerUseWindowActivating = SystemComputerUseWindowActivator(),
         permissionManager: ComputerUsePermissionManaging = SystemComputerUsePermissionService(),
         approvalStore: ComputerUseApprovalStoring = ComputerUseApprovalStore(),
         policy: ComputerUsePolicyChecking = ComputerUsePolicyService(),
@@ -56,7 +26,7 @@ final class ComputerUseActionService: ComputerUseActionServicing {
         self.textInserter = textInserter
         self.semanticActionPerformer = semanticActionPerformer
         self.valueActionPerformer = valueActionPerformer
-        self.targetValidator = targetValidator
+        self.targetActivator = targetActivator
         self.permissionManager = permissionManager
         self.approvalStore = approvalStore
         self.policy = policy
@@ -91,8 +61,8 @@ final class ComputerUseActionService: ComputerUseActionServicing {
         guard permissionManager.snapshot().canReadAccessibility else {
             throw ComputerUseActionError.permissionRequired
         }
-        guard targetValidator.isCurrent(target: observation.target) else {
-            throw ComputerUseActionError.targetNotFrontmost
+        guard targetActivator.activate(target: observation.target) else {
+            throw ComputerUseActionError.targetActivationFailed
         }
 
         switch action {

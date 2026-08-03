@@ -615,7 +615,7 @@ enum ComputerUseActionError: LocalizedError, Equatable, Sendable {
     case approvalRequired
     case staleApproval
     case permissionRequired
-    case targetNotFrontmost
+    case targetActivationFailed
     case invalidAction(String)
     case unsupportedKey(String)
     case eventCreationFailed
@@ -635,8 +635,8 @@ enum ComputerUseActionError: LocalizedError, Equatable, Sendable {
             return "The approval no longer matches the current app state."
         case .permissionRequired:
             return "Accessibility permission is required to control the selected app."
-        case .targetNotFrontmost:
-            return "The selected app is no longer the frontmost app."
+        case .targetActivationFailed:
+            return "The target application or window could not be brought forward."
         case let .invalidAction(message):
             return "The action is invalid: \(message)."
         case let .unsupportedKey(key):
@@ -708,10 +708,6 @@ protocol ComputerUseValueActionPerforming {
         target: ComputerUseTarget,
         cancellation: ComputerUseCancellationToken
     ) throws
-}
-
-protocol ComputerUseTargetValidating {
-    func isCurrent(target: ComputerUseTarget) -> Bool
 }
 
 protocol ComputerUseActionServicing {

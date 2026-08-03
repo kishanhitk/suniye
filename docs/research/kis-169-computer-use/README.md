@@ -9,8 +9,8 @@ The research uses read-only DMG inspection and Suniye source inspection.
 
 Phase 0 adds a read-only Swift observation service. Phase 1 adds a target picker, permission
 surface, observation preview, and cancellation flow. Phase 2 adds bounded desktop actions with
-one-time approval. Phase 3 adds a typed agent loop with re-observation, limits, and intervention
-checks. Phase 4 adds app policy, scoped approval storage, revocation, and redacted audit records.
+one-time approval. Phase 3 adds a typed agent loop with re-observation, limits, and cancellation.
+Phase 4 adds app policy, scoped approval storage, revocation, and redacted audit records.
 Phase 5A adds an independent OpenAI-compatible model transport and strict decision parsing.
 Phase 5B connects that transport to the coordinator and existing API settings, adds coordinator
 approval continuations, and adds a task UI with screenshot-upload consent disabled by default.
@@ -19,12 +19,13 @@ window selection and activation, screenshot identity checks, indexed clicks, dyn
 actions, and always-allowed approval management.
 
 The desktop path is connected. It still requires a configured API Endpoint model, Accessibility,
-and Screen Recording when screenshots are enabled. It is not full runtime parity: browser control,
-helper IPC, transient screenshot caching, and installed-app launch remain open or deferred.
+and Screen Recording when screenshots are enabled. The agent can resolve and launch installed apps
+through the application catalog. It is not full runtime parity: browser control, helper IPC, and
+transient screenshot caching remain open or deferred.
 
 The final post-E2E run reports 1,089 tests with 1,088 passed, 1 skipped, and 0 failures. Gated
-line coverage is 95.10% (14,453/15,197) at the documented 95% threshold. The focused regression
-suite passes 3 tests. The live
+line coverage is 95.08% (14,455/15,203) at the documented 95% threshold. The focused Computer Use
+regression classes pass. The live
 `@Computer` run passes navigation, target/window selection, same-process activation,
 Accessibility-only observation, and approval denial. Provider behavior, screenshot capture, and
 cross-process input still require separate validation.
@@ -38,6 +39,7 @@ cross-process input still require separate validation.
 - `open-questions.md` records gaps that need a decision or a live test.
 - `e2e-computer.md` records the live `@Computer` run, failures, fixes, and remaining unknowns.
 - `parity-audit.md` is the current reference-to-Suniye parity matrix and corrective-slice record.
+- `target-scope-implementation.md` records the target-lock correction and its validation boundary.
 - `parity-audit-dmg-agent.md` is the detailed raw DMG audit used as supporting evidence.
 
 ## Evidence labels

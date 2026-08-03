@@ -126,12 +126,12 @@ final class ComputerUsePhase2CoordinatorTests: XCTestCase {
 
         coordinator.observeSelectedApplication()
         await waitForPhase(coordinator, .observed)
-        actionService.error = ComputerUseActionError.targetNotFrontmost
+        actionService.error = ComputerUseActionError.targetActivationFailed
         coordinator.requestAction(.keyPress(key: .named(.escape), modifiers: ComputerUseKeyModifiers()))
         coordinator.approvePendingAction()
         await waitForPhase(coordinator, .actionFailed)
 
-        XCTAssertEqual(coordinator.errorMessage, ComputerUseActionError.targetNotFrontmost.errorDescription)
+        XCTAssertEqual(coordinator.errorMessage, ComputerUseActionError.targetActivationFailed.errorDescription)
         XCTAssertNil(coordinator.lastActionResult)
     }
 

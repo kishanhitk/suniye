@@ -83,6 +83,7 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         let request = ComputerUseModelRequest(
             instruction: "Enter the secret only when the task requires it.",
             observation: observationWithScreenshot,
+            availableApplications: [observation.target.application],
             recentActionResults: [
                 ComputerUseActionResult(
                     action: .typeText("secret-value"),
@@ -100,6 +101,8 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         XCTAssertNil(textOnly.screenshot)
         XCTAssertTrue(textOnly.text.contains("Type 12 characters"))
         XCTAssertFalse(textOnly.text.contains("secret-value"))
+        XCTAssertTrue(textOnly.text.contains("Available applications:"))
+        XCTAssertTrue(textOnly.text.contains("Target App (com.example.target)"))
 
         let multimodal = ComputerUseModelPromptRenderer.render(
             request: request,
@@ -176,12 +179,20 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             ),
             .action(action)
         )
+
+        XCTAssertEqual(
+            try ComputerUseModelDecisionParser.parse(
+                #"{"kind":"target","app":"com.google.Chrome"}"#
+            ),
+            .target(application: "com.google.Chrome")
+        )
     }
 
     func testDecisionParserRejectsMalformedAndEmptyDecisions() {
         assertInvalidResponse("")
         assertInvalidResponse("not json")
         assertInvalidResponse("{\"kind\":\"completed\",\"message\":\"\"}")
+        assertInvalidResponse("{\"kind\":\"target\",\"app\":\" \"}")
     }
 
     func testModelClientSendsTextAndOptionalScreenshotAndParsesDecision() async throws {

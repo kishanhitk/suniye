@@ -8,28 +8,27 @@ enum ComputerUseAgentPhase: String, Codable, Equatable, Sendable {
     case completed
     case askingUser
     case blocked
-    case userIntervened
     case cancelled
     case failed
 }
 
 struct ComputerUseAgentTask: Codable, Equatable, Sendable {
     let instruction: String
-    let applicationID: String
+    let applicationID: String?
     let windowID: UInt32?
     let includeScreenshot: Bool
     let sessionID: UUID
 
     init(
         instruction: String,
-        applicationID: String,
+        applicationID: String? = nil,
         windowID: UInt32? = nil,
         includeScreenshot: Bool = true,
         sessionID: UUID = UUID()
     ) {
         self.instruction = instruction
         self.applicationID = applicationID
-        self.windowID = windowID
+        self.windowID = applicationID == nil ? nil : windowID
         self.includeScreenshot = includeScreenshot
         self.sessionID = sessionID
     }
@@ -38,6 +37,7 @@ struct ComputerUseAgentTask: Codable, Equatable, Sendable {
 struct ComputerUseModelRequest: Codable, Equatable, Sendable {
     let instruction: String
     let observation: ComputerUseObservation
+    let availableApplications: [ComputerUseApplication]
     let recentActionResults: [ComputerUseActionResult]
     let recentFailureMessages: [String]
     let iteration: Int
@@ -45,12 +45,14 @@ struct ComputerUseModelRequest: Codable, Equatable, Sendable {
     init(
         instruction: String,
         observation: ComputerUseObservation,
+        availableApplications: [ComputerUseApplication] = [],
         recentActionResults: [ComputerUseActionResult],
         recentFailureMessages: [String] = [],
         iteration: Int
     ) {
         self.instruction = instruction
         self.observation = observation
+        self.availableApplications = availableApplications
         self.recentActionResults = recentActionResults
         self.recentFailureMessages = recentFailureMessages
         self.iteration = iteration
@@ -59,6 +61,7 @@ struct ComputerUseModelRequest: Codable, Equatable, Sendable {
 
 enum ComputerUseModelDecision: Codable, Equatable, Sendable {
     case action(ComputerUseAction)
+    case target(application: String, windowID: UInt32? = nil)
     case completed(message: String)
     case askUser(question: String)
     case blocked(reason: String)
@@ -70,10 +73,13 @@ enum ComputerUseModelDecision: Codable, Equatable, Sendable {
         case message
         case question
         case reason
+        case app
+        case windowID = "window_id"
     }
 
     private enum Kind: String, Codable {
         case action
+        case target
         case completed
         case askUser = "ask_user"
         case blocked
@@ -85,6 +91,11 @@ enum ComputerUseModelDecision: Codable, Equatable, Sendable {
         switch try container.decode(Kind.self, forKey: .kind) {
         case .action:
             self = .action(try container.decode(ComputerUseAction.self, forKey: .action))
+        case .target:
+            self = .target(
+                application: try container.decode(String.self, forKey: .app),
+                windowID: try container.decodeIfPresent(UInt32.self, forKey: .windowID)
+            )
         case .completed:
             self = .completed(message: try container.decode(String.self, forKey: .message))
         case .askUser:
@@ -102,6 +113,10 @@ enum ComputerUseModelDecision: Codable, Equatable, Sendable {
         case let .action(action):
             try container.encode(Kind.action, forKey: .kind)
             try container.encode(action, forKey: .action)
+        case let .target(application, windowID):
+            try container.encode(Kind.target, forKey: .kind)
+            try container.encode(application, forKey: .app)
+            try container.encodeIfPresent(windowID, forKey: .windowID)
         case let .completed(message):
             try container.encode(Kind.completed, forKey: .kind)
             try container.encode(message, forKey: .message)
@@ -121,6 +136,8 @@ enum ComputerUseModelDecision: Codable, Equatable, Sendable {
         switch self {
         case .action:
             return nil
+        case let .target(application, _):
+            return Self.nonEmptyMessage(application, label: "target application")
         case let .completed(message):
             return Self.nonEmptyMessage(message, label: "completion message")
         case let .askUser(question):
@@ -136,23 +153,6 @@ enum ComputerUseModelDecision: Codable, Equatable, Sendable {
         value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "The model returned an empty \(label)."
             : nil
-    }
-}
-
-enum ComputerUseIntervention: String, Codable, Equatable, Sendable {
-    case frontmostApplicationChanged
-    case targetWindowChanged
-    case userStopped
-
-    var message: String {
-        switch self {
-        case .frontmostApplicationChanged:
-            return "The frontmost application changed."
-        case .targetWindowChanged:
-            return "The target window changed or is no longer key."
-        case .userStopped:
-            return "The user stopped the Computer Use session."
-        }
     }
 }
 
@@ -229,10 +229,6 @@ protocol ComputerUseApprovalRequesting {
         _ request: ComputerUseApprovalRequest,
         cancellation: ComputerUseCancellationToken
     ) async -> ComputerUseApprovalDecision
-}
-
-protocol ComputerUseInterventionMonitoring {
-    func check(target: ComputerUseTarget) -> ComputerUseIntervention?
 }
 
 struct UnconfiguredComputerUseModelClient: ComputerUseModelClient {

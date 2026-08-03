@@ -28,7 +28,6 @@ Suniye/Services/ComputerUseWindowActivationService.swift # NSRunningApplication 
 Suniye/Services/ComputerUsePermissionService.swift # TCC permission checks and system prompts; injected behavior is covered by ComputerUsePhase0Tests.
 Suniye/Services/ComputerUseScreenshotService.swift # CGWindowListCreateImage and PNG capture; the live path requires WindowServer and Screen Recording.
 Suniye/Services/ComputerUseInputEventService.swift # native CGEvent posting; platform-bound path is covered through the action-service seam.
-Suniye/Services/ComputerUseInterventionMonitor.swift # live frontmost-app and key-window checks require WindowServer; injected monitor behavior is tested.
 
 # --- Window-server bound UI shells (logic lives in state/services) ---
 Suniye/Services/LearningToastPresenter.swift          # transient NSPanel toast

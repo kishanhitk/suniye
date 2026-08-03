@@ -3,30 +3,32 @@
 Status: Phase 0 observation, Phase 1 preview, Phase 2 approved actions, Phase 3 typed agent loop,
 Phase 4 policy, Phase 5A model transport, Phase 5B coordinator/model integration, and the current
 desktop parity correction are added.
-Browser control and a separate native helper remain unimplemented. Installed-app launch, transient
-screenshot caching, and reference-specific state diffs remain open. The strict maintainability
-review is complete. A live `@Computer` run validates the Suniye self-target path; provider,
-screenshot, and cross-process validation remain open.
+Browser control and a separate native helper remain unimplemented. Transient screenshot caching
+and reference-specific state diffs remain open. The model can now resolve and launch installed
+desktop apps for the next observation. The strict maintainability review is complete. A live
+`@Computer` run validates the Suniye self-target path; provider, screenshot, and cross-process
+validation remain open.
 
 ## Goal
 
 Add an independent, user-controlled macOS Computer Use capability to Suniye.
 
-The capability should observe a selected app, ask a model for one safe action, request approval when needed, execute the action, and observe again.
+The capability should observe an optional starting app, let the model select another app when
+needed, ask for approval when needed, execute the action, and observe again.
 
 ## Non-goals
 
 - Do not reuse ChatGPT binaries or package files.
 - Do not add remote audio processing.
 - Do not place business logic in SwiftUI views.
-- Do not grant a model unrestricted control.
+- Do not bypass macOS permissions or the per-action approval policy.
 - Do not add browser automation in the first desktop milestone.
 - Do not add model calls or input events in Phase 0.
 
 ## Proposed service boundaries
 
-The observation, permission, action, approval, agent, intervention, policy, storage, audit, and
-model transport boundaries are implemented as typed seams. The coordinator now connects the
+The observation, permission, action, approval, agent, app-target resolution, policy, storage,
+audit, and model transport boundaries are implemented as typed seams. The coordinator now connects the
 transport to the existing explicit API Endpoint settings and keychain.
 
 - `ComputerUseCoordinator`: `@MainActor` lifecycle, UI state, user stop, and approval presentation.
@@ -37,7 +39,8 @@ transport to the existing explicit API Endpoint settings and keychain.
 - `ComputerUseInputEventService`: native `CGEvent` click, key, and scroll adapters.
 - `ComputerUsePermissionService`: Accessibility and Screen Recording checks and request flow.
 - `ComputerUseApprovalService`: one-time, session, and app-scoped approval decisions.
-- `ComputerUseInterventionMonitor`: frontmost app, target window, and user stop signals.
+- `ComputerUseApplicationCatalog`: running and installed app discovery, target resolution, and
+  background app launch.
 - `ComputerUsePolicy`: action risk classification and hard safety blocks.
 - `ComputerUseApprovalStore`: session-memory and app/risk-scoped persistent approval records.
 - `ComputerUseAuditRecording`: redacted approval and policy audit events.
@@ -52,8 +55,8 @@ Keep platform APIs behind those protocols.
 
 Phase 2 keeps `ComputerUseActionService` behind `ComputerUseActionServicing`. The coordinator
 creates an approval request from a validated action. The action service checks the permission,
-frontmost process, current window, observation generation, and action policy before it calls a
-native adapter. The current approval scope is one action only.
+activates the observation target, checks the observation generation and action policy, then calls
+a native adapter. The current approval scope is one action only.
 
 ### Suggested Swift ownership
 
@@ -67,7 +70,8 @@ The names below are proposals. They do not require these exact file names.
 - `ComputerUseModelClient` should return a `ComputerUseDecision`. It should never return executable Swift or arbitrary shell commands.
 - `ComputerUsePermissionService` should report each permission separately. It should distinguish not granted, pending, denied, and unavailable.
 - `ComputerUseApprovalService` should store only the approval scope and expiry. It should not store screenshots or raw typed secrets.
-- `ComputerUseInterventionMonitor` should publish target changes and user stop events.
+- The agent should treat a model target decision as a new app/window observation request. A
+  frontmost-app change alone is not user intervention.
 - `ComputerUsePolicy` should be a pure value-based service. It should classify an action before approval.
 
 ### Suggested data types
@@ -124,7 +128,6 @@ The first design should define these states:
 - `awaitingApproval`
 - `executing`
 - `waitingForUI`
-- `userIntervened`
 - `completed`
 - `canceled`
 - `failed`
@@ -184,10 +187,11 @@ Phase 0 uses `CGWindowListCreateImage` as the first adapter. This choice is prov
 - Use `NSWorkspace` application URLs when the user selects an app that is not running.
 - Use `AXUIElementCreateApplication(pid)` and `kAXWindowsAttribute` for Accessibility windows.
 - Use `CGWindowListCopyWindowInfo` to correlate window IDs, owners, bounds, names, and layers.
-- Prefer the frontmost key window after explicit target selection.
+- Prefer the frontmost key window when the active app is used or a starting target omits a window.
 - Store both PID and window ID. A bundle identifier alone is not enough for a live session.
 
-The exact window selection policy is a product decision. The implementation must show the selected app and window before control begins.
+The exact window selection policy is a product decision. A starting app and window are optional.
+The agent can select a different target from a later model decision.
 
 ### Accessibility tree detail
 
@@ -353,11 +357,13 @@ The card must stay visible while an action is pending. The user must be able to 
 
 Persistent approval is a later phase. If added, key it by app identity and action class. Add a reset control and an audit record.
 
-### User intervention
+### User stop and target changes
 
-Pause when the target app exits, the target window changes, or the frontmost app changes during a controlled action.
+The user can stop a run from the approval surface or the Computer Use page.
 
-Ask the user whether to resume only after a fresh observation. Do not silently move control to the new app.
+Do not treat a frontmost-app or key-window change as user intervention. The model can select a
+different app or window with a target decision. The next observation resolves that target, and the
+action service activates the observed target before it posts input.
 
 ## Native helper decision
 
@@ -479,39 +485,40 @@ The current action boundary also covers drag, set value, and select text behind 
 Implementation added:
 
 - `Suniye/Services/ComputerUseActionModels.swift` defines typed actions, keys, modifiers, approval requests, grants, results, and errors.
-- `Suniye/Services/ComputerUseActionService.swift` validates actions and binds execution to the exact approval request, Accessibility permission, the selected frontmost process, the current key window, and the observation generation.
+- `Suniye/Services/ComputerUseActionService.swift` validates actions and binds execution to the exact approval request, Accessibility permission, per-action target activation, and the observation generation.
 - `Suniye/Services/ComputerUseInputEventService.swift` owns native `CGEvent` posting for click, key, and scroll actions.
 - `Suniye/Services/ComputerUseAccessibilityReader.swift` resolves the observed AX element index and performs the approved semantic action.
 - `Suniye/Services/ComputerUseCoordinator.swift` exposes request, allow once, deny, stop, and cancel transitions. It requires a fresh observation after an action completes.
 - `Suniye/Views/MainWindow/ComputerUseActionPanel.swift` presents bounded action controls and the approval card.
 - `SuniyeTests/ComputerUsePhase2ActionTests.swift`, `ComputerUsePhase2TestSupport.swift`, and
-  `ComputerUsePhase2Tests.swift` cover action models, policy, service seams, target validation,
+  `ComputerUsePhase2Tests.swift` cover action models, policy, service seams, target activation,
   approval flow, failures, and cancellation.
 
 Phase 2 does not call a model. The controls are deterministic user-driven test surfaces for the
 native action and approval boundaries.
 
-The parity correction adds a platform runner, selected-window activation, window-relative
-coordinate conversion, and always-allowed approval management. Agent startup may activate the
-explicitly selected window once. The intervention monitor remains responsible for detecting a
-later user takeover.
+The parity correction adds a platform runner, per-action target activation, window-relative
+coordinate conversion, optional starting context, installed-app resolution, and always-allowed
+approval management. A model target decision can switch the next observation to another app or
+window. Frontmost-app changes are not treated as user intervention.
 
-Installed-app launch, transient screenshot caching, reference-specific state diffs, and helper IPC
-remain separate work items. Indexed click and dynamic secondary Accessibility actions are now in
-the desktop action contract.
+Transient screenshot caching, reference-specific state diffs, and helper IPC remain separate work
+items. Indexed click and dynamic secondary Accessibility actions are now in the desktop action
+contract.
 
 ### Phase 3: Agent loop
 
-Add the model interface, action validation, re-observation, limits, and user intervention.
+Add the model interface, action validation, re-observation, limits, target selection, and stop
+cancellation.
 
 Use a fake model in tests. Do not connect a remote model until the privacy decision and approval UX are complete.
 
 Implementation added:
 
 - `Suniye/Services/ComputerUseAgentModels.swift` defines terminal outcomes, typed model requests and decisions, failure feedback, cancellation-aware model and approval protocols, and bounded session limits.
-- `Suniye/Services/ComputerUseAgent.swift` runs one actor-isolated loop. It observes fresh state, checks intervention, requests one typed decision, validates it, obtains one-time approval, executes through the Phase 2 action service, records failures, waits for UI settlement, and re-observes.
-- `Suniye/Services/ComputerUseInterventionMonitor.swift` checks the frontmost process and current key window through injected discovery boundaries.
-- `SuniyeTests/ComputerUsePhase3Tests.swift` covers model value validation, completed and blocked outcomes, retries, action results and failure feedback, approval decisions, limits, cancellation, and intervention; `ComputerUsePhase3TestSupport.swift` keeps the fakes and observation fixtures separate.
+- `Suniye/Services/ComputerUseAgent.swift` runs one actor-isolated loop. It observes fresh state, exposes available apps to the model, applies target decisions, validates actions, obtains one-time approval, executes through the Phase 2 action service, records failures, waits for UI settlement, and re-observes.
+- `Suniye/Services/ComputerUseApplicationCatalog.swift` resolves bundle IDs, display names, dynamic process IDs, installed app bundles, and background launches.
+- `SuniyeTests/ComputerUsePhase3Tests.swift` covers model value validation, target changes, completed and blocked outcomes, retries, action results and failure feedback, approval decisions, limits, and cancellation; `ComputerUsePhase3TestSupport.swift` keeps the fakes and observation fixtures separate.
 
 Phase 3 has a default model that fails closed with `notConfigured`. Phase 5B supplies the live
 transport through the coordinator only when the user has configured an explicit API Endpoint.
@@ -567,8 +574,8 @@ The current prompt describes the expanded typed action forms and the window-rela
 origin. It does not claim to reproduce the reference's unknown server prompt or provider choice.
 
 The deterministic suite passes with 1,089 tests, 1,088 passed, 1 skipped, and 0 failures. Gated
-line coverage is 95.10% (14,453/15,197), above the documented 95% floor. The focused regression
-suite passes 3 tests. The live E2E result is recorded in `e2e-computer.md`.
+line coverage is 95.08% (14,455/15,203), above the documented 95% floor. The focused Computer Use
+regression classes also pass. The live E2E result is recorded in `e2e-computer.md`.
 
 ### Later: Browser adapter
 

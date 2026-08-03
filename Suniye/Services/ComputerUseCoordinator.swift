@@ -26,9 +26,9 @@ enum ComputerUseCoordinatorPhase: Equatable {
 @Observable
 final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
     private let runner: ComputerUsePlatformRunner
+    private let applicationCatalog: ComputerUseApplicationCatalog
     private let observationService: ComputerUseObservationServicing
     private let actionService: ComputerUseActionServicing
-    private let interventionMonitor: ComputerUseInterventionMonitoring
     private let approvalPolicyService: ComputerUseApprovalPolicyService
     private let approvalAuthorizer: ComputerUseApprovalAuthorizing
     private let sessionID: UUID
@@ -82,7 +82,6 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         policy: ComputerUsePolicyChecking? = nil,
         auditRecorder: ComputerUseAuditRecording? = nil,
         modelClient: ComputerUseModelClient? = nil,
-        interventionMonitor: ComputerUseInterventionMonitoring? = nil,
         agentLimits: ComputerUseAgentLimits = ComputerUseAgentLimits()
     ) {
         let resolvedCatalog = applicationCatalog ?? SystemComputerUseApplicationCatalog()
@@ -111,13 +110,14 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
             permissionManager: resolvedPermissionManager
         )
         let resolvedActionService = actionService ?? ComputerUseActionService(
+            targetActivator: resolvedWindowActivator,
             permissionManager: resolvedPermissionManager,
             approvalStore: resolvedApprovalStore,
             policy: resolvedPolicy
         )
+        self.applicationCatalog = resolvedCatalog
         self.observationService = resolvedObservationService
         self.actionService = resolvedActionService
-        self.interventionMonitor = interventionMonitor ?? SystemComputerUseInterventionMonitor()
         self.modelClient = modelClient
 
         runner = ComputerUsePlatformRunner(
@@ -165,9 +165,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
     }
 
     var canRunAgent: Bool {
-        guard let selectedApplicationID,
-              !selectedApplicationID.isEmpty,
-              !isBusy,
+        guard !isBusy,
               isModelConfigured,
               permissionSnapshot.canReadAccessibility else {
             return false
@@ -273,8 +271,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
             errorMessage = "Enter a task for Computer Use."
             return
         }
-        guard canRunAgent,
-              let selectedApplicationID else {
+        guard canRunAgent else {
             return
         }
 
@@ -282,11 +279,10 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         let operationID = UUID()
         let cancellation = ComputerUseCancellationToken()
         let agent = self.agent
-        let selectedWindowID = self.selectedWindowID
         let task = ComputerUseAgentTask(
             instruction: instruction,
             applicationID: selectedApplicationID,
-            windowID: selectedWindowID,
+            windowID: self.selectedWindowID,
             includeScreenshot: includeScreenshot,
             sessionID: sessionID
         )
@@ -299,26 +295,7 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
         errorMessage = nil
         phase = .runningAgent
 
-        let observationRunner = runner
         agentTask = Task { [weak self] in
-            if let selectedWindowID {
-                let activated = await observationRunner.activateWindow(
-                    applicationID: selectedApplicationID,
-                    windowID: selectedWindowID
-                )
-                guard activated, !Task.isCancelled else {
-                    guard !Task.isCancelled,
-                          let self,
-                          self.activeOperationID == operationID else {
-                        return
-                    }
-                    self.phase = .failed
-                    self.errorMessage = "The selected window could not be brought to the front."
-                    self.activeCancellation = nil
-                    return
-                }
-            }
-
             let result = await agent.run(task: task, cancellation: cancellation)
             guard !Task.isCancelled else {
                 return
@@ -874,9 +851,9 @@ final class ComputerUseCoordinator: ComputerUseApprovalRequesting {
             modelClient: modelClient ?? UnconfiguredComputerUseModelClient(),
             approvalService: self,
             approvalAuthorizer: approvalAuthorizer,
+            applicationCatalog: applicationCatalog,
             observationService: observationService,
             actionService: actionService,
-            interventionMonitor: interventionMonitor,
             limits: limits
         )
     }

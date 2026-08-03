@@ -132,6 +132,9 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         XCTAssertTrue(coordinator.isModelConfigured)
         coordinator.includeScreenshot = false
         XCTAssertTrue(coordinator.canRunAgent)
+        coordinator.selectedApplicationID = nil
+        coordinator.selectedWindowID = nil
+        XCTAssertTrue(coordinator.canRunAgent)
 
         coordinator.setRemoteScreenshotUploadAllowed(true)
         XCTAssertTrue(coordinator.allowRemoteScreenshotUpload)
@@ -460,7 +463,6 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
             approvalStore: store,
             policy: policy,
             modelClient: model,
-            interventionMonitor: Phase3StubInterventionMonitor(),
             agentLimits: agentLimits
         )
     }

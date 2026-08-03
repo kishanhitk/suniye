@@ -14,6 +14,7 @@ final class ComputerUsePhase3ModelTests: XCTestCase {
         )
         let decisions: [ComputerUseModelDecision] = [
             .action(.click(point: ComputerUsePoint(x: 50, y: 50))),
+            .target(application: "com.google.Chrome", windowID: 42),
             .completed(message: "Done"),
             .askUser(question: "Which item should I choose?"),
             .blocked(reason: "The task requires a payment."),
@@ -68,16 +69,12 @@ final class ComputerUsePhase3ModelTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            ComputerUseIntervention.frontmostApplicationChanged.message,
-            "The frontmost application changed."
-        )
-        XCTAssertEqual(
-            ComputerUseIntervention.targetWindowChanged.message,
-            "The target window changed or is no longer key."
-        )
-        XCTAssertEqual(
-            ComputerUseIntervention.userStopped.message,
+            "The user stopped the Computer Use session.",
             "The user stopped the Computer Use session."
+        )
+        XCTAssertEqual(
+            ComputerUseModelDecision.target(application: " ").validationMessage,
+            "The model returned an empty target application."
         )
     }
 
@@ -125,6 +122,16 @@ final class ComputerUsePhase3ModelTests: XCTestCase {
 
 @MainActor
 final class ComputerUsePhase3AgentTests: XCTestCase {
+    func testTaskClearsWindowWhenStartingApplicationIsNotSet() {
+        let task = ComputerUseAgentTask(
+            instruction: "Use the active app",
+            windowID: 42
+        )
+
+        XCTAssertNil(task.applicationID)
+        XCTAssertNil(task.windowID)
+    }
+
     func testInvalidTasksAndLimitsFailBeforePlatformCalls() async {
         let observation = Phase3StubObservationService(result: makePhase3Observation(generation: 1))
         let model = Phase3ScriptedModelClient(decisions: [.completed(message: "done")])
@@ -192,7 +199,7 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
         XCTAssertEqual(observation.observeCount, 1)
     }
 
-    func testAgentStopsOnObservationFailureAndIntervention() async {
+    func testAgentStopsOnObservationFailureAndAllowsTargetChanges() async {
         let failedObservation = Phase3StubObservationService(
             result: makePhase3Observation(generation: 1),
             error: ComputerUseObservationError.screenshotUnavailable
@@ -207,16 +214,26 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
         XCTAssertEqual(failed.phase, .failed)
         XCTAssertEqual(failed.message, ComputerUseObservationError.screenshotUnavailable.errorDescription)
 
-        let observation = Phase3StubObservationService(result: makePhase3Observation(generation: 1))
-        let intervention = Phase3StubInterventionMonitor(interventions: [.frontmostApplicationChanged])
-        let model = Phase3ScriptedModelClient(decisions: [.completed(message: "done")])
-        let agent = makeAgent(model: model, observation: observation, intervention: intervention)
-        let intervened = await agent.run(
+        let observation = Phase3StubObservationService(
+            results: [
+                makePhase3Observation(generation: 1),
+                makePhase3Observation(generation: 2),
+            ]
+        )
+        let model = Phase3ScriptedModelClient(
+            decisions: [
+                .target(application: "com.google.Chrome"),
+                .completed(message: "done"),
+            ]
+        )
+        let agent = makeAgent(model: model, observation: observation)
+        let switched = await agent.run(
             task: ComputerUseAgentTask(instruction: "Do it", applicationID: "target#42")
         )
 
-        XCTAssertEqual(intervened.phase, .userIntervened)
-        XCTAssertEqual(model.requests.count, 0)
+        XCTAssertEqual(switched.phase, .completed)
+        XCTAssertEqual(observation.applicationIDs, ["target#42", "com.google.Chrome"])
+        XCTAssertEqual(model.requests.count, 2)
     }
 
     func testAgentApprovesActionReobservesAndPassesRecentResultsToTheModel() async {
@@ -395,29 +412,7 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
         XCTAssertEqual(actionResult.failureCount, 2)
     }
 
-    func testAgentClassifiesTargetInterventionAndActionLimit() async {
-        let observation = Phase3StubObservationService(result: makePhase3Observation(generation: 1))
-        let model = Phase3ScriptedModelClient(
-            decisions: [.action(.scroll(horizontal: 0, vertical: -10))]
-        )
-        let approval = Phase3StubApprovalService(decisions: [.allowOnce])
-        let intervention = Phase3StubInterventionMonitor(
-            interventions: [nil, .frontmostApplicationChanged]
-        )
-        let actionService = Phase3StubActionService()
-        let agent = makeAgent(
-            model: model,
-            approval: approval,
-            observation: observation,
-            actionService: actionService,
-            intervention: intervention
-        )
-        let intervened = await agent.run(
-            task: ComputerUseAgentTask(instruction: "Scroll", applicationID: "target#42")
-        )
-        XCTAssertEqual(intervened.phase, .userIntervened)
-        XCTAssertTrue(actionService.actions.isEmpty)
-
+    func testAgentEnforcesActionLimit() async {
         let limitObservation = Phase3StubObservationService(result: makePhase3Observation(generation: 1))
         let limitAgent = makeAgent(
             model: Phase3ScriptedModelClient(
@@ -691,20 +686,22 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
         XCTAssertEqual(sleepFailureResult.actionResults.count, 1)
         XCTAssertTrue(sleepFailureResult.message.contains("failure limit"))
 
-        let targetChangedActionAgent = makeAgent(
+        let targetActivationAgent = makeAgent(
             model: Phase3ScriptedModelClient(
                 decisions: [.action(.scroll(horizontal: 0, vertical: -10))]
             ),
             approval: Phase3StubApprovalService(decisions: [.allowOnce]),
             observation: Phase3StubObservationService(result: makePhase3Observation(generation: 1)),
             actionService: Phase3StubActionService(
-                errors: [ComputerUseActionError.targetNotFrontmost]
-            )
+                errors: [ComputerUseActionError.targetActivationFailed]
+            ),
+            limits: ComputerUseAgentLimits(maxFailures: 1)
         )
-        let targetChangedActionResult = await targetChangedActionAgent.run(
+        let targetActivationResult = await targetActivationAgent.run(
             task: ComputerUseAgentTask(instruction: "Scroll", applicationID: "target#42")
         )
-        XCTAssertEqual(targetChangedActionResult.phase, .userIntervened)
+        XCTAssertEqual(targetActivationResult.phase, .failed)
+        XCTAssertTrue(targetActivationResult.message.contains("failure limit"))
     }
 
     func testAgentUsesDefaultSettlingClosure() async {
@@ -720,7 +717,6 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
                 results: [makePhase3Observation(generation: 1), makePhase3Observation(generation: 2)]
             ),
             actionService: Phase3StubActionService(),
-            interventionMonitor: Phase3StubInterventionMonitor(),
             limits: ComputerUseAgentLimits(settleDelay: 0.001)
         )
         let result = await agent.run(
@@ -757,7 +753,6 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
         approval: ComputerUseApprovalRequesting = Phase3StubApprovalService(decisions: [.deny]),
         observation: ComputerUseObservationServicing,
         actionService: ComputerUseActionServicing = Phase3StubActionService(),
-        intervention: ComputerUseInterventionMonitoring = Phase3StubInterventionMonitor(),
         limits: ComputerUseAgentLimits = ComputerUseAgentLimits(settleDelay: 0),
         dateProvider: @escaping () -> Date = { Date(timeIntervalSince1970: 10_000) },
         sleep: @escaping (TimeInterval) async throws -> Void = { _ in }
@@ -765,46 +760,12 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
         ComputerUseAgent(
             modelClient: model,
             approvalService: approval,
+            applicationCatalog: Phase3StubApplicationCatalog(),
             observationService: observation,
             actionService: actionService,
-            interventionMonitor: intervention,
             limits: limits,
             dateProvider: dateProvider,
             sleep: sleep
         )
-    }
-}
-
-final class ComputerUsePhase3InterventionTests: XCTestCase {
-    func testSystemInterventionMonitorDetectsProcessAndWindowChanges() {
-        let observation = makePhase3Observation(generation: 1)
-        let application = observation.target.application
-        let window = observation.target.window
-        let discovery = Phase3StubWindowDiscovery(windows: [window])
-        var frontmost: Int32? = application.processIdentifier
-        let monitor = SystemComputerUseInterventionMonitor(
-            windowDiscovery: discovery,
-            frontmostProcessIdentifierProvider: { frontmost }
-        )
-
-        XCTAssertNil(monitor.check(target: observation.target))
-        frontmost = 999
-        XCTAssertEqual(
-            monitor.check(target: observation.target),
-            .frontmostApplicationChanged
-        )
-        frontmost = application.processIdentifier
-        discovery.windows = []
-        XCTAssertEqual(monitor.check(target: observation.target), .targetWindowChanged)
-        discovery.windows = [ComputerUseWindow(
-            id: window.id,
-            title: window.title,
-            ownerProcessIdentifier: window.ownerProcessIdentifier,
-            bounds: window.bounds,
-            layer: window.layer,
-            isOnScreen: window.isOnScreen,
-            isKeyWindow: false
-        )]
-        XCTAssertEqual(monitor.check(target: observation.target), .targetWindowChanged)
     }
 }

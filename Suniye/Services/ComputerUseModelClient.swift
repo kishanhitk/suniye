@@ -80,6 +80,7 @@ enum ComputerUseRemoteModelDefaults {
     {"kind":"semantic","element_index":3,"action":"AXPress"}
     {"kind":"perform_secondary_action","element_index":3,"action":"AXShowMenu"}
 
+    Use {"kind":"target","app":"com.google.Chrome"} when the task requires another application. Use the exact bundle identifier or display name from Available applications. The host refreshes state for that application and launches it when needed. A target decision does not perform input.
     Use {"kind":"action","action":...} for one action. Use {"kind":"completed","message":"..."} when the task is complete. Use {"kind":"ask_user","question":"..."} when the user must decide something. Use {"kind":"blocked","reason":"..."} when the task cannot continue safely. Use {"kind":"retryable_failure","reason":"..."} only when the current observation is insufficient and another observation may help.
 
     Click and drag coordinates are relative to the top-left corner of the observed window. Scroll coordinates are also window-relative. The observation generation is the current state revision. If a screenshot is present, copy its exact ID from the Screenshot ID line for a coordinate action grounded in that screenshot. Never use the placeholder from the example. Use an accessibility element index only when that index is present in the observation. Use an element index for a click only when the element has valid bounds. Use only an action name exposed by that element for semantic or secondary actions. Never invent a target, element index, or action name. Never type, set, or select text unless the user's task requires that exact text.
@@ -171,6 +172,12 @@ enum ComputerUseModelPromptRenderer {
         let failures = request.recentFailureMessages
             .map { "- \($0)" }
             .joined(separator: "\n")
+        let availableApplications = request.availableApplications
+            .prefix(100)
+            .map {
+                "- \($0.displayName) (\($0.bundleIdentifier)); running=\($0.isRunning)"
+            }
+            .joined(separator: "\n")
 
         let text = """
         User task:
@@ -182,6 +189,9 @@ enum ComputerUseModelPromptRenderer {
         Window bounds: x=\(window.bounds.x), y=\(window.bounds.y), width=\(window.bounds.width), height=\(window.bounds.height)
         Observation generation: \(observation.generation)
         Screenshot ID: \(observation.screenshot?.id ?? "(none)")
+
+        Available applications:
+        \(availableApplications.isEmpty ? "(none)" : availableApplications)
 
         Accessibility text:
         \(observation.accessibility.text)

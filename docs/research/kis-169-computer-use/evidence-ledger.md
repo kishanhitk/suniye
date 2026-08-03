@@ -617,3 +617,26 @@ Sources: local Git status, `git log`, `git push`, and `git ls-remote`.
   regression tests, and the live E2E record.
 - `[Verified]` The branch `kis-169-computer-use` is clean and tracks
   `origin/kis-169-computer-use` at commit `f15a04d`.
+
+### Entry 46: Atomic target-scope correction
+
+Sources: the mounted reference `sky-window-api.md` and Computer Use skill, the current target
+scope implementation note, current Suniye Computer Use services and tests, and the final local
+validation commands.
+
+- `[Verified]` The public macOS reference takes an app target per state and input call. It does
+  not expose one immutable session-wide app target.
+- `[Verified]` The reference skill describes background launch when state is requested for a
+  non-running app.
+- `[Corrected]` The old Suniye frontmost/key-window intervention monitor was a local target lock,
+  not a verified reference requirement. It is removed.
+- `[Implemented]` Suniye now permits no starting app, exposes app candidates to the model, accepts
+  typed target decisions, resolves installed apps, launches them through asynchronous `NSWorkspace`,
+  and activates the fresh target immediately before input.
+- `[Retained]` Accessibility, Screen Recording, policy, approval, observation-generation, explicit
+  stop, cancellation, and action/session limits remain separate control boundaries.
+- `[Verified]` The final full suite reports 1,088 passed, 1 skipped, and 0 failed tests, for 1,089
+  total. Gated coverage is 95.08% (14,455/15,203 lines) at the 95% threshold.
+- `[Verified]` `scripts/e2e_preflight.sh` and `scripts/e2e_smoke.sh` pass.
+- `[Unknown]` Live third-party app launch, cross-process activation and input, Screen Recording
+  capture, browser control, helper IPC, and the complete provider/model loop remain unverified.

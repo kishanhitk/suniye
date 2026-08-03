@@ -1,6 +1,16 @@
 import Foundation
 @testable import Suniye
 
+final class Phase3StubApplicationCatalog: ComputerUseApplicationCatalog {
+    func listApplications() -> [ComputerUseApplication] {
+        []
+    }
+
+    func application(withID identifier: String) -> ComputerUseApplication? {
+        nil
+    }
+}
+
 final class Phase3ScriptedModelClient: ComputerUseModelClient {
     private var decisions: [ComputerUseModelDecision]
     private var errors: [Error]
@@ -120,20 +130,6 @@ final class Phase3StubActionService: ComputerUseActionServicing {
             target: observation.target,
             completedAt: Date(timeIntervalSince1970: 20_000)
         )
-    }
-}
-
-final class Phase3StubInterventionMonitor: ComputerUseInterventionMonitoring {
-    private var interventions: [ComputerUseIntervention?]
-    private(set) var checkCount = 0
-
-    init(interventions: [ComputerUseIntervention?] = []) {
-        self.interventions = interventions
-    }
-
-    func check(target: ComputerUseTarget) -> ComputerUseIntervention? {
-        checkCount += 1
-        return interventions.isEmpty ? nil : interventions.removeFirst()
     }
 }
 

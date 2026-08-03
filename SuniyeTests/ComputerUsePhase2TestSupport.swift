@@ -190,18 +190,6 @@ final class Phase2StubSemanticActionPerformer: ComputerUseSemanticActionPerformi
     }
 }
 
-final class Phase2StubTargetValidator: ComputerUseTargetValidating {
-    var isCurrent: Bool
-
-    init(isCurrent: Bool) {
-        self.isCurrent = isCurrent
-    }
-
-    func isCurrent(target: ComputerUseTarget) -> Bool {
-        isCurrent
-    }
-}
-
 final class Phase2StubPermissionManager: ComputerUsePermissionManaging {
     private var granted: Bool
 

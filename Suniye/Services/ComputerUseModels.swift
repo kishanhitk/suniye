@@ -217,6 +217,29 @@ final class ComputerUseCancellationToken: @unchecked Sendable {
 protocol ComputerUseApplicationCatalog {
     func listApplications() -> [ComputerUseApplication]
     func application(withID identifier: String) -> ComputerUseApplication?
+    func resolveApplication(identifier: String) -> ComputerUseApplication?
+    func activeApplication() -> ComputerUseApplication?
+    func listAvailableApplications() -> [ComputerUseApplication]
+    func launchApplication(identifier: String) async -> ComputerUseApplication?
+}
+
+extension ComputerUseApplicationCatalog {
+    func resolveApplication(identifier: String) -> ComputerUseApplication? {
+        application(withID: identifier)
+    }
+
+    func activeApplication() -> ComputerUseApplication? {
+        let applications = listApplications()
+        return applications.first(where: \.isActive) ?? applications.first
+    }
+
+    func listAvailableApplications() -> [ComputerUseApplication] {
+        listApplications()
+    }
+
+    func launchApplication(identifier: String) async -> ComputerUseApplication? {
+        nil
+    }
 }
 
 protocol ComputerUseWindowDiscovering {
@@ -255,4 +278,30 @@ protocol ComputerUseObservationServicing {
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) throws -> ComputerUseObservation
+
+    func observeTarget(
+        applicationIdentifier: String?,
+        includeScreenshot: Bool,
+        configuration: ComputerUseObservationConfiguration,
+        cancellation: ComputerUseCancellationToken
+    ) async throws -> ComputerUseObservation
+}
+
+extension ComputerUseObservationServicing {
+    func observeTarget(
+        applicationIdentifier: String?,
+        includeScreenshot: Bool,
+        configuration: ComputerUseObservationConfiguration,
+        cancellation: ComputerUseCancellationToken
+    ) async throws -> ComputerUseObservation {
+        guard let applicationIdentifier else {
+            throw ComputerUseObservationError.applicationNotFound("frontmost application")
+        }
+        return try observe(
+            applicationID: applicationIdentifier,
+            includeScreenshot: includeScreenshot,
+            configuration: configuration,
+            cancellation: cancellation
+        )
+    }
 }

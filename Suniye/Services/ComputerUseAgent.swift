@@ -4,9 +4,9 @@ actor ComputerUseAgent {
     private let modelClient: ComputerUseModelClient
     private let approvalService: ComputerUseApprovalRequesting
     private let approvalAuthorizer: ComputerUseApprovalAuthorizing?
+    private let applicationCatalog: ComputerUseApplicationCatalog
     private let observationService: ComputerUseObservationServicing
     private let actionService: ComputerUseActionServicing
-    private let interventionMonitor: ComputerUseInterventionMonitoring
     private let limits: ComputerUseAgentLimits
     private let dateProvider: () -> Date
     private let sleep: (TimeInterval) async throws -> Void
@@ -15,9 +15,9 @@ actor ComputerUseAgent {
         modelClient: ComputerUseModelClient,
         approvalService: ComputerUseApprovalRequesting = DenyAllComputerUseApprovalService(),
         approvalAuthorizer: ComputerUseApprovalAuthorizing? = nil,
+        applicationCatalog: ComputerUseApplicationCatalog = SystemComputerUseApplicationCatalog(),
         observationService: ComputerUseObservationServicing,
         actionService: ComputerUseActionServicing,
-        interventionMonitor: ComputerUseInterventionMonitoring = SystemComputerUseInterventionMonitor(),
         limits: ComputerUseAgentLimits = ComputerUseAgentLimits(),
         dateProvider: @escaping () -> Date = Date.init,
         sleep: @escaping (TimeInterval) async throws -> Void = { delay in
@@ -30,9 +30,9 @@ actor ComputerUseAgent {
         self.modelClient = modelClient
         self.approvalService = approvalService
         self.approvalAuthorizer = approvalAuthorizer
+        self.applicationCatalog = applicationCatalog
         self.observationService = observationService
         self.actionService = actionService
-        self.interventionMonitor = interventionMonitor
         self.limits = limits
         self.dateProvider = dateProvider
         self.sleep = sleep
@@ -55,10 +55,11 @@ actor ComputerUseAgent {
                 failureCount: 0
             )
         }
-        guard !task.applicationID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        if let applicationID = task.applicationID,
+           applicationID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return result(
                 phase: .failed,
-                message: "A target application is required.",
+                message: "The target application identifier cannot be empty.",
                 question: nil,
                 observation: nil,
                 actionResults: [],
@@ -76,7 +77,11 @@ actor ComputerUseAgent {
             )
         }
 
-        var state = RunState(startedAt: dateProvider())
+        var state = RunState(
+            startedAt: dateProvider(),
+            applicationID: task.applicationID,
+            windowID: task.windowID
+        )
         while true {
             switch await advance(
                 task: task,
@@ -93,11 +98,19 @@ actor ComputerUseAgent {
 
     private struct RunState {
         let startedAt: Date
+        var applicationID: String?
+        var windowID: UInt32?
         var latestObservation: ComputerUseObservation?
         var actionResults: [ComputerUseActionResult] = []
         var failureMessages: [String] = []
         var failureCount = 0
         var iteration = 0
+
+        init(startedAt: Date, applicationID: String?, windowID: UInt32?) {
+            self.startedAt = startedAt
+            self.applicationID = applicationID
+            self.windowID = windowID
+        }
 
         mutating func recordFailure(_ message: String) {
             failureCount += 1
@@ -119,7 +132,6 @@ actor ComputerUseAgent {
         case blocked(String)
         case denied
         case stopped
-        case userIntervened(String)
         case cancelled
     }
 
@@ -155,9 +167,9 @@ actor ComputerUseAgent {
         let observation: ComputerUseObservation
         do {
             var observationConfiguration = ComputerUseObservationConfiguration.default
-            observationConfiguration.preferredWindowID = task.windowID
-            observation = try observationService.observe(
-                applicationID: task.applicationID,
+            observationConfiguration.preferredWindowID = state.windowID
+            observation = try await observationService.observeTarget(
+                applicationIdentifier: state.applicationID,
                 includeScreenshot: task.includeScreenshot,
                 configuration: observationConfiguration,
                 cancellation: cancellation
@@ -185,22 +197,10 @@ actor ComputerUseAgent {
             )
         }
 
-        if let intervention = interventionMonitor.check(target: observation.target) {
-            return .finish(
-                result(
-                    phase: .userIntervened,
-                    message: intervention.message,
-                    question: nil,
-                    observation: observation,
-                    actionResults: state.actionResults,
-                    failureCount: state.failureCount
-                )
-            )
-        }
-
         let request = ComputerUseModelRequest(
             instruction: task.instruction,
             observation: observation,
+            availableApplications: applicationCatalog.listAvailableApplications(),
             recentActionResults: state.actionResults,
             recentFailureMessages: state.failureMessages,
             iteration: state.iteration
@@ -319,6 +319,10 @@ actor ComputerUseAgent {
                 state: &state,
                 observation: observation
             )
+        case let .target(application, windowID):
+            state.applicationID = application.trimmingCharacters(in: .whitespacesAndNewlines)
+            state.windowID = windowID
+            return .continueWith(state)
         case let .action(action):
             switch await attemptAction(
                 action: action,
@@ -358,18 +362,7 @@ actor ComputerUseAgent {
                 return .finish(
                     result(
                         phase: .cancelled,
-                        message: ComputerUseIntervention.userStopped.message,
-                        question: nil,
-                        observation: observation,
-                        actionResults: state.actionResults,
-                        failureCount: state.failureCount
-                    )
-                )
-            case let .userIntervened(message):
-                return .finish(
-                    result(
-                        phase: .userIntervened,
-                        message: message,
+                        message: "The user stopped the Computer Use session.",
                         question: nil,
                         observation: observation,
                         actionResults: state.actionResults,
@@ -536,9 +529,6 @@ actor ComputerUseAgent {
         guard !isCancelled(cancellation) else {
             return .cancelled
         }
-        if let intervention = interventionMonitor.check(target: observation.target) {
-            return .userIntervened(intervention.message)
-        }
 
         let grant: ComputerUseApprovalGrant
         if let approvalAuthorizer {
@@ -574,10 +564,6 @@ actor ComputerUseAgent {
         } catch {
             if isCancelled(cancellation) || isCancellation(error) {
                 return .cancelled
-            }
-            if let actionError = error as? ComputerUseActionError,
-               actionError == .targetNotFrontmost {
-                return .userIntervened(actionError.localizedDescription)
             }
             return .retryableFailure(localizedMessage(error))
         }

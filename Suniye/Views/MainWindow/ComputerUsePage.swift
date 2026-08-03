@@ -237,24 +237,29 @@ struct ComputerUsePage: View {
 
     private var targetSelection: some View {
         VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-            SectionHeading(title: "Target")
+            SectionHeading(title: "Starting context (optional)")
 
             SurfaceCard(padding: 16) {
                 VStack(alignment: .leading, spacing: 16) {
                     if coordinator.applications.isEmpty {
-                        HStack(spacing: 10) {
+                        HStack(alignment: .top, spacing: 10) {
                             Image(systemName: "macwindow.on.rectangle")
                                 .foregroundStyle(MainWindowPalette.secondaryText)
-                            Text("No eligible running app windows were found.")
-                                .font(AppTypography.body)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("No running app windows were found.")
+                                    .font(AppTypography.body)
+                                    .foregroundStyle(MainWindowPalette.secondaryText)
+                                Text("The agent can choose and launch an app from the task.")
+                                    .font(AppTypography.subheadline)
+                                    .foregroundStyle(MainWindowPalette.tertiaryText)
+                            }
                             Spacer(minLength: 8)
                             Button("Refresh", action: coordinator.refresh)
                                 .buttonStyle(.bordered)
                         }
                     } else {
                         HStack(spacing: 12) {
-                            Text("Running app")
+                            Text("Starting app")
                                 .font(AppTypography.body)
                             Spacer(minLength: 12)
                             NativePopupPicker(
@@ -299,7 +304,7 @@ struct ComputerUsePage: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "info.circle")
                                     .foregroundStyle(MainWindowPalette.tertiaryText)
-                                Text("Control is limited to the selected window. Bring it forward before an action.")
+                                Text("This is only the starting context. The agent can switch apps and windows during the task.")
                                     .font(AppTypography.subheadline)
                                     .foregroundStyle(MainWindowPalette.secondaryText)
                                     .fixedSize(horizontal: false, vertical: true)

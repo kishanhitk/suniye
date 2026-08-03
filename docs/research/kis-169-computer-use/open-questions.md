@@ -15,7 +15,9 @@
 
 - Should the first model run locally, remotely, or through a user-selected provider?
 - Does the local-first promise cover screenshots and AX text?
-- Should Suniye control one selected app or the whole desktop?
+- `[Resolved for the current desktop prototype]` Suniye allows the agent to start from the active
+  app or an optional picker selection, then switch apps during the run. Release policy remains
+  open.
 - Which action classes are safe without approval?
 - Should persistent approvals exist in the first release?
 - Should Suniye support locked-screen operation?
@@ -33,7 +35,8 @@
 - Does `CGWindowListCreateImage` capture the selected window after Screen Recording grant?
 - Does AX window geometry match CG window geometry for the target apps?
 - Which target apps expose a complete enough AX tree for the first read-only preview?
-- Phase 1 currently uses a target picker. Does that remain the right product policy after live testing?
+- `[Resolved for the current desktop prototype]` The picker is optional starting context. The
+  model can select another app during the run.
 - Does running discovery and observation behind the Phase 1 actor boundary behave correctly for real AX targets?
 
 ## Phase 2 live validation
@@ -57,6 +60,9 @@
   multiple target applications.
 - `[Resolved for the current desktop prototype]` Indexed clicks, dynamic secondary AX actions,
   and screenshot IDs are part of the typed action and policy contracts.
+- `[Resolved for the current desktop prototype]` The model receives running and installed app
+  candidates. A non-running resolved app launches through the application catalog before state
+  capture.
 - `[Unknown]` Reference-level transient screenshot caching and state diffs are not yet implemented
   in Suniye.
 
@@ -85,8 +91,8 @@
 - `[Verified]` Deterministic validation covers the coordinator's approval, policy, cancellation,
   stale-operation, and terminal-result paths. The full suite reports 1,088 passed, 1 skipped,
   and 0 failed tests.
-- `[Verified]` The gated coverage report passes at 95.10% (14,453/15,197 lines) at the 95% floor.
-- `[Verified]` The focused regression suite reports 3 passed tests and 0 failures.
+- `[Verified]` Gated coverage passes at 95.08% (14,455/15,203 lines) at the 95% floor.
+- `[Verified]` The focused Computer Use regression classes pass with 0 failures.
 - `[Unknown]` A live provider's actual multimodal support, prompt reliability, response latency, and cancellation behavior still need a manual test.
 - `[Unknown]` The current Core Graphics screenshot adapter must still be compared with ScreenCaptureKit on macOS 14 and later.
 - `[Verified]` The live `@Computer` E2E validates Suniye navigation, target/window selection,

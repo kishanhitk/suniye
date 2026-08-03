@@ -3,13 +3,18 @@ import Foundation
 
 final class SystemComputerUseApplicationCatalog: ComputerUseApplicationCatalog {
     private let runningApplicationsProvider: () -> [NSRunningApplication]
+    private let installedApplicationURLsProvider: () -> [URL]
 
     init(
         runningApplicationsProvider: @escaping () -> [NSRunningApplication] = {
             NSWorkspace.shared.runningApplications
+        },
+        installedApplicationURLsProvider: @escaping () -> [URL] = {
+            SystemComputerUseApplicationCatalog.defaultInstalledApplicationURLs()
         }
     ) {
         self.runningApplicationsProvider = runningApplicationsProvider
+        self.installedApplicationURLsProvider = installedApplicationURLsProvider
     }
 
     func listApplications() -> [ComputerUseApplication] {
@@ -25,6 +30,70 @@ final class SystemComputerUseApplicationCatalog: ComputerUseApplicationCatalog {
 
     func application(withID identifier: String) -> ComputerUseApplication? {
         listApplications().first { $0.id == identifier }
+    }
+
+    func resolveApplication(identifier: String) -> ComputerUseApplication? {
+        let applications = listAvailableApplications()
+        let normalizedIdentifier = Self.normalizedIdentifier(identifier)
+        return applications.first { application in
+            application.id == identifier
+                || application.bundleIdentifier == identifier
+                || application.bundleIdentifier == normalizedIdentifier
+                || application.displayName.localizedCaseInsensitiveCompare(identifier) == .orderedSame
+        }
+    }
+
+    func activeApplication() -> ComputerUseApplication? {
+        let applications = listApplications()
+        return applications.first(where: \.isActive) ?? applications.first
+    }
+
+    func listAvailableApplications() -> [ComputerUseApplication] {
+        let running = listApplications()
+        let runningBundleIdentifiers = Set(running.map(\.bundleIdentifier))
+        var seenBundleIdentifiers = runningBundleIdentifiers
+        let installed = installedApplicationURLsProvider()
+            .compactMap(Self.makeInstalledApplication)
+            .filter { seenBundleIdentifiers.insert($0.bundleIdentifier).inserted }
+
+        return (running + installed).sorted { lhs, rhs in
+            if lhs.isRunning != rhs.isRunning {
+                return lhs.isRunning && !rhs.isRunning
+            }
+            if lhs.isActive != rhs.isActive {
+                return lhs.isActive && !rhs.isActive
+            }
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
+    }
+
+    func launchApplication(identifier: String) async -> ComputerUseApplication? {
+        guard let candidate = resolveApplication(identifier: identifier) else {
+            return nil
+        }
+        guard !candidate.isRunning else {
+            return candidate
+        }
+        guard let applicationURL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: candidate.bundleIdentifier
+        ) else {
+            return nil
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = false
+        configuration.addsToRecentItems = false
+        let launchedApplication = await withCheckedContinuation { continuation in
+            NSWorkspace.shared.openApplication(
+                at: applicationURL,
+                configuration: configuration
+            ) { application, _ in
+                continuation.resume(returning: application)
+            }
+        }
+
+        return launchedApplication.flatMap(Self.makeApplication)
+            ?? listApplications().first { $0.bundleIdentifier == candidate.bundleIdentifier }
     }
 
     private static func makeApplication(_ application: NSRunningApplication) -> ComputerUseApplication? {
@@ -50,6 +119,53 @@ final class SystemComputerUseApplicationCatalog: ComputerUseApplicationCatalog {
 
     static func applicationID(bundleIdentifier: String, processIdentifier: Int32) -> String {
         "\(bundleIdentifier)#\(processIdentifier)"
+    }
+
+    private static func makeInstalledApplication(_ url: URL) -> ComputerUseApplication? {
+        guard let bundle = Bundle(url: url),
+              let bundleIdentifier = bundle.bundleIdentifier,
+              !bundleIdentifier.isEmpty else {
+            return nil
+        }
+        let displayName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? bundleIdentifier
+
+        return ComputerUseApplication(
+            id: bundleIdentifier,
+            bundleIdentifier: bundleIdentifier,
+            displayName: displayName,
+            processIdentifier: 0,
+            isRunning: false,
+            isActive: false,
+            launchDate: nil
+        )
+    }
+
+    private static func normalizedIdentifier(_ identifier: String) -> String {
+        guard let separator = identifier.firstIndex(of: "#") else {
+            return identifier
+        }
+        return String(identifier[..<separator])
+    }
+
+    static func defaultInstalledApplicationURLs() -> [URL] {
+        let fileManager = FileManager.default
+        let directories = [
+            URL(fileURLWithPath: "/Applications"),
+            URL(fileURLWithPath: "/System/Applications"),
+            URL(fileURLWithPath: "/System/Library/CoreServices"),
+            URL(fileURLWithPath: "/System/Library/CoreServices/Applications"),
+            fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications"),
+        ]
+
+        return directories.flatMap { directory in
+            (try? fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )) ?? []
+        }.filter { $0.pathExtension == "app" }
     }
 }
 
@@ -116,6 +232,7 @@ final class SystemComputerUseWindowDiscovery: ComputerUseWindowDiscovering {
                 isKeyWindow: appIsFrontmost && index == 0
             )
         }
+
     }
 
     private func numberValue(_ value: Any?) -> NSNumber? {

@@ -162,6 +162,45 @@ final class ComputerUsePhase0Tests: XCTestCase {
         }
     }
 
+    func testObservationLaunchesAResolvedNonRunningApplication() async throws {
+        let stopped = ComputerUseApplication(
+            id: "com.example.browser",
+            bundleIdentifier: "com.example.browser",
+            displayName: "Browser",
+            processIdentifier: 1234,
+            isRunning: false,
+            isActive: false,
+            launchDate: nil
+        )
+        let running = ComputerUseApplication(
+            id: "com.example.browser#1234",
+            bundleIdentifier: stopped.bundleIdentifier,
+            displayName: stopped.displayName,
+            processIdentifier: stopped.processIdentifier,
+            isRunning: true,
+            isActive: false,
+            launchDate: nil
+        )
+        let catalog = LaunchingApplicationCatalog(stopped: stopped, running: running)
+        let service = ComputerUseObservationService(
+            applicationCatalog: catalog,
+            windowDiscovery: StubWindowDiscovery(windows: [makeWindow()]),
+            accessibilityReader: StubAccessibilityReader(),
+            screenshotCapturer: StubScreenshotCapturer(),
+            permissionManager: StubPermissionManager(snapshot: readyPermissions)
+        )
+
+        let observation = try await service.observeTarget(
+            applicationIdentifier: stopped.bundleIdentifier,
+            includeScreenshot: false,
+            configuration: .default,
+            cancellation: ComputerUseCancellationToken()
+        )
+
+        XCTAssertTrue(catalog.didLaunch)
+        XCTAssertEqual(observation.target.application, running)
+    }
+
     func testObservationPropagatesScreenshotFailure() {
         let application = makeApplication()
         let service = ComputerUseObservationService(
@@ -455,6 +494,37 @@ private final class StubApplicationCatalog: ComputerUseApplicationCatalog {
 
     func application(withID identifier: String) -> ComputerUseApplication? {
         applications.first { $0.id == identifier }
+    }
+}
+
+private final class LaunchingApplicationCatalog: ComputerUseApplicationCatalog {
+    let stopped: ComputerUseApplication
+    let running: ComputerUseApplication
+    private(set) var didLaunch = false
+
+    init(stopped: ComputerUseApplication, running: ComputerUseApplication) {
+        self.stopped = stopped
+        self.running = running
+    }
+
+    func listApplications() -> [ComputerUseApplication] {
+        [stopped]
+    }
+
+    func application(withID identifier: String) -> ComputerUseApplication? {
+        identifier == stopped.id ? stopped : nil
+    }
+
+    func resolveApplication(identifier: String) -> ComputerUseApplication? {
+        identifier == stopped.id || identifier == stopped.bundleIdentifier ? stopped : nil
+    }
+
+    func launchApplication(identifier: String) async -> ComputerUseApplication? {
+        guard identifier == stopped.id || identifier == stopped.bundleIdentifier else {
+            return nil
+        }
+        didLaunch = true
+        return running
     }
 }
 

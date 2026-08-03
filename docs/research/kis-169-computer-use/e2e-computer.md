@@ -52,4 +52,6 @@ own process. `ComputerUseWindowActivationTests` covers that policy.
   loop completion remain untested because no model is configured.
 - `[Unknown]` Cross-process window activation and native input delivery remain untested. The test
   deliberately used Suniye as the safe same-process target.
-- `[Deferred]` Browser control, helper IPC, and installed-app launch remain outside this E2E.
+- `[Deferred]` Browser control and helper IPC remain outside this E2E.
+- `[Not exercised]` Installed-app launch is implemented behind the async application-catalog seam,
+  but this safe UI run did not launch a third-party application.
