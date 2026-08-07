@@ -202,6 +202,32 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         XCTAssertNil(failedCoordinator.errorMessage)
     }
 
+    func testAgentObservationFailurePublishesFailedCoordinatorPhase() async {
+        let observation = makePhase3Observation(generation: 37)
+        let coordinator = makeCoordinator(
+            model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
+            observation: observation,
+            observationService: Phase3StubObservationService(
+                result: observation,
+                error: ComputerUseObservationError.screenshotUnavailable
+            ),
+            actionService: Phase3StubActionService()
+        )
+        coordinator.agentInstruction = "Inspect the app."
+
+        coordinator.start()
+        await waitForPhase(coordinator, .ready)
+        coordinator.startAgent()
+        await waitForPhase(coordinator, .failed)
+
+        XCTAssertEqual(coordinator.agentResult?.phase, .failed)
+        XCTAssertEqual(
+            coordinator.errorMessage,
+            ComputerUseObservationError.screenshotUnavailable.errorDescription
+        )
+        XCTAssertEqual(coordinator.phaseTitle, "Computer Use failed")
+    }
+
     func testCoordinatorGuardsConfigurationAndAgentState() async {
         let coordinator = makeCoordinator(
             model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
@@ -320,6 +346,7 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
     private func makeCoordinator(
         model: ComputerUseModelClient,
         observation: ComputerUseObservation,
+        observationService: ComputerUseObservationServicing? = nil,
         actionService: ComputerUseActionServicing,
         permissionManager: ComputerUsePermissionManaging = Phase5PermissionManager(),
         policy: ComputerUsePolicyChecking? = nil
@@ -327,7 +354,7 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         ComputerUseCoordinator(
             applicationCatalog: Phase5ApplicationCatalog(application: observation.target.application),
             permissionManager: permissionManager,
-            observationService: Phase3StubObservationService(result: observation),
+            observationService: observationService ?? Phase3StubObservationService(result: observation),
             actionService: actionService,
             policy: policy,
             modelClient: model

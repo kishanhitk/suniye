@@ -154,16 +154,23 @@ actor ComputerUseAgent {
                     )
                 )
             }
-            return .finish(
-                result(
-                    phase: .failed,
-                    message: localizedMessage(error),
-                    question: nil,
-                    observation: state.latestObservation,
-                    actionResults: state.actionResults,
-                    failureCount: state.failureCount
+            if let observationError = error as? ComputerUseObservationError,
+               case .noWindow = observationError,
+               let latestObservation = state.latestObservation {
+                state.recordFailure(localizedMessage(error))
+                observation = latestObservation
+            } else {
+                return .finish(
+                    result(
+                        phase: .failed,
+                        message: localizedMessage(error),
+                        question: nil,
+                        observation: state.latestObservation,
+                        actionResults: state.actionResults,
+                        failureCount: state.failureCount
+                    )
                 )
-            )
+            }
         }
 
         let request = ComputerUseModelRequest(

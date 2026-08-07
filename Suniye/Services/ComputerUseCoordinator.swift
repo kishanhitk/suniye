@@ -478,9 +478,11 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         observation = result.latestObservation
         activeCancellation = nil
         agentTask = nil
-        phase = .agentCompleted
         if result.phase == .failed {
+            phase = .failed
             errorMessage = result.message
+        } else {
+            phase = .agentCompleted
         }
     }
 

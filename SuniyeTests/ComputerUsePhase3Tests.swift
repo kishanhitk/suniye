@@ -352,6 +352,45 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
         )
     }
 
+    func testAgentRecoversWhenTargetWindowDisappearsBeforeTargetSwitch() async {
+        let observation = Phase3StubObservationService(
+            results: [
+                makePhase3Observation(generation: 1),
+                makePhase3Observation(generation: 2),
+            ],
+            errorsByObservation: [
+                2: ComputerUseObservationError.noWindow("dev.suniye.app.preview"),
+            ]
+        )
+        let model = Phase3ScriptedModelClient(
+            decisions: [
+                .retryableFailure(reason: "Choose the requested app."),
+                .target(application: "com.panic.Nova"),
+                .completed(message: "Recovered."),
+            ]
+        )
+        let agent = makeAgent(model: model, observation: observation)
+
+        let result = await agent.run(
+            task: ComputerUseAgentTask(
+                instruction: "Open the editor.",
+                applicationID: "dev.suniye.app.preview"
+            )
+        )
+
+        XCTAssertEqual(result.phase, .completed)
+        XCTAssertEqual(result.message, "Recovered.")
+        XCTAssertEqual(
+            observation.applicationIDs,
+            ["dev.suniye.app.preview", "dev.suniye.app.preview", "com.panic.Nova"]
+        )
+        XCTAssertEqual(model.requests.count, 3)
+        XCTAssertEqual(
+            model.requests[1].recentFailureMessages,
+            ["Choose the requested app.", "The application has no visible window: dev.suniye.app.preview."]
+        )
+    }
+
     func testAgentForwardsModelActionsAndRetriesActionErrors() async {
         let invalidObservation = Phase3StubObservationService(
             results: [

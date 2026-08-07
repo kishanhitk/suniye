@@ -71,17 +71,24 @@ final class Phase3ScriptedModelClient: ComputerUseModelClient {
 final class Phase3StubObservationService: ComputerUseObservationServicing {
     private var results: [ComputerUseObservation]
     let error: Error?
+    private let errorsByObservation: [Int: Error]
     private(set) var observeCount = 0
     private(set) var applicationIDs: [String] = []
 
     init(result: ComputerUseObservation, error: Error? = nil) {
         results = [result]
         self.error = error
+        errorsByObservation = [:]
     }
 
-    init(results: [ComputerUseObservation], error: Error? = nil) {
+    init(
+        results: [ComputerUseObservation],
+        error: Error? = nil,
+        errorsByObservation: [Int: Error] = [:]
+    ) {
         self.results = results
         self.error = error
+        self.errorsByObservation = errorsByObservation
     }
 
     func observe(
@@ -93,6 +100,9 @@ final class Phase3StubObservationService: ComputerUseObservationServicing {
         applicationIDs.append(applicationID)
         if let error {
             throw error
+        }
+        if let scriptedError = errorsByObservation[observeCount] {
+            throw scriptedError
         }
         guard !cancellation.isCancelled else {
             throw ComputerUseObservationError.cancelled
