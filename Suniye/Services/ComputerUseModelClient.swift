@@ -52,7 +52,7 @@ enum ComputerUseRemoteModelDefaults {
     static let maxTokens = 2_048
 
     static let systemPrompt = """
-    You are a desktop UI planning model. Complete the user's task by inspecting the current observation and proposing one next step.
+    You control one macOS application at a time through its current Accessibility state and window screenshot. Complete the user's task by returning one next decision.
 
     Return exactly one JSON object. Do not use Markdown fences. Do not include commentary outside the JSON object.
 
@@ -68,10 +68,14 @@ enum ComputerUseRemoteModelDefaults {
     {"kind":"action","action":{"kind":"perform_secondary_action","element_index":3,"action":"AXPress"}}
     {"kind":"action","action":{"kind":"perform_secondary_action","element_index":3,"action":"AXShowMenu"}}
 
-    Use a target decision with the exact bundle identifier or display name from Available applications when the task requires another application. The host refreshes state for that application and launches it when needed. A target decision does not perform input.
+    When the task names another application, use a target decision with its display name or bundle identifier. Prefer an exact value from Available applications when present. The host refreshes state for that application and launches it when needed. A target decision does not perform input.
     Use {"kind":"action","action":...} for one action. Use {"kind":"completed","message":"..."} when the task is complete. Use {"kind":"ask_user","question":"..."} when the user must decide something. Use {"kind":"blocked","reason":"..."} when the task cannot continue safely. Use {"kind":"retryable_failure","reason":"..."} only when the current observation is insufficient and another observation may help.
 
-    Click and drag coordinates are relative to the top-left corner of the observed window. Scroll targets an accessibility element and uses direction up, down, left, or right plus a positive page count. Use an accessibility element index only when that index is present in the observation. Use only an action name exposed by that element for secondary actions. Never invent a target, element index, or action name. Never type, set, or select text unless the user's task requires that exact text.
+    An action is valid only when Observation freshness is fresh. When it is stale, do not return an action; choose a target, request another observation, ask the user, report a block, or complete only if the task is already complete.
+    Prefer Accessibility element actions over coordinates. Prefer Accessibility text over the screenshot, but use screenshot coordinates when Accessibility is incomplete or behaves unexpectedly.
+    Element indexes and exposed action names belong only to the current observation. Never reuse them after the UI changes. The host captures fresh state after every action before asking for another decision.
+    Click and drag coordinates are relative to the top-left corner of the observed window. Scroll targets an Accessibility element and uses direction up, down, left, or right plus a positive page count. Use only an action name exposed by that element for secondary actions. Never invent a target, element index, or action name.
+    Key presses and typed text target the observed application and cannot invoke global shortcuts. Treat newline characters in typed text as Return, which can submit a form or send a message. Never type, set, or select text unless the user's task requires that exact text.
     """
 }
 
@@ -158,11 +162,22 @@ enum ComputerUseModelPromptRenderer {
                 "- \($0.displayName) (\($0.bundleIdentifier)); running=\($0.isRunning)"
             }
             .joined(separator: "\n")
+        let conversation = request.conversation
+            .map { message in
+                let speaker = message.role == .user ? "User" : "Assistant"
+                return "\(speaker): \(message.text)"
+            }
+            .joined(separator: "\n")
 
         let text = """
+        Prior conversation:
+        \(conversation.isEmpty ? "(none)" : conversation)
+
         User task:
         \(request.instruction)
 
+        Observation freshness: \(request.observationFreshness.rawValue)
+        Actions allowed from this observation: \(request.observationFreshness.allowsActions ? "yes" : "no")
         Target application: \(target.application.displayName) (\(target.application.bundleIdentifier))
         Available applications:
         \(availableApplications.isEmpty ? "(none)" : availableApplications)

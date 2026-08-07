@@ -469,14 +469,15 @@ Sources: `Suniye/Services/ComputerUseCoordinator.swift`,
 
 Sources: `Suniye/Services/ComputerUseModelConfigurationFactory.swift`,
 `Suniye/AppState.swift`, `Suniye/Services/ComputerUseModelClient.swift`,
-`Suniye/Views/MainWindow/ComputerUseAgentPanel.swift`, and
+`Suniye/Views/MainWindow/ComputerUsePage.swift`,
+`Suniye/Views/MainWindow/ComputerUseDetailsView.swift`, and
 `Suniye/Views/MainWindow/MainWindowView.swift`.
 
 - `[Verified]` The production coordinator receives a model only when the user enables the existing API Endpoint provider, has valid endpoint/model settings, and has a non-empty keychain key.
 - `[Verified]` Automatic, local, disabled, invalid, and missing-key settings fail closed to no configured Computer Use model.
 - `[Verified]` Accessibility remains required for an agent run. Screen Recording is required only when the local observation includes a screenshot.
 - `[Verified]` Screenshot upload is disabled by default and can be enabled only through a visible session UI toggle.
-- `[Verified]` The model task editor, connection status, run control, upload consent, terminal result, and user question are now visible in the Computer Use page.
+- `[Corrected]` The legacy agent panel was replaced by a conversation-first transcript and fixed composer. Connection, permission, starting-app, and observation controls are collapsed at the bottom of the transcript.
 - `[Inferred]` The configured endpoint may receive AX text whenever the user runs the agent. The UI discloses this boundary, but a live provider test is still required.
 - `[Unknown]` Reliability of the prompt and decision schema across real providers and target applications remains unverified.
 

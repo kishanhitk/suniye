@@ -65,6 +65,55 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         )
     }
 
+    func testModelClientRejectsInvalidConfigurationAndPreflightCancellation() async {
+        let request = ComputerUseModelRequest(
+            instruction: "Inspect the app.",
+            observation: makePhase3Observation(generation: 7),
+            recentActionResults: [],
+            iteration: 1
+        )
+        let invalidClient = OpenAICompatibleComputerUseModelClient(
+            configuration: ComputerUseRemoteModelConfiguration(
+                endpointURL: URL(string: "file:///tmp/model")!,
+                modelID: "model",
+                apiKey: "key"
+            )
+        )
+
+        do {
+            _ = try await invalidClient.decide(
+                request: request,
+                cancellation: ComputerUseCancellationToken()
+            )
+            XCTFail("Expected invalid configuration to fail")
+        } catch let error as ComputerUseModelError {
+            XCTAssertEqual(
+                error,
+                .requestFailed("The Computer Use model endpoint must use HTTP or HTTPS.")
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        let cancellation = ComputerUseCancellationToken()
+        cancellation.cancel()
+        let validClient = OpenAICompatibleComputerUseModelClient(
+            configuration: ComputerUseRemoteModelConfiguration(
+                endpointURL: URL(string: "https://example.com/v1/chat/completions")!,
+                modelID: "model",
+                apiKey: "key"
+            )
+        )
+        do {
+            _ = try await validClient.decide(request: request, cancellation: cancellation)
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testPromptRendererRedactsTypedActionContentAndIncludesTheObservationScreenshot() {
         let observation = makePhase3Observation(generation: 8)
         let screenshot = ComputerUseScreenshot(
@@ -83,6 +132,11 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         let request = ComputerUseModelRequest(
             instruction: "Enter the secret only when the task requires it.",
             observation: observationWithScreenshot,
+            observationFreshness: .stale,
+            conversation: [
+                ComputerUseConversationMessage(role: .user, text: "Open the form."),
+                ComputerUseConversationMessage(role: .assistant, text: "The form is open."),
+            ],
             availableApplications: [observation.target.application],
             recentActionResults: [
                 ComputerUseActionResult(
@@ -100,6 +154,10 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         XCTAssertFalse(rendered.text.contains("secret-value"))
         XCTAssertTrue(rendered.text.contains("Available applications:"))
         XCTAssertTrue(rendered.text.contains("Target App (com.example.target)"))
+        XCTAssertTrue(rendered.text.contains("Observation freshness: stale"))
+        XCTAssertTrue(rendered.text.contains("Actions allowed from this observation: no"))
+        XCTAssertTrue(rendered.text.contains("User: Open the form."))
+        XCTAssertTrue(rendered.text.contains("Assistant: The form is open."))
     }
 
     func testPromptRendererIncludesNativeAccessibilityText() {
@@ -142,6 +200,17 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Search field: query (AXTextField, focused, selected, enabled)"))
         XCTAssertFalse(prompt.contains("role=AXTextField"))
         XCTAssertFalse(prompt.contains("bounds=10.0,20.0,200.0,30.0"))
+    }
+
+    func testSystemPromptEnforcesVerifiedDesktopWorkflowRules() {
+        let prompt = ComputerUseRemoteModelDefaults.systemPrompt
+
+        XCTAssertTrue(prompt.contains("An action is valid only when Observation freshness is fresh."))
+        XCTAssertTrue(prompt.contains("Prefer Accessibility element actions over coordinates."))
+        XCTAssertTrue(prompt.contains("Element indexes and exposed action names belong only to the current observation."))
+        XCTAssertTrue(prompt.contains("The host captures fresh state after every action"))
+        XCTAssertTrue(prompt.contains("cannot invoke global shortcuts"))
+        XCTAssertTrue(prompt.contains("Never invent a target, element index, or action name."))
     }
 
     func testDecisionParserAcceptsCanonicalAndFencedJSON() throws {
@@ -311,6 +380,40 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             cancellation: ComputerUseCancellationToken()
         )
         XCTAssertEqual(decision, .blocked(reason: "No action is needed."))
+    }
+
+    func testModelClientHonorsCancellationAfterProviderResponse() async {
+        let endpoint = URL(string: "https://example.com/v1/chat/completions")!
+        let cancellation = ComputerUseCancellationToken()
+        ComputerUseModelURLProtocol.handler = { request in
+            cancellation.cancel()
+            return try Self.response(for: request, decision: .completed(message: "Done."))
+        }
+        let client = OpenAICompatibleComputerUseModelClient(
+            configuration: ComputerUseRemoteModelConfiguration(
+                endpointURL: endpoint,
+                modelID: "text-model",
+                apiKey: "test-key"
+            ),
+            completionClient: makeCompletionClient()
+        )
+
+        do {
+            _ = try await client.decide(
+                request: ComputerUseModelRequest(
+                    instruction: "Inspect the app.",
+                    observation: makePhase3Observation(generation: 15),
+                    recentActionResults: [],
+                    iteration: 1
+                ),
+                cancellation: cancellation
+            )
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
     }
 
     func testModelClientMapsMalformedProviderOutputToInvalidResponse() async throws {

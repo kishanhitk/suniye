@@ -28,6 +28,78 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.agentResult?.phase, .completed)
         XCTAssertEqual(actionService.actions, [action])
+        XCTAssertEqual(coordinator.conversation.map(\.role), [.user, .assistant])
+        XCTAssertEqual(
+            coordinator.conversation.map(\.text),
+            ["Scroll down and finish the task.", "Finished automatically."]
+        )
+        XCTAssertTrue(coordinator.agentInstruction.isEmpty)
+    }
+
+    func testFollowUpCarriesTheConversationIntoTheNextModelRequest() async {
+        let model = Phase3ScriptedModelClient(
+            decisions: [
+                .completed(message: "The first task is done."),
+                .completed(message: "The follow-up is done."),
+            ]
+        )
+        let coordinator = makeCoordinator(
+            model: model,
+            observation: makePhase3Observation(generation: 22),
+            actionService: Phase3StubActionService()
+        )
+
+        coordinator.start()
+        await waitForPhase(coordinator, .ready)
+        coordinator.agentInstruction = "Open the document."
+        coordinator.startAgent()
+        await waitForPhase(coordinator, .agentCompleted)
+
+        coordinator.agentInstruction = "Now summarize it."
+        coordinator.startAgent()
+        await waitForPhase(coordinator, .agentCompleted)
+
+        XCTAssertEqual(model.requests.count, 2)
+        XCTAssertTrue(model.requests[0].conversation.isEmpty)
+        XCTAssertEqual(
+            model.requests[1].conversation.map(\.text),
+            ["Open the document.", "The first task is done."]
+        )
+        XCTAssertEqual(
+            coordinator.conversation.map(\.text),
+            [
+                "Open the document.",
+                "The first task is done.",
+                "Now summarize it.",
+                "The follow-up is done.",
+            ]
+        )
+
+        coordinator.clearConversation()
+        XCTAssertTrue(coordinator.conversation.isEmpty)
+        XCTAssertNil(coordinator.agentResult)
+    }
+
+    func testConversationControlsRespectActiveRunAndRecordCancellation() {
+        let coordinator = makeCoordinator(
+            model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
+            observation: makePhase3Observation(generation: 41),
+            actionService: Phase3StubActionService()
+        )
+        coordinator.conversation = [
+            ComputerUseConversationMessage(role: .user, text: "Keep this message."),
+        ]
+        coordinator.phase = .runningAgent
+
+        coordinator.clearConversation()
+        XCTAssertEqual(coordinator.conversation.map(\.text), ["Keep this message."])
+
+        coordinator.cancel()
+        XCTAssertEqual(coordinator.phase, .ready)
+        XCTAssertEqual(
+            coordinator.conversation.map(\.text),
+            ["Keep this message.", "Stopped."]
+        )
     }
 
     func testVoiceTaskStartsAgentAutomatically() async {
@@ -47,8 +119,9 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         )
         await waitForPhase(coordinator, .agentCompleted)
 
-        XCTAssertEqual(coordinator.agentInstruction, "Read the current app state.")
+        XCTAssertTrue(coordinator.agentInstruction.isEmpty)
         XCTAssertEqual(coordinator.agentResult?.message, "Finished from voice.")
+        XCTAssertEqual(coordinator.conversation.first?.text, "Read the current app state.")
         XCTAssertFalse(coordinator.isVoiceTaskPending)
     }
 
@@ -75,7 +148,7 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         )
         await waitForPhase(coordinator, .agentCompleted)
 
-        XCTAssertEqual(coordinator.agentInstruction, "Read the current app state.")
+        XCTAssertTrue(coordinator.agentInstruction.isEmpty)
         XCTAssertEqual(coordinator.agentResult?.message, "Finished queued voice task.")
         XCTAssertFalse(coordinator.isVoiceTaskPending)
     }
@@ -351,7 +424,7 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         permissionManager: ComputerUsePermissionManaging = Phase5PermissionManager(),
         policy: ComputerUsePolicyChecking? = nil
     ) -> ComputerUseCoordinator {
-        ComputerUseCoordinator(
+        let coordinator = ComputerUseCoordinator(
             applicationCatalog: Phase5ApplicationCatalog(application: observation.target.application),
             permissionManager: permissionManager,
             observationService: observationService ?? Phase3StubObservationService(result: observation),
@@ -359,6 +432,8 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
             policy: policy,
             modelClient: model
         )
+        coordinator.selectedApplicationID = observation.target.application.id
+        return coordinator
     }
 
     private func waitForPhase(

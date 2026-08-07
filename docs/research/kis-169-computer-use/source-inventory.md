@@ -300,7 +300,8 @@ Phase 5B added the coordinator/model integration files:
 
 - `Suniye/Services/ComputerUseAgentApproval.swift`;
 - `Suniye/Services/ComputerUseModelConfigurationFactory.swift`;
-- `Suniye/Views/MainWindow/ComputerUseAgentPanel.swift`;
+- `Suniye/Views/MainWindow/ComputerUsePage.swift`;
+- `Suniye/Views/MainWindow/ComputerUseDetailsView.swift`;
 - `SuniyeTests/ComputerUsePhase5CoordinatorTests.swift`;
 - `SuniyeTests/ComputerUseModelConfigurationTests.swift`.
 
@@ -326,7 +327,8 @@ The current implementation adds these files and references:
 - `Suniye/Services/ComputerUseCoordinator.swift`;
 - `Suniye/AppState.swift`;
 - `Suniye/Views/MainWindow/ComputerUsePage.swift`;
-- `Suniye/Views/MainWindow/ComputerUseAgentPanel.swift`;
+- `Suniye/Views/MainWindow/ComputerUsePage.swift`;
+- `Suniye/Views/MainWindow/ComputerUseDetailsView.swift`;
 - `Suniye/Views/MainWindow/MainWindowView.swift`;
 - `SuniyeTests/AppStateComputerUseVoiceTests.swift`;
 - `SuniyeTests/ComputerUsePhase5CoordinatorTests.swift`.

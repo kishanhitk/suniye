@@ -16,21 +16,43 @@ struct ComputerUseAgentTask: Codable, Equatable, Sendable {
     let instruction: String
     let applicationID: String?
     let sessionID: UUID
+    let conversation: [ComputerUseConversationMessage]
 
     init(
         instruction: String,
         applicationID: String? = nil,
-        sessionID: UUID = UUID()
+        sessionID: UUID = UUID(),
+        conversation: [ComputerUseConversationMessage] = []
     ) {
         self.instruction = instruction
         self.applicationID = applicationID
         self.sessionID = sessionID
+        self.conversation = conversation
+    }
+}
+
+struct ComputerUseConversationMessage: Identifiable, Codable, Equatable, Sendable {
+    enum Role: String, Codable, Equatable, Sendable {
+        case user
+        case assistant
+    }
+
+    let id: UUID
+    let role: Role
+    let text: String
+
+    init(id: UUID = UUID(), role: Role, text: String) {
+        self.id = id
+        self.role = role
+        self.text = text
     }
 }
 
 struct ComputerUseModelRequest: Codable, Equatable, Sendable {
     let instruction: String
     let observation: ComputerUseObservation
+    let observationFreshness: ComputerUseObservationFreshness
+    let conversation: [ComputerUseConversationMessage]
     let availableApplications: [ComputerUseApplication]
     let recentActionResults: [ComputerUseActionResult]
     let recentFailureMessages: [String]
@@ -39,6 +61,8 @@ struct ComputerUseModelRequest: Codable, Equatable, Sendable {
     init(
         instruction: String,
         observation: ComputerUseObservation,
+        observationFreshness: ComputerUseObservationFreshness = .fresh,
+        conversation: [ComputerUseConversationMessage] = [],
         availableApplications: [ComputerUseApplication] = [],
         recentActionResults: [ComputerUseActionResult],
         recentFailureMessages: [String] = [],
@@ -46,10 +70,21 @@ struct ComputerUseModelRequest: Codable, Equatable, Sendable {
     ) {
         self.instruction = instruction
         self.observation = observation
+        self.observationFreshness = observationFreshness
+        self.conversation = conversation
         self.availableApplications = availableApplications
         self.recentActionResults = recentActionResults
         self.recentFailureMessages = recentFailureMessages
         self.iteration = iteration
+    }
+}
+
+enum ComputerUseObservationFreshness: String, Codable, Equatable, Sendable {
+    case fresh
+    case stale
+
+    var allowsActions: Bool {
+        self == .fresh
     }
 }
 

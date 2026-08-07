@@ -562,7 +562,7 @@ Implementation added:
 - `Suniye/Services/ComputerUseAgentApproval.swift` isolates automatic policy preparation, remembered-scope lookup, and grant creation behind an actor-safe seam.
 - `Suniye/Services/ComputerUseCoordinator.swift` now owns the agent task, shared session identity, cancellation, result publication, and remote model configuration.
 - `Suniye/Services/ComputerUseModelConfigurationFactory.swift` maps only an explicitly selected API Endpoint, valid model settings, and a non-empty key to the Computer Use transport.
-- `Suniye/Views/MainWindow/ComputerUseAgentPanel.swift` adds the task editor, model status, run action, and terminal question display.
+- `Suniye/Views/MainWindow/ComputerUsePage.swift` provides the conversation transcript and fixed composer; `ComputerUseDetailsView.swift` contains model, permission, starting-app, and observation controls.
 - `Suniye/Views/MainWindow/MainWindowView.swift` passes the existing model configuration into the Computer Use page.
 - `SuniyeTests/ComputerUsePhase5CoordinatorTests.swift` covers automatic action execution, policy blocking, cancellation, and session-scoped configuration.
 - `SuniyeTests/ComputerUseModelConfigurationTests.swift` covers provider gating, key trimming, and model mapping.

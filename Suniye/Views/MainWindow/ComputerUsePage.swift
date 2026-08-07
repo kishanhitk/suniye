@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct ComputerUsePage: View {
@@ -17,63 +16,13 @@ struct ComputerUsePage: View {
     }
 
     var body: some View {
-        DetailScrollContainer {
+        VStack(spacing: 0) {
             header
-
-            if let errorMessage = coordinator.errorMessage {
-                InlineStatusBanner(
-                    icon: "exclamationmark.triangle.fill",
-                    tint: .orange,
-                    title: coordinator.phaseTitle,
-                    detail: errorMessage,
-                    progress: nil
-                )
-            } else if coordinator.phase == .observing {
-                InlineStatusBanner(
-                    icon: "eye",
-                    tint: .accentColor,
-                    title: coordinator.phaseTitle,
-                    detail: "Reading the selected app. No input event will be posted.",
-                    progress: nil
-                )
-            } else if coordinator.phase == .runningAgent {
-                InlineStatusBanner(
-                    icon: "sparkles",
-                    tint: .accentColor,
-                    title: coordinator.phaseTitle,
-                    detail: "Reading the selected app and applying the next model action automatically.",
-                    progress: nil
-                )
-            } else if coordinator.phase == .agentCompleted,
-                      let result = coordinator.agentResult {
-                InlineStatusBanner(
-                    icon: result.phase == .completed ? "checkmark.circle.fill" : "info.circle",
-                    tint: result.phase == .completed ? .green : .orange,
-                    title: coordinator.phaseTitle,
-                    detail: result.message,
-                    progress: nil
-                )
-            }
-
-            permissions
-            targetSelection
-            ComputerUseAgentPanel(
-                coordinator: coordinator,
-                remoteModelConfiguration: remoteModelConfiguration
-            )
-            observationPreview
-
-            SurfaceCard {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "lock.shield")
-                        .foregroundStyle(.green)
-                    Text("Actions run automatically after you start a task. Accessibility and Screen Recording permissions still apply.")
-                        .font(AppTypography.subheadline)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            Divider()
+            conversation
+            composer
         }
+        .background(MainWindowPalette.windowBackground)
         .onAppear {
             onVoiceTaskHandlerChange(coordinator)
             coordinator.configureRemoteModel(remoteModelConfiguration)
@@ -89,280 +38,239 @@ struct ComputerUsePage: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                DetailPageTitle(title: "Computer Use")
-                Text("Inspect an app and run a task automatically.")
-                    .font(AppTypography.body)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
+        HStack(spacing: 12) {
+            DetailPageTitle(title: "Computer Use")
             Spacer(minLength: 12)
-
             Button {
-                coordinator.refresh()
+                coordinator.clearConversation()
             } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                Label("New conversation", systemImage: "square.and.pencil")
             }
-            .buttonStyle(.bordered)
-            .disabled(coordinator.isBusy)
+            .buttonStyle(.borderless)
+            .disabled(coordinator.isBusy || coordinator.conversation.isEmpty)
         }
+        .padding(.horizontal, AppMetrics.detailPaddingHorizontal)
+        .padding(.vertical, 16)
     }
 
-    private var permissions: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-            SectionHeading(title: "Permissions")
+    private var conversation: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                LazyVStack(alignment: .leading, spacing: 22) {
+                    if coordinator.conversation.isEmpty, !coordinator.isBusy {
+                        ComputerUseEmptyConversation()
+                    }
 
-            SurfaceCard {
-                VStack(spacing: 0) {
-                    ComputerUsePermissionRow(
-                        title: "Accessibility",
-                        detail: "Required to read app windows and controls.",
-                        state: coordinator.permissionSnapshot.accessibility,
-                        action: coordinator.requestAccessibility
+                    ForEach(coordinator.conversation) { message in
+                        ComputerUseChatMessageRow(message: message)
+                            .id(message.id)
+                    }
+
+                    if coordinator.phase == .runningAgent {
+                        ComputerUseWorkingRow(
+                            applicationName: coordinator.selectedApplication?.displayName,
+                            stop: coordinator.cancel
+                        )
+                        .id("computer-use-working")
+                    }
+
+                    ComputerUseDetailsView(
+                        coordinator: coordinator,
+                        remoteModelConfiguration: remoteModelConfiguration
                     )
-
-                    CardDivider()
-                        .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
-
-                    ComputerUsePermissionRow(
-                        title: "Screen Recording",
-                        detail: "Required to capture the app window for the model.",
-                        state: coordinator.permissionSnapshot.screenRecording,
-                        action: coordinator.requestScreenRecording
-                    )
+                    .padding(.top, 10)
                 }
+                .padding(.horizontal, AppMetrics.detailPaddingHorizontal)
+                .padding(.vertical, 28)
+                .frame(maxWidth: 820)
+                .frame(maxWidth: .infinity)
+            }
+            .onChange(of: coordinator.conversation.count) { _, _ in
+                scrollToLatest(using: proxy)
+            }
+            .onChange(of: coordinator.phase) { _, phase in
+                guard phase == .runningAgent else {
+                    return
+                }
+                scrollToLatest(using: proxy)
             }
         }
     }
 
-    private var targetSelection: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-            SectionHeading(title: "Starting app (optional)")
-
-            SurfaceCard(padding: 16) {
-                VStack(alignment: .leading, spacing: 16) {
-                    if coordinator.applications.isEmpty {
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "macwindow.on.rectangle")
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("No running apps were found.")
-                                    .font(AppTypography.body)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
-                                Text("The agent can choose and launch an app from the task.")
-                                    .font(AppTypography.subheadline)
-                                    .foregroundStyle(MainWindowPalette.tertiaryText)
-                            }
-                            Spacer(minLength: 8)
-                            Button("Refresh", action: coordinator.refresh)
-                                .buttonStyle(.bordered)
-                        }
-                    } else {
-                        HStack(spacing: 12) {
-                            Text("Starting app")
-                                .font(AppTypography.body)
-                            Spacer(minLength: 12)
-                            NativePopupPicker(
-                                items: coordinator.applicationIDs,
-                                selection: selectedApplicationBinding,
-                                title: applicationTitle(for:)
-                            )
-                            .frame(maxWidth: 320)
-                            .disabled(coordinator.isBusy)
-                        }
-
-                        if let application = coordinator.selectedApplication {
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(spacing: 8) {
-                                    Text(application.displayName)
-                                        .font(AppTypography.bodyMedium)
-                                    if application.isActive {
-                                        StatusPill(title: "Active", tint: .green)
-                                    }
-                                }
-
-                                Text(application.bundleIdentifier)
-                                    .font(AppTypography.codeCaption)
-                                    .foregroundStyle(MainWindowPalette.tertiaryText)
-                            }
-                        }
-                    }
-
-                    HStack(spacing: 12) {
-                        Spacer(minLength: 12)
-
-                        if coordinator.isBusy {
-                            Button("Cancel", action: coordinator.cancel)
-                                .buttonStyle(.bordered)
-                        } else {
-                            Button(
-                                coordinator.phase == .observed ? "Capture Again" : "Capture Observation",
-                                action: coordinator.observeSelectedApplication
-                            )
-                            .buttonStyle(.borderedProminent)
-                            .disabled(!coordinator.canObserve)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var observationPreview: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-            SectionHeading(title: "Observation")
-
-            if let observation = coordinator.observation {
-                ComputerUseObservationPreview(observation: observation)
-            } else {
-                SurfaceCard {
-                    VStack(spacing: 12) {
-                        Image(systemName: "eye")
-                            .font(AppTypography.emptyIcon)
-                            .foregroundStyle(Color.secondary.opacity(0.72))
-                        Text("No observation yet")
-                            .font(AppTypography.bodyMedium)
-                        Text("Select an app and capture its current state.")
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 180)
-                }
-            }
-        }
-    }
-
-    private var selectedApplicationBinding: Binding<String> {
-        Binding(
-            get: { coordinator.selectedApplicationID ?? "" },
-            set: { coordinator.selectApplication($0) }
+    private var composer: some View {
+        ComputerUseComposer(
+            instruction: $coordinator.agentInstruction,
+            isWorking: coordinator.phase == .runningAgent,
+            canSend: coordinator.canRunAgent,
+            readinessMessage: readinessMessage,
+            send: coordinator.startAgent,
+            stop: coordinator.cancel
         )
     }
 
-    private func applicationTitle(for identifier: String) -> String {
-        coordinator.applications.first { $0.id == identifier }?.displayName ?? identifier
+    private var readinessMessage: String? {
+        if coordinator.isVoiceTaskPending {
+            return "Voice task captured. Computer Use is preparing."
+        }
+        if !coordinator.isModelConfigured {
+            return "Connect an API endpoint in Model settings."
+        }
+        if !coordinator.permissionSnapshot.canReadAccessibility
+            || !coordinator.permissionSnapshot.canCaptureScreen {
+            return "Grant Accessibility and Screen Recording below."
+        }
+        return nil
     }
 
+    private func scrollToLatest(using proxy: ScrollViewProxy) {
+        Task { @MainActor in
+            if coordinator.phase == .runningAgent {
+                proxy.scrollTo("computer-use-working", anchor: .bottom)
+            } else if let lastMessage = coordinator.conversation.last {
+                proxy.scrollTo(lastMessage.id, anchor: .bottom)
+            }
+        }
+    }
 }
 
-private struct ComputerUsePermissionRow: View {
-    let title: String
-    let detail: String
-    let state: ComputerUsePermissionState
-    let action: () -> Void
+private struct ComputerUseEmptyConversation: View {
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "cursorarrow.motionlines")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(.secondary)
+            Text("What should I do on your Mac?")
+                .font(AppTypography.pageTitle)
+            Text("Ask with text or hold your dictation hotkey and speak. You can follow up in the same conversation.")
+                .font(AppTypography.body)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 460)
+        }
+        .frame(maxWidth: .infinity, minHeight: 260)
+    }
+}
+
+private struct ComputerUseChatMessageRow: View {
+    let message: ComputerUseConversationMessage
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            if message.role == .user {
+                Spacer(minLength: 72)
+            } else {
+                assistantMark
+            }
+
+            Text(message.text)
+                .font(AppTypography.body)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(message.role == .user ? 12 : 0)
+                .background {
+                    if message.role == .user {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(MainWindowPalette.selectedFill)
+                    }
+                }
+
+            if message.role == .assistant {
+                Spacer(minLength: 72)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+    }
+
+    private var assistantMark: some View {
+        Image(systemName: "cursorarrow.motionlines")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 26, height: 26)
+            .background(Circle().fill(Color.accentColor))
+    }
+}
+
+private struct ComputerUseWorkingRow: View {
+    let applicationName: String?
+    let stop: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(title)
-                        .font(AppTypography.body)
-                    Image(systemName: state.icon)
-                        .foregroundStyle(state.tint)
-                }
-
-                Text(detail)
+            ProgressView()
+                .controlSize(.small)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Working")
+                    .font(AppTypography.bodyMedium)
+                Text(applicationName.map { "Using \($0)" } ?? "Choosing an app and reading its current state")
                     .font(AppTypography.subheadline)
                     .foregroundStyle(MainWindowPalette.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
             }
-
             Spacer(minLength: 12)
-
-            if state != .granted {
-                Button(state == .unavailable ? "Unavailable" : "Request Access", action: action)
-                    .buttonStyle(.bordered)
-                    .disabled(state == .unavailable)
-            } else {
-                Text("Granted")
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(.green)
-            }
+            Button("Stop", action: stop)
+                .buttonStyle(.bordered)
         }
+        .padding(.leading, 38)
     }
 }
 
-private struct ComputerUseObservationPreview: View {
-    let observation: ComputerUseObservation
+private struct ComputerUseComposer: View {
+    @Binding var instruction: String
+    let isWorking: Bool
+    let canSend: Bool
+    let readinessMessage: String?
+    let send: () -> Void
+    let stop: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-            SurfaceCard(padding: 16) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
-                        Text(observation.target.application.displayName)
-                            .font(AppTypography.bodyMedium)
-                        Spacer(minLength: 8)
-                    }
-                }
+        VStack(spacing: 8) {
+            if let readinessMessage {
+                Text(readinessMessage)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
             }
 
-            if let screenshot = observation.screenshot,
-               let image = NSImage(data: screenshot.data) {
-                SurfaceCard(padding: 12) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Screenshot · \(screenshot.width) × \(screenshot.height)")
-                            .font(AppTypography.subheadlineSemibold)
+            HStack(alignment: .bottom, spacing: 10) {
+                TextEditor(text: $instruction)
+                    .font(AppTypography.body)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 38, maxHeight: 86)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .disabled(isWorking)
 
-                        Image(nsImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: .infinity, maxHeight: 360)
-                            .background(MainWindowPalette.editorBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    }
+                Button(action: isWorking ? stop : send) {
+                    Image(systemName: isWorking ? "stop.fill" : "arrow.up")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle().fill(buttonEnabled ? Color.accentColor : Color.secondary.opacity(0.35))
+                        )
                 }
+                .buttonStyle(.plain)
+                .disabled(!buttonEnabled)
+                .help(isWorking ? "Stop" : "Send")
+                .padding(.bottom, 8)
+                .padding(.trailing, 8)
             }
+            .background(MainWindowPalette.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
+            )
 
-            SurfaceCard(padding: 12) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Accessibility text")
-                            .font(AppTypography.subheadlineSemibold)
-                        Spacer(minLength: 8)
-                        if observation.accessibility.wasTruncated {
-                            StatusPill(title: "Truncated", tint: .orange)
-                        }
-                    }
-
-                    ScrollView(.vertical) {
-                        Text(observation.accessibility.text.isEmpty ? "No text was exposed." : observation.accessibility.text)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(Color.primary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(minHeight: 180, maxHeight: 320)
-                }
-            }
+            Text("Computer Use can make mistakes. Keep an eye on important actions.")
+                .font(AppTypography.caption)
+                .foregroundStyle(MainWindowPalette.tertiaryText)
         }
+        .padding(.horizontal, AppMetrics.detailPaddingHorizontal)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+        .background(.ultraThinMaterial)
     }
 
-}
-
-private extension ComputerUsePermissionState {
-    var icon: String {
-        switch self {
-        case .granted:
-            return "checkmark.circle.fill"
-        case .notGranted:
-            return "exclamationmark.triangle.fill"
-        case .unavailable:
-            return "questionmark.circle"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .granted:
-            return .green
-        case .notGranted:
-            return .orange
-        case .unavailable:
-            return MainWindowPalette.secondaryText
-        }
+    private var buttonEnabled: Bool {
+        isWorking || (canSend && !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 }

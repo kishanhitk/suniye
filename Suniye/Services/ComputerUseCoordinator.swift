@@ -39,6 +39,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     var errorMessage: String?
     var agentInstruction = ""
     var agentResult: ComputerUseAgentResult?
+    var conversation: [ComputerUseConversationMessage] = []
     var isVoiceTaskPending: Bool {
         pendingVoiceInstruction != nil
     }
@@ -242,8 +243,13 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         let task = ComputerUseAgentTask(
             instruction: instruction,
             applicationID: selectedApplicationID,
-            sessionID: sessionID
+            sessionID: sessionID,
+            conversation: conversation
         )
+        conversation.append(
+            ComputerUseConversationMessage(role: .user, text: instruction)
+        )
+        agentInstruction = ""
         activeOperationID = operationID
         activeCancellation = cancellation
         observation = nil
@@ -342,6 +348,16 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
             return
         }
 
+        if identifier.isEmpty {
+            guard selectedApplicationID != nil else {
+                return
+            }
+            cancelActiveOperation()
+            selectedApplicationID = nil
+            observation = nil
+            return
+        }
+
         guard applications.contains(where: { $0.id == identifier }) else {
             return
         }
@@ -417,6 +433,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     }
 
     func cancel() {
+        let wasRunningAgent = phase == .runningAgent
         cancelActiveOperation()
         refreshTask?.cancel()
         permissionTask?.cancel()
@@ -425,6 +442,20 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         if isBusy {
             phase = .ready
         }
+        if wasRunningAgent {
+            appendAssistantMessage("Stopped.")
+        }
+    }
+
+    func clearConversation() {
+        guard !isBusy else {
+            return
+        }
+        conversation = []
+        agentResult = nil
+        errorMessage = nil
+        observation = nil
+        phase = .ready
     }
 
     private func requestPermission(
@@ -456,13 +487,14 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     }
 
     private func reconcileSelection() {
-        if let selectedApplicationID,
-           applications.contains(where: { $0.id == selectedApplicationID }) {
+        guard let selectedApplicationID else {
             return
         }
 
-        selectedApplicationID = applications.first?.id
-        observation = nil
+        if !applications.contains(where: { $0.id == selectedApplicationID }) {
+            self.selectedApplicationID = nil
+            observation = nil
+        }
     }
 
     private func cancelActiveOperation() {
@@ -478,12 +510,23 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         observation = result.latestObservation
         activeCancellation = nil
         agentTask = nil
+        appendAssistantMessage(result.question ?? result.message)
         if result.phase == .failed {
             phase = .failed
             errorMessage = result.message
         } else {
             phase = .agentCompleted
         }
+    }
+
+    private func appendAssistantMessage(_ text: String) {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            return
+        }
+        conversation.append(
+            ComputerUseConversationMessage(role: .assistant, text: trimmedText)
+        )
     }
 
     private func startPendingVoiceTaskIfPossible() {

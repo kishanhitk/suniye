@@ -77,11 +77,11 @@ cancels the coordinator, so a task cannot start after its routing context disapp
 ### SwiftUI UX
 
 `ComputerUsePage` registers the coordinator on appear and unregisters it on disappear.
-`ComputerUseAgentPanel` explains the hold-to-talk gesture and shows a waiting message when a task
-has been captured but Computer Use is not ready.
+Its fixed composer explains the hold-to-talk gesture and shows a waiting message when a task has
+been captured but Computer Use is not ready.
 
-The existing text editor and Run button remain available as a manual fallback. Voice does not
-require a second Computer Use shortcut or a confirmation card.
+The text composer and Send button remain available as a manual fallback. Voice does not require a
+second Computer Use shortcut or a confirmation card.
 
 ## End-to-end lifecycle
 

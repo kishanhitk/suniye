@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class ComputerUsePhase1Tests: XCTestCase {
-    func testStartLoadsApplicationsPermissionsAndSelectsFirstApplication() async {
+    func testStartLoadsApplicationsAndLeavesStartingApplicationOptional() async {
         let first = makeApplication(id: "com.example.first", name: "First App", active: true)
         let second = makeApplication(id: "com.example.second", name: "Second App")
         let permissions = Phase1StubPermissionManager(
@@ -12,16 +12,45 @@ final class ComputerUsePhase1Tests: XCTestCase {
         )
         let coordinator = makeCoordinator(
             applications: [first, second],
-            permissionManager: permissions
+            permissionManager: permissions,
+            preselectFirstApplication: false
         )
 
         coordinator.start()
         await waitUntil { coordinator.phase == .ready }
 
         XCTAssertEqual(coordinator.applications, [first, second])
-        XCTAssertEqual(coordinator.selectedApplicationID, first.id)
+        XCTAssertNil(coordinator.selectedApplicationID)
+        XCTAssertNil(coordinator.selectedApplication)
         XCTAssertEqual(coordinator.permissionSnapshot, permissions.currentSnapshot)
-        XCTAssertTrue(coordinator.canObserve)
+        XCTAssertFalse(coordinator.canObserve)
+    }
+
+    func testOptionalStartingApplicationCanBeClearedAndInvalidSelectionIsReconciled() async {
+        let coordinator = makeCoordinator(
+            permissionManager: Phase1StubPermissionManager(
+                snapshot: ComputerUsePermissionSnapshot(
+                    accessibility: .granted,
+                    screenRecording: .granted
+                )
+            )
+        )
+
+        coordinator.start()
+        await waitUntil { coordinator.phase == .ready }
+        XCTAssertNotNil(coordinator.selectedApplicationID)
+
+        coordinator.selectApplication("")
+        XCTAssertNil(coordinator.selectedApplicationID)
+        XCTAssertFalse(coordinator.canObserve)
+
+        coordinator.selectApplication("")
+        XCTAssertNil(coordinator.selectedApplicationID)
+
+        coordinator.selectedApplicationID = "com.example.missing"
+        coordinator.refresh()
+        await waitUntil { coordinator.phase == .ready }
+        XCTAssertNil(coordinator.selectedApplicationID)
     }
 
     func testDerivedStateAndPhaseTitlesCoverAllCoordinatorStates() async {
@@ -321,15 +350,20 @@ final class ComputerUsePhase1Tests: XCTestCase {
     private func makeCoordinator(
         applications: [ComputerUseApplication]? = nil,
         permissionManager: Phase1StubPermissionManager,
-        observationService: ComputerUseObservationServicing? = nil
+        observationService: ComputerUseObservationServicing? = nil,
+        preselectFirstApplication: Bool = true
     ) -> ComputerUseCoordinator {
         let resolvedApplications = applications ?? [makeApplication(id: "com.example.target", name: "Target App", active: true)]
         let catalog = Phase1StubApplicationCatalog(applications: resolvedApplications)
-        return ComputerUseCoordinator(
+        let coordinator = ComputerUseCoordinator(
             applicationCatalog: catalog,
             permissionManager: permissionManager,
             observationService: observationService ?? Phase1StubObservationService(result: makeObservation(application: resolvedApplications[0]))
         )
+        if preselectFirstApplication {
+            coordinator.selectedApplicationID = resolvedApplications.first?.id
+        }
+        return coordinator
     }
 
     private func makeApplication(

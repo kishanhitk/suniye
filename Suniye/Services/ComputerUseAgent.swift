@@ -1,6 +1,10 @@
 import Foundation
 
 actor ComputerUseAgent {
+    private static let postActionSettleDelay = 1.0
+    private static let freshObservationRequiredMessage =
+        "A fresh app observation is required before performing an action."
+
     private let modelClient: ComputerUseModelClient
     private let approvalAuthorizer: ComputerUseApprovalAuthorizing
     private let applicationCatalog: ComputerUseApplicationCatalog
@@ -117,6 +121,11 @@ actor ComputerUseAgent {
         case cancelled
     }
 
+    private struct ObservationContext {
+        let observation: ComputerUseObservation
+        let freshness: ComputerUseObservationFreshness
+    }
+
     private func advance(
         task: ComputerUseAgentTask,
         state: RunState,
@@ -134,16 +143,20 @@ actor ComputerUseAgent {
             )
         }
         state.iteration += 1
-        let observation: ComputerUseObservation
+        let observationContext: ObservationContext
         do {
             var observationConfiguration = ComputerUseObservationConfiguration.default
             observationConfiguration.activateTarget = true
-            observation = try await observationService.observeTarget(
+            let observation = try await observationService.observeTarget(
                 applicationIdentifier: state.applicationID,
                 configuration: observationConfiguration,
                 cancellation: cancellation
             )
             state.latestObservation = observation
+            observationContext = ObservationContext(
+                observation: observation,
+                freshness: .fresh
+            )
         } catch {
             if isCancelled(cancellation) || isCancellation(error) {
                 return .finish(
@@ -158,7 +171,10 @@ actor ComputerUseAgent {
                case .noWindow = observationError,
                let latestObservation = state.latestObservation {
                 state.recordFailure(localizedMessage(error))
-                observation = latestObservation
+                observationContext = ObservationContext(
+                    observation: latestObservation,
+                    freshness: .stale
+                )
             } else {
                 return .finish(
                     result(
@@ -175,7 +191,9 @@ actor ComputerUseAgent {
 
         let request = ComputerUseModelRequest(
             instruction: task.instruction,
-            observation: observation,
+            observation: observationContext.observation,
+            observationFreshness: observationContext.freshness,
+            conversation: task.conversation,
             availableApplications: applicationCatalog.listAvailableApplications(),
             recentActionResults: state.actionResults,
             recentFailureMessages: state.failureMessages,
@@ -191,7 +209,7 @@ actor ComputerUseAgent {
             if isCancelled(cancellation) || isCancellation(error) {
                 return .finish(
                     cancelledResult(
-                        observation: observation,
+                        observation: observationContext.observation,
                         actionResults: state.actionResults,
                         failureCount: state.failureCount
                     )
@@ -204,7 +222,7 @@ actor ComputerUseAgent {
                         phase: .failed,
                         message: localizedMessage(error),
                         question: nil,
-                        observation: observation,
+                        observation: observationContext.observation,
                         actionResults: state.actionResults,
                         failureCount: state.failureCount
                     )
@@ -215,14 +233,14 @@ actor ComputerUseAgent {
             return retryAfterFailure(
                 message: message,
                 state: &state,
-                observation: observation
+                observation: observationContext.observation
             )
         }
 
         if isCancelled(cancellation) {
             return .finish(
                 cancelledResult(
-                    observation: observation,
+                    observation: observationContext.observation,
                     actionResults: state.actionResults,
                     failureCount: state.failureCount
                 )
@@ -231,7 +249,7 @@ actor ComputerUseAgent {
 
         return await handle(
             decision: decision,
-            observation: observation,
+            observationContext: observationContext,
             state: state,
             cancellation: cancellation,
             sessionID: task.sessionID
@@ -240,12 +258,13 @@ actor ComputerUseAgent {
 
     private func handle(
         decision: ComputerUseModelDecision,
-        observation: ComputerUseObservation,
+        observationContext: ObservationContext,
         state: RunState,
         cancellation: ComputerUseCancellationToken,
         sessionID: UUID
     ) async -> LoopResult {
         var state = state
+        let observation = observationContext.observation
 
         if let validationMessage = decision.validationMessage {
             return retryAfterFailure(
@@ -301,7 +320,7 @@ actor ComputerUseAgent {
         case let .action(action):
             switch await attemptAction(
                 action: action,
-                observation: observation,
+                observationContext: observationContext,
                 cancellation: cancellation,
                 sessionID: sessionID
             ) {
@@ -333,7 +352,7 @@ actor ComputerUseAgent {
             case let .succeeded(actionResult):
                 state.actionResults.append(actionResult)
                 do {
-                    try await sleep(0.15)
+                    try await sleep(Self.postActionSettleDelay)
                 } catch {
                     if isCancelled(cancellation) || isCancellation(error) {
                         return .finish(
@@ -367,10 +386,14 @@ actor ComputerUseAgent {
 
     private func attemptAction(
         action: ComputerUseAction,
-        observation: ComputerUseObservation,
+        observationContext: ObservationContext,
         cancellation: ComputerUseCancellationToken,
         sessionID: UUID
     ) async -> ActionAttemptResult {
+        guard observationContext.freshness.allowsActions else {
+            return .retryableFailure(Self.freshObservationRequiredMessage)
+        }
+        let observation = observationContext.observation
         let approvalRequest = ComputerUseApprovalRequest(
             id: UUID(),
             action: action,
