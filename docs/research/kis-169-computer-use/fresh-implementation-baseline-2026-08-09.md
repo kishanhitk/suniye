@@ -43,3 +43,24 @@ entry says `[Implemented]`. Current implementation claims require code and tests
 - `[Planned]` Keep desktop and browser control as separate capabilities.
 - `[Planned]` Run the strict maintainability review, full tests, coverage gate, and relevant E2E
   checks after every completed implementation phase before committing and pushing it.
+
+## Phase 0 status
+
+- `[Implemented]` `ComputerUseProtocol.swift` defines the normalized Swift domain contract for the
+  exact ten recovered desktop operations and their app-scoped inputs and outputs.
+- `[Implemented]` `ComputerUseSession.swift` is a cancellation-aware dispatcher over an injected
+  native-tool boundary. It does not select, infer, or lock a target application.
+- `[Implemented]` Click input is represented as a validated element or coordinate target instead of
+  an optional field bag that could represent an invalid click.
+- `[Verified]` Focused tests assert the exact operation names and mappings, all action routes, list
+  behavior, and the absence of an exact app-identifier lock.
+- `[Verified]` The phase passes the full repository suite, the requested 95% coverage gate, and the
+  existing E2E preflight and smoke checks. Exact results are in
+  `phase-0-tool-contract-2026-08-09.md`.
+- `[Planned]` The model-facing wire decoder will preserve the recovered optional fields, defaults,
+  aliases, and snake-case names while translating them into this normalized domain contract.
+- `[Planned]` Fresh-observation authorization belongs to the agent decision loop, not this native
+  dispatcher. That later boundary will allow an ordered action batch from one observation, then
+  require a new observation before the next model decision.
+- `[Not implemented]` This phase does not discover apps or windows, capture screenshots, render AX
+  state, synthesize input, call a model, or expose Computer Use UI.

@@ -848,3 +848,27 @@ symbols and imported macOS APIs, targeted ARM64 disassembly, and
   debounce/already-posting cancellation behavior remain unrecovered.
 - `[Not implemented]` This entry changes research conclusions only. No Suniye production code was
   changed.
+
+### Entry 55: Fresh implementation phase 0 tool contract
+
+Sources: `ComputerUseProtocol.swift`, `ComputerUseSession.swift`,
+`ComputerUseProtocolTests.swift`, the recovered node-REPL API surface, and the live native
+`tools/list` evidence recorded in `native-algorithm-recovery-2026-08-09.md`.
+
+- `[Implemented]` The fresh implementation defines the exact ten recovered desktop operation names
+  and normalized, app-scoped Swift input and output types.
+- `[Implemented]` An actor dispatcher routes every operation through an injected async native-tool
+  boundary and checks cancellation before dispatch.
+- `[Corrected]` An initial exact-string active-app set was removed. It would have imposed a hidden
+  target lock that the recovered public tool surface does not have.
+- `[Implemented]` Click target input is a validated element-or-coordinate enum. The future wire
+  decoder remains responsible for matching the recovered optional JSON fields and aliases.
+- `[Verified]` Five focused tests pass, covering the exact operation list and name mapping, all
+  action routes, discovery without target selection, and alternate app identifiers without a
+  session lock.
+- `[Verified]` The full suite passes with 989 tests executed, 1 skipped, and 0 failures. Gated line
+  coverage is 95.20% (11,177/11,741 lines) at the requested 95% threshold.
+- `[Verified]` The existing E2E preflight and smoke checks pass.
+- `[Not implemented]` App discovery, window selection, AX state, screenshots, action execution,
+  model requests, agent orchestration, permissions, approvals, UI, and live E2E remain future
+  phases.
