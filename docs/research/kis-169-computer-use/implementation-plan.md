@@ -10,6 +10,21 @@ The phase sections below preserve the incremental design record. The 2026-08-09 
 correction is the starting design for this branch. Every implementation status from the old branch
 must be reverified before it is marked implemented here.
 
+## Fresh branch progress
+
+- `[Implemented]` Phase 0: exact ten-operation desktop contract and cancellation-aware dispatcher.
+- `[Implemented]` Phase 1: running/recent app discovery, exact target resolution, non-activating
+  launch, and internal CG/AX window cross-referencing.
+- `[Validated]` Phase 1: 1,002 tests executed, 1 skipped, 0 failures; 95.14% gated coverage; E2E
+  preflight and smoke pass.
+- `[Next]` Phase 2: AX observation tree, revision identity/diffs, and screenshot capture.
+- `[Later]` Native actions; then model/agent integration, permissions, cancellation/intervention,
+  chat UX, and live E2E.
+
+The exact phase records are `phase-0-tool-contract-2026-08-09.md` and
+`phase-1-app-window-discovery-2026-08-09.md`. They supersede historical implementation claims
+below for this branch.
+
 ## Goal
 
 Add an independent, user-controlled macOS Computer Use capability to Suniye.

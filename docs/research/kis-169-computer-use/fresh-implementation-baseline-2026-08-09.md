@@ -64,3 +64,23 @@ entry says `[Implemented]`. Current implementation claims require code and tests
   require a new observation before the next model decision.
 - `[Not implemented]` This phase does not discover apps or windows, capture screenshots, render AX
   state, synthesize input, call a model, or expose Computer Use UI.
+
+## Phase 1 status
+
+- `[Implemented]` Application discovery combines `NSWorkspace` running processes with the
+  recovered 14-day Spotlight metadata query.
+- `[Implemented]` App resolution accepts only an exact display name, full path, or unambiguous
+  bundle identifier. It contains no task-specific or fuzzy matcher and no frontmost fallback.
+- `[Implemented]` Non-running targets launch without activation or recent-item insertion.
+- `[Implemented]` Window discovery uses the recovered on-screen, non-desktop Core Graphics list,
+  target-process Accessibility windows, and internal CG/AX cross-referencing without exposing a
+  model-facing window picker.
+- `[Independent choice]` The reference's live recent-app cache is implemented as a fresh Spotlight
+  snapshot per call. The unrecovered final multi-window comparator is approximated with title and
+  bounds correlation while preserving Core Graphics order. Details are recorded in
+  `phase-1-app-window-discovery-2026-08-09.md`.
+- `[Verified]` Thirteen focused tests pass after the required strict maintainability review.
+- `[Verified]` The final full suite executes 1,002 tests with 1 skipped and 0 failures. Gated
+  coverage is 95.14% (11,440/12,024 lines), and both repository E2E scripts pass.
+- `[Not implemented]` AX rendering, screenshots, action execution, the agent/model loop,
+  permissions, conversation UI, and browser control remain later phases.

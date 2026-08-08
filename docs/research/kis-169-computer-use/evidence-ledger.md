@@ -872,3 +872,34 @@ Sources: `ComputerUseProtocol.swift`, `ComputerUseSession.swift`,
 - `[Not implemented]` App discovery, window selection, AX state, screenshots, action execution,
   model requests, agent orchestration, permissions, approvals, UI, and live E2E remain future
   phases.
+
+### Entry 56: Fresh implementation phase 1 app and window discovery
+
+Sources: the mounted DMG JavaScript macOS client and native service, targeted native strings and
+imports, the locally executed Spotlight query and `mdls`, `ComputerUseApplicationCatalog.swift`,
+`SystemComputerUseApplicationInventory.swift`, `ComputerUseWindowDiscovery.swift`,
+`SystemComputerUseWindowInventory.swift`, the native bridge, and focused tests.
+
+- `[Verified]` The reference public app shape, 14-day Spotlight query, usage metadata, background
+  launch configuration, exact app identifier forms, and on-screen/non-desktop CG window request
+  are recovered from the mounted artifact.
+- `[Implemented]` Suniye discovers running and recent applications, resolves only exact names,
+  paths, or unambiguous bundle identifiers, and launches a stopped target without activation.
+- `[Implemented]` Suniye obtains native CG window descriptions through a narrow Objective-C++
+  bridge, reads target-process AX windows, cross-references them, and preserves CG ordering.
+- `[Verified]` The implementation contains no fuzzy noun or task matcher, no frontmost target
+  fallback, no public window selection requirement, and no automatic app activation during
+  discovery.
+- `[Independent choice]` A per-call Spotlight snapshot replaces the reference's live indexed
+  cache. Duplicate metadata precedence and a two-point title/bounds CG-to-AX matcher are explicit
+  closest-match decisions because the native final ordering and comparator remain unknown.
+- `[Corrected]` The strict review split platform adapters from pure policy, removed an unnecessary
+  resolution parameter, stabilized duplicate merging, and made bridge nullability explicit.
+- `[Verified]` Thirteen focused tests pass with zero failures. The final full suite executes 1,002
+  tests with 1 skipped and 0 failures; gated coverage is 95.14% (11,440/12,024 lines); E2E
+  preflight and smoke both pass.
+- `[Verified]` The two live macOS adapters are documented coverage exclusions because they require
+  NSWorkspace/Spotlight/Launch Services or the window server/Accessibility permission. Pure window
+  description decoding remains gated and tested.
+- `[Not implemented]` Observation rendering/revisions, screenshots, actions, model/agent wiring,
+  permissions, conversation UI, and browser control remain future phases.

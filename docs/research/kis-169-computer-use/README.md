@@ -7,10 +7,11 @@ The source artifact is `/Users/kishan/Downloads/ChatGPT (1).dmg`.
 
 ## Current branch baseline
 
-`kis-169-computer-use-parity` starts from `origin/main` at `aebdf680` and intentionally contains
-no Computer Use production code or tests. The implementation entries below are historical records
-from the preserved `kis-169-computer-use` branch. They remain useful as evidence and failure
-history, but they do not describe code present on this fresh branch.
+`kis-169-computer-use-parity` starts from `origin/main` at `aebdf680`. Research was moved onto this
+branch without carrying over the prior prototype implementation. New Swift code is being written
+from the recovered contract. Phase 0 adds the exact ten-tool domain contract; Phase 1 adds fresh
+app and window discovery. Older implementation entries remain historical records from the
+preserved `kis-169-computer-use` branch unless the fresh baseline explicitly re-verifies them.
 
 See `fresh-implementation-baseline-2026-08-09.md` before beginning the new implementation.
 
@@ -63,6 +64,9 @@ cross-process input still require separate validation.
   screenshot backends, coordinate conversion, and process-scoped input paths.
 - `fresh-implementation-baseline-2026-08-09.md` records the clean-main branch reset, preserved old
   branch, and rules for distinguishing historical implementation notes from current code.
+- `phase-0-tool-contract-2026-08-09.md` records the exact ten-tool domain contract and validation.
+- `phase-1-app-window-discovery-2026-08-09.md` records app discovery, exact target resolution,
+  background launch, CG/AX window correlation, independent choices, and validation.
 
 ## Evidence labels
 
