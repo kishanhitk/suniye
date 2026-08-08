@@ -48,10 +48,22 @@ struct ComputerUseConversationMessage: Identifiable, Codable, Equatable, Sendabl
     }
 }
 
+struct ComputerUseObservationContext: Codable, Equatable, Sendable {
+    let observation: ComputerUseObservation
+    let freshness: ComputerUseObservationFreshness
+
+    init(
+        observation: ComputerUseObservation,
+        freshness: ComputerUseObservationFreshness = .fresh
+    ) {
+        self.observation = observation
+        self.freshness = freshness
+    }
+}
+
 struct ComputerUseModelRequest: Codable, Equatable, Sendable {
     let instruction: String
-    let observation: ComputerUseObservation
-    let observationFreshness: ComputerUseObservationFreshness
+    let observationContext: ComputerUseObservationContext?
     let conversation: [ComputerUseConversationMessage]
     let availableApplications: [ComputerUseApplication]
     let recentActionResults: [ComputerUseActionResult]
@@ -60,8 +72,7 @@ struct ComputerUseModelRequest: Codable, Equatable, Sendable {
 
     init(
         instruction: String,
-        observation: ComputerUseObservation,
-        observationFreshness: ComputerUseObservationFreshness = .fresh,
+        observationContext: ComputerUseObservationContext? = nil,
         conversation: [ComputerUseConversationMessage] = [],
         availableApplications: [ComputerUseApplication] = [],
         recentActionResults: [ComputerUseActionResult],
@@ -69,8 +80,7 @@ struct ComputerUseModelRequest: Codable, Equatable, Sendable {
         iteration: Int
     ) {
         self.instruction = instruction
-        self.observation = observation
-        self.observationFreshness = observationFreshness
+        self.observationContext = observationContext
         self.conversation = conversation
         self.availableApplications = availableApplications
         self.recentActionResults = recentActionResults

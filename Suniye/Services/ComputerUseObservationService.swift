@@ -10,6 +10,7 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
     private let accessibilityReader: ComputerUseAccessibilityReading
     private let screenshotCapturer: ComputerUseScreenshotCapturing
     private let permissionManager: ComputerUsePermissionManaging
+    private let applicationPolicy: ComputerUseApplicationPolicyChecking
     private let dateProvider: () -> Date
     private let launchWindowPollIntervalNanoseconds: UInt64
     private let launchWindowPollAttempts: Int
@@ -22,6 +23,7 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
         accessibilityReader: ComputerUseAccessibilityReading = SystemComputerUseAccessibilityReader(),
         screenshotCapturer: ComputerUseScreenshotCapturing = CoreGraphicsComputerUseScreenshotService(),
         permissionManager: ComputerUsePermissionManaging = SystemComputerUsePermissionService(),
+        applicationPolicy: ComputerUseApplicationPolicyChecking = ComputerUsePolicyService(),
         dateProvider: @escaping () -> Date = Date.init,
         launchWindowPollIntervalNanoseconds: UInt64 = computerUseLaunchWindowPollIntervalNanoseconds,
         launchWindowPollAttempts: Int = computerUseLaunchWindowPollAttempts
@@ -32,6 +34,7 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
         self.accessibilityReader = accessibilityReader
         self.screenshotCapturer = screenshotCapturer
         self.permissionManager = permissionManager
+        self.applicationPolicy = applicationPolicy
         self.dateProvider = dateProvider
         self.launchWindowPollIntervalNanoseconds = launchWindowPollIntervalNanoseconds
         self.launchWindowPollAttempts = max(1, launchWindowPollAttempts)
@@ -45,7 +48,8 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
         guard let application = applicationCatalog.application(withID: applicationID) else {
             throw ComputerUseObservationError.applicationNotFound(applicationID)
         }
-        return try observe(
+        try enforceApplicationPolicy(application)
+        return try captureObservation(
             application: application,
             configuration: configuration,
             cancellation: cancellation
@@ -53,7 +57,7 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
     }
 
     func observeTarget(
-        applicationIdentifier: String?,
+        applicationIdentifier: String,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) async throws -> ComputerUseObservation {
@@ -63,39 +67,36 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
 
         let application: ComputerUseApplication
         var wasLaunched = false
-        if let applicationIdentifier {
-            if let resolvedApplication = applicationCatalog.resolveApplication(
-                identifier: applicationIdentifier
-            ) {
-                if resolvedApplication.isRunning {
-                    application = resolvedApplication
-                } else if let launchedApplication = await applicationCatalog.launchApplication(
-                    identifier: applicationIdentifier
-                ) {
-                    application = launchedApplication
-                    wasLaunched = true
-                } else {
-                    throw ComputerUseObservationError.applicationNotRunning(applicationIdentifier)
-                }
+        if let resolvedApplication = applicationCatalog.resolveApplication(
+            identifier: applicationIdentifier
+        ) {
+            try enforceApplicationPolicy(resolvedApplication)
+            if resolvedApplication.isRunning {
+                application = resolvedApplication
             } else if let launchedApplication = await applicationCatalog.launchApplication(
                 identifier: applicationIdentifier
             ) {
+                try enforceApplicationPolicy(launchedApplication)
                 application = launchedApplication
                 wasLaunched = true
             } else {
-                throw ComputerUseObservationError.applicationNotFound(applicationIdentifier)
+                throw ComputerUseObservationError.applicationNotRunning(applicationIdentifier)
             }
-        } else if let activeApplication = applicationCatalog.activeApplication() {
-            application = activeApplication
+        } else if let launchedApplication = await applicationCatalog.launchApplication(
+            identifier: applicationIdentifier
+        ) {
+            try enforceApplicationPolicy(launchedApplication)
+            application = launchedApplication
+            wasLaunched = true
         } else {
-            throw ComputerUseObservationError.applicationNotFound("frontmost application")
+            throw ComputerUseObservationError.applicationNotFound(applicationIdentifier)
         }
 
         if wasLaunched {
             try await waitForVisibleWindow(application: application, cancellation: cancellation)
         }
 
-        return try observe(
+        return try captureObservation(
             application: application,
             configuration: configuration,
             cancellation: cancellation
@@ -127,7 +128,7 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
         }
     }
 
-    private func observe(
+    private func captureObservation(
         application: ComputerUseApplication,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
@@ -185,5 +186,16 @@ final class ComputerUseObservationService: ComputerUseObservationServicing {
             accessibility: accessibility,
             screenshot: screenshot
         )
+    }
+
+    private func enforceApplicationPolicy(_ application: ComputerUseApplication) throws {
+        switch applicationPolicy.evaluate(application: application) {
+        case .allowed:
+            return
+        case let .denied(reason):
+            throw ComputerUsePolicyError.applicationDenied(reason)
+        case let .forbidden(reason):
+            throw ComputerUsePolicyError.applicationForbidden(reason)
+        }
     }
 }

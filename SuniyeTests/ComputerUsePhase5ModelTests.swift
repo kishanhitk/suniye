@@ -68,7 +68,9 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
     func testModelClientRejectsInvalidConfigurationAndPreflightCancellation() async {
         let request = ComputerUseModelRequest(
             instruction: "Inspect the app.",
-            observation: makePhase3Observation(generation: 7),
+            observationContext: ComputerUseObservationContext(
+                observation: makePhase3Observation(generation: 7)
+            ),
             recentActionResults: [],
             iteration: 1
         )
@@ -131,8 +133,10 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         )
         let request = ComputerUseModelRequest(
             instruction: "Enter the secret only when the task requires it.",
-            observation: observationWithScreenshot,
-            observationFreshness: .stale,
+            observationContext: ComputerUseObservationContext(
+                observation: observationWithScreenshot,
+                freshness: .stale
+            ),
             conversation: [
                 ComputerUseConversationMessage(role: .user, text: "Open the form."),
                 ComputerUseConversationMessage(role: .assistant, text: "The form is open."),
@@ -191,7 +195,7 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         let prompt = ComputerUseModelPromptRenderer.render(
             request: ComputerUseModelRequest(
                 instruction: "Inspect the field.",
-                observation: observation,
+                observationContext: ComputerUseObservationContext(observation: observation),
                 recentActionResults: [],
                 iteration: 1
             )
@@ -200,6 +204,24 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Search field: query (AXTextField, focused, selected, enabled)"))
         XCTAssertFalse(prompt.contains("role=AXTextField"))
         XCTAssertFalse(prompt.contains("bounds=10.0,20.0,200.0,30.0"))
+    }
+
+    func testPromptRendererRequiresTargetSelectionBeforeTheFirstObservation() {
+        let application = makePhase3Observation(generation: 1).target.application
+        let request = ComputerUseModelRequest(
+            instruction: "Open Chrome.",
+            availableApplications: [application],
+            recentActionResults: [],
+            iteration: 1
+        )
+
+        let rendered = ComputerUseModelPromptRenderer.render(request: request)
+
+        XCTAssertNil(rendered.screenshot)
+        XCTAssertTrue(rendered.text.contains("Observation: (none; choose the target application"))
+        XCTAssertTrue(rendered.text.contains("Actions allowed from this observation: no"))
+        XCTAssertTrue(rendered.text.contains("Target application: (not selected)"))
+        XCTAssertTrue(rendered.text.contains(application.bundleIdentifier))
     }
 
     func testSystemPromptEnforcesVerifiedDesktopWorkflowRules() {
@@ -211,6 +233,8 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         XCTAssertTrue(prompt.contains("The host captures fresh state after every action"))
         XCTAssertTrue(prompt.contains("cannot invoke global shortcuts"))
         XCTAssertTrue(prompt.contains("Never invent a target, element index, or action name."))
+        XCTAssertTrue(prompt.contains("Do not default to the frontmost application."))
+        XCTAssertTrue(prompt.contains("Never return an action before an application observation is present."))
     }
 
     func testDecisionParserAcceptsCanonicalAndFencedJSON() throws {
@@ -280,12 +304,14 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         )
         let request = ComputerUseModelRequest(
             instruction: "Click the button.",
-            observation: ComputerUseObservation(
-                generation: observation.generation,
-                capturedAt: observation.capturedAt,
-                target: observation.target,
-                accessibility: observation.accessibility,
-                screenshot: screenshot
+            observationContext: ComputerUseObservationContext(
+                observation: ComputerUseObservation(
+                    generation: observation.generation,
+                    capturedAt: observation.capturedAt,
+                    target: observation.target,
+                    accessibility: observation.accessibility,
+                    screenshot: screenshot
+                )
             ),
             recentActionResults: [],
             iteration: 1
@@ -335,16 +361,18 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         let observation = makePhase3Observation(generation: 13)
         let request = ComputerUseModelRequest(
             instruction: "Read the button.",
-            observation: ComputerUseObservation(
-                generation: observation.generation,
-                capturedAt: observation.capturedAt,
-                target: observation.target,
-                accessibility: observation.accessibility,
-                screenshot: ComputerUseScreenshot(
-                    data: Data([0x01]),
-                    mimeType: "image/png",
-                    width: 1,
-                    height: 1
+            observationContext: ComputerUseObservationContext(
+                observation: ComputerUseObservation(
+                    generation: observation.generation,
+                    capturedAt: observation.capturedAt,
+                    target: observation.target,
+                    accessibility: observation.accessibility,
+                    screenshot: ComputerUseScreenshot(
+                        data: Data([0x01]),
+                        mimeType: "image/png",
+                        width: 1,
+                        height: 1
+                    )
                 )
             ),
             recentActionResults: [],
@@ -402,7 +430,9 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             _ = try await client.decide(
                 request: ComputerUseModelRequest(
                     instruction: "Inspect the app.",
-                    observation: makePhase3Observation(generation: 15),
+                    observationContext: ComputerUseObservationContext(
+                        observation: makePhase3Observation(generation: 15)
+                    ),
                     recentActionResults: [],
                     iteration: 1
                 ),
@@ -447,7 +477,9 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             _ = try await client.decide(
                 request: ComputerUseModelRequest(
                     instruction: "Read the button.",
-                    observation: makePhase3Observation(generation: 14),
+                    observationContext: ComputerUseObservationContext(
+                        observation: makePhase3Observation(generation: 14)
+                    ),
                     recentActionResults: [],
                     iteration: 1
                 ),

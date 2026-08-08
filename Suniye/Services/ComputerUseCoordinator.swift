@@ -86,7 +86,8 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
             applicationCatalog: resolvedCatalog,
             windowDiscovery: resolvedWindowDiscovery,
             windowActivator: resolvedWindowActivator,
-            permissionManager: resolvedPermissionManager
+            permissionManager: resolvedPermissionManager,
+            applicationPolicy: resolvedPolicy
         )
         let resolvedActionService = actionService ?? ComputerUseActionService(
             targetActivator: resolvedWindowActivator,

@@ -69,8 +69,10 @@ enum ComputerUseRemoteModelDefaults {
     {"kind":"action","action":{"kind":"perform_secondary_action","element_index":3,"action":"AXShowMenu"}}
 
     When the task names another application, use a target decision with its display name or bundle identifier. Prefer an exact value from Available applications when present. The host refreshes state for that application and launches it when needed. A target decision does not perform input.
+    Before any application has been observed, first identify the application from the user's task and return a target decision. Do not default to the frontmost application. If the request can be answered without desktop interaction, complete it without selecting an application.
     Use {"kind":"action","action":...} for one action. Use {"kind":"completed","message":"..."} when the task is complete. Use {"kind":"ask_user","question":"..."} when the user must decide something. Use {"kind":"blocked","reason":"..."} when the task cannot continue safely. Use {"kind":"retryable_failure","reason":"..."} only when the current observation is insufficient and another observation may help.
 
+    Never return an action before an application observation is present.
     An action is valid only when Observation freshness is fresh. When it is stale, do not return an action; choose a target, request another observation, ask the user, report a block, or complete only if the task is already complete.
     Prefer Accessibility element actions over coordinates. Prefer Accessibility text over the screenshot, but use screenshot coordinates when Accessibility is incomplete or behaves unexpectedly.
     Element indexes and exposed action names belong only to the current observation. Never reuse them after the UI changes. The host captures fresh state after every action before asking for another decision.
@@ -149,8 +151,6 @@ struct ComputerUseRenderedModelPrompt: Equatable, Sendable {
 
 enum ComputerUseModelPromptRenderer {
     static func render(request: ComputerUseModelRequest) -> ComputerUseRenderedModelPrompt {
-        let observation = request.observation
-        let target = observation.target
         let actionResults = request.recentActionResults
             .map { "- \($0.action.summary) at \($0.completedAt.ISO8601Format())" }
             .joined(separator: "\n")
@@ -169,6 +169,29 @@ enum ComputerUseModelPromptRenderer {
             }
             .joined(separator: "\n")
 
+        let observationText: String
+        let screenshot: ComputerUseScreenshot?
+        if let observationContext = request.observationContext {
+            let observation = observationContext.observation
+            let freshness = observationContext.freshness
+            observationText = """
+            Observation freshness: \(freshness.rawValue)
+            Actions allowed from this observation: \(freshness.allowsActions ? "yes" : "no")
+            Target application: \(observation.target.application.displayName) (\(observation.target.application.bundleIdentifier))
+
+            Accessibility text:
+            \(observation.accessibility.text)
+            """
+            screenshot = observation.screenshot
+        } else {
+            observationText = """
+            Observation: (none; choose the target application before requesting an action)
+            Actions allowed from this observation: no
+            Target application: (not selected)
+            """
+            screenshot = nil
+        }
+
         let text = """
         Prior conversation:
         \(conversation.isEmpty ? "(none)" : conversation)
@@ -176,14 +199,10 @@ enum ComputerUseModelPromptRenderer {
         User task:
         \(request.instruction)
 
-        Observation freshness: \(request.observationFreshness.rawValue)
-        Actions allowed from this observation: \(request.observationFreshness.allowsActions ? "yes" : "no")
-        Target application: \(target.application.displayName) (\(target.application.bundleIdentifier))
+        \(observationText)
+
         Available applications:
         \(availableApplications.isEmpty ? "(none)" : availableApplications)
-
-        Accessibility text:
-        \(observation.accessibility.text)
 
         Recent completed actions:
         \(actionResults.isEmpty ? "(none)" : actionResults)
@@ -194,7 +213,7 @@ enum ComputerUseModelPromptRenderer {
 
         return ComputerUseRenderedModelPrompt(
             text: text,
-            screenshot: observation.screenshot
+            screenshot: screenshot
         )
     }
 

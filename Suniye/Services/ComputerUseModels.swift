@@ -266,7 +266,7 @@ protocol ComputerUseObservationServicing {
     ) throws -> ComputerUseObservation
 
     func observeTarget(
-        applicationIdentifier: String?,
+        applicationIdentifier: String,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) async throws -> ComputerUseObservation
@@ -274,13 +274,10 @@ protocol ComputerUseObservationServicing {
 
 extension ComputerUseObservationServicing {
     func observeTarget(
-        applicationIdentifier: String?,
+        applicationIdentifier: String,
         configuration: ComputerUseObservationConfiguration,
         cancellation: ComputerUseCancellationToken
     ) async throws -> ComputerUseObservation {
-        guard let applicationIdentifier else {
-            throw ComputerUseObservationError.applicationNotFound("frontmost application")
-        }
         return try observe(
             applicationID: applicationIdentifier,
             configuration: configuration,

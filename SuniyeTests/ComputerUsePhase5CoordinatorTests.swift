@@ -80,6 +80,37 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.agentResult)
     }
 
+    func testConversationalReplyDoesNotObserveActOrRefillTheComposer() async {
+        let observation = makePhase3Observation(generation: 42)
+        let observationService = Phase3StubObservationService(result: observation)
+        let actionService = Phase3StubActionService()
+        let model = Phase3ScriptedModelClient(
+            decisions: [.completed(message: "Hello! How can I help you today?")]
+        )
+        let coordinator = makeCoordinator(
+            model: model,
+            observation: observation,
+            observationService: observationService,
+            actionService: actionService,
+            selectApplication: false
+        )
+
+        coordinator.start()
+        await waitForPhase(coordinator, .ready)
+        coordinator.agentInstruction = "Hello"
+        coordinator.startAgent()
+        await waitForPhase(coordinator, .agentCompleted)
+
+        XCTAssertEqual(
+            coordinator.conversation.map(\.text),
+            ["Hello", "Hello! How can I help you today?"]
+        )
+        XCTAssertTrue(coordinator.agentInstruction.isEmpty)
+        XCTAssertEqual(observationService.observeCount, 0)
+        XCTAssertTrue(actionService.actions.isEmpty)
+        XCTAssertNil(model.requests.first?.observationContext)
+    }
+
     func testConversationControlsRespectActiveRunAndRecordCancellation() {
         let coordinator = makeCoordinator(
             model: Phase3ScriptedModelClient(decisions: [.completed(message: "unused")]),
@@ -422,7 +453,8 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         observationService: ComputerUseObservationServicing? = nil,
         actionService: ComputerUseActionServicing,
         permissionManager: ComputerUsePermissionManaging = Phase5PermissionManager(),
-        policy: ComputerUsePolicyChecking? = nil
+        policy: ComputerUsePolicyChecking? = nil,
+        selectApplication: Bool = true
     ) -> ComputerUseCoordinator {
         let coordinator = ComputerUseCoordinator(
             applicationCatalog: Phase5ApplicationCatalog(application: observation.target.application),
@@ -432,7 +464,9 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
             policy: policy,
             modelClient: model
         )
-        coordinator.selectedApplicationID = observation.target.application.id
+        if selectApplication {
+            coordinator.selectedApplicationID = observation.target.application.id
+        }
         return coordinator
     }
 

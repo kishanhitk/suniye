@@ -6,6 +6,12 @@ enum ComputerUsePolicyDecision: Equatable, Sendable {
     case forbidden(reason: String)
 }
 
+enum ComputerUseApplicationPolicyDecision: Equatable, Sendable {
+    case allowed
+    case denied(reason: String)
+    case forbidden(reason: String)
+}
+
 struct ComputerUsePolicyConfiguration: Codable, Equatable, Sendable {
     let deniedBundleIdentifiers: Set<String>
     let forbiddenBundleIdentifiers: Set<String>
@@ -27,7 +33,11 @@ struct ComputerUsePolicyConfiguration: Codable, Equatable, Sendable {
     }
 }
 
-protocol ComputerUsePolicyChecking {
+protocol ComputerUseApplicationPolicyChecking {
+    func evaluate(application: ComputerUseApplication) -> ComputerUseApplicationPolicyDecision
+}
+
+protocol ComputerUsePolicyChecking: ComputerUseApplicationPolicyChecking {
     func evaluate(
         application: ComputerUseApplication,
         action: ComputerUseAction
@@ -36,20 +46,50 @@ protocol ComputerUsePolicyChecking {
 
 struct ComputerUsePolicyService: ComputerUsePolicyChecking {
     let configuration: ComputerUsePolicyConfiguration
+    private let hostBundleIdentifier: String?
 
-    init(configuration: ComputerUsePolicyConfiguration = ComputerUsePolicyConfiguration()) {
+    init(
+        configuration: ComputerUsePolicyConfiguration = ComputerUsePolicyConfiguration(),
+        hostBundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) {
         self.configuration = configuration
+        self.hostBundleIdentifier = hostBundleIdentifier?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 
     func evaluate(
         application: ComputerUseApplication,
         action: ComputerUseAction
     ) -> ComputerUsePolicyDecision {
+        switch evaluate(application: application) {
+        case .allowed:
+            break
+        case let .denied(reason):
+            return .denied(reason: reason)
+        case let .forbidden(reason):
+            return .forbidden(reason: reason)
+        }
+
+        var scopes: Set<ComputerUseApprovalScope> = [.once]
+        if action.risk != .textEntry,
+           configuration.persistentApprovalRisks.contains(action.risk) {
+            scopes.formUnion([.session, .always])
+        }
+        return .allowed(approvalScopes: scopes)
+    }
+
+    func evaluate(application: ComputerUseApplication) -> ComputerUseApplicationPolicyDecision {
         let bundleIdentifier = application.bundleIdentifier
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         guard !bundleIdentifier.isEmpty else {
             return .forbidden(reason: "The target application has no bundle identifier.")
+        }
+        if bundleIdentifier == hostBundleIdentifier {
+            return .forbidden(
+                reason: "Computer Use is not allowed to use the app '\(application.bundleIdentifier)' for safety reasons."
+            )
         }
         if configuration.forbiddenBundleIdentifiers.contains(bundleIdentifier) {
             return .forbidden(
@@ -61,13 +101,7 @@ struct ComputerUsePolicyService: ComputerUsePolicyChecking {
                 reason: "Computer Use is blocked from using \(application.displayName) by policy."
             )
         }
-
-        var scopes: Set<ComputerUseApprovalScope> = [.once]
-        if action.risk != .textEntry,
-           configuration.persistentApprovalRisks.contains(action.risk) {
-            scopes.formUnion([.session, .always])
-        }
-        return .allowed(approvalScopes: scopes)
+        return .allowed
     }
 }
 

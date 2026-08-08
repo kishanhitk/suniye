@@ -44,6 +44,8 @@ cross-process input still require separate validation.
 - `parity-audit.md` is the current reference-to-Suniye parity matrix and corrective-slice record.
 - `target-scope-implementation.md` records the target-lock correction and its validation boundary.
 - `parity-audit-dmg-agent.md` is the detailed raw DMG audit used as supporting evidence.
+- `bootstrap-and-self-target-parity-2026-08-08.md` records the focused correction for initial app
+  selection, frontmost state, conversational routing, and host-app policy enforcement.
 
 ## Evidence labels
 

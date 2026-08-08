@@ -157,6 +157,31 @@ final class ComputerUsePhase0Tests: XCTestCase {
         }
     }
 
+    func testObservationBlocksTheHostApplicationBeforeWindowDiscovery() {
+        let application = makeApplication()
+        let windowDiscovery = StubWindowDiscovery(windows: [makeWindow()])
+        let service = ComputerUseObservationService(
+            applicationCatalog: StubApplicationCatalog(applications: [application]),
+            windowDiscovery: windowDiscovery,
+            accessibilityReader: StubAccessibilityReader(),
+            screenshotCapturer: StubScreenshotCapturer(),
+            permissionManager: StubPermissionManager(snapshot: readyPermissions),
+            applicationPolicy: ComputerUsePolicyService(
+                hostBundleIdentifier: application.bundleIdentifier
+            )
+        )
+
+        XCTAssertThrowsError(try service.observe(applicationID: application.id)) { error in
+            XCTAssertEqual(
+                error as? ComputerUsePolicyError,
+                .applicationForbidden(
+                    "Computer Use is not allowed to use the app '\(application.bundleIdentifier)' for safety reasons."
+                )
+            )
+        }
+        XCTAssertNil(windowDiscovery.lastApplication)
+    }
+
     func testObservationReportsMissingWindow() {
         let application = makeApplication()
         let service = makeObservationService(application: application, windows: [])

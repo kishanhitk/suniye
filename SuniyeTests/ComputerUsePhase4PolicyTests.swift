@@ -68,6 +68,30 @@ final class ComputerUsePhase4PolicyTests: XCTestCase {
         )
     }
 
+    func testPolicyForbidsTheHostApplicationForEveryAction() {
+        let bundleIdentifier = "dev.suniye.app.preview"
+        let policy = ComputerUsePolicyService(hostBundleIdentifier: bundleIdentifier)
+
+        XCTAssertEqual(
+            policy.evaluate(
+                application: application(bundleIdentifier: bundleIdentifier)
+            ),
+            .forbidden(
+                reason: "Computer Use is not allowed to use the app '\(bundleIdentifier)' for safety reasons."
+            )
+        )
+
+        XCTAssertEqual(
+            policy.evaluate(
+                application: application(bundleIdentifier: bundleIdentifier),
+                action: .typeText("Hello! How can I help you today?")
+            ),
+            .forbidden(
+                reason: "Computer Use is not allowed to use the app '\(bundleIdentifier)' for safety reasons."
+            )
+        )
+    }
+
     func testApprovalStoreSeparatesSessionAndAlwaysApprovals() {
         let defaults = isolatedDefaults()
         let store = ComputerUseApprovalStore(

@@ -24,7 +24,9 @@ reference behavior from implementation choices and remaining unknowns.
 
 ## Implemented correction
 
-- `[Implemented]` A task may start with no app or window. The first observation uses the active app.
+- `[Corrected 2026-08-08]` A task may start with no app, but it does not observe the active app.
+  The first model request has no observation and includes available applications. The model must
+  select an explicit app before observation, or return a terminal conversational decision.
 - `[Implemented]` The model can return a typed `target` decision with a bundle ID or display name.
 - `[Implemented]` The model request includes running and installed application candidates.
 - `[Implemented]` The application catalog resolves dynamic process IDs, bundle IDs, display names,
@@ -50,6 +52,20 @@ reference behavior from implementation choices and remaining unknowns.
 - `[Open]` Decide whether Suniye needs a separate native helper for crash or permission isolation.
 - `[Open]` Add and test a separate browser adapter.
 - `[Open]` Compare transient screenshot caching and reference-specific state diffs.
+
+## Bootstrap and self-target correction — 2026-08-08
+
+- `[Verified]` The packaged Computer Use state API requires an explicit `app`. Its public app list
+  does not expose frontmost state. The host's separate `computer-use-frontmost-window` route is for
+  screen context/Appshots, not the Computer Use action loop.
+- `[Corrected]` The Suniye agent no longer logs or observes a synthetic `frontmost` target when no
+  starting app is selected.
+- `[Implemented]` The model can answer conversational input without any desktop observation or
+  action. An action returned before target selection and observation is rejected and retried.
+- `[Implemented]` Observation and action both enforce the same application policy. The current
+  Suniye bundle identifier is forbidden at that boundary, before Accessibility or input work.
+- `[Unknown]` The exact provider-side routing response to a greeting is not present in the DMG.
+  No deterministic greeting or instruction matcher was added.
 
 ## Superseding target-scope correction — 2026-08-03
 

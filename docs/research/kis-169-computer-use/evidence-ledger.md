@@ -749,3 +749,33 @@ Sources: the installed `/Users/kishan/Applications/Suniye Preview.app`, the Comp
 - `[Verified]` The refreshed page does not expose the removed manual action or approval controls.
 - `[Not exercised]` No microphone recording, voice submission, provider request, or third-party
   app action was performed in this smoke check.
+
+### Entry 52: Explicit bootstrap and host-policy correction
+
+Sources: the mounted DMG Computer Use skill, JavaScript macOS client and policy wrapper, native
+helper symbols and strings, `bootstrap-and-self-target-parity-2026-08-08.md`, the installed bundled
+Computer Use client used only as a separate live cross-check, Suniye logs from the failed `Hello`
+run, and the focused Computer Use tests.
+
+- `[Verified]` The packaged Computer Use state call requires an explicit app. The documented start
+  is a task-named app or app listing; public app data omits native frontmost state.
+- `[Verified]` The host's `computer-use-frontmost-window` route belongs to screen-context/Appshot
+  capture and is not exposed by the Computer Use macOS action client.
+- `[Verified]` Suniye's failed `Hello` run logged `target=frontmost`, then executed a text-entry
+  action against the Suniye Preview bundle. The assistant text in the composer was native agent
+  input into its own focused text editor, not a SwiftUI state-binding copy.
+- `[Corrected]` A Suniye run with no selected app now asks the model for a target or terminal
+  decision before any observation. It never defaults to the active/frontmost app, and observation
+  requires an explicit app identifier.
+- `[Implemented]` Application policy now runs before both observation and action. It forbids the
+  current Suniye bundle at that shared boundary while leaving discovery unchanged.
+- `[Implemented]` A model action without an observation is rejected. Conversational completion can
+  return without Accessibility, screenshot, or input work, and the composer remains empty.
+- `[Verified]` The focused parity suite reports 94 passing tests and 0 failures before removing the
+  remaining optional-frontmost observation path; the follow-up affected groups report 55 passing
+  tests and 0 failures.
+- `[Verified]` The final full suite reports 1,100 passed, 1 skipped, and 0 failed tests, for 1,101
+  total. Gated line coverage is 95.11% (13,899/14,613 lines), above the documented 95% threshold.
+- `[Verified]` E2E preflight and smoke checks pass after the correction.
+- `[Unknown]` The provider-side hidden prompt and exact greeting response are not in the DMG. No
+  deterministic greeting, noun, app, or task matcher was added.

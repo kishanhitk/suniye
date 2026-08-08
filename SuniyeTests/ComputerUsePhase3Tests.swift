@@ -7,8 +7,10 @@ final class ComputerUsePhase3ModelTests: XCTestCase {
         let observation = makePhase3Observation(generation: 1)
         let request = ComputerUseModelRequest(
             instruction: "Open the item",
-            observation: observation,
-            observationFreshness: .stale,
+            observationContext: ComputerUseObservationContext(
+                observation: observation,
+                freshness: .stale
+            ),
             conversation: [
                 ComputerUseConversationMessage(role: .user, text: "Open the editor."),
                 ComputerUseConversationMessage(role: .assistant, text: "The editor is open."),
@@ -37,6 +39,21 @@ final class ComputerUsePhase3ModelTests: XCTestCase {
                 from: JSONEncoder().encode(request)
             ),
             request
+        )
+        let bootstrapRequest = ComputerUseModelRequest(
+            instruction: "Open Chrome.",
+            conversation: [],
+            availableApplications: [observation.target.application],
+            recentActionResults: [],
+            iteration: 1
+        )
+        XCTAssertNil(bootstrapRequest.observationContext)
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                ComputerUseModelRequest.self,
+                from: JSONEncoder().encode(bootstrapRequest)
+            ),
+            bootstrapRequest
         )
 
         let task = ComputerUseAgentTask(instruction: "Open the item", applicationID: "target#42")
@@ -78,7 +95,9 @@ final class ComputerUsePhase3ModelTests: XCTestCase {
             _ = try await model.decide(
                 request: ComputerUseModelRequest(
                     instruction: "task",
-                    observation: makePhase3Observation(generation: 1),
+                    observationContext: ComputerUseObservationContext(
+                        observation: makePhase3Observation(generation: 1)
+                    ),
                     recentActionResults: [],
                     iteration: 1
                 ),
@@ -102,7 +121,7 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
         XCTAssertNil(task.applicationID)
     }
 
-    func testAgentDoesNotInferAnApplicationFromInstructionText() async {
+    func testAgentAsksTheModelForATargetBeforeItsFirstObservation() async {
         let selfApplication = ComputerUseApplication(
             id: "dev.suniye.app.preview#99",
             bundleIdentifier: "dev.suniye.app.preview",
@@ -120,8 +139,14 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
             isActive: false
         )
         let observation = Phase3StubObservationService(result: makePhase3Observation(generation: 1))
+        let model = Phase3ScriptedModelClient(
+            decisions: [
+                .target(application: chromeApplication.bundleIdentifier),
+                .completed(message: "done"),
+            ]
+        )
         let agent = ComputerUseAgent(
-            modelClient: Phase3ScriptedModelClient(decisions: [.completed(message: "done")]),
+            modelClient: model,
             applicationCatalog: Phase3InstructionApplicationCatalog(
                 applications: [selfApplication, chromeApplication]
             ),
@@ -131,43 +156,41 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
 
         let result = await agent.run(
             task: ComputerUseAgentTask(
-                instruction: "Open Chrome and go to Flipkart.",
-                applicationID: selfApplication.id
+                instruction: "Open Chrome and go to Flipkart."
             )
         )
 
         XCTAssertEqual(result.phase, .completed)
-        XCTAssertEqual(observation.applicationIDs, [selfApplication.id])
+        XCTAssertEqual(observation.applicationIDs, [chromeApplication.bundleIdentifier])
+        XCTAssertEqual(model.requests.count, 2)
+        XCTAssertNil(model.requests[0].observationContext)
+        XCTAssertEqual(model.requests[1].observationContext?.observation.generation, 1)
+        XCTAssertEqual(model.requests[1].observationContext?.freshness, .fresh)
     }
 
-    func testAgentDoesNotExcludeAnExplicitSuniyeTarget() async {
-        let application = ComputerUseApplication(
-            id: "dev.suniye.app.preview#99",
-            bundleIdentifier: "dev.suniye.app.preview",
-            displayName: "Suniye Preview",
-            processIdentifier: 99,
-            isRunning: true,
-            isActive: true
-        )
+    func testAgentCanCompleteConversationalInputWithoutObservingOrActing() async {
         let observation = Phase3StubObservationService(result: makePhase3Observation(generation: 1))
+        let actionService = Phase3StubActionService()
+        let model = Phase3ScriptedModelClient(
+            decisions: [.completed(message: "Hello! How can I help you today?")]
+        )
         let agent = ComputerUseAgent(
-            modelClient: Phase3ScriptedModelClient(decisions: [.completed(message: "done")]),
-            applicationCatalog: Phase3InstructionApplicationCatalog(
-                applications: [application]
-            ),
+            modelClient: model,
+            applicationCatalog: Phase3StubApplicationCatalog(),
             observationService: observation,
-            actionService: Phase3StubActionService()
+            actionService: actionService
         )
 
         let result = await agent.run(
-            task: ComputerUseAgentTask(
-                instruction: "Use the active app.",
-                applicationID: application.id
-            )
+            task: ComputerUseAgentTask(instruction: "Hello")
         )
 
         XCTAssertEqual(result.phase, .completed)
-        XCTAssertEqual(observation.applicationIDs, [application.id])
+        XCTAssertEqual(result.message, "Hello! How can I help you today?")
+        XCTAssertTrue(observation.applicationIDs.isEmpty)
+        XCTAssertTrue(actionService.actions.isEmpty)
+        XCTAssertEqual(model.requests.count, 1)
+        XCTAssertNil(model.requests[0].observationContext)
     }
 
     func testInvalidTasksFailBeforePlatformCalls() async {
@@ -390,9 +413,9 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
             ["dev.suniye.app.preview", "dev.suniye.app.preview", "com.panic.Nova"]
         )
         XCTAssertEqual(model.requests.count, 3)
-        XCTAssertEqual(model.requests[0].observationFreshness, .fresh)
-        XCTAssertEqual(model.requests[1].observationFreshness, .stale)
-        XCTAssertEqual(model.requests[2].observationFreshness, .fresh)
+        XCTAssertEqual(model.requests[0].observationContext?.freshness, .fresh)
+        XCTAssertEqual(model.requests[1].observationContext?.freshness, .stale)
+        XCTAssertEqual(model.requests[2].observationContext?.freshness, .fresh)
         XCTAssertEqual(
             model.requests[1].recentFailureMessages,
             ["Choose the requested app.", "The application has no visible window: dev.suniye.app.preview."]
@@ -434,8 +457,8 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
 
         XCTAssertEqual(result.phase, .completed)
         XCTAssertTrue(actionService.actions.isEmpty)
-        XCTAssertEqual(model.requests[1].observationFreshness, .stale)
-        XCTAssertEqual(model.requests[2].observationFreshness, .stale)
+        XCTAssertEqual(model.requests[1].observationContext?.freshness, .stale)
+        XCTAssertEqual(model.requests[2].observationContext?.freshness, .stale)
         XCTAssertTrue(
             model.requests[2].recentFailureMessages.contains(
                 "A fresh app observation is required before performing an action."
