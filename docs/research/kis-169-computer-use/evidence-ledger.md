@@ -903,3 +903,25 @@ imports, the locally executed Spotlight query and `mdls`, `ComputerUseApplicatio
   description decoding remains gated and tested.
 - `[Not implemented]` Observation rendering/revisions, screenshots, actions, model/agent wiring,
   permissions, conversation UI, and browser control remain future phases.
+
+### Entry 57: Fresh implementation phase 2 observation
+
+Sources: the mounted native service symbols and live-state findings in
+`native-algorithm-recovery-2026-08-09.md`, `ComputerUseAccessibilityTree.swift`,
+`ComputerUseObservationService.swift`, the two system adapters, and Phase 2 tests.
+
+- `[Implemented]` Suniye independently renders bounded depth-first AX state with integer IDs,
+  retains app/window-scoped revisions, maps IDs to tree paths, inherits matched IDs, supports
+  diffs and `disableDiff`, and redacts secure text values.
+- `[Implemented]` Background window screenshots use public ScreenCaptureKit, JPEG encoding, actual
+  display scale, the window frame, and bounded transient file retention.
+- `[Implemented]` AX and screenshot capture run concurrently after exact app and internal window
+  resolution; observation does not activate the target.
+- `[Independent choice]` Match keys, diff punctuation, traversal limits, and ScreenCaptureKit-only
+  backend selection are explicit closest matches because the exact native details remain unknown.
+- `[Corrected]` The strict review removed hard-coded scale and prevented revisions from leaking
+  across windows in the same app.
+- `[Live blocked]` The read-only Calculator XCTest failed with AX `-25211` because its host lacks
+  Accessibility permission. It remains opt-in and skipped in ordinary headless runs.
+- `[Verified]` The final full suite executes 1,012 tests with 2 skipped and 0 failures; gated
+  coverage is 95.14% (11,685/12,282 lines); E2E preflight and smoke pass.

@@ -36,14 +36,18 @@ protocol ComputerUseWindowInventoryProviding: Sendable {
         -> [ComputerUseAXWindowSnapshot]
 }
 
-actor ComputerUseWindowDiscovery {
+protocol ComputerUseWindowDiscovering: Sendable {
+    func orderedWindows(processIdentifier: Int32) async throws -> [ComputerUseWindow]
+}
+
+actor ComputerUseWindowDiscovery: ComputerUseWindowDiscovering {
     private let inventory: ComputerUseWindowInventoryProviding
 
     init(inventory: ComputerUseWindowInventoryProviding = SystemComputerUseWindowInventory()) {
         self.inventory = inventory
     }
 
-    func orderedWindows(processIdentifier: Int32) throws -> [ComputerUseWindow] {
+    func orderedWindows(processIdentifier: Int32) async throws -> [ComputerUseWindow] {
         let cgWindows = try inventory.onScreenWindows().filter {
             $0.ownerProcessIdentifier == processIdentifier
                 && $0.isOnScreen

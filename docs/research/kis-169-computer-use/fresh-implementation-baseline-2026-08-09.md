@@ -84,3 +84,19 @@ entry says `[Implemented]`. Current implementation claims require code and tests
   coverage is 95.14% (11,440/12,024 lines), and both repository E2E scripts pass.
 - `[Not implemented]` AX rendering, screenshots, action execution, the agent/model loop,
   permissions, conversation UI, and browser control remain later phases.
+
+## Phase 2 status
+
+- `[Implemented]` Depth-first AX rendering, observation-scoped integer identity, retained
+  per-window revisions, full-tree fallback, diffs, secure-value redaction, and internal element
+  references.
+- `[Implemented]` Background ScreenCaptureKit window capture produces a JPEG file URL and retains
+  actual screenshot scale and window origin for later coordinate actions.
+- `[Implemented]` The observation service composes exact app resolution, internal window discovery,
+  concurrent AX/screenshot capture, and the public app-state result.
+- `[Live blocked]` The read-only Calculator XCTest reached the native path but the test host lacks
+  Accessibility permission (`-25211`). Installed Preview validation remains later work.
+- `[Verified]` The final full suite executes 1,012 tests with 2 skipped and 0 failures. Gated
+  coverage is 95.14% (11,685/12,282 lines), and both repository E2E scripts pass.
+- `[Not implemented]` Native actions, model/agent wiring, permissions UX, chat UX, and browser
+  control remain later phases.

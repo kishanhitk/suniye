@@ -24,6 +24,8 @@ Suniye/Services/AppleSpeechTranscriptionService.swift # SpeechAnalyzer/SpeechTra
 Suniye/Services/AppleFoundationModelsPostProcessor.swift # Apple Intelligence FoundationModels API; its on-device paths compile on the macOS 26 SDK but can't run on a headless CI runner (no provisioned model), so they count as uncovered. Exercised locally where the model is available.
 Suniye/Services/SystemComputerUseApplicationInventory.swift # NSWorkspace process inventory, Spotlight MDQuery, and background app launch require the live macOS workspace and Launch Services
 Suniye/Services/SystemComputerUseWindowInventory.swift # CGWindowServer and AXUIElement process inspection require a live window server and Accessibility permission; description decoding is tested separately
+Suniye/Services/SystemComputerUseAccessibilitySnapshotProvider.swift # AXUIElement tree traversal requires a live target process and Accessibility permission
+Suniye/Services/SystemComputerUseScreenshotCapturer.swift # ScreenCaptureKit window capture requires a live window server and Screen Recording permission
 
 # --- Window-server bound UI shells (logic lives in state/services) ---
 Suniye/Services/LearningToastPresenter.swift          # transient NSPanel toast

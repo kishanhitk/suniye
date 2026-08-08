@@ -67,6 +67,8 @@ cross-process input still require separate validation.
 - `phase-0-tool-contract-2026-08-09.md` records the exact ten-tool domain contract and validation.
 - `phase-1-app-window-discovery-2026-08-09.md` records app discovery, exact target resolution,
   background launch, CG/AX window correlation, independent choices, and validation.
+- `phase-2-observation-2026-08-09.md` records AX rendering/revisions/diffs, background screenshot
+  capture, closest-match choices, tests, and the permission-bound live result.
 
 ## Evidence labels
 

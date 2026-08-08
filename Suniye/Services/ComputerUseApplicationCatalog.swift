@@ -51,7 +51,12 @@ protocol ComputerUseApplicationLaunching: Sendable {
         -> ComputerUseApplicationRecord
 }
 
-actor ComputerUseApplicationCatalog {
+protocol ComputerUseApplicationCatalogProviding: Sendable {
+    func listApps() async throws -> [ComputerUseApplication]
+    func resolveOrLaunch(_ identifier: String) async throws -> ComputerUseApplicationRecord
+}
+
+actor ComputerUseApplicationCatalog: ComputerUseApplicationCatalogProviding {
     private let inventory: ComputerUseApplicationInventoryProviding
     private let launcher: ComputerUseApplicationLaunching
     private let excludedBundleIdentifiers: Set<String>
