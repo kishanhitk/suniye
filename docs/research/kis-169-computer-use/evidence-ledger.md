@@ -89,7 +89,9 @@ Source family: `@oai/sky/dist/project/cua/sky_js/src/targets/mac`.
 - `[Verified]` Its binary contains symbols or strings for `AXUIElement`, `CGEvent`, `CGWindow`, `ScreenCaptureKit`, `Accessibility`, `Screen Recording`, window tracking, permission requests, and JSON-RPC socket classes.
 - `[Verified]` The helper has an application group and Apple Events entitlement.
 - `[Inferred]` The helper can use Accessibility, Core Graphics events, and ScreenCaptureKit. Binary strings alone do not prove which path each operation uses.
-- `[Unknown]` The exact helper implementation is not recoverable from the shipped binary.
+- `[Superseded by Entry 54]` This initial static-only pass did not recover the helper's behavior.
+  A later live MCP session, preserved symbols, imports, and targeted disassembly recovered its
+  observable protocol and major native algorithms. Five specific internal details remain unknown.
 
 ### Entry 7: Capture bridge
 
@@ -709,9 +711,11 @@ services and page, the final `xcodebuild` result bundle at
 - `[Verified]` The safe live Calculator task completed automatically through the configured model:
   `Read the Calculator result and report it. Do not change the calculator.` The UI reported
   `Computer Use finished The Calculator result is 323`; the Calculator remained at `17 × 19 = 323`.
-- `[Unknown]` The DMG does not expose the complete native helper implementation, server/model
-  loop, or browser-extension route. Cross-process third-party input, fresh Screen Recording
-  consent, and browser/cart behavior remain unverified in this run.
+- `[Superseded by Entries 53 and 54]` This run had not yet recovered the client request loop or
+  native helper algorithms. Those are now substantially recovered. Provider-private inference,
+  five narrow native branch details, and the browser-extension route remain unknown;
+  cross-process third-party input, fresh Screen Recording consent, and browser/cart behavior also
+  remain unverified in this run.
 
 ### Entry 50: Direct voice-to-Computer Use integration
 
@@ -777,5 +781,70 @@ run, and the focused Computer Use tests.
 - `[Verified]` The final full suite reports 1,100 passed, 1 skipped, and 0 failed tests, for 1,101
   total. Gated line coverage is 95.11% (13,899/14,613 lines), above the documented 95% threshold.
 - `[Verified]` E2E preflight and smoke checks pass after the correction.
-- `[Unknown]` The provider-side hidden prompt and exact greeting response are not in the DMG. No
-  deterministic greeting, noun, app, or task matcher was added.
+- `[Verified]` The DMG contains the static GPT-5.6 base instructions and the complete readable
+  Computer Use operating instructions. See `prompt-recovery-2026-08-08.md` and
+  `recovered-prompts/`.
+- `[Verified]` The client-side request construction, role ordering, and selected-model field are
+  recovered, and a loopback request serialized by the DMG binary selected `gpt-5.6-luna`.
+- `[Unknown]` Provider-private inference and the response for a particular unexecuted greeting turn
+  remain unavailable. No deterministic greeting, noun, app, or task matcher was added.
+
+### Entry 53: Client model and runtime-request recovery
+
+Sources: the DMG `codex` executable, its `debug models` and `debug prompt-input` commands, official
+Codex tag `rust-v0.146.0-alpha.9.2`, the isolated loopback request capture at
+`/private/tmp/suniye-codex-request-audit-20260808/captured-request.json`, the DMG `app.asar`, and
+`runtime-request-and-model-selection-recovery-2026-08-08.md`.
+
+- `[Corrected]` Normal model selection is not provider-side. The app-server turn protocol accepts a
+  client model override, and the client sends the resolved model slug in the Responses request.
+- `[Verified]` The service may exceptionally report a different model. The client compares it with
+  the requested slug and emits a model-reroute event on mismatch.
+- `[Verified]` The request schema, Lite/non-Lite construction, initial context ordering, world-state
+  ordering, user-message placement, and selected skill/plugin injection placement are recovered
+  from the exact tagged source.
+- `[Verified]` The DMG app-server, initialized with ChatGPT desktop client information, serialized a
+  loopback request selecting `gpt-5.6-luna`. It ordered Lite tool definitions, GPT-5.6 base
+  instructions, dynamic developer context, repository instructions, the user task, and the
+  Computer Use skill prompt.
+- `[Verified]` The DMG host chooses the node-REPL or legacy-MCP Computer Use skill variant from a
+  desktop feature flag. In node-REPL mode it materializes the detailed node-REPL instructions as
+  `skills/computer-use/SKILL.md`.
+- `[Unknown]` Provider-private inference, hidden classifiers, post-receipt transformations, and the
+  model response for an unexecuted production turn remain unavailable.
+- `[Not implemented]` This entry changes research conclusions only. No Suniye production code was
+  changed.
+
+### Entry 54: Native helper live protocol and algorithm recovery
+
+Sources: the DMG-shipped `SkyComputerUseClient` and `SkyComputerUseService`, a live local MCP
+session using read-only `list_apps` and `get_app_state` against Calculator, preserved Swift
+symbols and imported macOS APIs, targeted ARM64 disassembly, and
+`native-algorithm-recovery-2026-08-09.md`.
+
+- `[Corrected]` The prior claim that native helper behavior was unavailable because the helper is
+  compiled was too broad.
+- `[Verified]` The native MCP server exposes exactly ten app-scoped tools. `list_apps` reports
+  running/recent apps and usage metadata; `get_app_state` accepts app name, full path, or an
+  unambiguous bundle identifier.
+- `[Verified]` The first Calculator state call elicited app approval. Accepted state contained a
+  depth-indented preorder AX tree with observation-scoped integer IDs and a JPEG screenshot.
+- `[Verified]` Calculator remained in the background while WhatsApp stayed frontmost across two
+  state calls. Observation does not inherently activate the target application.
+- `[Verified]` Window discovery requests on-screen, non-desktop CG windows and cross-references
+  them with AX candidates. No public model-facing window picker or window ID is required.
+- `[Verified]` The helper retains AX revisions, maps IDs to AX elements, compares render trees,
+  inherits matched IDs, and supports depth-first insertion/removal changes and stale-element
+  refetch.
+- `[Verified]` Both ScreenCaptureKit and SkyLight/WindowServer screenshot paths exist. The helper
+  supports window-ID capture, crop, size, opacity, shadow, delay, and encoding options.
+- `[Verified]` Screenshot coordinates are scaled and optionally translated by the target window
+  origin. Actions use semantic AX mechanisms with process-scoped synthesized click, drag, scroll,
+  key, and text fallbacks plus conditional focus coordination.
+- `[Verified]` UI settling, AX invalidation, physical-input, focus, and lock-screen monitoring
+  paths exist.
+- `[Unknown]` The final multi-window comparator, exact AX diff equality/budget rules, complete
+  capture-backend branch matrix, every AX-versus-synthesized-input branch, and exact intervention
+  debounce/already-posting cancellation behavior remain unrecovered.
+- `[Not implemented]` This entry changes research conclusions only. No Suniye production code was
+  changed.

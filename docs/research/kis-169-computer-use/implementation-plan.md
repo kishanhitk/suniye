@@ -5,9 +5,10 @@ Phase 4 policy, Phase 5A model transport, Phase 5B coordinator/model integration
 desktop parity correction are added.
 Browser control and a separate native helper remain unimplemented. Transient screenshot caching
 and reference-specific state diffs remain open. The model can now resolve and launch installed
-desktop apps for the next observation. The strict maintainability review is complete. A live
-`@Computer` run validates the Suniye self-target path; provider, screenshot, and cross-process
-validation remain open.
+desktop apps for the next observation. The reference client request loop and major native-helper
+algorithms are recovered in the 2026-08-08 and 2026-08-09 reports. A live `@Computer` run validates
+the Suniye self-target path; provider response quality, fresh Screen Recording consent, and
+cross-process Suniye input validation remain open.
 
 The phase sections below preserve the incremental design record. The superseding correction at the
 end of this file is authoritative for the current behavior.
@@ -272,7 +273,12 @@ The provider, model name, network boundary, and privacy display need a product d
 - `[Verified]` Existing Suniye Magic Format models accept text only.
 - `[Verified]` Existing local Gemma uses a text-only chat-completion payload.
 - `[Inferred]` Computer Use needs a separate multimodal provider interface.
-- `[Unknown]` The DMG does not identify the exact model used for Computer Use.
+- `[Verified]` The reference does not hard-code one Computer Use model. The client accepts the
+  user-selected model for a turn and sends the resolved slug in the Responses request. The DMG
+  catalog includes GPT-5.6 Luna with text/image input, and the isolated capture selected
+  `gpt-5.6-luna`.
+- `[Unknown]` Whether the provider exceptionally reroutes a particular production request and the
+  provider's private inference behavior cannot be known before that response.
 
 The first provider should be selected only after these decisions:
 
@@ -639,12 +645,15 @@ Do not infer DOM or tab state from a desktop screenshot. Define a browser-specif
 - Suniye’s existing support and missing capability are explicit.
 - The model boundary is separate from Magic Format.
 - Permission UX and policy authorization have explicit boundaries.
-- Native helper use is a decision gate, not an assumption.
+- Native helper isolation is required for close runtime-architecture parity, but can remain a
+  staged migration from the current same-process prototype.
 - Browser control is a separate adapter.
 - Phase 0 remains read-only.
 - Phase 2 actions require a one-time policy grant and fresh observation state.
 - The desktop coordinator model run is connected behind explicit API settings and automatic policy authorization.
-- Browser code and a separate native helper are not enabled because their contracts remain unverified.
+- Browser code and a separate native helper are not enabled in the current prototype. The
+  reference helper contract and major native algorithms are now substantially recovered; browser
+  protocol details remain incomplete.
 
 ## Superseding implementation plan correction — 2026-08-03
 
@@ -659,8 +668,10 @@ The implementation follows the inspected macOS app-scoped contract:
   permission checks, cancellation token, observation-generation check, and redacted audit seam.
 - `[Verified]` Capture and include the macOS screenshot on every observation. Keep the local
   Screen Recording requirement explicit in permission UX.
-- `[Unknown]` Add helper IPC only after its endpoint, sender authentication, process lifecycle, and
-  permission ownership are verified; it is not required by the current same-process plan.
+- `[Proposed]` For close reference parity, add a separately signed UI-element helper behind a
+  versioned, authenticated local IPC boundary. Preserve explicit request IDs, deadlines,
+  cancellation, restart behavior, and helper-owned permission/error reporting. The exact
+  reference sender-authentication algorithm remains unknown and must not be copied or invented.
 
 ## Final cleanup validation correction — 2026-08-03
 
@@ -671,5 +682,41 @@ The implementation follows the inspected macOS app-scoped contract:
 - `[Verified]` The final full suite is 1,080 tests executed, 1 skipped, 0 failures, with gated
   coverage at 95.02% (13,672/14,389 lines).
 - `[Verified]` The Preview install and safe Calculator model run pass after a fresh app relaunch.
-- `[Unknown]` The native helper/IPC contract, exact host prompt and server loop, browser adapter,
-  Screen Recording consent path, and cross-process input still require separate evidence.
+- `[Corrected]` The client-selected model, host request construction, static prompts, helper MCP
+  contract, and major native algorithms are recovered. Provider-private inference, five narrow
+  native branch/ranking details, browser adapter, Screen Recording consent path, and Suniye's own
+  cross-process input still require evidence or implementation validation.
+
+## Native parity plan correction — 2026-08-09
+
+The following implementation targets are now evidence-backed rather than speculative:
+
+1. Keep every public observation/action call app-scoped. Resolve by name, full path, or
+   unambiguous bundle identifier; prefer a running target, launch when necessary, and return an
+   ambiguity error instead of choosing silently.
+2. Keep concrete windows internal. Request on-screen, non-desktop CG windows, join them to AX
+   windows, and define a deterministic Suniye comparator for the remaining multi-window case. Mark
+   that comparator as an independent choice until the reference rule is recovered.
+3. Observe background applications without unconditional activation. Coordinate synthetic focus
+   only for input paths that require it.
+4. Render a depth-first AX tree with observation-scoped integer IDs. Retain revisions so current
+   IDs can resolve to current AX elements, refetch invalidated elements, and support depth-first
+   insertion/removal diffs plus explicit full refresh.
+5. Introduce a screenshot backend abstraction that can use ScreenCaptureKit and a documented
+   fallback. Keep window-ID capture, crop, output size, opacity, shadow, delay, encoding, and scale
+   metadata explicit. Do not depend directly on private SkyLight APIs in Suniye.
+6. Apply the recovered coordinate conversion: scale screenshot coordinates, then translate by the
+   target window origin when present.
+7. Prefer semantic AX press, action, set-value, selection, and scrollbar behavior. Fall back to
+   process-scoped synthesized click, drag, scroll, key, and Unicode text events.
+8. Add UI-settling waits, AX invalidation/refetch, physical-input monitoring, focus-change
+   handling, screen-lock guards, and stable native error mapping at the helper boundary.
+9. Send the user-selected model slug. Mirror the recovered Responses Lite/non-Lite request
+   placement and ordered context/tool-result history through an independent typed request builder.
+   Treat a reported server-model mismatch as an exceptional reroute event.
+10. Preserve per-app policy before observation and action. Reintroduce reference-shaped app
+    approval and safety UX before release; automatic approval remains a development-only mode.
+
+The implementation can start from this observable contract. It must not claim exact internal
+parity for the unresolved multi-window comparator, AX diff equality/budgets, screenshot-backend
+branch matrix, every AX-versus-synthesized-input branch, or intervention cancellation timing.

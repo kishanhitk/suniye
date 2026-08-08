@@ -29,7 +29,7 @@ This note is limited to initial app selection, `frontmost`, host-app control, co
 | Does the public Computer Use app list expose which app is frontmost? | **Verified: no.** The native record has `isFrontmost`, but the public `list_apps()` mapper drops it. |
 | Why does `computer-use-frontmost-window` exist? | **Verified:** it supports Appshots and realtime screen context in the host app. It is separate from the packaged Computer Use tool surface. |
 | Can ordinary Computer Use target the host app? | **Inferred: it is intended to be forbidden.** Native symbols define ChatGPT/Computer Use host bundle groups and a forbidden-target classifier, and the policy wrapper blocks `forbidden` targets before observation or action. Exact array membership could not be executed from the read-only artifact. |
-| How is `Hello` handled? | **Unknown:** the exact model/tool-routing decision is not in the DMG. The Computer Use skill is scoped to tasks requiring local-app reading or operation; no deterministic `Hello` target matcher was found. |
+| How is `Hello` handled? | **Partly verified, final behavior unknown:** the DMG contains the static GPT-5.6 base instructions and Computer Use tool-selection instructions. It does not contain a captured live turn proving the final routing decision for `Hello`. No deterministic `Hello` target matcher was found. |
 | Where does self-target enforcement live? | **Verified:** target classification and policy are native-service responsibilities; the JavaScript wrapper requests that policy and rejects `forbidden` before `get_app_state` and actions. |
 
 ## 1. Initial target and app selection
@@ -102,7 +102,15 @@ This note is limited to initial app selection, `frontmost`, host-app control, co
 - **Verified**: the packaged skill describes Computer Use as a capability for tasks that require “reading or operating app UI.” It also says to prefer a dedicated interface when one can complete the task.
   - Source: `.../computer-use-node-repl.md:2-10`.
 - **Verified**: no deterministic mapping from `Hello`, greetings, or other conversational text to `frontmost`, a running app, or any app bundle identifier was found in the packaged Computer Use plugin, Mac client, or native symbol/string evidence inspected for this note.
-- **Unknown**: the exact model prompt and tool-selection policy that decide whether to answer `Hello` conversationally or invoke a tool. Those provider-side components are not in the DMG.
+- **Verified**: the DMG contains the static GPT-5.6 base instructions and the complete readable
+  Computer Use operating instructions. The latter scopes Computer Use to tasks that require reading
+  or operating local app UI and says to prefer dedicated interfaces when available.
+  - Sources: `recovered-prompts/gpt-5.6-base-instructions.md` and
+    `recovered-prompts/computer-use-node-repl.md`.
+- **Verified**: the client-side request-construction algorithm, message ordering, and selected-model
+  field are recovered. A loopback capture from the DMG binary verifies those mechanics.
+- **Unknown**: the resulting model response for a production `Hello` turn, because that specific
+  remote turn was not executed or captured.
 - **Inferred**: because `Hello` neither names an app nor requests reading/operating app UI, the intended routing is a normal conversational response without starting Computer Use. This is a routing inference from the skill scope, not a recovered hidden rule.
 
 ## 5. App-list filtering
@@ -148,4 +156,7 @@ Self-target enforcement is therefore not a model prompt-only rule. The directly 
 - The native helper is compiled Swift. Exported symbols and embedded strings were available, but source and the exact async list-handler body were not.
 - Attempting to launch the artifact under LLDB to print the static bundle arrays was denied by macOS attach policy. No array contents were claimed as Verified from that failed attempt.
 - The packaged Node wrapper could not be executed in the available trusted REPL because its required `NODE_REPL_NODE_MODULE_DIRS` bootstrap environment is immutable in that session. No live output from a different installed Computer Use build was substituted as artifact evidence.
-- Provider-side model prompts, inference logic, and service behavior are not present in the DMG and remain Unknown.
+- The static model base instructions and Computer Use operating instructions are present and have
+  been recovered from the DMG. Client-side model selection, runtime composition, and role ordering
+  are also recovered. Provider-private inference and the response to an unexecuted production turn
+  remain Unknown.

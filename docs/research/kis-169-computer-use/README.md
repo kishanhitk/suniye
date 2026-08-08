@@ -46,6 +46,12 @@ cross-process input still require separate validation.
 - `parity-audit-dmg-agent.md` is the detailed raw DMG audit used as supporting evidence.
 - `bootstrap-and-self-target-parity-2026-08-08.md` records the focused correction for initial app
   selection, frontmost state, conversational routing, and host-app policy enforcement.
+- `runtime-request-and-model-selection-recovery-2026-08-08.md` records client-side model
+  selection, exact request construction and role ordering, Computer Use prompt-variant selection,
+  and a loopback-captured request serialized by the DMG binary.
+- `native-algorithm-recovery-2026-08-09.md` records the live native MCP session, exact ten-tool
+  schema, background observation behavior, AX rendering and revision pipeline, window discovery,
+  screenshot backends, coordinate conversion, and process-scoped input paths.
 
 ## Evidence labels
 
@@ -79,8 +85,14 @@ as separate evidence entries. Git handoff status is reported with the final comm
   identifiers and coordinate metadata are not part of Suniye's model contract.
 - `[Verified]` The model prompt contains native Accessibility text and the screenshot, without a
   second serialized Accessibility-element table or internal window metadata.
-- `[Unknown]` The complete native helper, IPC, host model loop, exact prompt, and browser extension
-  behavior remain unavailable from the inspected artifact.
+- `[Verified]` Static GPT-5.6 base instructions and complete readable Computer Use operating
+  instructions were recovered from the inspected artifact. See
+  `prompt-recovery-2026-08-08.md` and `recovered-prompts/`.
+- `[Verified]` Client-side model selection, the Responses request schema, context/message ordering,
+  and Computer Use prompt injection are recovered and verified by a request serialized by the DMG
+  binary.
+- `[Unknown]` Provider-private inference, unrecovered native-helper details, exact IPC
+  authentication, and browser-extension behavior remain unavailable from the inspected artifact.
 
 ## Final cleanup validation — 2026-08-03
 
@@ -92,8 +104,10 @@ as separate evidence entries. Git handoff status is reported with the final comm
   Bring Forward control, screenshot choice, manual action surface, or approval card.
 - `[Verified]` The configured model completed a safe read-only Calculator task and reported the
   existing result `323` for `17 × 19`.
-- `[Unknown]` Helper IPC, the reference server/model loop and prompt, Screen Recording consent,
-  cross-process third-party input, and browser control remain outside this validation.
+- `[Unknown]` Helper IPC internals, provider-private inference, Screen Recording consent,
+  cross-process third-party input, and browser control remain outside this validation. The client
+  loop, prompts, request schema, and context ordering were recovered later and are no longer part
+  of this unknown set.
 
 ## Direct voice implementation — 2026-08-03
 

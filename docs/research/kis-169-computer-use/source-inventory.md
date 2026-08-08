@@ -72,8 +72,11 @@ Status: `[Verified]` by source inspection.
   and window activation adapters.
 - `[Verified]` `ComputerUseModelClient` sends Accessibility text and the observation screenshot;
   the former duplicate element renderer and internal window metadata are removed.
-- `[Unknown]` No source inventory can establish the inspected artifact's full native helper or
-  server-side model implementation.
+- `[Verified]` The exact tagged client source plus a DMG-binary request capture establish
+  client-side model selection, request construction, role ordering, and the local agent loop. See
+  `runtime-request-and-model-selection-recovery-2026-08-08.md`.
+- `[Unknown]` No source inventory can establish provider-private inference or unrecovered compiled
+  native-helper details.
 
 ## Corrective parity slice (historical implementation record)
 
@@ -126,8 +129,10 @@ The helper executable was inspected with `file`, `otool`, `codesign`, and `strin
 Status:
 
 - framework links and named native components: `[Verified]`;
-- source-level implementation: `[Unknown]`;
-- exact native operation path: `[Unknown]`.
+- live MCP schema and observable native behavior: `[Verified]`;
+- major Swift method signatures, imported APIs, and selected decoded control flow: `[Verified]`;
+- the five remaining branch/ranking details: `[Unknown]`, as enumerated in
+  `native-algorithm-recovery-2026-08-09.md`.
 
 ### Capture bridge
 
@@ -146,7 +151,11 @@ Useful symbols and behavior:
 - stale attachment-generation handling;
 - completed and failed update handling.
 
-Status: `[Verified]` for readable worker behavior. Native helper behavior remains `[Unknown]`.
+Status: `[Verified]` for readable worker behavior. The native helper's live protocol, AX renderer,
+window-discovery primitives, screenshot backends, coordinate transform, event mechanisms, and
+settling/refetch architecture are also `[Verified]` in
+`native-algorithm-recovery-2026-08-09.md`; only its enumerated internal branch details remain
+`[Unknown]`.
 
 ### Host bridge
 
@@ -313,7 +322,9 @@ Phase 5B also extends `Suniye/AppState.swift`,
 
 Status: `[Verified]` by focused coordinator, model, and configuration tests. The desktop path is
 connected to an explicit API Endpoint configuration. A live provider run, live WindowServer
-action, browser adapter, and separate native helper remain `[Unknown]` or intentionally deferred.
+action and browser adapter remain `[Unknown]` or intentionally deferred. A separate Suniye native
+helper remains intentionally deferred; the reference helper's observable contract and major native
+mechanisms are now recovered in `native-algorithm-recovery-2026-08-09.md`.
 
 These files establish the current state machine, permissions, Accessibility insertion, model seams, settings surface, build source of truth, and test seams.
 

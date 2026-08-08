@@ -14,7 +14,8 @@ The public macOS Sky target is app based. It returns accessibility text and a sc
 
 The observed design is not a single model call. It is a state and action loop.
 
-The exact model and server loop remain unknown.
+The client-side model choice, request schema, context ordering, and local agent-loop implementation
+are recoverable. Provider-private inference and hidden service-side processing remain unknown.
 
 ## Observed component map
 
@@ -42,7 +43,19 @@ Status: `[Inferred]` for the end-to-end flow. The component names and protocols 
 
 - `[Verified]` The Sky README calls the API model-facing.
 - `[Verified]` Sky accepts a structured app target and returns structured state or action results.
-- `[Unknown]` The DMG does not show the exact model name, prompt, token format, or remote request endpoint.
+- `[Verified]` The DMG contains model-profile base instructions and the complete readable Computer
+  Use operating instructions. GPT-5.6 Sol, Terra, and Luna share identical base instructions in
+  this artifact.
+- `[Verified]` The app-server turn protocol accepts a client model override, and the request builder
+  sends the resolved model slug. An isolated request serialized by the DMG binary selected
+  `gpt-5.6-luna`.
+- `[Verified]` The Responses request schema and ordering are recovered from the exact tagged client
+  source and verified by a loopback capture from the shipped executable. See
+  `runtime-request-and-model-selection-recovery-2026-08-08.md`.
+- `[Verified]` A response can exceptionally report a different server model; the client emits a
+  model-reroute event when it differs from the requested slug.
+- `[Unknown]` Provider-private inference, hidden classifiers, exceptional reroute decisions, and
+  post-receipt transformations are not established by the client artifact.
 
 The model should not call macOS APIs directly.
 
@@ -81,7 +94,10 @@ The observed and inferred loop is:
 
 Steps 1, 2, 4, 6, 8, and the returned data shape are `[Verified]` or directly represented by the artifact.
 
-The complete model loop is `[Inferred]` because the server-side model orchestration is not in the DMG.
+The static GPT-5.6 base instructions and Computer Use operating instructions are `[Verified]` from
+the DMG. The client loop, request construction, role ordering, and model slug are also `[Verified]`.
+The actual model response and provider-private inference for a particular production turn remain
+`[Unknown]` until that turn is executed or captured.
 
 ## App and window discovery
 
@@ -101,35 +117,49 @@ The public macOS API does not expose a separate stable window object.
 
 The Windows window API does expose an explicit window object. This is a real platform difference.
 
-The Sky wrapper accepts app IDs, display names, process names, and other supported identifiers. The exact native resolution rules remain unknown.
+The live native schema accepts an app name, full app path, or unambiguous bundle identifier.
+Preserved helper symbols verify name/path/bundle lookup, a path that prefers an already-running
+target, launch by name or URL, launch waiting, and explicit ambiguity errors when duplicate bundle
+identifiers exist.
 
 ### Native discovery
 
-The helper binary contains `CGWindow`, window tracking, frontmost-window, and Accessibility names.
+`ComputerUseAppController.orderedWindows()` calls `CGWindowListCreate(0x11, 0)`, which requests
+on-screen windows while excluding desktop elements. The helper converts those IDs to window
+objects and cross-references them with AX window candidates. It also contains AX-to-CG matching in
+both directions, primary-window waiting, and focused-context construction for an explicit window.
 
-This proves that the helper has native window and accessibility components.
-
-It does not prove the exact selection order.
-
-The selection algorithm is therefore `[Unknown]`.
+- `[Verified]` Native window discovery joins on-screen, non-desktop CG windows with AX windows.
+- `[Verified]` The model-facing macOS API remains app-scoped; native window resolution is internal.
+- `[Unknown]` The final ranking comparator when several matched windows remain for one app has not
+  been reconstructed reliably.
 
 ## Accessibility and screenshot handling
 
 ### Accessibility
 
-The helper binary contains `AXUIElement` and Accessibility names.
+The live Calculator state returned a depth-indented preorder AX rendering with sequential integer
+element IDs. Lines can include role and name, description, help, stable application-provided ID,
+disabled state, and secondary actions. Preserved symbols verify the pipeline:
 
-The state protocol returns accessibility text, not a raw AX object graph.
+1. `ApplicationUIElement.flatTree(...)`
+2. `UIElementTree.render(...)`
+3. `UIElementRenderTree.setElementIDs()`
+4. depth-first traversal and line rendering
 
-The public action API uses element indices from that text.
+The helper retains tree revisions, maps integer IDs back to AX elements, compares old and new
+render trees, inherits IDs for matched nodes, and emits depth-first insertion/removal-aware
+changes. A second unchanged live state returned the full rendering and screenshot, so not every
+subsequent observation is exposed as an empty diff.
 
-The native helper must therefore flatten native accessibility data into a model-readable representation.
-
-The exact flattening format is `[Unknown]` beyond the public text field and index contract.
+- `[Verified]` The observable flattening shape, element-ID assignment, retained revision model,
+  and diff architecture are recoverable.
+- `[Unknown]` Exact node-matching equality keys, line-budget constants, and every full-tree
+  fallback condition remain unrecovered.
 
 ### Screenshots
 
-The public state returns a data URL.
+The public state returns screenshot image content. The live native MCP response used JPEG.
 
 The capture bridge also returns a local screenshot URL and MIME type.
 
@@ -137,9 +167,12 @@ The worker validates image paths and allows PNG, JPEG, and JPG output.
 
 The worker rejects images larger than 25 MB.
 
-The helper links ScreenCaptureKit and CoreGraphics.
+The helper exposes window-ID-scoped capture with crop, size, opacity, shadow, delay, and encoding
+options. It contains both `SCScreenshotManager` capture and a SkyLight/WindowServer capture path.
 
-The exact choice between ScreenCaptureKit and CoreGraphics for each capture is `[Unknown]`.
+- `[Verified]` Both capture backends and their common window-scoped abstraction are present.
+- `[Unknown]` The exact runtime matrix choosing ScreenCaptureKit versus SkyLight for every OS and
+  window condition remains unrecovered.
 
 ## Supported macOS actions
 
@@ -156,7 +189,19 @@ The exact choice between ScreenCaptureKit and CoreGraphics for each capture is `
 
 The action wrappers pass requests through the same app policy gate.
 
-The exact native event synthesis for each action is `[Unknown]`.
+The helper resolves indexed AX elements against the current retained revision. Semantic paths use
+AX press/actions, settable values, text ranges, and scrollbars. Fallback paths synthesize click,
+drag, scroll, key, and Unicode text events and post them to the target PID. Its recovered
+screenshot-to-screen transform is:
+
+`screenPoint = (screenshotPoint * scalingFactor) + optionalWindowOrigin`
+
+It also has conditional synthetic-focus coordination. The target does not have to become
+frontmost for observation; an individual input path can coordinate focus when necessary.
+
+- `[Verified]` Semantic AX and process-scoped synthesized-event mechanisms are both present.
+- `[Unknown]` Every role- and app-specific branch choosing semantic AX behavior versus synthesized
+  input remains unrecovered.
 
 ## Permissions
 
@@ -219,20 +264,23 @@ It links the main macOS frameworks needed for Accessibility, input, capture, win
 
 Its binary contains JSON-RPC socket, XPC, permission, window, AX, CGEvent, and ScreenCaptureKit names.
 
-### Inferred responsibilities
+### Recovered responsibilities
 
-The helper likely performs these operations:
+Live calls, preserved Swift symbols, imported APIs, and targeted disassembly verify that the
+helper:
 
-- resolve an app and its key window;
-- read the AX tree;
-- flatten AX data into text with indices;
-- capture a bounded window image;
-- synthesize mouse and keyboard input;
-- perform AX semantic actions;
-- report permission state and native errors;
-- keep a session identity for requests.
+- resolves and launches app targets and reports ambiguity;
+- joins CG and AX windows and builds focused contexts;
+- reads, flattens, renders, revisions, and diffs AX trees;
+- maps observation-scoped integer IDs back to current AX elements;
+- captures one or more window IDs through ScreenCaptureKit or SkyLight paths;
+- converts screenshot coordinates to screen coordinates;
+- performs semantic AX actions and process-scoped synthesized input;
+- waits for UI settling and refetches invalidated AX state;
+- monitors physical input, focus changes, lock state, and native permission/error conditions.
 
-The exact implementation remains unknown because the helper is a compiled binary.
+See `native-algorithm-recovery-2026-08-09.md` for the evidence boundary and the five remaining
+native questions.
 
 ## Process communication
 
@@ -262,11 +310,11 @@ The worker retries selected Apple Event transport failures.
 
 ### Boundaries that remain unknown
 
-The DMG does not show the full model-to-Sky call path.
-
-The DMG does not show whether one process or several processes own the complete agent session.
-
-The DMG does not show an explicit macOS cancellation message for every action.
+The desktop host's exact production process ownership across every turn is not fully established.
+The app-server request composition and model-facing Computer Use prompt are recovered, while the
+final host-to-native route can differ between the node-REPL and legacy-MCP feature variants.
+No explicit native cancellation point has been verified for every action after an event is already
+being posted.
 
 ## Error, cancellation, and user intervention
 
@@ -290,9 +338,13 @@ The loop should not repeat a failed action without fresh state.
 
 The loop should re-observe after user intervention.
 
-The loop should treat a changed frontmost app or window as a possible intervention.
+The loop should treat physical user input or invalidated target state as intervention/recovery
+signals. The helper contains process-scoped and system event taps, physical-input monitoring,
+focus-steal prevention, AX invalidation monitoring, and screen-lock guards.
 
-The exact native signal for intervention is `[Unknown]`.
+- `[Verified]` Dedicated native monitoring paths exist for these conditions.
+- `[Unknown]` The exact intervention debounce interval and cancellation behavior during an event
+  already being sent remain unrecovered.
 
 ## Desktop control versus browser control
 
@@ -420,8 +472,14 @@ internal details.
 ## Evidence limits
 
 - `[Verified]` Static bundle inspection exposes public wrappers, strings, resources, and transport code.
-- `[Verified]` Static inspection does not expose the server-side model prompt or the compiled helper source.
-- `[Unknown]` Exact helper behavior needs a live test or source access.
+- `[Verified]` The DMG contains the complete readable static Computer Use operating instructions
+  and GPT-5.6 base instructions. The client request schema and ordering are recovered and were
+  confirmed with a loopback request serialized by the DMG binary.
+- `[Verified]` The helper's source code is not shipped, but live MCP calls, preserved Swift
+  symbols, imported APIs, and targeted disassembly recover the observable protocol and major native
+  algorithms.
+- `[Unknown]` Provider-private inference and the five narrow native details enumerated in
+  `native-algorithm-recovery-2026-08-09.md` remain unavailable.
 - `[Unknown]` Exact browser behavior needs a browser trace or browser documentation.
 
 ## Research limitation

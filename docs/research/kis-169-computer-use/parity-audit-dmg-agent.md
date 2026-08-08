@@ -62,9 +62,11 @@ not modified by this audit.
     -> model/agent
   ~~~
 
-- [Unknown] The DMG does not reveal the complete server-side model prompt, model name, or full
-  server-side agent loop. The public wrapper and native service can be inspected, but the model
-  orchestration outside the artifact is not established.
+- [Superseded] This early audit did not yet recover the client model catalog, exact tagged client
+  source, prompt renderer, or serialized request. The later audit verifies client-side model
+  selection, static prompts, request construction, context ordering, and the local agent loop.
+  Provider-private inference remains unknown. See
+  `runtime-request-and-model-selection-recovery-2026-08-08.md`.
 - [Verified] Suniye now has the same broad semantic loop: observe, ask a model for a typed next
   decision, apply policy and approval, execute one action, then observe again.
 - [Verified] Suniye does not yet have the reference runtime topology. Its Computer Use services
@@ -985,20 +987,26 @@ native symbol names.
   state revision, recent action outcomes, and an optional screenshot reference.
 - Expose actions with the reference's public semantics: indexed click or coordinate click, drag,
   key chord, type, indexed scroll, set value, select text, and validated exposed secondary action.
-- Allow only one action proposal per model decision. The executor, not the model, owns sequencing.
+- Support one or more ordered actions before the next state read, matching the recovered Computer
+  Use instructions. The executor still validates each action before execution.
 - Treat AX text, screenshots, app content, and web content as untrusted data. None of them can grant
   approval.
-- Require a fresh state after each action before the next model decision. Request a full tree when
-  a diff cannot be applied or an element becomes stale.
+- Fetch updated app state after the ordered action group and before deciding what to do next.
+  Request a full tree when a diff cannot be applied or an element becomes stale.
 - Preserve screenshot upload opt-in. Show the provider, destination, and screenshot/data scope in
   the session UI before upload.
 - Keep the direct HTTP provider and a future local multimodal provider behind the same protocol.
   Do not conflate text-only Magic Format with Computer Use.
 - Do not claim the artifact uses the same HTTP model endpoint. The DMG does not prove that.
 
-[Unknown] The reference model's exact schema, prompt, and provider remain unavailable. Suniye's
-model schema should therefore be contract-tested and measured with real providers instead of being
-declared identical.
+[Verified] The static GPT-5.6 base instructions, detailed Computer Use operating prompt, and ten
+public Computer Use methods are available in the DMG and are preserved under `recovered-prompts/`.
+
+[Superseded] The client-side runtime-composition algorithm, role ordering, model slug, and wire
+schema are recovered, and a request serialized by the shipped binary was captured. Provider-private
+inference, exceptional service rerouting for a particular turn, and any post-receipt transformations
+remain unknown. Suniye's provider contract should still be tested with real providers instead of
+being declared identical.
 
 ### 14.6 Permission and approval UX
 
@@ -1126,5 +1134,7 @@ helper IPC, and live macOS validation.
   resolver needed to operate macOS Accessibility and screenshots.
 - `[Implemented]` Suniye's Preview path uses automatic authorization, always includes the
   observation screenshot, and removes the duplicate structured element prompt rendering.
-- `[Unknown]` Static inspection still cannot establish the native helper's internal AX traversal,
-  screenshot implementation, complete prompt, or server-side loop.
+- `[Corrected]` The client-side model selection, request schema, context ordering, prompt-variant
+  selection, and local agent loop are recoverable and are documented in
+  `runtime-request-and-model-selection-recovery-2026-08-08.md`. Provider-private inference remains
+  unknown. Native-helper internals are tracked separately in the native algorithm recovery note.

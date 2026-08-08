@@ -19,8 +19,11 @@ reference behavior from implementation choices and remaining unknowns.
   a requirement by the inspected macOS API.
 - `[Inferred]` A model can move between desktop apps by making another app-targeted state request.
   The DMG does not expose the complete host model loop.
-- `[Unknown]` The reference server prompt, exact model, launch retry timing, and native helper
-  orchestration are not visible in the inspected files.
+- `[Verified]` The static prompts, client-side model selection, request composition, and local
+  agent-loop ordering are recovered in
+  `runtime-request-and-model-selection-recovery-2026-08-08.md`.
+- `[Unknown]` Provider-private inference, launch retry timing not defined by the public prompt, and
+  unrecovered native-helper orchestration remain open.
 
 ## Implemented correction
 
@@ -64,8 +67,9 @@ reference behavior from implementation choices and remaining unknowns.
   action. An action returned before target selection and observation is rejected and retried.
 - `[Implemented]` Observation and action both enforce the same application policy. The current
   Suniye bundle identifier is forbidden at that boundary, before Accessibility or input work.
-- `[Unknown]` The exact provider-side routing response to a greeting is not present in the DMG.
-  No deterministic greeting or instruction matcher was added.
+- `[Unknown]` The model's response to an unexecuted production greeting turn is not present in the
+  DMG. Client-side model selection and request ordering are recovered. No deterministic greeting
+  or instruction matcher was added.
 
 ## Superseding target-scope correction — 2026-08-03
 

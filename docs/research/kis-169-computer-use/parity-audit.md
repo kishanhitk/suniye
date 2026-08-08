@@ -93,8 +93,9 @@ The current Suniye session has a stricter target lock than the inspected macOS r
   names. It launches a resolved non-running app before reading its state.
 - `[Implemented]` The action service activates the observation target immediately before input.
   Approval, per-app policy, permission checks, and observation-generation checks remain active.
-- `[Remaining]` The exact native helper orchestration and browser adapter remain outside this
-  desktop slice.
+- `[Remaining]` Suniye still lacks the reference's separate native-helper architecture and browser
+  adapter. The reference helper's public protocol and major native mechanisms are now recovered;
+  see `native-algorithm-recovery-2026-08-09.md`.
 
 ## Findings by certainty
 
@@ -119,10 +120,14 @@ The current Suniye session has a stricter target lock than the inspected macOS r
 
 ### Unknown
 
-- The reference server-side model, prompt, exact model name, and complete agent orchestration.
+- Provider-private inference, hidden classifiers, exceptional reroute decisions, and
+  post-receipt transformations. Client-side model selection, exact model slug transport, static
+  prompts, and runtime request ordering are recovered.
 - The exact native XPC endpoint and sender-authentication algorithm.
-- The reference’s full permission matrix, lock-screen behavior, and cancellation timing for an
-  already-posted native event.
+- The final multi-window comparator, exact AX diff equality/budget rules, screenshot-backend
+  selection matrix, every AX-versus-synthesized-input branch, and intervention/cancellation timing
+  for an already-posted native event.
+- The reference’s full release permission and approval policy.
 - Whether Suniye’s Core Graphics capture is equivalent to ScreenCaptureKit for all Retina,
   multi-display, and transient-window cases.
 - Whether the current native activation path succeeds for every target app under real Accessibility

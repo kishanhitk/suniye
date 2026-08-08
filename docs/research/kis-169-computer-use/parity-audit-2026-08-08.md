@@ -23,10 +23,10 @@ safety policy, complete session semantics, and browser separation are release-le
 |---|---|---|
 | Desktop action vocabulary | Broad parity | Both expose click, drag, key press, scroll, text entry, value setting, selection, and named secondary AX actions. |
 | App discovery and targeting | Partial | Suniye resolves bundle IDs/display names and scans common app folders. The reference accepts display name, path, or bundle ID per call, returns usage metadata, reports ambiguity, and can launch through its helper. |
-| Window discovery and activation | Partial | Both resolve app windows internally. Suniye relies on on-screen layer-zero Core Graphics windows and a local activation heuristic; the reference delegates this to its native service. |
-| Accessibility observation | Partial | Both provide indexed AX state. Suniye sends a bounded full flattened tree every turn; the reference supports observation-scoped indexes, default diffs, full-tree refresh, and app-specific instructions. |
-| Screenshot handling | Partial | Both ground actions in a window screenshot. Suniye uses `CGWindowListCreateImage` in-process; the reference helper links ScreenCaptureKit and exposes capture/session-specific errors and update handling. |
-| Model and action loop | Partial, exact parity unknown | Suniye implements its own JSON chat-completions loop. It now requires a fresh observation before every action, refreshes after actions, uses a reference-like one-second base settle, and tells the model to prefer AX over coordinates. The reference's server-side model, exact prompt, and complete orchestration are not in the DMG. |
+| Window discovery and activation | Partial | Both resolve app windows internally. Suniye relies on layer-zero Core Graphics windows and a local activation heuristic. The reference requests on-screen, non-desktop CG windows, joins them to AX windows, observes targets in the background, and conditionally coordinates focus for input. |
+| Accessibility observation | Partial | Both provide indexed AX state. Suniye sends a bounded full flattened tree every turn. The reference assigns IDs in a depth-first rendered AX tree, retains revisions, maps IDs back to current AX elements, and supports insertion/removal diffs plus full-tree responses. |
+| Screenshot handling | Partial | Both ground actions in a window screenshot. Suniye uses `CGWindowListCreateImage` in-process. The reference has window-ID-scoped ScreenCaptureKit and SkyLight/WindowServer paths with crop, size, opacity, shadow, delay, and encoding options. |
+| Model and action loop | Partial | Suniye implements its own JSON chat-completions loop and requires a fresh observation before every action. The recovered reference instructions allow one or more ordered actions before fetching updated state for the next decision, use an approximately one-second base settle, and prefer AX indexes over coordinates. The client-selected model, request schema, context ordering, and Computer Use prompt injection are recovered; provider-private inference remains unknown. |
 | Permissions | Partial | Both require Accessibility and screen capture. The reference has helper-owned permission/session states and Apple Events usage; Suniye has only main-process Accessibility and Screen Recording checks. |
 | Approval and safety | Materially divergent | The reference performs policy checks on every app operation and can elicit session or persistent approval, with forbidden/denied outcomes and action-time safety rules. Suniye's default sets are empty and actions are auto-authorized. |
 | Native helper and IPC | Missing | The reference ships a signed UI-element service and native client using versioned IPC. Suniye has no Computer Use helper target or authenticated IPC boundary. |
@@ -51,13 +51,27 @@ safety policy, complete session semantics, and browser separation are release-le
 - `[Verified]` The public macOS surface has `list_apps`, `get_app_state`, and app-scoped actions.
   Accessibility indexes are scoped to the latest observation, diffs are enabled by default, and
   callers are told to refetch state after actions.
+- `[Verified]` A live MCP session against the DMG-shipped native client exposed exactly ten tools.
+  Calculator state and a JPEG screenshot were captured twice while another app remained
+  frontmost, proving background observation.
+- `[Verified]` Preserved symbols, imported APIs, and targeted disassembly recover the helper's AX
+  rendering/revision pipeline, on-screen/non-desktop CG-to-AX window matching, both screenshot
+  backends, screenshot-to-screen coordinate transform, semantic AX actions, process-scoped event
+  synthesis, conditional focus, settling, and stale-element refetch. See
+  `native-algorithm-recovery-2026-08-09.md`.
 - `[Verified]` The bundled UX assets expose Computer Use settings for Any App, Chrome/Edge,
   app-specific live-control plugins, extension management, and picture-in-picture activity.
 - `[Verified]` Browser control is packaged as separate browser and Chrome plugins with browser-
   specific session, extension, and safety surfaces.
-- `[Unknown]` The artifact does not expose the complete server-side model loop, exact model name,
-  exact prompt, runtime choice among all packaged policy documents, or complete browser-extension
-  protocol.
+- `[Verified]` The artifact exposes model-profile base instructions and complete readable Computer
+  Use operating instructions. The recovered GPT-5.6 Sol, Terra, and Luna base instructions are
+  identical in this DMG.
+- `[Verified]` The app-server accepts a client model override, the Responses request sends that
+  resolved slug, and the request-construction algorithm and role ordering are recovered. A
+  loopback request serialized by the DMG binary selected `gpt-5.6-luna`. See
+  `runtime-request-and-model-selection-recovery-2026-08-08.md`.
+- `[Unknown]` Provider-private inference, an actual response for an unexecuted task, five narrow
+  native branch/ranking details, and the complete browser-extension protocol remain unavailable.
 
 ## Highest-priority parity gaps
 

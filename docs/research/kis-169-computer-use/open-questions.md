@@ -2,14 +2,22 @@
 
 ## DMG questions
 
-- What exact model and prompt produce Computer Use actions?
-- Which service owns the complete agent loop?
-- Which native API captures the target window in each state?
-- How does the helper resolve an app name to one window?
-- What exact signal means user intervention?
-- What cancels an in-flight native action?
-- Which actions require approval in the full production policy?
-- How does browser control differ in its wire protocol?
+- `[Resolved]` The user/client-selected model slug, static prompts, request schema, and runtime
+  message ordering are recovered in `runtime-request-and-model-selection-recovery-2026-08-08.md`.
+- `[Resolved in observable behavior]` The native ten-tool schema, app resolution inputs,
+  background observation, AX rendering, window-discovery primitives, screenshot backends,
+  coordinate conversion, semantic actions, synthesized input, and settling/refetch architecture
+  are recovered in `native-algorithm-recovery-2026-08-09.md`.
+- `[Unknown]` Which desktop process owns each part of every production session across the
+  node-REPL and legacy-MCP variants?
+- `[Unknown]` What final comparator ranks multiple valid matched windows for one app?
+- `[Unknown]` What are the complete AX diff equality rules, line budgets, and full-tree fallbacks?
+- `[Unknown]` What exact matrix selects ScreenCaptureKit versus SkyLight for every capture?
+- `[Unknown]` What exact role/app conditions choose AX semantics versus synthesized input?
+- `[Unknown]` What are the intervention debounce and cancellation semantics once an event is
+  already being posted?
+- `[Unknown]` Which actions require approval in the full production policy?
+- `[Unknown]` How does browser control differ in its complete wire protocol?
 
 ## Suniye product questions
 
@@ -117,8 +125,10 @@
 - `[Resolved for the current agent loop]` Local action, failure, and duration caps are removed;
   explicit cancellation, model/provider termination, platform errors, and provider timeout remain
   terminal boundaries.
-- `[Unknown]` The complete helper IPC contract, server-side model loop/prompt, and browser
-  extension behavior remain unknown.
+- `[Resolved]` Client-side model selection, request construction, static prompts, and context-role
+  ordering are recovered in `runtime-request-and-model-selection-recovery-2026-08-08.md`.
+- `[Unknown]` The complete helper IPC authentication contract, the five native branch details
+  enumerated above, provider-private inference, and browser-extension behavior remain unknown.
 
 ## Direct voice follow-up — 2026-08-03
 
