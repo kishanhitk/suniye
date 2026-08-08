@@ -234,6 +234,7 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
         XCTAssertTrue(prompt.contains("cannot invoke global shortcuts"))
         XCTAssertTrue(prompt.contains("Never invent a target, element index, or action name."))
         XCTAssertTrue(prompt.contains("Do not default to the frontmost application."))
+        XCTAssertTrue(prompt.contains("call select_target"))
         XCTAssertTrue(prompt.contains("Never return an action before an application observation is present."))
     }
 
@@ -354,6 +355,80 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             cancellation: ComputerUseCancellationToken()
         )
         XCTAssertEqual(decision, .completed(message: "Done."))
+    }
+
+    func testModelClientUsesOneTypedToolCallForTheNextDesktopStep() async throws {
+        let endpoint = URL(string: "https://example.com/v1/chat/completions")!
+        ComputerUseModelURLProtocol.handler = { request in
+            let body = try XCTUnwrap(
+                try JSONSerialization.jsonObject(
+                    with: try XCTUnwrap(ComputerUseModelURLProtocol.bodyData(from: request))
+                ) as? [String: Any]
+            )
+            let tools = try XCTUnwrap(body["tools"] as? [[String: Any]])
+            let toolNames = try tools.map { tool in
+                let function = try XCTUnwrap(tool["function"] as? [String: Any])
+                return try XCTUnwrap(function["name"] as? String)
+            }
+            XCTAssertTrue(toolNames.contains("select_target"))
+            XCTAssertTrue(toolNames.contains("click_element"))
+            XCTAssertTrue(toolNames.contains("completed"))
+            XCTAssertEqual(body["tool_choice"] as? String, "required")
+            XCTAssertEqual(body["parallel_tool_calls"] as? Bool, false)
+
+            let responseJSON: [String: Any] = [
+                "choices": [
+                    [
+                        "message": [
+                            "content": NSNull(),
+                            "tool_calls": [
+                                [
+                                    "type": "function",
+                                    "function": [
+                                        "name": "click_element",
+                                        "arguments": #"{"element_index":17,"click_count":1,"mouse_button":"left"}"#,
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ]
+            let data = try JSONSerialization.data(withJSONObject: responseJSON)
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, data)
+        }
+
+        let client = OpenAICompatibleComputerUseModelClient(
+            configuration: ComputerUseRemoteModelConfiguration(
+                endpointURL: endpoint,
+                modelID: "tool-model",
+                apiKey: "test-key"
+            ),
+            completionClient: makeCompletionClient()
+        )
+
+        let decision = try await client.decide(
+            request: ComputerUseModelRequest(
+                instruction: "Press the visible button.",
+                observationContext: ComputerUseObservationContext(
+                    observation: makePhase3Observation(generation: 13)
+                ),
+                recentActionResults: [],
+                iteration: 1
+            ),
+            cancellation: ComputerUseCancellationToken()
+        )
+
+        XCTAssertEqual(
+            decision,
+            .action(.clickElement(elementIndex: 17, clickCount: 1, mouseButton: .left))
+        )
     }
 
     func testModelClientSendsAvailableScreenshot() async throws {
@@ -490,6 +565,46 @@ final class ComputerUsePhase5ModelTests: XCTestCase {
             guard case .invalidResponse = error else {
                 return XCTFail("Unexpected model error: \(error)")
             }
+        }
+    }
+
+    func testModelClientPreservesTheProviderStatusInRequestFailures() async {
+        let endpoint = URL(string: "https://example.com/v1/chat/completions")!
+        ComputerUseModelURLProtocol.handler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 429,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data())
+        }
+        let client = OpenAICompatibleComputerUseModelClient(
+            configuration: ComputerUseRemoteModelConfiguration(
+                endpointURL: endpoint,
+                modelID: "text-model",
+                apiKey: "test-key"
+            ),
+            completionClient: makeCompletionClient()
+        )
+
+        do {
+            _ = try await client.decide(
+                request: ComputerUseModelRequest(
+                    instruction: "Read the button.",
+                    recentActionResults: [],
+                    iteration: 1
+                ),
+                cancellation: ComputerUseCancellationToken()
+            )
+            XCTFail("Expected provider failure")
+        } catch let error as ComputerUseModelError {
+            XCTAssertEqual(
+                error,
+                .requestFailed("LLM provider error: http_429")
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
         }
     }
 

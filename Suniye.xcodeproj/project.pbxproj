@@ -145,6 +145,7 @@
 		A450DED6405BD9A57EEB5F5D /* LocalGemmaLlamaServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E002F2ED2661905D8B147320 /* LocalGemmaLlamaServerTests.swift */; };
 		A812A56A0A2C9789B8DEE871 /* UpdateServiceMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B02C346233A9DC50B3D8C611 /* UpdateServiceMoreTests.swift */; };
 		AA6055C8F1FCE5AEB5F539CE /* ComputerUsePhase1Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E06F1E626788284EEDF7BF0 /* ComputerUsePhase1Tests.swift */; };
+		AA721E15D6421BB25ABA9876 /* ComputerUseModelTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED0B05286A5D79D375063809 /* ComputerUseModelTools.swift */; };
 		AA7DAE1D8BC31737F5640A1B /* FragmentMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 82E6C7AA7DADED73D5C382DA /* FragmentMono-Regular.ttf */; };
 		ABBE39ACCFDBB6ADD2342962 /* AppAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A15D7D20796CE98FF1612651 /* AppAnalytics.swift */; };
 		AC9882C375B2BE7B4DA592C8 /* GeneralSettingsStoreMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6630118CE32F73C5461F0700 /* GeneralSettingsStoreMoreTests.swift */; };
@@ -451,6 +452,7 @@
 		EA9398D558E18F63DF60E14F /* ComputerUsePhase2ActionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUsePhase2ActionTests.swift; sourceTree = "<group>"; };
 		EB11655DD35A3470EDFC236F /* LLMSettingsStoreMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettingsStoreMoreTests.swift; sourceTree = "<group>"; };
 		EB37B94E17F7F98AC28DE3B4 /* EditLearningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditLearningTests.swift; sourceTree = "<group>"; };
+		ED0B05286A5D79D375063809 /* ComputerUseModelTools.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseModelTools.swift; sourceTree = "<group>"; };
 		EFA746307D9443BD6CC0A15D /* AppPromptBindingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPromptBindingTests.swift; sourceTree = "<group>"; };
 		F071EC20B9165DA02529D09C /* ModelManagerCoverageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerCoverageTests.swift; sourceTree = "<group>"; };
 		F198C419B5376572D7185A29 /* AppStateUpdateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateUpdateTests.swift; sourceTree = "<group>"; };
@@ -726,6 +728,7 @@
 				27D284AB90A99E14F74CD672 /* ComputerUseModelClient.swift */,
 				884B1CC2D66C8CB3E7D1C9D6 /* ComputerUseModelConfigurationFactory.swift */,
 				078039BD4516DD78B3F0B723 /* ComputerUseModels.swift */,
+				ED0B05286A5D79D375063809 /* ComputerUseModelTools.swift */,
 				FD44F10C318905A89E8CCDCC /* ComputerUseObservationService.swift */,
 				AF568F275723DEA3AC53D6FD /* ComputerUsePermissionService.swift */,
 				9B6CA4E65A17384B97489860 /* ComputerUsePlatformRunner.swift */,
@@ -948,6 +951,7 @@
 				EB5FE4279193EF9322BCAEA0 /* ComputerUseInputEventService.swift in Sources */,
 				B266BC6B62E2E28DE45AF733 /* ComputerUseModelClient.swift in Sources */,
 				B99B0D39DC70096C3BF79EAB /* ComputerUseModelConfigurationFactory.swift in Sources */,
+				AA721E15D6421BB25ABA9876 /* ComputerUseModelTools.swift in Sources */,
 				DAE1045F38EB7D01D86DD152 /* ComputerUseModels.swift in Sources */,
 				0AFA13F79B856CBDCFE32509 /* ComputerUseObservationService.swift in Sources */,
 				33F5D29E43701DEA2F88C25D /* ComputerUsePage.swift in Sources */,

@@ -316,7 +316,7 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
         XCTAssertEqual(actionService.requestIDs.count, 1)
     }
 
-    func testAgentRetriesBoundedModelAndModelDecisionFailures() async {
+    func testAgentStopsOnModelErrorsAndRetriesModelDecisions() async {
         let observation = Phase3StubObservationService(
             results: [
                 makePhase3Observation(generation: 1),
@@ -339,22 +339,20 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
         XCTAssertEqual(observation.observeCount, 2)
 
         let invalidModel = Phase3ScriptedModelClient(
-            decisions: [.completed(message: "done")],
+            decisions: [],
             errors: [ComputerUseModelError.invalidResponse("missing action")]
         )
         let invalidObservation = Phase3StubObservationService(
-            results: [makePhase3Observation(generation: 1), makePhase3Observation(generation: 2)]
+            result: makePhase3Observation(generation: 1)
         )
         let invalidAgent = makeAgent(model: invalidModel, observation: invalidObservation)
         let invalidResult = await invalidAgent.run(
             task: ComputerUseAgentTask(instruction: "Do it", applicationID: "target#42")
         )
-        XCTAssertEqual(invalidResult.phase, .completed)
-        XCTAssertEqual(invalidResult.failureCount, 1)
-        XCTAssertEqual(
-            invalidModel.requests[1].recentFailureMessages,
-            [ComputerUseModelError.invalidResponse("missing action").localizedDescription]
-        )
+        XCTAssertEqual(invalidResult.phase, .failed)
+        XCTAssertEqual(invalidResult.failureCount, 0)
+        XCTAssertEqual(invalidModel.requests.count, 1)
+        XCTAssertEqual(invalidObservation.observeCount, 1)
 
         let emptyDecisionModel = Phase3ScriptedModelClient(
             decisions: [
@@ -632,23 +630,22 @@ final class ComputerUsePhase3AgentTests: XCTestCase {
         XCTAssertEqual(result.failureCount, 4)
         XCTAssertEqual(model.requests[4].recentFailureMessages, ["one", "two", "three", "four"])
 
+        let modelErrorClient = Phase3ScriptedModelClient(
+            decisions: [],
+            errors: [ComputerUseModelError.requestFailed("network")]
+        )
         let modelErrorAgent = makeAgent(
-            model: Phase3ScriptedModelClient(
-                decisions: [.completed(message: "done")],
-                errors: [ComputerUseModelError.requestFailed("network")]
-            ),
+            model: modelErrorClient,
             observation: Phase3StubObservationService(
-                results: [
-                    makePhase3Observation(generation: 1),
-                    makePhase3Observation(generation: 2),
-                ]
+                result: makePhase3Observation(generation: 1)
             )
         )
         let modelErrorResult = await modelErrorAgent.run(
             task: ComputerUseAgentTask(instruction: "Do it", applicationID: "target#42")
         )
-        XCTAssertEqual(modelErrorResult.phase, .completed)
-        XCTAssertEqual(modelErrorResult.failureCount, 1)
+        XCTAssertEqual(modelErrorResult.phase, .failed)
+        XCTAssertEqual(modelErrorResult.failureCount, 0)
+        XCTAssertEqual(modelErrorClient.requests.count, 1)
 
         let invalidDecisionAgent = makeAgent(
             model: Phase3ScriptedModelClient(

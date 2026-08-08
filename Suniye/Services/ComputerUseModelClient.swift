@@ -52,25 +52,11 @@ enum ComputerUseRemoteModelDefaults {
     static let maxTokens = 2_048
 
     static let systemPrompt = """
-    You control one macOS application at a time through its current Accessibility state and window screenshot. Complete the user's task by returning one next decision.
+    You control one macOS application at a time through its current Accessibility state and window screenshot. Complete the user's task by calling exactly one provided tool for the next step. Do not return ordinary assistant text.
 
-    Return exactly one JSON object. Do not use Markdown fences. Do not include commentary outside the JSON object.
-
-    An action decision has this form. The nested action uses one of these forms:
-    {"kind":"action","action":{"kind":"click","x":100,"y":200,"click_count":1,"mouse_button":"left"}}
-    {"kind":"action","action":{"kind":"press_key","key":"Return"}}
-    {"kind":"action","action":{"kind":"scroll","element_index":3,"direction":"down","pages":1}}
-    {"kind":"action","action":{"kind":"click","element_index":3,"click_count":1,"mouse_button":"left"}}
-    {"kind":"action","action":{"kind":"type_text","text":"text explicitly required by the task"}}
-    {"kind":"action","action":{"kind":"set_value","element_index":3,"value":"text explicitly required by the task"}}
-    {"kind":"action","action":{"kind":"drag","from_x":100,"from_y":200,"to_x":300,"to_y":200}}
-    {"kind":"action","action":{"kind":"select_text","element_index":3,"text":"exact text","selection_type":"text","prefix":"optional","suffix":"optional"}}
-    {"kind":"action","action":{"kind":"perform_secondary_action","element_index":3,"action":"AXPress"}}
-    {"kind":"action","action":{"kind":"perform_secondary_action","element_index":3,"action":"AXShowMenu"}}
-
-    When the task names another application, use a target decision with its display name or bundle identifier. Prefer an exact value from Available applications when present. The host refreshes state for that application and launches it when needed. A target decision does not perform input.
+    When the task names another application, call select_target with its display name or bundle identifier. Prefer an exact value from Available applications when present. The host refreshes state for that application and launches it when needed. Selecting a target does not perform input.
     Before any application has been observed, first identify the application from the user's task and return a target decision. Do not default to the frontmost application. If the request can be answered without desktop interaction, complete it without selecting an application.
-    Use {"kind":"action","action":...} for one action. Use {"kind":"completed","message":"..."} when the task is complete. Use {"kind":"ask_user","question":"..."} when the user must decide something. Use {"kind":"blocked","reason":"..."} when the task cannot continue safely. Use {"kind":"retryable_failure","reason":"..."} only when the current observation is insufficient and another observation may help.
+    Call one action tool for one action. Call completed when the task is complete. Call ask_user when the user must decide something. Call blocked when the task cannot continue safely. Call retryable_failure only when the current observation is insufficient and another observation may help.
 
     Never return an action before an application observation is present.
     An action is valid only when Observation freshness is fresh. When it is stale, do not return an action; choose a target, request another observation, ask the user, report a block, or complete only if the task is already complete.
@@ -87,6 +73,9 @@ struct ComputerUseChatCompletionPayload: Encodable {
     let temperature: Int
     let maxTokens: Int
     let stream: Bool
+    let tools: [ComputerUseChatCompletionTool]
+    let toolChoice: String
+    let parallelToolCalls: Bool
 
     enum CodingKeys: String, CodingKey {
         case model
@@ -94,6 +83,9 @@ struct ComputerUseChatCompletionPayload: Encodable {
         case temperature
         case maxTokens = "max_tokens"
         case stream
+        case tools
+        case toolChoice = "tool_choice"
+        case parallelToolCalls = "parallel_tool_calls"
     }
 }
 
@@ -300,12 +292,15 @@ final class OpenAICompatibleComputerUseModelClient: ComputerUseModelClient {
             ],
             temperature: 0,
             maxTokens: configuration.maxTokens,
-            stream: false
+            stream: false,
+            tools: ComputerUseModelTools.all,
+            toolChoice: "required",
+            parallelToolCalls: false
         )
         let requestBody = try JSONEncoder().encode(payload)
 
         do {
-            let rawResponse = try await completionClient.complete(
+            let response = try await completionClient.completeResult(
                 endpointURL: configuration.endpointURL,
                 apiKey: configuration.apiKey,
                 requestBody: requestBody,
@@ -314,13 +309,29 @@ final class OpenAICompatibleComputerUseModelClient: ComputerUseModelClient {
             guard !cancellation.isCancelled else {
                 throw CancellationError()
             }
-            return try ComputerUseModelDecisionParser.parse(rawResponse)
+            if let toolCall = response.toolCalls.first {
+                guard response.toolCalls.count == 1 else {
+                    throw ComputerUseModelError.invalidResponse(
+                        "the response must contain exactly one tool call"
+                    )
+                }
+                return try ComputerUseModelToolCallParser.parse(
+                    name: toolCall.name,
+                    arguments: toolCall.arguments
+                )
+            }
+            guard let text = response.text else {
+                throw ComputerUseModelError.invalidResponse("the response did not contain a decision")
+            }
+            return try ComputerUseModelDecisionParser.parse(text)
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as ComputerUseModelError {
             throw error
         } catch let error as LLMPostProcessorError {
-            throw ComputerUseModelError.requestFailed(error.logValue)
+            throw ComputerUseModelError.requestFailed(
+                error.errorDescription ?? error.logValue
+            )
         } catch {
             throw ComputerUseModelError.requestFailed("request_failed")
         }

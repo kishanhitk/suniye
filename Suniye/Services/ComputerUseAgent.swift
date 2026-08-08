@@ -213,21 +213,16 @@ actor ComputerUseAgent {
                     )
                 )
             }
-            if let modelError = error as? ComputerUseModelError,
-               modelError == .notConfigured {
-                return .finish(
-                    result(
-                        phase: .failed,
-                        message: localizedMessage(error),
-                        question: nil,
-                        observation: state.latestObservation,
-                        actionResults: state.actionResults,
-                        failureCount: state.failureCount
-                    )
+            return .finish(
+                result(
+                    phase: .failed,
+                    message: localizedMessage(error),
+                    question: nil,
+                    observation: state.latestObservation,
+                    actionResults: state.actionResults,
+                    failureCount: state.failureCount
                 )
-            }
-
-            return retryAfterFailure(message: localizedMessage(error), state: &state)
+            )
         }
 
         if isCancelled(cancellation) {

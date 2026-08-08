@@ -13,20 +13,43 @@ enum ComputerUseWindowActivationPolicy {
 
 struct SystemComputerUseWindowActivator: ComputerUseWindowActivating {
     private let runningApplicationProvider: (Int32) -> NSRunningApplication?
+    private let applicationActivator: (NSRunningApplication) -> Bool
+    private let windowRaiser: (ComputerUseTarget) -> Bool
 
     init(
         runningApplicationProvider: @escaping (Int32) -> NSRunningApplication? = {
             NSRunningApplication(processIdentifier: $0)
+        },
+        applicationActivator: @escaping (NSRunningApplication) -> Bool = {
+            $0.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        },
+        windowRaiser: @escaping (ComputerUseTarget) -> Bool = { target in
+            let applicationElement = AXUIElementCreateApplication(
+                target.application.processIdentifier
+            )
+            guard let windowElement = SystemComputerUseAccessibilityReader.resolveWindowElement(
+                in: applicationElement,
+                target: target.window,
+                shouldCancel: { false }
+            ) else {
+                return false
+            }
+            return AXUIElementPerformAction(
+                windowElement,
+                kAXRaiseAction as CFString
+            ) == .success
         }
     ) {
         self.runningApplicationProvider = runningApplicationProvider
+        self.applicationActivator = applicationActivator
+        self.windowRaiser = windowRaiser
     }
 
     func activate(target: ComputerUseTarget) -> Bool {
-        guard let application = runningApplicationProvider(target.application.processIdentifier),
-              application.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) else {
+        guard let application = runningApplicationProvider(target.application.processIdentifier) else {
             return false
         }
+        let applicationActivated = applicationActivator(application)
 
         // Raising our own window through AX re-enters AppKit's accessibility path and can
         // trap while AppKit is ordering the window. Activation already brings this app forward.
@@ -34,21 +57,9 @@ struct SystemComputerUseWindowActivator: ComputerUseWindowActivating {
             targetProcessIdentifier: target.application.processIdentifier,
             currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier
         ) else {
-            return true
+            return applicationActivated
         }
 
-        let applicationElement = AXUIElementCreateApplication(target.application.processIdentifier)
-        guard let windowElement = SystemComputerUseAccessibilityReader.resolveWindowElement(
-            in: applicationElement,
-            target: target.window,
-            shouldCancel: { false }
-        ) else {
-            return true
-        }
-
-        // App activation is sufficient for PID-targeted input. Some native apps
-        // expose a window that can be read but do not accept AXRaise.
-        _ = AXUIElementPerformAction(windowElement, kAXRaiseAction as CFString)
-        return true
+        return windowRaiser(target) || applicationActivated
     }
 }

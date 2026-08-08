@@ -78,6 +78,28 @@ final class ComputerUsePhase5CoordinatorTests: XCTestCase {
         coordinator.clearConversation()
         XCTAssertTrue(coordinator.conversation.isEmpty)
         XCTAssertNil(coordinator.agentResult)
+        XCTAssertTrue(coordinator.agentInstruction.isEmpty)
+        XCTAssertFalse(coordinator.isVoiceTaskPending)
+    }
+
+    func testNewConversationClearsTheComposerDraft() async {
+        let coordinator = makeCoordinator(
+            model: Phase3ScriptedModelClient(decisions: [.completed(message: "Done.")]),
+            observation: makePhase3Observation(generation: 43),
+            actionService: Phase3StubActionService()
+        )
+
+        coordinator.start()
+        await waitForPhase(coordinator, .ready)
+        coordinator.conversation = [
+            ComputerUseConversationMessage(role: .assistant, text: "Previous response."),
+        ]
+        coordinator.agentInstruction = "Previous response."
+
+        coordinator.clearConversation()
+
+        XCTAssertTrue(coordinator.conversation.isEmpty)
+        XCTAssertTrue(coordinator.agentInstruction.isEmpty)
     }
 
     func testConversationalReplyDoesNotObserveActOrRefillTheComposer() async {

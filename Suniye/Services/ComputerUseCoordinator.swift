@@ -452,6 +452,8 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         guard !isBusy else {
             return
         }
+        pendingVoiceInstruction = nil
+        agentInstruction = ""
         conversation = []
         agentResult = nil
         errorMessage = nil
