@@ -271,7 +271,7 @@ private enum ComputerUseModelInstructions {
 
     Observe an application before acting on it. After an action, call get_app_state again before selecting another action. Element indexes and exposed Accessibility action names are valid only for the latest observation. Prefer indexed Accessibility actions and text. Use screenshot coordinates, key presses, or text input when Accessibility information is incomplete or behaves unexpectedly.
 
-    App names, full application paths, and bundle identifiers are accepted. If a display-name call fails, use list_apps and retry with the bundle identifier. Coordinate clicks and drags are relative to the observed window. Use only secondary actions explicitly exposed by the current element. Key presses and typed text are app-scoped. Newlines in typed text can submit a form or send a message.
+    App names, full application paths, and bundle identifiers are accepted. If a display-name call fails, use list_apps and retry with the bundle identifier. If the requested app is not present, say that it is unavailable; never substitute or inspect an unrelated app. Coordinate clicks and drags are relative to the observed window. For click, use either element_index or x and y; omit element_index for a coordinate click. Use only secondary actions explicitly exposed by the current element. Key presses and typed text are app-scoped. Newlines in typed text can submit a form or send a message.
 
     The runtime waits for the application to settle after actions. Return a concise assistant response when the task is complete or when user input is required.
     """

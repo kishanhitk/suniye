@@ -120,6 +120,75 @@ final class ComputerUseAccessibilityTreeTests: XCTestCase {
         XCTAssertEqual(revision.text, "0: AXButton \"After\"")
     }
 
+    func testAccessibilityActionDescriptionsMatchTheModelFacingContract() {
+        let described = ComputerUseAccessibilityActionResolver.descriptor(
+            rawName: "AXScrollDownByPage",
+            description: "scroll down by a page"
+        )
+        let undescribed = ComputerUseAccessibilityActionResolver.descriptor(
+            rawName: "AXCustomAction",
+            description: "  "
+        )
+
+        XCTAssertEqual(
+            described,
+            .init(rawName: "AXScrollDownByPage", exposedName: "Scroll Down")
+        )
+        XCTAssertEqual(
+            undescribed,
+            .init(rawName: "AXCustomAction", exposedName: "AXCustomAction")
+        )
+        XCTAssertEqual(
+            ComputerUseAccessibilityActionResolver.rawName(
+                exposedName: "Scroll Down",
+                descriptors: [described]
+            ),
+            "AXScrollDownByPage"
+        )
+        XCTAssertNil(
+            ComputerUseAccessibilityActionResolver.rawName(
+                exposedName: "AXScrollDownByPage",
+                descriptors: [described]
+            )
+        )
+
+        XCTAssertEqual(
+            ComputerUseAccessibilityActionResolver.descriptor(
+                rawName: "AXScrollUpByPage",
+                description: "scroll up by a page"
+            ).exposedName,
+            "Scroll Up"
+        )
+        XCTAssertEqual(
+            ComputerUseAccessibilityActionResolver.descriptor(
+                rawName: "AXScrollLeftByPage",
+                description: "scroll left by a page"
+            ).exposedName,
+            "Scroll Left"
+        )
+        XCTAssertEqual(
+            ComputerUseAccessibilityActionResolver.descriptor(
+                rawName: "AXScrollRightByPage",
+                description: "scroll right by a page"
+            ).exposedName,
+            "Scroll Right"
+        )
+    }
+
+    func testAmbiguousAccessibilityActionDescriptionsAreRejected() {
+        let descriptors = [
+            ComputerUseAccessibilityActionDescriptor(rawName: "AXFirst", exposedName: "Choose"),
+            ComputerUseAccessibilityActionDescriptor(rawName: "AXSecond", exposedName: "Choose"),
+        ]
+
+        XCTAssertNil(
+            ComputerUseAccessibilityActionResolver.rawName(
+                exposedName: "Choose",
+                descriptors: descriptors
+            )
+        )
+    }
+
     func testInsertedElementGetsNewIDAndRemovedElementLeavesCurrentMap() async {
         let store = ComputerUseAccessibilityRevisionStore()
         _ = await store.revision(

@@ -69,7 +69,9 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
                 value: renderedValue(from: element),
                 isEnabled: boolean(kAXEnabledAttribute, from: element) ?? true,
                 isValueSettable: isValueSettable(element),
-                secondaryActions: actionNames(from: element).filter { $0 != kAXPressAction },
+                secondaryActions: actions(from: element)
+                    .filter { $0.rawName != kAXPressAction }
+                    .map(\.exposedName),
                 children: children.compactMap { read($0, depth: depth + 1) }
             )
         }
@@ -114,8 +116,10 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
             return String(rendered.prefix(maximumValueLength))
         }
 
-        private func actionNames(from element: AXUIElement) -> [String] {
-            SystemComputerUseAccessibilityAPI.actionNames(from: element)
+        private func actions(from element: AXUIElement)
+            -> [ComputerUseAccessibilityActionDescriptor]
+        {
+            SystemComputerUseAccessibilityAPI.actions(from: element)
         }
     }
 }

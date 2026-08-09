@@ -64,6 +64,10 @@ final class ComputerUseRemoteModelClientTests: XCTestCase {
         )
         let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
         XCTAssertEqual(messages.compactMap { $0["role"] as? String }, ["system", "user"])
+        XCTAssertTrue(
+            try XCTUnwrap(messages.first?["content"] as? String)
+                .contains("never substitute or inspect an unrelated app")
+        )
         XCTAssertEqual(messages.last?["content"] as? String, "Read the Calculator result.")
     }
 

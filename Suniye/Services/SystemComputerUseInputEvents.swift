@@ -1,4 +1,4 @@
-import CoreGraphics
+import AppKit
 import Foundation
 
 struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
@@ -8,7 +8,10 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
         clickCount: Int,
         pid: Int32
     ) async throws {
-        try await perform {
+        try await withActivatedApplication(pid: pid) {
+            try Task.checkCancellation()
+            try Self.postMouseEvent(type: .mouseMoved, at: point)
+            try await Task.sleep(for: .milliseconds(16))
             let button = mouseButton.cgButton
             for clickIndex in 1 ... clickCount {
                 try Task.checkCancellation()
@@ -23,46 +26,43 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
                         mouseType: mouseButton.upEvent,
                         mouseCursorPosition: point,
                         mouseButton: button
-                    ) else {
+                ) else {
                     throw ComputerUseActionError.eventCreationFailed
                 }
                 down.setIntegerValueField(.mouseEventClickState, value: Int64(clickIndex))
                 up.setIntegerValueField(.mouseEventClickState, value: Int64(clickIndex))
-                down.postToPid(pid)
-                up.postToPid(pid)
+                down.post(tap: .cgSessionEventTap)
+                try await Task.sleep(for: .milliseconds(12))
+                up.post(tap: .cgSessionEventTap)
+                if clickIndex < clickCount {
+                    try await Task.sleep(for: .milliseconds(50))
+                }
             }
         }
     }
 
     func drag(from start: CGPoint, to end: CGPoint, pid: Int32) async throws {
-        try await perform {
-            guard let down = CGEvent(
-                mouseEventSource: nil,
-                mouseType: .leftMouseDown,
-                mouseCursorPosition: start,
-                mouseButton: .left
-            ),
-                let dragged = CGEvent(
-                    mouseEventSource: nil,
-                    mouseType: .leftMouseDragged,
-                    mouseCursorPosition: end,
-                    mouseButton: .left
-                ),
-                let up = CGEvent(
-                    mouseEventSource: nil,
-                    mouseType: .leftMouseUp,
-                    mouseCursorPosition: end,
-                    mouseButton: .left
-                ) else {
-                throw ComputerUseActionError.eventCreationFailed
-            }
-            down.postToPid(pid)
+        try await withActivatedApplication(pid: pid) {
+            try Task.checkCancellation()
+            try Self.postMouseEvent(type: .mouseMoved, at: start)
+            try await Task.sleep(for: .milliseconds(16))
+            try Self.postMouseEvent(type: .leftMouseDown, at: start)
+
+            var lastPoint = start
             do {
-                try Task.checkCancellation()
-                dragged.postToPid(pid)
-                up.postToPid(pid)
+                for step in 1 ... 12 {
+                    try Task.checkCancellation()
+                    let progress = CGFloat(step) / 12
+                    lastPoint = CGPoint(
+                        x: start.x + (end.x - start.x) * progress,
+                        y: start.y + (end.y - start.y) * progress
+                    )
+                    try Self.postMouseEvent(type: .leftMouseDragged, at: lastPoint)
+                    try await Task.sleep(for: .milliseconds(12))
+                }
+                try Self.postMouseEvent(type: .leftMouseUp, at: end)
             } catch {
-                up.postToPid(pid)
+                try? Self.postMouseEvent(type: .leftMouseUp, at: lastPoint)
                 throw error
             }
         }
@@ -74,7 +74,7 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
         pages: Double,
         pid: Int32
     ) async throws {
-        try await perform {
+        try await withActivatedApplication(pid: pid) {
             guard let move = CGEvent(
                 mouseEventSource: nil,
                 mouseType: .mouseMoved,
@@ -94,13 +94,14 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
             ) else {
                 throw ComputerUseActionError.eventCreationFailed
             }
-            move.postToPid(pid)
-            scroll.postToPid(pid)
+            scroll.location = point
+            move.post(tap: .cgSessionEventTap)
+            scroll.post(tap: .cgSessionEventTap)
         }
     }
 
     func pressKey(_ chord: String, pid: Int32) async throws {
-        let parsed = try ComputerUseKeyChord.parse(chord)
+        let parsed = try await Self.parseKeyChord(chord)
         try await perform {
             guard let down = CGEvent(
                 keyboardEventSource: nil,
@@ -125,6 +126,11 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
                 throw error
             }
         }
+    }
+
+    @MainActor
+    static func parseKeyChord(_ chord: String) throws -> ComputerUseParsedKeyChord {
+        try ComputerUseKeyChord.parse(chord)
     }
 
     func typeText(_ text: String, pid: Int32) async throws {
@@ -176,6 +182,70 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
             try operation()
             try Task.checkCancellation()
         }.value
+    }
+
+    private static func postMouseEvent(
+        type: CGEventType,
+        at point: CGPoint
+    ) throws {
+        guard let event = CGEvent(
+            mouseEventSource: nil,
+            mouseType: type,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        ) else {
+            throw ComputerUseActionError.eventCreationFailed
+        }
+        event.post(tap: .cgSessionEventTap)
+    }
+
+    private func withActivatedApplication(
+        pid: Int32,
+        operation: @escaping @Sendable () async throws -> Void
+    ) async throws {
+        let previousPID = try await Self.activateApplication(pid: pid)
+        do {
+            try await Self.waitUntilFrontmost(pid: pid)
+            try await Task.detached(priority: .userInitiated) {
+                try await operation()
+            }.value
+            await Self.restoreApplication(pid: previousPID)
+        } catch {
+            await Self.restoreApplication(pid: previousPID)
+            throw error
+        }
+    }
+
+    @MainActor
+    private static func activateApplication(pid: Int32) throws -> Int32? {
+        let previousPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        guard previousPID != pid else {
+            return nil
+        }
+        guard let application = NSRunningApplication(processIdentifier: pid) else {
+            throw ComputerUseActionError.applicationActivationFailed
+        }
+        application.activate(options: [.activateAllWindows])
+        return previousPID
+    }
+
+    private static func waitUntilFrontmost(pid: Int32) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+        while await MainActor.run(body: {
+            NSWorkspace.shared.frontmostApplication?.processIdentifier
+        }) != pid {
+            guard clock.now < deadline else {
+                throw ComputerUseActionError.applicationActivationFailed
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    @MainActor
+    private static func restoreApplication(pid: Int32?) {
+        guard let pid else { return }
+        NSRunningApplication(processIdentifier: pid)?.activate(options: [])
     }
 }
 

@@ -6,19 +6,19 @@ final class ComputerUseInputTranslationTests: XCTestCase {
     func testScrollDirectionsProducePageScaledAxes() {
         XCTAssertEqual(
             ComputerUseScrollDirection.up.eventDelta(pages: 1.5),
-            ComputerUseScrollDelta(horizontal: 0, vertical: -600)
-        )
-        XCTAssertEqual(
-            ComputerUseScrollDirection.down.eventDelta(pages: 1.5),
             ComputerUseScrollDelta(horizontal: 0, vertical: 600)
         )
         XCTAssertEqual(
+            ComputerUseScrollDirection.down.eventDelta(pages: 1.5),
+            ComputerUseScrollDelta(horizontal: 0, vertical: -600)
+        )
+        XCTAssertEqual(
             ComputerUseScrollDirection.left.eventDelta(pages: 1.5),
-            ComputerUseScrollDelta(horizontal: -600, vertical: 0)
+            ComputerUseScrollDelta(horizontal: 600, vertical: 0)
         )
         XCTAssertEqual(
             ComputerUseScrollDirection.right.eventDelta(pages: 1.5),
-            ComputerUseScrollDelta(horizontal: 600, vertical: 0)
+            ComputerUseScrollDelta(horizontal: -600, vertical: 0)
         )
     }
 
@@ -62,5 +62,13 @@ final class ComputerUseInputTranslationTests: XCTestCase {
         XCTAssertThrowsError(try ComputerUseKeyChord.parse("Control++a"))
         XCTAssertThrowsError(try ComputerUseKeyChord.parse("Hyper_L+a"))
         XCTAssertThrowsError(try ComputerUseKeyChord.parse("not-a-key"))
+    }
+
+    func testSystemKeyChordParsingHopsToMainActor() async throws {
+        let parsed = try await Task.detached {
+            try await SystemComputerUseInputEvents.parseKeyChord("super+a")
+        }.value
+
+        XCTAssertEqual(parsed, .init(keyCode: 0, flags: .maskCommand))
     }
 }

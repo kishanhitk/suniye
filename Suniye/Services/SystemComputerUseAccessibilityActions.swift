@@ -7,7 +7,9 @@ struct SystemComputerUseAccessibilityActions: ComputerUseAccessibilityActionPerf
         target: ComputerUseObservedTarget
     ) async throws -> Bool {
         try await run(reference: reference, target: target) { worker, element in
-            guard worker.actions(element).contains(kAXPressAction as String) else {
+            guard worker.actions(element).contains(where: {
+                $0.rawName == kAXPressAction as String
+            }) else {
                 return false
             }
             guard AXUIElementPerformAction(element, kAXPressAction as CFString) == .success else {
@@ -41,8 +43,12 @@ struct SystemComputerUseAccessibilityActions: ComputerUseAccessibilityActionPerf
         target: ComputerUseObservedTarget
     ) async throws {
         try await run(reference: reference, target: target) { worker, element in
-            guard worker.actions(element).contains(action),
-                  AXUIElementPerformAction(element, action as CFString) == .success else {
+            let descriptors = worker.actions(element)
+            guard let rawName = ComputerUseAccessibilityActionResolver.rawName(
+                exposedName: action,
+                descriptors: descriptors
+            ),
+                worker.perform(rawAction: rawName, on: element) else {
                 throw ComputerUseActionError.actionUnavailable(action)
             }
         }
@@ -159,13 +165,31 @@ private struct Worker: Sendable {
         if SystemComputerUseAccessibilityAPI.boolean(kAXEnabledAttribute, from: element) == false {
             throw ComputerUseActionError.elementDisabled
         }
-        if actions(element).contains(Self.scrollToVisibleAction) {
+        if actions(element).contains(where: { $0.rawName == Self.scrollToVisibleAction }) {
             AXUIElementPerformAction(element, Self.scrollToVisibleAction as CFString)
         }
     }
 
-    func actions(_ element: AXUIElement) -> [String] {
-        SystemComputerUseAccessibilityAPI.actionNames(from: element)
+    func actions(_ element: AXUIElement) -> [ComputerUseAccessibilityActionDescriptor] {
+        SystemComputerUseAccessibilityAPI.actions(from: element)
+    }
+
+    func perform(rawAction: String, on element: AXUIElement) -> Bool {
+        if AXUIElementPerformAction(element, rawAction as CFString) == .success {
+            return true
+        }
+        guard let pageScroll = PageScroll(rawAction: rawAction),
+              let scrollBar = SystemComputerUseAccessibilityAPI.element(
+                pageScroll.scrollBarAttribute,
+                from: element
+              ),
+              let pageButton = descendants(of: scrollBar).first(where: {
+                SystemComputerUseAccessibilityAPI.string(kAXSubroleAttribute, from: $0)
+                    == pageScroll.buttonSubrole
+              }) else {
+            return false
+        }
+        return AXUIElementPerformAction(pageButton, kAXPressAction as CFString) == .success
     }
 
     private func accessibilityRoots() throws -> [AXUIElement] {
@@ -219,6 +243,11 @@ private struct Worker: Sendable {
         }
     }
 
+    private func descendants(of root: AXUIElement) -> [AXUIElement] {
+        var remaining = Self.maximumSearchElements
+        return descendants(of: root, depth: 0, remaining: &remaining)
+    }
+
     private func matches(
         _ element: AXUIElement,
         _ reference: ComputerUseAccessibilityElementReference
@@ -236,5 +265,29 @@ private struct Worker: Sendable {
             kAXIdentifierAttribute,
             from: element
         ) == identifier
+    }
+}
+
+private struct PageScroll {
+    let scrollBarAttribute: String
+    let buttonSubrole: String
+
+    init?(rawAction: String) {
+        switch rawAction {
+        case "AXScrollDownByPage":
+            scrollBarAttribute = kAXVerticalScrollBarAttribute as String
+            buttonSubrole = kAXIncrementPageSubrole as String
+        case "AXScrollUpByPage":
+            scrollBarAttribute = kAXVerticalScrollBarAttribute as String
+            buttonSubrole = kAXDecrementPageSubrole as String
+        case "AXScrollRightByPage":
+            scrollBarAttribute = kAXHorizontalScrollBarAttribute as String
+            buttonSubrole = kAXIncrementPageSubrole as String
+        case "AXScrollLeftByPage":
+            scrollBarAttribute = kAXHorizontalScrollBarAttribute as String
+            buttonSubrole = kAXDecrementPageSubrole as String
+        default:
+            return nil
+        }
     }
 }

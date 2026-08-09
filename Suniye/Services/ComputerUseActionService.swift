@@ -19,6 +19,7 @@ enum ComputerUseActionError: LocalizedError, Equatable, Sendable {
     case textAmbiguous(String)
     case screenshotUnavailable
     case invalidArgument(String)
+    case applicationActivationFailed
     case eventCreationFailed
     case unsupportedKey(String)
 
@@ -46,6 +47,8 @@ enum ComputerUseActionError: LocalizedError, Equatable, Sendable {
             "A current window screenshot is required for coordinate input."
         case let .invalidArgument(message):
             message
+        case .applicationActivationFailed:
+            "The target application could not be activated for pointer input."
         case .eventCreationFailed:
             "macOS could not create the input event."
         case let .unsupportedKey(key):

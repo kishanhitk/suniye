@@ -9,6 +9,26 @@ final class ComputerUseModelToolContractTests: XCTestCase {
         )
     }
 
+    func testClickToolExplainsTheElementOrCoordinateChoice() throws {
+        let click = try XCTUnwrap(
+            ComputerUseModelToolCatalog.all.first { $0.name == .click }
+        )
+
+        XCTAssertTrue(click.function.description.contains("Omit element_index"))
+        XCTAssertTrue(
+            try XCTUnwrap(click.function.parameters.properties["x"])
+                .description.contains("no element_index")
+        )
+        XCTAssertTrue(
+            try XCTUnwrap(click.function.parameters.properties["y"])
+                .description.contains("no element_index")
+        )
+        XCTAssertEqual(
+            click.function.parameters.oneOf?.map(\.required),
+            [["element_index"], ["x", "y"]]
+        )
+    }
+
     func testToolSchemasPreserveRecoveredArgumentsAndRequiredFields() throws {
         let encoded = try JSONEncoder().encode(ComputerUseModelToolCatalog.all)
         let tools = try XCTUnwrap(

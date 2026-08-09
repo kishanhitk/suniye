@@ -8,9 +8,14 @@ struct ComputerUseModelTool: Encodable, Sendable {
     }
 
     struct Parameters: Encodable, Sendable {
+        struct RequiredVariant: Encodable, Sendable {
+            let required: [String]
+        }
+
         let type = "object"
         let properties: [String: Property]
         let required: [String]
+        let oneOf: [RequiredVariant]?
         let additionalProperties = false
     }
 
@@ -54,19 +59,30 @@ enum ComputerUseModelToolCatalog {
         ),
         tool(
             .click,
-            "Click an observed Accessibility element or window-relative screenshot coordinates.",
+            "Click exactly one target: either an observed Accessibility element_index, or " +
+                "window-relative screenshot x and y coordinates. Omit element_index when using " +
+                "coordinates.",
             [
                 "app": app,
-                "element_index": integer("Element index from the latest observation."),
-                "x": number("Window-relative horizontal screenshot coordinate."),
-                "y": number("Window-relative vertical screenshot coordinate."),
+                "element_index": integer(
+                    "Element index from the latest observation. Use instead of x and y."
+                ),
+                "x": number(
+                    "Window-relative horizontal screenshot coordinate. Requires y and no " +
+                        "element_index."
+                ),
+                "y": number(
+                    "Window-relative vertical screenshot coordinate. Requires x and no " +
+                        "element_index."
+                ),
                 "mouse_button": string(
                     "Mouse button.",
                     values: ["left", "right", "middle", "l", "r", "m"]
                 ),
                 "click_count": integer("Number of clicks."),
             ],
-            ["app"]
+            ["app"],
+            alternatives: [["element_index"], ["x", "y"]]
         ),
         tool(
             .performSecondaryAction,
@@ -152,14 +168,21 @@ enum ComputerUseModelToolCatalog {
         _ name: ComputerUseToolName,
         _ description: String,
         _ properties: [String: ComputerUseModelTool.Property],
-        _ required: [String]
+        _ required: [String],
+        alternatives: [[String]] = []
     ) -> ComputerUseModelTool {
         ComputerUseModelTool(
             operation: name,
             function: .init(
                 name: name.rawValue,
                 description: description,
-                parameters: .init(properties: properties, required: required)
+                parameters: .init(
+                    properties: properties,
+                    required: required,
+                    oneOf: alternatives.isEmpty
+                        ? nil
+                        : alternatives.map(ComputerUseModelTool.Parameters.RequiredVariant.init)
+                )
             )
         )
     }

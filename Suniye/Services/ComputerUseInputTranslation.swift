@@ -9,10 +9,10 @@ extension ComputerUseScrollDirection {
     func eventDelta(pages: Double) -> ComputerUseScrollDelta {
         let amount = pages * 400
         return switch self {
-        case .up: ComputerUseScrollDelta(horizontal: 0, vertical: -amount)
-        case .down: ComputerUseScrollDelta(horizontal: 0, vertical: amount)
-        case .left: ComputerUseScrollDelta(horizontal: -amount, vertical: 0)
-        case .right: ComputerUseScrollDelta(horizontal: amount, vertical: 0)
+        case .up: ComputerUseScrollDelta(horizontal: 0, vertical: amount)
+        case .down: ComputerUseScrollDelta(horizontal: 0, vertical: -amount)
+        case .left: ComputerUseScrollDelta(horizontal: amount, vertical: 0)
+        case .right: ComputerUseScrollDelta(horizontal: -amount, vertical: 0)
         }
     }
 }

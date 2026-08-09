@@ -1,6 +1,40 @@
 import ApplicationServices
 import Foundation
 
+struct ComputerUseAccessibilityActionDescriptor: Equatable, Sendable {
+    let rawName: String
+    let exposedName: String
+}
+
+enum ComputerUseAccessibilityActionResolver {
+    private static let canonicalNames = [
+        "AXScrollDownByPage": "Scroll Down",
+        "AXScrollLeftByPage": "Scroll Left",
+        "AXScrollRightByPage": "Scroll Right",
+        "AXScrollUpByPage": "Scroll Up",
+    ]
+
+    static func descriptor(rawName: String, description: String?)
+        -> ComputerUseAccessibilityActionDescriptor
+    {
+        let exposedName = description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ComputerUseAccessibilityActionDescriptor(
+            rawName: rawName,
+            exposedName: canonicalNames[rawName]
+                ?? exposedName.flatMap { $0.isEmpty ? nil : $0 }
+                ?? rawName
+        )
+    }
+
+    static func rawName(
+        exposedName: String,
+        descriptors: [ComputerUseAccessibilityActionDescriptor]
+    ) -> String? {
+        let matches = descriptors.filter { $0.exposedName == exposedName }
+        return matches.count == 1 ? matches[0].rawName : nil
+    }
+}
+
 enum SystemComputerUseAccessibilityAPI {
     static func copy(
         _ attribute: String,
@@ -73,6 +107,27 @@ enum SystemComputerUseAccessibilityAPI {
             return []
         }
         return names as? [String] ?? []
+    }
+
+    static func actions(from element: AXUIElement) -> [ComputerUseAccessibilityActionDescriptor] {
+        actionNames(from: element).map { rawName in
+            ComputerUseAccessibilityActionResolver.descriptor(
+                rawName: rawName,
+                description: actionDescription(rawName, from: element)
+            )
+        }
+    }
+
+    private static func actionDescription(_ action: String, from element: AXUIElement) -> String? {
+        var description: CFString?
+        guard AXUIElementCopyActionDescription(
+            element,
+            action as CFString,
+            &description
+        ) == .success else {
+            return nil
+        }
+        return description as String?
     }
 
     private static func axValue(_ attribute: String, from element: AXUIElement) -> AXValue? {
