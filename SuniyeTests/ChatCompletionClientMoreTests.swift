@@ -85,6 +85,49 @@ final class ChatCompletionClientMoreTests: XCTestCase {
         await assertMalformed(client: client)
     }
 
+    func testStructuredToolCallResultPreservesItsIdentityAndArguments() async throws {
+        let client = makeClient()
+        ScriptedResponseURLProtocol.handler = { request in
+            let json: [String: Any] = [
+                "choices": [[
+                    "message": [
+                        "content": NSNull(),
+                        "tool_calls": [[
+                            "id": "call-state",
+                            "type": "function",
+                            "function": [
+                                "name": "get_app_state",
+                                "arguments": #"{"app":"Calculator"}"#,
+                            ],
+                        ]],
+                    ],
+                ]],
+            ]
+            return try Self.httpResponse(for: request, json: json)
+        }
+
+        let result = try await client.completeResult(
+            endpointURL: endpointURL,
+            apiKey: "key",
+            requestBody: Data("{}".utf8),
+            timeoutSeconds: 3
+        )
+
+        XCTAssertEqual(
+            result,
+            ChatCompletionResult(
+                text: nil,
+                toolCalls: [
+                    ChatCompletionToolCall(
+                        id: "call-state",
+                        name: "get_app_state",
+                        arguments: #"{"app":"Calculator"}"#
+                    ),
+                ]
+            )
+        )
+    }
+
     // MARK: - Helpers
 
     private var endpointURL: URL {

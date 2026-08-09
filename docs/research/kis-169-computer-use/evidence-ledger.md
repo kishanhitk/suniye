@@ -954,3 +954,32 @@ Sources: `phase-3-native-actions-2026-08-09.md`, `ComputerUseActionService.swift
   coverage is 95.38% (12,277/12,871 lines); E2E preflight and smoke both pass.
 - `[Live required]` Safe cross-process native action testing remains pending under the final
   installed Preview's Accessibility and Screen Recording identity.
+
+### Entry 59: Fresh implementation phase 4 provider and agent loop
+
+Sources: `phase-4-provider-agent-loop-2026-08-09.md`, the recovered operating instructions and
+request-order evidence, `ComputerUseAgent.swift`, `ComputerUseRemoteModelClient.swift`, the exact
+tool catalog and decoder, and focused/full validation.
+
+- `[Verified]` The inspected desktop contract exposes exactly ten operations, disables parallel
+  tool calls, preserves ordered conversation/tool results, and uses normal assistant text for a
+  terminal response or user question.
+- `[Implemented]` Suniye exposes exactly those ten operations to the configured model and decodes
+  them into the typed native backend without a deterministic matcher, frontmost fallback, target
+  lock, invented completion tool, or local action/failure/duration cap.
+- `[Implemented]` The agent preserves prior conversation, the current task, assistant tool calls,
+  native results, and screenshots in order. Native errors return to the model for recovery;
+  cancellation remains terminal.
+- `[Implemented]` The selected endpoint, model, and key come from existing user settings without
+  requiring Magic Format to be enabled.
+- `[Independent choice]` The current wire uses direct function tools over Suniye's existing
+  OpenAI-compatible Chat Completions transport. The inspected app's Responses/node-REPL transport
+  and provider-private behavior are not reproduced byte for byte.
+- `[Corrected]` The strict review removed a force unwrap, localized the sendability assertion,
+  separated screenshot/result serialization, and prevented cancellation from being converted into
+  a retryable tool error.
+- `[Verified]` The full suite executes 1,052 tests with 1,050 passed, 2 skipped, and 0 failed.
+  Gated coverage is 94.93% (12,702/13,380 lines) against the explicitly selected 80% floor. E2E
+  preflight and smoke both pass.
+- `[Not implemented]` Main-actor coordinator integration, final permission/intervention/voice/chat
+  UX, and installed live-provider Computer Use validation remain subsequent work.

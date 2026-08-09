@@ -25,6 +25,23 @@ struct ComputerUseAppState: Codable, Equatable, Sendable {
     let app: String
     let screenshot: URL?
     let text: String
+
+    enum CodingKeys: String, CodingKey {
+        case app
+        case screenshot
+        case text
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(app, forKey: .app)
+        if let screenshot {
+            try container.encode(screenshot, forKey: .screenshot)
+        } else {
+            try container.encodeNil(forKey: .screenshot)
+        }
+        try container.encode(text, forKey: .text)
+    }
 }
 
 enum ComputerUseMouseButton: String, Codable, Equatable, Sendable {

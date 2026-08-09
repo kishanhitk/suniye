@@ -92,12 +92,36 @@
 
 ## Phase 3 integration gates
 
-- Which model provider may receive screenshots, AX text, action results, and failure messages?
-- Does the local-first promise require a fully local Computer Use model, or can the user choose a remote provider with explicit disclosure?
-- What request timeout and provider cancellation contract enforces the agent duration limit while a model request is in flight?
+- `[Resolved for the fresh implementation]` The endpoint, model slug, and API key are selected by
+  the user through Suniye's existing API Endpoint settings. The selected provider receives the AX
+  text, screenshots, action results, and failure messages needed for the requested run.
+- `[Product question]` Does the local-first promise require a fully local Computer Use model, or
+  is a user-selected remote provider acceptable with explicit disclosure?
+- `[Independent choice]` Provider requests use the existing 120-second timeout. There is no local
+  agent-duration cap; task cancellation cancels an in-flight provider request.
 - How should `ComputerUseAgentResult` events connect to the main-actor coordinator without allowing the model to mutate views?
-- Which model response schema and prompt produce reliable typed actions for each supported target app?
-- Should action failures be shown to the user before the agent retries, or should the first release stop after one failure?
+- `[Resolved in deterministic code]` The model receives exactly the ten recovered function tools,
+  and normal assistant text is terminal. The independent system prompt follows the recovered
+  observable operating logic.
+- `[Resolved in deterministic code]` Action failures return to the model as tool results so it can
+  recover. The conversation UI may surface those retries without blocking them.
+
+## Fresh phase 4 provider-loop follow-up
+
+- `[Resolved in deterministic code]` Prior conversation precedes the current task; assistant tool
+  calls, native tool results, and observation screenshots remain ordered for subsequent requests.
+- `[Resolved in deterministic code]` No deterministic instruction matcher, frontmost fallback,
+  target lock, completion tool, action cap, failure cap, or duration cap is present.
+- `[Independent choice]` Suniye uses its OpenAI-compatible Chat Completions endpoint and exposes
+  ten direct function tools. The inspected client uses a Responses/node-REPL route.
+- `[Independent choice]` Screenshots are supplied as a follow-on user multimodal image after the
+  corresponding tool result for broad provider compatibility.
+- `[Unknown]` Does the user's selected live model support the exact tool-call and image-message
+  combination reliably?
+- `[Unknown]` What provider-private routing, inference, hidden instructions, or output repair occur
+  beyond the inspected client boundary?
+- `[Next]` Connect the actor agent to the main-actor coordinator and final conversation UX without
+  allowing the model layer to mutate SwiftUI state.
 
 ## Phase 4 integration gates
 
