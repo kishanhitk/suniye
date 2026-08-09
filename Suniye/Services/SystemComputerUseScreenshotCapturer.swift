@@ -19,21 +19,23 @@ actor SystemComputerUseScreenshotCapturer: ComputerUseScreenshotCapturing {
         guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
             throw ComputerUseScreenshotError.windowUnavailable(windowID)
         }
-        let scale = await MainActor.run {
+        let backingScale = await MainActor.run {
             NSScreen.screens.first(where: { $0.frame.intersects(window.frame) })?
                 .backingScaleFactor ?? 1
         }
         let configuration = SCStreamConfiguration()
-        configuration.width = max(1, Int(window.frame.width * scale))
-        configuration.height = max(1, Int(window.frame.height * scale))
+        configuration.width = max(1, Int(window.frame.width * backingScale))
+        configuration.height = max(1, Int(window.frame.height * backingScale))
         configuration.showsCursor = false
         configuration.capturesAudio = false
-        configuration.ignoreShadowsSingleWindow = false
+        configuration.ignoreShadowsSingleWindow = true
 
         let image = try await SCScreenshotManager.captureImage(
             contentFilter: SCContentFilter(desktopIndependentWindow: window),
             configuration: configuration
         )
+        let pixelWidth = image.width
+        let pixelHeight = image.height
         guard let data = NSBitmapImageRep(cgImage: image).representation(
             using: .jpeg,
             properties: [.compressionFactor: 0.82]
@@ -51,9 +53,9 @@ actor SystemComputerUseScreenshotCapturer: ComputerUseScreenshotCapturing {
         }
         return ComputerUseCapturedScreenshot(
             url: url,
-            pixelWidth: configuration.width,
-            pixelHeight: configuration.height,
-            scale: scale,
+            pixelWidth: pixelWidth,
+            pixelHeight: pixelHeight,
+            coordinateScale: window.frame.width / Double(pixelWidth),
             windowFrame: window.frame
         )
     }

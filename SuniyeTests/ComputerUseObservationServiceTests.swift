@@ -8,7 +8,7 @@ final class ComputerUseObservationServiceTests: XCTestCase {
             url: URL(fileURLWithPath: "/tmp/window.jpg"),
             pixelWidth: 800,
             pixelHeight: 600,
-            scale: 2,
+            coordinateScale: 0.5,
             windowFrame: CGRect(x: 10, y: 20, width: 400, height: 300)
         )
         let accessibility = StubAccessibilitySnapshotProvider(

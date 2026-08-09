@@ -1,0 +1,267 @@
+import ApplicationServices
+import Foundation
+
+struct SystemComputerUseAccessibilityActions: ComputerUseAccessibilityActionPerforming {
+    func press(
+        reference: ComputerUseAccessibilityElementReference,
+        target: ComputerUseObservedTarget
+    ) async throws -> Bool {
+        try await run(reference: reference, target: target) { worker, element in
+            guard worker.actions(element).contains(kAXPressAction as String) else {
+                return false
+            }
+            guard AXUIElementPerformAction(element, kAXPressAction as CFString) == .success else {
+                throw ComputerUseActionError.actionUnavailable(kAXPressAction as String)
+            }
+            return true
+        }
+    }
+
+    func center(
+        reference: ComputerUseAccessibilityElementReference,
+        target: ComputerUseObservedTarget
+    ) async throws -> CGPoint {
+        try await run(reference: reference, target: target) { worker, element in
+            guard let position = worker.point(kAXPositionAttribute, element),
+                  let size = worker.size(kAXSizeAttribute, element),
+                  size.width > 0,
+                  size.height > 0 else {
+                throw ComputerUseActionError.elementChanged
+            }
+            return CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2)
+        }
+    }
+
+    func perform(
+        action: String,
+        reference: ComputerUseAccessibilityElementReference,
+        target: ComputerUseObservedTarget
+    ) async throws {
+        try await run(reference: reference, target: target) { worker, element in
+            guard worker.actions(element).contains(action),
+                  AXUIElementPerformAction(element, action as CFString) == .success else {
+                throw ComputerUseActionError.actionUnavailable(action)
+            }
+        }
+    }
+
+    func setValue(
+        _ value: String,
+        reference: ComputerUseAccessibilityElementReference,
+        target: ComputerUseObservedTarget
+    ) async throws {
+        try await run(reference: reference, target: target) { worker, element in
+            var settable = DarwinBoolean(false)
+            guard AXUIElementIsAttributeSettable(
+                element,
+                kAXValueAttribute as CFString,
+                &settable
+            ) == .success,
+                settable.boolValue,
+                AXUIElementSetAttributeValue(
+                    element,
+                    kAXValueAttribute as CFString,
+                    value as CFTypeRef
+                ) == .success else {
+                throw ComputerUseActionError.valueNotSettable
+            }
+        }
+    }
+
+    func selectText(
+        _ text: String,
+        prefix: String?,
+        suffix: String?,
+        selectionType: ComputerUseTextSelectionType,
+        reference: ComputerUseAccessibilityElementReference,
+        target: ComputerUseObservedTarget
+    ) async throws {
+        try await run(reference: reference, target: target) { worker, element in
+            guard let value = worker.string(kAXValueAttribute, element) else {
+                throw ComputerUseActionError.textNotFound(text)
+            }
+            var selection = try ComputerUseTextSelectionResolver.resolve(
+                text: text,
+                prefix: prefix,
+                suffix: suffix,
+                selectionType: selectionType,
+                in: value
+            )
+            guard let range = AXValueCreate(.cfRange, &selection),
+                  AXUIElementSetAttributeValue(
+                    element,
+                    kAXSelectedTextRangeAttribute as CFString,
+                    range
+                  ) == .success else {
+                throw ComputerUseActionError.actionUnavailable(kAXSelectedTextRangeAttribute)
+            }
+        }
+    }
+
+    private func run<T: Sendable>(
+        reference: ComputerUseAccessibilityElementReference,
+        target: ComputerUseObservedTarget,
+        operation: @escaping @Sendable (Worker, AXUIElement) throws -> T
+    ) async throws -> T {
+        try await Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            let worker = Worker(target: target)
+            let element = try worker.resolve(reference)
+            try worker.prepareForInteraction(element)
+            let result = try operation(worker, element)
+            try Task.checkCancellation()
+            return result
+        }.value
+    }
+}
+
+private struct Worker: Sendable {
+    private static let maximumSearchDepth = 30
+    private static let maximumSearchElements = 1_500
+    private static let scrollToVisibleAction = "AXScrollToVisible"
+
+    let target: ComputerUseObservedTarget
+
+    func resolve(_ reference: ComputerUseAccessibilityElementReference) throws -> AXUIElement {
+        let roots = try accessibilityRoots()
+        if roots.indices.contains(reference.rootIndex),
+           let candidate = element(at: reference.path, from: roots[reference.rootIndex]),
+           matches(candidate, reference) {
+            return candidate
+        }
+
+        guard let identifier = reference.identifier else {
+            throw ComputerUseActionError.elementChanged
+        }
+        var remaining = Self.maximumSearchElements
+        let candidates = roots.flatMap {
+            descendants(of: $0, depth: 0, remaining: &remaining)
+        }.filter {
+            string(kAXRoleAttribute, $0) == reference.role
+                && string(kAXIdentifierAttribute, $0) == identifier
+        }
+        guard candidates.count == 1, let match = candidates.first else {
+            throw ComputerUseActionError.elementChanged
+        }
+        return match
+    }
+
+    func prepareForInteraction(_ element: AXUIElement) throws {
+        if (copied(kAXEnabledAttribute, element) as? NSNumber)?.boolValue == false {
+            throw ComputerUseActionError.elementDisabled
+        }
+        if actions(element).contains(Self.scrollToVisibleAction) {
+            AXUIElementPerformAction(element, Self.scrollToVisibleAction as CFString)
+        }
+    }
+
+    func actions(_ element: AXUIElement) -> [String] {
+        var names: CFArray?
+        guard AXUIElementCopyActionNames(element, &names) == .success else {
+            return []
+        }
+        return names as? [String] ?? []
+    }
+
+    func string(_ attribute: String, _ element: AXUIElement) -> String? {
+        copied(attribute, element) as? String
+    }
+
+    func point(_ attribute: String, _ element: AXUIElement) -> CGPoint? {
+        guard let value = axValue(attribute, element) else {
+            return nil
+        }
+        var point = CGPoint.zero
+        return AXValueGetValue(value, .cgPoint, &point) ? point : nil
+    }
+
+    func size(_ attribute: String, _ element: AXUIElement) -> CGSize? {
+        guard let value = axValue(attribute, element) else {
+            return nil
+        }
+        var size = CGSize.zero
+        return AXValueGetValue(value, .cgSize, &size) ? size : nil
+    }
+
+    private func accessibilityRoots() throws -> [AXUIElement] {
+        guard let pid = target.application.processIdentifier else {
+            throw ComputerUseActionError.staleObservation(target.application.displayName)
+        }
+        let app = AXUIElementCreateApplication(pid)
+        let windows = elements(kAXWindowsAttribute, app)
+        guard windows.indices.contains(target.window.accessibilityOrdinal) else {
+            throw ComputerUseActionError.staleObservation(target.application.displayName)
+        }
+        var roots = [windows[target.window.accessibilityOrdinal]]
+        if let menuBar = axElement(copied(kAXMenuBarAttribute, app)) {
+            roots.append(menuBar)
+        }
+        return roots
+    }
+
+    private func element(at path: [Int], from root: AXUIElement) -> AXUIElement? {
+        path.reduce(Optional(root)) { current, index in
+            guard let current else { return nil }
+            let children = elements(kAXChildrenAttribute, current)
+            return children.indices.contains(index) ? children[index] : nil
+        }
+    }
+
+    private func descendants(
+        of root: AXUIElement,
+        depth: Int,
+        remaining: inout Int
+    ) -> [AXUIElement] {
+        guard depth <= Self.maximumSearchDepth, remaining > 0 else {
+            return []
+        }
+        remaining -= 1
+        return [root] + elements(kAXChildrenAttribute, root).flatMap {
+            descendants(of: $0, depth: depth + 1, remaining: &remaining)
+        }
+    }
+
+    private func matches(
+        _ element: AXUIElement,
+        _ reference: ComputerUseAccessibilityElementReference
+    ) -> Bool {
+        guard string(kAXRoleAttribute, element) == reference.role else {
+            return false
+        }
+        guard let identifier = reference.identifier else {
+            return true
+        }
+        return string(kAXIdentifierAttribute, element) == identifier
+    }
+
+    private func copied(_ attribute: String, _ element: AXUIElement) -> CFTypeRef? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success
+        else {
+            return nil
+        }
+        return value
+    }
+
+    private func elements(_ attribute: String, _ element: AXUIElement) -> [AXUIElement] {
+        guard let values = copied(attribute, element) as? [AnyObject] else {
+            return []
+        }
+        return values.compactMap(axElement)
+    }
+
+    private func axElement(_ value: CFTypeRef?) -> AXUIElement? {
+        guard let value, CFGetTypeID(value) == AXUIElementGetTypeID() else {
+            return nil
+        }
+        return unsafeBitCast(value, to: AXUIElement.self)
+    }
+
+    private func axValue(_ attribute: String, _ element: AXUIElement) -> AXValue? {
+        guard let raw = copied(attribute, element),
+              CFGetTypeID(raw) == AXValueGetTypeID() else {
+            return nil
+        }
+        return unsafeBitCast(raw, to: AXValue.self)
+    }
+}

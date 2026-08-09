@@ -9,18 +9,32 @@ protocol ComputerUseScreenshotCapturing: Sendable {
     func capture(windowID: UInt32) async throws -> ComputerUseCapturedScreenshot?
 }
 
+protocol ComputerUseObserving: Sendable {
+    func observe(
+        application: ComputerUseApplicationRecord,
+        requestedIdentifier: String,
+        disableDiff: Bool
+    ) async throws -> ComputerUseObservation
+}
+
 struct ComputerUseCapturedScreenshot: Equatable, Sendable {
     let url: URL
     let pixelWidth: Int
     let pixelHeight: Int
-    let scale: Double
+    let coordinateScale: Double
     let windowFrame: CGRect
 }
 
 struct ComputerUseObservation: Equatable, Sendable {
+    let target: ComputerUseObservedTarget
     let state: ComputerUseAppState
     let revision: ComputerUseAccessibilityRevision
     let screenshot: ComputerUseCapturedScreenshot?
+}
+
+struct ComputerUseObservedTarget: Equatable, Sendable {
+    let application: ComputerUseApplicationRecord
+    let window: ComputerUseWindow
 }
 
 enum ComputerUseObservationError: LocalizedError, Equatable, Sendable {
@@ -37,39 +51,39 @@ enum ComputerUseObservationError: LocalizedError, Equatable, Sendable {
     }
 }
 
-actor ComputerUseObservationService {
-    private let applications: ComputerUseApplicationCatalogProviding
+actor ComputerUseObservationService: ComputerUseObserving {
     private let windows: ComputerUseWindowDiscovering
     private let accessibility: ComputerUseAccessibilitySnapshotProviding
     private let screenshots: ComputerUseScreenshotCapturing
     private let revisions: ComputerUseAccessibilityRevisionStore
 
     init(
-        applications: ComputerUseApplicationCatalogProviding = ComputerUseApplicationCatalog(),
         windows: ComputerUseWindowDiscovering = ComputerUseWindowDiscovery(),
         accessibility: ComputerUseAccessibilitySnapshotProviding =
             SystemComputerUseAccessibilitySnapshotProvider(),
         screenshots: ComputerUseScreenshotCapturing = SystemComputerUseScreenshotCapturer(),
         revisions: ComputerUseAccessibilityRevisionStore = ComputerUseAccessibilityRevisionStore()
     ) {
-        self.applications = applications
         self.windows = windows
         self.accessibility = accessibility
         self.screenshots = screenshots
         self.revisions = revisions
     }
 
-    func observe(app: String, disableDiff: Bool) async throws -> ComputerUseObservation {
+    func observe(
+        application: ComputerUseApplicationRecord,
+        requestedIdentifier: String,
+        disableDiff: Bool
+    ) async throws -> ComputerUseObservation {
         try Task.checkCancellation()
-        let application = try await applications.resolveOrLaunch(app)
         guard let processIdentifier = application.processIdentifier else {
-            throw ComputerUseObservationError.targetDidNotLaunch(app)
+            throw ComputerUseObservationError.targetDidNotLaunch(requestedIdentifier)
         }
         let discoveredWindows = try await windows.orderedWindows(
             processIdentifier: processIdentifier
         )
         guard let window = discoveredWindows.first else {
-            throw ComputerUseObservationError.noWindow(app)
+            throw ComputerUseObservationError.noWindow(requestedIdentifier)
         }
 
         async let snapshot = accessibility.snapshot(
@@ -90,8 +104,9 @@ actor ComputerUseObservationService {
             disableDiff: disableDiff
         )
         return ComputerUseObservation(
+            target: ComputerUseObservedTarget(application: application, window: window),
             state: ComputerUseAppState(
-                app: app,
+                app: requestedIdentifier,
                 screenshot: capturedScreenshot?.url,
                 text: revision.text
             ),

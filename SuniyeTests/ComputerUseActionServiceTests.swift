@@ -1,0 +1,381 @@
+import XCTest
+@testable import Suniye
+
+final class ComputerUseActionServiceTests: XCTestCase {
+    func testIndexedClickPrefersAccessibilityPress() async throws {
+        let accessibility = RecordingAccessibilityActions(pressResult: true)
+        let input = RecordingInputEvents()
+        let service = ComputerUseActionService(accessibility: accessibility, input: input)
+
+        try await service.click(
+            ComputerUseClickRequest(app: "Calculator", elementIndex: 7, clickCount: 2),
+            context: computerUseTestActionContext()
+        )
+
+        let pressedIndexes = await accessibility.pressedIndexes
+        let clicks = await input.clicks
+        XCTAssertEqual(pressedIndexes, [7, 7])
+        XCTAssertTrue(clicks.isEmpty)
+    }
+
+    func testIndexedClickFallsBackToProcessScopedEventAtCurrentElementCenter() async throws {
+        let accessibility = RecordingAccessibilityActions(pressResult: true, center: CGPoint(x: 140, y: 90))
+        let input = RecordingInputEvents()
+        let service = ComputerUseActionService(accessibility: accessibility, input: input)
+
+        try await service.click(
+            ComputerUseClickRequest(
+                app: "Calculator",
+                elementIndex: 7,
+                mouseButton: .right,
+                clickCount: 2
+            ),
+            context: computerUseTestActionContext()
+        )
+
+        let clicks = await input.clicks
+        let pressedIndexes = await accessibility.pressedIndexes
+        XCTAssertTrue(pressedIndexes.isEmpty)
+        XCTAssertEqual(
+            clicks,
+            [.init(point: CGPoint(x: 140, y: 90), button: .right, count: 2, pid: 42)]
+        )
+    }
+
+    func testCoordinateActionsConvertScreenshotPixelsToScreenPoints() async throws {
+        let input = RecordingInputEvents()
+        let service = ComputerUseActionService(
+            accessibility: RecordingAccessibilityActions(),
+            input: input
+        )
+        let context = computerUseTestActionContext(
+            screenshot: ComputerUseCapturedScreenshot(
+                url: URL(fileURLWithPath: "/tmp/window.jpg"),
+                pixelWidth: 400,
+                pixelHeight: 200,
+                coordinateScale: 0.5,
+                windowFrame: CGRect(x: 100, y: 50, width: 200, height: 100)
+            )
+        )
+
+        try await service.click(
+            ComputerUseClickRequest(app: "Calculator", x: 80, y: 40),
+            context: context
+        )
+        try await service.drag(
+            fromX: 0,
+            fromY: 0,
+            toX: 400,
+            toY: 200,
+            context: context
+        )
+
+        let clicks = await input.clicks
+        let drags = await input.drags
+        XCTAssertEqual(clicks.first?.point, CGPoint(x: 140, y: 70))
+        XCTAssertEqual(
+            drags,
+            [.init(start: CGPoint(x: 100, y: 50), end: CGPoint(x: 300, y: 150), pid: 42)]
+        )
+    }
+
+    func testAccessibilityAndInputActionsForwardExactArguments() async throws {
+        let accessibility = RecordingAccessibilityActions(center: CGPoint(x: 120, y: 80))
+        let input = RecordingInputEvents()
+        let service = ComputerUseActionService(accessibility: accessibility, input: input)
+        let context = computerUseTestActionContext()
+
+        try await service.performSecondaryAction("Show Menu", elementIndex: 7, context: context)
+        try await service.setValue("42", elementIndex: 7, context: context)
+        try await service.selectText(
+            "world",
+            elementIndex: 7,
+            prefix: "hello ",
+            suffix: "!",
+            selectionType: .cursorAfter,
+            context: context
+        )
+        try await service.scroll(
+            elementIndex: 7,
+            direction: .down,
+            pages: 1.5,
+            context: context
+        )
+        try await service.pressKey("Super_L+a", context: context)
+        try await service.typeText("hello", context: context)
+
+        let secondaryActions = await accessibility.secondaryActions
+        let values = await accessibility.values
+        let selections = await accessibility.selections
+        let scrolls = await input.scrolls
+        let keys = await input.keys
+        let typedText = await input.typedText
+        XCTAssertEqual(secondaryActions, [.init(index: 7, action: "Show Menu")])
+        XCTAssertEqual(values, [.init(index: 7, value: "42")])
+        XCTAssertEqual(
+            selections,
+            [.init(index: 7, text: "world", prefix: "hello ", suffix: "!", type: .cursorAfter)]
+        )
+        XCTAssertEqual(
+            scrolls,
+            [.init(point: CGPoint(x: 120, y: 80), direction: .down, pages: 1.5, pid: 42)]
+        )
+        XCTAssertEqual(keys, [.init(chord: "Super_L+a", pid: 42)])
+        XCTAssertEqual(typedText, [.init(text: "hello", pid: 42)])
+    }
+
+    func testRejectsOnlyInvalidPublicArguments() async {
+        let service = ComputerUseActionService(
+            accessibility: RecordingAccessibilityActions(),
+            input: RecordingInputEvents()
+        )
+        let context = computerUseTestActionContext()
+
+        await XCTAssertThrowsErrorAsync(
+            try await service.click(
+                ComputerUseClickRequest(app: "Calculator", x: .nan, y: 1),
+                context: context
+            )
+        )
+        await XCTAssertThrowsErrorAsync(
+            try await service.click(
+                ComputerUseClickRequest(app: "Calculator", elementIndex: 7, clickCount: 0),
+                context: context
+            )
+        )
+        await XCTAssertThrowsErrorAsync(
+            try await service.scroll(
+                elementIndex: 7,
+                direction: .down,
+                pages: 0,
+                context: context
+            )
+        )
+        await XCTAssertThrowsErrorAsync(
+            try await service.drag(
+                fromX: 0,
+                fromY: 0,
+                toX: .infinity,
+                toY: 1,
+                context: context
+            )
+        )
+        await XCTAssertThrowsErrorAsync(try await service.pressKey("   ", context: context))
+    }
+
+    func testRejectsMissingElementScreenshotAndProcess() async {
+        let service = ComputerUseActionService(
+            accessibility: RecordingAccessibilityActions(),
+            input: RecordingInputEvents()
+        )
+
+        do {
+            try await service.setValue(
+                "42",
+                elementIndex: 99,
+                context: computerUseTestActionContext()
+            )
+            XCTFail("Expected a missing element error")
+        } catch {
+            XCTAssertEqual(error as? ComputerUseActionError, .elementUnavailable(99))
+        }
+        do {
+            try await service.click(
+                ComputerUseClickRequest(app: "Calculator", x: 1, y: 1),
+                context: computerUseTestActionContext(screenshot: nil)
+            )
+            XCTFail("Expected a screenshot error")
+        } catch {
+            XCTAssertEqual(error as? ComputerUseActionError, .screenshotUnavailable)
+        }
+        do {
+            try await service.typeText(
+                "42",
+                context: computerUseTestActionContext(processIdentifier: nil)
+            )
+            XCTFail("Expected a stale observation error")
+        } catch {
+            XCTAssertEqual(error as? ComputerUseActionError, .staleObservation("Calculator"))
+        }
+    }
+}
+
+func computerUseTestActionContext(
+    processIdentifier: Int32? = 42,
+    screenshot: ComputerUseCapturedScreenshot? = ComputerUseCapturedScreenshot(
+        url: URL(fileURLWithPath: "/tmp/window.jpg"),
+        pixelWidth: 200,
+        pixelHeight: 100,
+        coordinateScale: 1,
+        windowFrame: CGRect(x: 100, y: 50, width: 200, height: 100)
+    )
+) -> ComputerUseActionContext {
+    let application = ComputerUseApplicationRecord(
+        displayName: "Calculator",
+        bundleIdentifier: "com.apple.calculator",
+        applicationURL: URL(fileURLWithPath: "/System/Applications/Calculator.app"),
+        lastUsedDate: nil,
+        useCount: nil,
+        processIdentifier: processIdentifier,
+        isFrontmost: false
+    )
+    let window = ComputerUseWindow(
+        id: 9,
+        ownerProcessIdentifier: 42,
+        title: "Calculator",
+        bounds: CGRect(x: 100, y: 50, width: 200, height: 100),
+        layer: 0,
+        isOnScreen: true,
+        accessibilityOrdinal: 0,
+        isFocused: false,
+        isMain: true
+    )
+    return ComputerUseActionContext(
+        target: ComputerUseObservedTarget(application: application, window: window),
+        revision: ComputerUseAccessibilityRevision(
+            id: UUID(),
+            text: "7: AXButton",
+            elements: [
+                7: ComputerUseAccessibilityElementReference(
+                    rootIndex: 0,
+                    path: [0],
+                    role: "AXButton",
+                    identifier: "equals"
+                ),
+            ]
+        ),
+        screenshot: screenshot
+    )
+}
+
+private actor RecordingAccessibilityActions: ComputerUseAccessibilityActionPerforming {
+    struct Secondary: Equatable { let index: Int; let action: String }
+    struct Value: Equatable { let index: Int; let value: String }
+    struct Selection: Equatable {
+        let index: Int
+        let text: String
+        let prefix: String?
+        let suffix: String?
+        let type: ComputerUseTextSelectionType
+    }
+
+    private let pressResult: Bool
+    private let resolvedCenter: CGPoint
+    private(set) var pressedIndexes: [Int] = []
+    private(set) var secondaryActions: [Secondary] = []
+    private(set) var values: [Value] = []
+    private(set) var selections: [Selection] = []
+
+    init(pressResult: Bool = false, center: CGPoint = CGPoint(x: 0, y: 0)) {
+        self.pressResult = pressResult
+        resolvedCenter = center
+    }
+
+    func press(reference: ComputerUseAccessibilityElementReference, target: ComputerUseObservedTarget) -> Bool {
+        pressedIndexes.append(index(for: reference))
+        return pressResult
+    }
+
+    func center(reference: ComputerUseAccessibilityElementReference, target: ComputerUseObservedTarget) -> CGPoint {
+        resolvedCenter
+    }
+
+    func perform(
+        action: String,
+        reference: ComputerUseAccessibilityElementReference,
+        target: ComputerUseObservedTarget
+    ) {
+        secondaryActions.append(.init(index: index(for: reference), action: action))
+    }
+
+    func setValue(
+        _ value: String,
+        reference: ComputerUseAccessibilityElementReference,
+        target: ComputerUseObservedTarget
+    ) {
+        values.append(.init(index: index(for: reference), value: value))
+    }
+
+    func selectText(
+        _ text: String,
+        prefix: String?,
+        suffix: String?,
+        selectionType: ComputerUseTextSelectionType,
+        reference: ComputerUseAccessibilityElementReference,
+        target: ComputerUseObservedTarget
+    ) {
+        selections.append(
+            .init(
+                index: index(for: reference),
+                text: text,
+                prefix: prefix,
+                suffix: suffix,
+                type: selectionType
+            )
+        )
+    }
+
+    private func index(for reference: ComputerUseAccessibilityElementReference) -> Int {
+        reference.identifier == "equals" ? 7 : -1
+    }
+}
+
+private actor RecordingInputEvents: ComputerUseInputEventPosting {
+    struct Click: Equatable {
+        let point: CGPoint
+        let button: ComputerUseMouseButton
+        let count: Int
+        let pid: Int32
+    }
+    struct Drag: Equatable { let start: CGPoint; let end: CGPoint; let pid: Int32 }
+    struct Scroll: Equatable {
+        let point: CGPoint
+        let direction: ComputerUseScrollDirection
+        let pages: Double
+        let pid: Int32
+    }
+    struct Key: Equatable { let chord: String; let pid: Int32 }
+    struct Text: Equatable { let text: String; let pid: Int32 }
+
+    private(set) var clicks: [Click] = []
+    private(set) var drags: [Drag] = []
+    private(set) var scrolls: [Scroll] = []
+    private(set) var keys: [Key] = []
+    private(set) var typedText: [Text] = []
+
+    func click(at point: CGPoint, mouseButton: ComputerUseMouseButton, clickCount: Int, pid: Int32) {
+        clicks.append(.init(point: point, button: mouseButton, count: clickCount, pid: pid))
+    }
+
+    func drag(from start: CGPoint, to end: CGPoint, pid: Int32) {
+        drags.append(.init(start: start, end: end, pid: pid))
+    }
+
+    func scroll(
+        at point: CGPoint,
+        direction: ComputerUseScrollDirection,
+        pages: Double,
+        pid: Int32
+    ) {
+        scrolls.append(.init(point: point, direction: direction, pages: pages, pid: pid))
+    }
+
+    func pressKey(_ chord: String, pid: Int32) {
+        keys.append(.init(chord: chord, pid: pid))
+    }
+
+    func typeText(_ text: String, pid: Int32) {
+        typedText.append(.init(text: text, pid: pid))
+    }
+}
+
+func XCTAssertThrowsErrorAsync(
+    _ expression: @autoclosure () async throws -> Void,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) async {
+    do {
+        try await expression()
+        XCTFail("Expected an error", file: file, line: line)
+    } catch {}
+}
