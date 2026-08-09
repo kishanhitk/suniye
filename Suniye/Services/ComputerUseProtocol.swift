@@ -31,6 +31,26 @@ enum ComputerUseMouseButton: String, Codable, Equatable, Sendable {
     case left
     case right
     case middle
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self).lowercased()
+        switch value {
+        case "left", "l": self = .left
+        case "right", "r": self = .right
+        case "middle", "m": self = .middle
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported mouse button: \(value)"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 enum ComputerUseScrollDirection: String, Codable, Equatable, Sendable {
@@ -38,6 +58,27 @@ enum ComputerUseScrollDirection: String, Codable, Equatable, Sendable {
     case down
     case left
     case right
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self).lowercased()
+        switch value {
+        case "up", "u": self = .up
+        case "down", "d": self = .down
+        case "left", "l": self = .left
+        case "right", "r": self = .right
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported scroll direction: \(value)"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 enum ComputerUseTextSelectionType: String, Codable, Equatable, Sendable {

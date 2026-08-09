@@ -10,8 +10,10 @@ final class ComputerUseObservationLiveTests: XCTestCase {
             throw XCTSkip("Set SUNIYE_LIVE_COMPUTER_USE=1 for the permission-bound live test.")
         }
 
+        let application = try await ComputerUseApplicationCatalog().resolveOrLaunch("Calculator")
         let observation = try await ComputerUseObservationService().observe(
-            app: "Calculator",
+            application: application,
+            requestedIdentifier: "Calculator",
             disableDiff: true
         )
 

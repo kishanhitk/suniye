@@ -56,6 +56,22 @@
 - Does the existing clipboard-preserving text insertion path protect clipboard state during an approved text action?
 - Is a one-time approval card sufficient for the first local integration, or does the product need a separate persistent approval service later?
 
+## Fresh phase 3 native-action follow-up
+
+- `[Resolved in deterministic code]` Every action consumes a successful app/window observation;
+  a failed refresh invalidates the previous observation and a newly selected action must follow a
+  successful refresh.
+- `[Resolved in deterministic code]` Coordinate input uses actual captured-image scale plus the
+  current window origin, and synthesized events are process-scoped rather than globally posted.
+- `[Unknown]` Which role/app/action conditions choose native AX semantics versus a synthesized
+  event in the reference implementation?
+- `[Unknown]` What exact loading or AX-change signals extend settling from about one second to at
+  most about five seconds?
+- `[Unknown]` What scroll page calibration, drag interpolation, key timing, and Unicode chunking
+  does the native implementation use?
+- `[Live required]` Verify click, drag, scroll, key, text, set-value, selection, and secondary AX
+  actions against safe cross-process apps under the installed Preview's TCC identity.
+
 ### Corrective parity status
 
 - `[Resolved for the current desktop prototype]` The target UI can select a specific visible

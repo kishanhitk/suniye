@@ -69,6 +69,9 @@ cross-process input still require separate validation.
   background launch, CG/AX window correlation, independent choices, and validation.
 - `phase-2-observation-2026-08-09.md` records AX rendering/revisions/diffs, background screenshot
   capture, closest-match choices, tests, and the permission-bound live result.
+- `phase-3-native-actions-2026-08-09.md` records native semantic and synthesized actions,
+  process-scoped delivery, fresh-observation enforcement, settling, strict-review corrections,
+  independent choices, and remaining live gaps.
 
 ## Evidence labels
 

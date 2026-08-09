@@ -33,12 +33,15 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
 
         mutating func snapshot(pid: Int32, windowOrdinal: Int) throws -> ComputerUseAXSnapshot {
             let application = AXUIElementCreateApplication(pid)
-            let windows = try elements(kAXWindowsAttribute, from: application)
+            let windows = try requiredElements(kAXWindowsAttribute, from: application)
             guard windows.indices.contains(windowOrdinal) else {
                 throw ComputerUseAccessibilitySnapshotError.windowUnavailable(windowOrdinal)
             }
             var roots = [read(windows[windowOrdinal], depth: 0)].compactMap { $0 }
-            if let menuBar = element(kAXMenuBarAttribute, from: application),
+            if let menuBar = SystemComputerUseAccessibilityAPI.element(
+                kAXMenuBarAttribute,
+                from: application
+            ),
                let menuNode = read(menuBar, depth: 0) {
                 roots.append(menuNode)
             }
@@ -51,7 +54,10 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
             }
             elementCount += 1
             let role = string(kAXRoleAttribute, from: element) ?? "AXUnknown"
-            let children = (try? elements(kAXChildrenAttribute, from: element)) ?? []
+            let children = SystemComputerUseAccessibilityAPI.elements(
+                kAXChildrenAttribute,
+                from: element
+            ) ?? []
             return ComputerUseAXNode(
                 role: role,
                 roleDescription: string(kAXRoleDescriptionAttribute, from: element),
@@ -68,38 +74,24 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
             )
         }
 
-        private func copied(_ attribute: String, from element: AXUIElement) -> CFTypeRef? {
-            var value: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success
-            else {
-                return nil
-            }
-            return value
-        }
-
-        private func elements(_ attribute: String, from element: AXUIElement) throws
+        private func requiredElements(_ attribute: String, from element: AXUIElement) throws
             -> [AXUIElement]
         {
-            guard let value = copied(attribute, from: element) else {
+            guard let elements = SystemComputerUseAccessibilityAPI.elements(
+                attribute,
+                from: element
+            ) else {
                 throw ComputerUseAccessibilitySnapshotError.attributeUnavailable(attribute)
             }
-            return (value as? [AXUIElement]) ?? []
-        }
-
-        private func element(_ attribute: String, from source: AXUIElement) -> AXUIElement? {
-            guard let value = copied(attribute, from: source),
-                  CFGetTypeID(value) == AXUIElementGetTypeID() else {
-                return nil
-            }
-            return (value as! AXUIElement)
+            return elements
         }
 
         private func string(_ attribute: String, from element: AXUIElement) -> String? {
-            copied(attribute, from: element) as? String
+            SystemComputerUseAccessibilityAPI.string(attribute, from: element)
         }
 
         private func boolean(_ attribute: String, from element: AXUIElement) -> Bool? {
-            (copied(attribute, from: element) as? NSNumber)?.boolValue
+            SystemComputerUseAccessibilityAPI.boolean(attribute, from: element)
         }
 
         private func isValueSettable(_ element: AXUIElement) -> Bool {
@@ -112,7 +104,10 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
         }
 
         private func renderedValue(from element: AXUIElement) -> String? {
-            guard let value = copied(kAXValueAttribute, from: element) else {
+            guard let value = SystemComputerUseAccessibilityAPI.copied(
+                kAXValueAttribute,
+                from: element
+            ) else {
                 return nil
             }
             let rendered = (value as? String) ?? String(describing: value)
@@ -120,11 +115,7 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
         }
 
         private func actionNames(from element: AXUIElement) -> [String] {
-            var names: CFArray?
-            guard AXUIElementCopyActionNames(element, &names) == .success else {
-                return []
-            }
-            return (names as? [String]) ?? []
+            SystemComputerUseAccessibilityAPI.actionNames(from: element)
         }
     }
 }

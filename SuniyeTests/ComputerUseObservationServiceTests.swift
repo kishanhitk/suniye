@@ -2,6 +2,17 @@ import XCTest
 @testable import Suniye
 
 final class ComputerUseObservationServiceTests: XCTestCase {
+    func testObservationErrorsHaveUserReadableDescriptions() throws {
+        XCTAssertFalse(
+            try XCTUnwrap(
+                ComputerUseObservationError.targetDidNotLaunch("Example").errorDescription
+            ).isEmpty
+        )
+        XCTAssertFalse(
+            try XCTUnwrap(ComputerUseObservationError.noWindow("Example").errorDescription).isEmpty
+        )
+    }
+
     func testObservationResolvesTargetAndCapturesAXAndScreenshotInBackground() async throws {
         let application = makeApplication(processIdentifier: 123)
         let screenshot = ComputerUseCapturedScreenshot(
@@ -16,13 +27,16 @@ final class ComputerUseObservationServiceTests: XCTestCase {
         )
         let screenshots = StubScreenshotCapturer(result: screenshot)
         let service = ComputerUseObservationService(
-            applications: StubApplicationCatalog(result: application),
             windows: StubWindowDiscovery(result: [makeWindow(id: 44, ordinal: 2)]),
             accessibility: accessibility,
             screenshots: screenshots
         )
 
-        let observation = try await service.observe(app: "TextEdit", disableDiff: false)
+        let observation = try await service.observe(
+            application: application,
+            requestedIdentifier: "TextEdit",
+            disableDiff: false
+        )
 
         XCTAssertEqual(observation.state.app, "TextEdit")
         XCTAssertEqual(observation.state.screenshot, screenshot.url)
@@ -39,27 +53,33 @@ final class ComputerUseObservationServiceTests: XCTestCase {
     }
 
     func testObservationFailsWhenLaunchHasNoProcess() async {
-        let service = makeService(application: makeApplication(processIdentifier: nil), windows: [])
+        let application = makeApplication(processIdentifier: nil)
+        let service = makeService(windows: [])
 
         await assertObservationError(.targetDidNotLaunch("Example")) {
-            try await service.observe(app: "Example", disableDiff: false)
+            try await service.observe(
+                application: application,
+                requestedIdentifier: "Example",
+                disableDiff: false
+            )
         }
     }
 
     func testObservationFailsWhenTargetHasNoWindow() async {
-        let service = makeService(application: makeApplication(processIdentifier: 123), windows: [])
+        let application = makeApplication(processIdentifier: 123)
+        let service = makeService(windows: [])
 
         await assertObservationError(.noWindow("Example")) {
-            try await service.observe(app: "Example", disableDiff: false)
+            try await service.observe(
+                application: application,
+                requestedIdentifier: "Example",
+                disableDiff: false
+            )
         }
     }
 
-    private func makeService(
-        application: ComputerUseApplicationRecord,
-        windows: [ComputerUseWindow]
-    ) -> ComputerUseObservationService {
+    private func makeService(windows: [ComputerUseWindow]) -> ComputerUseObservationService {
         ComputerUseObservationService(
-            applications: StubApplicationCatalog(result: application),
             windows: StubWindowDiscovery(result: windows),
             accessibility: StubAccessibilitySnapshotProvider(
                 result: ComputerUseAXSnapshot(roots: [])
@@ -125,18 +145,6 @@ final class ComputerUseObservationServiceTests: XCTestCase {
             secondaryActions: [],
             children: []
         )
-    }
-}
-
-private struct StubApplicationCatalog: ComputerUseApplicationCatalogProviding {
-    let result: ComputerUseApplicationRecord
-
-    func listApps() async throws -> [ComputerUseApplication] {
-        [result.publicApplication]
-    }
-
-    func resolveOrLaunch(_ identifier: String) async throws -> ComputerUseApplicationRecord {
-        result
     }
 }
 

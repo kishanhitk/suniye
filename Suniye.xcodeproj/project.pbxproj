@@ -48,6 +48,7 @@
 		305CB2DFC0FA4FD60803A30D /* libsherpa-onnx-c-api.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 75E6194F3E61C3D677F93DA9 /* libsherpa-onnx-c-api.dylib */; };
 		333852D3F7D107BEDBDB5000 /* SettingsWindowLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73B49F1E40E87BF78702B0A5 /* SettingsWindowLocator.swift */; };
 		33659F330869ED86EC4C95FD /* AppStateSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDBA8DA30905F29C03B8A36D /* AppStateSettingsTests.swift */; };
+		336DCD0B3DC928633498F124 /* SystemComputerUseAccessibilityAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = F803FAFA1956148860BCCACF /* SystemComputerUseAccessibilityAPI.swift */; };
 		34A83F20C1CEA0EA82E71CAC /* SuniyeNativeBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = DA6D9C9D8CF9BF854941CE7C /* SuniyeNativeBridge.mm */; };
 		34D1CED54F02F03C7A595DEC /* ComputerUseTextSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8F74387D72959A6CBA84AC /* ComputerUseTextSelectionTests.swift */; };
 		38F6E5F3ABB211F063C7DEFE /* ComputerUseApplicationCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6DBCE0BBD218C71FFFA9A4 /* ComputerUseApplicationCatalogTests.swift */; };
@@ -440,6 +441,7 @@
 		F60EC103F5AE7479F817F152 /* ComputerUseToolBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseToolBackend.swift; sourceTree = "<group>"; };
 		F71F09E71632C13C91BE934A /* PartialTranscriptStabilizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartialTranscriptStabilizerTests.swift; sourceTree = "<group>"; };
 		F730F7A2C1E5C20D574C01FA /* MagicFormatPromptFileStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatPromptFileStoreTests.swift; sourceTree = "<group>"; };
+		F803FAFA1956148860BCCACF /* SystemComputerUseAccessibilityAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemComputerUseAccessibilityAPI.swift; sourceTree = "<group>"; };
 		FD44F10C318905A89E8CCDCC /* ComputerUseObservationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseObservationService.swift; sourceTree = "<group>"; };
 		FD7C23F9B077871C0A935834 /* RoutingTranscriptionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTranscriptionServiceTests.swift; sourceTree = "<group>"; };
 		FFA4ABF77342C58F327BD3EC /* SystemComputerUseAccessibilitySnapshotProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemComputerUseAccessibilitySnapshotProvider.swift; sourceTree = "<group>"; };
@@ -726,6 +728,7 @@
 				98B58C8F7A33FE14A72479F5 /* RoutingTranscriptionService.swift */,
 				46CB08DB3B0815DC0E822412 /* SoundFeedbackService.swift */,
 				B6EB5FBEA5CAE89927889A5A /* SystemComputerUseAccessibilityActions.swift */,
+				F803FAFA1956148860BCCACF /* SystemComputerUseAccessibilityAPI.swift */,
 				FFA4ABF77342C58F327BD3EC /* SystemComputerUseAccessibilitySnapshotProvider.swift */,
 				3968654FF11FBBDD3DF379A5 /* SystemComputerUseApplicationInventory.swift */,
 				5E296F34F1CD716B433B935B /* SystemComputerUseInputEvents.swift */,
@@ -969,6 +972,7 @@
 				9CEC29D27FCC952C4C618C70 /* StatusItemController.swift in Sources */,
 				67C62EE8BA2F2B763D8477D6 /* Suniye.swift in Sources */,
 				34A83F20C1CEA0EA82E71CAC /* SuniyeNativeBridge.mm in Sources */,
+				336DCD0B3DC928633498F124 /* SystemComputerUseAccessibilityAPI.swift in Sources */,
 				F579D30BB8D15B3A99EBDF7F /* SystemComputerUseAccessibilityActions.swift in Sources */,
 				6D399296AEC7E00B43019D73 /* SystemComputerUseAccessibilitySnapshotProvider.swift in Sources */,
 				AD1126C55615D20E9BCA6D3D /* SystemComputerUseApplicationInventory.swift in Sources */,

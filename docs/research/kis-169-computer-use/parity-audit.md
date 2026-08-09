@@ -222,3 +222,31 @@ editor. These are known UX and behavior gaps, not unknown implementation details
 - `[Verified]` A configured model completed a safe read-only Calculator task and reported `323`.
 - `[Unknown]` Full native-helper parity, Screen Recording consent, cross-process input, the
   server-side model loop/prompt, and browser control remain unverified.
+
+## Fresh-branch phase 3 status — 2026-08-09
+
+This section supersedes prototype implementation claims above when evaluating
+`kis-169-computer-use-parity`. See `fresh-implementation-baseline-2026-08-09.md`.
+
+| Area | Fresh branch | Reference evidence | Status |
+|---|---|---|---|
+| Tool surface | Exact ten operation names, app argument per state/action call, public button/direction aliases | Shipped macOS client and native tools list | Verified observable match |
+| State requirement | One successful app/window observation authorizes one action; failed refresh invalidates prior state | Recovered workflow requires updated state before the next decision; user requirement tightens this to every newly selected action | Implemented requirement; exact internal cache policy unknown |
+| Indexed AX actions | Refetch by path/role/identifier; AX press, arbitrary action, value replacement, text/cursor selection; unique identifier recovery | Semantic-first native layer, refetchable tree, stale/ambiguous element handling | Broad match; exact branch conditions unknown |
+| Synthesized input | Process-scoped click, drag, pixel scroll, key chord, and Unicode text events | Native synthesized-event layer and `postToPid` | Broad match; timing/calibration unknown |
+| Coordinate conversion | Actual screenshot scale plus current window origin | Recovered scaling transform | Verified algorithm match |
+| Background behavior | Observation and action boundaries do not require frontmost/key status or add activation | Live background observation and process-scoped input evidence | Intended match; cross-process live action pending |
+| Settling | Cancellation-aware one-second wait after success | About one-second base plus loading-aware extension to about five seconds | Partial; loading extension remains |
+| Intervention and focus | Cancellation checks around paired events | Native conditional focus, physical-input, lock-screen, and invalidation monitors | Partial |
+| Model/agent loop | Not connected on this fresh branch | Request ordering, model selection, and prompt context recovered separately | Missing next phase |
+| Permissions, voice, chat UX | Not connected on this fresh branch | Observable permission and host UX evidence recorded separately | Missing later phases |
+| Browser control | No desktop-tool browser adapter | Separate browser surface | Correctly separate; extension path remains later work |
+
+- `[Corrected]` The strict phase review removed duplicate AX cast/read code and prevented failed
+  observations from preserving stale action authority.
+- `[Independent choice]` Scroll calibration, Unicode event chunking, AX search limits,
+  `AXScrollToVisible`, repeated semantic click behavior, and ScreenCaptureKit-only capture are not
+  claimed as exact internal parity.
+- `[Verified]` The post-review full suite executes 1,041 tests with 2 skipped and 0 failures; gated
+  coverage is 95.38% (12,277/12,871 lines); E2E preflight and smoke pass.
+- `[Live required]` Installed-Preview cross-process action results remain pending final E2E.

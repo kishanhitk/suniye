@@ -27,6 +27,7 @@ Suniye/Services/SystemComputerUseWindowInventory.swift # CGWindowServer and AXUI
 Suniye/Services/SystemComputerUseAccessibilitySnapshotProvider.swift # AXUIElement tree traversal requires a live target process and Accessibility permission
 Suniye/Services/SystemComputerUseScreenshotCapturer.swift # ScreenCaptureKit window capture requires a live window server and Screen Recording permission
 Suniye/Services/SystemComputerUseAccessibilityActions.swift # AXUIElement refetch and mutation require a live target process and Accessibility permission; text-range resolution is extracted and tested
+Suniye/Services/SystemComputerUseAccessibilityAPI.swift # Thin Core Foundation AX adapter requires live Accessibility objects; callers keep pure traversal and matching logic testable
 Suniye/Services/SystemComputerUseInputEvents.swift # process-scoped CGEvent posting requires a live target process and Accessibility permission; key, scroll, and Unicode translation are extracted and tested
 
 # --- Window-server bound UI shells (logic lives in state/services) ---

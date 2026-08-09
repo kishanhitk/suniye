@@ -22,8 +22,11 @@ struct SystemComputerUseAccessibilityActions: ComputerUseAccessibilityActionPerf
         target: ComputerUseObservedTarget
     ) async throws -> CGPoint {
         try await run(reference: reference, target: target) { worker, element in
-            guard let position = worker.point(kAXPositionAttribute, element),
-                  let size = worker.size(kAXSizeAttribute, element),
+            guard let position = SystemComputerUseAccessibilityAPI.point(
+                kAXPositionAttribute,
+                from: element
+            ),
+                let size = SystemComputerUseAccessibilityAPI.size(kAXSizeAttribute, from: element),
                   size.width > 0,
                   size.height > 0 else {
                 throw ComputerUseActionError.elementChanged
@@ -77,7 +80,10 @@ struct SystemComputerUseAccessibilityActions: ComputerUseAccessibilityActionPerf
         target: ComputerUseObservedTarget
     ) async throws {
         try await run(reference: reference, target: target) { worker, element in
-            guard let value = worker.string(kAXValueAttribute, element) else {
+            guard let value = SystemComputerUseAccessibilityAPI.string(
+                kAXValueAttribute,
+                from: element
+            ) else {
                 throw ComputerUseActionError.textNotFound(text)
             }
             var selection = try ComputerUseTextSelectionResolver.resolve(
@@ -137,8 +143,11 @@ private struct Worker: Sendable {
         let candidates = roots.flatMap {
             descendants(of: $0, depth: 0, remaining: &remaining)
         }.filter {
-            string(kAXRoleAttribute, $0) == reference.role
-                && string(kAXIdentifierAttribute, $0) == identifier
+            SystemComputerUseAccessibilityAPI.string(kAXRoleAttribute, from: $0) == reference.role
+                && SystemComputerUseAccessibilityAPI.string(
+                    kAXIdentifierAttribute,
+                    from: $0
+                ) == identifier
         }
         guard candidates.count == 1, let match = candidates.first else {
             throw ComputerUseActionError.elementChanged
@@ -147,7 +156,7 @@ private struct Worker: Sendable {
     }
 
     func prepareForInteraction(_ element: AXUIElement) throws {
-        if (copied(kAXEnabledAttribute, element) as? NSNumber)?.boolValue == false {
+        if SystemComputerUseAccessibilityAPI.boolean(kAXEnabledAttribute, from: element) == false {
             throw ComputerUseActionError.elementDisabled
         }
         if actions(element).contains(Self.scrollToVisibleAction) {
@@ -156,31 +165,7 @@ private struct Worker: Sendable {
     }
 
     func actions(_ element: AXUIElement) -> [String] {
-        var names: CFArray?
-        guard AXUIElementCopyActionNames(element, &names) == .success else {
-            return []
-        }
-        return names as? [String] ?? []
-    }
-
-    func string(_ attribute: String, _ element: AXUIElement) -> String? {
-        copied(attribute, element) as? String
-    }
-
-    func point(_ attribute: String, _ element: AXUIElement) -> CGPoint? {
-        guard let value = axValue(attribute, element) else {
-            return nil
-        }
-        var point = CGPoint.zero
-        return AXValueGetValue(value, .cgPoint, &point) ? point : nil
-    }
-
-    func size(_ attribute: String, _ element: AXUIElement) -> CGSize? {
-        guard let value = axValue(attribute, element) else {
-            return nil
-        }
-        var size = CGSize.zero
-        return AXValueGetValue(value, .cgSize, &size) ? size : nil
+        SystemComputerUseAccessibilityAPI.actionNames(from: element)
     }
 
     private func accessibilityRoots() throws -> [AXUIElement] {
@@ -188,12 +173,18 @@ private struct Worker: Sendable {
             throw ComputerUseActionError.staleObservation(target.application.displayName)
         }
         let app = AXUIElementCreateApplication(pid)
-        let windows = elements(kAXWindowsAttribute, app)
+        let windows = SystemComputerUseAccessibilityAPI.elements(
+            kAXWindowsAttribute,
+            from: app
+        ) ?? []
         guard windows.indices.contains(target.window.accessibilityOrdinal) else {
             throw ComputerUseActionError.staleObservation(target.application.displayName)
         }
         var roots = [windows[target.window.accessibilityOrdinal]]
-        if let menuBar = axElement(copied(kAXMenuBarAttribute, app)) {
+        if let menuBar = SystemComputerUseAccessibilityAPI.element(
+            kAXMenuBarAttribute,
+            from: app
+        ) {
             roots.append(menuBar)
         }
         return roots
@@ -202,7 +193,10 @@ private struct Worker: Sendable {
     private func element(at path: [Int], from root: AXUIElement) -> AXUIElement? {
         path.reduce(Optional(root)) { current, index in
             guard let current else { return nil }
-            let children = elements(kAXChildrenAttribute, current)
+            let children = SystemComputerUseAccessibilityAPI.elements(
+                kAXChildrenAttribute,
+                from: current
+            ) ?? []
             return children.indices.contains(index) ? children[index] : nil
         }
     }
@@ -216,7 +210,11 @@ private struct Worker: Sendable {
             return []
         }
         remaining -= 1
-        return [root] + elements(kAXChildrenAttribute, root).flatMap {
+        let children = SystemComputerUseAccessibilityAPI.elements(
+            kAXChildrenAttribute,
+            from: root
+        ) ?? []
+        return [root] + children.flatMap {
             descendants(of: $0, depth: depth + 1, remaining: &remaining)
         }
     }
@@ -225,43 +223,18 @@ private struct Worker: Sendable {
         _ element: AXUIElement,
         _ reference: ComputerUseAccessibilityElementReference
     ) -> Bool {
-        guard string(kAXRoleAttribute, element) == reference.role else {
+        guard SystemComputerUseAccessibilityAPI.string(
+            kAXRoleAttribute,
+            from: element
+        ) == reference.role else {
             return false
         }
         guard let identifier = reference.identifier else {
             return true
         }
-        return string(kAXIdentifierAttribute, element) == identifier
-    }
-
-    private func copied(_ attribute: String, _ element: AXUIElement) -> CFTypeRef? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success
-        else {
-            return nil
-        }
-        return value
-    }
-
-    private func elements(_ attribute: String, _ element: AXUIElement) -> [AXUIElement] {
-        guard let values = copied(attribute, element) as? [AnyObject] else {
-            return []
-        }
-        return values.compactMap(axElement)
-    }
-
-    private func axElement(_ value: CFTypeRef?) -> AXUIElement? {
-        guard let value, CFGetTypeID(value) == AXUIElementGetTypeID() else {
-            return nil
-        }
-        return unsafeBitCast(value, to: AXUIElement.self)
-    }
-
-    private func axValue(_ attribute: String, _ element: AXUIElement) -> AXValue? {
-        guard let raw = copied(attribute, element),
-              CFGetTypeID(raw) == AXValueGetTypeID() else {
-            return nil
-        }
-        return unsafeBitCast(raw, to: AXValue.self)
+        return SystemComputerUseAccessibilityAPI.string(
+            kAXIdentifierAttribute,
+            from: element
+        ) == identifier
     }
 }

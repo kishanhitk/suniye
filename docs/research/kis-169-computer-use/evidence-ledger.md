@@ -925,3 +925,32 @@ Sources: the mounted native service symbols and live-state findings in
   Accessibility permission. It remains opt-in and skipped in ordinary headless runs.
 - `[Verified]` The final full suite executes 1,012 tests with 2 skipped and 0 failures; gated
   coverage is 95.14% (11,685/12,282 lines); E2E preflight and smoke pass.
+
+### Entry 58: Fresh implementation phase 3 native actions
+
+Sources: `phase-3-native-actions-2026-08-09.md`, `ComputerUseActionService.swift`,
+`ComputerUseToolBackend.swift`, `SystemComputerUseAccessibilityActions.swift`,
+`SystemComputerUseInputEvents.swift`, the shared AX platform adapter, and focused tests.
+
+- `[Implemented]` The fresh backend executes all eight recovered action tools against app-scoped
+  observations; `list_apps` and `get_app_state` complete the exact ten-tool service.
+- `[Implemented]` The latest successful app observation is one-shot. Actions verify the current
+  process and CG window, consume the observation before native work, settle after success, and
+  require a fresh observation for the next action.
+- `[Corrected]` A failed state refresh can no longer leave an older observation authorized.
+- `[Implemented]` AX press, arbitrary secondary action, value replacement, UTF-16 text selection,
+  process-scoped click/drag/scroll/key/text events, and screenshot-to-screen coordinate conversion
+  are isolated behind typed native seams.
+- `[Corrected]` The strict review preserved requested right/middle and multi-click semantics,
+  centralized repeated action orchestration, and replaced three duplicate AX casting/read layers
+  with one platform adapter.
+- `[Independent choice]` Scroll calibration, Unicode chunking, AX refetch limits,
+  `AXScrollToVisible`, repeated semantic presses, and the single ScreenCaptureKit capture path are
+  closest matches rather than verified internal constants or branches.
+- `[Not yet implemented]` Loading-aware extended settling, conditional focus, user-intervention
+  monitoring, lock-screen guards, model/agent integration, permissions UX, direct voice, and chat
+  rendering remain later phases.
+- `[Verified]` The post-review full suite executes 1,041 tests with 2 skipped and 0 failures; gated
+  coverage is 95.38% (12,277/12,871 lines); E2E preflight and smoke both pass.
+- `[Live required]` Safe cross-process native action testing remains pending under the final
+  installed Preview's Accessibility and Screen Recording identity.

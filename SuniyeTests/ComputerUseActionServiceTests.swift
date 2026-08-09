@@ -2,6 +2,28 @@ import XCTest
 @testable import Suniye
 
 final class ComputerUseActionServiceTests: XCTestCase {
+    func testActionErrorsHaveUserReadableDescriptions() {
+        let errors: [ComputerUseActionError] = [
+            .observationRequired("Calculator"),
+            .staleObservation("Calculator"),
+            .elementUnavailable(7),
+            .elementChanged,
+            .elementDisabled,
+            .actionUnavailable("AXPress"),
+            .valueNotSettable,
+            .textNotFound("hello"),
+            .textAmbiguous("hello"),
+            .screenshotUnavailable,
+            .invalidArgument("Invalid value"),
+            .eventCreationFailed,
+            .unsupportedKey("Hyper"),
+        ]
+
+        for error in errors {
+            XCTAssertFalse(try XCTUnwrap(error.errorDescription).isEmpty)
+        }
+    }
+
     func testIndexedClickPrefersAccessibilityPress() async throws {
         let accessibility = RecordingAccessibilityActions(pressResult: true)
         let input = RecordingInputEvents()

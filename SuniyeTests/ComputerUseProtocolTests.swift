@@ -44,6 +44,36 @@ final class ComputerUseProtocolTests: XCTestCase {
         XCTAssertEqual(calls.map(\.name), ComputerUseToolName.allCases)
     }
 
+    func testPublicMouseAndScrollAliasesDecodeToCanonicalValues() throws {
+        let decoder = JSONDecoder()
+
+        XCTAssertEqual(
+            try decoder.decode(ComputerUseMouseButton.self, from: Data(#""m""#.utf8)),
+            .middle
+        )
+        XCTAssertEqual(
+            try decoder.decode(ComputerUseScrollDirection.self, from: Data(#""u""#.utf8)),
+            .up
+        )
+        XCTAssertEqual(
+            String(decoding: try JSONEncoder().encode(ComputerUseMouseButton.right), as: UTF8.self),
+            #""right""#
+        )
+        XCTAssertEqual(
+            String(decoding: try JSONEncoder().encode(ComputerUseScrollDirection.left), as: UTF8.self),
+            #""left""#
+        )
+    }
+
+    func testUnknownMouseAndScrollValuesFailDecoding() {
+        XCTAssertThrowsError(
+            try JSONDecoder().decode(ComputerUseMouseButton.self, from: Data(#""side""#.utf8))
+        )
+        XCTAssertThrowsError(
+            try JSONDecoder().decode(ComputerUseScrollDirection.self, from: Data(#""diagonal""#.utf8))
+        )
+    }
+
     func testSessionListsAppsWithoutSelectingOrLockingATarget() async throws {
         let calculator = ComputerUseApplication(
             id: "/System/Applications/Calculator.app",

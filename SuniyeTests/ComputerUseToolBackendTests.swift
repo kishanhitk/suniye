@@ -88,6 +88,31 @@ final class ComputerUseToolBackendTests: XCTestCase {
         }
     }
 
+    func testFailedRefreshInvalidatesThePreviousObservation() async throws {
+        let fixture = backendFixture()
+        let observations = ControllableComputerUseObserving(observation: fixture.observations.observation)
+        let backend = ComputerUseToolBackend(
+            applications: fixture.applications,
+            windows: fixture.windows,
+            observations: observations,
+            actions: fixture.actions,
+            settler: fixture.settler
+        )
+        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+        await observations.failSubsequentObservations()
+
+        await XCTAssertThrowsErrorAsync(
+            _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+        )
+
+        do {
+            try await backend.typeText(app: "Calculator", text: "42")
+            XCTFail("Expected the failed refresh to invalidate the previous observation")
+        } catch {
+            XCTAssertEqual(error as? ComputerUseActionError, .observationRequired("Calculator"))
+        }
+    }
+
     func testForwardsEveryActionAfterFreshObservation() async throws {
         let fixture = backendFixture()
         let backend = ComputerUseToolBackend(
@@ -255,14 +280,42 @@ private actor MutableActionWindowDiscovery: ComputerUseWindowDiscovering {
 }
 
 private actor StubComputerUseObserving: ComputerUseObserving {
-    let observation: ComputerUseObservation
+    nonisolated let observation: ComputerUseObservation
 
     init(observation: ComputerUseObservation) {
         self.observation = observation
     }
 
-    func observe(app: String, disableDiff: Bool) -> ComputerUseObservation {
+    func observe(
+        application: ComputerUseApplicationRecord,
+        requestedIdentifier: String,
+        disableDiff: Bool
+    ) -> ComputerUseObservation {
         observation
+    }
+}
+
+private actor ControllableComputerUseObserving: ComputerUseObserving {
+    let observation: ComputerUseObservation
+    private var shouldFail = false
+
+    init(observation: ComputerUseObservation) {
+        self.observation = observation
+    }
+
+    func failSubsequentObservations() {
+        shouldFail = true
+    }
+
+    func observe(
+        application: ComputerUseApplicationRecord,
+        requestedIdentifier: String,
+        disableDiff: Bool
+    ) throws -> ComputerUseObservation {
+        if shouldFail {
+            throw ComputerUseObservationError.noWindow(requestedIdentifier)
+        }
+        return observation
     }
 }
 
