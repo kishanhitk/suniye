@@ -1075,7 +1075,7 @@ treated as ordinary model retryable failures.
 - manual macOS tests for Accessibility, Screen Recording, app launch, key window changes, user
   takeover, screen lock, service restart, and multi-display capture;
 - run XcodeGen from project.yml before build checks and keep the repository coverage gate at its
-  existing 95% policy.
+  current 80% policy.
 
 ## 15. Open questions that block a claim of full parity
 
