@@ -1,23 +1,31 @@
 import Foundation
 
-protocol ComputerUseActionSettling: Sendable {
-    func waitForUIToSettle() async throws
-}
-
 actor ComputerUseToolBackend: ComputerUseToolServing {
     private let applications: ComputerUseApplicationCatalogProviding
     private let windows: ComputerUseWindowDiscovering
     private let observations: ComputerUseObserving
     private let actions: ComputerUseActionServing
     private let settler: ComputerUseActionSettling
-    private var observationsByTarget: [String: ComputerUseObservation] = [:]
+    private let runtimeGuard: ComputerUseRuntimeGuarding
+    private var observationsByTarget: [String: AuthorizedObservation] = [:]
+
+    private struct AuthorizedObservation {
+        let observation: ComputerUseObservation
+        let runtimeAuthorization: ComputerUseRuntimeAuthorization
+    }
+
+    private struct PreparedAction {
+        let context: ComputerUseActionContext
+        let runtimeAuthorization: ComputerUseRuntimeAuthorization
+    }
 
     init(
         applications: ComputerUseApplicationCatalogProviding = ComputerUseApplicationCatalog(),
         windows: ComputerUseWindowDiscovering = ComputerUseWindowDiscovery(),
         observations: ComputerUseObserving? = nil,
         actions: ComputerUseActionServing = ComputerUseActionService(),
-        settler: ComputerUseActionSettling = SystemComputerUseActionSettler()
+        settler: ComputerUseActionSettling = SystemComputerUseActionSettler(),
+        runtimeGuard: ComputerUseRuntimeGuarding = ComputerUseRuntimeGuard()
     ) {
         self.applications = applications
         self.windows = windows
@@ -26,6 +34,7 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
         )
         self.actions = actions
         self.settler = settler
+        self.runtimeGuard = runtimeGuard
     }
 
     func listApps() async throws -> [ComputerUseApplication] {
@@ -35,6 +44,7 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
 
     func getAppState(app: String, disableDiff: Bool) async throws -> ComputerUseAppState {
         try Task.checkCancellation()
+        let runtimeAuthorization = try await runtimeGuard.prepareForObservation()
         let application = try await applications.resolveOrLaunch(app)
         let key = targetKey(application)
         observationsByTarget.removeValue(forKey: key)
@@ -43,7 +53,10 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
             requestedIdentifier: app,
             disableDiff: disableDiff
         )
-        observationsByTarget[key] = observation
+        observationsByTarget[key] = AuthorizedObservation(
+            observation: observation,
+            runtimeAuthorization: runtimeAuthorization
+        )
         return observation.state
     }
 
@@ -139,17 +152,23 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
         app: String,
         operation: (ComputerUseActionContext) async throws -> Void
     ) async throws {
-        try await operation(context(for: app))
-        try await finishAction()
+        let preparedAction = try await prepareAction(for: app)
+        try await operation(preparedAction.context)
+        try await finishAction(
+            target: preparedAction.context.target,
+            authorization: preparedAction.runtimeAuthorization
+        )
     }
 
-    private func context(for app: String) async throws -> ComputerUseActionContext {
+    private func prepareAction(for app: String) async throws -> PreparedAction {
         try Task.checkCancellation()
         let application = try await applications.resolveOrLaunch(app)
         let key = targetKey(application)
-        guard let observation = observationsByTarget.removeValue(forKey: key) else {
+        guard let authorizedObservation = observationsByTarget.removeValue(forKey: key) else {
             throw ComputerUseActionError.observationRequired(app)
         }
+        try await runtimeGuard.validateAction(authorizedObservation.runtimeAuthorization)
+        let observation = authorizedObservation.observation
         guard application.processIdentifier == observation.target.application.processIdentifier,
               let pid = application.processIdentifier else {
             throw ComputerUseActionError.staleObservation(app)
@@ -159,32 +178,27 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
         else {
             throw ComputerUseActionError.staleObservation(app)
         }
-        return ComputerUseActionContext(
-            target: ComputerUseObservedTarget(application: application, window: window),
-            revision: observation.revision,
-            screenshot: observation.screenshot
+        return PreparedAction(
+            context: ComputerUseActionContext(
+                target: ComputerUseObservedTarget(application: application, window: window),
+                revision: observation.revision,
+                screenshot: observation.screenshot
+            ),
+            runtimeAuthorization: authorizedObservation.runtimeAuthorization
         )
     }
 
-    private func finishAction() async throws {
+    private func finishAction(
+        target: ComputerUseObservedTarget,
+        authorization: ComputerUseRuntimeAuthorization
+    ) async throws {
         try Task.checkCancellation()
-        try await settler.waitForUIToSettle()
+        try await settler.waitForUIToSettle(target: target)
         try Task.checkCancellation()
+        try await runtimeGuard.validateAction(authorization)
     }
 
     private func targetKey(_ application: ComputerUseApplicationRecord) -> String {
         application.bundleIdentifier ?? application.applicationURL.standardizedFileURL.path
-    }
-}
-
-struct SystemComputerUseActionSettler: ComputerUseActionSettling {
-    private let delay: Duration
-
-    init(delay: Duration = .seconds(1)) {
-        self.delay = delay
-    }
-
-    func waitForUIToSettle() async throws {
-        try await Task.sleep(for: delay)
     }
 }

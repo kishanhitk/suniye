@@ -8,7 +8,9 @@ final class ComputerUseToolBackendTests: XCTestCase {
 
     func testSystemSettlerIsCancellationAware() async {
         let task = Task {
-            try await SystemComputerUseActionSettler().waitForUIToSettle()
+            try await SystemComputerUseActionSettler().waitForUIToSettle(
+                target: computerUseTestActionContext().target
+            )
         }
         task.cancel()
 
@@ -210,221 +212,94 @@ final class ComputerUseToolBackendTests: XCTestCase {
         let waitCount = await fixture.settler.waitCount
         XCTAssertEqual(waitCount, 0)
     }
-}
 
-private struct BackendFixture {
-    let applications: StubActionApplicationCatalog
-    let windows: MutableActionWindowDiscovery
-    let observations: StubComputerUseObserving
-    let actions: RecordingComputerUseActions
-    let settler: RecordingComputerUseSettler
-}
-
-private func backendFixture(actionError: Error? = nil) -> BackendFixture {
-    let context = computerUseTestActionContext()
-    let observation = ComputerUseObservation(
-        target: context.target,
-        state: ComputerUseAppState(app: "Calculator", screenshot: context.screenshot?.url, text: "0: AXWindow"),
-        revision: context.revision,
-        screenshot: context.screenshot
-    )
-    return BackendFixture(
-        applications: StubActionApplicationCatalog(application: context.target.application),
-        windows: MutableActionWindowDiscovery(window: context.target.window),
-        observations: StubComputerUseObserving(observation: observation),
-        actions: RecordingComputerUseActions(error: actionError),
-        settler: RecordingComputerUseSettler()
-    )
-}
-
-private actor StubActionApplicationCatalog: ComputerUseApplicationCatalogProviding {
-    let application: ComputerUseApplicationRecord
-
-    init(application: ComputerUseApplicationRecord) {
-        self.application = application
-    }
-
-    func listApps() -> [ComputerUseApplication] {
-        [application.publicApplication]
-    }
-
-    func resolveOrLaunch(_ identifier: String) -> ComputerUseApplicationRecord {
-        application
-    }
-}
-
-private actor MutableActionWindowDiscovery: ComputerUseWindowDiscovering {
-    private var window: ComputerUseWindow
-
-    init(window: ComputerUseWindow) {
-        self.window = window
-    }
-
-    func orderedWindows(processIdentifier: Int32) -> [ComputerUseWindow] {
-        [window]
-    }
-
-    func replaceWindowID(with id: UInt32) {
-        window = ComputerUseWindow(
-            id: id,
-            ownerProcessIdentifier: window.ownerProcessIdentifier,
-            title: window.title,
-            bounds: window.bounds,
-            layer: window.layer,
-            isOnScreen: window.isOnScreen,
-            accessibilityOrdinal: window.accessibilityOrdinal,
-            isFocused: window.isFocused,
-            isMain: window.isMain
+    func testLockedScreenRejectsObservationBeforeNativeCapture() async {
+        let fixture = backendFixture()
+        let runtimeGuard = ControllableComputerUseRuntimeGuard(isScreenLocked: true)
+        let backend = ComputerUseToolBackend(
+            applications: fixture.applications,
+            windows: fixture.windows,
+            observations: fixture.observations,
+            actions: fixture.actions,
+            settler: fixture.settler,
+            runtimeGuard: runtimeGuard
         )
-    }
-}
 
-private actor StubComputerUseObserving: ComputerUseObserving {
-    nonisolated let observation: ComputerUseObservation
-
-    init(observation: ComputerUseObservation) {
-        self.observation = observation
-    }
-
-    func observe(
-        application: ComputerUseApplicationRecord,
-        requestedIdentifier: String,
-        disableDiff: Bool
-    ) -> ComputerUseObservation {
-        observation
-    }
-}
-
-private actor ControllableComputerUseObserving: ComputerUseObserving {
-    let observation: ComputerUseObservation
-    private var shouldFail = false
-
-    init(observation: ComputerUseObservation) {
-        self.observation = observation
-    }
-
-    func failSubsequentObservations() {
-        shouldFail = true
-    }
-
-    func observe(
-        application: ComputerUseApplicationRecord,
-        requestedIdentifier: String,
-        disableDiff: Bool
-    ) throws -> ComputerUseObservation {
-        if shouldFail {
-            throw ComputerUseObservationError.noWindow(requestedIdentifier)
+        do {
+            _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+            XCTFail("Expected a screen-locked error")
+        } catch {
+            XCTAssertEqual(error as? ComputerUseRuntimeError, .screenLocked)
         }
-        return observation
+        let observationCount = await runtimeGuard.observationCount
+        XCTAssertEqual(observationCount, 0)
     }
-}
 
-private actor RecordingComputerUseActions: ComputerUseActionServing {
-    enum Call: Equatable {
-        case click(ComputerUseClickRequest)
-        case secondaryAction(index: Int, action: String)
-        case setValue(index: Int, value: String)
-        case selectText(
-            index: Int,
-            text: String,
-            prefix: String?,
-            suffix: String?,
-            selectionType: ComputerUseTextSelectionType
+    func testPhysicalInputAfterObservationRequiresARequery() async throws {
+        let fixture = backendFixture()
+        let runtimeGuard = ControllableComputerUseRuntimeGuard()
+        let backend = ComputerUseToolBackend(
+            applications: fixture.applications,
+            windows: fixture.windows,
+            observations: fixture.observations,
+            actions: fixture.actions,
+            settler: fixture.settler,
+            runtimeGuard: runtimeGuard
         )
-        case scroll(index: Int, direction: ComputerUseScrollDirection, pages: Double)
-        case drag(fromX: Double, fromY: Double, toX: Double, toY: Double)
-        case pressKey(String)
-        case typeText(String)
+        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+        await runtimeGuard.recordPhysicalInput()
+
+        do {
+            try await backend.typeText(app: "Calculator", text: "42")
+            XCTFail("Expected user intervention")
+        } catch {
+            XCTAssertEqual(error as? ComputerUseRuntimeError, .userIntervened)
+        }
+
+        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+        try await backend.typeText(app: "Calculator", text: "42")
+        let actionCalls = await fixture.actions.calls
+        XCTAssertEqual(actionCalls, [.typeText("42")])
     }
 
-    private let error: Error?
-    private(set) var calls: [Call] = []
-
-    init(error: Error? = nil) {
-        self.error = error
-    }
-
-    func click(_ request: ComputerUseClickRequest, context: ComputerUseActionContext) throws {
-        try throwIfNeeded()
-        calls.append(.click(request))
-    }
-
-    func performSecondaryAction(
-        _ action: String,
-        elementIndex: Int,
-        context: ComputerUseActionContext
-    ) throws {
-        try throwIfNeeded()
-        calls.append(.secondaryAction(index: elementIndex, action: action))
-    }
-
-    func setValue(_ value: String, elementIndex: Int, context: ComputerUseActionContext) throws {
-        try throwIfNeeded()
-        calls.append(.setValue(index: elementIndex, value: value))
-    }
-
-    func selectText(
-        _ text: String,
-        elementIndex: Int,
-        prefix: String?,
-        suffix: String?,
-        selectionType: ComputerUseTextSelectionType,
-        context: ComputerUseActionContext
-    ) throws {
-        try throwIfNeeded()
-        calls.append(
-            .selectText(
-                index: elementIndex,
-                text: text,
-                prefix: prefix,
-                suffix: suffix,
-                selectionType: selectionType
-            )
+    func testPhysicalInputDuringSettlingEndsTheActionAsIntervened() async throws {
+        let fixture = backendFixture()
+        let runtimeGuard = ControllableComputerUseRuntimeGuard()
+        let settler = InterveningComputerUseSettler(runtimeGuard: runtimeGuard)
+        let backend = ComputerUseToolBackend(
+            applications: fixture.applications,
+            windows: fixture.windows,
+            observations: fixture.observations,
+            actions: fixture.actions,
+            settler: settler,
+            runtimeGuard: runtimeGuard
         )
-    }
+        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
 
-    func scroll(
-        elementIndex: Int,
-        direction: ComputerUseScrollDirection,
-        pages: Double,
-        context: ComputerUseActionContext
-    ) throws {
-        try throwIfNeeded()
-        calls.append(.scroll(index: elementIndex, direction: direction, pages: pages))
-    }
-
-    func drag(
-        fromX: Double,
-        fromY: Double,
-        toX: Double,
-        toY: Double,
-        context: ComputerUseActionContext
-    ) throws {
-        try throwIfNeeded()
-        calls.append(.drag(fromX: fromX, fromY: fromY, toX: toX, toY: toY))
-    }
-
-    func pressKey(_ key: String, context: ComputerUseActionContext) throws {
-        try throwIfNeeded()
-        calls.append(.pressKey(key))
-    }
-
-    func typeText(_ text: String, context: ComputerUseActionContext) throws {
-        try throwIfNeeded()
-        calls.append(.typeText(text))
-    }
-
-    private func throwIfNeeded() throws {
-        if let error {
-            throw error
+        do {
+            try await backend.typeText(app: "Calculator", text: "42")
+            XCTFail("Expected user intervention")
+        } catch {
+            XCTAssertEqual(error as? ComputerUseRuntimeError, .userIntervened)
         }
     }
-}
 
-private actor RecordingComputerUseSettler: ComputerUseActionSettling {
-    private(set) var waitCount = 0
+    func testSettlerExtendsDelayOnlyWhileLoadingIndicatorIsPresent() async throws {
+        let loading = ScriptedComputerUseLoadingState(states: [true, true, false])
+        let sleeper = RecordingComputerUseSleeper()
+        let settler = SystemComputerUseActionSettler(
+            loadingState: loading,
+            sleeper: sleeper,
+            initialDelay: .seconds(1),
+            loadingPollDelay: .milliseconds(500),
+            maximumLoadingChecks: 10
+        )
 
-    func waitForUIToSettle() {
-        waitCount += 1
+        try await settler.waitForUIToSettle(target: computerUseTestActionContext().target)
+
+        let delays = await sleeper.delays
+        let checkCount = await loading.checkCount
+        XCTAssertEqual(delays, [.seconds(1), .milliseconds(500), .milliseconds(500)])
+        XCTAssertEqual(checkCount, 3)
     }
 }

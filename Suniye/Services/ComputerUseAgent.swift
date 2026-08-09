@@ -94,6 +94,11 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                     )
                 }
             }
+        } catch ComputerUseRuntimeError.userIntervened {
+            return ComputerUseAgentResult(
+                outcome: .cancelled,
+                message: ComputerUseRuntimeError.userIntervened.errorDescription ?? "Stopped."
+            )
         } catch is CancellationError {
             return ComputerUseAgentResult(outcome: .cancelled, message: "Stopped.")
         } catch {
@@ -132,6 +137,8 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
             }
         } catch is CancellationError {
             throw CancellationError()
+        } catch let error as ComputerUseRuntimeError {
+            throw error
         } catch {
             messages.append(
                 .toolResult(

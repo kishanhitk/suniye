@@ -1018,3 +1018,27 @@ validation.
 - `[Unknown]` Live provider behavior, installed-app TCC behavior, cross-process actions,
   physical-input intervention timing, lock-screen behavior, loading-aware settling, and browser
   control remain unverified or unimplemented.
+
+### Entry 61: Fresh implementation phase 6 runtime guards and settling
+
+Sources: `phase-6-runtime-guards-settling-2026-08-09.md`, recovered native lock/intervention
+symbols and settling instructions, `ComputerUseRuntimeGuard.swift`,
+`ComputerUseActionSettler.swift`, backend and agent integration, and focused tests.
+
+- `[Implemented]` Each observation captures an unlocked-session authorization and a full vector
+  of physical HID event counters. The action validates it before native input and after settling.
+- `[Implemented]` A locked session fails with an unlock instruction. Physical user input after an
+  observation terminates the run as cancelled and requires a new run or observation.
+- `[Implemented]` Successful actions wait one second, then poll fresh target AX state every 500
+  milliseconds while a progress or busy indicator remains, up to five seconds.
+- `[Corrected]` The strict review added post-settle intervention validation, replaced a lossy
+  counter sum with the complete vector, and split backend test doubles from the test cases.
+- `[Independent choice]` Suniye uses HID counter snapshots instead of a persistent event tap and
+  uses `AXProgressIndicator`/`AXBusyIndicator` as its loading predicate. It does not implement
+  automatic lock-screen unlock.
+- `[Unknown]` Exact intervention debounce, event filtering, already-posting action cancellation,
+  full loading heuristics, and lock-screen recovery details remain unrecovered.
+- `[Verified]` The focused runtime, backend, and agent suite executes 25 tests with 0 failures.
+- `[Verified]` The full suite executes 1,075 tests with 2 skipped and 0 failures. Gated coverage is
+  89.36% (13,041/14,593 lines) against the requested 80% floor. E2E preflight and smoke pass.
+- `[Pending]` Installed Preview and live model validation.

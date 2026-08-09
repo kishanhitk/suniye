@@ -170,6 +170,36 @@ final class ComputerUseAgentTests: XCTestCase {
             ]
         )
     }
+
+    func testUserInterventionEndsTheRunAsCancelled() async {
+        let model = ScriptedComputerUseModel(
+            responses: [
+                .toolCall(
+                    id: "state-1",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Calculator"}"#
+                ),
+            ]
+        )
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: UserIntervenedComputerUseBackend())
+        )
+
+        let result = await agent.run(
+            task: ComputerUseAgentTask(instruction: "Read Calculator.")
+        )
+
+        XCTAssertEqual(
+            result,
+            ComputerUseAgentResult(
+                outcome: .cancelled,
+                message: "Computer Use stopped because you used your Mac."
+            )
+        )
+        let requestCount = await model.requests.count
+        XCTAssertEqual(requestCount, 1)
+    }
 }
 
 private actor ScriptedComputerUseModel: ComputerUseModelServing {
@@ -270,4 +300,47 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
         hasFreshState = false
         calls.append(call)
     }
+}
+
+private actor UserIntervenedComputerUseBackend: ComputerUseToolServing {
+    func listApps() throws -> [ComputerUseApplication] { throw ComputerUseRuntimeError.userIntervened }
+    func getAppState(app: String, disableDiff: Bool) throws -> ComputerUseAppState {
+        throw ComputerUseRuntimeError.userIntervened
+    }
+    func click(_ request: ComputerUseClickRequest) throws { throw ComputerUseRuntimeError.userIntervened }
+    func performSecondaryAction(app: String, elementIndex: Int, action: String) throws {
+        throw ComputerUseRuntimeError.userIntervened
+    }
+    func setValue(app: String, elementIndex: Int, value: String) throws {
+        throw ComputerUseRuntimeError.userIntervened
+    }
+    func selectText(
+        app: String,
+        elementIndex: Int,
+        text: String,
+        prefix: String?,
+        suffix: String?,
+        selectionType: ComputerUseTextSelectionType
+    ) throws {
+        throw ComputerUseRuntimeError.userIntervened
+    }
+    func scroll(
+        app: String,
+        elementIndex: Int,
+        direction: ComputerUseScrollDirection,
+        pages: Double
+    ) throws {
+        throw ComputerUseRuntimeError.userIntervened
+    }
+    func drag(
+        app: String,
+        fromX: Double,
+        fromY: Double,
+        toX: Double,
+        toY: Double
+    ) throws {
+        throw ComputerUseRuntimeError.userIntervened
+    }
+    func pressKey(app: String, key: String) throws { throw ComputerUseRuntimeError.userIntervened }
+    func typeText(app: String, text: String) throws { throw ComputerUseRuntimeError.userIntervened }
 }

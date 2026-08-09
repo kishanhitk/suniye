@@ -200,3 +200,23 @@
   window, and for how long?
 - `[Live required]` Validate model routing, TCC permission identity, safe cross-process native
   actions, Stop behavior, direct voice, and the installed conversation UI.
+
+## Fresh phase 6 status — 2026-08-09
+
+- `[Resolved in deterministic code]` Observation and action fail while
+  `CGSSessionScreenIsLocked` is true. The user is asked to unlock the Mac; Suniye does not store
+  credentials or attempt automatic unlock.
+- `[Resolved in deterministic code]` Physical HID keyboard, pointer, drag, scroll, and modifier
+  counter changes after observation are user intervention. The backend validates before native
+  input and after settling, and the agent ends the run as cancelled.
+- `[Resolved in deterministic code]` A successful action waits one second and then polls the
+  target AX tree for progress or busy indicators every 500 milliseconds, up to five seconds.
+- `[Independent choice]` HID counter snapshots replace the unrecovered long-lived event-tap and
+  debounce implementation. The complete counter vector avoids checksum collisions and excludes
+  Suniye's process-scoped synthetic events.
+- `[Independent choice]` `AXProgressIndicator` and `AXBusyIndicator` are the loading predicate.
+  The exact reference loading heuristic remains unknown.
+- `[Unknown]` The exact intervention debounce, event filter, action-in-progress cancellation
+  boundary, automatic-unlock UX, and full loading-state predicate remain unrecovered.
+- `[Live required]` Validate these behaviors under the installed Preview's TCC identity and the
+  selected live model.
