@@ -220,3 +220,16 @@
   boundary, automatic-unlock UX, and full loading-state predicate remain unrecovered.
 - `[Live required]` Validate these behaviors under the installed Preview's TCC identity and the
   selected live model.
+
+## Fresh phase 7 status — 2026-08-09
+
+- `[Resolved live]` Dynamic CG/AX titles no longer block same-geometry window correlation.
+- `[Resolved live]` A newly launched Calculator can be observed on the first model tool call after
+  launch completion and primary-window waiting.
+- `[Resolved live]` Battery observation and a multi-action Calculator run complete under the
+  installed Preview's Accessibility and Screen Recording identity.
+- `[Independent choice]` The exact native launch timeout, window timeout, polling interval, and
+  transient-error handling remain unknown. Suniye currently uses a five-second primary-window
+  timeout and 50-millisecond polling.
+- `[Live required]` Exercise every remaining action kind, Stop, physical intervention, denied
+  permissions, provider/native failures, direct voice, and final transcript/composer rendering.

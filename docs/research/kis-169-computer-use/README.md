@@ -88,6 +88,9 @@ cross-process input still require separate validation.
 - `phase-6-runtime-guards-settling-2026-08-09.md` records lock-state handling, physical-user
   intervention, loading-aware settling, strict-review corrections, independent choices, and the
   remaining installed live checks.
+- `phase-7-live-observation-launch-parity-2026-08-09.md` records dynamic-title window matching,
+  launch-completion and primary-window waiting, privacy-bounded diagnostics, installed live model
+  results, strict review, and validation.
 
 ## Evidence labels
 

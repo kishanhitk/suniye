@@ -40,6 +40,29 @@ protocol ComputerUseWindowDiscovering: Sendable {
     func orderedWindows(processIdentifier: Int32) async throws -> [ComputerUseWindow]
 }
 
+extension ComputerUseWindowDiscovering {
+    func waitUntilHasPrimaryWindow(
+        processIdentifier: Int32,
+        timeout: Duration,
+        pollingInterval: Duration
+    ) async throws -> ComputerUseWindow? {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+
+        while true {
+            if let window = try await orderedWindows(
+                processIdentifier: processIdentifier
+            ).first {
+                return window
+            }
+            guard clock.now < deadline else {
+                return nil
+            }
+            try await Task.sleep(for: pollingInterval)
+        }
+    }
+}
+
 actor ComputerUseWindowDiscovery: ComputerUseWindowDiscovering {
     private let inventory: ComputerUseWindowInventoryProviding
 
@@ -95,9 +118,6 @@ enum ComputerUseWindowMatcher {
     ) -> Bool {
         let cgTitle = normalizedTitle(cgWindow.title)
         let axTitle = normalizedTitle(axWindow.title)
-        if let cgTitle, let axTitle, cgTitle != axTitle {
-            return false
-        }
         if let axBounds = axWindow.bounds {
             return approximatelyEqual(cgWindow.bounds, axBounds)
         }

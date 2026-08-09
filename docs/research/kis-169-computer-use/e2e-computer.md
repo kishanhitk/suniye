@@ -120,3 +120,21 @@ route.
   rows, and does not expose the removed manual action or approval controls.
 - `[Not exercised]` This UI smoke did not record microphone audio, submit a voice task, or send a
   model request.
+
+## Fresh-branch live provider and launch checks — 2026-08-09
+
+Build: Debug Preview installed at `/Users/kishan/Applications/Suniye Preview.app` from
+`kis-169-computer-use-parity`.
+
+- `[Verified]` The configured `openai/gpt-5.6-luna` model completed a System Settings Battery task
+  and reported Battery Health as `Normal` after one app listing and one state observation.
+- `[Verified]` `Use Calculator to calculate 17 times 19 and tell me the result.` completed with
+  `323`. Its 23 model-tool calls alternated each action with a fresh `get_app_state`.
+- `[Verified]` After Calculator was quit, `Open Calculator and tell me the number currently shown.`
+  cold-launched and observed it using one successful `get_app_state` tool call, with no app-list
+  recovery call.
+- `[Verified]` The current page renders user tasks and assistant results in the transcript; model
+  output does not populate the composer.
+- `[Not exercised]` Every individual action type, physical intervention, permission denial,
+  provider/native error recovery, Stop, and live microphone initiation remain for the final E2E
+  matrix.

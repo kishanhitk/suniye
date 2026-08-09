@@ -34,6 +34,20 @@ struct SystemComputerUseApplicationInventory: ComputerUseApplicationInventoryPro
 }
 
 struct SystemComputerUseApplicationLauncher: ComputerUseApplicationLaunching {
+    private let windows: ComputerUseWindowDiscovering
+    private let primaryWindowTimeout: Duration
+    private let primaryWindowPollingInterval: Duration
+
+    init(
+        windows: ComputerUseWindowDiscovering = ComputerUseWindowDiscovery(),
+        primaryWindowTimeout: Duration = .seconds(5),
+        primaryWindowPollingInterval: Duration = .milliseconds(50)
+    ) {
+        self.windows = windows
+        self.primaryWindowTimeout = primaryWindowTimeout
+        self.primaryWindowPollingInterval = primaryWindowPollingInterval
+    }
+
     func launchInBackground(_ application: ComputerUseApplicationRecord) async throws
         -> ComputerUseApplicationRecord
     {
@@ -48,34 +62,60 @@ struct SystemComputerUseApplicationLauncher: ComputerUseApplicationLaunching {
         configuration.activates = false
         configuration.addsToRecentItems = false
 
-        return try await withCheckedThrowingContinuation { continuation in
+        let runningApplication = try await openApplication(
+            at: application.applicationURL,
+            configuration: configuration,
+            displayName: application.displayName
+        )
+        while !runningApplication.isFinishedLaunching {
+            guard !runningApplication.isTerminated else {
+                throw ComputerUseApplicationCatalogError.launchFailed(application.displayName)
+            }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        guard let applicationURL = runningApplication.bundleURL else {
+            throw ComputerUseApplicationCatalogError.launchFailed(application.displayName)
+        }
+        guard try await windows.waitUntilHasPrimaryWindow(
+            processIdentifier: runningApplication.processIdentifier,
+            timeout: primaryWindowTimeout,
+            pollingInterval: primaryWindowPollingInterval
+        ) != nil else {
+            throw ComputerUseApplicationCatalogError.launchFailed(application.displayName)
+        }
+        return ComputerUseApplicationRecord(
+            displayName: runningApplication.localizedName ?? application.displayName,
+            bundleIdentifier: runningApplication.bundleIdentifier
+                ?? application.bundleIdentifier,
+            applicationURL: applicationURL,
+            lastUsedDate: application.lastUsedDate,
+            useCount: application.useCount,
+            processIdentifier: runningApplication.processIdentifier,
+            isFrontmost: runningApplication.isActive
+        )
+    }
+
+    @MainActor
+    private func openApplication(
+        at applicationURL: URL,
+        configuration: NSWorkspace.OpenConfiguration,
+        displayName: String
+    ) async throws -> NSRunningApplication {
+        try await withCheckedThrowingContinuation { continuation in
             NSWorkspace.shared.openApplication(
-                at: application.applicationURL,
+                at: applicationURL,
                 configuration: configuration
             ) { runningApplication, error in
-                guard let runningApplication,
-                      let applicationURL = runningApplication.bundleURL else {
+                guard let runningApplication else {
                     continuation.resume(
                         throwing: error
                             ?? ComputerUseApplicationCatalogError.launchFailed(
-                                application.displayName
+                                displayName
                             )
                     )
                     return
                 }
-                continuation.resume(
-                    returning: ComputerUseApplicationRecord(
-                        displayName: runningApplication.localizedName
-                            ?? application.displayName,
-                        bundleIdentifier: runningApplication.bundleIdentifier
-                            ?? application.bundleIdentifier,
-                        applicationURL: applicationURL,
-                        lastUsedDate: application.lastUsedDate,
-                        useCount: application.useCount,
-                        processIdentifier: runningApplication.processIdentifier,
-                        isFrontmost: runningApplication.isActive
-                    )
-                )
+                continuation.resume(returning: runningApplication)
             }
         }
     }

@@ -1042,3 +1042,29 @@ symbols and settling instructions, `ComputerUseRuntimeGuard.swift`,
 - `[Verified]` The full suite executes 1,075 tests with 2 skipped and 0 failures. Gated coverage is
   89.36% (13,041/14,593 lines) against the requested 80% floor. E2E preflight and smoke pass.
 - `[Pending]` Installed Preview and live model validation.
+
+### Entry 62: Live observation and cold-launch parity
+
+Sources: `phase-7-live-observation-launch-parity-2026-08-09.md`, mounted native service symbols,
+direct reference and installed-Preview live sessions, window matcher and launcher changes, and
+focused/full validation.
+
+- `[Verified]` The reference waits for application launch completion and for a primary window. A
+  cold Calculator `get_app_state` succeeded directly in 791 milliseconds.
+- `[Corrected]` Suniye now correlates CG and AX windows by matching geometry when AX bounds exist;
+  dynamic title differences no longer reject the same window. Title remains a fallback when AX
+  bounds are unavailable.
+- `[Implemented]` Background launch waits until the application finishes launching and a matched
+  primary window appears, without activating the app or adding it to recent items.
+- `[Independent choice]` The five-second primary-window timeout and 50-millisecond polling interval
+  are closest-match values because the exact native constants remain unknown.
+- `[Verified]` Installed Preview tasks read Battery Health as `Normal`, calculated `17 × 19` as
+  `323`, and cold-launched/observed Calculator in one model tool call after the fix.
+- `[Verified]` The multi-action Calculator trace alternated every native action with
+  `get_app_state`, providing live evidence of fresh observation before each newly selected action.
+- `[Corrected]` Privacy-bounded lifecycle diagnostics exclude task text, arguments, AX content,
+  screenshots, paths, endpoints, and credentials.
+- `[Verified]` The strict review found no new oversized module, routing heuristic, target lock,
+  forced-frontmost behavior, or raw payload logging.
+- `[Verified]` The full suite executes 1,078 tests with 2 skipped and 0 failures. Gated coverage is
+  89.36% (13,083/14,641 lines) against the requested 80% floor. E2E preflight and smoke pass.

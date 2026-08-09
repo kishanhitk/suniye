@@ -250,3 +250,19 @@ This section supersedes prototype implementation claims above when evaluating
 - `[Verified]` The post-review full suite executes 1,041 tests with 2 skipped and 0 failures; gated
   coverage is 95.38% (12,277/12,871 lines); E2E preflight and smoke pass.
 - `[Live required]` Installed-Preview cross-process action results remain pending final E2E.
+
+## Fresh-branch phase 7 live observation status — 2026-08-09
+
+- `[Verified observable match]` A cold reference Calculator observation launches and waits for a
+  primary window before returning. The fresh Suniye path now does the same without activating the
+  target or adding it to recent items.
+- `[Corrected]` Matching geometry takes precedence over different dynamic CG/AX titles. This fixes
+  live System Settings observation without adding app-specific matching logic.
+- `[Verified]` Installed live tasks read Battery Health, performed a multi-action Calculator task,
+  and cold-launched Calculator. The multi-action trace required a new observation after every
+  action.
+- `[Independent choice]` Suniye's five-second primary-window timeout and 50-millisecond polling
+  interval are not recovered reference constants.
+- `[Verified]` Lifecycle diagnostics are metadata-only and exclude user/model/native payloads.
+- `[Still required]` The final E2E matrix must exercise all action kinds, Stop, intervention,
+  failure/permission paths, voice initiation, and final chat rendering.

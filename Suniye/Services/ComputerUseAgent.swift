@@ -76,13 +76,24 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
             )
         }
         messages.append(.text(role: .user, text: instruction))
+        var step = 0
+        AppLogger.shared.log(.info, "computer use run started")
         do {
             while true {
                 try Task.checkCancellation()
                 switch try await model.respond(to: messages) {
                 case let .text(text):
+                    AppLogger.shared.log(
+                        .info,
+                        "computer use run completed steps=\(step)"
+                    )
                     return ComputerUseAgentResult(outcome: .completed, message: text)
                 case let .toolCall(id, name, arguments):
+                    step += 1
+                    AppLogger.shared.log(
+                        .debug,
+                        "computer use tool started step=\(step) name=\(name)"
+                    )
                     messages.append(
                         .toolCall(id: id, name: name, arguments: arguments)
                     )
@@ -95,13 +106,19 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 }
             }
         } catch ComputerUseRuntimeError.userIntervened {
+            AppLogger.shared.log(.info, "computer use run cancelled reason=user_intervened")
             return ComputerUseAgentResult(
                 outcome: .cancelled,
                 message: ComputerUseRuntimeError.userIntervened.errorDescription ?? "Stopped."
             )
         } catch is CancellationError {
+            AppLogger.shared.log(.info, "computer use run cancelled reason=requested")
             return ComputerUseAgentResult(outcome: .cancelled, message: "Stopped.")
         } catch {
+            AppLogger.shared.log(
+                .warning,
+                "computer use run failed error_type=\(String(describing: type(of: error)))"
+            )
             return ComputerUseAgentResult(
                 outcome: .failed,
                 message: localizedMessage(error)
@@ -121,6 +138,10 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 arguments: arguments
             )
             let result = try await session.execute(call)
+            AppLogger.shared.log(
+                .debug,
+                "computer use tool completed name=\(name) result=\(result.logValue)"
+            )
             messages.append(
                 .toolResult(id: id, content: try ComputerUseToolResultEncoder.encode(result))
             )
@@ -140,6 +161,10 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         } catch let error as ComputerUseRuntimeError {
             throw error
         } catch {
+            AppLogger.shared.log(
+                .warning,
+                "computer use tool failed name=\(name) error_type=\(String(describing: type(of: error)))"
+            )
             messages.append(
                 .toolResult(
                     id: id,
@@ -153,5 +178,18 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
 
     private func localizedMessage(_ error: Error) -> String {
         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+}
+
+private extension ComputerUseToolResult {
+    var logValue: String {
+        switch self {
+        case let .applications(applications):
+            "applications count=\(applications.count)"
+        case let .appState(state):
+            "app_state text_chars=\(state.text.count) screenshot=\(state.screenshot != nil)"
+        case .actionCompleted:
+            "action_completed"
+        }
     }
 }

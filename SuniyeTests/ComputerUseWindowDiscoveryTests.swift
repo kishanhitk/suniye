@@ -49,15 +49,32 @@ final class ComputerUseWindowDiscoveryTests: XCTestCase {
         XCTAssertEqual(windows.map(\.id), [1, 2])
     }
 
-    func testMismatchedOrEmptyWindowsAreExcluded() async throws {
+    func testMatchingBoundsTakePrecedenceOverDifferentDynamicTitles() async throws {
         let inventory = StubComputerUseWindowInventory(
             cgWindows: [
-                cgWindow(id: 1, title: "Wrong title", x: 10, width: 300),
-                cgWindow(id: 2, title: "Empty", x: 20, width: 0),
+                cgWindow(id: 1, title: "Battery", x: 10, width: 300),
             ],
             axWindows: [
-                axWindow(ordinal: 0, title: "Expected title", x: 10, width: 300),
+                axWindow(
+                    ordinal: 0,
+                    title: "Battery – Charged to 80% Limit",
+                    x: 10,
+                    width: 300
+                ),
             ]
+        )
+        let discovery = ComputerUseWindowDiscovery(inventory: inventory)
+
+        let windows = try await discovery.orderedWindows(processIdentifier: 123)
+
+        XCTAssertEqual(windows.map(\.id), [1])
+        XCTAssertEqual(windows.first?.accessibilityOrdinal, 0)
+    }
+
+    func testEmptyCGWindowsAreExcluded() async throws {
+        let inventory = StubComputerUseWindowInventory(
+            cgWindows: [cgWindow(id: 2, title: "Empty", x: 20, width: 0)],
+            axWindows: [axWindow(ordinal: 0, title: "Empty", x: 20, width: 0)]
         )
         let discovery = ComputerUseWindowDiscovery(inventory: inventory)
 
@@ -85,6 +102,45 @@ final class ComputerUseWindowDiscoveryTests: XCTestCase {
 
         XCTAssertEqual(windows.map(\.id), [7])
         XCTAssertEqual(windows.first?.accessibilityOrdinal, 4)
+    }
+
+    func testPrimaryWindowWaitPollsUntilAWindowAppears() async throws {
+        let expected = ComputerUseWindow(
+            id: 7,
+            ownerProcessIdentifier: 123,
+            title: "Calculator",
+            bounds: CGRect(x: 10, y: 10, width: 300, height: 500),
+            layer: 0,
+            isOnScreen: true,
+            accessibilityOrdinal: 0,
+            isFocused: false,
+            isMain: true
+        )
+        let discovery = SequencedComputerUseWindowDiscovery(responses: [[], [expected]])
+
+        let window = try await discovery.waitUntilHasPrimaryWindow(
+            processIdentifier: 123,
+            timeout: .seconds(1),
+            pollingInterval: .milliseconds(1)
+        )
+
+        XCTAssertEqual(window, expected)
+        let callCount = await discovery.callCount
+        XCTAssertEqual(callCount, 2)
+    }
+
+    func testPrimaryWindowWaitReturnsNilAtItsDeadline() async throws {
+        let discovery = SequencedComputerUseWindowDiscovery(responses: [[]])
+
+        let window = try await discovery.waitUntilHasPrimaryWindow(
+            processIdentifier: 123,
+            timeout: .zero,
+            pollingInterval: .milliseconds(1)
+        )
+
+        XCTAssertNil(window)
+        let callCount = await discovery.callCount
+        XCTAssertEqual(callCount, 1)
     }
 
     func testWindowDescriptionDecoderCreatesTypedSnapshot() {
@@ -162,6 +218,23 @@ final class ComputerUseWindowDiscoveryTests: XCTestCase {
             isFocused: isFocused,
             isMain: isMain
         )
+    }
+}
+
+private actor SequencedComputerUseWindowDiscovery: ComputerUseWindowDiscovering {
+    private var responses: [[ComputerUseWindow]]
+    private(set) var callCount = 0
+
+    init(responses: [[ComputerUseWindow]]) {
+        self.responses = responses
+    }
+
+    func orderedWindows(processIdentifier: Int32) -> [ComputerUseWindow] {
+        callCount += 1
+        guard responses.count > 1 else {
+            return responses.first ?? []
+        }
+        return responses.removeFirst()
     }
 }
 
