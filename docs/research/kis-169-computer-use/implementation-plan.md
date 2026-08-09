@@ -645,6 +645,23 @@ the existing Computer Use coordinator. The detailed design and evidence boundary
 - `[Unknown]` Live microphone capture, provider behavior after voice submission, and browser
   extension routing remain unverified.
 
+## Fresh phase 5 implementation status — 2026-08-09
+
+- `[Implemented]` `ComputerUseCoordinator` is the main-actor boundary for conversation state,
+  provider configuration, permissions, one active agent task, cancellation, and queued voice work.
+- `[Implemented]` `ComputerUsePage` and its focused chat/settings components provide the
+  conversation-first surface with one Send/Stop control and collapsed setup UI.
+- `[Implemented]` `SystemComputerUsePermissionService` wraps Accessibility and Screen Recording
+  status/request APIs; a separate opener handles denied-permission recovery.
+- `[Implemented]` `ComputerUseVoiceTaskHandling` keeps `AppState` independent of coordinator
+  internals while routing a raw local transcript from the visible page.
+- `[Verified]` Coordinator and voice tests cover message ordering, composer clearing, follow-up
+  context, stale completions, cancellation, permission races, model changes, and queued voice.
+- `[Next]` Add only the remaining native behaviors supported by recovered evidence: physical-user
+  intervention, lock-screen guarding, and loading-aware settling. Keep browser control separate.
+- `[Next]` Install the Preview and run live end-to-end validation with the selected model after the
+  final strict review.
+
 ### Later: Browser adapter
 
 Design browser control as a separate capability after desktop behavior is stable.

@@ -983,3 +983,38 @@ tool catalog and decoder, and focused/full validation.
   preflight and smoke both pass.
 - `[Not implemented]` Main-actor coordinator integration, final permission/intervention/voice/chat
   UX, and installed live-provider Computer Use validation remain subsequent work.
+
+### Entry 60: Fresh implementation phase 5 coordinator, chat, permissions, and voice
+
+Sources: `phase-5-coordinator-chat-voice-2026-08-09.md`,
+`ComputerUseCoordinator.swift`, `ComputerUsePermissionService.swift`,
+`ComputerUseVoiceTaskHandling.swift`, the three Computer Use SwiftUI files, and focused/full
+validation.
+
+- `[Implemented]` A main-actor observable coordinator owns model configuration, permission state,
+  conversation history, queued voice work, one active agent task, cancellation, and terminal
+  result publication. The actor agent cannot mutate SwiftUI state directly.
+- `[Implemented]` A submitted instruction is appended to conversation history and removed from the
+  composer before the agent starts. Assistant output is appended only to the transcript. Follow-up
+  runs receive prior conversation once and the current instruction once.
+- `[Implemented]` The page exposes a single contextual Send/Stop control, generic shimmering
+  `Working` status, new-conversation reset, and one collapsed settings disclosure at the bottom.
+  No target picker, target lock, frontmost fallback, manual native-action panel, approval card, or
+  debug observation panel is present.
+- `[Implemented]` Accessibility and Screen Recording use the public TCC preflight/request APIs.
+  When access remains denied, the settings disclosure can open the corresponding System Settings
+  privacy pane.
+- `[Implemented]` While the Computer Use page is visible, Suniye's existing local hold-to-talk
+  pipeline routes the raw transcript to the coordinator. It bypasses Magic Format, clipboard and
+  focused-app insertion, submit-key handling, and dictation history.
+- `[Corrected]` The strict review split the page into focused files, allowed model changes to apply
+  to the next run while preserving the current run, generation-guarded overlapping permission
+  requests, and queued voice work during permission preparation.
+- `[Independent choice]` The exact SwiftUI layout, permission-settings deep links, visible-page
+  voice routing, and voice queue lifecycle are Suniye integrations. The inspected artifact does
+  not reveal those exact host-level implementations.
+- `[Verified]` The full suite executes 1,064 tests with 2 skipped and 0 failures. Gated coverage is
+  89.32% (12,938/14,485 lines) against the requested 80% floor. E2E preflight and smoke pass.
+- `[Unknown]` Live provider behavior, installed-app TCC behavior, cross-process actions,
+  physical-input intervention timing, lock-screen behavior, loading-aware settling, and browser
+  control remain unverified or unimplemented.

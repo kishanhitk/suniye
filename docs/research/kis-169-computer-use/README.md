@@ -11,13 +11,14 @@ The source artifact is `/Users/kishan/Downloads/ChatGPT (1).dmg`.
 branch without carrying over the prior prototype implementation. New Swift code is being written
 from the recovered contract. The fresh implementation now contains the exact ten-tool domain
 contract, app and window discovery, AX and screenshot observation, native actions with one-shot
-fresh-observation enforcement, and a provider-backed model/agent loop. Older implementation
-entries remain historical records from the preserved `kis-169-computer-use` branch unless a
-fresh-phase note explicitly re-verifies them.
+fresh-observation enforcement, a provider-backed model/agent loop, and a main-actor conversation
+coordinator with permission, cancellation, and direct-voice UX. Older implementation entries
+remain historical records from the preserved `kis-169-computer-use` branch unless a fresh-phase
+note explicitly re-verifies them.
 
-The fresh branch does not yet connect that agent to the main-actor coordinator or final chat,
-permission, cancellation, intervention, and direct-voice UX. It has not yet completed an installed
-live provider run. See the phase notes below for verified boundaries and independent choices.
+The fresh branch has not yet completed physical-input intervention, lock-screen handling,
+loading-aware settling, or an installed live-provider run. See the phase notes below for verified
+boundaries and independent choices.
 
 See `fresh-implementation-baseline-2026-08-09.md` before beginning the new implementation.
 
@@ -81,6 +82,9 @@ cross-process input still require separate validation.
 - `phase-4-provider-agent-loop-2026-08-09.md` records the exact model tool contract, ordered
   context loop, provider transport, strict-review corrections, independent choices, validation,
   and remaining coordinator/UX work.
+- `phase-5-coordinator-chat-voice-2026-08-09.md` records the main-actor coordinator, permission and
+  cancellation lifecycle, conversation UI, direct-voice route, strict-review corrections,
+  validation, and remaining live/native work.
 
 ## Evidence labels
 

@@ -182,3 +182,21 @@
   during a live voice task?
 - `[Deferred]` Browser voice tasks should be validated through the separate browser extension path,
   not by extending the desktop routing seam.
+
+## Fresh phase 5 status — 2026-08-09
+
+- `[Resolved]` The fresh provider-backed agent is connected to a main-actor coordinator and the
+  Computer Use conversation page.
+- `[Resolved]` The composer clears on submission and assistant output is rendered only in the
+  transcript. Working state has one Stop control and generic shimmering status text.
+- `[Resolved]` Accessibility and Screen Recording are checked and requested at the feature
+  boundary, with recovery links to the matching System Settings pane.
+- `[Resolved]` Direct voice reuses local transcription and routes raw text only while the Computer
+  Use page is visible. It does not use phrase matching or focused-app insertion.
+- `[Unknown]` What exact physical-input debounce and self-generated-event suppression does the
+  native reference helper apply before cancelling or re-observing?
+- `[Unknown]` What exact lock-screen transition and recovery UX should Suniye expose?
+- `[Unknown]` Which loading indicators and observation changes extend the reference settling
+  window, and for how long?
+- `[Live required]` Validate model routing, TCC permission identity, safe cross-process native
+  actions, Stop behavior, direct voice, and the installed conversation UI.

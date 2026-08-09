@@ -41,7 +41,11 @@ struct ComputerUseAgentResult: Equatable, Sendable {
     let message: String
 }
 
-actor ComputerUseAgent {
+protocol ComputerUseAgentRunning: Sendable {
+    func run(task: ComputerUseAgentTask) async -> ComputerUseAgentResult
+}
+
+actor ComputerUseAgent: ComputerUseAgentRunning {
     private let model: ComputerUseModelServing
     private let session: ComputerUseSession
     private let screenshots: ComputerUseScreenshotLoading

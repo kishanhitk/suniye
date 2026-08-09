@@ -4,6 +4,7 @@ import XCTest
 final class MainWindowSectionTests: XCTestCase {
     func testLaunchArgumentsRouteToExpectedSections() {
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-dashboard"]), .dashboard)
+        XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-computer-use"]), .computerUse)
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-history"]), .history)
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-model"]), .model)
         XCTAssertEqual(MainWindowSection.initialSelection(arguments: ["Suniye", "--open-style"]), .style)
@@ -20,5 +21,10 @@ final class MainWindowSectionTests: XCTestCase {
 
     func testStyleSectionUsesMagicFormatTitle() {
         XCTAssertEqual(MainWindowSection.style.title, "Magic Format")
+    }
+
+    func testComputerUseSectionPresentation() {
+        XCTAssertEqual(MainWindowSection.computerUse.title, "Computer Use")
+        XCTAssertEqual(MainWindowSection.computerUse.icon, "cursorarrow.click.2")
     }
 }

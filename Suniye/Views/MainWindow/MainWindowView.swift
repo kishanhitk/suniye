@@ -3,6 +3,7 @@ import SwiftUI
 struct MainWindowView: View {
     @Bindable var appState: AppState
     @State private var selection: MainWindowSection = MainWindowSection.initialSelection(arguments: CommandLine.arguments)
+    @State private var computerUseCoordinator = ComputerUseCoordinator()
     private let appIdentity = AppIdentity.current
 
     var body: some View {
@@ -60,6 +61,13 @@ struct MainWindowView: View {
             switch selection {
             case .dashboard:
                 DashboardPage(appState: appState) { selection = $0 }
+            case .computerUse:
+                ComputerUsePage(
+                    coordinator: computerUseCoordinator,
+                    modelConfiguration: appState.computerUseRemoteModelConfiguration,
+                    openModelSettings: { selection = .style },
+                    onVoiceTaskHandlerChange: appState.setComputerUseVoiceTaskHandler
+                )
             case .history:
                 HistoryPage(appState: appState)
             case .model:

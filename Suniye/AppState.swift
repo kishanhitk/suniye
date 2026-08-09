@@ -523,6 +523,8 @@ final class AppState {
     @ObservationIgnored private var hasTrackedMagicFormatNudgeShown = false
     @ObservationIgnored private var firstLaunchRecorded = false
     @ObservationIgnored private var lastKnownAccessibilityGranted = false
+    @ObservationIgnored private weak var computerUseVoiceTaskHandler:
+        (any ComputerUseVoiceTaskHandling)?
     private var magicFormatNudgeDismissed = false {
         didSet {
             guard !isHydratingGeneralSettings, oldValue != magicFormatNudgeDismissed else {
@@ -777,6 +779,13 @@ final class AppState {
 
     var llmStatusHint: String? {
         magicFormatSetupState.detail
+    }
+
+    var computerUseRemoteModelConfiguration: ComputerUseRemoteModelConfiguration? {
+        ComputerUseModelConfigurationFactory.make(
+            settings: currentLLMSettings(),
+            apiKey: try? keychainService.getLLMKey()
+        )
     }
 
     var llmSelectedModelIdPreview: String {
@@ -1545,13 +1554,14 @@ final class AppState {
         case systemInsertion
         case clipboardOnly
         case onboardingPractice
+        case computerUseTask
         case editRewrite(selectedText: String?)
 
         var needsAccessibility: Bool {
             switch self {
             case .systemInsertion, .editRewrite:
                 true
-            case .clipboardOnly, .onboardingPractice:
+            case .clipboardOnly, .onboardingPractice, .computerUseTask:
                 false
             }
         }
@@ -1564,6 +1574,8 @@ final class AppState {
                 .clipboard
             case .onboardingPractice:
                 .onboardingPractice
+            case .computerUseTask:
+                .unknown
             }
         }
     }
@@ -3193,6 +3205,12 @@ final class AppState {
         }
     }
 
+    func setComputerUseVoiceTaskHandler(
+        _ handler: (any ComputerUseVoiceTaskHandling)?
+    ) {
+        computerUseVoiceTaskHandler = handler
+    }
+
     func stopRecordingFromUI() {
         guard phase == .recording else {
             return
@@ -3698,6 +3716,11 @@ final class AppState {
                     source: context.source,
                     destination: destination
                 )
+            case .computerUseTask:
+                completeComputerUseVoiceTask(
+                    rawText: rawText,
+                    sessionID: sessionID
+                )
             case .onboardingPractice:
                 await completeOnboardingPracticeDictation(
                     rawText: rawText,
@@ -3723,6 +3746,38 @@ final class AppState {
                 indicatorMessage: "Transcription failed"
             )
         }
+    }
+
+    private func completeComputerUseVoiceTask(
+        rawText: String,
+        sessionID: UUID
+    ) {
+        guard !rawText.isEmpty else {
+            failDictationSession(
+                sessionID: sessionID,
+                lastErrorMessage: "No Computer Use task was transcribed.",
+                indicatorMessage: "No task heard"
+            )
+            return
+        }
+        guard let computerUseVoiceTaskHandler else {
+            failDictationSession(
+                sessionID: sessionID,
+                lastErrorMessage: "Computer Use is no longer active.",
+                indicatorMessage: "Computer Use is no longer active"
+            )
+            return
+        }
+
+        if case let .rejected(message) = computerUseVoiceTaskHandler.submitVoiceTask(rawText) {
+            failDictationSession(
+                sessionID: sessionID,
+                lastErrorMessage: message,
+                indicatorMessage: message
+            )
+            return
+        }
+        completeDictationSession(sessionID: sessionID, playSuccessSound: true)
     }
 
     private func completeDictation(
@@ -4499,6 +4554,9 @@ final class AppState {
     private var currentDictationDestination: DictationDestination {
         if activeOnboardingStep == .speak {
             return .onboardingPractice
+        }
+        if computerUseVoiceTaskHandler != nil {
+            return .computerUseTask
         }
         return hasAccessibilityPermission ? .systemInsertion : .clipboardOnly
     }
