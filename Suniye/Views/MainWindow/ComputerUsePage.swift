@@ -116,7 +116,15 @@ struct ComputerUsePage: View {
                     .padding(.vertical, 6)
                     .disabled(coordinator.isRunning)
                     .accessibilityLabel("Computer Use task")
+                    .accessibilityHint("Press Return to send. Hold Shift and press Return for a new line.")
                     .accessibilityIdentifier("computer-use-composer")
+                    .onKeyPress(.return, phases: .down) { keyPress in
+                        guard !keyPress.modifiers.contains(.shift) else {
+                            return .ignored
+                        }
+                        coordinator.submit()
+                        return .handled
+                    }
 
                 Button(action: coordinator.isRunning ? coordinator.stop : coordinator.submit) {
                     Image(systemName: coordinator.isRunning ? "stop.fill" : "arrow.up")
