@@ -1203,3 +1203,33 @@ XCTest runs, coverage, E2E scripts, the installed Preview, sessions `CU-DACA4C3C
 - `[Verified]` The final focused suite executes 32 tests with zero failures. The full suite executes
   1,093 tests with 2 skipped and zero failures. Gated coverage is 88.45% (13,397/15,146 lines)
   against the 80% floor. E2E preflight and smoke pass.
+
+### Entry 69: Background-Space observation parity
+
+Sources: `phase-12-background-space-observation-2026-08-12.md`, mounted native binary symbols,
+direct bundled-runtime observations, Core Graphics and Accessibility probes, installed Preview
+sessions `CU-87E929416B23` and `CU-1294CF91EBB9`, XCTest, coverage, and E2E scripts.
+
+- `[Corrected]` Entry 68's removal of the all-window path is superseded. Live reference behavior
+  proves that Computer Use can observe an application on another Space without bringing it
+  forward, and the native binary contains the corresponding private WindowServer capture path.
+- `[Verified]` Helium exposes no on-screen Core Graphics window and an empty `AXWindows` array in
+  this state, while the complete Core Graphics list plus `AXMainWindow`/`AXFocusedWindow` identify
+  its real browser window and complete Accessibility tree.
+- `[Corrected]` Direct probing rejected the earlier AX-enablement hypothesis for this failure:
+  `AXManualAccessibility` is unsupported and `AXEnhancedUserInterface` is already true. No
+  Chromium-specific enablement branch remains in Suniye.
+- `[Implemented]` Suniye tries the normal on-screen match first, then the complete window list;
+  shares the AX main/focused fallback across discovery, observation, and actions; and tries
+  ScreenCaptureKit before the dynamically resolved SkyLight/WindowServer image function.
+- `[Verified]` ScreenCaptureKit enumerates the off-Space window with
+  `onScreenWindowsOnly: false` but fails capture with `SCStreamErrorDomain -3811`. The recovered
+  `SLSHWCaptureWindowListInRect` path returned the correct 3420-by-2148 image without activation.
+- `[Verified live]` Session `CU-87E929416B23` naturally read the two Helium tabs in one observation.
+  Session `CU-1294CF91EBB9` opened and closed a new tab with a fresh observation after each action;
+  an independent observation verified that the original two-tab state was restored.
+- `[Verified]` The full suite executes 1,093 tests with 2 skipped and zero failures. Gated coverage
+  is 88.46% (13,411/15,160 lines) against the 80% floor. E2E preflight and smoke pass.
+- `[Unknown]` The exact full private-backend branch matrix, every WindowServer option bit, and
+  future private-API compatibility remain unavailable. No behavior beyond the verified fallback
+  was added.

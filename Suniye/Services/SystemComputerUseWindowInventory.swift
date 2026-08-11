@@ -10,11 +10,18 @@ struct SystemComputerUseWindowInventory: ComputerUseWindowInventoryProviding {
         return descriptions.compactMap(ComputerUseWindowDescriptionDecoder.decode)
     }
 
+    func allWindows() throws -> [ComputerUseCGWindowSnapshot] {
+        guard let descriptions = SuniyeCopyAllWindowDescriptions() else {
+            throw ComputerUseWindowInventoryError.windowListUnavailable
+        }
+        return descriptions.compactMap(ComputerUseWindowDescriptionDecoder.decode)
+    }
+
     func accessibilityWindows(processIdentifier: Int32) throws
         -> [ComputerUseAXWindowSnapshot]
     {
         let application = AXUIElementCreateApplication(processIdentifier)
-        let windows = try requiredElements(attribute: kAXWindowsAttribute, from: application)
+        let windows = try requiredApplicationWindows(from: application)
         let focusedWindow = SystemComputerUseAccessibilityAPI.element(
             kAXFocusedWindowAttribute,
             from: application
@@ -35,10 +42,10 @@ struct SystemComputerUseWindowInventory: ComputerUseWindowInventoryProviding {
         }
     }
 
-    private func requiredElements(attribute: String, from element: AXUIElement) throws
+    private func requiredApplicationWindows(from application: AXUIElement) throws
         -> [AXUIElement]
     {
-        let result = SystemComputerUseAccessibilityAPI.copy(attribute, from: element)
+        let result = SystemComputerUseAccessibilityAPI.applicationWindows(from: application)
         guard result.error == .success else {
             throw ComputerUseWindowInventoryError.accessibilityFailure(result.error.rawValue)
         }

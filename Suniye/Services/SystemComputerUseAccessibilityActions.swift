@@ -230,10 +230,10 @@ private struct Worker: Sendable {
             throw ComputerUseActionError.staleObservation(target.application.displayName)
         }
         let app = AXUIElementCreateApplication(pid)
-        let windows = SystemComputerUseAccessibilityAPI.elements(
-            kAXWindowsAttribute,
-            from: app
-        ) ?? []
+        let windowResult = SystemComputerUseAccessibilityAPI.applicationWindows(from: app)
+        let windows = windowResult.error == .success
+            ? SystemComputerUseAccessibilityAPI.elements(from: windowResult.value)
+            : []
         guard windows.indices.contains(target.window.accessibilityOrdinal) else {
             throw ComputerUseActionError.staleObservation(target.application.displayName)
         }

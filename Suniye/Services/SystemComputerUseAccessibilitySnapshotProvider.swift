@@ -33,7 +33,7 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
 
         mutating func snapshot(pid: Int32, windowOrdinal: Int) throws -> ComputerUseAXSnapshot {
             let application = AXUIElementCreateApplication(pid)
-            let windows = try requiredElements(kAXWindowsAttribute, from: application)
+            let windows = try requiredApplicationWindows(from: application)
             guard windows.indices.contains(windowOrdinal) else {
                 throw ComputerUseAccessibilitySnapshotError.windowUnavailable(windowOrdinal)
             }
@@ -86,6 +86,18 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
                 throw ComputerUseAccessibilitySnapshotError.attributeUnavailable(attribute)
             }
             return elements
+        }
+
+        private func requiredApplicationWindows(from application: AXUIElement) throws
+            -> [AXUIElement]
+        {
+            let result = SystemComputerUseAccessibilityAPI.applicationWindows(from: application)
+            guard result.error == .success else {
+                throw ComputerUseAccessibilitySnapshotError.attributeUnavailable(
+                    kAXWindowsAttribute
+                )
+            }
+            return SystemComputerUseAccessibilityAPI.elements(from: result.value)
         }
 
         private func string(_ attribute: String, from element: AXUIElement) -> String? {

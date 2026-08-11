@@ -1,4 +1,5 @@
 #import "c-api.h"
+#import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
 #ifdef __cplusplus
@@ -13,6 +14,11 @@ const SherpaOnnxOfflineRecognizer * _Nullable SuniyeCreateOfflineRecognizerSafe(
 void SuniyeFreeCString(char * _Nullable string);
 
 NSArray<NSDictionary<NSString *, id> *> * _Nullable SuniyeCopyOnScreenWindowDescriptions(void);
+NSArray<NSDictionary<NSString *, id> *> * _Nullable SuniyeCopyAllWindowDescriptions(void);
+CGImageRef _Nullable SuniyeCopyWindowImage(
+    CGWindowID windowID,
+    CGRect bounds
+) CF_RETURNS_RETAINED;
 
 #ifdef __cplusplus
 }

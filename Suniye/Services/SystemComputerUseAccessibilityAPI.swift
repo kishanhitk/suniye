@@ -57,6 +57,28 @@ enum SystemComputerUseAccessibilityAPI {
         return elements(from: value)
     }
 
+    static func applicationWindows(from application: AXUIElement)
+        -> (error: AXError, value: CFTypeRef?)
+    {
+        let result = copy(kAXWindowsAttribute, from: application)
+        guard result.error == .success else {
+            return result
+        }
+        guard elements(from: result.value).isEmpty else {
+            return result
+        }
+
+        var windows: [AXUIElement] = []
+        for attribute in [kAXMainWindowAttribute, kAXFocusedWindowAttribute] {
+            guard let window = element(attribute, from: application),
+                  !windows.contains(where: { CFEqual($0, window) }) else {
+                continue
+            }
+            windows.append(window)
+        }
+        return (.success, windows as CFArray)
+    }
+
     static func elements(from value: CFTypeRef?) -> [AXUIElement] {
         guard let values = value as? [AnyObject] else {
             return []

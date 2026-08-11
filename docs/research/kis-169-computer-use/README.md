@@ -105,6 +105,9 @@ cross-process input still require separate validation.
 - `phase-11-run-scoped-cursor-and-native-parity-2026-08-12.md` records persistent cursor lifecycle,
   process-scoped pointer delivery, per-action observation semantics, same-process replacement
   window reacquisition, and current live validation.
+- `phase-12-background-space-observation-2026-08-12.md` records the recovered all-window and
+  Accessibility fallback, ScreenCaptureKit's verified off-Space failure, the matching private
+  WindowServer screenshot path, and natural read/action E2E validation.
 - `deep-code-parity-audit-2026-08-12.md` consolidates three independent code-level audits of the
   model/runtime, native mechanics, and cursor/UX, with verified gaps kept explicit.
 

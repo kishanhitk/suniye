@@ -32,8 +32,15 @@ struct ComputerUseWindow: Equatable, Sendable {
 
 protocol ComputerUseWindowInventoryProviding: Sendable {
     func onScreenWindows() throws -> [ComputerUseCGWindowSnapshot]
+    func allWindows() throws -> [ComputerUseCGWindowSnapshot]
     func accessibilityWindows(processIdentifier: Int32) throws
         -> [ComputerUseAXWindowSnapshot]
+}
+
+extension ComputerUseWindowInventoryProviding {
+    func allWindows() throws -> [ComputerUseCGWindowSnapshot] {
+        try onScreenWindows()
+    }
 }
 
 protocol ComputerUseWindowDiscovering: Sendable {
@@ -74,9 +81,19 @@ actor ComputerUseWindowDiscovery: ComputerUseWindowDiscovering {
         let axWindows = try inventory.accessibilityWindows(
             processIdentifier: processIdentifier
         )
-        return ComputerUseWindowMatcher.match(
+        let onScreenMatches = ComputerUseWindowMatcher.match(
             cgWindows: try candidateWindows(
                 inventory.onScreenWindows(),
+                processIdentifier: processIdentifier
+            ),
+            axWindows: axWindows
+        )
+        if !onScreenMatches.isEmpty {
+            return onScreenMatches
+        }
+        return ComputerUseWindowMatcher.match(
+            cgWindows: try candidateWindows(
+                inventory.allWindows(),
                 processIdentifier: processIdentifier
             ),
             axWindows: axWindows

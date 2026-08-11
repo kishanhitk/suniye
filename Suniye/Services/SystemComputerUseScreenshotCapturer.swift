@@ -14,7 +14,7 @@ actor SystemComputerUseScreenshotCapturer: ComputerUseScreenshotCapturing {
     func capture(windowID: UInt32) async throws -> ComputerUseCapturedScreenshot? {
         let content = try await SCShareableContent.excludingDesktopWindows(
             false,
-            onScreenWindowsOnly: true
+            onScreenWindowsOnly: false
         )
         let window = content.windows.first(where: {
             $0.windowID == windowID
@@ -33,10 +33,18 @@ actor SystemComputerUseScreenshotCapturer: ComputerUseScreenshotCapturing {
         configuration.capturesAudio = false
         configuration.ignoreShadowsSingleWindow = true
 
-        let image = try await SCScreenshotManager.captureImage(
-            contentFilter: SCContentFilter(desktopIndependentWindow: window),
-            configuration: configuration
-        )
+        let image: CGImage
+        do {
+            image = try await SCScreenshotManager.captureImage(
+                contentFilter: SCContentFilter(desktopIndependentWindow: window),
+                configuration: configuration
+            )
+        } catch {
+            guard let fallbackImage = SuniyeCopyWindowImage(windowID, window.frame) else {
+                throw error
+            }
+            image = fallbackImage
+        }
         let pixelWidth = image.width
         let pixelHeight = image.height
         guard let data = NSBitmapImageRep(cgImage: image).representation(

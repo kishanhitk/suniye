@@ -24,18 +24,33 @@ final class ComputerUseWindowDiscoveryTests: XCTestCase {
         XCTAssertEqual(windows.map(\.accessibilityOrdinal), [1, 0])
     }
 
-    func testDoesNotReturnOffScreenWindowWhenNoOnScreenWindowMatches() async throws {
+    func testFallsBackToAllWindowsWhenNoOnScreenWindowMatches() async throws {
         let inventory = StubComputerUseWindowInventory(
             cgWindows: [],
+            allCGWindows: [
+                cgWindow(
+                    id: 9,
+                    title: "Background document",
+                    x: 10,
+                    width: 600,
+                    isOnScreen: false
+                ),
+            ],
             axWindows: [
-                axWindow(ordinal: 0, title: nil, x: 10, width: 600, isMain: true),
+                axWindow(
+                    ordinal: 0,
+                    title: "Background document",
+                    x: 10,
+                    width: 600,
+                    isMain: true
+                ),
             ]
         )
         let discovery = ComputerUseWindowDiscovery(inventory: inventory)
 
         let windows = try await discovery.orderedWindows(processIdentifier: 123)
 
-        XCTAssertTrue(windows.isEmpty)
+        XCTAssertEqual(windows.map(\.id), [9])
     }
 
     func testWindowOrderingDoesNotAddTitleAreaOrFocusedHeuristics() async throws {
@@ -255,18 +270,25 @@ private actor SequencedComputerUseWindowDiscovery: ComputerUseWindowDiscovering 
 
 private struct StubComputerUseWindowInventory: ComputerUseWindowInventoryProviding {
     let cgWindows: [ComputerUseCGWindowSnapshot]
+    let allCGWindows: [ComputerUseCGWindowSnapshot]
     let axWindows: [ComputerUseAXWindowSnapshot]
 
     init(
         cgWindows: [ComputerUseCGWindowSnapshot],
+        allCGWindows: [ComputerUseCGWindowSnapshot]? = nil,
         axWindows: [ComputerUseAXWindowSnapshot]
     ) {
         self.cgWindows = cgWindows
+        self.allCGWindows = allCGWindows ?? cgWindows
         self.axWindows = axWindows
     }
 
     func onScreenWindows() throws -> [ComputerUseCGWindowSnapshot] {
         cgWindows
+    }
+
+    func allWindows() throws -> [ComputerUseCGWindowSnapshot] {
+        allCGWindows
     }
 
     func accessibilityWindows(processIdentifier: Int32) throws
