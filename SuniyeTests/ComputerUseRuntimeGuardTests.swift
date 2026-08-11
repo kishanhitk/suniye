@@ -19,28 +19,6 @@ final class ComputerUseRuntimeGuardTests: XCTestCase {
         XCTAssertFalse(checker.isScreenLocked())
     }
 
-    func testPhysicalInputSamplerRetainsEachMonitoredCounter() {
-        let sampler = SystemComputerUsePhysicalInputSampler { eventType in
-            eventType.rawValue
-        }
-
-        XCTAssertEqual(
-            sampler.snapshot().eventCounts,
-            [
-                CGEventType.leftMouseDown.rawValue,
-                CGEventType.rightMouseDown.rawValue,
-                CGEventType.otherMouseDown.rawValue,
-                CGEventType.mouseMoved.rawValue,
-                CGEventType.leftMouseDragged.rawValue,
-                CGEventType.rightMouseDragged.rawValue,
-                CGEventType.otherMouseDragged.rawValue,
-                CGEventType.scrollWheel.rawValue,
-                CGEventType.keyDown.rawValue,
-                CGEventType.flagsChanged.rawValue,
-            ]
-        )
-    }
-
     func testLoadingStateCheckerFindsNestedProgressIndicator() async {
         let accessibility = RuntimeGuardAccessibilityStub(
             result: .success(

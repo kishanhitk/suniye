@@ -2,20 +2,16 @@ import ApplicationServices
 import Foundation
 
 struct SystemComputerUseAccessibilityActions: ComputerUseAccessibilityActionPerforming {
-    func press(
+    func performPrimaryClick(
         reference: ComputerUseAccessibilityElementReference,
-        target: ComputerUseObservedTarget
+        target: ComputerUseObservedTarget,
+        clickCount: Int
     ) async throws -> Bool {
         try await run(reference: reference, target: target) { worker, element in
-            guard worker.actions(element).contains(where: {
-                $0.rawName == kAXPressAction as String
-            }) else {
-                return false
+            if clickCount == 1, try worker.selectIfPossible(element) {
+                return true
             }
-            guard AXUIElementPerformAction(element, kAXPressAction as CFString) == .success else {
-                throw ComputerUseActionError.actionUnavailable(kAXPressAction as String)
-            }
-            return true
+            return try worker.pressIfPossible(element, count: clickCount)
         }
     }
 
@@ -172,6 +168,43 @@ private struct Worker: Sendable {
 
     func actions(_ element: AXUIElement) -> [ComputerUseAccessibilityActionDescriptor] {
         SystemComputerUseAccessibilityAPI.actions(from: element)
+    }
+
+    func selectIfPossible(_ element: AXUIElement) throws -> Bool {
+        var settable = DarwinBoolean(false)
+        guard AXUIElementIsAttributeSettable(
+            element,
+            kAXSelectedAttribute as CFString,
+            &settable
+        ) == .success,
+            settable.boolValue else {
+            return false
+        }
+        if SystemComputerUseAccessibilityAPI.boolean(kAXSelectedAttribute, from: element) == true {
+            return true
+        }
+        guard AXUIElementSetAttributeValue(
+            element,
+            kAXSelectedAttribute as CFString,
+            kCFBooleanTrue
+        ) == .success else {
+            throw ComputerUseActionError.actionUnavailable(kAXSelectedAttribute as String)
+        }
+        return true
+    }
+
+    func pressIfPossible(_ element: AXUIElement, count: Int) throws -> Bool {
+        guard actions(element).contains(where: {
+            $0.rawName == kAXPressAction as String
+        }) else {
+            return false
+        }
+        for _ in 0 ..< count {
+            guard AXUIElementPerformAction(element, kAXPressAction as CFString) == .success else {
+                throw ComputerUseActionError.actionUnavailable(kAXPressAction as String)
+            }
+        }
+        return true
     }
 
     func perform(rawAction: String, on element: AXUIElement) -> Bool {

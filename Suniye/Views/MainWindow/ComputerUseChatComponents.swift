@@ -20,7 +20,19 @@ struct ComputerUseEmptyConversation: View {
 struct ComputerUseChatMessageRow: View {
     let message: ComputerUseConversationMessage
 
+    @ViewBuilder
     var body: some View {
+        switch message.role {
+        case .activity:
+            if let activity = message.activity {
+                ComputerUseActivityRow(activity: activity)
+            }
+        case .user, .assistant:
+            conversationMessage
+        }
+    }
+
+    private var conversationMessage: some View {
         HStack(alignment: .top, spacing: 12) {
             if message.role == .user {
                 Spacer(minLength: 72)
@@ -62,6 +74,23 @@ struct ComputerUseChatMessageRow: View {
             .foregroundStyle(.white)
             .frame(width: 26, height: 26)
             .background(Circle().fill(Color.accentColor))
+    }
+}
+
+private struct ComputerUseActivityRow: View {
+    let activity: ComputerUseActivity
+
+    var body: some View {
+        (Text(activity.toolName).fontWeight(.medium)
+            + Text("  \(activity.arguments)"))
+        .font(.system(size: 11, design: .monospaced))
+        .foregroundStyle(MainWindowPalette.secondaryText)
+        .textSelection(.enabled)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 38)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("computer-use-activity")
     }
 }
 

@@ -24,6 +24,20 @@ final class ComputerUseWindowDiscoveryTests: XCTestCase {
         XCTAssertEqual(windows.map(\.accessibilityOrdinal), [1, 0])
     }
 
+    func testDoesNotReturnOffScreenWindowWhenNoOnScreenWindowMatches() async throws {
+        let inventory = StubComputerUseWindowInventory(
+            cgWindows: [],
+            axWindows: [
+                axWindow(ordinal: 0, title: nil, x: 10, width: 600, isMain: true),
+            ]
+        )
+        let discovery = ComputerUseWindowDiscovery(inventory: inventory)
+
+        let windows = try await discovery.orderedWindows(processIdentifier: 123)
+
+        XCTAssertTrue(windows.isEmpty)
+    }
+
     func testWindowOrderingDoesNotAddTitleAreaOrFocusedHeuristics() async throws {
         let inventory = StubComputerUseWindowInventory(
             cgWindows: [
@@ -191,7 +205,8 @@ final class ComputerUseWindowDiscoveryTests: XCTestCase {
         x: CGFloat,
         width: CGFloat,
         pid: Int32 = 123,
-        layer: Int = 0
+        layer: Int = 0,
+        isOnScreen: Bool = true
     ) -> ComputerUseCGWindowSnapshot {
         ComputerUseCGWindowSnapshot(
             id: id,
@@ -199,7 +214,7 @@ final class ComputerUseWindowDiscoveryTests: XCTestCase {
             title: title,
             bounds: CGRect(x: x, y: 10, width: width, height: 500),
             layer: layer,
-            isOnScreen: true
+            isOnScreen: isOnScreen
         )
     }
 
@@ -241,6 +256,14 @@ private actor SequencedComputerUseWindowDiscovery: ComputerUseWindowDiscovering 
 private struct StubComputerUseWindowInventory: ComputerUseWindowInventoryProviding {
     let cgWindows: [ComputerUseCGWindowSnapshot]
     let axWindows: [ComputerUseAXWindowSnapshot]
+
+    init(
+        cgWindows: [ComputerUseCGWindowSnapshot],
+        axWindows: [ComputerUseAXWindowSnapshot]
+    ) {
+        self.cgWindows = cgWindows
+        self.axWindows = axWindows
+    }
 
     func onScreenWindows() throws -> [ComputerUseCGWindowSnapshot] {
         cgWindows

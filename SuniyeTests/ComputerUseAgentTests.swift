@@ -2,6 +2,76 @@ import XCTest
 @testable import Suniye
 
 final class ComputerUseAgentTests: XCTestCase {
+    func testPublishesOnlyRawToolNameAndArgumentsForEachToolCall() async {
+        let model = ScriptedComputerUseModel(
+            responses: [
+                .toolCall(
+                    id: "state-1",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Calculator"}"#
+                ),
+                .text("Done."),
+            ]
+        )
+        let recorder = RecordingComputerUseActivitySink()
+        let activitySink = ComputerUseActivitySink { activity in
+            await recorder.record(activity)
+        }
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend()),
+            activitySink: activitySink
+        )
+
+        _ = await agent.run(task: ComputerUseAgentTask(instruction: "Inspect Calculator."))
+
+        let activities = await recorder.activities
+        XCTAssertEqual(
+            activities,
+            [
+                ComputerUseActivity(
+                    toolName: "get_app_state",
+                    arguments: #"{"app":"Calculator"}"#
+                ),
+            ]
+        )
+    }
+
+    func testEveryLifecycleAndToolLogIncludesTheTaskDebugSessionID() async {
+        let model = ScriptedComputerUseModel(
+            responses: [
+                .toolCall(
+                    id: "state-1",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Calculator"}"#
+                ),
+                .text("Done."),
+            ]
+        )
+        let logger = RecordingComputerUseLogger()
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend()),
+            logger: logger
+        )
+        let debugSessionID = ComputerUseDebugSessionID(rawValue: "CU-ABC123DEF456")
+
+        _ = await agent.run(
+            task: ComputerUseAgentTask(
+                instruction: "Inspect Calculator.",
+                debugSessionID: debugSessionID
+            )
+        )
+
+        let messages = logger.messages
+        XCTAssertEqual(messages.count, 4)
+        XCTAssertTrue(messages.allSatisfy { $0.contains("session=CU-ABC123DEF456") })
+        XCTAssertTrue(messages.contains { $0.contains("computer use run started") })
+        XCTAssertTrue(messages.contains { $0.contains("computer use tool started") })
+        XCTAssertTrue(messages.contains { $0.contains("computer use tool completed") })
+        XCTAssertTrue(messages.contains { $0.contains("computer use run completed") })
+    }
+
     func testModelChoosesTheApplicationAndCompletesThroughOrderedToolResults() async {
         let model = ScriptedComputerUseModel(
             responses: [
@@ -53,7 +123,7 @@ final class ComputerUseAgentTests: XCTestCase {
         ])
     }
 
-    func testAgentRejectsASecondActionUntilTheModelGetsFreshState() async {
+    func testAgentForwardsAFreshObservationBetweenSequentialActions() async {
         let model = ScriptedComputerUseModel(
             responses: [
                 .toolCall(
@@ -67,17 +137,12 @@ final class ComputerUseAgentTests: XCTestCase {
                     arguments: #"{"app":"Notes","key":"Return"}"#
                 ),
                 .toolCall(
-                    id: "text-stale",
-                    name: "type_text",
-                    arguments: #"{"app":"Notes","text":"hello"}"#
-                ),
-                .toolCall(
                     id: "state-2",
                     name: "get_app_state",
                     arguments: #"{"app":"Notes"}"#
                 ),
                 .toolCall(
-                    id: "text-fresh",
+                    id: "text-1",
                     name: "type_text",
                     arguments: #"{"app":"Notes","text":"hello"}"#
                 ),
@@ -98,13 +163,18 @@ final class ComputerUseAgentTests: XCTestCase {
         let calls = await backend.calls
         XCTAssertEqual(calls, [.getAppState, .pressKey, .getAppState, .typeText])
         let requests = await model.requests
-        let staleResult = try? XCTUnwrap(
-            requests[3].last
+        XCTAssertEqual(requests.count, 5)
+        XCTAssertEqual(
+            requests[4].suffix(2),
+            [
+                .toolCall(
+                    id: "text-1",
+                    name: "type_text",
+                    arguments: #"{"app":"Notes","text":"hello"}"#
+                ),
+                .toolResult(id: "text-1", content: "null"),
+            ]
         )
-        guard case let .text(errorJSON)? = staleResult?.content else {
-            return XCTFail("Expected a tool error result")
-        }
-        XCTAssertTrue(errorJSON.contains("Observe Calculator before performing an action."))
     }
 
     func testFreshAppStateAddsItsScreenshotAfterTheToolResult() async throws {
@@ -155,6 +225,12 @@ final class ComputerUseAgentTests: XCTestCase {
                 instruction: "Now read it.",
                 conversation: [
                     ComputerUseConversationMessage(role: .user, text: "Open Calculator."),
+                    ComputerUseConversationMessage(
+                        activity: ComputerUseActivity(
+                            toolName: "get_app_state",
+                            arguments: #"{"app":"Calculator"}"#
+                        )
+                    ),
                     ComputerUseConversationMessage(role: .assistant, text: "Calculator is ready."),
                 ]
             )
@@ -171,34 +247,28 @@ final class ComputerUseAgentTests: XCTestCase {
         )
     }
 
-    func testUserInterventionEndsTheRunAsCancelled() async {
-        let model = ScriptedComputerUseModel(
-            responses: [
-                .toolCall(
-                    id: "state-1",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Calculator"}"#
-                ),
-            ]
-        )
-        let agent = ComputerUseAgent(
-            model: model,
-            session: ComputerUseSession(backend: UserIntervenedComputerUseBackend())
-        )
+}
 
-        let result = await agent.run(
-            task: ComputerUseAgentTask(instruction: "Read Calculator.")
-        )
+private actor RecordingComputerUseActivitySink {
+    private(set) var activities: [ComputerUseActivity] = []
 
-        XCTAssertEqual(
-            result,
-            ComputerUseAgentResult(
-                outcome: .cancelled,
-                message: "Computer Use stopped because you used your Mac."
-            )
-        )
-        let requestCount = await model.requests.count
-        XCTAssertEqual(requestCount, 1)
+    func record(_ activity: ComputerUseActivity) {
+        activities.append(activity)
+    }
+}
+
+private final class RecordingComputerUseLogger: ComputerUseLogging, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedMessages: [String] = []
+
+    var messages: [String] {
+        lock.withLock { recordedMessages }
+    }
+
+    func log(_ level: AppLogger.Level, _ message: String) {
+        lock.withLock {
+            recordedMessages.append(message)
+        }
     }
 }
 
@@ -221,7 +291,7 @@ private actor ScriptedComputerUseModel: ComputerUseModelServing {
 
 private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
     private(set) var calls: [ComputerUseToolName] = []
-    private var hasFreshState = false
+    private var hasObservedState = false
     private let screenshotURL: URL?
 
     init(screenshotURL: URL? = nil) {
@@ -235,7 +305,7 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
 
     func getAppState(app: String, disableDiff: Bool) async throws -> ComputerUseAppState {
         calls.append(.getAppState)
-        hasFreshState = true
+        hasObservedState = true
         return ComputerUseAppState(
             app: app,
             screenshot: screenshotURL,
@@ -244,15 +314,15 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
     }
 
     func click(_ request: ComputerUseClickRequest) async throws {
-        try consumeFreshState(for: .click)
+        try requireObservedState(for: .click)
     }
 
     func performSecondaryAction(app: String, elementIndex: Int, action: String) async throws {
-        try consumeFreshState(for: .performSecondaryAction)
+        try requireObservedState(for: .performSecondaryAction)
     }
 
     func setValue(app: String, elementIndex: Int, value: String) async throws {
-        try consumeFreshState(for: .setValue)
+        try requireObservedState(for: .setValue)
     }
 
     func selectText(
@@ -263,7 +333,7 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
         suffix: String?,
         selectionType: ComputerUseTextSelectionType
     ) async throws {
-        try consumeFreshState(for: .selectText)
+        try requireObservedState(for: .selectText)
     }
 
     func scroll(
@@ -272,7 +342,7 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
         direction: ComputerUseScrollDirection,
         pages: Double
     ) async throws {
-        try consumeFreshState(for: .scroll)
+        try requireObservedState(for: .scroll)
     }
 
     func drag(
@@ -282,65 +352,22 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
         toX: Double,
         toY: Double
     ) async throws {
-        try consumeFreshState(for: .drag)
+        try requireObservedState(for: .drag)
     }
 
     func pressKey(app: String, key: String) async throws {
-        try consumeFreshState(for: .pressKey)
+        try requireObservedState(for: .pressKey)
     }
 
     func typeText(app: String, text: String) async throws {
-        try consumeFreshState(for: .typeText)
+        try requireObservedState(for: .typeText)
     }
 
-    private func consumeFreshState(for call: ComputerUseToolName) throws {
-        guard hasFreshState else {
+    private func requireObservedState(for call: ComputerUseToolName) throws {
+        guard hasObservedState else {
             throw ComputerUseActionError.observationRequired("Calculator")
         }
-        hasFreshState = false
+        hasObservedState = false
         calls.append(call)
     }
-}
-
-private actor UserIntervenedComputerUseBackend: ComputerUseToolServing {
-    func listApps() throws -> [ComputerUseApplication] { throw ComputerUseRuntimeError.userIntervened }
-    func getAppState(app: String, disableDiff: Bool) throws -> ComputerUseAppState {
-        throw ComputerUseRuntimeError.userIntervened
-    }
-    func click(_ request: ComputerUseClickRequest) throws { throw ComputerUseRuntimeError.userIntervened }
-    func performSecondaryAction(app: String, elementIndex: Int, action: String) throws {
-        throw ComputerUseRuntimeError.userIntervened
-    }
-    func setValue(app: String, elementIndex: Int, value: String) throws {
-        throw ComputerUseRuntimeError.userIntervened
-    }
-    func selectText(
-        app: String,
-        elementIndex: Int,
-        text: String,
-        prefix: String?,
-        suffix: String?,
-        selectionType: ComputerUseTextSelectionType
-    ) throws {
-        throw ComputerUseRuntimeError.userIntervened
-    }
-    func scroll(
-        app: String,
-        elementIndex: Int,
-        direction: ComputerUseScrollDirection,
-        pages: Double
-    ) throws {
-        throw ComputerUseRuntimeError.userIntervened
-    }
-    func drag(
-        app: String,
-        fromX: Double,
-        fromY: Double,
-        toX: Double,
-        toY: Double
-    ) throws {
-        throw ComputerUseRuntimeError.userIntervened
-    }
-    func pressKey(app: String, key: String) throws { throw ComputerUseRuntimeError.userIntervened }
-    func typeText(app: String, text: String) throws { throw ComputerUseRuntimeError.userIntervened }
 }

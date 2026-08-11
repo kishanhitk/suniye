@@ -7,6 +7,7 @@ struct BackendFixture {
     let observations: StubComputerUseObserving
     let actions: RecordingComputerUseActions
     let settler: RecordingComputerUseSettler
+    let runtimeGuard: ControllableComputerUseRuntimeGuard
 }
 
 func backendFixture(actionError: Error? = nil) -> BackendFixture {
@@ -26,7 +27,8 @@ func backendFixture(actionError: Error? = nil) -> BackendFixture {
         windows: MutableActionWindowDiscovery(window: context.target.window),
         observations: StubComputerUseObserving(observation: observation),
         actions: RecordingComputerUseActions(error: actionError),
-        settler: RecordingComputerUseSettler()
+        settler: RecordingComputerUseSettler(),
+        runtimeGuard: ControllableComputerUseRuntimeGuard()
     )
 }
 
@@ -44,17 +46,29 @@ actor StubActionApplicationCatalog: ComputerUseApplicationCatalogProviding {
     func resolveOrLaunch(_ identifier: String) -> ComputerUseApplicationRecord {
         application
     }
+
 }
 
 actor MutableActionWindowDiscovery: ComputerUseWindowDiscovering {
     private var window: ComputerUseWindow
+    private var unavailableResponsesRemaining = 0
+    private(set) var callCount = 0
 
     init(window: ComputerUseWindow) {
         self.window = window
     }
 
     func orderedWindows(processIdentifier: Int32) -> [ComputerUseWindow] {
-        [window]
+        callCount += 1
+        if unavailableResponsesRemaining > 0 {
+            unavailableResponsesRemaining -= 1
+            return []
+        }
+        return [window]
+    }
+
+    func hideForNextCalls(_ count: Int) {
+        unavailableResponsesRemaining = count
     }
 
     func replaceWindowID(with id: UInt32) {
@@ -91,6 +105,7 @@ actor StubComputerUseObserving: ComputerUseObserving {
 actor ControllableComputerUseObserving: ComputerUseObserving {
     let observation: ComputerUseObservation
     private var shouldFail = false
+    private var failuresRemaining = 0
 
     init(observation: ComputerUseObservation) {
         self.observation = observation
@@ -100,11 +115,19 @@ actor ControllableComputerUseObserving: ComputerUseObserving {
         shouldFail = true
     }
 
+    func failNextObservation() {
+        failuresRemaining = 1
+    }
+
     func observe(
         application: ComputerUseApplicationRecord,
         requestedIdentifier: String,
         disableDiff: Bool
     ) throws -> ComputerUseObservation {
+        if failuresRemaining > 0 {
+            failuresRemaining -= 1
+            throw ComputerUseObservationError.noWindow(requestedIdentifier)
+        }
         if shouldFail {
             throw ComputerUseObservationError.noWindow(requestedIdentifier)
         }
@@ -223,7 +246,6 @@ actor RecordingComputerUseSettler: ComputerUseActionSettling {
 }
 
 actor ControllableComputerUseRuntimeGuard: ComputerUseRuntimeGuarding {
-    private var generation: UInt32 = 0
     private var isScreenLocked: Bool
     private(set) var observationCount = 0
 
@@ -236,25 +258,16 @@ actor ControllableComputerUseRuntimeGuard: ComputerUseRuntimeGuarding {
             throw ComputerUseRuntimeError.screenLocked
         }
         observationCount += 1
-        return ComputerUseRuntimeAuthorization(
-            physicalInputSnapshot: ComputerUsePhysicalInputSnapshot(
-                eventCounts: [generation]
-            )
-        )
+        return ComputerUseRuntimeAuthorization()
     }
 
     func validateAction(_ authorization: ComputerUseRuntimeAuthorization) throws {
         guard !isScreenLocked else {
             throw ComputerUseRuntimeError.screenLocked
         }
-        guard authorization.physicalInputSnapshot.eventCounts == [generation] else {
-            throw ComputerUseRuntimeError.userIntervened
-        }
     }
 
-    func recordPhysicalInput() {
-        generation &+= 1
-    }
+    func recordPhysicalInput() {}
 }
 
 actor ScriptedComputerUseLoadingState: ComputerUseLoadingStateChecking {
@@ -276,17 +289,5 @@ actor RecordingComputerUseSleeper: ComputerUseSleeping {
 
     func sleep(for duration: Duration) {
         delays.append(duration)
-    }
-}
-
-actor InterveningComputerUseSettler: ComputerUseActionSettling {
-    let runtimeGuard: ControllableComputerUseRuntimeGuard
-
-    init(runtimeGuard: ControllableComputerUseRuntimeGuard) {
-        self.runtimeGuard = runtimeGuard
-    }
-
-    func waitForUIToSettle(target: ComputerUseObservedTarget) async {
-        await runtimeGuard.recordPhysicalInput()
     }
 }

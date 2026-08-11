@@ -1068,3 +1068,138 @@ focused/full validation.
   forced-frontmost behavior, or raw payload logging.
 - `[Verified]` The full suite executes 1,078 tests with 2 skipped and 0 failures. Gated coverage is
   89.36% (13,083/14,641 lines) against the requested 80% floor. E2E preflight and smoke pass.
+
+### Entry 63: Native virtual cursor recovery
+
+Sources: `fake-cursor-dmg-agent-report.md`, the mounted DMG's `SkyComputerUseService`,
+`sky.node`, `Package_ComputerUse.bundle/Contents/Resources/Assets.car`, the extracted ASAR, and
+live Sky screenshots from the installed helper.
+
+- `[Verified]` The native helper contains a dedicated `ComputerUseCursor` subsystem with a cursor
+  window, `SoftwareCursorStyle`, `FogCursorStyle`, `CursorView`, `CursorMotionPath`, target window
+  state, cursor active/location notifications, and the feature flag
+  `feature/computerUseCursor` (`Enable the virtual cursor in Computer Use`).
+- `[Verified]` The helper ships a transparent compiled `SoftwareCursor` image asset. The host
+  `sky.node` bridge carries cursor active state and location and exposes a remote-hosted PIP
+  cursor-location path.
+- `[Verified]` The ASAR also contains a separate browser-only `browser-agent-cursor-overlay` with
+  pointer-events-disabled rendering and animated cursor movement. It is not the native Mac helper
+  cursor.
+- `[Verified]` A later installed helper returned a post-action Calculator skyshot containing the
+  virtual cursor at the clicked button. The installed helper version differs from the mounted DMG
+  version, so this is corroboration rather than exact-build proof.
+- `[Inferred]` The desktop cursor is a helper-owned presentation sidecar: it moves to the same
+  resolved target point as the native action, animates with spring/arc/scoot state, and can be
+  forwarded to a PIP presentation. The public ten-tool contract remains unchanged.
+- `[Unknown]` The exact mounted-build screenshot compositor, cursor style gate, physical-pointer
+  behavior, fade timing, and pressed animation remain unrecovered.
+- `[Verified]` Suniye currently has no equivalent cursor window, cursor state, action-location
+  bridge, or desktop overlay. Adding one is a parity gap, not a reason to add another model tool or
+  target-selection restriction.
+
+### Entry 64: Suniye native virtual cursor implementation
+
+Sources: `phase-8-native-virtual-cursor-2026-08-11.md`, production Swift sources, XCTest results,
+coverage report, E2E scripts, installed Preview, and the natural Calculator run.
+
+- `[Implemented]` A passive nonactivating AppKit overlay presents cursor movement, click, drag,
+  and scroll feedback at the same resolved screen coordinates used by the action service.
+- `[Implemented]` The cursor is an internal presentation service. The ten public model tools,
+  provider request, prompt, application discovery, and approval behavior are unchanged.
+- `[Implemented]` Superseded animations are cancelled, Reduced Motion is honored, and action-run
+  cancellation propagates through optional Accessibility-center resolution.
+- `[Verified]` The full suite executes 1,089 tests with 2 skipped and 0 failures. Gated coverage is
+  88.95% (13,380/15,043 lines) against the 80% floor. E2E preflight and smoke pass.
+- `[Verified]` The installed Preview completed `Open Calculator and click the 7 button.`,
+  re-observed Calculator value `71`, and returned `Done.`
+- `[Unknown]` Exact reference animation constants, style gate, physical-pointer behavior, and the
+  screenshot/PIP cursor-composition branch remain unavailable and were not guessed.
+
+### Entry 65: Per-run debug session correlation
+
+Sources: `phase-9-debug-session-correlation-2026-08-11.md`, coordinator and agent tests, full-suite
+coverage, installed Preview UI, clipboard verification, and the installed app log.
+
+- `[Implemented]` Each run receives one compact `CU-...` debug identifier. Coordinator state keeps
+  the current or most-recent value, and the agent task carries the identical value.
+- `[Corrected]` `Copy debug ID` is directly beside `New conversation` in the Computer Use header;
+  it is not hidden in the settings disclosure.
+- `[Implemented]` Every agent lifecycle and tool-boundary event includes `session=<ID>` without
+  logging task text, tool arguments, AX content, screenshots, credentials, or endpoints.
+- `[Verified]` The corrected installed Preview shows `Copy debug ID` beside `New conversation`,
+  copies the exact `CU-...` value, and no longer shows debug UI inside the settings disclosure.
+  Searching `app.log` and `app.log.1` by a copied ID recovers the complete ordered run trace.
+- `[Verified]` The full suite executes 1,091 tests with 2 skipped and 0 failures. Gated coverage is
+  88.41% (13,400/15,156 lines) against the 80% floor.
+
+### Entry 66: Remove speculative physical-input cancellation
+
+Sources: installed session `CU-6E2061703015`, live Codex/ChatGPT concurrent-use behavior,
+`ComputerUseRuntimeGuard.swift`, agent/backend integration, regression tests, and installed Preview
+session `CU-CC7B23592202`.
+
+- `[Verified]` The failed session completed app discovery and observation, began a click, then
+  cancelled with `reason=user_intervened` at the same moment Suniye became key.
+- `[Corrected]` Global HID-counter changes no longer invalidate a fresh observation or cancel a
+  run. Users can continue using the Mac while Computer Use is running.
+- `[Removed]` `SystemComputerUsePhysicalInputSampler`, physical-input authorization snapshots,
+  `ComputerUseRuntimeError.userIntervened`, its agent cancellation message, and intervention-only
+  test doubles/tests.
+- `[Retained]` Locked-screen rejection, one-action-per-fresh-observation enforcement, explicit
+  Stop cancellation, and loading-aware action settling.
+- `[Verified]` During installed Preview session `CU-CC7B23592202`, `Copy debug ID` was clicked while
+  the task was working. The run continued through 13 model/tool steps, completed the Calculator
+  action, and returned `Done.` The correlated trace contains no intervention cancellation.
+- `[Verified]` The full suite executes 1,088 tests with 2 skipped and 0 failures. Gated coverage is
+  88.55% (13,376/15,106 lines) against the 80% floor.
+
+### Entry 67: Minimal inline tool activity
+
+Sources: `phase-10-inline-agent-activity-2026-08-11.md`, production Swift sources, focused tests,
+full-suite XCTest results, and coverage report.
+
+- `[Corrected]` The earlier transport/debug-heavy activity UI was rejected before release and
+  removed. Chat does not show model requests, provider responses, HTTP metadata, lifecycle rows,
+  tool results, error payloads, expandable details, connector lines, or per-tool icons.
+- `[Implemented]` Each model-issued tool call appears in order as one plain selectable monospaced
+  row containing only its raw tool name and raw JSON argument string.
+- `[Implemented]` Tool activity appears between the user task and final assistant response and is
+  excluded from subsequent model context.
+- `[Implemented]` Explicit Stop produces only the final assistant message `Stopped.`.
+- `[Verified]` Focused validation executes 19 tests with zero failures. The full suite executes
+  1,090 tests with 2 skipped and 0 failures. Gated coverage is 88.44% (13,420/15,174 lines) against
+  the 80% floor.
+- `[Verified]` Installed Preview session `CU-616B85F2116D` rendered one raw `get_app_state` call as
+  plain text between the user task and final assistant message. Live Accessibility and screenshot
+  inspection found no activity icon, lifecycle, transport, result, disclosure, connector, or
+  separate completion row.
+- `[Observed]` The provider resolved the phrase `Suniye Preview` to the separate app `Preview` and
+  returned that app's PDF window title. This app-name ambiguity was recorded rather than hidden by
+  deterministic client routing.
+
+### Entry 68: Persistent cursor and replacement-window parity
+
+Sources: `phase-11-run-scoped-cursor-and-native-parity-2026-08-12.md`,
+`deep-code-parity-audit-2026-08-12.md`, three independent code-level audits, focused and full
+XCTest runs, coverage, E2E scripts, the installed Preview, sessions `CU-DACA4C3C5CD5` and
+`CU-463FE693F46D`, and independent observations through the bundled Computer Use runtime.
+
+- `[Verified]` The inspected desktop cursor remains at its last pointer-action location while the
+  model reasons and animates from that retained point to the next pointer target.
+- `[Implemented]` Suniye's passive cursor is now run-scoped. It has no action-local hide timer and
+  is cleared only on completion, failure, Stop, or New Conversation.
+- `[Corrected]` A stale window still invalidates the authorized action. The next observation now
+  waits for an on-screen replacement window in the same running process instead of reopening the
+  app and misreporting the timeout as `launchFailed`.
+- `[Removed]` The temporary all-window/off-screen CG and screenshot fallback was removed because
+  the recovered normal reference path enumerates on-screen, non-desktop windows.
+- `[Verified live]` Installed Preview session `CU-463FE693F46D` completed the natural battery
+  health task through System Settings and reported `Normal, 100%`. An independent observation of
+  the resulting Battery Health sheet verified `Normal 100%`.
+- `[Observed]` Installed Preview session `CU-DACA4C3C5CD5` completed a 13-step Calculator loop with
+  strict observation/action alternation, but the model chose `17 × 9` and reported `153` for the
+  requested `17 × 19`. The native loop worked; model planning/context fidelity remains a known
+  architecture-level gap from the inspected Responses plus persistent-JavaScript runtime.
+- `[Verified]` The final focused suite executes 32 tests with zero failures. The full suite executes
+  1,093 tests with 2 skipped and zero failures. Gated coverage is 88.45% (13,397/15,146 lines)
+  against the 80% floor. E2E preflight and smoke pass.

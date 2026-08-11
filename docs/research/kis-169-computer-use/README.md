@@ -12,13 +12,14 @@ branch without carrying over the prior prototype implementation. New Swift code 
 from the recovered contract. The fresh implementation now contains the exact ten-tool domain
 contract, app and window discovery, AX and screenshot observation, native actions with one-shot
 fresh-observation enforcement, a provider-backed model/agent loop, a main-actor conversation
-coordinator with permission, cancellation, and direct-voice UX, and native lock, physical-input
-intervention, and loading-aware settling guards. Older implementation entries
+coordinator with permission, cancellation, and direct-voice UX, plus native lock and
+loading-aware settling guards. Physical-input cancellation was removed after live parity
+testing showed it incorrectly prevented concurrent Mac use. Older implementation entries
 remain historical records from the preserved `kis-169-computer-use` branch unless a fresh-phase
 note explicitly re-verifies them.
 
-The fresh branch has not yet completed its installed live-provider run. See the phase notes below
-for verified boundaries and independent choices.
+The fresh branch has completed installed live-provider runs. See the phase notes below for
+successful cases, failed cases, verified boundaries, and independent choices.
 
 See `fresh-implementation-baseline-2026-08-09.md` before beginning the new implementation.
 
@@ -69,6 +70,9 @@ cross-process input still require separate validation.
 - `native-algorithm-recovery-2026-08-09.md` records the live native MCP session, exact ten-tool
   schema, background observation behavior, AX rendering and revision pipeline, window discovery,
   screenshot backends, coordinate conversion, and process-scoped input paths.
+- `fake-cursor-dmg-agent-report.md` records the native virtual-cursor subsystem, compiled cursor
+  asset, host/PIP bridge, separate browser cursor overlay, live visual corroboration, and the
+  remaining exact-build unknowns.
 - `fresh-implementation-baseline-2026-08-09.md` records the clean-main branch reset, preserved old
   branch, and rules for distinguishing historical implementation notes from current code.
 - `phase-0-tool-contract-2026-08-09.md` records the exact ten-tool domain contract and validation.
@@ -85,12 +89,24 @@ cross-process input still require separate validation.
 - `phase-5-coordinator-chat-voice-2026-08-09.md` records the main-actor coordinator, permission and
   cancellation lifecycle, conversation UI, direct-voice route, strict-review corrections,
   validation, and remaining live/native work.
-- `phase-6-runtime-guards-settling-2026-08-09.md` records lock-state handling, physical-user
-  intervention, loading-aware settling, strict-review corrections, independent choices, and the
-  remaining installed live checks.
+- `phase-6-runtime-guards-settling-2026-08-09.md` records lock-state handling, loading-aware
+  settling, the superseded physical-input experiment, and its live parity correction.
 - `phase-7-live-observation-launch-parity-2026-08-09.md` records dynamic-title window matching,
   launch-completion and primary-window waiting, privacy-bounded diagnostics, installed live model
   results, strict review, and validation.
+- `phase-8-native-virtual-cursor-2026-08-11.md` records the passive desktop cursor overlay,
+  action-coordinate integration, cancellation behavior, validation, and remaining compositor
+  unknowns.
+- `phase-9-debug-session-correlation-2026-08-11.md` records the copyable per-run debug identifier,
+  end-to-end log correlation, privacy boundary, and installed-app validation.
+- `phase-10-inline-agent-activity-2026-08-11.md` records the deliberately minimal conversation
+  activity UI: raw tool names and arguments only, with no transport, lifecycle, result, or icon
+  decoration.
+- `phase-11-run-scoped-cursor-and-native-parity-2026-08-12.md` records persistent cursor lifecycle,
+  process-scoped pointer delivery, per-action observation semantics, same-process replacement
+  window reacquisition, and current live validation.
+- `deep-code-parity-audit-2026-08-12.md` consolidates three independent code-level audits of the
+  model/runtime, native mechanics, and cursor/UX, with verified gaps kept explicit.
 
 ## Evidence labels
 

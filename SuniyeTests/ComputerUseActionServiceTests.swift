@@ -24,8 +24,8 @@ final class ComputerUseActionServiceTests: XCTestCase {
         }
     }
 
-    func testIndexedClickPrefersAccessibilityPress() async throws {
-        let accessibility = RecordingAccessibilityActions(pressResult: true)
+    func testIndexedClickPrefersAccessibilityPrimaryClick() async throws {
+        let accessibility = RecordingAccessibilityActions(primaryClickResult: true)
         let input = RecordingInputEvents()
         let service = ComputerUseActionService(accessibility: accessibility, input: input)
 
@@ -34,14 +34,69 @@ final class ComputerUseActionServiceTests: XCTestCase {
             context: computerUseTestActionContext()
         )
 
-        let pressedIndexes = await accessibility.pressedIndexes
+        let primaryClicks = await accessibility.primaryClicks
         let clicks = await input.clicks
-        XCTAssertEqual(pressedIndexes, [7, 7])
+        XCTAssertEqual(primaryClicks, [.init(index: 7, count: 2)])
         XCTAssertTrue(clicks.isEmpty)
     }
 
+    func testIndexedClickPresentsVirtualCursorAtCurrentElementCenter() async throws {
+        let cursor = RecordingComputerUseCursorPresenter()
+        let service = ComputerUseActionService(
+            accessibility: RecordingAccessibilityActions(
+                primaryClickResult: true,
+                center: CGPoint(x: 140, y: 90)
+            ),
+            input: RecordingInputEvents(),
+            cursor: cursor
+        )
+
+        try await service.click(
+            ComputerUseClickRequest(app: "Calculator", elementIndex: 7, clickCount: 2),
+            context: computerUseTestActionContext()
+        )
+
+        let presentations = await cursor.presentations
+        XCTAssertEqual(
+            presentations,
+            [
+                .click(
+                    point: CGPoint(x: 140, y: 90),
+                    target: .init(windowID: 9, processIdentifier: 42),
+                    mouseButton: .left,
+                    clickCount: 2
+                ),
+            ]
+        )
+    }
+
+    func testIndexedClickPropagatesCancellationWhileResolvingCursorPoint() async {
+        let accessibility = RecordingAccessibilityActions(
+            primaryClickResult: true,
+            centerError: CancellationError()
+        )
+        let service = ComputerUseActionService(
+            accessibility: accessibility,
+            input: RecordingInputEvents(),
+            cursor: RecordingComputerUseCursorPresenter()
+        )
+
+        await XCTAssertThrowsErrorAsync(
+            try await service.click(
+                ComputerUseClickRequest(app: "Calculator", elementIndex: 7),
+                context: computerUseTestActionContext()
+            )
+        )
+
+        let primaryClicks = await accessibility.primaryClicks
+        XCTAssertTrue(primaryClicks.isEmpty)
+    }
+
     func testIndexedClickFallsBackToProcessScopedEventAtCurrentElementCenter() async throws {
-        let accessibility = RecordingAccessibilityActions(pressResult: true, center: CGPoint(x: 140, y: 90))
+        let accessibility = RecordingAccessibilityActions(
+            primaryClickResult: true,
+            center: CGPoint(x: 140, y: 90)
+        )
         let input = RecordingInputEvents()
         let service = ComputerUseActionService(accessibility: accessibility, input: input)
 
@@ -56,8 +111,8 @@ final class ComputerUseActionServiceTests: XCTestCase {
         )
 
         let clicks = await input.clicks
-        let pressedIndexes = await accessibility.pressedIndexes
-        XCTAssertTrue(pressedIndexes.isEmpty)
+        let primaryClicks = await accessibility.primaryClicks
+        XCTAssertTrue(primaryClicks.isEmpty)
         XCTAssertEqual(
             clicks,
             [.init(point: CGPoint(x: 140, y: 90), button: .right, count: 2, pid: 42)]
@@ -98,6 +153,109 @@ final class ComputerUseActionServiceTests: XCTestCase {
         XCTAssertEqual(
             drags,
             [.init(start: CGPoint(x: 100, y: 50), end: CGPoint(x: 300, y: 150), pid: 42)]
+        )
+    }
+
+    func testCoordinateClickPresentsVirtualCursorAtResolvedScreenPoint() async throws {
+        let cursor = RecordingComputerUseCursorPresenter()
+        let service = ComputerUseActionService(
+            accessibility: RecordingAccessibilityActions(),
+            input: RecordingInputEvents(),
+            cursor: cursor
+        )
+        let context = computerUseTestActionContext(
+            screenshot: ComputerUseCapturedScreenshot(
+                url: URL(fileURLWithPath: "/tmp/window.jpg"),
+                pixelWidth: 400,
+                pixelHeight: 200,
+                coordinateScale: 0.5,
+                windowFrame: CGRect(x: 100, y: 50, width: 200, height: 100)
+            )
+        )
+
+        try await service.click(
+            ComputerUseClickRequest(app: "Calculator", x: 80, y: 40),
+            context: context
+        )
+
+        let presentations = await cursor.presentations
+        XCTAssertEqual(
+            presentations,
+            [
+                .click(
+                    point: CGPoint(x: 140, y: 70),
+                    target: .init(windowID: 9, processIdentifier: 42),
+                    mouseButton: .left,
+                    clickCount: 1
+                ),
+            ]
+        )
+    }
+
+    func testDragPresentsVirtualCursorAcrossResolvedScreenPoints() async throws {
+        let cursor = RecordingComputerUseCursorPresenter()
+        let service = ComputerUseActionService(
+            accessibility: RecordingAccessibilityActions(),
+            input: RecordingInputEvents(),
+            cursor: cursor
+        )
+        let context = computerUseTestActionContext(
+            screenshot: ComputerUseCapturedScreenshot(
+                url: URL(fileURLWithPath: "/tmp/window.jpg"),
+                pixelWidth: 400,
+                pixelHeight: 200,
+                coordinateScale: 0.5,
+                windowFrame: CGRect(x: 100, y: 50, width: 200, height: 100)
+            )
+        )
+
+        try await service.drag(
+            fromX: 0,
+            fromY: 0,
+            toX: 400,
+            toY: 200,
+            context: context
+        )
+
+        let presentations = await cursor.presentations
+        XCTAssertEqual(
+            presentations,
+            [
+                .drag(
+                    from: CGPoint(x: 100, y: 50),
+                    to: CGPoint(x: 300, y: 150),
+                    target: .init(windowID: 9, processIdentifier: 42)
+                ),
+            ]
+        )
+    }
+
+    func testScrollPresentsVirtualCursorAtCurrentElementCenter() async throws {
+        let cursor = RecordingComputerUseCursorPresenter()
+        let service = ComputerUseActionService(
+            accessibility: RecordingAccessibilityActions(center: CGPoint(x: 120, y: 80)),
+            input: RecordingInputEvents(),
+            cursor: cursor
+        )
+
+        try await service.scroll(
+            elementIndex: 7,
+            direction: .down,
+            pages: 1.5,
+            context: computerUseTestActionContext()
+        )
+
+        let presentations = await cursor.presentations
+        XCTAssertEqual(
+            presentations,
+            [
+                .scroll(
+                    point: CGPoint(x: 120, y: 80),
+                    target: .init(windowID: 9, processIdentifier: 42),
+                    direction: .down,
+                    pages: 1.5
+                ),
+            ]
         )
     }
 
@@ -271,6 +429,7 @@ func computerUseTestActionContext(
 }
 
 private actor RecordingAccessibilityActions: ComputerUseAccessibilityActionPerforming {
+    struct PrimaryClick: Equatable { let index: Int; let count: Int }
     struct Secondary: Equatable { let index: Int; let action: String }
     struct Value: Equatable { let index: Int; let value: String }
     struct Selection: Equatable {
@@ -281,25 +440,41 @@ private actor RecordingAccessibilityActions: ComputerUseAccessibilityActionPerfo
         let type: ComputerUseTextSelectionType
     }
 
-    private let pressResult: Bool
+    private let primaryClickResult: Bool
     private let resolvedCenter: CGPoint
-    private(set) var pressedIndexes: [Int] = []
+    private let centerError: Error?
+    private(set) var primaryClicks: [PrimaryClick] = []
     private(set) var secondaryActions: [Secondary] = []
     private(set) var values: [Value] = []
     private(set) var selections: [Selection] = []
 
-    init(pressResult: Bool = false, center: CGPoint = CGPoint(x: 0, y: 0)) {
-        self.pressResult = pressResult
+    init(
+        primaryClickResult: Bool = false,
+        center: CGPoint = CGPoint(x: 0, y: 0),
+        centerError: Error? = nil
+    ) {
+        self.primaryClickResult = primaryClickResult
         resolvedCenter = center
+        self.centerError = centerError
     }
 
-    func press(reference: ComputerUseAccessibilityElementReference, target: ComputerUseObservedTarget) -> Bool {
-        pressedIndexes.append(index(for: reference))
-        return pressResult
+    func performPrimaryClick(
+        reference: ComputerUseAccessibilityElementReference,
+        target: ComputerUseObservedTarget,
+        clickCount: Int
+    ) -> Bool {
+        primaryClicks.append(.init(index: index(for: reference), count: clickCount))
+        return primaryClickResult
     }
 
-    func center(reference: ComputerUseAccessibilityElementReference, target: ComputerUseObservedTarget) -> CGPoint {
-        resolvedCenter
+    func center(
+        reference: ComputerUseAccessibilityElementReference,
+        target: ComputerUseObservedTarget
+    ) throws -> CGPoint {
+        if let centerError {
+            throw centerError
+        }
+        return resolvedCenter
     }
 
     func perform(
@@ -388,6 +563,14 @@ private actor RecordingInputEvents: ComputerUseInputEventPosting {
 
     func typeText(_ text: String, pid: Int32) {
         typedText.append(.init(text: text, pid: pid))
+    }
+}
+
+private actor RecordingComputerUseCursorPresenter: ComputerUseCursorPresenting {
+    private(set) var presentations: [ComputerUseCursorPresentation] = []
+
+    func present(_ presentation: ComputerUseCursorPresentation) async throws {
+        presentations.append(presentation)
     }
 }
 

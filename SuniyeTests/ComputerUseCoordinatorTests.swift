@@ -14,7 +14,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         )
         let coordinator = ComputerUseCoordinator(
             permissions: permissions,
-            makeAgent: { _ in StubComputerUseAgent() }
+            makeAgent: { _, _ in StubComputerUseAgent() }
         )
 
         await coordinator.refreshPermissions()
@@ -43,7 +43,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         )
         let coordinator = ComputerUseCoordinator(
             permissions: permissions,
-            makeAgent: { _ in StubComputerUseAgent() }
+            makeAgent: { _, _ in StubComputerUseAgent() }
         )
 
         await coordinator.refreshPermissions()
@@ -59,7 +59,8 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         let agent = StubComputerUseAgent(
             result: ComputerUseAgentResult(outcome: .completed, message: "Battery health is normal.")
         )
-        let coordinator = readyCoordinator(agent: agent)
+        let cursorSession = SpyComputerUseCursorSession()
+        let coordinator = readyCoordinator(agent: agent, cursorSession: cursorSession)
         coordinator.draft = "Check my battery health"
 
         coordinator.submit()
@@ -82,6 +83,44 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         let tasks = await agent.receivedTasks()
         XCTAssertEqual(tasks.map(\.instruction), ["Check my battery health"])
         XCTAssertEqual(tasks.first?.conversation, [])
+        XCTAssertEqual(cursorSession.endSessionCount, 1)
+    }
+
+    func testSubmittingTaskPublishesTheDebugSessionIDPassedToTheAgent() async throws {
+        let agent = StubComputerUseAgent()
+        let coordinator = readyCoordinator(agent: agent)
+        coordinator.draft = "Inspect Calculator"
+
+        coordinator.submit()
+
+        let displayedID = try XCTUnwrap(coordinator.debugSessionID)
+        await waitUntilRunFinishes(coordinator)
+        let tasks = await agent.receivedTasks()
+        let task = try XCTUnwrap(tasks.first)
+        XCTAssertEqual(task.debugSessionID, displayedID)
+    }
+
+    func testAgentActivitiesAppearInlineBetweenUserAndAssistantMessages() async {
+        let activity = ComputerUseActivity(
+            toolName: "get_app_state",
+            arguments: #"{"app":"Calculator"}"#
+        )
+        let coordinator = ComputerUseCoordinator(
+            permissions: StubComputerUsePermissions(snapshots: []),
+            initialPermissionSnapshot: .granted,
+            makeAgent: { _, activitySink in
+                ActivityEmittingComputerUseAgent(activity: activity, sink: activitySink)
+            }
+        )
+        coordinator.configureModel(testConfiguration)
+        coordinator.draft = "Inspect Calculator"
+
+        coordinator.submit()
+        await waitUntilRunFinishes(coordinator)
+
+        XCTAssertEqual(coordinator.conversation.map(\.role), [.user, .activity, .assistant])
+        XCTAssertEqual(coordinator.conversation[1].activity, activity)
+        XCTAssertEqual(coordinator.conversation[2].text, "Done.")
     }
 
     func testFollowUpPassesPriorConversationWithoutDuplicatingCurrentInstruction() async {
@@ -111,7 +150,8 @@ final class ComputerUseCoordinatorTests: XCTestCase {
 
     func testStopInvalidatesRunAndAppendsOneAssistantMessage() async {
         let agent = SuspendedComputerUseAgent()
-        let coordinator = readyCoordinator(agent: agent)
+        let cursorSession = SpyComputerUseCursorSession()
+        let coordinator = readyCoordinator(agent: agent, cursorSession: cursorSession)
         coordinator.draft = "Long task"
         coordinator.submit()
         await Task.yield()
@@ -123,13 +163,18 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         await Task.yield()
 
         XCTAssertEqual(coordinator.phase, .cancelled)
-        XCTAssertEqual(coordinator.conversation.map(\.text), ["Long task", "Stopped."])
+        XCTAssertEqual(
+            coordinator.conversation.map(\.text),
+            ["Long task", "Stopped."]
+        )
+        XCTAssertEqual(coordinator.conversation.map(\.role), [.user, .assistant])
+        XCTAssertEqual(cursorSession.endSessionCount, 1)
     }
 
     func testSubmitRequiresModelAndBothPermissions() {
         let coordinator = ComputerUseCoordinator(
             permissions: StubComputerUsePermissions(snapshots: []),
-            makeAgent: { _ in StubComputerUseAgent() }
+            makeAgent: { _, _ in StubComputerUseAgent() }
         )
         coordinator.draft = "Do something"
 
@@ -159,7 +204,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         let coordinator = ComputerUseCoordinator(
             permissions: StubComputerUsePermissions(snapshots: []),
             permissionSettings: opener,
-            makeAgent: { _ in StubComputerUseAgent() }
+            makeAgent: { _, _ in StubComputerUseAgent() }
         )
 
         coordinator.openPermissionSettings(.accessibility)
@@ -173,7 +218,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         let permissions = StubComputerUsePermissions(snapshots: [.granted])
         let coordinator = ComputerUseCoordinator(
             permissions: permissions,
-            makeAgent: { _ in agent }
+            makeAgent: { _, _ in agent }
         )
         coordinator.configureModel(testConfiguration)
 
@@ -188,12 +233,14 @@ final class ComputerUseCoordinatorTests: XCTestCase {
     }
 
     private func readyCoordinator(
-        agent: some ComputerUseAgentRunning
+        agent: some ComputerUseAgentRunning,
+        cursorSession: any ComputerUseCursorSessionManaging = NoopComputerUseCursorPresenter()
     ) -> ComputerUseCoordinator {
         let coordinator = ComputerUseCoordinator(
             permissions: StubComputerUsePermissions(snapshots: []),
             initialPermissionSnapshot: .granted,
-            makeAgent: { _ in agent }
+            cursorSession: cursorSession,
+            makeAgent: { _, _ in agent }
         )
         coordinator.configureModel(testConfiguration)
         return coordinator
@@ -211,6 +258,15 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         for _ in 0..<100 where coordinator.isRunning {
             await Task.yield()
         }
+    }
+}
+
+@MainActor
+private final class SpyComputerUseCursorSession: ComputerUseCursorSessionManaging {
+    private(set) var endSessionCount = 0
+
+    func endSession() {
+        endSessionCount += 1
     }
 }
 
@@ -253,6 +309,21 @@ private actor SuspendedComputerUseAgent: ComputerUseAgentRunning {
     func finish(_ result: ComputerUseAgentResult) {
         continuation?.resume(returning: result)
         continuation = nil
+    }
+}
+
+private actor ActivityEmittingComputerUseAgent: ComputerUseAgentRunning {
+    let activity: ComputerUseActivity
+    let sink: ComputerUseActivitySink
+
+    init(activity: ComputerUseActivity, sink: ComputerUseActivitySink) {
+        self.activity = activity
+        self.sink = sink
+    }
+
+    func run(task: ComputerUseAgentTask) async -> ComputerUseAgentResult {
+        await sink.emit(activity)
+        return ComputerUseAgentResult(outcome: .completed, message: "Done.")
     }
 }
 

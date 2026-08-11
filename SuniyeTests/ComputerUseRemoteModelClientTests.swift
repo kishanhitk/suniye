@@ -69,6 +69,7 @@ final class ComputerUseRemoteModelClientTests: XCTestCase {
                 .contains("never substitute or inspect an unrelated app")
         )
         XCTAssertEqual(messages.last?["content"] as? String, "Read the Calculator result.")
+
     }
 
     func testProviderRequestPreservesToolResultAndScreenshotOrdering() async throws {

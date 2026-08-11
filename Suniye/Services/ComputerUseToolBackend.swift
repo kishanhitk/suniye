@@ -7,6 +7,8 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
     private let actions: ComputerUseActionServing
     private let settler: ComputerUseActionSettling
     private let runtimeGuard: ComputerUseRuntimeGuarding
+    private let windowReacquisitionTimeout: Duration
+    private let windowReacquisitionPollingInterval: Duration
     private var observationsByTarget: [String: AuthorizedObservation] = [:]
 
     private struct AuthorizedObservation {
@@ -23,9 +25,13 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
         applications: ComputerUseApplicationCatalogProviding = ComputerUseApplicationCatalog(),
         windows: ComputerUseWindowDiscovering = ComputerUseWindowDiscovery(),
         observations: ComputerUseObserving? = nil,
-        actions: ComputerUseActionServing = ComputerUseActionService(),
+        actions: ComputerUseActionServing = ComputerUseActionService(
+            cursor: SystemComputerUseCursorPresenter()
+        ),
         settler: ComputerUseActionSettling = SystemComputerUseActionSettler(),
-        runtimeGuard: ComputerUseRuntimeGuarding = ComputerUseRuntimeGuard()
+        runtimeGuard: ComputerUseRuntimeGuarding = ComputerUseRuntimeGuard(),
+        windowReacquisitionTimeout: Duration = .seconds(5),
+        windowReacquisitionPollingInterval: Duration = .milliseconds(50)
     ) {
         self.applications = applications
         self.windows = windows
@@ -35,6 +41,8 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
         self.actions = actions
         self.settler = settler
         self.runtimeGuard = runtimeGuard
+        self.windowReacquisitionTimeout = windowReacquisitionTimeout
+        self.windowReacquisitionPollingInterval = windowReacquisitionPollingInterval
     }
 
     func listApps() async throws -> [ComputerUseApplication] {
@@ -48,7 +56,7 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
         let application = try await applications.resolveOrLaunch(app)
         let key = targetKey(application)
         observationsByTarget.removeValue(forKey: key)
-        let observation = try await observations.observe(
+        let observation = try await observe(
             application: application,
             requestedIdentifier: app,
             disableDiff: disableDiff
@@ -58,6 +66,34 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
             runtimeAuthorization: runtimeAuthorization
         )
         return observation.state
+    }
+
+    private func observe(
+        application: ComputerUseApplicationRecord,
+        requestedIdentifier: String,
+        disableDiff: Bool
+    ) async throws -> ComputerUseObservation {
+        do {
+            return try await observations.observe(
+                application: application,
+                requestedIdentifier: requestedIdentifier,
+                disableDiff: disableDiff
+            )
+        } catch ComputerUseObservationError.noWindow where application.isRunning {
+            guard let processIdentifier = application.processIdentifier,
+                  try await windows.waitUntilHasPrimaryWindow(
+                      processIdentifier: processIdentifier,
+                      timeout: windowReacquisitionTimeout,
+                      pollingInterval: windowReacquisitionPollingInterval
+                  ) != nil else {
+                throw ComputerUseObservationError.noWindow(requestedIdentifier)
+            }
+            return try await observations.observe(
+                application: application,
+                requestedIdentifier: requestedIdentifier,
+                disableDiff: disableDiff
+            )
+        }
     }
 
     func click(_ request: ComputerUseClickRequest) async throws {

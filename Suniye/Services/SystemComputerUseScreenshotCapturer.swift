@@ -16,7 +16,10 @@ actor SystemComputerUseScreenshotCapturer: ComputerUseScreenshotCapturing {
             false,
             onScreenWindowsOnly: true
         )
-        guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+        let window = content.windows.first(where: {
+            $0.windowID == windowID
+        })
+        guard let window else {
             throw ComputerUseScreenshotError.windowUnavailable(windowID)
         }
         let backingScale = await MainActor.run {

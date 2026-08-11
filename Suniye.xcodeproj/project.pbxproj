@@ -7,11 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		011573BC5508772E6B3BFC63 /* ComputerUseActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80CFBAD174ECF98CB61CEEB8 /* ComputerUseActivity.swift */; };
 		01989238B5D7396C7DB8C856 /* AppStateEditLearningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 667CD8D078A7298D136D4BC5 /* AppStateEditLearningTests.swift */; };
 		01D77BF533D1FA4CBA387D88 /* ComputerUseAccessibilityTree.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF27BE91A59F80432FA078F1 /* ComputerUseAccessibilityTree.swift */; };
 		01E1B817BFD22089ACBB49B0 /* ComputerUseToolResultEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = D29FC0918B96FB3F030D7EE7 /* ComputerUseToolResultEncoder.swift */; };
 		020967A2000D318C6A9ECE23 /* AudioRecognitionPreprocessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5AF8B0C31B3D3BC319A700 /* AudioRecognitionPreprocessorTests.swift */; };
 		02CE72BBF44FB307BA263B04 /* AppleSpeechTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB16CAD532E7ECD31B041352 /* AppleSpeechTranscriptionService.swift */; };
+		04CCDD36CBA6C757037A8BFE /* ComputerUseCursorPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A078FB8F387695BDA59615EB /* ComputerUseCursorPresentation.swift */; };
 		05D878784AAC0355171D3344 /* AudioRingBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0686CA2F51A15EC3135A4FD /* AudioRingBufferTests.swift */; };
 		066495EC738BDF43605587F6 /* AppPromptBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FE358ECC10D9D38BDD3718F /* AppPromptBinding.swift */; };
 		06E62A9DB81ED2EA8E9F0330 /* LLMPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C803DEDF9EAE9D4E8C14C7E /* LLMPostProcessor.swift */; };
@@ -23,6 +25,7 @@
 		0BB11537C982C731E8A9C06D /* LaunchAtLoginService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EEDE3A134D7940680E98B65 /* LaunchAtLoginService.swift */; };
 		0D52D29FA88DC99EB7115C7B /* PartialTranscriptionSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624DF0C47847FACD2976DEAE /* PartialTranscriptionSchedulerTests.swift */; };
 		1010ECBB713A653EFCEE90D3 /* PartialTranscriptStabilizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71F09E71632C13C91BE934A /* PartialTranscriptStabilizerTests.swift */; };
+		1036294FDAD331BE2AE40B78 /* ComputerUseCursorPresenterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13731A06E8C3CA71B59F9B46 /* ComputerUseCursorPresenterTests.swift */; };
 		104B3E93067006EC3245CD0A /* ComputerUseObservationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 240ED9365CE6AE370E8E5A2E /* ComputerUseObservationServiceTests.swift */; };
 		130C07628C0D3E28C6C66E9B /* AudioRingBuffer.c in Sources */ = {isa = PBXBuildFile; fileRef = CB8BDFE6C9896219254CC03D /* AudioRingBuffer.c */; };
 		137D1EF09941D22D862F80A8 /* PermisoPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 778C3F4BA67F5BF8643B0057 /* PermisoPanel.swift */; };
@@ -116,6 +119,7 @@
 		775525A23D0120E0D562F6DE /* IssueReportWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A40680D7D6D6D80DF33509F /* IssueReportWindowController.swift */; };
 		7CF0F632EA9799DB8AFF5A63 /* ComputerUseProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED3582AEA30366887AD9399 /* ComputerUseProtocol.swift */; };
 		7EB9B5550B0A955CDFC3FC17 /* LLMSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2C954DD9B2466B271CC6A1D /* LLMSettingsStoreTests.swift */; };
+		7F9E9217F6F55113E889B867 /* ComputerUseCursorOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5095ABED2B7F2B3FD6E030 /* ComputerUseCursorOverlayController.swift */; };
 		7FFDBD4254F504A0E5EC9D45 /* AudioCaptureDrivers.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0D2D7052852D86CA19FCC5 /* AudioCaptureDrivers.swift */; };
 		8026BDFF0398AE05E7C479C9 /* ChatCompletionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73E0B8EFFC4C811FB6EDB2C3 /* ChatCompletionClient.swift */; };
 		81A60C95C84B724430F89DD2 /* LLMSettingsMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A32517298CA486729883F93 /* LLMSettingsMoreTests.swift */; };
@@ -275,6 +279,7 @@
 		10EFB6CFB00782DD57172E26 /* AppStateSubmitCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSubmitCommandTests.swift; sourceTree = "<group>"; };
 		11558F5387C6D3FFC7B1B354 /* TestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestDoubles.swift; sourceTree = "<group>"; };
 		1215194BCE451924E1C06FDD /* libonnxruntime.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libonnxruntime.dylib; path = Suniye/Frameworks/libonnxruntime.dylib; sourceTree = "<group>"; };
+		13731A06E8C3CA71B59F9B46 /* ComputerUseCursorPresenterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseCursorPresenterTests.swift; sourceTree = "<group>"; };
 		139684AE1E0F9DE6F60EBA10 /* EditModeServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditModeServiceTests.swift; sourceTree = "<group>"; };
 		13D4CAFD2439B222AD68BE12 /* MainWindowSectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowSectionTests.swift; sourceTree = "<group>"; };
 		14AC42D54C76CA184ED6E2DC /* AppStateCoverageMiscTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateCoverageMiscTests.swift; sourceTree = "<group>"; };
@@ -372,6 +377,7 @@
 		7C803DEDF9EAE9D4E8C14C7E /* LLMPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMPostProcessor.swift; sourceTree = "<group>"; };
 		7EEDE3A134D7940680E98B65 /* LaunchAtLoginService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginService.swift; sourceTree = "<group>"; };
 		7F99CBD1DBECD891AFEFBB26 /* AppStatePerAppPromptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStatePerAppPromptTests.swift; sourceTree = "<group>"; };
+		80CFBAD174ECF98CB61CEEB8 /* ComputerUseActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseActivity.swift; sourceTree = "<group>"; };
 		81AA01747E25F8D549846F84 /* ComputerUseAgent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseAgent.swift; sourceTree = "<group>"; };
 		82E6C7AA7DADED73D5C382DA /* FragmentMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "FragmentMono-Regular.ttf"; sourceTree = "<group>"; };
 		83DBF264EA361B497944C9B3 /* AppStateCoverageOnboardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateCoverageOnboardingTests.swift; sourceTree = "<group>"; };
@@ -397,6 +403,7 @@
 		9E2ECDB4CFB11C5B9831460F /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
 		9FE358ECC10D9D38BDD3718F /* AppPromptBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPromptBinding.swift; sourceTree = "<group>"; };
 		A0686CA2F51A15EC3135A4FD /* AudioRingBufferTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRingBufferTests.swift; sourceTree = "<group>"; };
+		A078FB8F387695BDA59615EB /* ComputerUseCursorPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseCursorPresentation.swift; sourceTree = "<group>"; };
 		A15D7D20796CE98FF1612651 /* AppAnalytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAnalytics.swift; sourceTree = "<group>"; };
 		A2C954DD9B2466B271CC6A1D /* LLMSettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettingsStoreTests.swift; sourceTree = "<group>"; };
 		A3E2709940807F9CCB5EBB91 /* ComputerUseAgentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseAgentTests.swift; sourceTree = "<group>"; };
@@ -456,6 +463,7 @@
 		DB71DAFF5363E778A2E91DB2 /* AudioRingBuffer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioRingBuffer.h; sourceTree = "<group>"; };
 		DC0D2D7052852D86CA19FCC5 /* AudioCaptureDrivers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureDrivers.swift; sourceTree = "<group>"; };
 		DDBA8DA30905F29C03B8A36D /* AppStateSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSettingsTests.swift; sourceTree = "<group>"; };
+		DE5095ABED2B7F2B3FD6E030 /* ComputerUseCursorOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseCursorOverlayController.swift; sourceTree = "<group>"; };
 		DF9A2105698B412DA156394B /* SystemComputerUseWindowInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemComputerUseWindowInventory.swift; sourceTree = "<group>"; };
 		E002F2ED2661905D8B147320 /* LocalGemmaLlamaServerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaLlamaServerTests.swift; sourceTree = "<group>"; };
 		E0C52C50D2C18B69DD4C775D /* TextInsertionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionServiceTests.swift; sourceTree = "<group>"; };
@@ -597,6 +605,7 @@
 				A3E2709940807F9CCB5EBB91 /* ComputerUseAgentTests.swift */,
 				CE6DBCE0BBD218C71FFFA9A4 /* ComputerUseApplicationCatalogTests.swift */,
 				755CDA46051DAA1EEF641C2B /* ComputerUseCoordinatorTests.swift */,
+				13731A06E8C3CA71B59F9B46 /* ComputerUseCursorPresenterTests.swift */,
 				437827FB3E73E85A61541002 /* ComputerUseInputTranslationTests.swift */,
 				865C713832C141D8B0774005 /* ComputerUseModelConfigurationTests.swift */,
 				77E28CDB66B92AF35FAB32D1 /* ComputerUseModelToolContractTests.swift */,
@@ -748,9 +757,12 @@
 				AF27BE91A59F80432FA078F1 /* ComputerUseAccessibilityTree.swift */,
 				0A447F6ABB74C48E00FCCD9A /* ComputerUseActionService.swift */,
 				6201E54BB34F86964496AFDA /* ComputerUseActionSettler.swift */,
+				80CFBAD174ECF98CB61CEEB8 /* ComputerUseActivity.swift */,
 				81AA01747E25F8D549846F84 /* ComputerUseAgent.swift */,
 				634AAA361B464BD2826453FD /* ComputerUseApplicationCatalog.swift */,
 				095EB5A6DAE3904492FBB2D9 /* ComputerUseCoordinator.swift */,
+				DE5095ABED2B7F2B3FD6E030 /* ComputerUseCursorOverlayController.swift */,
+				A078FB8F387695BDA59615EB /* ComputerUseCursorPresentation.swift */,
 				C4A56768AB5F4A5EEDF7A7B2 /* ComputerUseInputTranslation.swift */,
 				42F1C02C57E67331C707FC09 /* ComputerUseKeyChord.swift */,
 				27D284AB90A99E14F74CD672 /* ComputerUseModelClient.swift */,
@@ -979,10 +991,13 @@
 				01D77BF533D1FA4CBA387D88 /* ComputerUseAccessibilityTree.swift in Sources */,
 				5DC6B15541C02823AB13E0A7 /* ComputerUseActionService.swift in Sources */,
 				AA0540F0BBA2197BFEEF1AD7 /* ComputerUseActionSettler.swift in Sources */,
+				011573BC5508772E6B3BFC63 /* ComputerUseActivity.swift in Sources */,
 				F64EAB4A79FD99211643D2E3 /* ComputerUseAgent.swift in Sources */,
 				EE0D6E8CE4770664A7759259 /* ComputerUseApplicationCatalog.swift in Sources */,
 				C5D0CC640CB01B8ED2B6C4DF /* ComputerUseChatComponents.swift in Sources */,
 				BFDB45CB069C025CECF01143 /* ComputerUseCoordinator.swift in Sources */,
+				7F9E9217F6F55113E889B867 /* ComputerUseCursorOverlayController.swift in Sources */,
+				04CCDD36CBA6C757037A8BFE /* ComputerUseCursorPresentation.swift in Sources */,
 				BA7AA29E9FC6D0523562AD61 /* ComputerUseInputTranslation.swift in Sources */,
 				55ABF25461C39CFCAE868B77 /* ComputerUseKeyChord.swift in Sources */,
 				B266BC6B62E2E28DE45AF733 /* ComputerUseModelClient.swift in Sources */,
@@ -1118,6 +1133,7 @@
 				E5A1D15B9A768ABE5926A0AF /* ComputerUseAgentTests.swift in Sources */,
 				38F6E5F3ABB211F063C7DEFE /* ComputerUseApplicationCatalogTests.swift in Sources */,
 				927A52C8CD5753D379ABFA8C /* ComputerUseCoordinatorTests.swift in Sources */,
+				1036294FDAD331BE2AE40B78 /* ComputerUseCursorPresenterTests.swift in Sources */,
 				0A011A2C3536B1B1F565B3BA /* ComputerUseInputTranslationTests.swift in Sources */,
 				E7FDC247323F09DDF262ADCE /* ComputerUseModelConfigurationTests.swift in Sources */,
 				3D4EF67E5B006E00511DD97B /* ComputerUseModelToolContractTests.swift in Sources */,

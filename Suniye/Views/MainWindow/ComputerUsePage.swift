@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct ComputerUsePage: View {
@@ -5,6 +6,7 @@ struct ComputerUsePage: View {
     let modelConfiguration: ComputerUseRemoteModelConfiguration?
     let openModelSettings: () -> Void
     let onVoiceTaskHandlerChange: ((any ComputerUseVoiceTaskHandling)?) -> Void
+    @State private var copiedDebugSessionID: ComputerUseDebugSessionID?
 
     init(
         coordinator: ComputerUseCoordinator,
@@ -48,6 +50,22 @@ struct ComputerUsePage: View {
             Text("Computer Use")
                 .font(AppTypography.pageTitle)
             Spacer(minLength: 12)
+            if let debugSessionID = coordinator.debugSessionID {
+                Button {
+                    copy(debugSessionID)
+                } label: {
+                    Label(
+                        copiedDebugSessionID == debugSessionID ? "Copied" : "Copy debug ID",
+                        systemImage: copiedDebugSessionID == debugSessionID
+                            ? "checkmark"
+                            : "doc.on.doc"
+                    )
+                }
+                .buttonStyle(.borderless)
+                .help("Copy debug session ID \(debugSessionID.rawValue)")
+                .accessibilityLabel("Copy debug session ID")
+                .accessibilityIdentifier("computer-use-copy-debug-session-id")
+            }
             Button {
                 coordinator.startNewConversation()
             } label: {
@@ -59,6 +77,20 @@ struct ComputerUsePage: View {
         }
         .padding(.horizontal, AppMetrics.detailPaddingHorizontal)
         .padding(.vertical, 16)
+    }
+
+    private func copy(_ debugSessionID: ComputerUseDebugSessionID) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.setString(debugSessionID.rawValue, forType: .string) else {
+            return
+        }
+        copiedDebugSessionID = debugSessionID
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard copiedDebugSessionID == debugSessionID else { return }
+            copiedDebugSessionID = nil
+        }
     }
 
     private var transcript: some View {

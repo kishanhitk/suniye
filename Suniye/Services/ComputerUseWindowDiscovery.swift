@@ -71,15 +71,26 @@ actor ComputerUseWindowDiscovery: ComputerUseWindowDiscovering {
     }
 
     func orderedWindows(processIdentifier: Int32) async throws -> [ComputerUseWindow] {
-        let cgWindows = try inventory.onScreenWindows().filter {
-            $0.ownerProcessIdentifier == processIdentifier
-                && $0.isOnScreen
-                && !$0.bounds.isEmpty
-        }
         let axWindows = try inventory.accessibilityWindows(
             processIdentifier: processIdentifier
         )
-        return ComputerUseWindowMatcher.match(cgWindows: cgWindows, axWindows: axWindows)
+        return ComputerUseWindowMatcher.match(
+            cgWindows: try candidateWindows(
+                inventory.onScreenWindows(),
+                processIdentifier: processIdentifier
+            ),
+            axWindows: axWindows
+        )
+    }
+
+    private func candidateWindows(
+        _ windows: @autoclosure () throws -> [ComputerUseCGWindowSnapshot],
+        processIdentifier: Int32
+    ) throws -> [ComputerUseCGWindowSnapshot] {
+        try windows().filter {
+            $0.ownerProcessIdentifier == processIdentifier
+                && !$0.bounds.isEmpty
+        }
     }
 }
 

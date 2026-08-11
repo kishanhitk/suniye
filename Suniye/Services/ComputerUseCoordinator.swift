@@ -16,7 +16,8 @@ enum ComputerUseCoordinatorPhase: Equatable {
 @Observable
 final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     typealias AgentFactory = @MainActor (
-        ComputerUseRemoteModelConfiguration
+        ComputerUseRemoteModelConfiguration,
+        ComputerUseActivitySink
     ) -> any ComputerUseAgentRunning
 
     var phase: ComputerUseCoordinatorPhase = .idle
@@ -24,10 +25,12 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     var draft = ""
     var conversation: [ComputerUseConversationMessage] = []
     var errorMessage: String?
+    var debugSessionID: ComputerUseDebugSessionID?
 
     @ObservationIgnored private let permissions: any ComputerUsePermissionServing
     @ObservationIgnored private let permissionSettings:
         any ComputerUsePermissionSettingsOpening
+    @ObservationIgnored private let cursorSession: any ComputerUseCursorSessionManaging
     @ObservationIgnored private let makeAgent: AgentFactory
     @ObservationIgnored private var configuration: ComputerUseRemoteModelConfiguration?
     @ObservationIgnored private var activeRun: Task<Void, Never>?
@@ -39,12 +42,14 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         permissions: any ComputerUsePermissionServing = SystemComputerUsePermissionService(),
         permissionSettings: (any ComputerUsePermissionSettingsOpening)? = nil,
         initialPermissionSnapshot: ComputerUsePermissionSnapshot = .notGranted,
+        cursorSession: any ComputerUseCursorSessionManaging = SystemComputerUseCursorPresenter(),
         makeAgent: @escaping AgentFactory = ComputerUseCoordinator.makeProductionAgent
     ) {
         self.permissions = permissions
         self.permissionSettings = permissionSettings
             ?? SystemComputerUsePermissionSettingsOpener()
         self.permissionSnapshot = initialPermissionSnapshot
+        self.cursorSession = cursorSession
         self.makeAgent = makeAgent
     }
 
@@ -139,18 +144,23 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
             return
         }
 
+        let runID = UUID()
+        let debugSessionID = ComputerUseDebugSessionID.generate(uuid: runID)
         let history = conversation
         conversation.append(.init(role: .user, text: instruction))
         draft = ""
         errorMessage = nil
         phase = .running
-
-        let runID = UUID()
         activeRunID = runID
-        let agent = makeAgent(configuration)
+        self.debugSessionID = debugSessionID
+        let activitySink = ComputerUseActivitySink { [weak self] activity in
+            await self?.appendActivity(activity, for: runID)
+        }
+        let agent = makeAgent(configuration, activitySink)
         let task = ComputerUseAgentTask(
             instruction: instruction,
-            conversation: history
+            conversation: history,
+            debugSessionID: debugSessionID
         )
         activeRun = Task { [weak self] in
             let result = await agent.run(task: task)
@@ -186,6 +196,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
             return
         }
         invalidateActiveRun()
+        cursorSession.endSession()
         pendingVoiceInstruction = nil
         phase = .cancelled
         appendAssistantMessage("Stopped.")
@@ -196,10 +207,12 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
             return
         }
         invalidateActiveRun()
+        cursorSession.endSession()
         pendingVoiceInstruction = nil
         draft = ""
         conversation = []
         errorMessage = nil
+        debugSessionID = nil
         phase = .ready
     }
 
@@ -223,6 +236,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     private func finish(_ result: ComputerUseAgentResult) {
         activeRun = nil
         activeRunID = nil
+        cursorSession.endSession()
         appendAssistantMessage(result.message)
         switch result.outcome {
         case .completed:
@@ -248,6 +262,13 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         conversation.append(.init(role: .assistant, text: normalized))
     }
 
+    private func appendActivity(_ activity: ComputerUseActivity, for runID: UUID) {
+        guard activeRunID == runID else {
+            return
+        }
+        conversation.append(.init(activity: activity))
+    }
+
     private func invalidateActiveRun() {
         activeRun?.cancel()
         activeRun = nil
@@ -271,11 +292,13 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     }
 
     private static func makeProductionAgent(
-        configuration: ComputerUseRemoteModelConfiguration
+        configuration: ComputerUseRemoteModelConfiguration,
+        activitySink: ComputerUseActivitySink
     ) -> any ComputerUseAgentRunning {
         ComputerUseAgent(
             model: ComputerUseRemoteModelClient(configuration: configuration),
-            session: ComputerUseSession(backend: ComputerUseToolBackend())
+            session: ComputerUseSession(backend: ComputerUseToolBackend()),
+            activitySink: activitySink
         )
     }
 }

@@ -3,6 +3,26 @@
 Date: 2026-08-09
 Branch: `kis-169-computer-use-parity`
 
+## Superseding correction — 2026-08-11
+
+- `[Verified]` Live Codex/ChatGPT behavior permits concurrent user interaction with the Mac.
+- `[Verified]` Suniye session `CU-6E2061703015` reached a model-selected click and then cancelled
+  solely because a global HID counter changed. The app reported `Computer Use stopped because you
+  used your Mac.`
+- `[Corrected]` The physical-input sampler, HID authorization snapshot, `userIntervened` runtime
+  error, agent cancellation branch, and associated tests were removed. They were an overly broad
+  independent approximation, not recovered reference logic.
+- `[Implemented]` Runtime authorization now checks only whether the macOS session is locked.
+  Fresh-observation enforcement and loading-aware settling remain unchanged.
+- `[Verified]` The installed Preview regression session `CU-CC7B23592202` remained active after
+  `Copy debug ID` was clicked during execution, completed 13 model/tool steps, performed the
+  Calculator action, and returned `Done.` No intervention cancellation appears in its trace.
+- `[Verified]` The corrected full suite executes 1,088 tests with 2 skipped and 0 failures. Gated
+  coverage is 88.55% (13,376/15,106 lines) against the 80% floor.
+
+The original Phase 6 sections below are retained as a historical record and are superseded where
+they describe physical-input cancellation.
+
 ## Scope
 
 This phase completes the native runtime behavior that can be supported by direct artifact evidence:

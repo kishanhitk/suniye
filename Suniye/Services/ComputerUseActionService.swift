@@ -19,7 +19,6 @@ enum ComputerUseActionError: LocalizedError, Equatable, Sendable {
     case textAmbiguous(String)
     case screenshotUnavailable
     case invalidArgument(String)
-    case applicationActivationFailed
     case eventCreationFailed
     case unsupportedKey(String)
 
@@ -47,8 +46,6 @@ enum ComputerUseActionError: LocalizedError, Equatable, Sendable {
             "A current window screenshot is required for coordinate input."
         case let .invalidArgument(message):
             message
-        case .applicationActivationFailed:
-            "The target application could not be activated for pointer input."
         case .eventCreationFailed:
             "macOS could not create the input event."
         case let .unsupportedKey(key):
@@ -58,9 +55,10 @@ enum ComputerUseActionError: LocalizedError, Equatable, Sendable {
 }
 
 protocol ComputerUseAccessibilityActionPerforming: Sendable {
-    func press(
+    func performPrimaryClick(
         reference: ComputerUseAccessibilityElementReference,
-        target: ComputerUseObservedTarget
+        target: ComputerUseObservedTarget,
+        clickCount: Int
     ) async throws -> Bool
     func center(
         reference: ComputerUseAccessibilityElementReference,
@@ -144,14 +142,17 @@ protocol ComputerUseActionServing: Sendable {
 struct ComputerUseActionService: ComputerUseActionServing {
     private let accessibility: ComputerUseAccessibilityActionPerforming
     private let input: ComputerUseInputEventPosting
+    private let cursor: ComputerUseCursorPresenting
 
     init(
         accessibility: ComputerUseAccessibilityActionPerforming =
             SystemComputerUseAccessibilityActions(),
-        input: ComputerUseInputEventPosting = SystemComputerUseInputEvents()
+        input: ComputerUseInputEventPosting = SystemComputerUseInputEvents(),
+        cursor: ComputerUseCursorPresenting = NoopComputerUseCursorPresenter()
     ) {
         self.accessibility = accessibility
         self.input = input
+        self.cursor = cursor
     }
 
     func click(_ request: ComputerUseClickRequest, context: ComputerUseActionContext) async throws {
@@ -162,19 +163,45 @@ struct ComputerUseActionService: ComputerUseActionServing {
         switch request.target {
         case let .element(index):
             let reference = try element(index, in: context)
+            let cursorPoint: CGPoint?
+            do {
+                cursorPoint = try await accessibility.center(
+                    reference: reference,
+                    target: context.target
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                cursorPoint = nil
+            }
+            if let cursorPoint {
+                try await presentClick(
+                    request,
+                    at: cursorPoint,
+                    processIdentifier: pid,
+                    context: context
+                )
+            }
             if request.mouseButton == .left,
-               try await accessibility.press(reference: reference, target: context.target) {
-                for _ in 1 ..< request.clickCount {
-                    guard try await accessibility.press(
-                        reference: reference,
-                        target: context.target
-                    ) else {
-                        throw ComputerUseActionError.actionUnavailable("AXPress")
-                    }
-                }
+               try await accessibility.performPrimaryClick(
+                   reference: reference,
+                   target: context.target,
+                   clickCount: request.clickCount
+               ) {
                 return
             }
-            let point = try await accessibility.center(reference: reference, target: context.target)
+            let point: CGPoint
+            if let cursorPoint {
+                point = cursorPoint
+            } else {
+                point = try await accessibility.center(reference: reference, target: context.target)
+                try await presentClick(
+                    request,
+                    at: point,
+                    processIdentifier: pid,
+                    context: context
+                )
+            }
             try await input.click(
                 at: point,
                 mouseButton: request.mouseButton,
@@ -183,8 +210,15 @@ struct ComputerUseActionService: ComputerUseActionServing {
             )
         case let .coordinates(x, y):
             try requireFinite([x, y], name: "click coordinates")
+            let point = try screenPoint(x: x, y: y, context: context)
+            try await presentClick(
+                request,
+                at: point,
+                processIdentifier: pid,
+                context: context
+            )
             try await input.click(
-                at: try screenPoint(x: x, y: y, context: context),
+                at: point,
                 mouseButton: request.mouseButton,
                 clickCount: request.clickCount,
                 pid: pid
@@ -245,11 +279,23 @@ struct ComputerUseActionService: ComputerUseActionServing {
         }
         let reference = try element(elementIndex, in: context)
         let point = try await accessibility.center(reference: reference, target: context.target)
+        let processIdentifier = try processIdentifier(context)
+        try await cursor.present(
+            .scroll(
+                point: point,
+                target: ComputerUseCursorTarget(
+                    windowID: context.target.window.id,
+                    processIdentifier: processIdentifier
+                ),
+                direction: direction,
+                pages: pages
+            )
+        )
         try await input.scroll(
             at: point,
             direction: direction,
             pages: pages,
-            pid: try processIdentifier(context)
+            pid: processIdentifier
         )
     }
 
@@ -261,10 +307,23 @@ struct ComputerUseActionService: ComputerUseActionServing {
         context: ComputerUseActionContext
     ) async throws {
         try requireFinite([fromX, fromY, toX, toY], name: "drag coordinates")
+        let processIdentifier = try processIdentifier(context)
+        let start = try screenPoint(x: fromX, y: fromY, context: context)
+        let end = try screenPoint(x: toX, y: toY, context: context)
+        try await cursor.present(
+            .drag(
+                from: start,
+                to: end,
+                target: ComputerUseCursorTarget(
+                    windowID: context.target.window.id,
+                    processIdentifier: processIdentifier
+                )
+            )
+        )
         try await input.drag(
-            from: screenPoint(x: fromX, y: fromY, context: context),
-            to: screenPoint(x: toX, y: toY, context: context),
-            pid: processIdentifier(context)
+            from: start,
+            to: end,
+            pid: processIdentifier
         )
     }
 
@@ -294,6 +353,25 @@ struct ComputerUseActionService: ComputerUseActionServing {
             throw ComputerUseActionError.staleObservation(context.target.application.displayName)
         }
         return pid
+    }
+
+    private func presentClick(
+        _ request: ComputerUseClickRequest,
+        at point: CGPoint,
+        processIdentifier: Int32,
+        context: ComputerUseActionContext
+    ) async throws {
+        try await cursor.present(
+            .click(
+                point: point,
+                target: ComputerUseCursorTarget(
+                    windowID: context.target.window.id,
+                    processIdentifier: processIdentifier
+                ),
+                mouseButton: request.mouseButton,
+                clickCount: request.clickCount
+            )
+        )
     }
 
     private func screenPoint(

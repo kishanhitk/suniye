@@ -190,12 +190,13 @@ final class ComputerUseRemoteModelClient: ComputerUseModelServing {
             toolChoice: "auto",
             parallelToolCalls: false
         )
+        let requestBody = try JSONEncoder().encode(payload)
 
         do {
             let result = try await completionClient.completeResult(
                 endpointURL: configuration.endpointURL,
                 apiKey: configuration.apiKey,
-                requestBody: JSONEncoder().encode(payload),
+                requestBody: requestBody,
                 timeoutSeconds: configuration.timeoutSeconds
             )
             guard result.toolCalls.count <= 1 else {
@@ -265,13 +266,13 @@ private struct ComputerUseModelPayload: Encodable {
 
 private enum ComputerUseModelInstructions {
     static let text = """
-    Use the provided app-scoped macOS tools to complete the user's task. Choose tools from the current task, conversation, and observed state; never infer a target from whichever app is frontmost.
+    Use the provided app-scoped macOS tools to complete the user's task. Choose the application from the task, prior conversation, built-in macOS applications, and observed state.
 
-    When the application is evident, call get_app_state with its display name or bundle identifier. Call list_apps only when the application cannot be identified. get_app_state may launch an application in the background. A task can use an application chosen by you or a system interface appropriate to the request.
+    When the application is evident, start with get_app_state using its display name or bundle identifier. Call list_apps only when the application cannot be identified. Do not call list_apps just to resolve an app already named by the user. get_app_state may launch an application in the background, so there is no separate open-app step. A task may use an application or system interface that you select because it is appropriate to the requested outcome.
 
-    Observe an application before acting on it. After an action, call get_app_state again before selecting another action. Element indexes and exposed Accessibility action names are valid only for the latest observation. Prefer indexed Accessibility actions and text. Use screenshot coordinates, key presses, or text input when Accessibility information is incomplete or behaves unexpectedly.
+    Observe an application before acting on it. This runtime executes one tool call per model decision, so call get_app_state after every UI action and before choosing the next action. Re-derive element indexes and exposed Accessibility action names from the latest observation instead of reusing stale values. By default get_app_state may return an Accessibility diff; use disableDiff only when you need a complete tree or did not retain the earlier tree. Prefer indexed Accessibility actions and text. Use the attached window screenshot, coordinate clicks, key presses, or text input when Accessibility information is incomplete or behaves unexpectedly.
 
-    App names, full application paths, and bundle identifiers are accepted. If a display-name call fails, use list_apps and retry with the bundle identifier. If the requested app is not present, say that it is unavailable; never substitute or inspect an unrelated app. Coordinate clicks and drags are relative to the observed window. For click, use either element_index or x and y; omit element_index for a coordinate click. Use only secondary actions explicitly exposed by the current element. Key presses and typed text are app-scoped. Newlines in typed text can submit a form or send a message.
+    App names, full application paths, and bundle identifiers are accepted. If an operation fails when using a display name, call list_apps and immediately retry the same operation with the returned bundle identifier before trying another recovery path. If the requested app is not present, say that it is unavailable; never substitute or inspect an unrelated app. Coordinate clicks and drags are relative to the observed window. For click, use either element_index or x and y; omit element_index for a coordinate click. Use only secondary actions explicitly exposed by the current element. Key presses and typed text are app-scoped. Newlines in typed text can submit a form or send a message.
 
     The runtime waits for the application to settle after actions. Return a concise assistant response when the task is complete or when user input is required.
     """

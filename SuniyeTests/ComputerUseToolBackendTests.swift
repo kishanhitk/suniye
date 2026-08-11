@@ -24,7 +24,8 @@ final class ComputerUseToolBackendTests: XCTestCase {
             windows: fixture.windows,
             observations: fixture.observations,
             actions: fixture.actions,
-            settler: fixture.settler
+            settler: fixture.settler,
+            runtimeGuard: fixture.runtimeGuard
         )
 
         let applications = try await backend.listApps()
@@ -39,7 +40,8 @@ final class ComputerUseToolBackendTests: XCTestCase {
             windows: fixture.windows,
             observations: fixture.observations,
             actions: fixture.actions,
-            settler: fixture.settler
+            settler: fixture.settler,
+            runtimeGuard: fixture.runtimeGuard
         )
 
         let state = try await backend.getAppState(app: "Calculator", disableDiff: false)
@@ -52,6 +54,53 @@ final class ComputerUseToolBackendTests: XCTestCase {
         XCTAssertEqual(waitCount, 1)
     }
 
+    func testObservationWaitsForReplacementWindowInTheSameRunningProcess() async throws {
+        let fixture = backendFixture()
+        let observations = ControllableComputerUseObserving(observation: fixture.observations.observation)
+        await observations.failNextObservation()
+        await fixture.windows.hideForNextCalls(1)
+        let backend = ComputerUseToolBackend(
+            applications: fixture.applications,
+            windows: fixture.windows,
+            observations: observations,
+            actions: fixture.actions,
+            settler: fixture.settler,
+            runtimeGuard: fixture.runtimeGuard,
+            windowReacquisitionTimeout: .seconds(1),
+            windowReacquisitionPollingInterval: .milliseconds(1)
+        )
+
+        let state = try await backend.getAppState(app: "Calculator", disableDiff: false)
+
+        XCTAssertEqual(state.text, "0: AXWindow")
+        let callCount = await fixture.windows.callCount
+        XCTAssertEqual(callCount, 2)
+    }
+
+    func testObservationReportsNoWindowWhenReplacementDoesNotAppear() async {
+        let fixture = backendFixture()
+        let observations = ControllableComputerUseObserving(observation: fixture.observations.observation)
+        await observations.failNextObservation()
+        await fixture.windows.hideForNextCalls(1)
+        let backend = ComputerUseToolBackend(
+            applications: fixture.applications,
+            windows: fixture.windows,
+            observations: observations,
+            actions: fixture.actions,
+            settler: fixture.settler,
+            runtimeGuard: fixture.runtimeGuard,
+            windowReacquisitionTimeout: .zero,
+            windowReacquisitionPollingInterval: .milliseconds(1)
+        )
+
+        do {
+            _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+            XCTFail("Expected no-window error")
+        } catch {
+            XCTAssertEqual(error as? ComputerUseObservationError, .noWindow("Calculator"))
+        }
+    }
+
     func testActionRequiresAReferenceObservation() async {
         let fixture = backendFixture()
         let backend = ComputerUseToolBackend(
@@ -59,7 +108,8 @@ final class ComputerUseToolBackendTests: XCTestCase {
             windows: fixture.windows,
             observations: fixture.observations,
             actions: fixture.actions,
-            settler: fixture.settler
+            settler: fixture.settler,
+            runtimeGuard: fixture.runtimeGuard
         )
 
         do {
@@ -70,24 +120,28 @@ final class ComputerUseToolBackendTests: XCTestCase {
         }
     }
 
-    func testSuccessfulActionConsumesObservation() async throws {
+    func testSuccessfulActionRequiresAFreshObservationForTheNextAction() async throws {
         let fixture = backendFixture()
         let backend = ComputerUseToolBackend(
             applications: fixture.applications,
             windows: fixture.windows,
             observations: fixture.observations,
             actions: fixture.actions,
-            settler: fixture.settler
+            settler: fixture.settler,
+            runtimeGuard: fixture.runtimeGuard
         )
         _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
         try await backend.typeText(app: "Calculator", text: "42")
 
         do {
             try await backend.pressKey(app: "Calculator", key: "Return")
-            XCTFail("Expected a fresh observation requirement")
+            XCTFail("Expected a new observation before the next action")
         } catch {
             XCTAssertEqual(error as? ComputerUseActionError, .observationRequired("Calculator"))
         }
+
+        let calls = await fixture.actions.calls
+        XCTAssertEqual(calls, [.typeText("42")])
     }
 
     func testFailedRefreshInvalidatesThePreviousObservation() async throws {
@@ -98,7 +152,8 @@ final class ComputerUseToolBackendTests: XCTestCase {
             windows: fixture.windows,
             observations: observations,
             actions: fixture.actions,
-            settler: fixture.settler
+            settler: fixture.settler,
+            runtimeGuard: fixture.runtimeGuard
         )
         _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
         await observations.failSubsequentObservations()
@@ -115,14 +170,15 @@ final class ComputerUseToolBackendTests: XCTestCase {
         }
     }
 
-    func testForwardsEveryActionAfterFreshObservation() async throws {
+    func testForwardsEveryActionKindAfterItsOwnFreshObservation() async throws {
         let fixture = backendFixture()
         let backend = ComputerUseToolBackend(
             applications: fixture.applications,
             windows: fixture.windows,
             observations: fixture.observations,
             actions: fixture.actions,
-            settler: fixture.settler
+            settler: fixture.settler,
+            runtimeGuard: fixture.runtimeGuard
         )
         let click = ComputerUseClickRequest(app: "Calculator", elementIndex: 7)
 
@@ -178,7 +234,8 @@ final class ComputerUseToolBackendTests: XCTestCase {
             windows: fixture.windows,
             observations: fixture.observations,
             actions: fixture.actions,
-            settler: fixture.settler
+            settler: fixture.settler,
+            runtimeGuard: fixture.runtimeGuard
         )
         _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
         await fixture.windows.replaceWindowID(with: 99)
@@ -202,7 +259,8 @@ final class ComputerUseToolBackendTests: XCTestCase {
             windows: fixture.windows,
             observations: fixture.observations,
             actions: fixture.actions,
-            settler: fixture.settler
+            settler: fixture.settler,
+            runtimeGuard: fixture.runtimeGuard
         )
         _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
 
@@ -235,7 +293,7 @@ final class ComputerUseToolBackendTests: XCTestCase {
         XCTAssertEqual(observationCount, 0)
     }
 
-    func testPhysicalInputAfterObservationRequiresARequery() async throws {
+    func testPhysicalInputAfterObservationDoesNotCancelTheAction() async throws {
         let fixture = backendFixture()
         let runtimeGuard = ControllableComputerUseRuntimeGuard()
         let backend = ComputerUseToolBackend(
@@ -249,39 +307,9 @@ final class ComputerUseToolBackendTests: XCTestCase {
         _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
         await runtimeGuard.recordPhysicalInput()
 
-        do {
-            try await backend.typeText(app: "Calculator", text: "42")
-            XCTFail("Expected user intervention")
-        } catch {
-            XCTAssertEqual(error as? ComputerUseRuntimeError, .userIntervened)
-        }
-
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
         try await backend.typeText(app: "Calculator", text: "42")
         let actionCalls = await fixture.actions.calls
         XCTAssertEqual(actionCalls, [.typeText("42")])
-    }
-
-    func testPhysicalInputDuringSettlingEndsTheActionAsIntervened() async throws {
-        let fixture = backendFixture()
-        let runtimeGuard = ControllableComputerUseRuntimeGuard()
-        let settler = InterveningComputerUseSettler(runtimeGuard: runtimeGuard)
-        let backend = ComputerUseToolBackend(
-            applications: fixture.applications,
-            windows: fixture.windows,
-            observations: fixture.observations,
-            actions: fixture.actions,
-            settler: settler,
-            runtimeGuard: runtimeGuard
-        )
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
-
-        do {
-            try await backend.typeText(app: "Calculator", text: "42")
-            XCTFail("Expected user intervention")
-        } catch {
-            XCTAssertEqual(error as? ComputerUseRuntimeError, .userIntervened)
-        }
     }
 
     func testSettlerExtendsDelayOnlyWhileLoadingIndicatorIsPresent() async throws {
