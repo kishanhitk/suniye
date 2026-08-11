@@ -113,7 +113,7 @@ final class TextInsertionServiceTests: XCTestCase {
         XCTAssertEqual(postedFlags, [.maskCommand])
     }
 
-    func testInsertTextStillRestoresClipboardWhenPasteKeyPostingThrows() throws {
+    func testInsertTextThrowsBeforeChangingClipboardWhenNoTextInputIsFocused() {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
         pasteboard.clearContents()
@@ -121,6 +121,30 @@ final class TextInsertionServiceTests: XCTestCase {
 
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementProvider = { nil }
+        service.keyPoster = { _, _ in
+            XCTFail("No key should be posted without a focused text input")
+        }
+
+        XCTAssertThrowsError(try service.insertText("fallback")) { error in
+            guard case TextInsertionService.InsertError.noFocusedTextInput = error else {
+                return XCTFail("Expected noFocusedTextInput, got \(error)")
+            }
+        }
+        XCTAssertEqual(pasteboard.string(forType: .string), "previous")
+    }
+
+    func testInsertTextStillRestoresClipboardWhenPasteKeyPostingThrows() throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setString("previous", forType: .string)
+        let element = AXUIElementCreateSystemWide()
+        let unchanged = TextInsertionService.FocusedTextSnapshot(value: "hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementProvider = { element }
+        service.focusedTextSnapshotProvider = { _ in unchanged }
+        service.selectedTextSetter = { _, _ in true }
         service.pasteKeyCodeProvider = { 42 }
         service.clipboardRestoreDelay = 0
         service.keyPoster = { _, _ in

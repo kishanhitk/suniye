@@ -27,6 +27,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     enum InsertError: LocalizedError {
         case cannotCreateEvent
         case cannotCopyToClipboard
+        case noFocusedTextInput
 
         var errorDescription: String? {
             switch self {
@@ -34,6 +35,8 @@ final class TextInsertionService: TextInsertionServiceProtocol {
                 return "Unable to generate keyboard event"
             case .cannotCopyToClipboard:
                 return "Unable to copy transcription to the clipboard"
+            case .noFocusedTextInput:
+                return "No editable text field is focused"
             }
         }
     }
@@ -85,7 +88,11 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     }
 
     func insertText(_ text: String) throws {
-        if insertDirectlyIntoFocusedTextElement(text) {
+        guard let focusedElement = getFocusedTextElement() else {
+            throw InsertError.noFocusedTextInput
+        }
+
+        if insertDirectlyIntoFocusedTextElement(text, focusedElement: focusedElement) {
             return
         }
 
@@ -120,9 +127,8 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         try postKey(36)
     }
 
-    private func insertDirectlyIntoFocusedTextElement(_ text: String) -> Bool {
-        guard let focusedElement = getFocusedTextElement(),
-              let initialState = captureFocusedTextState(for: focusedElement),
+    private func insertDirectlyIntoFocusedTextElement(_ text: String, focusedElement: AXUIElement) -> Bool {
+        guard let initialState = captureFocusedTextState(for: focusedElement),
               setSelectedText(text, on: focusedElement),
               let currentState = captureFocusedTextState(for: focusedElement) else {
             return false

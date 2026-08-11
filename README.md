@@ -36,7 +36,7 @@ Hold your hotkey, say what you mean, release. Your words land at the cursor in M
 - **Private by default.** Local speech models transcribe on-device. Your audio never touches a network, so there's nothing to store, leak, or train on.
 - **Instant.** No round-trip to a server. The model is always loaded, so speech becomes text in milliseconds, not seconds.
 - **Everywhere you type.** Text is inserted through the macOS Accessibility APIs, so it works in every app — not just a special editor.
-- **One shortcut.** Hold Fn/Globe (or any combo you pick), talk, release. No modes, no buttons.
+- **Shortcuts that fit you.** Customize dictation, Edit Mode, and recovery shortcuts from General settings.
 - **Yours to inspect.** Open source under the MIT license — read every line, build it yourself, or send a patch.
 
 ## How it works
@@ -44,6 +44,7 @@ Hold your hotkey, say what you mean, release. Your words land at the cursor in M
 1. A small icon lives in your **menu bar** — that's Suniye, listening for its hotkey.
 2. **Hold your hotkey** (default: Fn/Globe) and speak naturally.
 3. **Release** — your speech is transcribed on-device and pasted at the cursor.
+4. If focus moved before insertion, focus a text field and press **Control + Command + V** to paste the last transcript. The recovery shortcut is customizable.
 
 ## Install
 
@@ -86,7 +87,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed st
 | **Live preview** | Watch a partial transcript appear in the floating indicator as you speak |
 | **Models** | Compare, install, and switch local speech models by speed, quality, size, and language |
 | **Vocabulary** | Teach Suniye your names and jargon so it gets them right |
-| **Your hotkey** | Any hold-to-talk shortcut you like — Fn/Globe, modifier combos, and more |
+| **Your hotkeys** | Customize hold-to-talk, Edit Mode, and Paste Last Transcript recovery shortcuts |
 
 ### Magic Format — cleanup that can stay on your Mac
 
