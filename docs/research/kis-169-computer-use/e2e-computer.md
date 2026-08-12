@@ -111,6 +111,32 @@ the Computer Use skill against Calculator only.
 Browser tasks should use the browser extension path and are not evidence for this desktop voice
 route.
 
+## App-owned session and background lifecycle E2E — 2026-08-12
+
+Build: Debug Preview installed at `/Users/kishan/Applications/Suniye Preview.app` from
+`kis-169-computer-use-parity`.
+
+- `[Verified]` Natural task `Open Calculator, enter 7, and verify the display.` completed through
+  a deterministic OpenAI-compatible loopback provider. The observed sequence was
+  `get_app_state` → `press_key` → `get_app_state`; the final response reported that Calculator
+  showed 7. Debug session: `CU-6EE003523304`.
+- `[Verified]` The bundled Computer Use integration independently observed Calculator and read
+  the display value as 7.
+- `[Verified]` Quit/reopen restored the user turn, tool calls, collapsed raw output, and assistant
+  result. New conversation removed the persisted session.
+- `[Verified]` Stop cancelled a deliberately delayed provider response and appended `Stopped.`
+  while showing one generic floating Working/Stop surface. Debug session: `CU-031A4F2312E4`.
+- `[Verified]` A deliberately delayed task continued after the Suniye window was closed. The app
+  remained running, did not reopen or focus the conversation, completed in the background, and
+  restored the result when manually reopened. Debug session: `CU-83846183223F`.
+- `[Verified]` Accessibility and Screen Recording were granted, and the dedicated shortcut was
+  configured as `Control + Command + U`.
+- `[Not exercised]` The bundled driver cannot hold and release a global shortcut, so it cannot
+  produce a real microphone recording. The source route and failure/restart boundaries are
+  covered by tests, but the final speech-to-action leg needs user participation.
+- `[Not exercised]` A real remote provider credential was not copied from Magic Format. The local
+  loopback credential was cleared and the temporary server removed after the run.
+
 ### Refreshed Preview UI smoke — 2026-08-03
 
 - `[Verified]` After reinstalling and relaunching `/Users/kishan/Applications/Suniye Preview.app`,

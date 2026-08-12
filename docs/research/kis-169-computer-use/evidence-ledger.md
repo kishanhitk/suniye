@@ -1402,3 +1402,36 @@ full XCTest runs, coverage, and E2E scripts.
   stop control, or task-specific progress text was introduced.
 - `[Verified]` The full suite passes 1,131 tests with 2 skipped and zero failures. Gated coverage
   is 87.00% (14,256/16,387 lines), above the 80% floor. E2E preflight and smoke pass.
+
+### Entry 78: Background voice resilience and installed lifecycle E2E
+
+Sources: `phase-21-background-voice-resilience-and-e2e-2026-08-12.md`, production Swift sources,
+focused and full XCTest runs, coverage, E2E scripts, installed Preview logs, and independent
+bundled Computer Use observations.
+
+- `[Verified]` Before this correction, Computer Use permissions were refreshed only when its page
+  appeared. A global task captured after fresh launch could remain queued despite already-granted
+  TCC permissions.
+- `[Implemented]` App bootstrap now reads the Computer Use permission snapshot without prompting,
+  so the global task route is ready independently of main-window navigation.
+- `[Verified]` Before this correction, a locally transcribed instruction waiting for permissions
+  or model configuration existed only in memory and could be lost on restart.
+- `[Implemented]` One pending instruction is atomically persisted, restored as the current draft,
+  handed to the existing coordinator when prerequisites become ready, and cleared only after run
+  acceptance or explicit user cancellation/reset.
+- `[User-directed]` Provider, endpoint, and model selection remain independent. OpenRouter
+  Computer Use now reuses Magic Format's saved OpenRouter key when no dedicated Computer Use key
+  exists. Dedicated credentials take precedence, and the fallback is disabled for non-OpenRouter
+  configuration on either side.
+- `[Verified live]` Installed Preview completed the natural Calculator task in debug session
+  `CU-6EE003523304`; the exact loop was observation, key press, fresh observation, and terminal
+  response. Independent Computer Use observation confirmed Calculator displayed 7.
+- `[Verified live]` Quit/reopen restored the complete conversation and collapsed tool result; New
+  conversation cleared it. Stop cancelled a delayed request in `CU-031A4F2312E4`.
+- `[Verified live]` `CU-83846183223F` continued after the Suniye window closed, completed without
+  reopening or focusing the host conversation, and restored its result when manually reopened.
+- `[Not exercised]` The bundled app-scoped input driver cannot hold/release the global shortcut,
+  so a real microphone voice cycle still requires user participation. A real remote provider key
+  was not copied; deterministic E2E used a temporary loopback provider and removed its credential.
+- `[Verified]` The full suite passes 1,139 tests with 2 skipped and zero failures. Gated coverage
+  is 87.03% (14,372/16,514 lines), above the 80% floor. Sequential E2E preflight and smoke pass.

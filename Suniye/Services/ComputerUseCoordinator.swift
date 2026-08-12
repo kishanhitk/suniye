@@ -66,6 +66,8 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         self.conversationStore = conversationStore
         self.makeAgent = makeAgent
         conversation = conversationStore.load()
+        pendingVoiceInstruction = conversationStore.loadPendingVoiceInstruction()
+        draft = pendingVoiceInstruction ?? ""
     }
 
     var isRunning: Bool {
@@ -207,6 +209,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
 
         draft = normalized
         pendingVoiceInstruction = normalized
+        conversationStore.savePendingVoiceInstruction(normalized)
         if isModelConfigured && permissionSnapshot.canControlComputer {
             startPendingVoiceTaskIfPossible()
             return .started
@@ -221,6 +224,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         invalidateActiveRun()
         cursorSession.endSession()
         pendingVoiceInstruction = nil
+        conversationStore.savePendingVoiceInstruction(nil)
         phase = .cancelled
         appendAssistantMessage("Stopped.")
     }
@@ -232,6 +236,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         invalidateActiveRun()
         cursorSession.endSession()
         pendingVoiceInstruction = nil
+        conversationStore.savePendingVoiceInstruction(nil)
         draft = ""
         conversation = []
         errorMessage = nil
@@ -310,6 +315,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
 
     func cancelPendingVoiceTask() {
         pendingVoiceInstruction = nil
+        conversationStore.savePendingVoiceInstruction(nil)
     }
 
     private func startPendingVoiceTaskIfPossible() {
@@ -320,8 +326,10 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
             return
         }
         draft = instruction
-        pendingVoiceInstruction = nil
         submit()
+        guard isRunning else { return }
+        pendingVoiceInstruction = nil
+        conversationStore.savePendingVoiceInstruction(nil)
     }
 
     private static func makeProductionAgent(

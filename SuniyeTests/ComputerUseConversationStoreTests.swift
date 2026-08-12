@@ -38,4 +38,19 @@ final class ComputerUseConversationStoreTests: XCTestCase {
         XCTAssertTrue(store.load().isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
     }
+
+    func testPendingVoiceInstructionSurvivesRestartAndCanBeCleared() {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ComputerUseConversationStoreTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ComputerUseConversationStore(
+            fileURL: directory.appendingPathComponent("current-session.json")
+        )
+
+        store.savePendingVoiceInstruction("  Check battery health  ")
+
+        XCTAssertEqual(store.loadPendingVoiceInstruction(), "Check battery health")
+        store.savePendingVoiceInstruction(nil)
+        XCTAssertNil(store.loadPendingVoiceInstruction())
+    }
 }

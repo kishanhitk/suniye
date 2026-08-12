@@ -279,19 +279,45 @@ final class ComputerUseCoordinatorTests: XCTestCase {
     func testVoiceTaskQueuesUntilPermissionsBecomeReady() async {
         let agent = StubComputerUseAgent()
         let permissions = StubComputerUsePermissions(snapshots: [.granted])
+        let store = SpyComputerUseConversationStore()
         let coordinator = ComputerUseCoordinator(
             permissions: permissions,
+            conversationStore: store,
             makeAgent: { _, _ in agent }
         )
         coordinator.configureModel(testConfiguration)
 
         XCTAssertEqual(coordinator.submitVoiceTask("Check battery health"), .queued)
         XCTAssertTrue(coordinator.isVoiceTaskPending)
+        XCTAssertEqual(store.pendingVoiceInstruction, "Check battery health")
 
         await coordinator.refreshPermissions()
         await waitUntilRunFinishes(coordinator)
 
         XCTAssertFalse(coordinator.isVoiceTaskPending)
+        XCTAssertNil(store.pendingVoiceInstruction)
+        XCTAssertEqual(coordinator.conversation.map(\.text), ["Check battery health", "Done."])
+    }
+
+    func testQueuedVoiceTaskIsRestoredAndRunsWhenPermissionsBecomeReady() async {
+        let agent = StubComputerUseAgent()
+        let store = SpyComputerUseConversationStore(
+            pendingVoiceInstruction: "Check battery health"
+        )
+        let coordinator = ComputerUseCoordinator(
+            permissions: StubComputerUsePermissions(snapshots: [.granted]),
+            conversationStore: store,
+            makeAgent: { _, _ in agent }
+        )
+
+        XCTAssertEqual(coordinator.draft, "Check battery health")
+        XCTAssertTrue(coordinator.isVoiceTaskPending)
+        coordinator.configureModel(testConfiguration)
+        await coordinator.refreshPermissions()
+        await waitUntilRunFinishes(coordinator)
+
+        XCTAssertFalse(coordinator.isVoiceTaskPending)
+        XCTAssertNil(store.pendingVoiceInstruction)
         XCTAssertEqual(coordinator.conversation.map(\.text), ["Check battery health", "Done."])
     }
 
@@ -353,10 +379,15 @@ final class ComputerUseCoordinatorTests: XCTestCase {
 
 private final class SpyComputerUseConversationStore: ComputerUseConversationStoring {
     private var value: [ComputerUseConversationMessage]
+    private(set) var pendingVoiceInstruction: String?
     private(set) var savedConversations: [[ComputerUseConversationMessage]] = []
 
-    init(value: [ComputerUseConversationMessage] = []) {
+    init(
+        value: [ComputerUseConversationMessage] = [],
+        pendingVoiceInstruction: String? = nil
+    ) {
         self.value = value
+        self.pendingVoiceInstruction = pendingVoiceInstruction
     }
 
     func load() -> [ComputerUseConversationMessage] {
@@ -366,6 +397,14 @@ private final class SpyComputerUseConversationStore: ComputerUseConversationStor
     func save(_ conversation: [ComputerUseConversationMessage]) {
         value = conversation
         savedConversations.append(conversation)
+    }
+
+    func loadPendingVoiceInstruction() -> String? {
+        pendingVoiceInstruction
+    }
+
+    func savePendingVoiceInstruction(_ instruction: String?) {
+        pendingVoiceInstruction = instruction
     }
 }
 

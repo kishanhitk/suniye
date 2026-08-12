@@ -84,7 +84,7 @@ struct ComputerUseSettingsDisclosure: View {
             labeledField("API key") {
                 HStack(spacing: 8) {
                     SecureField(
-                        modelSettings.hasAPIKey ? "Saved" : "Required",
+                        apiKeyPlaceholder,
                         text: $modelSettings.apiKeyDraft
                     )
                     .textFieldStyle(.roundedBorder)
@@ -92,7 +92,7 @@ struct ComputerUseSettingsDisclosure: View {
                         modelSettings.saveAPIKey()
                     }
                     .disabled(modelSettings.apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    if modelSettings.hasAPIKey {
+                    if modelSettings.hasDedicatedAPIKey {
                         Button("Clear", action: modelSettings.clearAPIKey)
                     }
                 }
@@ -135,7 +135,13 @@ struct ComputerUseSettingsDisclosure: View {
         }
         switch modelSettings.connectionState {
         case .idle:
-            return modelSettings.hasAPIKey ? "API key saved in Keychain." : "Enter an API key to enable Computer Use."
+            if modelSettings.hasDedicatedAPIKey {
+                return "Computer Use API key saved in Keychain."
+            }
+            if modelSettings.usesSharedOpenRouterAPIKey {
+                return "Using the OpenRouter API key from Magic Format."
+            }
+            return "Enter an API key to enable Computer Use."
         case .testing:
             return "Testing connection…"
         case .connected:
@@ -143,6 +149,12 @@ struct ComputerUseSettingsDisclosure: View {
         case let .failed(message):
             return message
         }
+    }
+
+    private var apiKeyPlaceholder: String {
+        if modelSettings.hasDedicatedAPIKey { return "Saved" }
+        if modelSettings.usesSharedOpenRouterAPIKey { return "Using Magic Format key" }
+        return "Required"
     }
 
     private var modelStatusIsError: Bool {

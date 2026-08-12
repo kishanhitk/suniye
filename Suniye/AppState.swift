@@ -1709,6 +1709,11 @@ final class AppState {
             settingsStore: computerUseModelSettingsStore,
             credentialStore: computerUseCredentialStore,
             connectionTester: computerUseConnectionTester,
+            sharedOpenRouterAPIKey: {
+                let magicFormatSettings = llmSettingsStore.load()
+                guard magicFormatSettings.endpointProvider == .openRouter else { return nil }
+                return try? keychainService.getLLMKey()
+            },
             onConfigurationChange: { configuration in
                 guard ownsComputerUseCoordinator else { return }
                 resolvedComputerUseCoordinator.configureModel(configuration)
@@ -1865,6 +1870,7 @@ final class AppState {
         }
         statusText = "Checking permissions..."
         await refreshPermissions()
+        await computerUseCoordinator.refreshPermissions()
 
         statusText = "Checking model..."
         let bootstrapCandidates = orderedInstalledASRModelIDs()
@@ -2293,6 +2299,7 @@ final class AppState {
             try keychainService.setLLMKey(normalized)
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
+            computerUseModelSettings.publishConfiguration()
             clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key saved")
         } catch {
@@ -2307,6 +2314,7 @@ final class AppState {
             try keychainService.deleteLLMKey()
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
+            computerUseModelSettings.publishConfiguration()
             clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key cleared")
         } catch {
@@ -4388,6 +4396,7 @@ final class AppState {
         clearMagicFormatSetupTestResult()
         let settings = currentLLMSettings()
         llmSettingsStore.save(settings)
+        computerUseModelSettings.publishConfiguration()
         onStateChange?()
     }
 

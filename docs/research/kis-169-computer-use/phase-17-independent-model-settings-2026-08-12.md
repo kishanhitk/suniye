@@ -21,8 +21,7 @@ Date: 2026-08-12
   OpenRouter supply their known Chat Completions endpoints; Custom exposes an editable HTTP/HTTPS
   endpoint. Model ID remains editable for every provider.
 - `[Implemented]` Computer Use uses a separate generic-password item in macOS Keychain, scoped to
-  the app bundle identifier and the `computer-use-api-key` account. It does not read, copy, or
-  delete Magic Format's credential.
+  the app bundle identifier and the `computer-use-api-key` account.
 - `[Implemented]` Settings mutations persist immediately and reconfigure the app-owned
   coordinator. Saving or clearing the Computer Use key does the same. Magic Format settings and
   key mutations no longer call the Computer Use coordinator.
@@ -32,6 +31,9 @@ Date: 2026-08-12
 - `[Independent choice]` New settings default to OpenAI and `gpt-5.6-luna`, following the model
   selected for this development effort. The user can replace both provider and model. No existing
   Magic Format credential is migrated because that would violate the requested independence.
+- `[Superseded by Phase 21]` By explicit product direction, OpenRouter Computer Use may read the
+  saved Magic Format key as a fallback when Magic Format also uses OpenRouter and no dedicated
+  Computer Use key exists. It never copies, migrates, or deletes that shared key.
 
 ## Scope boundary
 
@@ -39,7 +41,7 @@ Date: 2026-08-12
   Completions wire contract. Responses-style context normalization and compaction are a later
   parity slice.
 - `[Not added]` No provider-specific task routing, model-name matcher, hidden endpoint, target
-  restriction, approval rule, or automatic credential sharing was introduced.
+  restriction, or approval rule was introduced.
 
 ## Validation
 

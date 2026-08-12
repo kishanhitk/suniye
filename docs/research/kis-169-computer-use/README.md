@@ -123,6 +123,11 @@ cross-process input still require separate validation.
   model-specific truncation.
 - `phase-19-spoken-intervention-2026-08-12.md` records same-session voice correction, atomic-action
   completion, stale-response rejection, and fresh re-observation before continuation.
+- `phase-20-floating-run-lifecycle-2026-08-12.md` records the page-independent floating working,
+  stop, completion, failure, and direct session-reset UX.
+- `phase-21-background-voice-resilience-and-e2e-2026-08-12.md` records startup permission refresh,
+  durable queued speech, installed request/tool/cancellation/background E2E, and the remaining
+  physical voice-test boundary.
 - `deep-code-parity-audit-2026-08-12.md` consolidates three independent code-level audits of the
   model/runtime, native mechanics, and cursor/UX, with verified gaps kept explicit.
 

@@ -212,36 +212,44 @@ final class ComputerUseModelSettingsController {
         }
     }
     var apiKeyDraft = ""
-    private(set) var hasAPIKey: Bool
+    private(set) var hasDedicatedAPIKey: Bool
+    private(set) var usesSharedOpenRouterAPIKey = false
     private(set) var credentialError: String?
     private(set) var connectionState: ComputerUseModelConnectionState = .idle
 
     private let settingsStore: ComputerUseModelSettingsStoreProtocol
     private let credentialStore: ComputerUseCredentialStoring
     private let connectionTester: ComputerUseModelConnectionTesting
+    private let sharedOpenRouterAPIKey: () -> String?
     private let onConfigurationChange: (ComputerUseRemoteModelConfiguration?) -> Void
 
     init(
         settingsStore: ComputerUseModelSettingsStoreProtocol = ComputerUseModelSettingsStore(),
         credentialStore: ComputerUseCredentialStoring = ComputerUseCredentialStore(),
         connectionTester: ComputerUseModelConnectionTesting = ComputerUseModelConnectionTester(),
+        sharedOpenRouterAPIKey: @escaping () -> String? = { nil },
         onConfigurationChange: @escaping (ComputerUseRemoteModelConfiguration?) -> Void = { _ in }
     ) {
         self.settingsStore = settingsStore
         self.credentialStore = credentialStore
         self.connectionTester = connectionTester
+        self.sharedOpenRouterAPIKey = sharedOpenRouterAPIKey
         self.onConfigurationChange = onConfigurationChange
         settings = settingsStore.load()
-        hasAPIKey = credentialStore.hasAPIKey()
+        hasDedicatedAPIKey = credentialStore.hasAPIKey()
+        refreshCredentialState()
     }
 
+    var hasAPIKey: Bool { hasDedicatedAPIKey || usesSharedOpenRouterAPIKey }
+
     var modelConfiguration: ComputerUseRemoteModelConfiguration? {
-        settings.configuration(apiKey: try? credentialStore.getAPIKey())
+        settings.configuration(apiKey: effectiveAPIKey)
     }
 
     var isReady: Bool { modelConfiguration != nil }
 
     func publishConfiguration() {
+        refreshCredentialState()
         onConfigurationChange(modelConfiguration)
     }
 
@@ -254,7 +262,7 @@ final class ComputerUseModelSettingsController {
         do {
             try credentialStore.setAPIKey(value)
             apiKeyDraft = ""
-            hasAPIKey = true
+            hasDedicatedAPIKey = true
             credentialError = nil
             connectionState = .idle
             publishConfiguration()
@@ -267,7 +275,7 @@ final class ComputerUseModelSettingsController {
         do {
             try credentialStore.deleteAPIKey()
             apiKeyDraft = ""
-            hasAPIKey = false
+            hasDedicatedAPIKey = false
             credentialError = nil
             connectionState = .idle
             publishConfiguration()
@@ -290,5 +298,26 @@ final class ComputerUseModelSettingsController {
         } catch {
             connectionState = .failed(error.localizedDescription)
         }
+    }
+
+    private var effectiveAPIKey: String? {
+        if let dedicatedKey = normalizedAPIKey(try? credentialStore.getAPIKey()) {
+            return dedicatedKey
+        }
+        guard settings.provider == .openRouter else { return nil }
+        return normalizedAPIKey(sharedOpenRouterAPIKey())
+    }
+
+    private func refreshCredentialState() {
+        hasDedicatedAPIKey = credentialStore.hasAPIKey()
+        usesSharedOpenRouterAPIKey = !hasDedicatedAPIKey
+            && settings.provider == .openRouter
+            && normalizedAPIKey(sharedOpenRouterAPIKey()) != nil
+    }
+
+    private func normalizedAPIKey(_ value: String?) -> String? {
+        let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalized, !normalized.isEmpty else { return nil }
+        return normalized
     }
 }

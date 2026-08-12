@@ -82,12 +82,63 @@ model/runtime composition, native app/window/action mechanics, and desktop curso
   changes are not recoverable. Suniye uses restrained independent constants and does not claim
   numerical identity.
 
+## App lifecycle, voice entry, and configuration
+
+- `[Verified]` Computer Use in Suniye is now owned by `AppState`, not by the page. Closing the
+  window does not cancel a run, switch its target to the host app, or reopen the conversation.
+- `[Verified]` The installed Preview completed a delayed three-tool run while its main window was
+  closed. The process remained alive and restored the completed conversation when reopened.
+- `[Implemented]` The dedicated optional global shortcut owns its hold/release recording path and
+  routes locally transcribed text directly to the app-owned coordinator. It does not invoke Magic
+  Format, clipboard insertion, normal dictation history, or page navigation.
+- `[Implemented]` A transcript received during a run enters the same session as a user
+  intervention. The agent discards stale model output or completes the current atomic native
+  action, then obtains a fresh app observation before requesting another decision.
+- `[Implemented]` Provider, endpoint, model ID, timeout, token limit, and connection test are
+  independently configurable. Computer Use can store a dedicated Keychain credential. By explicit
+  product direction, OpenRouter also falls back to Magic Format's saved OpenRouter key only when a
+  dedicated credential is absent; the fallback does not cross provider boundaries.
+- `[Unknown]` The artifact does not expose a host global-shortcut default, voice-intervention
+  queue, pending-transcript persistence format, or exact microphone-to-task UX. Suniye's shortcut,
+  one-pending-task file, and floating indicator are independent choices constrained by the
+  recovered run lifecycle.
+- `[Verified]` Startup reads the Computer Use TCC permission snapshot without prompting. A queued
+  local transcript is persisted before configuration/permission checks and survives coordinator
+  recreation; it is cleared only after run acceptance or explicit reset/cancellation.
+
+## Durable conversation and model hygiene
+
+- `[Implemented]` Suniye keeps one durable current conversation until New conversation. The local
+  record preserves complete tool arguments and raw results for the collapsed UI.
+- `[Implemented]` Provider context is separately normalized to at most 50 messages. Function
+  call/result pairs stay grouped; the current instruction and latest observation are retained;
+  missing local images are dropped; only recent useful screenshots are attached.
+- `[Implemented]` Model-visible app-state output removes local screenshot URLs and preserves the
+  screenshot as an image part. Success results remain minimal, AX diffs remain available, and
+  oversized tool output uses the recovered model-aware truncation policy.
+- `[Verified gap]` Suniye cannot reproduce encrypted reasoning retention, server-generated
+  compaction items, or provider-private context mutation through its portable Chat Completions
+  transport.
+
+## Final validation state
+
+- `[Verified live]` Installed session `CU-6EE003523304` completed a natural Calculator task with
+  `get_app_state`, `press_key`, and a fresh `get_app_state`; an independent observation confirmed
+  the display value. Persistence/reset, delayed-request Stop, and closed-window continuation were
+  also exercised in the installed Preview.
+- `[Verified]` The final full suite passes 1,139 tests with 2 skipped; gated line coverage is
+  87.03%, and sequential E2E preflight/smoke pass.
+- `[Not exercised]` The bundled app-scoped Computer Use driver cannot hold and release Suniye's
+  global shortcut or supply live microphone speech. The physical voice-to-action leg therefore
+  still needs a user-operated run; code-level routing, queuing, cancellation, and restart cases
+  are covered by focused tests.
+
 ## Result
 
-The ten-tool public capability and the observable native action loop are aligned. The latest
-evidence-backed corrections are persistent run-scoped cursor state, process-scoped input, strict
-fresh observation per Suniye model decision, and same-process replacement-window reacquisition.
-The remaining known differences are architectural: Responses/persistent JavaScript versus direct
-Chat Completions tools, encrypted reasoning and server compaction items, helper IPC/private capture
-internals, and cursor compositing. They must not be described as exact parity unless Suniye adopts
-and validates equivalent architecture.
+The ten-tool public capability, observable native action loop, app-level run lifecycle, durable
+session, independent model configuration, and direct local voice routing are implemented. The
+remaining known differences are architectural or unrecoverable: Responses/persistent JavaScript
+versus direct Chat Completions tools, encrypted reasoning and server compaction items, helper
+IPC/private capture internals, cursor compositing, and exact host voice UX. The physical global
+hotkey/microphone leg also remains a live validation boundary. These must not be described as exact
+parity without stronger evidence and matching validation.

@@ -41,6 +41,26 @@ final class AppStateComputerUseVoiceTests: XCTestCase {
         XCTAssertTrue(appState.recentResults.isEmpty)
     }
 
+    func testBootstrapRefreshesComputerUsePermissionsWithoutOpeningItsPage() async {
+        let coordinator = ComputerUseCoordinator(
+            permissions: VoiceTaskComputerUsePermissions(),
+            initialPermissionSnapshot: .notGranted,
+            makeAgent: { _, _ in VoiceTaskComputerUseAgent() }
+        )
+        coordinator.configureModel(testConfiguration)
+        let appState = makeTestAppState(
+            computerUseCoordinator: coordinator,
+            startServices: true
+        )
+
+        for _ in 0..<200 where coordinator.permissionSnapshot != .granted {
+            await Task.yield()
+        }
+
+        _ = appState
+        XCTAssertEqual(coordinator.permissionSnapshot, .granted)
+    }
+
     func testEscapeCancelsDedicatedTaskRecordingWithoutSubmittingTranscript() async {
         let hotkeyService = StubHotkeyService()
         let audioCapture = StubAudioCaptureService()
@@ -280,8 +300,8 @@ private actor SuspendedVoiceTaskComputerUseAgent: ComputerUseAgentRunning {
 }
 
 private actor VoiceTaskComputerUsePermissions: ComputerUsePermissionServing {
-    func snapshot() -> ComputerUsePermissionSnapshot { .notGranted }
+    func snapshot() -> ComputerUsePermissionSnapshot { .granted }
     func request(_ permission: ComputerUsePermissionKind) -> ComputerUsePermissionSnapshot {
-        .notGranted
+        .granted
     }
 }

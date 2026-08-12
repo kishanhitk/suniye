@@ -3,6 +3,13 @@ import Foundation
 protocol ComputerUseConversationStoring {
     func load() -> [ComputerUseConversationMessage]
     func save(_ conversation: [ComputerUseConversationMessage])
+    func loadPendingVoiceInstruction() -> String?
+    func savePendingVoiceInstruction(_ instruction: String?)
+}
+
+extension ComputerUseConversationStoring {
+    func loadPendingVoiceInstruction() -> String? { nil }
+    func savePendingVoiceInstruction(_ instruction: String?) {}
 }
 
 struct NoopComputerUseConversationStore: ComputerUseConversationStoring {
@@ -12,19 +19,25 @@ struct NoopComputerUseConversationStore: ComputerUseConversationStoring {
 
 final class ComputerUseConversationStore: ComputerUseConversationStoring, @unchecked Sendable {
     private let fileURL: URL
+    private let pendingVoiceInstructionFileURL: URL
     private let fileManager: FileManager
     private let queue = DispatchQueue(label: "dev.suniye.computer-use-conversation-store")
 
     init(
         fileURL: URL? = nil,
+        pendingVoiceInstructionFileURL: URL? = nil,
         fileManager: FileManager = .default,
         bundleIdentifier: String = Bundle.main.bundleIdentifier ?? "dev.suniye.app"
     ) {
         self.fileManager = fileManager
-        self.fileURL = fileURL ?? Self.defaultFileURL(
+        let resolvedFileURL = fileURL ?? Self.defaultFileURL(
             fileManager: fileManager,
             bundleIdentifier: bundleIdentifier
         )
+        self.fileURL = resolvedFileURL
+        self.pendingVoiceInstructionFileURL = pendingVoiceInstructionFileURL
+            ?? resolvedFileURL.deletingLastPathComponent()
+                .appendingPathComponent("pending-voice-task.txt")
     }
 
     func load() -> [ComputerUseConversationMessage] {
@@ -34,6 +47,23 @@ final class ComputerUseConversationStore: ComputerUseConversationStoring, @unche
     func save(_ conversation: [ComputerUseConversationMessage]) {
         queue.async { [self] in
             saveToDisk(conversation)
+        }
+    }
+
+    func loadPendingVoiceInstruction() -> String? {
+        queue.sync {
+            guard let data = try? Data(contentsOf: pendingVoiceInstructionFileURL),
+                  let value = String(data: data, encoding: .utf8) else {
+                return nil
+            }
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized.isEmpty ? nil : normalized
+        }
+    }
+
+    func savePendingVoiceInstruction(_ instruction: String?) {
+        queue.sync { [self] in
+            savePendingVoiceInstructionToDisk(instruction)
         }
     }
 
@@ -81,6 +111,39 @@ final class ComputerUseConversationStore: ComputerUseConversationStoring, @unche
             AppLogger.shared.log(
                 .warning,
                 "computer use conversation save failed: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func savePendingVoiceInstructionToDisk(_ instruction: String?) {
+        let normalized = instruction?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalized, !normalized.isEmpty else {
+            do {
+                if fileManager.fileExists(atPath: pendingVoiceInstructionFileURL.path) {
+                    try fileManager.removeItem(at: pendingVoiceInstructionFileURL)
+                }
+            } catch {
+                AppLogger.shared.log(
+                    .warning,
+                    "computer use pending voice task clear failed: \(error.localizedDescription)"
+                )
+            }
+            return
+        }
+
+        do {
+            try fileManager.createDirectory(
+                at: pendingVoiceInstructionFileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data(normalized.utf8).write(
+                to: pendingVoiceInstructionFileURL,
+                options: .atomic
+            )
+        } catch {
+            AppLogger.shared.log(
+                .warning,
+                "computer use pending voice task save failed: \(error.localizedDescription)"
             )
         }
     }
