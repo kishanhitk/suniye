@@ -1233,3 +1233,25 @@ sessions `CU-87E929416B23` and `CU-1294CF91EBB9`, XCTest, coverage, and E2E scri
 - `[Unknown]` The exact full private-backend branch matrix, every WindowServer option bit, and
   future private-API compatibility remain unavailable. No behavior beyond the verified fallback
   was added.
+
+### Entry 70: Collapsed inline tool results
+
+Sources: `phase-13-collapsed-tool-results-2026-08-12.md`, production Swift sources, focused tests,
+and installed Preview session `CU-B4C2E8F64CFC`.
+
+- `[Supersedes Entry 67]` Inline activity still defaults to the minimal raw tool name and raw JSON
+  arguments, but each completed call now also has a collapsed raw-result disclosure.
+- `[Implemented]` The agent emits a pending activity and then its exact encoded tool result under
+  the same private identifier. The coordinator replaces the pending activity in place, producing
+  one timeline row rather than a second result row.
+- `[Implemented]` Results include the payload actually sent back to the model: `null`, encoded app
+  lists or app states, and encoded error objects. Activity remains excluded from later model chat
+  history.
+- `[Verified live]` All completed calls in session `CU-B4C2E8F64CFC` rendered collapsed by default.
+  Expanding `set_value` revealed `null`; collapsing it hid the result again. An expanded
+  `get_app_state` showed its complete encoded app state and Accessibility text.
+- `[Verified]` A failed tool-call regression confirms that the completed activity exposes the same
+  encoded error object returned to the model. The full suite executes 1,094 tests with 2 skipped
+  and zero failures; gated coverage is 88.24% (13,453/15,246). E2E preflight and smoke pass.
+- `[Retained]` No model transport, provider response, lifecycle row, result summary, connector,
+  per-tool icon, or separate completion row is shown.

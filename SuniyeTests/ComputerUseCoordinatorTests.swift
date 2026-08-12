@@ -105,11 +105,17 @@ final class ComputerUseCoordinatorTests: XCTestCase {
             toolName: "get_app_state",
             arguments: #"{"app":"Calculator"}"#
         )
+        let completedActivity = activity.completed(
+            output: #"{"app":"Calculator","text":"0 AXStaticText: 42"}"#
+        )
         let coordinator = ComputerUseCoordinator(
             permissions: StubComputerUsePermissions(snapshots: []),
             initialPermissionSnapshot: .granted,
             makeAgent: { _, activitySink in
-                ActivityEmittingComputerUseAgent(activity: activity, sink: activitySink)
+                ActivityEmittingComputerUseAgent(
+                    activities: [activity, completedActivity],
+                    sink: activitySink
+                )
             }
         )
         coordinator.configureModel(testConfiguration)
@@ -119,7 +125,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         await waitUntilRunFinishes(coordinator)
 
         XCTAssertEqual(coordinator.conversation.map(\.role), [.user, .activity, .assistant])
-        XCTAssertEqual(coordinator.conversation[1].activity, activity)
+        XCTAssertEqual(coordinator.conversation[1].activity, completedActivity)
         XCTAssertEqual(coordinator.conversation[2].text, "Done.")
     }
 
@@ -313,16 +319,18 @@ private actor SuspendedComputerUseAgent: ComputerUseAgentRunning {
 }
 
 private actor ActivityEmittingComputerUseAgent: ComputerUseAgentRunning {
-    let activity: ComputerUseActivity
+    let activities: [ComputerUseActivity]
     let sink: ComputerUseActivitySink
 
-    init(activity: ComputerUseActivity, sink: ComputerUseActivitySink) {
-        self.activity = activity
+    init(activities: [ComputerUseActivity], sink: ComputerUseActivitySink) {
+        self.activities = activities
         self.sink = sink
     }
 
     func run(task: ComputerUseAgentTask) async -> ComputerUseAgentResult {
-        await sink.emit(activity)
+        for activity in activities {
+            await sink.emit(activity)
+        }
         return ComputerUseAgentResult(outcome: .completed, message: "Done.")
     }
 }

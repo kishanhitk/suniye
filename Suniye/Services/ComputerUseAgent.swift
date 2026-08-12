@@ -148,12 +148,11 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                         "computer use tool started step=\(step) name=\(name)",
                         session: debugSessionID
                     )
-                    await activitySink.emit(
-                        ComputerUseActivity(
-                            toolName: name,
-                            arguments: arguments
-                        )
+                    let activity = ComputerUseActivity(
+                        toolName: name,
+                        arguments: arguments
                     )
+                    await activitySink.emit(activity)
                     messages.append(
                         .toolCall(id: id, name: name, arguments: arguments)
                     )
@@ -161,6 +160,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                         id: id,
                         name: name,
                         arguments: arguments,
+                        activity: activity,
                         debugSessionID: debugSessionID,
                         messages: &messages
                     )
@@ -190,6 +190,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         id: String,
         name: String,
         arguments: String,
+        activity: ComputerUseActivity,
         debugSessionID: ComputerUseDebugSessionID,
         messages: inout [ComputerUseModelMessage]
     ) async throws {
@@ -205,6 +206,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 "computer use tool completed name=\(name) result=\(result.logValue)",
                 session: debugSessionID
             )
+            await activitySink.emit(activity.completed(output: encodedResult))
             messages.append(
                 .toolResult(id: id, content: encodedResult)
             )
@@ -222,6 +224,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as ComputerUseRuntimeError {
+            await emitFailure(error, for: activity)
             throw error
         } catch {
             let errorMessage = localizedMessage(error)
@@ -233,6 +236,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 session: debugSessionID
             )
             let encodedError = try ComputerUseToolResultEncoder.encode(error: errorMessage)
+            await activitySink.emit(activity.completed(output: encodedError))
             messages.append(
                 .toolResult(
                     id: id,
@@ -240,6 +244,18 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 )
             )
         }
+    }
+
+    private func emitFailure(
+        _ error: Error,
+        for activity: ComputerUseActivity
+    ) async {
+        guard let encodedError = try? ComputerUseToolResultEncoder.encode(
+            error: localizedMessage(error)
+        ) else {
+            return
+        }
+        await activitySink.emit(activity.completed(output: encodedError))
     }
 
     private func localizedMessage(_ error: Error) -> String {

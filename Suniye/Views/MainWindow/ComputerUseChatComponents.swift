@@ -79,8 +79,34 @@ struct ComputerUseChatMessageRow: View {
 
 private struct ComputerUseActivityRow: View {
     let activity: ComputerUseActivity
+    @State private var isOutputExpanded = false
 
+    @ViewBuilder
     var body: some View {
+        Group {
+            if let output = activity.output {
+                DisclosureGroup(isExpanded: $isOutputExpanded) {
+                    Text(output)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 6)
+                        .accessibilityIdentifier("computer-use-activity-output")
+                } label: {
+                    activityLabel
+                }
+                .tint(MainWindowPalette.secondaryText)
+            } else {
+                activityLabel
+            }
+        }
+        .padding(.leading, 38)
+        .accessibilityIdentifier("computer-use-activity")
+    }
+
+    private var activityLabel: some View {
         (Text(activity.toolName).fontWeight(.medium)
             + Text("  \(activity.arguments)"))
         .font(.system(size: 11, design: .monospaced))
@@ -88,9 +114,6 @@ private struct ComputerUseActivityRow: View {
         .textSelection(.enabled)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, 38)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("computer-use-activity")
     }
 }
 

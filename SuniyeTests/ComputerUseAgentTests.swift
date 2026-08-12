@@ -2,7 +2,7 @@ import XCTest
 @testable import Suniye
 
 final class ComputerUseAgentTests: XCTestCase {
-    func testPublishesOnlyRawToolNameAndArgumentsForEachToolCall() async {
+    func testPublishesRawToolCallThenUpdatesItWithRawOutput() async {
         let model = ScriptedComputerUseModel(
             responses: [
                 .toolCall(
@@ -26,15 +26,45 @@ final class ComputerUseAgentTests: XCTestCase {
         _ = await agent.run(task: ComputerUseAgentTask(instruction: "Inspect Calculator."))
 
         let activities = await recorder.activities
+        XCTAssertEqual(activities.count, 2)
+        XCTAssertEqual(activities[0].id, activities[1].id)
+        XCTAssertEqual(activities[0].toolName, "get_app_state")
+        XCTAssertEqual(activities[0].arguments, #"{"app":"Calculator"}"#)
+        XCTAssertNil(activities[0].output)
         XCTAssertEqual(
-            activities,
-            [
-                ComputerUseActivity(
-                    toolName: "get_app_state",
+            activities[1].output,
+            #"{"app":"Calculator","screenshot":null,"text":"0 AXStaticText: 42"}"#
+        )
+    }
+
+    func testPublishesEncodedToolFailureAsActivityOutput() async {
+        let model = ScriptedComputerUseModel(
+            responses: [
+                .toolCall(
+                    id: "state-1",
+                    name: "get_app_state",
                     arguments: #"{"app":"Calculator"}"#
                 ),
+                .text("Could not inspect Calculator."),
             ]
         )
+        let recorder = RecordingComputerUseActivitySink()
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(
+                backend: FreshnessCheckingComputerUseBackend(shouldFailObservation: true)
+            ),
+            activitySink: ComputerUseActivitySink { activity in
+                await recorder.record(activity)
+            }
+        )
+
+        _ = await agent.run(task: ComputerUseAgentTask(instruction: "Inspect Calculator."))
+
+        let activities = await recorder.activities
+        XCTAssertEqual(activities.count, 2)
+        XCTAssertEqual(activities[0].id, activities[1].id)
+        XCTAssertEqual(activities[1].output, #"{"error":"Tool failed."}"#)
     }
 
     func testEveryLifecycleAndToolLogIncludesTheTaskDebugSessionID() async {
@@ -293,9 +323,14 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
     private(set) var calls: [ComputerUseToolName] = []
     private var hasObservedState = false
     private let screenshotURL: URL?
+    private let shouldFailObservation: Bool
 
-    init(screenshotURL: URL? = nil) {
+    init(
+        screenshotURL: URL? = nil,
+        shouldFailObservation: Bool = false
+    ) {
         self.screenshotURL = screenshotURL
+        self.shouldFailObservation = shouldFailObservation
     }
 
     func listApps() async throws -> [ComputerUseApplication] {
@@ -305,6 +340,9 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
 
     func getAppState(app: String, disableDiff: Bool) async throws -> ComputerUseAppState {
         calls.append(.getAppState)
+        if shouldFailObservation {
+            throw StubComputerUseToolError.failed
+        }
         hasObservedState = true
         return ComputerUseAppState(
             app: app,
@@ -369,5 +407,13 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
         }
         hasObservedState = false
         calls.append(call)
+    }
+}
+
+private enum StubComputerUseToolError: LocalizedError {
+    case failed
+
+    var errorDescription: String? {
+        "Tool failed."
     }
 }

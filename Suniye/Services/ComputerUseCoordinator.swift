@@ -266,6 +266,13 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         guard activeRunID == runID else {
             return
         }
+        if let index = conversation.firstIndex(where: { $0.activity?.id == activity.id }) {
+            conversation[index] = .init(
+                id: conversation[index].id,
+                activity: activity
+            )
+            return
+        }
         conversation.append(.init(activity: activity))
     }
 
