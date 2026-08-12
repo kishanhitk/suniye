@@ -1419,10 +1419,10 @@ bundled Computer Use observations.
 - `[Implemented]` One pending instruction is atomically persisted, restored as the current draft,
   handed to the existing coordinator when prerequisites become ready, and cleared only after run
   acceptance or explicit user cancellation/reset.
-- `[User-directed]` Provider, endpoint, and model selection remain independent. OpenRouter
-  Computer Use now reuses Magic Format's saved OpenRouter key when no dedicated Computer Use key
-  exists. Dedicated credentials take precedence, and the fallback is disabled for non-OpenRouter
-  configuration on either side.
+- `[User-directed]` Provider, endpoint, and model selection remain independent. OpenRouter has one
+  shared credential across Magic Format and Computer Use; either feature can save or clear it.
+  The separate Computer Use credential applies only to OpenAI and Custom and is never selected
+  when the Computer Use provider is OpenRouter.
 - `[Verified live]` Installed Preview completed the natural Calculator task in debug session
   `CU-6EE003523304`; the exact loop was observation, key press, fresh observation, and terminal
   response. Independent Computer Use observation confirmed Calculator displayed 7.
@@ -1434,4 +1434,4 @@ bundled Computer Use observations.
   so a real microphone voice cycle still requires user participation. A real remote provider key
   was not copied; deterministic E2E used a temporary loopback provider and removed its credential.
 - `[Verified]` The full suite passes 1,139 tests with 2 skipped and zero failures. Gated coverage
-  is 87.03% (14,372/16,514 lines), above the 80% floor. Sequential E2E preflight and smoke pass.
+  is 87.05% (14,389/16,530 lines), above the 80% floor. Sequential E2E preflight and smoke pass.

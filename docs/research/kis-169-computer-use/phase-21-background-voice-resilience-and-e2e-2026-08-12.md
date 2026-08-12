@@ -23,10 +23,10 @@ Date: 2026-08-12
   it as the pending task and visible draft.
 - `[Implemented]` The pending file is cleared only after the coordinator has accepted the task as
   an active run, or when the user explicitly stops, cancels, or starts a new conversation.
-- `[User-directed]` Computer Use keeps independent provider, endpoint, and model settings. When
-  its provider is OpenRouter and no dedicated Computer Use credential exists, it reuses the saved
-  Magic Format key only if Magic Format is also configured for OpenRouter. A dedicated Computer
-  Use key takes precedence; other providers never receive the shared key.
+- `[User-directed]` Computer Use keeps independent provider, endpoint, and model settings, but
+  OpenRouter has one shared credential across Magic Format and Computer Use. Saving or clearing it
+  from either feature changes the same credential. OpenAI and Custom continue to use the separate
+  Computer Use credential, and that credential is never selected for OpenRouter.
 - `[Not added]` No instruction matcher, target lock, app-opening heuristic, approval gate,
   physical-input cancellation, or forced conversation navigation was introduced.
 
@@ -71,8 +71,8 @@ Build: Debug Preview at `/Users/kishan/Applications/Suniye Preview.app` from
 
 - `[Verified]` Focused tests cover startup permission refresh, immediate pending-instruction save,
   restart restoration, run handoff, explicit clearing, app-owned model reconfiguration, shared
-  OpenRouter fallback, dedicated-key precedence, and provider isolation.
+  shared OpenRouter reads/writes, and provider isolation.
 - `[Verified]` The full suite passes 1,139 tests with 2 skipped and zero failures.
-- `[Verified]` Gated coverage is 87.03% (14,372/16,514 lines), above the 80% floor.
+- `[Verified]` Gated coverage is 87.05% (14,389/16,530 lines), above the 80% floor.
 - `[Verified]` E2E preflight and smoke pass when run sequentially. The smoke build reports an
   unrelated out-of-date iOS CoreSimulator warning; the macOS destination and build succeed.

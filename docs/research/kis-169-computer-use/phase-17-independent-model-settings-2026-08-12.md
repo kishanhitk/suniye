@@ -31,9 +31,9 @@ Date: 2026-08-12
 - `[Independent choice]` New settings default to OpenAI and `gpt-5.6-luna`, following the model
   selected for this development effort. The user can replace both provider and model. No existing
   Magic Format credential is migrated because that would violate the requested independence.
-- `[Superseded by Phase 21]` By explicit product direction, OpenRouter Computer Use may read the
-  saved Magic Format key as a fallback when Magic Format also uses OpenRouter and no dedicated
-  Computer Use key exists. It never copies, migrates, or deletes that shared key.
+- `[Superseded by Phase 21]` By explicit product direction, OpenRouter has one shared credential
+  across Magic Format and Computer Use. Either feature may save or clear it. The dedicated
+  Computer Use credential is used only for OpenAI and Custom.
 
 ## Scope boundary
 

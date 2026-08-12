@@ -92,7 +92,7 @@ struct ComputerUseSettingsDisclosure: View {
                         modelSettings.saveAPIKey()
                     }
                     .disabled(modelSettings.apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    if modelSettings.hasDedicatedAPIKey {
+                    if modelSettings.hasAPIKey {
                         Button("Clear", action: modelSettings.clearAPIKey)
                     }
                 }
@@ -135,11 +135,12 @@ struct ComputerUseSettingsDisclosure: View {
         }
         switch modelSettings.connectionState {
         case .idle:
-            if modelSettings.hasDedicatedAPIKey {
-                return "Computer Use API key saved in Keychain."
-            }
             if modelSettings.usesSharedOpenRouterAPIKey {
-                return "Using the OpenRouter API key from Magic Format."
+                return "OpenRouter API key shared with Magic Format."
+            }
+            if modelSettings.hasDedicatedAPIKey,
+               modelSettings.settings.provider != .openRouter {
+                return "Computer Use API key saved in Keychain."
             }
             return "Enter an API key to enable Computer Use."
         case .testing:
@@ -152,8 +153,7 @@ struct ComputerUseSettingsDisclosure: View {
     }
 
     private var apiKeyPlaceholder: String {
-        if modelSettings.hasDedicatedAPIKey { return "Saved" }
-        if modelSettings.usesSharedOpenRouterAPIKey { return "Using Magic Format key" }
+        if modelSettings.hasAPIKey { return "Saved" }
         return "Required"
     }
 

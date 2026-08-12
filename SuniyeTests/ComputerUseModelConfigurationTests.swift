@@ -86,11 +86,15 @@ final class ComputerUseModelConfigurationTests: XCTestCase {
 
     func testConnectionTestUsesComputerUseConfiguration() async {
         let tester = StubComputerUseModelConnectionTester()
+        let sharedCredentials = TestKeychainService(value: "run-key")
         let controller = ComputerUseModelSettingsController(
             settingsStore: TestComputerUseModelSettingsStore(
                 value: ComputerUseModelSettings(provider: .openRouter, modelID: "run-model")
             ),
-            credentialStore: TestComputerUseCredentialStore(value: "run-key"),
+            credentialStore: TestComputerUseCredentialStore(),
+            sharedOpenRouterCredentialStore: MagicFormatOpenRouterCredentialStore(
+                keychainService: sharedCredentials
+            ),
             connectionTester: tester
         )
 
@@ -101,13 +105,16 @@ final class ComputerUseModelConfigurationTests: XCTestCase {
         XCTAssertEqual(configurations.map(\.modelID), ["run-model"])
     }
 
-    func testOpenRouterUsesMagicFormatKeyWhenNoDedicatedCredentialExists() {
+    func testOpenRouterUsesSharedMagicFormatCredential() {
+        let sharedCredentials = TestKeychainService(value: "  shared-key  ")
         let controller = ComputerUseModelSettingsController(
             settingsStore: TestComputerUseModelSettingsStore(
                 value: ComputerUseModelSettings(provider: .openRouter, modelID: "run-model")
             ),
             credentialStore: TestComputerUseCredentialStore(),
-            sharedOpenRouterAPIKey: { "  shared-key  " }
+            sharedOpenRouterCredentialStore: MagicFormatOpenRouterCredentialStore(
+                keychainService: sharedCredentials
+            )
         )
 
         XCTAssertEqual(controller.modelConfiguration?.apiKey, "shared-key")
@@ -116,27 +123,34 @@ final class ComputerUseModelConfigurationTests: XCTestCase {
         XCTAssertTrue(controller.usesSharedOpenRouterAPIKey)
     }
 
-    func testDedicatedCredentialOverridesSharedOpenRouterKey() {
+    func testOpenRouterAlwaysUsesSharedCredentialInsteadOfDedicatedCredential() {
+        let sharedCredentials = TestKeychainService(value: "shared-key")
         let controller = ComputerUseModelSettingsController(
             settingsStore: TestComputerUseModelSettingsStore(
                 value: ComputerUseModelSettings(provider: .openRouter, modelID: "run-model")
             ),
             credentialStore: TestComputerUseCredentialStore(value: "computer-use-key"),
-            sharedOpenRouterAPIKey: { "shared-key" }
+            sharedOpenRouterCredentialStore: MagicFormatOpenRouterCredentialStore(
+                keychainService: sharedCredentials
+            )
         )
 
-        XCTAssertEqual(controller.modelConfiguration?.apiKey, "computer-use-key")
+        XCTAssertEqual(controller.modelConfiguration?.apiKey, "shared-key")
+        XCTAssertTrue(controller.hasAPIKey)
         XCTAssertTrue(controller.hasDedicatedAPIKey)
-        XCTAssertFalse(controller.usesSharedOpenRouterAPIKey)
+        XCTAssertTrue(controller.usesSharedOpenRouterAPIKey)
     }
 
     func testSharedOpenRouterKeyIsNotUsedForOtherProviders() {
+        let sharedCredentials = TestKeychainService(value: "shared-key")
         let controller = ComputerUseModelSettingsController(
             settingsStore: TestComputerUseModelSettingsStore(
                 value: ComputerUseModelSettings(provider: .openAI, modelID: "run-model")
             ),
             credentialStore: TestComputerUseCredentialStore(),
-            sharedOpenRouterAPIKey: { "shared-key" }
+            sharedOpenRouterCredentialStore: MagicFormatOpenRouterCredentialStore(
+                keychainService: sharedCredentials
+            )
         )
 
         XCTAssertNil(controller.modelConfiguration)
@@ -178,14 +192,15 @@ final class ComputerUseModelConfigurationTests: XCTestCase {
         XCTAssertEqual(appState.computerUseCoordinator.modelID, "computer-model")
     }
 
-    func testSavingMagicFormatOpenRouterKeyConfiguresComputerUseFallback() {
+    func testMagicFormatAndComputerUseShareOneOpenRouterCredential() throws {
+        let sharedCredentials = TestKeychainService(value: nil)
         let appState = makeTestAppState(
             llmSettingsStore: TestLLMSettingsStore(),
             computerUseModelSettingsStore: TestComputerUseModelSettingsStore(
                 value: ComputerUseModelSettings(provider: .openRouter, modelID: "computer-model")
             ),
             computerUseCredentialStore: TestComputerUseCredentialStore(),
-            keychainService: TestKeychainService(value: nil)
+            keychainService: sharedCredentials
         )
         XCTAssertFalse(appState.computerUseCoordinator.isModelConfigured)
 
@@ -194,19 +209,21 @@ final class ComputerUseModelConfigurationTests: XCTestCase {
         XCTAssertTrue(appState.computerUseCoordinator.isModelConfigured)
         XCTAssertTrue(appState.computerUseModelSettings.usesSharedOpenRouterAPIKey)
 
-        appState.llmEndpointURLString = "https://magic.example/v1/chat/completions"
-
-        XCTAssertFalse(appState.computerUseCoordinator.isModelConfigured)
-        XCTAssertFalse(appState.computerUseModelSettings.usesSharedOpenRouterAPIKey)
-
-        appState.llmEndpointURLString = LLMDefaults.defaultEndpointURLString
-
-        XCTAssertTrue(appState.computerUseCoordinator.isModelConfigured)
-        XCTAssertTrue(appState.computerUseModelSettings.usesSharedOpenRouterAPIKey)
-
         appState.clearLLMAPIKey()
 
         XCTAssertFalse(appState.computerUseCoordinator.isModelConfigured)
         XCTAssertFalse(appState.computerUseModelSettings.hasAPIKey)
+
+        appState.computerUseModelSettings.saveAPIKey("saved-from-computer-use")
+
+        XCTAssertEqual(try sharedCredentials.getLLMKey(), "saved-from-computer-use")
+        XCTAssertTrue(appState.hasLLMAPIKey)
+        XCTAssertTrue(appState.computerUseCoordinator.isModelConfigured)
+
+        appState.computerUseModelSettings.clearAPIKey()
+
+        XCTAssertNil(try sharedCredentials.getLLMKey())
+        XCTAssertFalse(appState.hasLLMAPIKey)
+        XCTAssertFalse(appState.computerUseCoordinator.isModelConfigured)
     }
 }

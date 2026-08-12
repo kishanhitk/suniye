@@ -95,9 +95,9 @@ model/runtime composition, native app/window/action mechanics, and desktop curso
   intervention. The agent discards stale model output or completes the current atomic native
   action, then obtains a fresh app observation before requesting another decision.
 - `[Implemented]` Provider, endpoint, model ID, timeout, token limit, and connection test are
-  independently configurable. Computer Use can store a dedicated Keychain credential. By explicit
-  product direction, OpenRouter also falls back to Magic Format's saved OpenRouter key only when a
-  dedicated credential is absent; the fallback does not cross provider boundaries.
+  independently configurable. By explicit product direction, OpenRouter has one shared credential
+  across Magic Format and Computer Use. The separate Computer Use credential applies to OpenAI and
+  Custom only and is never selected for OpenRouter.
 - `[Unknown]` The artifact does not expose a host global-shortcut default, voice-intervention
   queue, pending-transcript persistence format, or exact microphone-to-task UX. Suniye's shortcut,
   one-pending-task file, and floating indicator are independent choices constrained by the
@@ -127,7 +127,7 @@ model/runtime composition, native app/window/action mechanics, and desktop curso
   the display value. Persistence/reset, delayed-request Stop, and closed-window continuation were
   also exercised in the installed Preview.
 - `[Verified]` The final full suite passes 1,139 tests with 2 skipped; gated line coverage is
-  87.03%, and sequential E2E preflight/smoke pass.
+  87.05%, and sequential E2E preflight/smoke pass.
 - `[Not exercised]` The bundled app-scoped Computer Use driver cannot hold and release Suniye's
   global shortcut or supply live microphone speech. The physical voice-to-action leg therefore
   still needs a user-operated run; code-level routing, queuing, cancellation, and restart cases

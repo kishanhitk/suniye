@@ -1708,12 +1708,10 @@ final class AppState {
         computerUseModelSettings = ComputerUseModelSettingsController(
             settingsStore: computerUseModelSettingsStore,
             credentialStore: computerUseCredentialStore,
+            sharedOpenRouterCredentialStore: MagicFormatOpenRouterCredentialStore(
+                keychainService: keychainService
+            ),
             connectionTester: computerUseConnectionTester,
-            sharedOpenRouterAPIKey: {
-                let magicFormatSettings = llmSettingsStore.load()
-                guard magicFormatSettings.endpointProvider == .openRouter else { return nil }
-                return try? keychainService.getLLMKey()
-            },
             onConfigurationChange: { configuration in
                 guard ownsComputerUseCoordinator else { return }
                 resolvedComputerUseCoordinator.configureModel(configuration)
@@ -1796,6 +1794,11 @@ final class AppState {
         refreshInputDevices()
         refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
+        computerUseModelSettings.onSharedOpenRouterCredentialChange = { [weak self] in
+            self?.refreshLLMKeyStatus()
+            self?.clearMagicFormatSetupTestResult()
+            self?.onStateChange?()
+        }
         computerUseModelSettings.publishConfiguration()
         refreshLocalGemmaInstallState()
 
