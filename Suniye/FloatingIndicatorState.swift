@@ -64,6 +64,7 @@ enum FloatingIndicatorState: Equatable {
         case hotkey
         case manual
         case editHotkey
+        case computerUseHotkey
     }
 
     /// Lifecycle of the live-preview bubble during a listening session.

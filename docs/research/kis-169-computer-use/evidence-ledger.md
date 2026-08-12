@@ -1299,3 +1299,23 @@ XCTest runs, coverage, and E2E scripts.
   is 88.35% (13,558/15,346), above the 80% floor. E2E preflight and smoke pass.
 - `[Next]` Dedicated Computer Use model settings and a separate global voice hotkey remain the
   next implementation slices; the existing model-setting bridge is temporary.
+
+### Entry 73: Global voice-to-task hotkey
+
+Sources: `phase-16-global-voice-hotkey-2026-08-12.md`, production Swift sources, focused and full
+XCTest runs, coverage, and E2E scripts.
+
+- `[Implemented]` Suniye now has an optional persisted global Hold to Run Task shortcut with
+  independent hold/release callbacks and three-way collision validation.
+- `[Verified]` Its local ASR transcript is submitted raw to the app-owned current Computer Use
+  conversation while the main window and Computer Use page remain absent. Magic Format,
+  clipboard/text insertion, and dictation history are bypassed.
+- `[Implemented]` Escape cancels only an active Computer Use voice recording. Its key monitor is
+  installed only while the optional shortcut is configured and otherwise does not observe global
+  key-down events.
+- `[Independent choice]` The new shortcut defaults to disabled because no conflict-free Suniye
+  default is established by the reference evidence.
+- `[Verified]` The full suite passes 1,106 tests with 2 skipped and zero failures. Gated coverage
+  is 88.41% (13,663/15,454), above the 80% floor. E2E preflight and smoke pass.
+- `[Next]` Computer Use provider, model, endpoint, and credential settings must be separated from
+  Magic Format before live voice-to-action validation.

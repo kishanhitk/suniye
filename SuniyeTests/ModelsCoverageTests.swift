@@ -19,6 +19,7 @@ final class FloatingIndicatorStateTests: XCTestCase {
         XCTAssertTrue(FloatingIndicatorState.hover.tracksPointerScreen)
         XCTAssertFalse(FloatingIndicatorState.listening(levels: [], source: .manual).tracksPointerScreen)
         XCTAssertFalse(FloatingIndicatorState.listening(levels: [0.5], source: .editHotkey).tracksPointerScreen)
+        XCTAssertFalse(FloatingIndicatorState.listening(levels: [0.5], source: .computerUseHotkey).tracksPointerScreen)
         XCTAssertFalse(FloatingIndicatorState.processing().tracksPointerScreen)
         XCTAssertFalse(FloatingIndicatorState.error(message: "Boom").tracksPointerScreen)
     }

@@ -13,6 +13,10 @@ final class GeneralSettingsStoreTests: XCTestCase {
             preferredInputDeviceName: "USB Microphone",
             autoSubmitEnabled: true,
             hotkeyConfiguration: .keyCombo(keyCode: UInt32(kVK_Space), carbonModifiers: UInt32(optionKey)),
+            computerUseHotkeyConfiguration: .keyCombo(
+                keyCode: UInt32(kVK_ANSI_R),
+                carbonModifiers: UInt32(controlKey | optionKey)
+            ),
             soundFeedbackEnabled: true,
             hideFloatingIndicatorWhenIdle: true,
             floatingIndicatorPlacement: FloatingIndicatorPlacement(centerXRatio: 0.2, bottomYRatio: 0.15),
@@ -26,7 +30,17 @@ final class GeneralSettingsStoreTests: XCTestCase {
         store.save(settings)
 
         XCTAssertEqual(store.load(), settings)
+        XCTAssertEqual(store.load().computerUseHotkeyConfiguration, settings.computerUseHotkeyConfiguration)
         XCTAssertEqual(store.load().shareAnalyticsEnabled, false)
+    }
+
+    func testComputerUseHotkeyDefaultsToDisabledForLegacySettings() {
+        let suite = "dev.suniye.tests.general.computerUseHotkey.legacy.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        defaults.set(Data(#"{"hotkeyConfiguration":{"kind":"globe","keyCode":63,"carbonModifiers":0}}"#.utf8), forKey: "general")
+
+        XCTAssertNil(store.load().computerUseHotkeyConfiguration)
     }
 
     func testUnknownASRModelIDFallsBackWithoutResettingOtherSettings() {

@@ -419,6 +419,11 @@ final class AppState {
                 AppLogger.shared.log(.warning, "edit mode hotkey cleared: matched new dictation hotkey")
                 showTransientIndicatorError("Edit Mode shortcut cleared: it matched dictation")
             }
+            if computerUseHotkeyConfiguration == hotkeyConfiguration {
+                computerUseHotkeyConfiguration = nil
+                AppLogger.shared.log(.warning, "computer use hotkey cleared: matched new dictation hotkey")
+                showTransientIndicatorError("Run Task shortcut cleared: it matched dictation")
+            }
             persistGeneralSettings()
             if runtimeServicesEnabled {
                 wireHotkey()
@@ -431,10 +436,42 @@ final class AppState {
             guard !isHydratingGeneralSettings, oldValue != editModeHotkeyConfiguration else {
                 return
             }
-            if editModeHotkeyConfiguration != nil, editModeHotkeyConfiguration == hotkeyConfiguration {
-                editModeHotkeyConfiguration = oldValue == hotkeyConfiguration ? nil : oldValue
-                AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches dictation hotkey")
-                showTransientIndicatorError("Edit Mode shortcut must differ from dictation")
+            let collidesWithDictation = editModeHotkeyConfiguration == hotkeyConfiguration
+            let collidesWithAnotherHotkey = editModeHotkeyConfiguration != nil
+                && (collidesWithDictation
+                    || editModeHotkeyConfiguration == computerUseHotkeyConfiguration)
+            if collidesWithAnotherHotkey {
+                let previousValueIsAvailable = oldValue != hotkeyConfiguration
+                    && oldValue != computerUseHotkeyConfiguration
+                editModeHotkeyConfiguration = previousValueIsAvailable ? oldValue : nil
+                AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches another hotkey")
+                let message = collidesWithDictation
+                    ? "Edit Mode shortcut must differ from dictation"
+                    : "Edit Mode shortcut is already in use"
+                showTransientIndicatorError(message)
+                return
+            }
+            persistGeneralSettings()
+            if runtimeServicesEnabled {
+                wireHotkey()
+            }
+            onStateChange?()
+        }
+    }
+    var computerUseHotkeyConfiguration: HotkeyConfiguration? = nil {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != computerUseHotkeyConfiguration else {
+                return
+            }
+            let collidesWithAnotherHotkey = computerUseHotkeyConfiguration != nil
+                && (computerUseHotkeyConfiguration == hotkeyConfiguration
+                    || computerUseHotkeyConfiguration == editModeHotkeyConfiguration)
+            if collidesWithAnotherHotkey {
+                let previousValueIsAvailable = oldValue != hotkeyConfiguration
+                    && oldValue != editModeHotkeyConfiguration
+                computerUseHotkeyConfiguration = previousValueIsAvailable ? oldValue : nil
+                AppLogger.shared.log(.warning, "computer use hotkey rejected: matches another hotkey")
+                showTransientIndicatorError("Run Task shortcut is already in use")
                 return
             }
             persistGeneralSettings()
@@ -3427,8 +3464,62 @@ final class AppState {
             }
         }
 
-        hotkeyService.startMonitoring(configuration: hotkeyConfiguration, editModeConfiguration: editModeHotkeyConfiguration)
-        AppLogger.shared.log(.info, "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off")")
+        hotkeyService.onComputerUseHotkeyDown = { [weak self] in
+            AppLogger.shared.log(.debug, "computer use hotkey callback: down")
+            Task { @MainActor in
+                await self?.beginRecordingFlow(
+                    trigger: .computerUseHotkey,
+                    destination: .computerUseTask
+                )
+            }
+        }
+
+        hotkeyService.onComputerUseHotkeyUp = { [weak self] in
+            AppLogger.shared.log(.debug, "computer use hotkey callback: up")
+            Task { @MainActor in
+                await self?.stopRecordingAndTranscribe(trigger: .computerUseHotkey)
+            }
+        }
+
+        hotkeyService.onCancel = { [weak self] in
+            guard let self,
+                  self.phase == .recording,
+                  self.activeDictationSession?.context.destination == .computerUseTask else {
+                return false
+            }
+            Task { @MainActor in
+                await self.cancelComputerUseRecording()
+            }
+            return true
+        }
+
+        hotkeyService.startMonitoring(
+            configuration: hotkeyConfiguration,
+            editModeConfiguration: editModeHotkeyConfiguration,
+            computerUseConfiguration: computerUseHotkeyConfiguration
+        )
+        AppLogger.shared.log(
+            .info,
+            "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off") computerUse=\(computerUseHotkeyConfiguration?.displayString ?? "off")"
+        )
+    }
+
+    private func cancelComputerUseRecording() async {
+        guard phase == .recording,
+              let context = activeDictationSession?.context,
+              context.destination == .computerUseTask else {
+            return
+        }
+        await audioCaptureService.cancelCapture(sessionID: context.id, reason: nil)
+        guard activeAudioCaptureSessionID == context.id else {
+            return
+        }
+        clearActiveDictationSession(sessionID: context.id)
+        phase = .ready
+        statusText = "Ready"
+        lastError = nil
+        setFloatingIndicatorState(.idle)
+        AppLogger.shared.log(.info, "computer use voice recording cancelled")
     }
 
     private func orderedInstalledASRModelIDs(excluding excludedModelIDs: Set<ASRModelID> = []) -> [ASRModelID] {
@@ -4157,6 +4248,7 @@ final class AppState {
         autoSubmitEnabled = settings.autoSubmitEnabled
         hotkeyConfiguration = settings.hotkeyConfiguration
         editModeHotkeyConfiguration = settings.editModeHotkeyConfiguration
+        computerUseHotkeyConfiguration = settings.computerUseHotkeyConfiguration
         echoCancellationEnabled = settings.echoCancellationEnabled
         soundFeedbackEnabled = settings.soundFeedbackEnabled
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
@@ -4184,11 +4276,19 @@ final class AppState {
         )
         isHydratingGeneralSettings = false
         // A persisted collision (e.g. hand-edited settings) would silently kill Edit Mode.
+        var normalizedHotkeyCollision = false
         if editModeHotkeyConfiguration != nil, editModeHotkeyConfiguration == hotkeyConfiguration {
             editModeHotkeyConfiguration = nil
+            normalizedHotkeyCollision = true
+        }
+        if computerUseHotkeyConfiguration != nil,
+           (computerUseHotkeyConfiguration == hotkeyConfiguration
+            || computerUseHotkeyConfiguration == editModeHotkeyConfiguration) {
+            computerUseHotkeyConfiguration = nil
+            normalizedHotkeyCollision = true
         }
         applyUpdateChannelToController()
-        if needsProgressMigration || needsFirstLaunchMigration {
+        if needsProgressMigration || needsFirstLaunchMigration || normalizedHotkeyCollision {
             persistGeneralSettings()
         }
     }
@@ -4216,6 +4316,7 @@ final class AppState {
             autoSubmitEnabled: autoSubmitEnabled,
             hotkeyConfiguration: hotkeyConfiguration,
             editModeHotkeyConfiguration: editModeHotkeyConfiguration,
+            computerUseHotkeyConfiguration: computerUseHotkeyConfiguration,
             echoCancellationEnabled: echoCancellationEnabled,
             soundFeedbackEnabled: soundFeedbackEnabled,
             hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,

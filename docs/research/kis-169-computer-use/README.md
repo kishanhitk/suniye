@@ -41,9 +41,9 @@ action -> fresh observation.
 The desktop path is connected. It requires a configured API Endpoint model, Accessibility, and
 Screen Recording because every macOS observation includes a screenshot. The agent can resolve and
 launch installed apps through the application catalog. It is not full runtime parity: browser
-control, helper IPC, and transient screenshot caching remain open or deferred. Direct voice
-submission is now connected through the existing Suniye hold-to-talk flow while the Computer Use
-page is visible; its design is recorded in `direct-voice-integration-plan.md`.
+control, helper IPC, and transient screenshot caching remain open or deferred. Direct voice can
+use the existing page-visible dictation route or the dedicated optional global Hold to Run Task
+shortcut; its design history is recorded in `direct-voice-integration-plan.md` and Phase 16.
 
 The current cleanup validation is recorded in the final evidence-ledger entry after the full test,
 coverage, build, and live safe-target checks. Provider behavior, Screen Recording capture, and
@@ -114,6 +114,8 @@ cross-process input still require separate validation.
   correction, and natural-language browser-link E2E validation.
 - `phase-15-app-runtime-session-2026-08-12.md` records the app-owned coordinator, durable current
   session, page-independent voice handoff, and storage validation.
+- `phase-16-global-voice-hotkey-2026-08-12.md` records the optional global Hold to Run Task
+  shortcut, raw local voice route, collision policy, and Escape cancellation.
 - `deep-code-parity-audit-2026-08-12.md` consolidates three independent code-level audits of the
   model/runtime, native mechanics, and cursor/UX, with verified gaps kept explicit.
 
@@ -175,6 +177,8 @@ as separate evidence entries. Git handoff status is reported with the final comm
 
 ## Direct voice implementation — 2026-08-03
 
+Historical page-visible slice; Phase 16 adds the page-independent global shortcut.
+
 - `[Verified]` The existing dictation pipeline routes a raw local transcript to Computer Use only
   while the Computer Use page is visible.
 - `[Verified]` The route bypasses text insertion, Magic Format, clipboard output, and dictation
@@ -193,5 +197,17 @@ as separate evidence entries. Git handoff status is reported with the final comm
   atomically written per-bundle session file and is removed by New conversation.
 - `[Verified]` The full suite passes 1,098 tests with 2 skipped and zero failures; gated coverage
   is 88.35% (13,558/15,346), and E2E preflight and smoke pass.
-- `[Next]` Separate Computer Use model configuration and the dedicated global voice hotkey remain
-  intentionally outside this slice.
+- `[Superseded by Phase 16]` The dedicated global voice hotkey is now implemented. Separate
+  Computer Use model configuration remains intentionally outside Phase 15.
+
+## Global voice-to-task hotkey — 2026-08-12
+
+- `[Verified]` An optional global Hold to Run Task shortcut now captures speech locally and sends
+  the raw transcript to the current app-owned Computer Use conversation without opening Suniye.
+- `[Verified]` The route bypasses Magic Format, clipboard insertion, focused-app insertion, and
+  dictation history. Escape cancels task recording without submitting a transcript.
+- `[Verified]` Three-way shortcut collision handling is persisted and legacy settings default the
+  new shortcut to disabled.
+- `[Verified]` The full suite passes 1,106 tests with 2 skipped and zero failures; gated coverage
+  is 88.41% (13,663/15,454), and E2E preflight and smoke pass.
+- `[Next]` Dedicated Computer Use model configuration remains the next slice.

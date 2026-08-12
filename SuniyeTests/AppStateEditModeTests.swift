@@ -4,6 +4,90 @@ import XCTest
 
 @MainActor
 final class AppStateEditModeTests: XCTestCase {
+    func testComputerUseHotkeyConfigurationPersistsAndRewiresMonitoring() {
+        let hotkeyService = StubHotkeyService()
+        let settingsStore = TestGeneralSettingsStore()
+        let appState = makeTestAppState(
+            hotkeyService: hotkeyService,
+            generalSettingsStore: settingsStore,
+            startServices: true
+        )
+        let taskHotkey = HotkeyConfiguration.keyCombo(
+            keyCode: UInt32(kVK_ANSI_R),
+            carbonModifiers: UInt32(controlKey | optionKey)
+        )
+
+        appState.computerUseHotkeyConfiguration = taskHotkey
+
+        XCTAssertEqual(settingsStore.latest.computerUseHotkeyConfiguration, taskHotkey)
+        XCTAssertEqual(hotkeyService.lastComputerUseConfiguration, taskHotkey)
+        XCTAssertGreaterThanOrEqual(hotkeyService.startMonitoringCallCount, 2)
+    }
+
+    func testComputerUseHotkeyRejectsDictationAndEditModeCollisions() {
+        let appState = makeTestAppState()
+        let editHotkey = HotkeyConfiguration.keyCombo(
+            keyCode: UInt32(kVK_ANSI_E),
+            carbonModifiers: UInt32(controlKey | optionKey)
+        )
+        appState.editModeHotkeyConfiguration = editHotkey
+
+        appState.computerUseHotkeyConfiguration = appState.hotkeyConfiguration
+        XCTAssertNil(appState.computerUseHotkeyConfiguration)
+
+        appState.computerUseHotkeyConfiguration = editHotkey
+        XCTAssertNil(appState.computerUseHotkeyConfiguration)
+    }
+
+    func testEditModeHotkeyRejectsComputerUseCollision() {
+        let appState = makeTestAppState()
+        let taskHotkey = HotkeyConfiguration.keyCombo(
+            keyCode: UInt32(kVK_ANSI_R),
+            carbonModifiers: UInt32(controlKey | optionKey)
+        )
+        appState.computerUseHotkeyConfiguration = taskHotkey
+
+        appState.editModeHotkeyConfiguration = taskHotkey
+
+        XCTAssertNil(appState.editModeHotkeyConfiguration)
+        XCTAssertEqual(appState.computerUseHotkeyConfiguration, taskHotkey)
+    }
+
+    func testSettingDictationHotkeyClearsCollidingComputerUseHotkey() {
+        let settingsStore = TestGeneralSettingsStore()
+        let appState = makeTestAppState(generalSettingsStore: settingsStore)
+        let taskHotkey = HotkeyConfiguration.keyCombo(
+            keyCode: UInt32(kVK_ANSI_R),
+            carbonModifiers: UInt32(controlKey | optionKey)
+        )
+        appState.computerUseHotkeyConfiguration = taskHotkey
+
+        appState.hotkeyConfiguration = taskHotkey
+
+        XCTAssertNil(appState.computerUseHotkeyConfiguration)
+        XCTAssertNil(settingsStore.latest.computerUseHotkeyConfiguration)
+        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Run Task shortcut cleared: it matched dictation"))
+    }
+
+    func testLoadingCollidingComputerUseHotkeyNormalizesToDisabled() {
+        let combo = HotkeyConfiguration.keyCombo(
+            keyCode: UInt32(kVK_ANSI_R),
+            carbonModifiers: UInt32(cmdKey)
+        )
+        let settingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                hotkeyConfiguration: combo,
+                computerUseHotkeyConfiguration: combo
+            )
+        )
+
+        let appState = makeTestAppState(generalSettingsStore: settingsStore)
+
+        XCTAssertNil(appState.computerUseHotkeyConfiguration)
+        XCTAssertNil(settingsStore.latest.computerUseHotkeyConfiguration)
+        XCTAssertEqual(appState.hotkeyConfiguration, combo)
+    }
+
     func testEditModeHotkeyConfigurationPersistsAndRewiresMonitoring() {
         let hotkeyService = StubHotkeyService()
         let modelManager = StubModelManager()

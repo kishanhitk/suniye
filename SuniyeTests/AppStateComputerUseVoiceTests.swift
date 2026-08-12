@@ -3,6 +3,78 @@ import XCTest
 
 @MainActor
 final class AppStateComputerUseVoiceTests: XCTestCase {
+    func testDedicatedHotkeySubmitsRawTaskWithoutComputerUsePageBeingActive() async {
+        let hotkeyService = StubHotkeyService()
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcription = StubTranscriptionService()
+        transcription.transcribeResult = .success("  increase my display brightness  ")
+        let insertion = SpyTextInsertionService()
+        let agent = VoiceTaskComputerUseAgent()
+        let coordinator = makeReadyCoordinator(agent: agent)
+        let started = expectation(description: "task recording started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let appState = makeTestAppState(
+            transcriptionService: transcription,
+            audioCaptureService: audioCapture,
+            textInsertionService: insertion,
+            hotkeyService: hotkeyService,
+            computerUseCoordinator: coordinator,
+            micAuthorizationStatusProvider: { .authorized },
+            startServices: true
+        )
+        for _ in 0..<100 where appState.phase == .loading {
+            await Task.yield()
+        }
+        appState.hasMicPermission = true
+        appState.phase = .ready
+
+        hotkeyService.onComputerUseHotkeyDown?()
+        await fulfillment(of: [started], timeout: 1)
+        hotkeyService.onComputerUseHotkeyUp?()
+        await waitUntilVoiceTaskFinishes(appState, coordinator: coordinator)
+
+        let receivedTasks = await agent.receivedTasks()
+        XCTAssertEqual(receivedTasks.map(\.instruction), ["increase my display brightness"])
+        XCTAssertTrue(insertion.insertedTexts.isEmpty)
+        XCTAssertTrue(insertion.copiedTexts.isEmpty)
+        XCTAssertTrue(appState.recentResults.isEmpty)
+    }
+
+    func testEscapeCancelsDedicatedTaskRecordingWithoutSubmittingTranscript() async {
+        let hotkeyService = StubHotkeyService()
+        let audioCapture = StubAudioCaptureService()
+        let agent = VoiceTaskComputerUseAgent()
+        let coordinator = makeReadyCoordinator(agent: agent)
+        let started = expectation(description: "task recording started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let appState = makeTestAppState(
+            audioCaptureService: audioCapture,
+            hotkeyService: hotkeyService,
+            computerUseCoordinator: coordinator,
+            micAuthorizationStatusProvider: { .authorized },
+            startServices: true
+        )
+        for _ in 0..<100 where appState.phase == .loading {
+            await Task.yield()
+        }
+        appState.hasMicPermission = true
+        appState.phase = .ready
+
+        hotkeyService.onComputerUseHotkeyDown?()
+        await fulfillment(of: [started], timeout: 1)
+        XCTAssertEqual(hotkeyService.onCancel?(), true)
+        for _ in 0..<100 where appState.phase != .ready {
+            await Task.yield()
+        }
+
+        let receivedTasks = await agent.receivedTasks()
+        XCTAssertEqual(audioCapture.cancelCaptureCallCount, 1)
+        XCTAssertTrue(receivedTasks.isEmpty)
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertNil(appState.lastError)
+    }
+
     func testDictationSubmitsComputerUseTaskWithoutInsertion() async {
         let audioCapture = StubAudioCaptureService()
         audioCapture.stopCaptureResult = makeValidCapturedAudio()
