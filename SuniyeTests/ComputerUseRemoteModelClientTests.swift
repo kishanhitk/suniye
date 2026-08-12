@@ -203,6 +203,38 @@ final class ComputerUseRemoteModelClientTests: XCTestCase {
         )
     }
 
+    func testTransientMalformedProviderResponseIsRetriedWithoutReplayingAnAction() async throws {
+        var requestCount = 0
+        ComputerUseModelURLProtocol.handler = { request in
+            requestCount += 1
+            if requestCount == 1 {
+                return try Self.response(for: request, json: ["choices": []])
+            }
+            return try Self.response(
+                for: request,
+                json: ["choices": [["message": ["content": "Recovered."]]]]
+            )
+        }
+        let sleeper = RecordingComputerUseModelRetrySleeper()
+        let client = ComputerUseRemoteModelClient(
+            configuration: ComputerUseRemoteModelConfiguration(
+                endpointURL: URL(string: "https://example.com/v1/chat/completions")!,
+                modelID: "model",
+                apiKey: "secret"
+            ),
+            completionClient: ChatCompletionClient(session: makeSession()),
+            retrySleeper: sleeper,
+            retryJitter: { 1 }
+        )
+
+        let result = try await client.respond(to: [.text(role: .user, text: "Continue.")])
+        let delays = await sleeper.delays
+
+        XCTAssertEqual(result, .text("Recovered."))
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(delays, [.milliseconds(200)])
+    }
+
     func testNonRetryableProviderFailureIsNotReplayed() async {
         var requestCount = 0
         ComputerUseModelURLProtocol.handler = { request in
@@ -257,8 +289,8 @@ final class ComputerUseRemoteModelClientTests: XCTestCase {
         XCTAssertFalse(policy.shouldRetry(.provider("unavailable")))
         XCTAssertFalse(policy.shouldRetry(.invalidConfiguration("missing")))
         XCTAssertFalse(policy.shouldRetry(.unauthorized))
-        XCTAssertFalse(policy.shouldRetry(.malformedResponse))
-        XCTAssertFalse(policy.shouldRetry(.emptyOutput))
+        XCTAssertTrue(policy.shouldRetry(.malformedResponse))
+        XCTAssertTrue(policy.shouldRetry(.emptyOutput))
         XCTAssertEqual(policy.delay(afterFailedAttempt: 0, jitter: 0), .milliseconds(180))
         XCTAssertEqual(policy.delay(afterFailedAttempt: 0, jitter: 2), .milliseconds(220))
     }

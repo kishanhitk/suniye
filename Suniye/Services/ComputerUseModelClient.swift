@@ -162,7 +162,9 @@ struct ComputerUseModelRetryPolicy: Equatable, Sendable {
                 return false
             }
             return (500 ... 599).contains(statusCode)
-        case .invalidConfiguration, .unauthorized, .malformedResponse, .emptyOutput:
+        case .malformedResponse, .emptyOutput:
+            return true
+        case .invalidConfiguration, .unauthorized:
             return false
         }
     }
