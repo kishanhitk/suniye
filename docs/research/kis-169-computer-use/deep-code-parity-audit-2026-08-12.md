@@ -135,6 +135,11 @@ model/runtime composition, native app/window/action mechanics, and desktop curso
   global shortcut or supply live microphone speech. The physical voice-to-action leg therefore
   still needs a user-operated run; code-level routing, queuing, cancellation, and restart cases
   are covered by focused tests.
+- `[Superseded by user-operated E2E]` Sessions `CU-7E6BEA9FE8C8` and `CU-83CD69D173D9` exercise
+  the physical global shortcut, production microphone capture, local transcription, raw routing,
+  real Luna inference, fresh native observation, completion while Suniye is windowless, and
+  durable restoration. The bundled driver independently inspected the conversation and Calculator
+  result after the user supplied the global shortcut and speech it cannot synthesize itself.
 
 ## Result
 

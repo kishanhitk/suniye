@@ -164,6 +164,25 @@ Build: Debug Preview installed at `/Users/kishan/Applications/Suniye Preview.app
   it cannot hold/release Suniye's global shortcut or generate microphone speech. A final
   user-operated hold–speak–release run is required to prove the complete chain in one session.
 
+### Continuous physical voice E2E — 2026-08-12
+
+- `[Verified live]` User-operated run `CU-7E6BEA9FE8C8` held and released the global shortcut,
+  captured 3.30 seconds of usable WH-1000XM4 microphone audio, transcribed 27 characters locally
+  as `Can you open uh calculator?`, called `get_app_state` for Calculator, and completed with
+  `Calculator is open, and the display shows **42**.`
+- `[Verified live]` A second run, `CU-83CD69D173D9`, captured 2.10 seconds of usable microphone
+  audio, transcribed 24 characters locally as `Can you open calculator?`, called a fresh
+  `get_app_state` for Calculator, and completed with `Calculator is open, displaying **42**.`
+- `[Verified live]` Suniye had no main window during these runs and did not open or focus one. The
+  bundled Computer Use driver observed only the app menu bar after completion.
+- `[Verified live]` Quitting and relaunching Preview restored both user transcripts, tool calls,
+  and assistant results in the existing Computer Use conversation.
+- `[Verified independently]` The bundled driver separately observed Calculator and reported
+  `StandardInputView;value:42` and AX display value `42`.
+- `[Supersedes]` The continuous physical voice boundary above is now exercised. The bundled driver
+  could inspect every resulting UI state and controlled app, while the user supplied the only
+  input it cannot synthesize: the global held shortcut and microphone speech.
+
 ### Refreshed Preview UI smoke — 2026-08-03
 
 - `[Verified]` After reinstalling and relaunching `/Users/kishan/Applications/Suniye Preview.app`,

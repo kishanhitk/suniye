@@ -73,6 +73,10 @@ Build: Debug Preview at `/Users/kishan/Applications/Suniye Preview.app` from
   into Computer Use. The final installed General page independently confirms the configured
   `Control + Command + U` shortcut. This does not replace the required continuous voice-to-action
   rerun now that the shared provider credential is active.
+- `[Superseded by final live run]` Sessions `CU-7E6BEA9FE8C8` and `CU-83CD69D173D9` now prove the
+  continuous chain: global hold/release, real Bluetooth-mic capture, local transcription, raw
+  transcript routing, Luna inference, fresh Calculator observation, terminal response, windowless
+  background execution, and session restoration after restart.
 - `[Verified]` Deterministic cancellation, persistence, and closed-window lifecycle checks used a
   temporary local protocol-compatible provider; its credential and server were removed. The final
   Calculator run used the user's existing shared OpenRouter credential without exposing or copying

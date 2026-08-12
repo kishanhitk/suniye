@@ -1437,5 +1437,12 @@ bundled Computer Use observations.
   displayed that it was shared with Magic Format. Real-provider session `CU-22D0FF4454A7` used
   `openai/gpt-5.6-luna`, alternated three clicks with four fresh Calculator observations, and
   reported display value 42. Independent bundled Computer Use observation confirmed AX value 42.
+- `[Verified live]` Final physical sessions `CU-7E6BEA9FE8C8` and `CU-83CD69D173D9` prove the
+  continuous global voice path. The latter captured 2.10 seconds from the Bluetooth microphone,
+  locally transcribed `Can you open calculator?`, passed it raw to Luna, obtained a fresh
+  Calculator observation, and returned `Calculator is open, displaying **42**.`
+- `[Verified live]` Suniye remained windowless and did not focus itself during the physical run.
+  Quit/relaunch restored both voice turns, tool calls, and results. The bundled Computer Use
+  driver independently confirmed Calculator's AX display value was 42.
 - `[Verified]` The full suite passes 1,139 tests with 2 skipped and zero failures. Gated coverage
   is 87.05% (14,389/16,530 lines), above the 80% floor. Sequential E2E preflight and smoke pass.
