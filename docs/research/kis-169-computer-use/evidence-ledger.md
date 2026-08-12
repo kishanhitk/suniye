@@ -1433,5 +1433,9 @@ bundled Computer Use observations.
 - `[Not exercised]` The bundled app-scoped input driver cannot hold/release the global shortcut,
   so a real microphone voice cycle still requires user participation. A real remote provider key
   was not copied; deterministic E2E used a temporary loopback provider and removed its credential.
+- `[Verified live]` The final Preview recognized the existing shared OpenRouter credential and
+  displayed that it was shared with Magic Format. Real-provider session `CU-22D0FF4454A7` used
+  `openai/gpt-5.6-luna`, alternated three clicks with four fresh Calculator observations, and
+  reported display value 42. Independent bundled Computer Use observation confirmed AX value 42.
 - `[Verified]` The full suite passes 1,139 tests with 2 skipped and zero failures. Gated coverage
   is 87.05% (14,389/16,530 lines), above the 80% floor. Sequential E2E preflight and smoke pass.

@@ -126,6 +126,9 @@ model/runtime composition, native app/window/action mechanics, and desktop curso
   `get_app_state`, `press_key`, and a fresh `get_app_state`; an independent observation confirmed
   the display value. Persistence/reset, delayed-request Stop, and closed-window continuation were
   also exercised in the installed Preview.
+- `[Verified live]` Final real-provider session `CU-22D0FF4454A7` used the single shared OpenRouter
+  credential and `openai/gpt-5.6-luna`. It alternated every Calculator click with a fresh
+  observation and reported 42; an independent bundled observation confirmed AX value 42.
 - `[Verified]` The final full suite passes 1,139 tests with 2 skipped; gated line coverage is
   87.05%, and sequential E2E preflight/smoke pass.
 - `[Not exercised]` The bundled app-scoped Computer Use driver cannot hold and release Suniye's

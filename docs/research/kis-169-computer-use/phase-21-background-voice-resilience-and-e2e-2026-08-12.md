@@ -52,6 +52,15 @@ Build: Debug Preview at `/Users/kishan/Applications/Suniye Preview.app` from
 - `[Verified live]` Accessibility and Screen Recording were granted in the installed Preview.
 - `[Verified live]` The dedicated Hold to Run Task shortcut was configured as
   `Control + Command + U` without changing the Magic Format model configuration.
+- `[Verified live]` After OpenRouter credential sharing replaced the temporary fallback design,
+  the installed Preview displayed `OpenRouter API key shared with Magic Format.` and enabled the
+  model without a second Computer Use key.
+- `[Verified live]` The natural task `Open Calculator, enter 42, and tell me what the display
+  shows.` ran through the real OpenRouter `openai/gpt-5.6-luna` configuration. Session
+  `CU-22D0FF4454A7` performed seven calls in the sequence observation, click, observation, click,
+  observation, click, observation, then answered `The Calculator display shows **42**.`
+- `[Verified live]` The bundled Computer Use driver independently observed Calculator after the
+  run and reported `StandardInputView;value:42` and AX value `42`.
 
 ## Honest remaining live boundaries
 
@@ -59,10 +68,10 @@ Build: Debug Preview at `/Users/kishan/Applications/Suniye Preview.app` from
   global hold/release shortcut. It therefore cannot itself perform a real microphone hold,
   speech, and release cycle. That final physical voice leg requires user participation or a
   purpose-built shortcut test driver.
-- `[Not exercised]` The final installed run used a local protocol-compatible provider so request,
-  tool, cancellation, persistence, and background lifecycle could be controlled deterministically.
-  The temporary credential and server were removed afterward. A real provider credential remains
-  user-owned and was not copied from another feature.
+- `[Verified]` Deterministic cancellation, persistence, and closed-window lifecycle checks used a
+  temporary local protocol-compatible provider; its credential and server were removed. The final
+  Calculator run used the user's existing shared OpenRouter credential without exposing or copying
+  it into a second store.
 - `[Not exercised]` The status-item New Computer Use Conversation action was not reachable through
   the bundled app-scoped accessibility driver. Its app-level action and enabled-state policy are
   covered by tests; the same reset was exercised from the conversation UI.

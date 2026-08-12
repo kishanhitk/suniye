@@ -137,6 +137,18 @@ Build: Debug Preview installed at `/Users/kishan/Applications/Suniye Preview.app
 - `[Not exercised]` A real remote provider credential was not copied from Magic Format. The local
   loopback credential was cleared and the temporary server removed after the run.
 
+### Shared OpenRouter real-provider run — 2026-08-12
+
+- `[Verified]` The final installed Preview showed provider `OpenRouter`, model
+  `openai/gpt-5.6-luna`, and `OpenRouter API key shared with Magic Format.` No dedicated Computer
+  Use key was required.
+- `[Verified]` Natural task `Open Calculator, enter 42, and tell me what the display shows.`
+  completed as session `CU-22D0FF4454A7` through the real provider.
+- `[Verified]` The run made seven calls: `get_app_state`, `click`, `get_app_state`, `click`,
+  `get_app_state`, `click`, `get_app_state`. It returned `The Calculator display shows **42**.`
+- `[Verified]` A separate bundled Computer Use observation read Calculator's
+  `StandardInputView;value:42` and AX display value `42`.
+
 ### Refreshed Preview UI smoke — 2026-08-03
 
 - `[Verified]` After reinstalling and relaunching `/Users/kishan/Applications/Suniye Preview.app`,
