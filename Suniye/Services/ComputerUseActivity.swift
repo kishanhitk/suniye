@@ -1,6 +1,6 @@
 import Foundation
 
-struct ComputerUseActivity: Equatable, Sendable {
+struct ComputerUseActivity: Codable, Equatable, Sendable {
     let id: UUID
     let toolName: String
     let arguments: String

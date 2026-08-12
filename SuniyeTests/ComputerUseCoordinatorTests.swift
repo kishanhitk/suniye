@@ -192,7 +192,11 @@ final class ComputerUseCoordinatorTests: XCTestCase {
     }
 
     func testNewConversationClearsTranscriptAndDraft() async {
-        let coordinator = readyCoordinator(agent: StubComputerUseAgent())
+        let store = SpyComputerUseConversationStore()
+        let coordinator = readyCoordinator(
+            agent: StubComputerUseAgent(),
+            conversationStore: store
+        )
         coordinator.draft = "Task"
         coordinator.submit()
         await waitUntilRunFinishes(coordinator)
@@ -203,6 +207,59 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.phase, .ready)
         XCTAssertEqual(coordinator.draft, "")
         XCTAssertTrue(coordinator.conversation.isEmpty)
+        XCTAssertEqual(store.savedConversations.last, [])
+    }
+
+    func testRestoresCurrentConversationFromStore() {
+        let activity = ComputerUseActivity(
+            toolName: "get_app_state",
+            arguments: #"{"app":"Calculator"}"#,
+            output: #"{"app":"Calculator","text":"0 AXStaticText: 42"}"#
+        )
+        let storedConversation = [
+            ComputerUseConversationMessage(role: .user, text: "Inspect Calculator"),
+            ComputerUseConversationMessage(activity: activity),
+            ComputerUseConversationMessage(role: .assistant, text: "Calculator shows 42."),
+        ]
+        let store = SpyComputerUseConversationStore(value: storedConversation)
+
+        let coordinator = ComputerUseCoordinator(
+            permissions: StubComputerUsePermissions(snapshots: []),
+            conversationStore: store,
+            makeAgent: { _, _ in StubComputerUseAgent() }
+        )
+
+        XCTAssertEqual(coordinator.conversation, storedConversation)
+    }
+
+    func testPersistsRawActivityOutputAndAssistantResult() async {
+        let activity = ComputerUseActivity(
+            toolName: "get_app_state",
+            arguments: #"{"app":"Calculator"}"#
+        )
+        let completedActivity = activity.completed(
+            output: #"{"app":"Calculator","text":"0 AXStaticText: 42"}"#
+        )
+        let store = SpyComputerUseConversationStore()
+        let coordinator = ComputerUseCoordinator(
+            permissions: StubComputerUsePermissions(snapshots: []),
+            initialPermissionSnapshot: .granted,
+            conversationStore: store,
+            makeAgent: { _, activitySink in
+                ActivityEmittingComputerUseAgent(
+                    activities: [activity, completedActivity],
+                    sink: activitySink
+                )
+            }
+        )
+        coordinator.configureModel(testConfiguration)
+        coordinator.draft = "Inspect Calculator"
+
+        coordinator.submit()
+        await waitUntilRunFinishes(coordinator)
+
+        XCTAssertEqual(store.savedConversations.last, coordinator.conversation)
+        XCTAssertEqual(store.savedConversations.last?[1].activity?.output, completedActivity.output)
     }
 
     func testPermissionSettingsRouteThroughInjectedOpener() {
@@ -240,12 +297,14 @@ final class ComputerUseCoordinatorTests: XCTestCase {
 
     private func readyCoordinator(
         agent: some ComputerUseAgentRunning,
-        cursorSession: any ComputerUseCursorSessionManaging = NoopComputerUseCursorPresenter()
+        cursorSession: any ComputerUseCursorSessionManaging = NoopComputerUseCursorPresenter(),
+        conversationStore: any ComputerUseConversationStoring = NoopComputerUseConversationStore()
     ) -> ComputerUseCoordinator {
         let coordinator = ComputerUseCoordinator(
             permissions: StubComputerUsePermissions(snapshots: []),
             initialPermissionSnapshot: .granted,
             cursorSession: cursorSession,
+            conversationStore: conversationStore,
             makeAgent: { _, _ in agent }
         )
         coordinator.configureModel(testConfiguration)
@@ -264,6 +323,24 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         for _ in 0..<100 where coordinator.isRunning {
             await Task.yield()
         }
+    }
+}
+
+private final class SpyComputerUseConversationStore: ComputerUseConversationStoring {
+    private var value: [ComputerUseConversationMessage]
+    private(set) var savedConversations: [[ComputerUseConversationMessage]] = []
+
+    init(value: [ComputerUseConversationMessage] = []) {
+        self.value = value
+    }
+
+    func load() -> [ComputerUseConversationMessage] {
+        value
+    }
+
+    func save(_ conversation: [ComputerUseConversationMessage]) {
+        value = conversation
+        savedConversations.append(conversation)
     }
 }
 

@@ -5,20 +5,19 @@ struct ComputerUsePage: View {
     @Bindable var coordinator: ComputerUseCoordinator
     let modelConfiguration: ComputerUseRemoteModelConfiguration?
     let openModelSettings: () -> Void
-    let onVoiceTaskHandlerChange: ((any ComputerUseVoiceTaskHandling)?) -> Void
+    let onPageActiveChange: (Bool) -> Void
     @State private var copiedDebugSessionID: ComputerUseDebugSessionID?
 
     init(
         coordinator: ComputerUseCoordinator,
         modelConfiguration: ComputerUseRemoteModelConfiguration?,
         openModelSettings: @escaping () -> Void,
-        onVoiceTaskHandlerChange: @escaping ((any ComputerUseVoiceTaskHandling)?) -> Void
-            = { _ in }
+        onPageActiveChange: @escaping (Bool) -> Void = { _ in }
     ) {
         self.coordinator = coordinator
         self.modelConfiguration = modelConfiguration
         self.openModelSettings = openModelSettings
-        self.onVoiceTaskHandlerChange = onVoiceTaskHandlerChange
+        self.onPageActiveChange = onPageActiveChange
     }
 
     var body: some View {
@@ -30,11 +29,10 @@ struct ComputerUsePage: View {
         }
         .background(MainWindowPalette.windowBackground)
         .onAppear {
-            onVoiceTaskHandlerChange(coordinator)
+            onPageActiveChange(true)
         }
         .onDisappear {
-            onVoiceTaskHandlerChange(nil)
-            coordinator.cancelPendingVoiceTask()
+            onPageActiveChange(false)
         }
         .task {
             coordinator.configureModel(modelConfiguration)

@@ -33,8 +33,8 @@ struct ComputerUseAgentTask: Equatable, Sendable {
     }
 }
 
-struct ComputerUseConversationMessage: Identifiable, Equatable, Sendable {
-    enum Role: Equatable, Sendable {
+struct ComputerUseConversationMessage: Codable, Identifiable, Equatable, Sendable {
+    enum Role: String, Codable, Equatable, Sendable {
         case user
         case assistant
         case activity

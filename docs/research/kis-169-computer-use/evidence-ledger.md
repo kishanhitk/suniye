@@ -1279,3 +1279,23 @@ sources, focused tests, installed Preview sessions `CU-93344C32D67F` and `CU-73F
   confirmed Helium at `gita.kishans.in`.
 - `[Verified]` The full suite executes 1,095 tests with 2 skipped and zero failures. Gated coverage
   is 88.27% (13,458/15,246), above the 80% floor. E2E preflight and smoke pass.
+
+### Entry 72: App-level runtime and durable current session
+
+Sources: `phase-15-app-runtime-session-2026-08-12.md`, production Swift sources, focused and full
+XCTest runs, coverage, and E2E scripts.
+
+- `[Verified]` The coordinator previously belonged to the main-window view and direct voice
+  routing depended on a page-owned weak callback. Leaving the page canceled its pending task and
+  process restart lost the in-memory conversation.
+- `[Implemented]` `AppState` now owns the coordinator. Page visibility selects the existing
+  dictation destination but does not own, cancel, or otherwise constrain the handed-off task.
+- `[Implemented]` The current conversation is restored on coordinator initialization and each
+  mutation is saved atomically through an ordered background persistence boundary. The exact local
+  timeline includes tool arguments and raw tool output; New conversation removes it.
+- `[Independent choice]` Suniye uses a per-bundle JSON file under Application Support. The
+  reference evidence does not expose a Swift storage format that Suniye could reproduce.
+- `[Verified]` The full suite passes 1,098 tests with 2 skipped and zero failures. Gated coverage
+  is 88.35% (13,558/15,346), above the 80% floor. E2E preflight and smoke pass.
+- `[Next]` Dedicated Computer Use model settings and a separate global voice hotkey remain the
+  next implementation slices; the existing model-setting bridge is temporary.

@@ -112,6 +112,8 @@ cross-process input still require separate validation.
   collapsed raw-output disclosure added to each inline tool call.
 - `phase-14-browser-link-click-2026-08-12.md` records the failed-run RCA, primary-click ordering
   correction, and natural-language browser-link E2E validation.
+- `phase-15-app-runtime-session-2026-08-12.md` records the app-owned coordinator, durable current
+  session, page-independent voice handoff, and storage validation.
 - `deep-code-parity-audit-2026-08-12.md` consolidates three independent code-level audits of the
   model/runtime, native mechanics, and cursor/UX, with verified gaps kept explicit.
 
@@ -182,3 +184,14 @@ as separate evidence entries. Git handoff status is reported with the final comm
 - `[Verified]` E2E preflight and smoke pass.
 - `[Unknown]` Live microphone capture and provider execution through this voice route still need a
   manual macOS test.
+
+## App-level runtime and durable session — 2026-08-12
+
+- `[Verified]` The Computer Use coordinator now belongs to `AppState`, so closing or navigating
+  away from the Computer Use UI does not destroy the runtime or cancel a handed-off transcript.
+- `[Verified]` The complete local conversation, including raw tool results, is restored from an
+  atomically written per-bundle session file and is removed by New conversation.
+- `[Verified]` The full suite passes 1,098 tests with 2 skipped and zero failures; gated coverage
+  is 88.35% (13,558/15,346), and E2E preflight and smoke pass.
+- `[Next]` Separate Computer Use model configuration and the dedicated global voice hotkey remain
+  intentionally outside this slice.

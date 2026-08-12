@@ -23,7 +23,11 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     var phase: ComputerUseCoordinatorPhase = .idle
     var permissionSnapshot: ComputerUsePermissionSnapshot
     var draft = ""
-    var conversation: [ComputerUseConversationMessage] = []
+    var conversation: [ComputerUseConversationMessage] = [] {
+        didSet {
+            conversationStore.save(conversation)
+        }
+    }
     var errorMessage: String?
     var debugSessionID: ComputerUseDebugSessionID?
 
@@ -31,6 +35,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     @ObservationIgnored private let permissionSettings:
         any ComputerUsePermissionSettingsOpening
     @ObservationIgnored private let cursorSession: any ComputerUseCursorSessionManaging
+    @ObservationIgnored private let conversationStore: any ComputerUseConversationStoring
     @ObservationIgnored private let makeAgent: AgentFactory
     @ObservationIgnored private var configuration: ComputerUseRemoteModelConfiguration?
     @ObservationIgnored private var activeRun: Task<Void, Never>?
@@ -43,6 +48,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         permissionSettings: (any ComputerUsePermissionSettingsOpening)? = nil,
         initialPermissionSnapshot: ComputerUsePermissionSnapshot = .notGranted,
         cursorSession: any ComputerUseCursorSessionManaging = SystemComputerUseCursorPresenter(),
+        conversationStore: any ComputerUseConversationStoring = NoopComputerUseConversationStore(),
         makeAgent: @escaping AgentFactory = ComputerUseCoordinator.makeProductionAgent
     ) {
         self.permissions = permissions
@@ -50,7 +56,9 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
             ?? SystemComputerUsePermissionSettingsOpener()
         self.permissionSnapshot = initialPermissionSnapshot
         self.cursorSession = cursorSession
+        self.conversationStore = conversationStore
         self.makeAgent = makeAgent
+        conversation = conversationStore.load()
     }
 
     var isRunning: Bool {

@@ -523,8 +523,7 @@ final class AppState {
     @ObservationIgnored private var hasTrackedMagicFormatNudgeShown = false
     @ObservationIgnored private var firstLaunchRecorded = false
     @ObservationIgnored private var lastKnownAccessibilityGranted = false
-    @ObservationIgnored private weak var computerUseVoiceTaskHandler:
-        (any ComputerUseVoiceTaskHandling)?
+    private var isComputerUsePageActive = false
     private var magicFormatNudgeDismissed = false {
         didSet {
             guard !isHydratingGeneralSettings, oldValue != magicFormatNudgeDismissed else {
@@ -1476,6 +1475,8 @@ final class AppState {
     private let magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol
     private let generalSettingsStore: GeneralSettingsStoreProtocol
     private let historyStore: HistoryStoreProtocol
+    let computerUseCoordinator: ComputerUseCoordinator
+    @ObservationIgnored private let ownsComputerUseCoordinator: Bool
     private let keychainService: KeychainServiceProtocol
     private let appUpdateController: AppUpdateControllerProtocol
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
@@ -1597,6 +1598,7 @@ final class AppState {
         magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol = MagicFormatPromptFileStore(),
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
         historyStore: HistoryStoreProtocol = HistoryStore(),
+        computerUseCoordinator: ComputerUseCoordinator? = nil,
         keychainService: KeychainServiceProtocol = KeychainService(),
         appUpdateController: AppUpdateControllerProtocol? = nil,
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
@@ -1662,6 +1664,12 @@ final class AppState {
         self.magicFormatPromptFileStore = magicFormatPromptFileStore
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
+        ownsComputerUseCoordinator = computerUseCoordinator == nil
+        self.computerUseCoordinator = computerUseCoordinator ?? ComputerUseCoordinator(
+            conversationStore: startServices
+                ? ComputerUseConversationStore()
+                : NoopComputerUseConversationStore()
+        )
         self.keychainService = keychainService
         self.appUpdateController = appUpdateController ?? AppUpdateControllerFactory.makeDefault()
         self.launchAtLoginService = launchAtLoginService
@@ -1736,6 +1744,7 @@ final class AppState {
         refreshInputDevices()
         refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
+        syncComputerUseModelConfiguration()
         refreshLocalGemmaInstallState()
 
         if floatingIndicatorEnabled {
@@ -2237,6 +2246,7 @@ final class AppState {
             try keychainService.setLLMKey(normalized)
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
+            syncComputerUseModelConfiguration()
             clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key saved")
         } catch {
@@ -2251,6 +2261,7 @@ final class AppState {
             try keychainService.deleteLLMKey()
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
+            syncComputerUseModelConfiguration()
             clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key cleared")
         } catch {
@@ -3205,10 +3216,8 @@ final class AppState {
         }
     }
 
-    func setComputerUseVoiceTaskHandler(
-        _ handler: (any ComputerUseVoiceTaskHandling)?
-    ) {
-        computerUseVoiceTaskHandler = handler
+    func setComputerUsePageActive(_ isActive: Bool) {
+        isComputerUsePageActive = isActive
     }
 
     func stopRecordingFromUI() {
@@ -3760,16 +3769,7 @@ final class AppState {
             )
             return
         }
-        guard let computerUseVoiceTaskHandler else {
-            failDictationSession(
-                sessionID: sessionID,
-                lastErrorMessage: "Computer Use is no longer active.",
-                indicatorMessage: "Computer Use is no longer active"
-            )
-            return
-        }
-
-        if case let .rejected(message) = computerUseVoiceTaskHandler.submitVoiceTask(rawText) {
+        if case let .rejected(message) = computerUseCoordinator.submitVoiceTask(rawText) {
             failDictationSession(
                 sessionID: sessionID,
                 lastErrorMessage: message,
@@ -4255,7 +4255,15 @@ final class AppState {
         clearMagicFormatSetupTestResult()
         let settings = currentLLMSettings()
         llmSettingsStore.save(settings)
+        syncComputerUseModelConfiguration()
         onStateChange?()
+    }
+
+    private func syncComputerUseModelConfiguration() {
+        guard ownsComputerUseCoordinator else {
+            return
+        }
+        computerUseCoordinator.configureModel(computerUseRemoteModelConfiguration)
     }
 
     private func saveProviderPromptFile(_ prompt: MagicFormatProviderPromptFile, content: String) {
@@ -4555,7 +4563,7 @@ final class AppState {
         if activeOnboardingStep == .speak {
             return .onboardingPractice
         }
-        if computerUseVoiceTaskHandler != nil {
+        if isComputerUsePageActive {
             return .computerUseTask
         }
         return hasAccessibilityPermission ? .systemInsertion : .clipboardOnly
