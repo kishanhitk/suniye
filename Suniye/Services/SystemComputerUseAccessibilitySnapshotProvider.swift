@@ -30,9 +30,14 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
         let maximumElements: Int
         let maximumValueLength: Int
         var elementCount = 0
+        var focusedElement: AXUIElement?
 
         mutating func snapshot(pid: Int32, windowOrdinal: Int) throws -> ComputerUseAXSnapshot {
             let application = AXUIElementCreateApplication(pid)
+            focusedElement = SystemComputerUseAccessibilityAPI.element(
+                kAXFocusedUIElementAttribute,
+                from: application
+            )
             let windows = try requiredApplicationWindows(from: application)
             guard windows.indices.contains(windowOrdinal) else {
                 throw ComputerUseAccessibilitySnapshotError.windowUnavailable(windowOrdinal)
@@ -69,6 +74,7 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
                 value: renderedValue(from: element),
                 isEnabled: boolean(kAXEnabledAttribute, from: element) ?? true,
                 isValueSettable: isValueSettable(element),
+                isFocused: isFocused(element),
                 secondaryActions: actions(from: element)
                     .filter { $0.rawName != kAXPressAction }
                     .map(\.exposedName),
@@ -115,6 +121,13 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
                 kAXValueAttribute as CFString,
                 &settable
             ) == .success && settable.boolValue
+        }
+
+        private func isFocused(_ element: AXUIElement) -> Bool {
+            if let focusedElement, CFEqual(element, focusedElement) {
+                return true
+            }
+            return boolean(kAXFocusedAttribute, from: element) ?? false
         }
 
         private func renderedValue(from element: AXUIElement) -> String? {

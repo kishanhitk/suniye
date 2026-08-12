@@ -7,8 +7,9 @@ struct ComputerUseModelContextPolicy: Equatable, Sendable {
     let maximumScreenshots: Int
 
     static func referenceAligned(modelID: String) -> Self {
-        let isLuna = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased() == "gpt-5.6-luna"
+        let normalizedModelID = modelID.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let isLuna = normalizedModelID.split(separator: "/").last == "gpt-5.6-luna"
         return Self(
             maximumMessages: 50,
             maximumContextTokens: isLuna ? 272_000 : 100_000,

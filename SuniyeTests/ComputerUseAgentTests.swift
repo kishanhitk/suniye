@@ -618,10 +618,14 @@ final class ComputerUseAgentTests: XCTestCase {
 
     func testReferencePolicyUsesSelectedModelMetadata() {
         let luna = ComputerUseModelContextPolicy.referenceAligned(modelID: "gpt-5.6-luna")
+        let openRouterLuna = ComputerUseModelContextPolicy.referenceAligned(
+            modelID: "openai/gpt-5.6-luna"
+        )
         let fallback = ComputerUseModelContextPolicy.referenceAligned(modelID: "custom-model")
 
         XCTAssertEqual(luna.maximumContextTokens, 272_000)
         XCTAssertEqual(luna.maximumToolOutputTokens, 10_000)
+        XCTAssertEqual(openRouterLuna, luna)
         XCTAssertEqual(fallback.maximumContextTokens, 100_000)
         XCTAssertEqual(fallback.maximumToolOutputTokens, 2_500)
     }

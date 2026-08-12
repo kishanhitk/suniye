@@ -301,3 +301,13 @@ Historical page-visible slice; Phase 16 adds the page-independent global shortcu
 - `[Verified live]` Restarted Preview renders `Clicked **7** in Calculator.` without showing the
   emphasis delimiters. The full suite passes 1,143 tests with 2 skipped and zero failures; gated
   coverage is 87.05% against the 80% floor.
+
+## Browser feedback-loop correction — 2026-08-12
+
+- `[Implemented]` Provider-qualified Luna IDs now receive the intended model context policy.
+- `[Implemented]` Accessibility observations retain the focused element and unchanged trees return
+  a compact no-change status instead of expanding back into the full tree.
+- `[Verified live]` Installed Preview session `CU-66A245F07512` completed the original Gmail task
+  from the inbox and reported the newest Apple email without reproducing the 41-click loop.
+- `[Verified]` The full suite passes 1,145 tests with 2 skipped and zero failures; gated coverage
+  is 87.08% against the 80% floor, and E2E preflight and smoke pass.

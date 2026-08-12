@@ -134,6 +134,7 @@ private func runtimeGuardNode(
         value: nil,
         isEnabled: true,
         isValueSettable: false,
+        isFocused: false,
         secondaryActions: [],
         children: children
     )

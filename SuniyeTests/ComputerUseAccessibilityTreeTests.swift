@@ -89,9 +89,15 @@ final class ComputerUseAccessibilityTreeTests: XCTestCase {
         )
     }
 
-    func testUnchangedRevisionReturnsFullTreeInsteadOfEmptyDiff() async {
+    func testUnchangedRevisionReturnsCompactStatusAndFocusedElement() async {
         let store = ComputerUseAccessibilityRevisionStore()
-        let snapshot = ComputerUseAXSnapshot(roots: [node(role: "AXButton", title: "OK")])
+        let snapshot = ComputerUseAXSnapshot(roots: [
+            node(
+                role: "AXWindow",
+                title: "Document",
+                children: [node(role: "AXTextField", title: "Search", focused: true)]
+            ),
+        ])
 
         _ = await store.revision(targetKey: "example", snapshot: snapshot, disableDiff: false)
         let unchanged = await store.revision(
@@ -100,7 +106,14 @@ final class ComputerUseAccessibilityTreeTests: XCTestCase {
             disableDiff: false
         )
 
-        XCTAssertEqual(unchanged.text, "0: AXButton \"OK\"")
+        XCTAssertEqual(
+            unchanged.text,
+            """
+            There has been no change in the accessibility tree for Window: Document
+
+            The focused UI element is 1: AXTextField "Search"
+            """
+        )
     }
 
     func testDisableDiffReturnsFullCurrentTree() async {
@@ -234,6 +247,7 @@ final class ComputerUseAccessibilityTreeTests: XCTestCase {
         value: String? = nil,
         enabled: Bool = true,
         valueSettable: Bool = false,
+        focused: Bool = false,
         actions: [String] = [],
         children: [ComputerUseAXNode] = []
     ) -> ComputerUseAXNode {
@@ -248,6 +262,7 @@ final class ComputerUseAccessibilityTreeTests: XCTestCase {
             value: value,
             isEnabled: enabled,
             isValueSettable: valueSettable,
+            isFocused: focused,
             secondaryActions: actions,
             children: children
         )

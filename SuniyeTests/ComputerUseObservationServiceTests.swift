@@ -142,6 +142,7 @@ final class ComputerUseObservationServiceTests: XCTestCase {
             value: nil,
             isEnabled: true,
             isValueSettable: false,
+            isFocused: false,
             secondaryActions: [],
             children: []
         )

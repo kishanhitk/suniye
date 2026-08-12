@@ -11,6 +11,7 @@ struct ComputerUseAXNode: Equatable, Sendable {
     let value: String?
     let isEnabled: Bool
     let isValueSettable: Bool
+    let isFocused: Bool
     let secondaryActions: [String]
     let children: [ComputerUseAXNode]
 }
@@ -43,6 +44,7 @@ actor ComputerUseAccessibilityRevisionStore {
         let reference: ComputerUseAccessibilityElementReference
         let matchKey: MatchKey
         let line: String
+        let isFocused: Bool
     }
 
     private enum MatchKey: Hashable {
@@ -91,7 +93,8 @@ actor ComputerUseAccessibilityRevisionStore {
                     node: flattenedElement.node,
                     id: id,
                     depth: flattenedElement.reference.path.count
-                )
+                ),
+                isFocused: flattenedElement.node.isFocused
             )
         }
         states[targetKey] = TargetState(elements: rendered, nextElementID: nextElementID)
@@ -102,13 +105,34 @@ actor ComputerUseAccessibilityRevisionStore {
             text = fullText
         } else {
             let diff = renderDiff(previous: previous?.elements ?? [], current: rendered)
-            text = diff.isEmpty ? fullText : diff
+            let changeText = diff.isEmpty
+                ? unchangedMessage(for: snapshot)
+                : diff
+            text = appendFocusedElement(to: changeText, elements: rendered)
         }
         return ComputerUseAccessibilityRevision(
             id: UUID(),
             text: text,
             elements: Dictionary(uniqueKeysWithValues: rendered.map { ($0.id, $0.reference) })
         )
+    }
+
+    private func unchangedMessage(for snapshot: ComputerUseAXSnapshot) -> String {
+        guard let windowTitle = snapshot.roots.first(where: { $0.role == "AXWindow" })?.title,
+              !windowTitle.isEmpty else {
+            return "There has been no change in the accessibility tree."
+        }
+        return "There has been no change in the accessibility tree for Window: \(windowTitle)"
+    }
+
+    private func appendFocusedElement(
+        to text: String,
+        elements: [RenderedElement]
+    ) -> String {
+        guard let focused = elements.first(where: \.isFocused) else {
+            return text
+        }
+        return "\(text)\n\nThe focused UI element is \(focused.line.trimmingCharacters(in: .whitespaces))"
     }
 
     private func reusableElementIDs(from elements: [RenderedElement]) -> [MatchKey: [Int]] {
