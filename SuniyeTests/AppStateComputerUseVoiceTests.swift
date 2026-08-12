@@ -165,6 +165,66 @@ final class AppStateComputerUseVoiceTests: XCTestCase {
         XCTAssertTrue(coordinator.isVoiceTaskPending)
     }
 
+    func testComputerUseRunShowsWorkingIndicatorAndIndicatorTapStopsIt() async {
+        let coordinator = makeReadyCoordinator(agent: SuspendedVoiceTaskComputerUseAgent())
+        let appState = makeTestAppState(computerUseCoordinator: coordinator)
+        appState.phase = .ready
+        coordinator.draft = "Long task"
+
+        coordinator.submit()
+
+        XCTAssertEqual(appState.floatingIndicatorState, .computerUseWorking)
+        appState.toggleFloatingIndicatorRecording()
+        for _ in 0..<100 where coordinator.phase != .cancelled {
+            await Task.yield()
+        }
+        XCTAssertEqual(coordinator.phase, .cancelled)
+        XCTAssertEqual(appState.floatingIndicatorState, .idle)
+    }
+
+    func testComputerUseCompletionShowsCompletedIndicator() async {
+        let coordinator = makeReadyCoordinator(agent: VoiceTaskComputerUseAgent())
+        let appState = makeTestAppState(computerUseCoordinator: coordinator)
+        coordinator.draft = "Check battery"
+
+        coordinator.submit()
+        for _ in 0..<100 where coordinator.isRunning {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(appState.floatingIndicatorState, .computerUseCompleted)
+    }
+
+    func testAppLevelNewConversationActionClearsComputerUseSession() async {
+        let coordinator = makeReadyCoordinator(agent: VoiceTaskComputerUseAgent())
+        let appState = makeTestAppState(computerUseCoordinator: coordinator)
+        coordinator.draft = "Check battery"
+        coordinator.submit()
+        for _ in 0..<100 where coordinator.isRunning {
+            await Task.yield()
+        }
+
+        appState.startNewComputerUseConversation()
+
+        XCTAssertTrue(coordinator.conversation.isEmpty)
+        XCTAssertEqual(coordinator.phase, .ready)
+        XCTAssertEqual(appState.floatingIndicatorState, .idle)
+    }
+
+    func testAppLevelNewConversationActionCannotClearAnActiveRun() {
+        let coordinator = makeReadyCoordinator(agent: SuspendedVoiceTaskComputerUseAgent())
+        let appState = makeTestAppState(computerUseCoordinator: coordinator)
+        coordinator.draft = "Long task"
+        coordinator.submit()
+
+        appState.startNewComputerUseConversation()
+
+        XCTAssertTrue(coordinator.isRunning)
+        XCTAssertFalse(coordinator.conversation.isEmpty)
+        XCTAssertEqual(appState.floatingIndicatorState, .computerUseWorking)
+        coordinator.stop()
+    }
+
     private func makeReadyCoordinator(
         agent: some ComputerUseAgentRunning
     ) -> ComputerUseCoordinator {

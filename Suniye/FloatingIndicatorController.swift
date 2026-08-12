@@ -156,7 +156,9 @@ final class FloatingIndicatorController {
             return true
         case .listening(_, let source, _):
             return source == .manual
-        case .processing, .error:
+        case .computerUseWorking:
+            return true
+        case .processing, .computerUseCompleted, .error:
             return false
         }
     }
@@ -418,7 +420,7 @@ final class FloatingIndicatorController {
         switch effectiveState {
         case .idle, .hover:
             return true
-        case .listening, .processing, .error:
+        case .listening, .processing, .computerUseWorking, .computerUseCompleted, .error:
             return false
         }
     }
@@ -447,6 +449,10 @@ final class FloatingIndicatorController {
             }
             let width = min(max(CGFloat(message.count) * 6.5 + 86, 292), 392)
             return NSSize(width: width, height: 40)
+        case .computerUseWorking:
+            return NSSize(width: 128, height: 40)
+        case .computerUseCompleted:
+            return NSSize(width: 96, height: 40)
         case let .error(message):
             let width = min(max(CGFloat(message.count) * 6.2, 170), 240) + 32
             return NSSize(width: width, height: 52)

@@ -11,6 +11,8 @@ final class FloatingIndicatorStateTests: XCTestCase {
         XCTAssertEqual(FloatingIndicatorState.hover.logValue, "hover")
         XCTAssertEqual(FloatingIndicatorState.listening(levels: [0.2], source: .hotkey).logValue, "listening")
         XCTAssertEqual(FloatingIndicatorState.processing(message: "Formatting…").logValue, "processing")
+        XCTAssertEqual(FloatingIndicatorState.computerUseWorking.logValue, "computer_use_working")
+        XCTAssertEqual(FloatingIndicatorState.computerUseCompleted.logValue, "computer_use_completed")
         XCTAssertEqual(FloatingIndicatorState.error(message: "Boom").logValue, "error")
     }
 
@@ -21,6 +23,8 @@ final class FloatingIndicatorStateTests: XCTestCase {
         XCTAssertFalse(FloatingIndicatorState.listening(levels: [0.5], source: .editHotkey).tracksPointerScreen)
         XCTAssertFalse(FloatingIndicatorState.listening(levels: [0.5], source: .computerUseHotkey).tracksPointerScreen)
         XCTAssertFalse(FloatingIndicatorState.processing().tracksPointerScreen)
+        XCTAssertFalse(FloatingIndicatorState.computerUseWorking.tracksPointerScreen)
+        XCTAssertFalse(FloatingIndicatorState.computerUseCompleted.tracksPointerScreen)
         XCTAssertFalse(FloatingIndicatorState.error(message: "Boom").tracksPointerScreen)
     }
 }

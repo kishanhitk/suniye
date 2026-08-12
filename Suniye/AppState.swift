@@ -1565,6 +1565,7 @@ final class AppState {
     private var activeRecordingSource: RecordingSource? { activeDictationSession?.context.source }
     private var recordingStart: Date? { activeDictationSession?.context.startedAt }
     private var overlayErrorResetTask: Task<Void, Never>?
+    private var computerUseIndicatorResetTask: Task<Void, Never>?
     private var asrDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
@@ -1748,6 +1749,9 @@ final class AppState {
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
         self.appUpdateController.onStateChange = { [weak self] in
             self?.refreshUpdateControllerState()
+        }
+        resolvedComputerUseCoordinator.onPhaseChange = { [weak self] phase in
+            self?.handleComputerUsePhaseChange(phase)
         }
         self.editLearningService.onLearnedTerms = { [weak self] terms in
             self?.handleLearnedVocabularyTerms(terms)
@@ -3235,6 +3239,10 @@ final class AppState {
     }
 
     func toggleFloatingIndicatorRecording() {
+        if computerUseCoordinator.isRunning {
+            computerUseCoordinator.stop()
+            return
+        }
         Task { @MainActor in
             switch phase {
             case .ready:
@@ -3259,6 +3267,14 @@ final class AppState {
 
     func setComputerUsePageActive(_ isActive: Bool) {
         isComputerUsePageActive = isActive
+    }
+
+    func startNewComputerUseConversation() {
+        guard !computerUseCoordinator.isRunning else { return }
+        computerUseIndicatorResetTask?.cancel()
+        computerUseIndicatorResetTask = nil
+        computerUseCoordinator.startNewConversation()
+        setFloatingIndicatorState(.idle)
     }
 
     func stopRecordingFromUI() {
@@ -3395,6 +3411,10 @@ final class AppState {
             setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0.72), source: .manual))
             try? await Task.sleep(nanoseconds: 220_000_000)
             setFloatingIndicatorState(.processing())
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            setFloatingIndicatorState(.computerUseWorking)
+            try? await Task.sleep(nanoseconds: 440_000_000)
+            setFloatingIndicatorState(.computerUseCompleted)
             try? await Task.sleep(nanoseconds: 220_000_000)
             showTransientIndicatorError("Microphone permission required", restoreState: .idle, duration: 0.35)
             try? await Task.sleep(nanoseconds: 900_000_000)
@@ -3872,7 +3892,11 @@ final class AppState {
             )
             return
         }
-        completeDictationSession(sessionID: sessionID, playSuccessSound: true)
+        completeDictationSession(
+            sessionID: sessionID,
+            playSuccessSound: true,
+            finalIndicatorState: computerUseCoordinator.isRunning ? .computerUseWorking : .idle
+        )
     }
 
     private func completeDictation(
@@ -4151,7 +4175,11 @@ final class AppState {
     }
 
     /// Shared success epilogue for every dictation/edit session.
-    private func completeDictationSession(sessionID: UUID, playSuccessSound: Bool) {
+    private func completeDictationSession(
+        sessionID: UUID,
+        playSuccessSound: Bool,
+        finalIndicatorState: FloatingIndicatorState = .idle
+    ) {
         if playSuccessSound {
             playSoundFeedback(.transcriptionSucceeded)
         }
@@ -4159,7 +4187,7 @@ final class AppState {
         lastError = nil
         phase = .ready
         statusText = "Ready"
-        setFloatingIndicatorState(.idle)
+        setFloatingIndicatorState(finalIndicatorState)
     }
 
     /// Shared failure epilogue; pass nil to leave the current lastError untouched.
@@ -4582,6 +4610,48 @@ final class AppState {
         floatingIndicatorState = state
         guard floatingIndicatorEnabled else { return }
         floatingIndicatorController.update(state)
+    }
+
+    private func handleComputerUsePhaseChange(_ phase: ComputerUseCoordinatorPhase) {
+        switch phase {
+        case .running:
+            computerUseIndicatorResetTask?.cancel()
+            computerUseIndicatorResetTask = nil
+            guard activeDictationSession == nil else { return }
+            setFloatingIndicatorState(.computerUseWorking)
+        case .completed:
+            guard activeDictationSession == nil else { return }
+            showComputerUseCompletedIndicator()
+        case .cancelled:
+            computerUseIndicatorResetTask?.cancel()
+            computerUseIndicatorResetTask = nil
+            guard activeDictationSession == nil else { return }
+            setFloatingIndicatorState(.idle)
+        case .failed:
+            computerUseIndicatorResetTask?.cancel()
+            computerUseIndicatorResetTask = nil
+            guard activeDictationSession == nil else { return }
+            showTransientIndicatorError(
+                computerUseCoordinator.errorMessage ?? "Computer Use failed"
+            )
+        case .idle, .checkingPermissions, .requestingPermission, .ready:
+            break
+        }
+    }
+
+    private func showComputerUseCompletedIndicator() {
+        computerUseIndicatorResetTask?.cancel()
+        setFloatingIndicatorState(.computerUseCompleted)
+        computerUseIndicatorResetTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            guard let self, !Task.isCancelled else { return }
+            guard self.floatingIndicatorState == .computerUseCompleted else {
+                self.computerUseIndicatorResetTask = nil
+                return
+            }
+            self.setFloatingIndicatorState(.idle)
+            self.computerUseIndicatorResetTask = nil
+        }
     }
 
     private func startMagicFormatSlowWarningTask() -> Task<Void, Never> {

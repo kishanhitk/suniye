@@ -20,7 +20,12 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         ComputerUseActivitySink
     ) -> any ComputerUseAgentRunning
 
-    var phase: ComputerUseCoordinatorPhase = .idle
+    var phase: ComputerUseCoordinatorPhase = .idle {
+        didSet {
+            guard oldValue != phase else { return }
+            onPhaseChange?(phase)
+        }
+    }
     var permissionSnapshot: ComputerUsePermissionSnapshot
     var draft = ""
     var conversation: [ComputerUseConversationMessage] = [] {
@@ -31,6 +36,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     var errorMessage: String?
     var debugSessionID: ComputerUseDebugSessionID?
 
+    @ObservationIgnored var onPhaseChange: ((ComputerUseCoordinatorPhase) -> Void)?
     @ObservationIgnored private let permissions: any ComputerUsePermissionServing
     @ObservationIgnored private let permissionSettings:
         any ComputerUsePermissionSettingsOpening
@@ -262,14 +268,14 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         case .cancelled:
             phase = .cancelled
         case .failed:
-            phase = .failed
             errorMessage = result.message
+            phase = .failed
         }
     }
 
     private func fail(_ message: String) {
-        phase = .failed
         errorMessage = message
+        phase = .failed
     }
 
     private func appendAssistantMessage(_ text: String) {

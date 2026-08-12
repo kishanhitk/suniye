@@ -252,3 +252,14 @@ Historical page-visible slice; Phase 16 adds the page-independent global shortcu
   this is a documented closest-match serial-loop implementation.
 - `[Verified]` The full suite passes 1,127 tests with 2 skipped and zero failures; gated coverage
   is 87.07% (14,191/16,299 lines), and E2E preflight and smoke pass.
+
+## Floating run lifecycle and direct session reset — 2026-08-12
+
+- `[Implemented]` Typed and spoken tasks now share an app-level floating lifecycle: listening,
+  generic shimmering `Working` with one stop affordance, brief `Done`, cancellation, and failure.
+- `[Implemented]` The menu bar can clear the current Computer Use conversation directly without
+  opening the Computer Use page, but cannot clear an active run.
+- `[Unknown]` The artifact does not expose exact host progress copy, shimmer timing, stop
+  placement, or menu-bar controls; these are explicitly user-directed Suniye UX choices.
+- `[Verified]` The full suite passes 1,131 tests with 2 skipped and zero failures; gated coverage
+  is 87.00% (14,256/16,387 lines), and E2E preflight and smoke pass.

@@ -91,6 +91,8 @@ enum FloatingIndicatorState: Equatable {
     case hover
     case listening(levels: [Float], source: Source, preview: PreviewState = .off)
     case processing(message: String? = nil)
+    case computerUseWorking
+    case computerUseCompleted
     case error(message: String)
 
     /// Reduced value for the pill's layout spring: changes only when the pill
@@ -108,6 +110,10 @@ enum FloatingIndicatorState: Equatable {
             return .listening(source: source)
         case let .processing(message):
             return .processing(message: message)
+        case .computerUseWorking:
+            return .computerUseWorking
+        case .computerUseCompleted:
+            return .computerUseCompleted
         case let .error(message):
             return .error(message: message)
         }
@@ -118,6 +124,8 @@ enum FloatingIndicatorState: Equatable {
         case hover
         case listening(source: Source)
         case processing(message: String?)
+        case computerUseWorking
+        case computerUseCompleted
         case error(message: String)
     }
 
@@ -131,6 +139,10 @@ enum FloatingIndicatorState: Equatable {
             return "listening"
         case .processing:
             return "processing"
+        case .computerUseWorking:
+            return "computer_use_working"
+        case .computerUseCompleted:
+            return "computer_use_completed"
         case .error:
             return "error"
         }
@@ -140,7 +152,7 @@ enum FloatingIndicatorState: Equatable {
         switch self {
         case .idle, .hover:
             return true
-        case .listening, .processing, .error:
+        case .listening, .processing, .computerUseWorking, .computerUseCompleted, .error:
             return false
         }
     }

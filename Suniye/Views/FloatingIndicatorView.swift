@@ -176,6 +176,21 @@ struct FloatingIndicatorView: View {
             ListeningMeterView(levels: levels)
         case let .processing(message):
             processingContent(message: message)
+        case .computerUseWorking:
+            HStack(spacing: 10) {
+                ShimmeringText("Working")
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+        case .computerUseCompleted:
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .bold))
+                Text("Done")
+                    .font(AppTypography.subheadlineSemibold)
+            }
+            .foregroundStyle(.white)
         case let .error(message):
             Text(message)
                 .font(AppTypography.subheadlineSemibold)
@@ -225,6 +240,8 @@ struct FloatingIndicatorView: View {
             return true
         case let .listening(_, source, _):
             return source == .manual
+        case .computerUseWorking:
+            return true
         default:
             return false
         }
@@ -234,7 +251,7 @@ struct FloatingIndicatorView: View {
         switch state {
         case .idle, .hover:
             return true
-        case .listening, .processing, .error:
+        case .listening, .processing, .computerUseWorking, .computerUseCompleted, .error:
             return false
         }
     }
@@ -295,6 +312,10 @@ struct FloatingIndicatorView: View {
                 return 128
             }
             return min(max(CGFloat(message.count) * 6.5 + 54, 260), 360)
+        case .computerUseWorking:
+            return 128
+        case .computerUseCompleted:
+            return 96
         case let .error(message):
             return min(max(CGFloat(message.count) * 6.4, 170), 240) + 16
         }
@@ -308,7 +329,7 @@ struct FloatingIndicatorView: View {
             return 32
         case .listening:
             return FloatingIndicatorMetrics.listeningPillSize.height
-        case .processing:
+        case .processing, .computerUseWorking, .computerUseCompleted:
             return 40
         case .error:
             return 52
@@ -323,7 +344,7 @@ struct FloatingIndicatorView: View {
             return 14
         case .listening:
             return 14
-        case .processing:
+        case .processing, .computerUseWorking, .computerUseCompleted:
             return 14
         case .error:
             return 16
@@ -338,6 +359,42 @@ struct FloatingIndicatorView: View {
                     .frame(width: 3.2, height: 3.2)
             }
         }
+    }
+}
+
+private struct ShimmeringText: View {
+    let text: String
+    @State private var shimmerOffset: CGFloat = -1
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text)
+            .font(AppTypography.subheadlineSemibold)
+            .foregroundStyle(.white.opacity(0.55))
+            .overlay {
+                GeometryReader { geometry in
+                    LinearGradient(
+                        colors: [.clear, .white, .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: geometry.size.width * 0.7)
+                    .offset(x: shimmerOffset * geometry.size.width)
+                }
+                .mask {
+                    Text(text)
+                        .font(AppTypography.subheadlineSemibold)
+                }
+            }
+            .onAppear {
+                shimmerOffset = -1
+                withAnimation(.linear(duration: 1.25).repeatForever(autoreverses: false)) {
+                    shimmerOffset = 1.7
+                }
+            }
     }
 }
 

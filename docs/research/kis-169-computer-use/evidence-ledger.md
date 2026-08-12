@@ -1383,3 +1383,22 @@ XCTest runs, coverage, and E2E scripts.
   It does not infer apps from the correction text.
 - `[Verified]` The full suite passes 1,127 tests with 2 skipped and zero failures. Gated coverage
   is 87.07% (14,191/16,299 lines), above the 80% floor. E2E preflight and smoke pass.
+
+### Entry 77: Floating run lifecycle and direct session reset
+
+Sources: `phase-20-floating-run-lifecycle-2026-08-12.md`, production Swift sources, focused and
+full XCTest runs, coverage, and E2E scripts.
+
+- `[Unknown]` Exact host-app progress wording, shimmer timing, stop placement, and menu-bar
+  controls are not exposed by the inspected native tool contract.
+- `[Implemented]` App-level coordinator phase changes now drive one floating lifecycle for typed
+  and spoken Computer Use tasks: listening, generic shimmering `Working`, brief `Done`,
+  cancellation, and failure.
+- `[Implemented]` The working pill has one stop affordance and tapping it cancels the active run.
+  It does not navigate to the Computer Use page or create another control surface.
+- `[Implemented]` The status-item menu can clear the durable current conversation directly when
+  no run is active.
+- `[Not added]` No task matcher, target lock, approval UI, physical-input cancellation, duplicate
+  stop control, or task-specific progress text was introduced.
+- `[Verified]` The full suite passes 1,131 tests with 2 skipped and zero failures. Gated coverage
+  is 87.00% (14,256/16,387 lines), above the 80% floor. E2E preflight and smoke pass.
