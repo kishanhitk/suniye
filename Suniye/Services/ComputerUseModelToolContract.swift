@@ -50,7 +50,9 @@ enum ComputerUseModelToolCatalog {
         tool(.listApps, "List available macOS applications.", [:], []),
         tool(
             .getAppState,
-            "Observe an application. The application is launched in the background when needed.",
+            "Observe an application. This must be called once per assistant turn before " +
+                "interacting with the app. The application is launched in the background " +
+                "when needed.",
             [
                 "app": string("Application display name, full path, or bundle identifier."),
                 "disableDiff": boolean("Return a full Accessibility tree instead of a diff."),

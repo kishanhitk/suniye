@@ -2,6 +2,29 @@ import XCTest
 @testable import Suniye
 
 final class ComputerUseActionServiceTests: XCTestCase {
+    func testMouseEventDescriptorTargetsObservedWindowUsingLocalCoordinates() {
+        let descriptor = ComputerUseMouseEventDescriptor(
+            screenPoint: CGPoint(x: 140, y: 90),
+            windowID: 9,
+            windowBounds: CGRect(x: 100, y: 50, width: 200, height: 100),
+            windowUsesFlippedCoordinates: false
+        )
+
+        XCTAssertEqual(descriptor.eventLocation, CGPoint(x: 40, y: 40))
+        XCTAssertEqual(descriptor.windowID, 9)
+    }
+
+    func testMouseEventDescriptorFlipsWindowLocalYCoordinateWhenRequired() {
+        let descriptor = ComputerUseMouseEventDescriptor(
+            screenPoint: CGPoint(x: 140, y: 90),
+            windowID: 9,
+            windowBounds: CGRect(x: 100, y: 50, width: 200, height: 100),
+            windowUsesFlippedCoordinates: true
+        )
+
+        XCTAssertEqual(descriptor.eventLocation, CGPoint(x: 40, y: 60))
+    }
+
     func testActionErrorsHaveUserReadableDescriptions() {
         let errors: [ComputerUseActionError] = [
             .observationRequired("Calculator"),
@@ -115,7 +138,43 @@ final class ComputerUseActionServiceTests: XCTestCase {
         XCTAssertTrue(primaryClicks.isEmpty)
         XCTAssertEqual(
             clicks,
-            [.init(point: CGPoint(x: 140, y: 90), button: .right, count: 2, pid: 42)]
+            [
+                .init(
+                    point: CGPoint(x: 140, y: 90),
+                    button: .right,
+                    count: 2,
+                    target: computerUseTestInputTarget()
+                ),
+            ]
+        )
+    }
+
+    func testIndexedLeftClickFallsBackWhenNoSemanticClickActionIsAvailable() async throws {
+        let accessibility = RecordingAccessibilityActions(
+            primaryClickResult: false,
+            center: CGPoint(x: 140, y: 90)
+        )
+        let input = RecordingInputEvents()
+        let service = ComputerUseActionService(accessibility: accessibility, input: input)
+
+        try await service.click(
+            ComputerUseClickRequest(app: "Calculator", elementIndex: 7),
+            context: computerUseTestActionContext()
+        )
+
+        let primaryClicks = await accessibility.primaryClicks
+        let clicks = await input.clicks
+        XCTAssertEqual(primaryClicks, [.init(index: 7, count: 1)])
+        XCTAssertEqual(
+            clicks,
+            [
+                .init(
+                    point: CGPoint(x: 140, y: 90),
+                    button: .left,
+                    count: 1,
+                    target: computerUseTestInputTarget()
+                ),
+            ]
         )
     }
 
@@ -152,7 +211,13 @@ final class ComputerUseActionServiceTests: XCTestCase {
         XCTAssertEqual(clicks.first?.point, CGPoint(x: 140, y: 70))
         XCTAssertEqual(
             drags,
-            [.init(start: CGPoint(x: 100, y: 50), end: CGPoint(x: 300, y: 150), pid: 42)]
+            [
+                .init(
+                    start: CGPoint(x: 100, y: 50),
+                    end: CGPoint(x: 300, y: 150),
+                    target: computerUseTestInputTarget()
+                ),
+            ]
         )
     }
 
@@ -298,7 +363,14 @@ final class ComputerUseActionServiceTests: XCTestCase {
         )
         XCTAssertEqual(
             scrolls,
-            [.init(point: CGPoint(x: 120, y: 80), direction: .down, pages: 1.5, pid: 42)]
+            [
+                .init(
+                    point: CGPoint(x: 120, y: 80),
+                    direction: .down,
+                    pages: 1.5,
+                    target: computerUseTestInputTarget()
+                ),
+            ]
         )
         XCTAssertEqual(keys, [.init(chord: "Super_L+a", pid: 42)])
         XCTAssertEqual(typedText, [.init(text: "hello", pid: 42)])
@@ -522,14 +594,18 @@ private actor RecordingInputEvents: ComputerUseInputEventPosting {
         let point: CGPoint
         let button: ComputerUseMouseButton
         let count: Int
-        let pid: Int32
+        let target: ComputerUseInputEventTarget
     }
-    struct Drag: Equatable { let start: CGPoint; let end: CGPoint; let pid: Int32 }
+    struct Drag: Equatable {
+        let start: CGPoint
+        let end: CGPoint
+        let target: ComputerUseInputEventTarget
+    }
     struct Scroll: Equatable {
         let point: CGPoint
         let direction: ComputerUseScrollDirection
         let pages: Double
-        let pid: Int32
+        let target: ComputerUseInputEventTarget
     }
     struct Key: Equatable { let chord: String; let pid: Int32 }
     struct Text: Equatable { let text: String; let pid: Int32 }
@@ -540,21 +616,26 @@ private actor RecordingInputEvents: ComputerUseInputEventPosting {
     private(set) var keys: [Key] = []
     private(set) var typedText: [Text] = []
 
-    func click(at point: CGPoint, mouseButton: ComputerUseMouseButton, clickCount: Int, pid: Int32) {
-        clicks.append(.init(point: point, button: mouseButton, count: clickCount, pid: pid))
+    func click(
+        at point: CGPoint,
+        mouseButton: ComputerUseMouseButton,
+        clickCount: Int,
+        target: ComputerUseInputEventTarget
+    ) {
+        clicks.append(.init(point: point, button: mouseButton, count: clickCount, target: target))
     }
 
-    func drag(from start: CGPoint, to end: CGPoint, pid: Int32) {
-        drags.append(.init(start: start, end: end, pid: pid))
+    func drag(from start: CGPoint, to end: CGPoint, target: ComputerUseInputEventTarget) {
+        drags.append(.init(start: start, end: end, target: target))
     }
 
     func scroll(
         at point: CGPoint,
         direction: ComputerUseScrollDirection,
         pages: Double,
-        pid: Int32
+        target: ComputerUseInputEventTarget
     ) {
-        scrolls.append(.init(point: point, direction: direction, pages: pages, pid: pid))
+        scrolls.append(.init(point: point, direction: direction, pages: pages, target: target))
     }
 
     func pressKey(_ chord: String, pid: Int32) {
@@ -564,6 +645,15 @@ private actor RecordingInputEvents: ComputerUseInputEventPosting {
     func typeText(_ text: String, pid: Int32) {
         typedText.append(.init(text: text, pid: pid))
     }
+}
+
+private func computerUseTestInputTarget() -> ComputerUseInputEventTarget {
+    ComputerUseInputEventTarget(
+        processIdentifier: 42,
+        windowID: 9,
+        windowBounds: CGRect(x: 100, y: 50, width: 200, height: 100),
+        windowUsesFlippedCoordinates: true
+    )
 }
 
 private actor RecordingComputerUseCursorPresenter: ComputerUseCursorPresenting {

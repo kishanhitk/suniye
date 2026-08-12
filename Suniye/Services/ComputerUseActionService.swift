@@ -89,14 +89,18 @@ protocol ComputerUseInputEventPosting: Sendable {
         at point: CGPoint,
         mouseButton: ComputerUseMouseButton,
         clickCount: Int,
-        pid: Int32
+        target: ComputerUseInputEventTarget
     ) async throws
-    func drag(from start: CGPoint, to end: CGPoint, pid: Int32) async throws
+    func drag(
+        from start: CGPoint,
+        to end: CGPoint,
+        target: ComputerUseInputEventTarget
+    ) async throws
     func scroll(
         at point: CGPoint,
         direction: ComputerUseScrollDirection,
         pages: Double,
-        pid: Int32
+        target: ComputerUseInputEventTarget
     ) async throws
     func pressKey(_ chord: String, pid: Int32) async throws
     func typeText(_ text: String, pid: Int32) async throws
@@ -206,7 +210,7 @@ struct ComputerUseActionService: ComputerUseActionServing {
                 at: point,
                 mouseButton: request.mouseButton,
                 clickCount: request.clickCount,
-                pid: pid
+                target: inputTarget(context, processIdentifier: pid)
             )
         case let .coordinates(x, y):
             try requireFinite([x, y], name: "click coordinates")
@@ -221,7 +225,7 @@ struct ComputerUseActionService: ComputerUseActionServing {
                 at: point,
                 mouseButton: request.mouseButton,
                 clickCount: request.clickCount,
-                pid: pid
+                target: inputTarget(context, processIdentifier: pid)
             )
         }
     }
@@ -295,7 +299,7 @@ struct ComputerUseActionService: ComputerUseActionServing {
             at: point,
             direction: direction,
             pages: pages,
-            pid: processIdentifier
+            target: inputTarget(context, processIdentifier: processIdentifier)
         )
     }
 
@@ -323,7 +327,7 @@ struct ComputerUseActionService: ComputerUseActionServing {
         try await input.drag(
             from: start,
             to: end,
-            pid: processIdentifier
+            target: inputTarget(context, processIdentifier: processIdentifier)
         )
     }
 
@@ -371,6 +375,18 @@ struct ComputerUseActionService: ComputerUseActionServing {
                 mouseButton: request.mouseButton,
                 clickCount: request.clickCount
             )
+        )
+    }
+
+    private func inputTarget(
+        _ context: ComputerUseActionContext,
+        processIdentifier: Int32
+    ) -> ComputerUseInputEventTarget {
+        ComputerUseInputEventTarget(
+            processIdentifier: processIdentifier,
+            windowID: context.target.window.id,
+            windowBounds: context.target.window.bounds,
+            windowUsesFlippedCoordinates: true
         )
     }
 

@@ -7,11 +7,13 @@ struct ComputerUseAccessibilityActionDescriptor: Equatable, Sendable {
 }
 
 enum ComputerUsePrimaryClickOperation: Equatable {
-    case press(count: Int)
-    case select
+    case pick
+    case press
 }
 
 enum ComputerUseAccessibilityActionResolver {
+    static let pickAction = "AXPick"
+
     private static let canonicalNames = [
         "AXScrollDownByPage": "Scroll Down",
         "AXScrollLeftByPage": "Scroll Left",
@@ -40,10 +42,7 @@ enum ComputerUseAccessibilityActionResolver {
     }
 
     static func primaryClickOperations(clickCount: Int) -> [ComputerUsePrimaryClickOperation] {
-        if clickCount == 1 {
-            return [.press(count: clickCount), .select]
-        }
-        return [.press(count: clickCount)]
+        clickCount == 1 ? [.pick, .press] : []
     }
 }
 

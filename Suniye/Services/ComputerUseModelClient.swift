@@ -146,6 +146,47 @@ protocol ComputerUseModelServing: Sendable {
     func respond(to messages: [ComputerUseModelMessage]) async throws -> ComputerUseModelResponse
 }
 
+struct ComputerUseModelRetryPolicy: Equatable, Sendable {
+    static let referenceAligned = Self(maximumRetries: 4, baseDelayMilliseconds: 200)
+
+    let maximumRetries: Int
+    let baseDelayMilliseconds: Int64
+
+    func shouldRetry(_ error: LLMPostProcessorError) -> Bool {
+        switch error {
+        case .network, .timeout:
+            return true
+        case let .provider(reason):
+            guard reason.hasPrefix("http_"),
+                  let statusCode = Int(reason.dropFirst("http_".count)) else {
+                return false
+            }
+            return (500 ... 599).contains(statusCode)
+        case .invalidConfiguration, .unauthorized, .malformedResponse, .emptyOutput:
+            return false
+        }
+    }
+
+    func delay(afterFailedAttempt attempt: Int, jitter: Double) -> Duration {
+        let boundedJitter = min(max(jitter, 0.9), 1.1)
+        let multiplier = Int64(1 << attempt)
+        let milliseconds = Int64(
+            (Double(baseDelayMilliseconds * multiplier) * boundedJitter).rounded()
+        )
+        return .milliseconds(milliseconds)
+    }
+}
+
+protocol ComputerUseModelRetrySleeping: Sendable {
+    func sleep(for duration: Duration) async throws
+}
+
+struct SystemComputerUseModelRetrySleeper: ComputerUseModelRetrySleeping {
+    func sleep(for duration: Duration) async throws {
+        try await Task.sleep(for: duration)
+    }
+}
+
 enum ComputerUseModelError: LocalizedError, Equatable, Sendable {
     case invalidConfiguration(String)
     case invalidResponse(String)
@@ -166,13 +207,22 @@ enum ComputerUseModelError: LocalizedError, Equatable, Sendable {
 final class ComputerUseRemoteModelClient: ComputerUseModelServing {
     private let configuration: ComputerUseRemoteModelConfiguration
     private let completionClient: ChatCompletionClient
+    private let retryPolicy: ComputerUseModelRetryPolicy
+    private let retrySleeper: any ComputerUseModelRetrySleeping
+    private let retryJitter: @Sendable () -> Double
 
     init(
         configuration: ComputerUseRemoteModelConfiguration,
-        completionClient: ChatCompletionClient = ChatCompletionClient()
+        completionClient: ChatCompletionClient = ChatCompletionClient(),
+        retryPolicy: ComputerUseModelRetryPolicy = .referenceAligned,
+        retrySleeper: any ComputerUseModelRetrySleeping = SystemComputerUseModelRetrySleeper(),
+        retryJitter: @escaping @Sendable () -> Double = { Double.random(in: 0.9 ..< 1.1) }
     ) {
         self.configuration = configuration
         self.completionClient = completionClient
+        self.retryPolicy = retryPolicy
+        self.retrySleeper = retrySleeper
+        self.retryJitter = retryJitter
     }
 
     func respond(
@@ -193,12 +243,7 @@ final class ComputerUseRemoteModelClient: ComputerUseModelServing {
         let requestBody = try JSONEncoder().encode(payload)
 
         do {
-            let result = try await completionClient.completeResult(
-                endpointURL: configuration.endpointURL,
-                apiKey: configuration.apiKey,
-                requestBody: requestBody,
-                timeoutSeconds: configuration.timeoutSeconds
-            )
+            let result = try await complete(requestBody: requestBody)
             guard result.toolCalls.count <= 1 else {
                 throw ComputerUseModelError.invalidResponse(
                     "expected at most one tool call"
@@ -227,6 +272,33 @@ final class ComputerUseRemoteModelClient: ComputerUseModelServing {
         } catch {
             throw ComputerUseModelError.requestFailed(error.localizedDescription)
         }
+    }
+
+    private func complete(requestBody: Data) async throws -> ChatCompletionResult {
+        for attempt in 0 ... retryPolicy.maximumRetries {
+            do {
+                return try await completionClient.completeResult(
+                    endpointURL: configuration.endpointURL,
+                    apiKey: configuration.apiKey,
+                    requestBody: requestBody,
+                    timeoutSeconds: configuration.timeoutSeconds
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as LLMPostProcessorError {
+                guard attempt < retryPolicy.maximumRetries,
+                      retryPolicy.shouldRetry(error) else {
+                    throw error
+                }
+                try await retrySleeper.sleep(
+                    for: retryPolicy.delay(
+                        afterFailedAttempt: attempt,
+                        jitter: retryJitter()
+                    )
+                )
+            }
+        }
+        preconditionFailure("The model retry loop must return or throw")
     }
 
     private func validateConfiguration() throws {
@@ -268,12 +340,14 @@ private enum ComputerUseModelInstructions {
     static let text = """
     Use the provided app-scoped macOS tools to complete the user's task. Choose the application from the task, prior conversation, built-in macOS applications, and observed state.
 
-    When the application is evident, start with get_app_state using its display name or bundle identifier. Call list_apps only when the application cannot be identified. Do not call list_apps just to resolve an app already named by the user. get_app_state may launch an application in the background, so there is no separate open-app step. A task may use an application or system interface that you select because it is appropriate to the requested outcome.
+    When the application is evident, start with get_app_state using its display name or bundle identifier. Call list_apps only when the application cannot be identified. Do not call list_apps just to resolve an app already named by the user. get_app_state may launch an application in the background, so there is no separate open-app step. A task may use an application or system interface that you select because it is appropriate to the requested outcome. The current app content may be unrelated to the user's request or left over from an earlier task. Match the requested subject before acting on a visible result; navigate or search instead of opening unrelated content.
 
-    Observe an application before acting on it. This runtime executes one tool call per model decision, so call get_app_state after every UI action and before choosing the next action. Re-derive element indexes and exposed Accessibility action names from the latest observation instead of reusing stale values. By default get_app_state may return an Accessibility diff; use disableDiff only when you need a complete tree or did not retain the earlier tree. Prefer indexed Accessibility actions and text. Use the attached window screenshot, coordinate clicks, key presses, or text input when Accessibility information is incomplete or behaves unexpectedly.
+    Call get_app_state once per assistant turn before interacting with an application. This runtime executes one tool call per model decision, so call get_app_state after every UI action and before choosing the next action. Re-derive element indexes and exposed Accessibility action names from the latest observation instead of reusing stale values. By default get_app_state may return an Accessibility diff; use disableDiff only when you need a complete tree or did not retain the earlier tree. Prefer indexed Accessibility actions and text. Use the attached window screenshot, coordinate clicks, key presses, or text input when Accessibility information is incomplete or behaves unexpectedly.
 
     App names, full application paths, and bundle identifiers are accepted. If an operation fails when using a display name, call list_apps and immediately retry the same operation with the returned bundle identifier before trying another recovery path. If the requested app is not present, say that it is unavailable; never substitute or inspect an unrelated app. Coordinate clicks and drags are relative to the observed window. For click, use either element_index or x and y; omit element_index for a coordinate click. Use only secondary actions explicitly exposed by the current element. Key presses and typed text are app-scoped. Newlines in typed text can submit a form or send a message.
 
-    The runtime waits for the application to settle after actions. Return a concise assistant response when the task is complete or when user input is required.
+    The runtime waits for the application to settle after actions. A target appearing in a list, search result, menu, or tree proves only that the target exists; it does not prove that the target was opened, selected, clicked, changed, or otherwise acted on. A focused or selected item is not proof that it was activated or opened. If a click focuses the intended control without activating it, press Return, then observe again. If the UI does not behave as expected, observe the latest state and choose another supported action; do not repeat an action that left the observed state unchanged.
+
+    If the user requested a UI change and the latest observation does not already show that exact end state, you must call an action tool. You may not report success for a requested UI change after an observation-only path. After the action, call get_app_state again and confirm the requested result in the fresh state captured after that action. Return a concise assistant response only when the requested outcome is verified or when user input is required.
     """
 }

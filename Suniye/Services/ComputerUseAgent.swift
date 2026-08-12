@@ -130,16 +130,24 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         )
         var step = 0
         var lastTargetApp: String?
+        var hasSuccessfulObservation = false
+        var hasPerformedAction = false
+        var needsPostActionObservation = false
+        var requestedCompletionAudit = false
+        var consecutiveUnchangedPostActionObservations = 0
         log(.info, "computer use run started", session: debugSessionID)
         do {
             while true {
                 try Task.checkCancellation()
-                try await applyInterventions(
+                if try await applyInterventions(
                     task.interventions.takeAll(),
                     lastTargetApp: lastTargetApp,
                     debugSessionID: debugSessionID,
                     messages: &messages
-                )
+                ) {
+                    hasSuccessfulObservation = true
+                    needsPostActionObservation = false
+                }
                 messages = contextBuilder.compact(
                     messages,
                     currentInstruction: instruction
@@ -147,16 +155,39 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 let response = try await model.respond(to: messages)
                 let interveningInstructions = task.interventions.takeAll()
                 if !interveningInstructions.isEmpty {
-                    try await applyInterventions(
+                    if try await applyInterventions(
                         interveningInstructions,
                         lastTargetApp: lastTargetApp,
                         debugSessionID: debugSessionID,
                         messages: &messages
-                    )
+                    ) {
+                        hasSuccessfulObservation = true
+                        needsPostActionObservation = false
+                    }
                     continue
                 }
                 switch response {
                 case let .text(text):
+                    if needsPostActionObservation {
+                        messages.append(.text(role: .assistant, text: text))
+                        messages.append(
+                            .text(
+                                role: .user,
+                                text: Self.postActionObservationAudit
+                            )
+                        )
+                        continue
+                    }
+                    if hasSuccessfulObservation,
+                       !hasPerformedAction,
+                       !requestedCompletionAudit {
+                        requestedCompletionAudit = true
+                        messages.append(.text(role: .assistant, text: text))
+                        messages.append(
+                            .text(role: .user, text: Self.completionAudit)
+                        )
+                        continue
+                    }
                     log(
                         .info,
                         "computer use run completed steps=\(step)",
@@ -178,7 +209,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                     messages.append(
                         .toolCall(id: id, name: name, arguments: arguments)
                     )
-                    let call = try await execute(
+                    let execution = try await execute(
                         id: id,
                         name: name,
                         arguments: arguments,
@@ -186,8 +217,27 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                         debugSessionID: debugSessionID,
                         messages: &messages
                     )
-                    if let app = call?.targetApp {
+                    if let app = execution?.call.targetApp {
                         lastTargetApp = app
+                    }
+                    if execution?.call.isObservation == true {
+                        hasSuccessfulObservation = true
+                        if needsPostActionObservation,
+                           execution?.observationWasUnchanged == true {
+                            consecutiveUnchangedPostActionObservations += 1
+                        } else {
+                            consecutiveUnchangedPostActionObservations = 0
+                        }
+                        needsPostActionObservation = false
+                        if consecutiveUnchangedPostActionObservations >= 2 {
+                            messages.append(
+                                .text(role: .user, text: Self.unchangedStateRecovery)
+                            )
+                            consecutiveUnchangedPostActionObservations = 0
+                        }
+                    } else if execution?.call.isAction == true {
+                        hasPerformedAction = true
+                        needsPostActionObservation = true
                     }
                 }
             }
@@ -218,7 +268,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         activity: ComputerUseActivity,
         debugSessionID: ComputerUseDebugSessionID,
         messages: inout [ComputerUseModelMessage]
-    ) async throws -> ComputerUseToolCall? {
+    ) async throws -> ComputerUseExecutedToolCall? {
         do {
             let call = try ComputerUseModelToolCallDecoder.decode(
                 name: name,
@@ -250,7 +300,18 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                     )
                 )
             }
-            return call
+            let observationWasUnchanged: Bool
+            if case let .appState(state) = result {
+                observationWasUnchanged = state.text.hasPrefix(
+                    "There has been no change in the accessibility tree"
+                )
+            } else {
+                observationWasUnchanged = false
+            }
+            return ComputerUseExecutedToolCall(
+                call: call,
+                observationWasUnchanged: observationWasUnchanged
+            )
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as ComputerUseRuntimeError {
@@ -282,8 +343,8 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         lastTargetApp: String?,
         debugSessionID: ComputerUseDebugSessionID,
         messages: inout [ComputerUseModelMessage]
-    ) async throws {
-        guard !interventions.isEmpty else { return }
+    ) async throws -> Bool {
+        guard !interventions.isEmpty else { return false }
         for intervention in interventions {
             messages.append(.text(role: .user, text: intervention))
         }
@@ -292,7 +353,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
             "computer use intervention received count=\(interventions.count)",
             session: debugSessionID
         )
-        guard let lastTargetApp else { return }
+        guard let lastTargetApp else { return false }
         let arguments = try encodeInterventionObservationArguments(app: lastTargetApp)
         let id = "intervention-observation-\(UUID().uuidString.lowercased())"
         let activity = ComputerUseActivity(
@@ -315,6 +376,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
             debugSessionID: debugSessionID,
             messages: &messages
         )
+        return true
     }
 
     private func encodeInterventionObservationArguments(app: String) throws -> String {
@@ -347,6 +409,34 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
     ) {
         logger.log(level, "\(message) session=\(debugSessionID.rawValue)")
     }
+
+    private static let completionAudit = """
+    Internal completion audit: Compare the current user request with the tool history. If the \
+    request asks to change the UI and the exact requested end state was not already present, \
+    continue with the required action tool instead of reporting success. An item appearing in a \
+    list, search result, menu, or tree is not evidence that it was opened or activated. If the \
+    task is read-only and the current observation is sufficient, return the concise final answer.
+    """
+
+    private static let postActionObservationAudit = """
+    Internal completion audit: An action was performed, but its result has not been observed. \
+    Call get_app_state for the target app now. Report success only if that fresh observation \
+    proves the requested end state; otherwise continue with the next appropriate action.
+    """
+
+    private static let unchangedStateRecovery = """
+    Repeated unchanged-state recovery: Two actions were each followed by an observation that \
+    showed no UI change. Those action attempts did not work. Reassess the latest state and use a \
+    different supported strategy. If the recent attempts were coordinate clicks, do not make \
+    another coordinate click until another interaction changes the state. Prefer a fresh full \
+    observation, an indexed Accessibility action, or keyboard activation such as Return when the \
+    intended control is focused. Do not report success from the unchanged state.
+    """
+}
+
+private struct ComputerUseExecutedToolCall {
+    let call: ComputerUseToolCall
+    let observationWasUnchanged: Bool
 }
 
 private struct InterventionObservationArguments: Encodable {
@@ -369,6 +459,23 @@ private extension ComputerUseToolCall {
             app
         case let .click(request):
             request.app
+        }
+    }
+
+    var isObservation: Bool {
+        if case .getAppState = self {
+            return true
+        }
+        return false
+    }
+
+    var isAction: Bool {
+        switch self {
+        case .listApps, .getAppState:
+            false
+        case .click, .performSecondaryAction, .setValue, .selectText,
+             .scroll, .drag, .pressKey, .typeText:
+            true
         }
     }
 }

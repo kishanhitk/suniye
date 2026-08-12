@@ -29,6 +29,18 @@ final class ComputerUseModelToolContractTests: XCTestCase {
         )
     }
 
+    func testObservationToolRequiresFreshStateAtTheStartOfEachTurn() throws {
+        let observation = try XCTUnwrap(
+            ComputerUseModelToolCatalog.all.first { $0.name == .getAppState }
+        )
+
+        XCTAssertTrue(
+            observation.function.description.contains(
+                "must be called once per assistant turn before interacting with the app"
+            )
+        )
+    }
+
     func testToolSchemasPreserveRecoveredArgumentsAndRequiredFields() throws {
         let encoded = try JSONEncoder().encode(ComputerUseModelToolCatalog.all)
         let tools = try XCTUnwrap(

@@ -100,19 +100,18 @@ actor ComputerUseAccessibilityRevisionStore {
         states[targetKey] = TargetState(elements: rendered, nextElementID: nextElementID)
 
         let fullText = rendered.map(\.line).joined(separator: "\n")
-        let text: String
+        let stateText: String
         if disableDiff || previous == nil {
-            text = fullText
+            stateText = fullText
         } else {
             let diff = renderDiff(previous: previous?.elements ?? [], current: rendered)
-            let changeText = diff.isEmpty
+            stateText = diff.isEmpty
                 ? unchangedMessage(for: snapshot)
                 : diff
-            text = appendFocusedElement(to: changeText, elements: rendered)
         }
         return ComputerUseAccessibilityRevision(
             id: UUID(),
-            text: text,
+            text: appendFocusedElement(to: stateText, elements: rendered),
             elements: Dictionary(uniqueKeysWithValues: rendered.map { ($0.id, $0.reference) })
         )
     }

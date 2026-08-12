@@ -1,16 +1,39 @@
 import CoreGraphics
 import Foundation
 
+struct ComputerUseInputEventTarget: Equatable, Sendable {
+    let processIdentifier: Int32
+    let windowID: UInt32
+    let windowBounds: CGRect
+    let windowUsesFlippedCoordinates: Bool
+}
+
+struct ComputerUseMouseEventDescriptor: Equatable, Sendable {
+    let screenPoint: CGPoint
+    let windowID: UInt32
+    let windowBounds: CGRect
+    let windowUsesFlippedCoordinates: Bool
+
+    var eventLocation: CGPoint {
+        let localX = screenPoint.x - windowBounds.minX
+        let localY = screenPoint.y - windowBounds.minY
+        return CGPoint(
+            x: localX,
+            y: windowUsesFlippedCoordinates ? windowBounds.height - localY : localY
+        )
+    }
+}
+
 struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
     func click(
         at point: CGPoint,
         mouseButton: ComputerUseMouseButton,
         clickCount: Int,
-        pid: Int32
+        target: ComputerUseInputEventTarget
     ) async throws {
         try await Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
-            try Self.postMouseEvent(type: .mouseMoved, at: point, pid: pid)
+            try Self.postMouseEvent(type: .mouseMoved, at: point, target: target)
             try await Task.sleep(for: .milliseconds(16))
             let button = mouseButton.cgButton
             for clickIndex in 1 ... clickCount {
@@ -31,9 +54,11 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
                 }
                 down.setIntegerValueField(.mouseEventClickState, value: Int64(clickIndex))
                 up.setIntegerValueField(.mouseEventClickState, value: Int64(clickIndex))
-                down.postToPid(pid)
+                Self.configure(down, screenPoint: point, button: button, target: target)
+                Self.configure(up, screenPoint: point, button: button, target: target)
+                down.postToPid(target.processIdentifier)
                 try await Task.sleep(for: .milliseconds(12))
-                up.postToPid(pid)
+                up.postToPid(target.processIdentifier)
                 if clickIndex < clickCount {
                     try await Task.sleep(for: .milliseconds(50))
                 }
@@ -41,12 +66,16 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
         }
     }
 
-    func drag(from start: CGPoint, to end: CGPoint, pid: Int32) async throws {
+    func drag(
+        from start: CGPoint,
+        to end: CGPoint,
+        target: ComputerUseInputEventTarget
+    ) async throws {
         try await Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
-            try Self.postMouseEvent(type: .mouseMoved, at: start, pid: pid)
+            try Self.postMouseEvent(type: .mouseMoved, at: start, target: target)
             try await Task.sleep(for: .milliseconds(16))
-            try Self.postMouseEvent(type: .leftMouseDown, at: start, pid: pid)
+            try Self.postMouseEvent(type: .leftMouseDown, at: start, target: target)
 
             var lastPoint = start
             do {
@@ -57,12 +86,12 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
                         x: start.x + (end.x - start.x) * progress,
                         y: start.y + (end.y - start.y) * progress
                     )
-                    try Self.postMouseEvent(type: .leftMouseDragged, at: lastPoint, pid: pid)
+                    try Self.postMouseEvent(type: .leftMouseDragged, at: lastPoint, target: target)
                     try await Task.sleep(for: .milliseconds(12))
                 }
-                try Self.postMouseEvent(type: .leftMouseUp, at: end, pid: pid)
+                try Self.postMouseEvent(type: .leftMouseUp, at: end, target: target)
             } catch {
-                try? Self.postMouseEvent(type: .leftMouseUp, at: lastPoint, pid: pid)
+                try? Self.postMouseEvent(type: .leftMouseUp, at: lastPoint, target: target)
                 throw error
             }
         }
@@ -72,7 +101,7 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
         at point: CGPoint,
         direction: ComputerUseScrollDirection,
         pages: Double,
-        pid: Int32
+        target: ComputerUseInputEventTarget
     ) async throws {
         try await perform {
             guard let move = CGEvent(
@@ -94,9 +123,10 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
             ) else {
                 throw ComputerUseActionError.eventCreationFailed
             }
-            scroll.location = point
-            move.postToPid(pid)
-            scroll.postToPid(pid)
+            Self.configure(move, screenPoint: point, button: .left, target: target)
+            Self.configure(scroll, screenPoint: point, button: .left, target: target)
+            move.postToPid(target.processIdentifier)
+            scroll.postToPid(target.processIdentifier)
         }
     }
 
@@ -187,7 +217,7 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
     private static func postMouseEvent(
         type: CGEventType,
         at point: CGPoint,
-        pid: Int32
+        target: ComputerUseInputEventTarget
     ) throws {
         guard let event = CGEvent(
             mouseEventSource: nil,
@@ -197,7 +227,33 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
         ) else {
             throw ComputerUseActionError.eventCreationFailed
         }
-        event.postToPid(pid)
+        configure(event, screenPoint: point, button: .left, target: target)
+        event.postToPid(target.processIdentifier)
+    }
+
+    private static func configure(
+        _ event: CGEvent,
+        screenPoint: CGPoint,
+        button: CGMouseButton,
+        target: ComputerUseInputEventTarget
+    ) {
+        let descriptor = ComputerUseMouseEventDescriptor(
+            screenPoint: screenPoint,
+            windowID: target.windowID,
+            windowBounds: target.windowBounds,
+            windowUsesFlippedCoordinates: target.windowUsesFlippedCoordinates
+        )
+        event.setIntegerValueField(.mouseEventButtonNumber, value: Int64(button.rawValue))
+        event.setIntegerValueField(.mouseEventSubtype, value: 0)
+        event.setIntegerValueField(
+            .mouseEventWindowUnderMousePointer,
+            value: Int64(descriptor.windowID)
+        )
+        event.setIntegerValueField(
+            .mouseEventWindowUnderMousePointerThatCanHandleThisEvent,
+            value: Int64(descriptor.windowID)
+        )
+        event.location = descriptor.eventLocation
     }
 }
 

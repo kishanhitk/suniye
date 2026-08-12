@@ -11,6 +11,7 @@ final class ComputerUseAgentTests: XCTestCase {
                     arguments: #"{"app":"Calculator"}"#
                 ),
                 .text("Done."),
+                .text("Done."),
             ]
         )
         let recorder = RecordingComputerUseActivitySink()
@@ -76,6 +77,7 @@ final class ComputerUseAgentTests: XCTestCase {
                     arguments: #"{"app":"Calculator"}"#
                 ),
                 .text("Done."),
+                .text("Done."),
             ]
         )
         let logger = RecordingComputerUseLogger()
@@ -115,6 +117,11 @@ final class ComputerUseAgentTests: XCTestCase {
                     name: "press_key",
                     arguments: #"{"app":"Calculator","key":"Return"}"#
                 ),
+                .toolCall(
+                    id: "state-2",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Calculator"}"#
+                ),
                 .text("The Calculator result is 42."),
             ]
         )
@@ -136,9 +143,9 @@ final class ComputerUseAgentTests: XCTestCase {
             )
         )
         let calls = await backend.calls
-        XCTAssertEqual(calls, [.getAppState, .pressKey])
+        XCTAssertEqual(calls, [.getAppState, .pressKey, .getAppState])
         let requests = await model.requests
-        XCTAssertEqual(requests.count, 3)
+        XCTAssertEqual(requests.count, 4)
         XCTAssertEqual(requests[0], [.text(role: .user, text: "Read the Calculator result.")])
         XCTAssertEqual(requests[1].suffix(2), [
             .toolCall(
@@ -151,6 +158,49 @@ final class ComputerUseAgentTests: XCTestCase {
                 content: #"{"app":"Calculator","text":"0 AXStaticText: 42"}"#
             ),
         ])
+    }
+
+    func testObservationOnlyCompletionGetsOneGenericOutcomeAudit() async {
+        let model = ScriptedComputerUseModel(
+            responses: [
+                .toolCall(
+                    id: "state-1",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Google Chrome"}"#
+                ),
+                .text("The requested email is open."),
+                .toolCall(
+                    id: "click-1",
+                    name: "click",
+                    arguments: #"{"app":"Google Chrome","element_index":7}"#
+                ),
+                .toolCall(
+                    id: "state-2",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Google Chrome"}"#
+                ),
+                .text("The requested email is open."),
+            ]
+        )
+        let backend = FreshnessCheckingComputerUseBackend()
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: backend)
+        )
+
+        let result = await agent.run(
+            task: ComputerUseAgentTask(instruction: "Open the invoice email.")
+        )
+
+        XCTAssertEqual(result.outcome, .completed)
+        let calls = await backend.calls
+        XCTAssertEqual(calls, [.getAppState, .click, .getAppState])
+        let auditRequest = await model.requests[2]
+        XCTAssertTrue(
+            auditRequest.contains { message in
+                message.textContent?.contains("Internal completion audit") == true
+            }
+        )
     }
 
     func testAgentForwardsAFreshObservationBetweenSequentialActions() async {
@@ -176,6 +226,11 @@ final class ComputerUseAgentTests: XCTestCase {
                     name: "type_text",
                     arguments: #"{"app":"Notes","text":"hello"}"#
                 ),
+                .toolCall(
+                    id: "state-3",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Notes"}"#
+                ),
                 .text("Done."),
             ]
         )
@@ -191,9 +246,12 @@ final class ComputerUseAgentTests: XCTestCase {
 
         XCTAssertEqual(result.outcome, .completed)
         let calls = await backend.calls
-        XCTAssertEqual(calls, [.getAppState, .pressKey, .getAppState, .typeText])
+        XCTAssertEqual(
+            calls,
+            [.getAppState, .pressKey, .getAppState, .typeText, .getAppState]
+        )
         let requests = await model.requests
-        XCTAssertEqual(requests.count, 5)
+        XCTAssertEqual(requests.count, 6)
         XCTAssertEqual(
             requests[4].suffix(2),
             [
@@ -204,6 +262,73 @@ final class ComputerUseAgentTests: XCTestCase {
                 ),
                 .toolResult(id: "text-1", content: "null"),
             ]
+        )
+    }
+
+    func testTwoUnchangedPostActionObservationsRequestADifferentRecoveryStrategy() async {
+        let model = ScriptedComputerUseModel(
+            responses: [
+                .toolCall(
+                    id: "state-1",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Google Chrome"}"#
+                ),
+                .toolCall(
+                    id: "click-1",
+                    name: "click",
+                    arguments: #"{"app":"Google Chrome","x":100,"y":200}"#
+                ),
+                .toolCall(
+                    id: "state-2",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Google Chrome"}"#
+                ),
+                .toolCall(
+                    id: "click-2",
+                    name: "click",
+                    arguments: #"{"app":"Google Chrome","x":101,"y":200}"#
+                ),
+                .toolCall(
+                    id: "state-3",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Google Chrome"}"#
+                ),
+                .toolCall(
+                    id: "key-1",
+                    name: "press_key",
+                    arguments: #"{"app":"Google Chrome","key":"Return"}"#
+                ),
+                .toolCall(
+                    id: "state-4",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Google Chrome"}"#
+                ),
+                .text("The requested email is open."),
+            ]
+        )
+        let backend = FreshnessCheckingComputerUseBackend(
+            appStateTexts: [
+                "Search results",
+                "There has been no change in the accessibility tree for Window: Search results",
+                "There has been no change in the accessibility tree for Window: Search results",
+                "Invoice Number: MC59950569",
+            ]
+        )
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: backend)
+        )
+
+        let result = await agent.run(
+            task: ComputerUseAgentTask(instruction: "Open the MacBook invoice email.")
+        )
+
+        XCTAssertEqual(result.outcome, .completed)
+        let recoveryRequest = await model.requests[5]
+        XCTAssertTrue(
+            recoveryRequest.contains { message in
+                message.textContent?.contains("Repeated unchanged-state recovery") == true
+            }
         )
     }
 
@@ -292,6 +417,7 @@ final class ComputerUseAgentTests: XCTestCase {
                     name: "get_app_state",
                     arguments: #"{"app":"Calculator"}"#
                 ),
+                .text("Done."),
                 .text("Done."),
             ]
         )
@@ -450,6 +576,7 @@ final class ComputerUseAgentTests: XCTestCase {
             responses: [
                 .toolCall(id: "state-1", name: "get_app_state", arguments: #"{"app":"Calculator"}"#),
                 .text("Done."),
+                .text("Done."),
             ]
         )
         let recorder = RecordingComputerUseActivitySink()
@@ -482,6 +609,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let model = ScriptedComputerUseModel(
             responses: [
                 .toolCall(id: "state-1", name: "get_app_state", arguments: #"{"app":"Calculator"}"#),
+                .text("Done."),
                 .text("Done."),
             ]
         )
@@ -743,7 +871,7 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
     private var hasObservedState = false
     private let screenshotURL: URL?
     private let shouldFailObservation: Bool
-    private let appStateText: String
+    private var appStateTexts: [String]
     private let interventionChannel: ComputerUseInterventionChannel?
     private let intervention: String?
 
@@ -751,12 +879,13 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
         screenshotURL: URL? = nil,
         shouldFailObservation: Bool = false,
         appStateText: String = "0 AXStaticText: 42",
+        appStateTexts: [String]? = nil,
         interventionChannel: ComputerUseInterventionChannel? = nil,
         intervention: String? = nil
     ) {
         self.screenshotURL = screenshotURL
         self.shouldFailObservation = shouldFailObservation
-        self.appStateText = appStateText
+        self.appStateTexts = appStateTexts ?? [appStateText]
         self.interventionChannel = interventionChannel
         self.intervention = intervention
     }
@@ -772,10 +901,13 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
             throw StubComputerUseToolError.failed
         }
         hasObservedState = true
+        let text = appStateTexts.count > 1
+            ? appStateTexts.removeFirst()
+            : appStateTexts.first ?? ""
         return ComputerUseAppState(
             app: app,
             screenshot: screenshotURL,
-            text: appStateText
+            text: text
         )
     }
 

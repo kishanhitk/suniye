@@ -133,6 +133,39 @@ final class ComputerUseAccessibilityTreeTests: XCTestCase {
         XCTAssertEqual(revision.text, "0: AXButton \"After\"")
     }
 
+    func testFullRevisionAppendsTheFocusedElementLikeTheReferenceHelper() async {
+        let store = ComputerUseAccessibilityRevisionStore()
+        let revision = await store.revision(
+            targetKey: "example",
+            snapshot: ComputerUseAXSnapshot(roots: [
+                node(
+                    role: "AXWindow",
+                    title: "Search results",
+                    children: [
+                        node(
+                            role: "AXTextField",
+                            description: "Search mail",
+                            value: "MacBook invoice",
+                            valueSettable: true,
+                            focused: true
+                        ),
+                    ]
+                ),
+            ]),
+            disableDiff: false
+        )
+
+        XCTAssertEqual(
+            revision.text,
+            """
+            0: AXWindow "Search results"
+              1: AXTextField Description: "Search mail" Value: "MacBook invoice" (value settable)
+
+            The focused UI element is 1: AXTextField Description: "Search mail" Value: "MacBook invoice" (value settable)
+            """
+        )
+    }
+
     func testAccessibilityActionDescriptionsMatchTheModelFacingContract() {
         let described = ComputerUseAccessibilityActionResolver.descriptor(
             rawName: "AXScrollDownByPage",
@@ -202,14 +235,14 @@ final class ComputerUseAccessibilityTreeTests: XCTestCase {
         )
     }
 
-    func testPrimaryClickPrefersPressBeforeSingleSelectionFallback() {
+    func testPrimaryClickUsesReferenceSemanticOrderOnlyForSingleClicks() {
         XCTAssertEqual(
             ComputerUseAccessibilityActionResolver.primaryClickOperations(clickCount: 1),
-            [.press(count: 1), .select]
+            [.pick, .press]
         )
         XCTAssertEqual(
             ComputerUseAccessibilityActionResolver.primaryClickOperations(clickCount: 2),
-            [.press(count: 2)]
+            []
         )
     }
 

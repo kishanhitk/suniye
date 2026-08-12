@@ -12,12 +12,18 @@ struct SystemComputerUseAccessibilityActions: ComputerUseAccessibilityActionPerf
                 clickCount: clickCount
             ) {
                 switch operation {
-                case let .press(count):
-                    if try worker.pressIfPossible(element, count: count) {
+                case .pick:
+                    if try worker.performPrimaryActionIfPossible(
+                        ComputerUseAccessibilityActionResolver.pickAction,
+                        on: element
+                    ) {
                         return true
                     }
-                case .select:
-                    if try worker.selectIfPossible(element) {
+                case .press:
+                    if try worker.performPrimaryActionIfPossible(
+                        kAXPressAction as String,
+                        on: element
+                    ) {
                         return true
                     }
                 }
@@ -67,6 +73,7 @@ struct SystemComputerUseAccessibilityActions: ComputerUseAccessibilityActionPerf
         target: ComputerUseObservedTarget
     ) async throws {
         try await run(reference: reference, target: target) { worker, element in
+            worker.focusIfPossible(element)
             var settable = DarwinBoolean(false)
             guard AXUIElementIsAttributeSettable(
                 element,
@@ -181,39 +188,32 @@ private struct Worker: Sendable {
         SystemComputerUseAccessibilityAPI.actions(from: element)
     }
 
-    func selectIfPossible(_ element: AXUIElement) throws -> Bool {
+    func focusIfPossible(_ element: AXUIElement) {
         var settable = DarwinBoolean(false)
         guard AXUIElementIsAttributeSettable(
             element,
-            kAXSelectedAttribute as CFString,
+            kAXFocusedAttribute as CFString,
             &settable
         ) == .success,
             settable.boolValue else {
-            return false
+            return
         }
-        if SystemComputerUseAccessibilityAPI.boolean(kAXSelectedAttribute, from: element) == true {
-            return true
-        }
-        guard AXUIElementSetAttributeValue(
+        _ = AXUIElementSetAttributeValue(
             element,
-            kAXSelectedAttribute as CFString,
+            kAXFocusedAttribute as CFString,
             kCFBooleanTrue
-        ) == .success else {
-            throw ComputerUseActionError.actionUnavailable(kAXSelectedAttribute as String)
-        }
-        return true
+        )
     }
 
-    func pressIfPossible(_ element: AXUIElement, count: Int) throws -> Bool {
-        guard actions(element).contains(where: {
-            $0.rawName == kAXPressAction as String
-        }) else {
+    func performPrimaryActionIfPossible(
+        _ action: String,
+        on element: AXUIElement
+    ) throws -> Bool {
+        guard actions(element).contains(where: { $0.rawName == action }) else {
             return false
         }
-        for _ in 0 ..< count {
-            guard AXUIElementPerformAction(element, kAXPressAction as CFString) == .success else {
-                throw ComputerUseActionError.actionUnavailable(kAXPressAction as String)
-            }
+        guard AXUIElementPerformAction(element, action as CFString) == .success else {
+            throw ComputerUseActionError.actionUnavailable(action)
         }
         return true
     }

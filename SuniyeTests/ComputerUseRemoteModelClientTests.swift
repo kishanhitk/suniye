@@ -64,9 +64,47 @@ final class ComputerUseRemoteModelClientTests: XCTestCase {
         )
         let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
         XCTAssertEqual(messages.compactMap { $0["role"] as? String }, ["system", "user"])
+        let systemInstructions = try XCTUnwrap(messages.first?["content"] as? String)
+        XCTAssertTrue(systemInstructions.contains("never substitute or inspect an unrelated app"))
         XCTAssertTrue(
-            try XCTUnwrap(messages.first?["content"] as? String)
-                .contains("never substitute or inspect an unrelated app")
+            systemInstructions.contains(
+                "A target appearing in a list, search result, menu, or tree proves only that"
+            )
+        )
+        XCTAssertTrue(
+            systemInstructions.contains(
+                "You may not report success for a requested UI change after an observation-only path"
+            )
+        )
+        XCTAssertTrue(
+            systemInstructions.contains(
+                "confirm the requested result in the fresh state captured after that action"
+            )
+        )
+        XCTAssertTrue(
+            systemInstructions.contains(
+                "A focused or selected item is not proof that it was activated or opened"
+            )
+        )
+        XCTAssertTrue(
+            systemInstructions.contains(
+                "If a click focuses the intended control without activating it, press Return"
+            )
+        )
+        XCTAssertTrue(
+            systemInstructions.contains(
+                "do not repeat an action that left the observed state unchanged"
+            )
+        )
+        XCTAssertTrue(
+            systemInstructions.contains(
+                "The current app content may be unrelated to the user's request"
+            )
+        )
+        XCTAssertTrue(
+            systemInstructions.contains(
+                "Match the requested subject before acting on a visible result"
+            )
         )
         XCTAssertEqual(messages.last?["content"] as? String, "Read the Calculator result.")
 
@@ -130,6 +168,101 @@ final class ComputerUseRemoteModelClientTests: XCTestCase {
         XCTAssertEqual(imageURL["url"] as? String, "data:image/jpeg;base64,AQID")
     }
 
+    func testTransientNetworkFailureUsesReferenceRequestRetryBudget() async throws {
+        var requestCount = 0
+        ComputerUseModelURLProtocol.handler = { request in
+            requestCount += 1
+            if requestCount <= 4 {
+                throw URLError(.networkConnectionLost)
+            }
+            return try Self.response(
+                for: request,
+                json: ["choices": [["message": ["content": "Recovered."]]]]
+            )
+        }
+        let sleeper = RecordingComputerUseModelRetrySleeper()
+        let client = ComputerUseRemoteModelClient(
+            configuration: ComputerUseRemoteModelConfiguration(
+                endpointURL: URL(string: "https://example.com/v1/chat/completions")!,
+                modelID: "model",
+                apiKey: "secret"
+            ),
+            completionClient: ChatCompletionClient(session: makeSession()),
+            retrySleeper: sleeper,
+            retryJitter: { 1 }
+        )
+
+        let result = try await client.respond(to: [.text(role: .user, text: "Continue.")])
+        let delays = await sleeper.delays
+
+        XCTAssertEqual(result, .text("Recovered."))
+        XCTAssertEqual(requestCount, 5)
+        XCTAssertEqual(
+            delays,
+            [.milliseconds(200), .milliseconds(400), .milliseconds(800), .milliseconds(1_600)]
+        )
+    }
+
+    func testNonRetryableProviderFailureIsNotReplayed() async {
+        var requestCount = 0
+        ComputerUseModelURLProtocol.handler = { request in
+            requestCount += 1
+            let response = try XCTUnwrap(
+                HTTPURLResponse(
+                    url: XCTUnwrap(request.url),
+                    statusCode: 429,
+                    httpVersion: nil,
+                    headerFields: nil
+                )
+            )
+            return (response, Data("{}".utf8))
+        }
+        let sleeper = RecordingComputerUseModelRetrySleeper()
+        let client = ComputerUseRemoteModelClient(
+            configuration: ComputerUseRemoteModelConfiguration(
+                endpointURL: URL(string: "https://example.com/v1/chat/completions")!,
+                modelID: "model",
+                apiKey: "secret"
+            ),
+            completionClient: ChatCompletionClient(session: makeSession()),
+            retrySleeper: sleeper,
+            retryJitter: { 1 }
+        )
+
+        do {
+            _ = try await client.respond(to: [.text(role: .user, text: "Continue.")])
+            XCTFail("Expected the provider failure")
+        } catch let error as ComputerUseModelError {
+            XCTAssertEqual(
+                error,
+                .requestFailed("LLM provider error: http_429")
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        let delays = await sleeper.delays
+        XCTAssertEqual(requestCount, 1)
+        XCTAssertEqual(delays, [])
+    }
+
+    func testRetryPolicyMatchesProviderFailureClassificationAndBackoffBounds() {
+        let policy = ComputerUseModelRetryPolicy.referenceAligned
+
+        XCTAssertTrue(policy.shouldRetry(.network("lost")))
+        XCTAssertTrue(policy.shouldRetry(.timeout))
+        XCTAssertTrue(policy.shouldRetry(.provider("http_500")))
+        XCTAssertTrue(policy.shouldRetry(.provider("http_599")))
+        XCTAssertFalse(policy.shouldRetry(.provider("http_429")))
+        XCTAssertFalse(policy.shouldRetry(.provider("unavailable")))
+        XCTAssertFalse(policy.shouldRetry(.invalidConfiguration("missing")))
+        XCTAssertFalse(policy.shouldRetry(.unauthorized))
+        XCTAssertFalse(policy.shouldRetry(.malformedResponse))
+        XCTAssertFalse(policy.shouldRetry(.emptyOutput))
+        XCTAssertEqual(policy.delay(afterFailedAttempt: 0, jitter: 0), .milliseconds(180))
+        XCTAssertEqual(policy.delay(afterFailedAttempt: 0, jitter: 2), .milliseconds(220))
+    }
+
     private func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ComputerUseModelURLProtocol.self]
@@ -171,6 +304,14 @@ final class ComputerUseRemoteModelClientTests: XCTestCase {
             data.append(buffer, count: count)
         }
         return data
+    }
+}
+
+private actor RecordingComputerUseModelRetrySleeper: ComputerUseModelRetrySleeping {
+    private(set) var delays: [Duration] = []
+
+    func sleep(for duration: Duration) async throws {
+        delays.append(duration)
     }
 }
 
