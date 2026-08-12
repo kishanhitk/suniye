@@ -149,6 +149,21 @@ Build: Debug Preview installed at `/Users/kishan/Applications/Suniye Preview.app
 - `[Verified]` A separate bundled Computer Use observation read Calculator's
   `StandardInputView;value:42` and AX display value `42`.
 
+### Physical voice boundary — 2026-08-12
+
+- `[Verified]` The bundled Computer Use driver inspected the final installed General page and
+  confirmed `Hold to Run Task` is configured as `Control + Command + U`. The selected system input
+  resolves to the WH-1000XM4 Bluetooth microphone.
+- `[Verified live, earlier process]` App logs from a user-operated shortcut run record the global
+  hotkey down/up callbacks, production audio capture, 1.82 seconds of usable audio, local
+  transcription, and a 13-character transcript. The Computer Use page then showed the captured
+  task waiting for configuration instead of inserting it into another app.
+- `[Verified separately]` After the credential correction, the same app-owned coordinator and real
+  Luna provider completed the Calculator action E2E described above.
+- `[Not yet one continuous E2E]` The bundled driver explicitly supports only app-scoped key input;
+  it cannot hold/release Suniye's global shortcut or generate microphone speech. A final
+  user-operated hold–speak–release run is required to prove the complete chain in one session.
+
 ### Refreshed Preview UI smoke — 2026-08-03
 
 - `[Verified]` After reinstalling and relaunching `/Users/kishan/Applications/Suniye Preview.app`,

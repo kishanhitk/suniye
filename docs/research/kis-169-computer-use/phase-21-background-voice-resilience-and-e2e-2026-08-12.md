@@ -68,6 +68,11 @@ Build: Debug Preview at `/Users/kishan/Applications/Suniye Preview.app` from
   global hold/release shortcut. It therefore cannot itself perform a real microphone hold,
   speech, and release cycle. That final physical voice leg requires user participation or a
   purpose-built shortcut test driver.
+- `[Verified partial live chain]` A user-operated installed run already recorded shortcut
+  down/up, 1.82 seconds of production microphone capture, local transcription, and direct routing
+  into Computer Use. The final installed General page independently confirms the configured
+  `Control + Command + U` shortcut. This does not replace the required continuous voice-to-action
+  rerun now that the shared provider credential is active.
 - `[Verified]` Deterministic cancellation, persistence, and closed-window lifecycle checks used a
   temporary local protocol-compatible provider; its credential and server were removed. The final
   Calculator run used the user's existing shared OpenRouter credential without exposing or copying
