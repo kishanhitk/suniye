@@ -189,6 +189,17 @@ final class ComputerUseAccessibilityTreeTests: XCTestCase {
         )
     }
 
+    func testPrimaryClickPrefersPressBeforeSingleSelectionFallback() {
+        XCTAssertEqual(
+            ComputerUseAccessibilityActionResolver.primaryClickOperations(clickCount: 1),
+            [.press(count: 1), .select]
+        )
+        XCTAssertEqual(
+            ComputerUseAccessibilityActionResolver.primaryClickOperations(clickCount: 2),
+            [.press(count: 2)]
+        )
+    }
+
     func testInsertedElementGetsNewIDAndRemovedElementLeavesCurrentMap() async {
         let store = ComputerUseAccessibilityRevisionStore()
         _ = await store.revision(

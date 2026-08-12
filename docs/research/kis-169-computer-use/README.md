@@ -110,6 +110,8 @@ cross-process input still require separate validation.
   WindowServer screenshot path, and natural read/action E2E validation.
 - `phase-13-collapsed-tool-results-2026-08-12.md` records in-place tool-result updates and the
   collapsed raw-output disclosure added to each inline tool call.
+- `phase-14-browser-link-click-2026-08-12.md` records the failed-run RCA, primary-click ordering
+  correction, and natural-language browser-link E2E validation.
 - `deep-code-parity-audit-2026-08-12.md` consolidates three independent code-level audits of the
   model/runtime, native mechanics, and cursor/UX, with verified gaps kept explicit.
 

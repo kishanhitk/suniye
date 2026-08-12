@@ -6,6 +6,11 @@ struct ComputerUseAccessibilityActionDescriptor: Equatable, Sendable {
     let exposedName: String
 }
 
+enum ComputerUsePrimaryClickOperation: Equatable {
+    case press(count: Int)
+    case select
+}
+
 enum ComputerUseAccessibilityActionResolver {
     private static let canonicalNames = [
         "AXScrollDownByPage": "Scroll Down",
@@ -32,6 +37,13 @@ enum ComputerUseAccessibilityActionResolver {
     ) -> String? {
         let matches = descriptors.filter { $0.exposedName == exposedName }
         return matches.count == 1 ? matches[0].rawName : nil
+    }
+
+    static func primaryClickOperations(clickCount: Int) -> [ComputerUsePrimaryClickOperation] {
+        if clickCount == 1 {
+            return [.press(count: clickCount), .select]
+        }
+        return [.press(count: clickCount)]
     }
 }
 

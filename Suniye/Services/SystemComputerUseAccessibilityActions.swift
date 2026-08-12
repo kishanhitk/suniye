@@ -8,10 +8,21 @@ struct SystemComputerUseAccessibilityActions: ComputerUseAccessibilityActionPerf
         clickCount: Int
     ) async throws -> Bool {
         try await run(reference: reference, target: target) { worker, element in
-            if clickCount == 1, try worker.selectIfPossible(element) {
-                return true
+            for operation in ComputerUseAccessibilityActionResolver.primaryClickOperations(
+                clickCount: clickCount
+            ) {
+                switch operation {
+                case let .press(count):
+                    if try worker.pressIfPossible(element, count: count) {
+                        return true
+                    }
+                case .select:
+                    if try worker.selectIfPossible(element) {
+                        return true
+                    }
+                }
             }
-            return try worker.pressIfPossible(element, count: clickCount)
+            return false
         }
     }
 

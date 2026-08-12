@@ -1255,3 +1255,27 @@ and installed Preview session `CU-B4C2E8F64CFC`.
   and zero failures; gated coverage is 88.24% (13,453/15,246). E2E preflight and smoke pass.
 - `[Retained]` No model transport, provider response, lifecycle row, result summary, connector,
   per-tool icon, or separate completion row is shown.
+
+### Entry 71: Browser link primary-click correction
+
+Sources: `phase-14-browser-link-click-2026-08-12.md`, mounted reference runtime, production Swift
+sources, focused tests, installed Preview sessions `CU-93344C32D67F` and `CU-73FFF3CFD120`.
+
+- `[Verified]` Session `CU-93344C32D67F` itself executed only `get_app_state`; it never issued a
+  click. The preceding run in the same conversation issued an indexed click and a coordinate
+  click, but Helium remained on `kishans.in`.
+- `[Verified]` The reference runtime activated the same `Gita GPT` Accessibility link and observed
+  `gita.kishans.in` afterward.
+- `[Supersedes Entry 68]` A single indexed primary click now tries `AXPress` before using settable
+  `AXSelected` as a fallback. Selection is not treated as successful activation when press is
+  available. Multi-click behavior remains repeated `AXPress`, followed by the existing
+  process-scoped pointer fallback when semantic activation is unavailable.
+- `[Inferred]` The old selection-first policy could report success without activating some
+  selectable controls and best matches the reported hover/focus-like symptom. The historical run
+  did not record which native branch returned success, so that branch attribution is not verified.
+- `[Verified live]` After terminating the old process and launching the newly installed Preview,
+  natural-language session `CU-73FFF3CFD120` observed Helium, called
+  `click(element_index: 79)`, observed again, and reported success. An independent observation
+  confirmed Helium at `gita.kishans.in`.
+- `[Verified]` The full suite executes 1,095 tests with 2 skipped and zero failures. Gated coverage
+  is 88.27% (13,458/15,246), above the 80% floor. E2E preflight and smoke pass.
