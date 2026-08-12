@@ -6,7 +6,12 @@ protocol HotkeyServiceProtocol: AnyObject {
     var onHotkeyUp: (() -> Void)? { get set }
     var onEditModeHotkeyDown: (() -> Void)? { get set }
     var onEditModeHotkeyUp: (() -> Void)? { get set }
-    func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?)
+    var onPasteLastTranscript: (() -> Void)? { get set }
+    func startMonitoring(
+        configuration: HotkeyConfiguration,
+        editModeConfiguration: HotkeyConfiguration?,
+        pasteLastTranscriptConfiguration: HotkeyConfiguration
+    )
     func stopMonitoring()
 }
 
@@ -22,12 +27,14 @@ final class HotkeyService: HotkeyServiceProtocol {
     enum Slot: UInt32 {
         case dictation = 1
         case editMode = 2
+        case pasteLastTranscript = 3
     }
 
     var onHotkeyDown: (() -> Void)?
     var onHotkeyUp: (() -> Void)?
     var onEditModeHotkeyDown: (() -> Void)?
     var onEditModeHotkeyUp: (() -> Void)?
+    var onPasteLastTranscript: (() -> Void)?
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
@@ -36,13 +43,22 @@ final class HotkeyService: HotkeyServiceProtocol {
     private var heldSlots: Set<Slot> = []
     private var globeSlot: Slot?
 
-    func startMonitoring(configuration: HotkeyConfiguration, editModeConfiguration: HotkeyConfiguration?) {
+    func startMonitoring(
+        configuration: HotkeyConfiguration,
+        editModeConfiguration: HotkeyConfiguration?,
+        pasteLastTranscriptConfiguration: HotkeyConfiguration
+    ) {
         stopMonitoring()
 
         register(configuration, for: .dictation)
+        if pasteLastTranscriptConfiguration == configuration {
+            AppLogger.shared.log(.warning, "paste last transcript hotkey ignored: matches dictation hotkey")
+        } else {
+            register(pasteLastTranscriptConfiguration, for: .pasteLastTranscript)
+        }
         if let editModeConfiguration {
-            if editModeConfiguration == configuration {
-                AppLogger.shared.log(.warning, "edit mode hotkey ignored: matches dictation hotkey")
+            if editModeConfiguration == configuration || editModeConfiguration == pasteLastTranscriptConfiguration {
+                AppLogger.shared.log(.warning, "edit mode hotkey ignored: matches another hotkey")
             } else {
                 register(editModeConfiguration, for: .editMode)
             }
@@ -204,21 +220,27 @@ final class HotkeyService: HotkeyServiceProtocol {
         return noErr
     }
 
-    private func downCallback(for slot: Slot) -> (() -> Void)? {
+    func downCallback(for slot: Slot) -> (() -> Void)? {
         switch slot {
         case .dictation:
             return onHotkeyDown
         case .editMode:
             return onEditModeHotkeyDown
+        case .pasteLastTranscript:
+            // The recovery path may synthesize Command+V. Wait until the
+            // physical shortcut key is released so the paste is not swallowed.
+            return nil
         }
     }
 
-    private func upCallback(for slot: Slot) -> (() -> Void)? {
+    func upCallback(for slot: Slot) -> (() -> Void)? {
         switch slot {
         case .dictation:
             return onHotkeyUp
         case .editMode:
             return onEditModeHotkeyUp
+        case .pasteLastTranscript:
+            return onPasteLastTranscript
         }
     }
 }

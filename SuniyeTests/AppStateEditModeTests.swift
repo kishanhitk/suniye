@@ -70,6 +70,25 @@ final class AppStateEditModeTests: XCTestCase {
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Edit Mode shortcut must differ from dictation"))
     }
 
+    func testSettingEditModeHotkeyMatchingPasteLastTranscriptIsRejected() {
+        let settingsStore = TestGeneralSettingsStore()
+        let appState = makeTestAppState(generalSettingsStore: settingsStore)
+        let previous = HotkeyConfiguration.keyCombo(
+            keyCode: UInt32(kVK_ANSI_E),
+            carbonModifiers: UInt32(controlKey | optionKey)
+        )
+        appState.editModeHotkeyConfiguration = previous
+
+        appState.editModeHotkeyConfiguration = appState.pasteLastTranscriptHotkeyConfiguration
+
+        XCTAssertEqual(appState.editModeHotkeyConfiguration, previous)
+        XCTAssertEqual(settingsStore.latest.editModeHotkeyConfiguration, previous)
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .error(message: "Edit Mode shortcut must differ from Paste Last Transcript")
+        )
+    }
+
     func testLoadingCollidingEditModeHotkeyNormalizesToDisabled() {
         let combo = HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_E), carbonModifiers: UInt32(cmdKey))
         let settingsStore = TestGeneralSettingsStore(

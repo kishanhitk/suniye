@@ -523,7 +523,7 @@ struct GeneralPage: View {
             }
 
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Hotkey")
+                SectionHeading(title: "Hotkeys")
 
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
@@ -536,7 +536,7 @@ struct GeneralPage: View {
                                     get: { appState.hotkeyConfiguration },
                                     set: { newValue in
                                         if let newValue {
-                                            appState.hotkeyConfiguration = newValue
+                                            appState.updateDictationHotkey(newValue)
                                         }
                                     }
                                 )
@@ -546,6 +546,33 @@ struct GeneralPage: View {
                         Text("Works from any app. Hold the shortcut to record, release to transcribe.")
                             .font(AppTypography.subheadline)
                             .foregroundStyle(MainWindowPalette.secondaryText)
+                        CardDivider()
+                        HStack(spacing: 12) {
+                            Text("Paste Last Transcript")
+                                .font(AppTypography.body)
+                            Spacer(minLength: 12)
+                            HotkeyRecorderButton(
+                                configuration: Binding(
+                                    get: { appState.pasteLastTranscriptHotkeyConfiguration },
+                                    set: { newValue in
+                                        if let newValue {
+                                            appState.updatePasteLastTranscriptHotkey(newValue)
+                                        }
+                                    }
+                                ),
+                                idleIcon: "text.insert"
+                            )
+                        }
+                        CardDivider()
+                        Text("Focus a text field and press this shortcut to insert your latest completed dictation without submitting it again.")
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+                        if let message = appState.hotkeyValidationMessage {
+                            CardDivider()
+                            Text(message)
+                                .font(AppTypography.subheadline)
+                                .foregroundStyle(.red)
+                        }
                         CardDivider()
                         HStack(spacing: 12) {
                             Text("Hold to Edit Selection")
