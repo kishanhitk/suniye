@@ -54,6 +54,8 @@ protocol ComputerUseApplicationLaunching: Sendable {
 protocol ComputerUseApplicationCatalogProviding: Sendable {
     func listApps() async throws -> [ComputerUseApplication]
     func resolveOrLaunch(_ identifier: String) async throws -> ComputerUseApplicationRecord
+    func reopen(_ application: ComputerUseApplicationRecord) async throws
+        -> ComputerUseApplicationRecord
 }
 
 actor ComputerUseApplicationCatalog: ComputerUseApplicationCatalogProviding {
@@ -115,6 +117,12 @@ actor ComputerUseApplicationCatalog: ComputerUseApplicationCatalogProviding {
             return application
         }
         return try await launcher.launchInBackground(application)
+    }
+
+    func reopen(_ application: ComputerUseApplicationRecord) async throws
+        -> ComputerUseApplicationRecord
+    {
+        try await launcher.launchInBackground(application)
     }
 
     private func applicationRecords() async throws -> [ComputerUseApplicationRecord] {

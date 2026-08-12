@@ -80,16 +80,22 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
                 disableDiff: disableDiff
             )
         } catch ComputerUseObservationError.noWindow where application.isRunning {
-            guard let processIdentifier = application.processIdentifier,
-                  try await windows.waitUntilHasPrimaryWindow(
-                      processIdentifier: processIdentifier,
-                      timeout: windowReacquisitionTimeout,
-                      pollingInterval: windowReacquisitionPollingInterval
-                  ) != nil else {
-                throw ComputerUseObservationError.noWindow(requestedIdentifier)
+            if let processIdentifier = application.processIdentifier,
+               try await windows.waitUntilHasPrimaryWindow(
+                   processIdentifier: processIdentifier,
+                   timeout: windowReacquisitionTimeout,
+                   pollingInterval: windowReacquisitionPollingInterval
+               ) != nil {
+                return try await observations.observe(
+                    application: application,
+                    requestedIdentifier: requestedIdentifier,
+                    disableDiff: disableDiff
+                )
             }
+
+            let reopenedApplication = try await applications.reopen(application)
             return try await observations.observe(
-                application: application,
+                application: reopenedApplication,
                 requestedIdentifier: requestedIdentifier,
                 disableDiff: disableDiff
             )

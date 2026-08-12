@@ -271,6 +271,34 @@ final class ComputerUseApplicationCatalogTests: XCTestCase {
         XCTAssertEqual(launchedPaths, ["/System/Applications/Calculator.app"])
     }
 
+    func testReopenUsesBackgroundLauncherForRunningApp() async throws {
+        let running = record(
+            name: "Google Chrome",
+            bundleIdentifier: "com.google.Chrome",
+            path: "/Applications/Google Chrome.app",
+            processIdentifier: 444,
+            isFrontmost: false
+        )
+        let reopened = record(
+            name: "Google Chrome",
+            bundleIdentifier: "com.google.Chrome",
+            path: "/Applications/Google Chrome.app",
+            processIdentifier: 444,
+            isFrontmost: false
+        )
+        let launcher = StubComputerUseApplicationLauncher(result: reopened)
+        let catalog = ComputerUseApplicationCatalog(
+            inventory: StubComputerUseApplicationInventory(running: [running], recent: []),
+            launcher: launcher
+        )
+
+        let result = try await catalog.reopen(running)
+
+        XCTAssertEqual(result, reopened)
+        let launchedPaths = await launcher.launchedPaths
+        XCTAssertEqual(launchedPaths, ["/Applications/Google Chrome.app"])
+    }
+
     private func assertCatalogError(
         _ expected: ComputerUseApplicationCatalogError,
         operation: () async throws -> ComputerUseApplicationRecord,

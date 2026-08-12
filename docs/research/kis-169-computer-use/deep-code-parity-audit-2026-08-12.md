@@ -45,10 +45,13 @@ model/runtime composition, native app/window/action mechanics, and desktop curso
   main-window-changed, focused-window-changed, and bounds-change observation machinery.
 - `[Verified live]` After System Settings changed panes/windows, the inspected runtime reacquired
   the replacement window in the same process and returned a fresh AX tree and screenshot.
-- `[Verified defect fixed]` Suniye previously treated a transient no-window result for a running
-  app as a reason to reopen it. That produced a false `launchFailed` result. Suniye now waits for a
-  replacement on-screen window in the same process, then observes again. If none appears, it
-  reports `noWindow`; it reserves `launchFailed` for actual launch failures.
+- `[Corrected by Phase 22]` Suniye first waits for a replacement on-screen window in the same
+  running process. If that bounded wait expires, it requests one background reopen and observes
+  the returned application. This preserves transient same-process window replacement while also
+  recovering from a process that remains alive with no window. A failed reopen is reported as an
+  actual `launchFailed` error.
+- `[Unknown]` The inspected artifact proves background launch plus primary-window waiting, but it
+  does not expose the exact branch used when an already-running application has zero windows.
 - `[Verified]` Suniye retains the stale-window action guard. An action authorized by the old
   window is rejected and cannot silently execute against its replacement; the next model step
   must observe again.

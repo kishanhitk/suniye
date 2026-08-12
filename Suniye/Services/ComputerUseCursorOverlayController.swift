@@ -51,6 +51,7 @@ final class ComputerUseCursorOverlayController {
         presentationGeneration &+= 1
         model.isPressed = false
         model.isMoving = false
+        model.isVisible = false
         currentPoint = nil
         currentTarget = nil
         panel?.alphaValue = 0
@@ -65,6 +66,7 @@ final class ComputerUseCursorOverlayController {
 
         ensurePanel(at: source)
         guard let panel else { return }
+        model.isVisible = true
         panel.alphaValue = 1
         panel.orderFrontRegardless()
 
@@ -187,28 +189,44 @@ private final class ComputerUseCursorPanel: NSPanel {
 private final class ComputerUseCursorViewModel {
     var isPressed = false
     var isMoving = false
+    var isVisible = false
     var angle = 0.0
 }
 
 private struct ComputerUseCursorView: View {
     @Bindable var model: ComputerUseCursorViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color(red: 0.08, green: 0.67, blue: 1).opacity(0.72),
-                            Color(red: 0.08, green: 0.67, blue: 1).opacity(0.22),
-                            .clear,
-                        ],
-                        center: .center,
-                        startRadius: 2,
-                        endRadius: 23
-                    )
+            TimelineView(
+                .animation(
+                    minimumInterval: 1 / 30,
+                    paused: reduceMotion || !model.isVisible
                 )
-                .blur(radius: model.isPressed ? 2 : 4)
+            ) { timeline in
+                let glow = ComputerUseCursorGlowAnimation.style(
+                    at: timeline.date.timeIntervalSinceReferenceDate,
+                    reduceMotion: reduceMotion
+                )
+
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(red: 0.08, green: 0.67, blue: 1).opacity(0.72),
+                                Color(red: 0.08, green: 0.67, blue: 1).opacity(0.22),
+                                .clear,
+                            ],
+                            center: .center,
+                            startRadius: 2,
+                            endRadius: 23
+                        )
+                    )
+                    .blur(radius: model.isPressed ? 2 : 4)
+                    .scaleEffect(glow.scale)
+                    .opacity(glow.opacity)
+            }
 
             Image(systemName: "cursorarrow")
                 .font(.system(size: 19, weight: .semibold))
@@ -224,5 +242,27 @@ private struct ComputerUseCursorView: View {
         .animation(.spring(response: 0.18, dampingFraction: 0.82), value: model.isPressed)
         .animation(.spring(response: 0.28, dampingFraction: 1), value: model.isMoving)
         .accessibilityHidden(true)
+    }
+}
+
+struct ComputerUseCursorGlowStyle: Equatable {
+    let scale: CGFloat
+    let opacity: Double
+}
+
+enum ComputerUseCursorGlowAnimation {
+    static let cycleDuration = 2.8
+
+    static func style(at elapsedTime: TimeInterval, reduceMotion: Bool) -> ComputerUseCursorGlowStyle {
+        guard !reduceMotion else {
+            return ComputerUseCursorGlowStyle(scale: 1, opacity: 0.94)
+        }
+
+        let radians = (elapsedTime / cycleDuration) * 2 * Double.pi
+        let phase = (sin(radians) + 1) / 2
+        return ComputerUseCursorGlowStyle(
+            scale: 0.98 + (0.04 * phase),
+            opacity: 0.88 + (0.12 * phase)
+        )
     }
 }

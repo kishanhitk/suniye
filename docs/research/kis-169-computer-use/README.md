@@ -268,3 +268,36 @@ Historical page-visible slice; Phase 16 adds the page-independent global shortcu
   placement, or menu-bar controls; these are explicitly user-directed Suniye UX choices.
 - `[Verified]` The full suite passes 1,131 tests with 2 skipped and zero failures; gated coverage
   is 87.00% (14,256/16,387 lines), and E2E preflight and smoke pass.
+
+## Running application window recovery — 2026-08-12
+
+- `[Verified live]` Session `CU-C96C0E8AAC68` exposed an already-running Chrome process with no
+  observable window. The missing lifecycle recovery caused a 321-second, 59-tool-call run.
+- `[Implemented]` Observation now preserves the same-process replacement-window wait, then asks
+  macOS to reopen the application once in the background if that wait expires, and observes the
+  returned application before authorizing input.
+- `[Unknown]` The inspected artifact does not reveal its exact already-running, zero-window branch;
+  Suniye uses the closest narrow native lifecycle recovery and adds no task-specific routing.
+- `[Verified]` Focused tests pass; the full suite passes 1,139 tests with 2 skipped and zero
+  failures. Gated coverage is 87.05% (14,398/16,539 lines) against the 80% floor. E2E preflight
+  and smoke pass.
+- `[Verified live]` Restarted installed Preview session `CU-63BFC1495D24` recovered the existing
+  zero-window Chrome process in about six seconds and reported `New Tab - Google Chrome` from a
+  fresh Accessibility observation and screenshot.
+
+## Subtle persistent cursor glow — 2026-08-12
+
+- `[Implemented]` The retained software cursor's blue halo now breathes subtly while visible,
+  including between tool calls. The cursor icon remains still.
+- `[Implemented]` Reduce Motion uses a static halo, and hidden cursor panels pause the animation
+  timeline.
+- `[Verified]` Focused tests cover the animation bounds and reduced-motion behavior.
+
+## Assistant Markdown rendering — 2026-08-12
+
+- `[Implemented]` Assistant chat text now renders native Markdown for emphasis, inline code, and
+  links while preserving line breaks and list layout.
+- `[Not changed]` User text and raw tool calls/results remain verbatim.
+- `[Verified live]` Restarted Preview renders `Clicked **7** in Calculator.` without showing the
+  emphasis delimiters. The full suite passes 1,143 tests with 2 skipped and zero failures; gated
+  coverage is 87.05% against the 80% floor.

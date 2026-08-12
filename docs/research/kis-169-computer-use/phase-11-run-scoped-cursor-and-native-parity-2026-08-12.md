@@ -11,6 +11,8 @@ installed Suniye Preview.
 - `[Implemented]` The software cursor now belongs to the complete Computer Use run. It remains
   visible at its last action point while the model reasons and while a fresh observation is being
   captured. A later pointer action animates from that retained point.
+- `[Extended by Phase 23]` The retained cursor's blue halo now has a subtle, reduced-motion-aware
+  breathing animation while visible. The cursor icon itself remains stationary between actions.
 - `[Implemented]` The coordinator hides and resets the software cursor only when the run completes,
   fails, is stopped, or the user starts a new conversation. The overlay no longer has a
   post-action fade timer.
@@ -23,9 +25,11 @@ installed Suniye Preview.
   action therefore consumes its observation and the model must call `get_app_state` before its
   next action. The reference may group actions inside one persistent `node_repl` execution, but
   Suniye does not expose that execution boundary and must not reuse state across model decisions.
-- `[Corrected]` A transient no-window result for a running application now waits for an on-screen
-  replacement window in the same process and observes again. It no longer reopens the running app
-  or misreports a reacquisition timeout as a launch failure.
+- `[Corrected by Phase 22]` A transient no-window result for a running application first waits for
+  an on-screen replacement window in the same process and observes again. If the bounded wait
+  expires, Suniye now requests one background reopen and observes the returned application before
+  the model may act. A real Chrome session showed that waiting alone could leave the run spinning
+  for minutes when the process remained alive without any observable window.
 - `[Corrected]` The temporary non-on-screen CG-window and ScreenCaptureKit fallback was removed.
   Normal discovery again uses the verified on-screen, non-desktop window path. The reference
   helper contains a private SkyLight/WindowServer capture path, but its exact branch matrix is

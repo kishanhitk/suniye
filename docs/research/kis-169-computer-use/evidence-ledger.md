@@ -1188,9 +1188,9 @@ XCTest runs, coverage, E2E scripts, the installed Preview, sessions `CU-DACA4C3C
   model reasons and animates from that retained point to the next pointer target.
 - `[Implemented]` Suniye's passive cursor is now run-scoped. It has no action-local hide timer and
   is cleared only on completion, failure, Stop, or New Conversation.
-- `[Corrected]` A stale window still invalidates the authorized action. The next observation now
-  waits for an on-screen replacement window in the same running process instead of reopening the
-  app and misreporting the timeout as `launchFailed`.
+- `[Corrected by Phase 22]` A stale window still invalidates the authorized action. The next
+  observation first waits for an on-screen replacement in the same process. If none appears
+  within the bounded wait, Suniye requests one background reopen and observes the returned app.
 - `[Removed]` The temporary all-window/off-screen CG and screenshot fallback was removed because
   the recovered normal reference path enumerates on-screen, non-desktop windows.
 - `[Verified live]` Installed Preview session `CU-463FE693F46D` completed the natural battery

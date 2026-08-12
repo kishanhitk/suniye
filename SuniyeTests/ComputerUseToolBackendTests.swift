@@ -77,7 +77,37 @@ final class ComputerUseToolBackendTests: XCTestCase {
         XCTAssertEqual(callCount, 2)
     }
 
-    func testObservationReportsNoWindowWhenReplacementDoesNotAppear() async {
+    func testObservationReportsLaunchFailureWhenRunningApplicationCannotReopen() async {
+        let fixture = backendFixture()
+        let observations = ControllableComputerUseObserving(observation: fixture.observations.observation)
+        await observations.failNextObservation()
+        await fixture.windows.hideForNextCalls(1)
+        await fixture.applications.failReopen(
+            with: ComputerUseApplicationCatalogError.launchFailed("Calculator")
+        )
+        let backend = ComputerUseToolBackend(
+            applications: fixture.applications,
+            windows: fixture.windows,
+            observations: observations,
+            actions: fixture.actions,
+            settler: fixture.settler,
+            runtimeGuard: fixture.runtimeGuard,
+            windowReacquisitionTimeout: .zero,
+            windowReacquisitionPollingInterval: .milliseconds(1)
+        )
+
+        do {
+            _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+            XCTFail("Expected launch failure")
+        } catch {
+            XCTAssertEqual(
+                error as? ComputerUseApplicationCatalogError,
+                .launchFailed("Calculator")
+            )
+        }
+    }
+
+    func testObservationReopensRunningApplicationWhenNoWindowAppears() async throws {
         let fixture = backendFixture()
         let observations = ControllableComputerUseObserving(observation: fixture.observations.observation)
         await observations.failNextObservation()
@@ -93,12 +123,11 @@ final class ComputerUseToolBackendTests: XCTestCase {
             windowReacquisitionPollingInterval: .milliseconds(1)
         )
 
-        do {
-            _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
-            XCTFail("Expected no-window error")
-        } catch {
-            XCTAssertEqual(error as? ComputerUseObservationError, .noWindow("Calculator"))
-        }
+        let state = try await backend.getAppState(app: "Calculator", disableDiff: false)
+
+        XCTAssertEqual(state.text, "0: AXWindow")
+        let reopenCount = await fixture.applications.reopenCount
+        XCTAssertEqual(reopenCount, 1)
     }
 
     func testActionRequiresAReferenceObservation() async {

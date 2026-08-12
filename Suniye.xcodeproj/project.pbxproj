@@ -25,6 +25,7 @@
 		0AFA13F79B856CBDCFE32509 /* ComputerUseObservationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD44F10C318905A89E8CCDCC /* ComputerUseObservationService.swift */; };
 		0BB11537C982C731E8A9C06D /* LaunchAtLoginService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EEDE3A134D7940680E98B65 /* LaunchAtLoginService.swift */; };
 		0D52D29FA88DC99EB7115C7B /* PartialTranscriptionSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624DF0C47847FACD2976DEAE /* PartialTranscriptionSchedulerTests.swift */; };
+		0E63BD08FC5329579BF7228F /* ComputerUseChatMarkdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116C877D1779B9B6EB0E2B54 /* ComputerUseChatMarkdownTests.swift */; };
 		1010ECBB713A653EFCEE90D3 /* PartialTranscriptStabilizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71F09E71632C13C91BE934A /* PartialTranscriptStabilizerTests.swift */; };
 		1036294FDAD331BE2AE40B78 /* ComputerUseCursorPresenterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13731A06E8C3CA71B59F9B46 /* ComputerUseCursorPresenterTests.swift */; };
 		104B3E93067006EC3245CD0A /* ComputerUseObservationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 240ED9365CE6AE370E8E5A2E /* ComputerUseObservationServiceTests.swift */; };
@@ -283,6 +284,7 @@
 		104370E76CFD4D8D685CEAC7 /* IssueReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueReportService.swift; sourceTree = "<group>"; };
 		10EFB6CFB00782DD57172E26 /* AppStateSubmitCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSubmitCommandTests.swift; sourceTree = "<group>"; };
 		11558F5387C6D3FFC7B1B354 /* TestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestDoubles.swift; sourceTree = "<group>"; };
+		116C877D1779B9B6EB0E2B54 /* ComputerUseChatMarkdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseChatMarkdownTests.swift; sourceTree = "<group>"; };
 		1215194BCE451924E1C06FDD /* libonnxruntime.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libonnxruntime.dylib; path = Suniye/Frameworks/libonnxruntime.dylib; sourceTree = "<group>"; };
 		13731A06E8C3CA71B59F9B46 /* ComputerUseCursorPresenterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseCursorPresenterTests.swift; sourceTree = "<group>"; };
 		139684AE1E0F9DE6F60EBA10 /* EditModeServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditModeServiceTests.swift; sourceTree = "<group>"; };
@@ -612,6 +614,7 @@
 				F2B8823BFA7307E2824BCD05 /* ComputerUseActionServiceTests.swift */,
 				A3E2709940807F9CCB5EBB91 /* ComputerUseAgentTests.swift */,
 				CE6DBCE0BBD218C71FFFA9A4 /* ComputerUseApplicationCatalogTests.swift */,
+				116C877D1779B9B6EB0E2B54 /* ComputerUseChatMarkdownTests.swift */,
 				3701FE2D60E73A1F3EDD9356 /* ComputerUseConversationStoreTests.swift */,
 				755CDA46051DAA1EEF641C2B /* ComputerUseCoordinatorTests.swift */,
 				13731A06E8C3CA71B59F9B46 /* ComputerUseCursorPresenterTests.swift */,
@@ -1147,6 +1150,7 @@
 				D725AA2FF7E45E06A41026C7 /* ComputerUseActionServiceTests.swift in Sources */,
 				E5A1D15B9A768ABE5926A0AF /* ComputerUseAgentTests.swift in Sources */,
 				38F6E5F3ABB211F063C7DEFE /* ComputerUseApplicationCatalogTests.swift in Sources */,
+				0E63BD08FC5329579BF7228F /* ComputerUseChatMarkdownTests.swift in Sources */,
 				0835D19EE5581E867B55D7A4 /* ComputerUseConversationStoreTests.swift in Sources */,
 				927A52C8CD5753D379ABFA8C /* ComputerUseCoordinatorTests.swift in Sources */,
 				1036294FDAD331BE2AE40B78 /* ComputerUseCursorPresenterTests.swift in Sources */,

@@ -40,7 +40,7 @@ struct ComputerUseChatMessageRow: View {
                 assistantMark
             }
 
-            Text(message.text)
+            messageText
                 .font(AppTypography.body)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
@@ -68,12 +68,31 @@ struct ComputerUseChatMessageRow: View {
         )
     }
 
+    private var messageText: Text {
+        if message.role == .assistant {
+            Text(ComputerUseChatMarkdown.attributedString(from: message.text))
+        } else {
+            Text(verbatim: message.text)
+        }
+    }
+
     private var assistantMark: some View {
         Image(systemName: "cursorarrow.motionlines")
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: 26, height: 26)
             .background(Circle().fill(Color.accentColor))
+    }
+}
+
+enum ComputerUseChatMarkdown {
+    static func attributedString(from source: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace,
+            failurePolicy: .returnPartiallyParsedIfPossible
+        )
+        return (try? AttributedString(markdown: source, options: options))
+            ?? AttributedString(source)
     }
 }
 

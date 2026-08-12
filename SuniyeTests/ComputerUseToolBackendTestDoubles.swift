@@ -34,6 +34,8 @@ func backendFixture(actionError: Error? = nil) -> BackendFixture {
 
 actor StubActionApplicationCatalog: ComputerUseApplicationCatalogProviding {
     let application: ComputerUseApplicationRecord
+    private var reopenError: Error?
+    private(set) var reopenCount = 0
 
     init(application: ComputerUseApplicationRecord) {
         self.application = application
@@ -47,6 +49,17 @@ actor StubActionApplicationCatalog: ComputerUseApplicationCatalogProviding {
         application
     }
 
+    func reopen(_ application: ComputerUseApplicationRecord) throws -> ComputerUseApplicationRecord {
+        reopenCount += 1
+        if let reopenError {
+            throw reopenError
+        }
+        return self.application
+    }
+
+    func failReopen(with error: Error) {
+        reopenError = error
+    }
 }
 
 actor MutableActionWindowDiscovery: ComputerUseWindowDiscovering {
