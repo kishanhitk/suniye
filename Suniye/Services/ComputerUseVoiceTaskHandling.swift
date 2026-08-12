@@ -3,6 +3,7 @@ import Foundation
 enum ComputerUseVoiceTaskSubmission: Equatable {
     case started
     case queued
+    case intervened
     case rejected(message: String)
 }
 

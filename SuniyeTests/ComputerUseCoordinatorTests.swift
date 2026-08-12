@@ -295,6 +295,31 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.conversation.map(\.text), ["Check battery health", "Done."])
     }
 
+    func testVoiceTaskDuringRunBecomesAnInterventionInTheSameSession() async throws {
+        let agent = SuspendedComputerUseAgent()
+        let coordinator = readyCoordinator(agent: agent)
+        coordinator.draft = "Open System Settings"
+        coordinator.submit()
+        for _ in 0..<100 where await agent.receivedTasks().isEmpty {
+            await Task.yield()
+        }
+
+        let submission = coordinator.submitVoiceTask("Actually, just check battery health")
+
+        XCTAssertEqual(submission, .intervened)
+        XCTAssertEqual(
+            coordinator.conversation.filter { $0.role == .user }.map(\.text),
+            ["Open System Settings", "Actually, just check battery health"]
+        )
+        let tasks = await agent.receivedTasks()
+        let task = try XCTUnwrap(tasks.first)
+        XCTAssertEqual(
+            task.interventions.takeAll(),
+            ["Actually, just check battery health"]
+        )
+        coordinator.stop()
+    }
+
     private func readyCoordinator(
         agent: some ComputerUseAgentRunning,
         cursorSession: any ComputerUseCursorSessionManaging = NoopComputerUseCursorPresenter(),
@@ -382,11 +407,17 @@ private actor StubComputerUseAgent: ComputerUseAgentRunning {
 
 private actor SuspendedComputerUseAgent: ComputerUseAgentRunning {
     private var continuation: CheckedContinuation<ComputerUseAgentResult, Never>?
+    private var tasks: [ComputerUseAgentTask] = []
 
     func run(task: ComputerUseAgentTask) async -> ComputerUseAgentResult {
-        await withCheckedContinuation { continuation in
+        tasks.append(task)
+        return await withCheckedContinuation { continuation in
             self.continuation = continuation
         }
+    }
+
+    func receivedTasks() -> [ComputerUseAgentTask] {
+        tasks
     }
 
     func finish(_ result: ComputerUseAgentResult) {

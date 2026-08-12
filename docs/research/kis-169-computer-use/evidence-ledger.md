@@ -1364,3 +1364,22 @@ production Swift sources, and focused tests.
   provider metadata is unavailable.
 - `[Verified]` The full suite passes 1,124 tests with 2 skipped and zero failures. Gated coverage
   is 87.00% (14,075/16,179 lines), above the 80% floor. E2E preflight and smoke pass.
+
+### Entry 76: Same-session spoken intervention
+
+Sources: `phase-19-spoken-intervention-2026-08-12.md`, production Swift sources, focused and full
+XCTest runs, coverage, and E2E scripts.
+
+- `[Unknown]` The inspected artifact does not expose an exact voice-intervention queue or the
+  precise checkpoint used to invalidate in-flight model output.
+- `[Implemented]` A transcript received during an active run is appended as a user turn in that
+  same conversation and delivered through a run-owned intervention channel. It is not rejected or
+  started as a second session.
+- `[Implemented]` The agent checks around every model request. A correction received during model
+  inference discards the stale response; a correction received during an atomic native action is
+  applied immediately after that action completes.
+- `[Implemented]` If an app target is established, the agent performs a fresh `get_app_state`
+  through the normal session/activity/result/screenshot path before requesting the next decision.
+  It does not infer apps from the correction text.
+- `[Verified]` The full suite passes 1,127 tests with 2 skipped and zero failures. Gated coverage
+  is 87.07% (14,191/16,299 lines), above the 80% floor. E2E preflight and smoke pass.

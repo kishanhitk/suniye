@@ -121,6 +121,8 @@ cross-process input still require separate validation.
 - `phase-18-model-context-normalization-2026-08-12.md` records protocol-paired activity history,
   model-only output cleanup, the 50-message/token budgets, screenshot retention, and
   model-specific truncation.
+- `phase-19-spoken-intervention-2026-08-12.md` records same-session voice correction, atomic-action
+  completion, stale-response rejection, and fresh re-observation before continuation.
 - `deep-code-parity-audit-2026-08-12.md` consolidates three independent code-level audits of the
   model/runtime, native mechanics, and cursor/UX, with verified gaps kept explicit.
 
@@ -239,3 +241,14 @@ Historical page-visible slice; Phase 16 adds the page-independent global shortcu
   selected model's known policy where metadata is available.
 - `[Verified]` The full suite passes 1,124 tests with 2 skipped and zero failures; gated coverage
   is 87.00% (14,075/16,179 lines), and E2E preflight and smoke pass.
+
+## Spoken intervention — 2026-08-12
+
+- `[Implemented]` Voice during an active run becomes a user correction in the same durable
+  conversation rather than an error or a new session.
+- `[Implemented]` The current atomic native action may finish, stale in-flight model output is
+  discarded, and the last established app target is freshly observed before the next decision.
+- `[Unknown]` The artifact does not expose the exact internal spoken-intervention checkpoint, so
+  this is a documented closest-match serial-loop implementation.
+- `[Verified]` The full suite passes 1,127 tests with 2 skipped and zero failures; gated coverage
+  is 87.07% (14,191/16,299 lines), and E2E preflight and smoke pass.

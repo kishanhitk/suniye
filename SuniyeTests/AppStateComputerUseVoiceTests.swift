@@ -110,7 +110,7 @@ final class AppStateComputerUseVoiceTests: XCTestCase {
         XCTAssertNil(appState.lastError)
     }
 
-    func testRejectedVoiceTaskReportsErrorWithoutInsertion() async {
+    func testVoiceTaskDuringRunBecomesAnInterventionWithoutInsertion() async {
         let audioCapture = StubAudioCaptureService()
         audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcription = StubTranscriptionService()
@@ -135,13 +135,17 @@ final class AppStateComputerUseVoiceTests: XCTestCase {
         appState.startRecordingFromUI()
         await fulfillment(of: [started], timeout: 1)
         appState.stopRecordingFromUI()
-        for _ in 0..<100 where appState.phase != .error {
+        for _ in 0..<100 where appState.phase != .ready {
             await Task.yield()
         }
 
         XCTAssertTrue(insertion.insertedTexts.isEmpty)
         XCTAssertTrue(insertion.copiedTexts.isEmpty)
-        XCTAssertEqual(appState.lastError, "Computer Use is already working.")
+        XCTAssertNil(appState.lastError)
+        XCTAssertEqual(
+            coordinator.conversation.filter { $0.role == .user }.map(\.text),
+            ["Existing task", "try another task"]
+        )
         coordinator.stop()
     }
 

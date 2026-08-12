@@ -136,6 +136,7 @@
 		897485217D84BB1499292D04 /* EditLearningServiceMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DFF30B89B35710FB74B0EB8 /* EditLearningServiceMoreTests.swift */; };
 		898E0CC20B6C61DE45A0BC0B /* GeneralSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 730EF6DDF61D565A9D49DFCA /* GeneralSettingsStoreTests.swift */; };
 		8A5BA0BBDF23417A9146C6B9 /* PermisoHostApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178E6345220851972413ABA2 /* PermisoHostApp.swift */; };
+		8A9BAD0F96CA3E5803DDE0B1 /* ComputerUseInterventionChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACD8C594890A1EC0B70D9120 /* ComputerUseInterventionChannel.swift */; };
 		8B5DBE4305E9D788FBFE42E0 /* ComputerUseToolBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60EC103F5AE7479F817F152 /* ComputerUseToolBackend.swift */; };
 		8D874A1D73D710DBF4FD77EC /* PartialTranscriptionScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17C618FC1DF7747D6FA464EF /* PartialTranscriptionScheduler.swift */; };
 		8D91611A49C362EB4D5D31D7 /* MagicFormatOutputPolicyMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A04F493D57EB7834B869AD /* MagicFormatOutputPolicyMoreTests.swift */; };
@@ -416,6 +417,7 @@
 		A99390B0C1FFE4B2791DA2BC /* EditLearningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditLearningService.swift; sourceTree = "<group>"; };
 		ABAF17E14062BC73F65CF7FD /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		ACD17ADB7342F21D32EF95DC /* SuniyeAppMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuniyeAppMoreTests.swift; sourceTree = "<group>"; };
+		ACD8C594890A1EC0B70D9120 /* ComputerUseInterventionChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseInterventionChannel.swift; sourceTree = "<group>"; };
 		AF27BE91A59F80432FA078F1 /* ComputerUseAccessibilityTree.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseAccessibilityTree.swift; sourceTree = "<group>"; };
 		AF568F275723DEA3AC53D6FD /* ComputerUsePermissionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUsePermissionService.swift; sourceTree = "<group>"; };
 		AFA029A8D395DF106BEEB35E /* EditModeServiceMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditModeServiceMoreTests.swift; sourceTree = "<group>"; };
@@ -772,6 +774,7 @@
 				DE5095ABED2B7F2B3FD6E030 /* ComputerUseCursorOverlayController.swift */,
 				A078FB8F387695BDA59615EB /* ComputerUseCursorPresentation.swift */,
 				C4A56768AB5F4A5EEDF7A7B2 /* ComputerUseInputTranslation.swift */,
+				ACD8C594890A1EC0B70D9120 /* ComputerUseInterventionChannel.swift */,
 				42F1C02C57E67331C707FC09 /* ComputerUseKeyChord.swift */,
 				27D284AB90A99E14F74CD672 /* ComputerUseModelClient.swift */,
 				B6A1E659A35BC9F426008728 /* ComputerUseModelContext.swift */,
@@ -1009,6 +1012,7 @@
 				7F9E9217F6F55113E889B867 /* ComputerUseCursorOverlayController.swift in Sources */,
 				04CCDD36CBA6C757037A8BFE /* ComputerUseCursorPresentation.swift in Sources */,
 				BA7AA29E9FC6D0523562AD61 /* ComputerUseInputTranslation.swift in Sources */,
+				8A9BAD0F96CA3E5803DDE0B1 /* ComputerUseInterventionChannel.swift in Sources */,
 				55ABF25461C39CFCAE868B77 /* ComputerUseKeyChord.swift in Sources */,
 				B266BC6B62E2E28DE45AF733 /* ComputerUseModelClient.swift in Sources */,
 				9B2B2B8844259BB4AC63428B /* ComputerUseModelContext.swift in Sources */,

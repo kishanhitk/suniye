@@ -17,19 +17,22 @@ struct ComputerUseDebugSessionID: Equatable, Sendable {
     }
 }
 
-struct ComputerUseAgentTask: Equatable, Sendable {
+struct ComputerUseAgentTask: Sendable {
     let instruction: String
     let conversation: [ComputerUseConversationMessage]
     let debugSessionID: ComputerUseDebugSessionID
+    let interventions: ComputerUseInterventionChannel
 
     init(
         instruction: String,
         conversation: [ComputerUseConversationMessage] = [],
-        debugSessionID: ComputerUseDebugSessionID = .generate()
+        debugSessionID: ComputerUseDebugSessionID = .generate(),
+        interventions: ComputerUseInterventionChannel = ComputerUseInterventionChannel()
     ) {
         self.instruction = instruction
         self.conversation = conversation
         self.debugSessionID = debugSessionID
+        self.interventions = interventions
     }
 }
 
@@ -126,15 +129,33 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
             screenshots: screenshots
         )
         var step = 0
+        var lastTargetApp: String?
         log(.info, "computer use run started", session: debugSessionID)
         do {
             while true {
                 try Task.checkCancellation()
+                try await applyInterventions(
+                    task.interventions.takeAll(),
+                    lastTargetApp: lastTargetApp,
+                    debugSessionID: debugSessionID,
+                    messages: &messages
+                )
                 messages = contextBuilder.compact(
                     messages,
                     currentInstruction: instruction
                 )
-                switch try await model.respond(to: messages) {
+                let response = try await model.respond(to: messages)
+                let interveningInstructions = task.interventions.takeAll()
+                if !interveningInstructions.isEmpty {
+                    try await applyInterventions(
+                        interveningInstructions,
+                        lastTargetApp: lastTargetApp,
+                        debugSessionID: debugSessionID,
+                        messages: &messages
+                    )
+                    continue
+                }
+                switch response {
                 case let .text(text):
                     log(
                         .info,
@@ -157,7 +178,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                     messages.append(
                         .toolCall(id: id, name: name, arguments: arguments)
                     )
-                    try await execute(
+                    let call = try await execute(
                         id: id,
                         name: name,
                         arguments: arguments,
@@ -165,6 +186,9 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                         debugSessionID: debugSessionID,
                         messages: &messages
                     )
+                    if let app = call?.targetApp {
+                        lastTargetApp = app
+                    }
                 }
             }
         } catch is CancellationError {
@@ -194,7 +218,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         activity: ComputerUseActivity,
         debugSessionID: ComputerUseDebugSessionID,
         messages: inout [ComputerUseModelMessage]
-    ) async throws {
+    ) async throws -> ComputerUseToolCall? {
         do {
             let call = try ComputerUseModelToolCallDecoder.decode(
                 name: name,
@@ -226,6 +250,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                     )
                 )
             }
+            return call
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as ComputerUseRuntimeError {
@@ -248,7 +273,55 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                     content: encodedError
                 )
             )
+            return nil
         }
+    }
+
+    private func applyInterventions(
+        _ interventions: [String],
+        lastTargetApp: String?,
+        debugSessionID: ComputerUseDebugSessionID,
+        messages: inout [ComputerUseModelMessage]
+    ) async throws {
+        guard !interventions.isEmpty else { return }
+        for intervention in interventions {
+            messages.append(.text(role: .user, text: intervention))
+        }
+        log(
+            .info,
+            "computer use intervention received count=\(interventions.count)",
+            session: debugSessionID
+        )
+        guard let lastTargetApp else { return }
+        let arguments = try encodeInterventionObservationArguments(app: lastTargetApp)
+        let id = "intervention-observation-\(UUID().uuidString.lowercased())"
+        let activity = ComputerUseActivity(
+            toolName: ComputerUseToolName.getAppState.rawValue,
+            arguments: arguments
+        )
+        await activitySink.emit(activity)
+        messages.append(
+            .toolCall(
+                id: id,
+                name: ComputerUseToolName.getAppState.rawValue,
+                arguments: arguments
+            )
+        )
+        _ = try await execute(
+            id: id,
+            name: ComputerUseToolName.getAppState.rawValue,
+            arguments: arguments,
+            activity: activity,
+            debugSessionID: debugSessionID,
+            messages: &messages
+        )
+    }
+
+    private func encodeInterventionObservationArguments(app: String) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let data = try encoder.encode(InterventionObservationArguments(app: app))
+        return String(decoding: data, as: UTF8.self)
     }
 
     private func emitFailure(
@@ -273,6 +346,30 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         session debugSessionID: ComputerUseDebugSessionID
     ) {
         logger.log(level, "\(message) session=\(debugSessionID.rawValue)")
+    }
+}
+
+private struct InterventionObservationArguments: Encodable {
+    let app: String
+}
+
+private extension ComputerUseToolCall {
+    var targetApp: String? {
+        switch self {
+        case .listApps:
+            nil
+        case let .getAppState(app, _),
+             let .performSecondaryAction(app, _, _),
+             let .setValue(app, _, _),
+             let .selectText(app, _, _, _, _, _),
+             let .scroll(app, _, _, _),
+             let .drag(app, _, _, _, _),
+             let .pressKey(app, _),
+             let .typeText(app, _):
+            app
+        case let .click(request):
+            request.app
+        }
     }
 }
 

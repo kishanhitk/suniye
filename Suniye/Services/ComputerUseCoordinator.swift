@@ -40,6 +40,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     @ObservationIgnored private var configuration: ComputerUseRemoteModelConfiguration?
     @ObservationIgnored private var activeRun: Task<Void, Never>?
     @ObservationIgnored private var activeRunID: UUID?
+    @ObservationIgnored private var activeInterventions: ComputerUseInterventionChannel?
     @ObservationIgnored private var pendingVoiceInstruction: String?
     @ObservationIgnored private var permissionOperationID: UUID?
 
@@ -153,6 +154,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         }
 
         let runID = UUID()
+        let interventions = ComputerUseInterventionChannel()
         let debugSessionID = ComputerUseDebugSessionID.generate(uuid: runID)
         let history = conversation
         conversation.append(.init(role: .user, text: instruction))
@@ -160,6 +162,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         errorMessage = nil
         phase = .running
         activeRunID = runID
+        activeInterventions = interventions
         self.debugSessionID = debugSessionID
         let activitySink = ComputerUseActivitySink { [weak self] activity in
             await self?.appendActivity(activity, for: runID)
@@ -168,7 +171,8 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         let task = ComputerUseAgentTask(
             instruction: instruction,
             conversation: history,
-            debugSessionID: debugSessionID
+            debugSessionID: debugSessionID,
+            interventions: interventions
         )
         activeRun = Task { [weak self] in
             let result = await agent.run(task: task)
@@ -186,8 +190,13 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         guard !normalized.isEmpty else {
             return .rejected(message: "No Computer Use task was transcribed.")
         }
-        guard !isRunning, pendingVoiceInstruction == nil else {
-            return .rejected(message: "Computer Use is already working.")
+        if isRunning, let activeInterventions {
+            conversation.append(.init(role: .user, text: normalized))
+            activeInterventions.submit(normalized)
+            return .intervened
+        }
+        guard pendingVoiceInstruction == nil else {
+            return .rejected(message: "A Computer Use voice task is already pending.")
         }
 
         draft = normalized
@@ -244,6 +253,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     private func finish(_ result: ComputerUseAgentResult) {
         activeRun = nil
         activeRunID = nil
+        activeInterventions = nil
         cursorSession.endSession()
         appendAssistantMessage(result.message)
         switch result.outcome {
@@ -288,6 +298,8 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         activeRun?.cancel()
         activeRun = nil
         activeRunID = nil
+        activeInterventions?.removeAll()
+        activeInterventions = nil
     }
 
     func cancelPendingVoiceTask() {

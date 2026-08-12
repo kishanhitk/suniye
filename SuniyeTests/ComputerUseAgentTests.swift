@@ -207,6 +207,79 @@ final class ComputerUseAgentTests: XCTestCase {
         )
     }
 
+    func testInterventionAfterAnAtomicActionForcesFreshObservationBeforeContinuing() async {
+        let interventions = ComputerUseInterventionChannel()
+        let model = ScriptedComputerUseModel(
+            responses: [
+                .toolCall(
+                    id: "state-1",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Calculator"}"#
+                ),
+                .toolCall(
+                    id: "click-1",
+                    name: "click",
+                    arguments: #"{"app":"Calculator","element_index":7}"#
+                ),
+                .text("Stopped after the correction."),
+            ]
+        )
+        let backend = FreshnessCheckingComputerUseBackend(
+            interventionChannel: interventions,
+            intervention: "Actually, do not click anything"
+        )
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: backend),
+            screenshots: MissingComputerUseScreenshotLoader()
+        )
+
+        let result = await agent.run(
+            task: ComputerUseAgentTask(
+                instruction: "Click 7 in Calculator",
+                interventions: interventions
+            )
+        )
+
+        XCTAssertEqual(result.message, "Stopped after the correction.")
+        let calls = await backend.calls
+        XCTAssertEqual(calls, [.getAppState, .click, .getAppState])
+        let finalRequest = await model.requests[2]
+        XCTAssertTrue(
+            finalRequest.contains(
+                .text(role: .user, text: "Actually, do not click anything")
+            )
+        )
+        XCTAssertEqual(
+            finalRequest.filter {
+                $0.toolCalls?.first?.function.name == ComputerUseToolName.getAppState.rawValue
+            }.count,
+            2
+        )
+    }
+
+    func testInterventionDuringModelDecisionDiscardsTheStaleProposedAction() async {
+        let interventions = ComputerUseInterventionChannel()
+        let model = InterventionInjectingComputerUseModel(interventions: interventions)
+        let backend = FreshnessCheckingComputerUseBackend()
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: backend),
+            screenshots: MissingComputerUseScreenshotLoader()
+        )
+
+        let result = await agent.run(
+            task: ComputerUseAgentTask(
+                instruction: "Click 7 in Calculator",
+                interventions: interventions
+            )
+        )
+
+        XCTAssertEqual(result.message, "Understood the correction.")
+        let calls = await backend.calls
+        XCTAssertEqual(calls, [.getAppState, .getAppState])
+    }
+
     func testFreshAppStateAddsItsScreenshotAfterTheToolResult() async throws {
         let screenshotURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("computer-use-agent-\(UUID().uuidString).jpg")
@@ -608,6 +681,36 @@ private actor ScriptedComputerUseModel: ComputerUseModelServing {
     }
 }
 
+private actor InterventionInjectingComputerUseModel: ComputerUseModelServing {
+    private let interventions: ComputerUseInterventionChannel
+    private var responseIndex = 0
+
+    init(interventions: ComputerUseInterventionChannel) {
+        self.interventions = interventions
+    }
+
+    func respond(to messages: [ComputerUseModelMessage]) async throws -> ComputerUseModelResponse {
+        defer { responseIndex += 1 }
+        switch responseIndex {
+        case 0:
+            return .toolCall(
+                id: "state-1",
+                name: "get_app_state",
+                arguments: #"{"app":"Calculator"}"#
+            )
+        case 1:
+            interventions.submit("Actually, do not click anything")
+            return .toolCall(
+                id: "stale-click",
+                name: "click",
+                arguments: #"{"app":"Calculator","element_index":7}"#
+            )
+        default:
+            return .text("Understood the correction.")
+        }
+    }
+}
+
 private struct MissingComputerUseScreenshotLoader: ComputerUseScreenshotLoading {
     func dataURL(for url: URL) async throws -> String {
         throw CocoaError(.fileNoSuchFile)
@@ -637,15 +740,21 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
     private let screenshotURL: URL?
     private let shouldFailObservation: Bool
     private let appStateText: String
+    private let interventionChannel: ComputerUseInterventionChannel?
+    private let intervention: String?
 
     init(
         screenshotURL: URL? = nil,
         shouldFailObservation: Bool = false,
-        appStateText: String = "0 AXStaticText: 42"
+        appStateText: String = "0 AXStaticText: 42",
+        interventionChannel: ComputerUseInterventionChannel? = nil,
+        intervention: String? = nil
     ) {
         self.screenshotURL = screenshotURL
         self.shouldFailObservation = shouldFailObservation
         self.appStateText = appStateText
+        self.interventionChannel = interventionChannel
+        self.intervention = intervention
     }
 
     func listApps() async throws -> [ComputerUseApplication] {
@@ -722,6 +831,9 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
         }
         hasObservedState = false
         calls.append(call)
+        if let intervention {
+            interventionChannel?.submit(intervention)
+        }
     }
 }
 
