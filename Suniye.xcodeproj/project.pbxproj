@@ -154,6 +154,7 @@
 		9789629B2500E8B3BDD2142C /* ComputerUsePermissionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF568F275723DEA3AC53D6FD /* ComputerUsePermissionService.swift */; };
 		980A0760D74063FC22882E45 /* ComputerUseAccessibilityTreeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16B0D02511A57448ADB9696E /* ComputerUseAccessibilityTreeTests.swift */; };
 		9B01738708A5E0777F9DDFB9 /* KeychainServiceMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F8CAE1D0035428B5509358E /* KeychainServiceMoreTests.swift */; };
+		9B2B2B8844259BB4AC63428B /* ComputerUseModelContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6A1E659A35BC9F426008728 /* ComputerUseModelContext.swift */; };
 		9CEC29D27FCC952C4C618C70 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2D87825E1C649DC7A33115 /* StatusItemController.swift */; };
 		9D13CEED2565CC8B3F4AD092 /* AudioCaptureServiceMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B3EE9E70828221B854F1BA /* AudioCaptureServiceMoreTests.swift */; };
 		9F822914FE40C1F233C1E055 /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F51B3DBFA1B6B9385FA63197 /* MainWindowController.swift */; };
@@ -421,6 +422,7 @@
 		AFC215558D575BA1241875A6 /* SuniyeAnalytics */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SuniyeAnalytics; path = SuniyeAnalytics; sourceTree = SOURCE_ROOT; };
 		B02C346233A9DC50B3D8C611 /* UpdateServiceMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateServiceMoreTests.swift; sourceTree = "<group>"; };
 		B174C0E31BC3B2F6FBD0DE0A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		B6A1E659A35BC9F426008728 /* ComputerUseModelContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseModelContext.swift; sourceTree = "<group>"; };
 		B6EB5FBEA5CAE89927889A5A /* SystemComputerUseAccessibilityActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemComputerUseAccessibilityActions.swift; sourceTree = "<group>"; };
 		B7E769F836704229B962F80C /* MainWindowComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowComponents.swift; sourceTree = "<group>"; };
 		B9D8487CCDF6CB1A7023E095 /* OpenRouterPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterPostProcessor.swift; sourceTree = "<group>"; };
@@ -772,6 +774,7 @@
 				C4A56768AB5F4A5EEDF7A7B2 /* ComputerUseInputTranslation.swift */,
 				42F1C02C57E67331C707FC09 /* ComputerUseKeyChord.swift */,
 				27D284AB90A99E14F74CD672 /* ComputerUseModelClient.swift */,
+				B6A1E659A35BC9F426008728 /* ComputerUseModelContext.swift */,
 				BC99DF5A7CB434D72CF94894 /* ComputerUseModelSettings.swift */,
 				54D7B74348B368D03303FD03 /* ComputerUseModelToolCallDecoder.swift */,
 				9685D04F9CED6FADA5B5DEA5 /* ComputerUseModelToolContract.swift */,
@@ -1008,6 +1011,7 @@
 				BA7AA29E9FC6D0523562AD61 /* ComputerUseInputTranslation.swift in Sources */,
 				55ABF25461C39CFCAE868B77 /* ComputerUseKeyChord.swift in Sources */,
 				B266BC6B62E2E28DE45AF733 /* ComputerUseModelClient.swift in Sources */,
+				9B2B2B8844259BB4AC63428B /* ComputerUseModelContext.swift in Sources */,
 				B79607DBACF14566A7E10A09 /* ComputerUseModelSettings.swift in Sources */,
 				A04767D71E2C855C6775CB17 /* ComputerUseModelToolCallDecoder.swift in Sources */,
 				BAC57CDD73EDAB55F4ABF790 /* ComputerUseModelToolContract.swift in Sources */,

@@ -92,19 +92,22 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
     private let screenshots: ComputerUseScreenshotLoading
     private let logger: ComputerUseLogging
     private let activitySink: ComputerUseActivitySink
+    private let contextBuilder: ComputerUseModelContextBuilder
 
     init(
         model: ComputerUseModelServing,
         session: ComputerUseSession,
         screenshots: ComputerUseScreenshotLoading = SystemComputerUseScreenshotLoader(),
         logger: ComputerUseLogging = SystemComputerUseLogger(),
-        activitySink: ComputerUseActivitySink = .disabled
+        activitySink: ComputerUseActivitySink = .disabled,
+        contextPolicy: ComputerUseModelContextPolicy = .referenceAligned(modelID: "")
     ) {
         self.model = model
         self.session = session
         self.screenshots = screenshots
         self.logger = logger
         self.activitySink = activitySink
+        contextBuilder = ComputerUseModelContextBuilder(policy: contextPolicy)
     }
 
     func run(task: ComputerUseAgentTask) async -> ComputerUseAgentResult {
@@ -117,22 +120,20 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         }
 
         let debugSessionID = task.debugSessionID
-        var messages = task.conversation.compactMap { message -> ComputerUseModelMessage? in
-            switch message.role {
-            case .user:
-                .text(role: .user, text: message.text)
-            case .assistant:
-                .text(role: .assistant, text: message.text)
-            case .activity:
-                nil
-            }
-        }
-        messages.append(.text(role: .user, text: instruction))
+        var messages = await contextBuilder.initialMessages(
+            conversation: task.conversation,
+            instruction: instruction,
+            screenshots: screenshots
+        )
         var step = 0
         log(.info, "computer use run started", session: debugSessionID)
         do {
             while true {
                 try Task.checkCancellation()
+                messages = contextBuilder.compact(
+                    messages,
+                    currentInstruction: instruction
+                )
                 switch try await model.respond(to: messages) {
                 case let .text(text):
                     log(
@@ -200,15 +201,19 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 arguments: arguments
             )
             let result = try await session.execute(call)
-            let encodedResult = try ComputerUseToolResultEncoder.encode(result)
+            let localResult = try ComputerUseToolResultEncoder.encode(result)
+            let modelResult = try ComputerUseModelToolOutput.encode(
+                result,
+                maximumTokens: contextBuilder.policy.maximumToolOutputTokens
+            )
             log(
                 .debug,
                 "computer use tool completed name=\(name) result=\(result.logValue)",
                 session: debugSessionID
             )
-            await activitySink.emit(activity.completed(output: encodedResult))
+            await activitySink.emit(activity.completed(output: localResult))
             messages.append(
-                .toolResult(id: id, content: encodedResult)
+                .toolResult(id: id, content: modelResult)
             )
             if case let .appState(state) = result,
                let screenshot = state.screenshot,

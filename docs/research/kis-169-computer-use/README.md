@@ -118,6 +118,9 @@ cross-process input still require separate validation.
   shortcut, raw local voice route, collision policy, and Escape cancellation.
 - `phase-17-independent-model-settings-2026-08-12.md` records the dedicated provider, endpoint,
   model, Keychain credential, connection test, and Magic Format isolation.
+- `phase-18-model-context-normalization-2026-08-12.md` records protocol-paired activity history,
+  model-only output cleanup, the 50-message/token budgets, screenshot retention, and
+  model-specific truncation.
 - `deep-code-parity-audit-2026-08-12.md` consolidates three independent code-level audits of the
   model/runtime, native mechanics, and cursor/UX, with verified gaps kept explicit.
 
@@ -222,5 +225,17 @@ Historical page-visible slice; Phase 16 adds the page-independent global shortcu
   credential Save/Clear, connection testing, Accessibility, and Screen Recording controls.
 - `[Verified]` The full suite passes 1,111 tests with 2 skipped and zero failures; gated coverage
   is 86.82% (13,789/15,882), and E2E preflight and smoke pass.
-- `[Next]` Model-visible context normalization, cleanup, and bounded compaction remain the next
-  parity slice.
+- `[Superseded by Phase 18]` Model-visible context normalization, cleanup, and bounded compaction
+  are now implemented.
+
+## Model context normalization — 2026-08-12
+
+- `[Implemented]` Model history now preserves completed tool calls and results as protocol pairs,
+  strips local screenshot URLs only from provider payloads, and retains raw local activity.
+- `[Implemented]` Requests are bounded to the latest useful 50 messages under a model-aware token
+  budget while retaining the current instruction, latest observation, and two newest readable
+  images across user turns.
+- `[Implemented]` Tool output uses the recovered UTF-8-safe middle truncation format and the
+  selected model's known policy where metadata is available.
+- `[Verified]` The full suite passes 1,124 tests with 2 skipped and zero failures; gated coverage
+  is 87.00% (14,075/16,179 lines), and E2E preflight and smoke pass.

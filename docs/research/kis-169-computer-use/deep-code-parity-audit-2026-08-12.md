@@ -26,8 +26,10 @@ model/runtime composition, native app/window/action mechanics, and desktop curso
 - `[Verified]` Suniye attaches a captured screenshot directly to the next provider request. The
   inspected persistent JavaScript runtime instead makes screenshot emission explicit through
   `nodeRepl.emitImage`.
-- `[Verified gap]` Suniye flattens earlier user/assistant conversation turns to text and does not
-  retain the inspected runtime's complete ordered tool, image, and reasoning-item history.
+- `[Verified correction]` Suniye now reconstructs completed activity as ordered function-call and
+  result pairs, retains the latest observation and recent screenshot messages, and compacts the
+  provider payload under message and token budgets. It still cannot retain encrypted reasoning
+  items because its transport does not expose them.
 - `[Verified gap]` Suniye uses a provider-portable Chat Completions endpoint rather than the
   inspected Responses API plus persistent JavaScript execution boundary. The tool semantics are
   aligned, but the transport and context representation are not identical.
@@ -86,6 +88,6 @@ The ten-tool public capability and the observable native action loop are aligned
 evidence-backed corrections are persistent run-scoped cursor state, process-scoped input, strict
 fresh observation per Suniye model decision, and same-process replacement-window reacquisition.
 The remaining known differences are architectural: Responses/persistent JavaScript versus direct
-Chat Completions tools, richer ordered turn history, helper IPC/private capture internals, and
-cursor compositing. They must not be described as exact parity unless Suniye adopts and validates
-equivalent architecture.
+Chat Completions tools, encrypted reasoning and server compaction items, helper IPC/private capture
+internals, and cursor compositing. They must not be described as exact parity unless Suniye adopts
+and validates equivalent architecture.

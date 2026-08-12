@@ -1339,5 +1339,28 @@ and full XCTest runs, coverage, and E2E scripts.
   credential is copied or migrated.
 - `[Verified]` The full suite passes 1,111 tests with 2 skipped and zero failures. Gated coverage
   is 86.82% (13,789/15,882), above the 80% floor. E2E preflight and smoke pass.
-- `[Next]` Context normalization, tool-output cleanup, screenshot retention, and bounded
-  compaction remain separate model-runtime work.
+- `[Superseded by Entry 75]` Context normalization, tool-output cleanup, screenshot retention, and
+  bounded compaction are now implemented.
+
+### Entry 75: Model-visible context normalization and cleanup
+
+Sources: `phase-18-model-context-normalization-2026-08-12.md`, inspected runtime source,
+production Swift sources, and focused tests.
+
+- `[Verified]` The selected Luna metadata declares a 272,000-token context window and a
+  10,000-token truncation policy. The shared truncator estimates one token per four UTF-8 bytes,
+  preserves the beginning and end, and emits an `…N tokens truncated…` marker.
+- `[Implemented]` Completed persisted activities now re-enter model context as paired assistant
+  function calls and tool results. Pairing and an adjacent image are kept as one compaction group.
+- `[Implemented]` Model-facing app-state results omit local screenshot file URLs; screenshot data
+  remains a separate image part. Persisted activity and the collapsed UI result remain raw.
+- `[Implemented]` Each request contains at most 50 messages, retaining the current instruction,
+  latest observation, at most two newest screenshots, and newest remaining groups under the
+  model-aware token budget.
+- `[Implemented]` New user turns restore the two newest still-readable historical screenshot files
+  as image messages beside their observation pairs; missing temporary files are skipped.
+- `[Independent choice]` Unknown models use a 100,000-token context budget, a generic
+  10,000-byte-equivalent output limit, and the same two-image retention cap because custom
+  provider metadata is unavailable.
+- `[Verified]` The full suite passes 1,124 tests with 2 skipped and zero failures. Gated coverage
+  is 87.00% (14,075/16,179 lines), above the 80% floor. E2E preflight and smoke pass.

@@ -148,7 +148,7 @@ final class ComputerUseAgentTests: XCTestCase {
             ),
             .toolResult(
                 id: "state-1",
-                content: #"{"app":"Calculator","screenshot":null,"text":"0 AXStaticText: 42"}"#
+                content: #"{"app":"Calculator","text":"0 AXStaticText: 42"}"#
             ),
         ])
     }
@@ -277,6 +277,295 @@ final class ComputerUseAgentTests: XCTestCase {
         )
     }
 
+    func testHistoricalToolCallsAreNormalizedAsPairedProtocolMessagesWithoutLocalScreenshotURL() async {
+        let model = ScriptedComputerUseModel(responses: [.text("Done.")])
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend())
+        )
+        let activity = ComputerUseActivity(
+            toolName: "get_app_state",
+            arguments: #"{"app":"Calculator"}"#,
+            output: #"{"app":"Calculator","screenshot":"file:///private/tmp/state.jpg","text":"0 AXStaticText: 42"}"#
+        )
+
+        _ = await agent.run(
+            task: ComputerUseAgentTask(
+                instruction: "Now read it.",
+                conversation: [ComputerUseConversationMessage(activity: activity)]
+            )
+        )
+
+        let request = await model.requests[0]
+        let callID = "history-\(activity.id.uuidString.lowercased())"
+        XCTAssertEqual(request, [
+            .toolCall(
+                id: callID,
+                name: "get_app_state",
+                arguments: #"{"app":"Calculator"}"#
+            ),
+            .toolResult(
+                id: callID,
+                content: #"{"app":"Calculator","text":"0 AXStaticText: 42"}"#
+            ),
+            .text(role: .user, text: "Now read it."),
+        ])
+    }
+
+    func testInitialContextIsAtMostFiftyMessagesAndKeepsCurrentInstruction() async {
+        let model = ScriptedComputerUseModel(responses: [.text("Done.")])
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend())
+        )
+        let conversation = (0..<70).map { index in
+            ComputerUseConversationMessage(
+                role: index.isMultiple(of: 2) ? .user : .assistant,
+                text: "message-\(index)"
+            )
+        }
+
+        _ = await agent.run(
+            task: ComputerUseAgentTask(
+                instruction: "current instruction",
+                conversation: conversation
+            )
+        )
+
+        let request = await model.requests[0]
+        XCTAssertEqual(request.count, 50)
+        XCTAssertEqual(request.last, .text(role: .user, text: "current instruction"))
+        XCTAssertFalse(request.contains(.text(role: .user, text: "message-0")))
+        XCTAssertTrue(request.contains(.text(role: .assistant, text: "message-69")))
+    }
+
+    func testContextKeepsLatestObservationEvenWhenFiftyNewerMessagesExist() async {
+        let model = ScriptedComputerUseModel(responses: [.text("Done.")])
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend())
+        )
+        let observation = ComputerUseActivity(
+            toolName: "get_app_state",
+            arguments: #"{"app":"Calculator"}"#,
+            output: #"{"app":"Calculator","screenshot":null,"text":"latest observed state"}"#
+        )
+        let newerMessages = (0..<60).map { index in
+            ComputerUseConversationMessage(role: .assistant, text: "later-\(index)")
+        }
+
+        _ = await agent.run(
+            task: ComputerUseAgentTask(
+                instruction: "current instruction",
+                conversation: [ComputerUseConversationMessage(activity: observation)] + newerMessages
+            )
+        )
+
+        let request = await model.requests[0]
+        XCTAssertEqual(request.count, 50)
+        XCTAssertTrue(request.contains { message in
+            message.toolCalls?.first?.function.name == "get_app_state"
+        })
+        XCTAssertTrue(request.contains { message in
+            message.textContent?.contains("latest observed state") == true
+        })
+    }
+
+    func testLocalActivityKeepsRawScreenshotURLWhileModelReceivesCleanOutput() async throws {
+        let screenshotURL = URL(fileURLWithPath: "/private/tmp/computer-use-state.jpg")
+        let model = ScriptedComputerUseModel(
+            responses: [
+                .toolCall(id: "state-1", name: "get_app_state", arguments: #"{"app":"Calculator"}"#),
+                .text("Done."),
+            ]
+        )
+        let recorder = RecordingComputerUseActivitySink()
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(
+                backend: FreshnessCheckingComputerUseBackend(screenshotURL: screenshotURL)
+            ),
+            screenshots: MissingComputerUseScreenshotLoader(),
+            activitySink: ComputerUseActivitySink { activity in
+                await recorder.record(activity)
+            }
+        )
+
+        _ = await agent.run(task: ComputerUseAgentTask(instruction: "Inspect Calculator."))
+
+        let activities = await recorder.activities
+        let requests = await model.requests
+        XCTAssertTrue(try XCTUnwrap(activities.last?.output).contains(screenshotURL.absoluteString))
+        let modelResult = try XCTUnwrap(requests[1].first { $0.toolCallID == "state-1" })
+        XCTAssertFalse(modelResult.textContent?.contains("file://") == true)
+        XCTAssertEqual(
+            modelResult.textContent,
+            #"{"app":"Calculator","text":"0 AXStaticText: 42"}"#
+        )
+    }
+
+    func testLargeToolOutputUsesReferenceMiddleTokenTruncation() async {
+        let longText = String(repeating: "a", count: 50_000) + "TAIL"
+        let model = ScriptedComputerUseModel(
+            responses: [
+                .toolCall(id: "state-1", name: "get_app_state", arguments: #"{"app":"Calculator"}"#),
+                .text("Done."),
+            ]
+        )
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(
+                backend: FreshnessCheckingComputerUseBackend(appStateText: longText)
+            ),
+            screenshots: MissingComputerUseScreenshotLoader(),
+            contextPolicy: .referenceAligned(modelID: "gpt-5.6-luna")
+        )
+
+        _ = await agent.run(task: ComputerUseAgentTask(instruction: "Inspect Calculator."))
+
+        let request = await model.requests[1]
+        let result = request.first { $0.toolCallID == "state-1" }?.textContent ?? ""
+        XCTAssertLessThanOrEqual(result.utf8.count, 40_100)
+        XCTAssertTrue(result.contains("tokens truncated"))
+        XCTAssertTrue(result.hasSuffix("TAIL\"}"))
+    }
+
+    func testContextTokenBudgetKeepsCurrentInstructionAndNewestUsefulMessages() {
+        let policy = ComputerUseModelContextPolicy(
+            maximumMessages: 50,
+            maximumContextTokens: 35,
+            maximumToolOutputTokens: 10_000,
+            maximumScreenshots: 2
+        )
+        let builder = ComputerUseModelContextBuilder(policy: policy)
+        let messages = (0..<8).map { index in
+            ComputerUseModelMessage.text(
+                role: .assistant,
+                text: "message-\(index)-" + String(repeating: "x", count: 24)
+            )
+        } + [.text(role: .user, text: "current instruction")]
+
+        let compacted = builder.compact(messages, currentInstruction: "current instruction")
+
+        XCTAssertEqual(compacted.last, .text(role: .user, text: "current instruction"))
+        XCTAssertTrue(compacted.contains { $0.textContent?.hasPrefix("message-7-") == true })
+        XCTAssertFalse(compacted.contains { $0.textContent?.hasPrefix("message-0-") == true })
+    }
+
+    func testContextRetainsOnlyTwoLatestScreenshots() {
+        let builder = ComputerUseModelContextBuilder(
+            policy: .referenceAligned(modelID: "gpt-5.6-luna")
+        )
+        let messages = (0..<4).map { index in
+            ComputerUseModelMessage.image(
+                role: .user,
+                text: "screenshot-\(index)",
+                dataURL: "data:image/jpeg;base64,\(index)"
+            )
+        } + [.text(role: .user, text: "current instruction")]
+
+        let compacted = builder.compact(messages, currentInstruction: "current instruction")
+        let screenshotLabels = compacted.compactMap { message -> String? in
+            guard case let .parts(parts) = message.content else { return nil }
+            guard case let .text(label)? = parts.first else { return nil }
+            return label
+        }
+
+        XCTAssertEqual(screenshotLabels, ["screenshot-2", "screenshot-3"])
+    }
+
+    func testInitialContextRestoresTwoNewestHistoricalScreenshots() async {
+        let model = ScriptedComputerUseModel(responses: [.text("Done.")])
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend()),
+            screenshots: StubComputerUseScreenshotLoader()
+        )
+        let conversation = (0..<3).map { index in
+            ComputerUseConversationMessage(
+                activity: ComputerUseActivity(
+                    toolName: "get_app_state",
+                    arguments: #"{"app":"App\#(index)"}"#,
+                    output: #"{"app":"App\#(index)","screenshot":"file:///tmp/state-\#(index).jpg","text":"state-\#(index)"}"#
+                )
+            )
+        }
+
+        _ = await agent.run(
+            task: ComputerUseAgentTask(
+                instruction: "Continue.",
+                conversation: conversation
+            )
+        )
+
+        let request = await model.requests[0]
+        let imageLabels = request.compactMap { message -> String? in
+            guard case let .parts(parts) = message.content else { return nil }
+            guard case let .text(label)? = parts.first else { return nil }
+            return label
+        }
+        XCTAssertEqual(
+            imageLabels,
+            ["Current App1 screenshot.", "Current App2 screenshot."]
+        )
+    }
+
+    func testInitialContextBackfillsAnOlderScreenshotWhenANewerFileIsMissing() async {
+        let model = ScriptedComputerUseModel(responses: [.text("Done.")])
+        let agent = ComputerUseAgent(
+            model: model,
+            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend()),
+            screenshots: SelectiveComputerUseScreenshotLoader(missingFile: "state-2.jpg")
+        )
+        let conversation = (0..<3).map { index in
+            ComputerUseConversationMessage(
+                activity: ComputerUseActivity(
+                    toolName: "get_app_state",
+                    arguments: #"{"app":"App\#(index)"}"#,
+                    output: #"{"app":"App\#(index)","screenshot":"file:///tmp/state-\#(index).jpg","text":"state-\#(index)"}"#
+                )
+            )
+        }
+
+        _ = await agent.run(
+            task: ComputerUseAgentTask(instruction: "Continue.", conversation: conversation)
+        )
+
+        let request = await model.requests[0]
+        let imageLabels = request.compactMap { message -> String? in
+            guard case let .parts(parts) = message.content else { return nil }
+            guard case let .text(label)? = parts.first else { return nil }
+            return label
+        }
+        XCTAssertEqual(
+            imageLabels,
+            ["Current App0 screenshot.", "Current App1 screenshot."]
+        )
+    }
+
+    func testReferencePolicyUsesSelectedModelMetadata() {
+        let luna = ComputerUseModelContextPolicy.referenceAligned(modelID: "gpt-5.6-luna")
+        let fallback = ComputerUseModelContextPolicy.referenceAligned(modelID: "custom-model")
+
+        XCTAssertEqual(luna.maximumContextTokens, 272_000)
+        XCTAssertEqual(luna.maximumToolOutputTokens, 10_000)
+        XCTAssertEqual(fallback.maximumContextTokens, 100_000)
+        XCTAssertEqual(fallback.maximumToolOutputTokens, 2_500)
+    }
+
+    func testMiddleTruncationPreservesUTF8BoundariesAndReportsReferenceTokenEstimate() {
+        let text = String(repeating: "🟣", count: 100)
+
+        let truncated = ComputerUseTokenTruncator.truncateMiddle(text, maximumTokens: 10)
+
+        XCTAssertEqual(
+            truncated,
+            String(repeating: "🟣", count: 5)
+                + "…90 tokens truncated…"
+                + String(repeating: "🟣", count: 5)
+        )
+    }
+
 }
 
 private actor RecordingComputerUseActivitySink {
@@ -319,18 +608,44 @@ private actor ScriptedComputerUseModel: ComputerUseModelServing {
     }
 }
 
+private struct MissingComputerUseScreenshotLoader: ComputerUseScreenshotLoading {
+    func dataURL(for url: URL) async throws -> String {
+        throw CocoaError(.fileNoSuchFile)
+    }
+}
+
+private struct StubComputerUseScreenshotLoader: ComputerUseScreenshotLoading {
+    func dataURL(for url: URL) async throws -> String {
+        "data:image/jpeg;base64,\(url.lastPathComponent)"
+    }
+}
+
+private struct SelectiveComputerUseScreenshotLoader: ComputerUseScreenshotLoading {
+    let missingFile: String
+
+    func dataURL(for url: URL) async throws -> String {
+        guard url.lastPathComponent != missingFile else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        return "data:image/jpeg;base64,\(url.lastPathComponent)"
+    }
+}
+
 private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
     private(set) var calls: [ComputerUseToolName] = []
     private var hasObservedState = false
     private let screenshotURL: URL?
     private let shouldFailObservation: Bool
+    private let appStateText: String
 
     init(
         screenshotURL: URL? = nil,
-        shouldFailObservation: Bool = false
+        shouldFailObservation: Bool = false,
+        appStateText: String = "0 AXStaticText: 42"
     ) {
         self.screenshotURL = screenshotURL
         self.shouldFailObservation = shouldFailObservation
+        self.appStateText = appStateText
     }
 
     func listApps() async throws -> [ComputerUseApplication] {
@@ -347,7 +662,7 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
         return ComputerUseAppState(
             app: app,
             screenshot: screenshotURL,
-            text: "0 AXStaticText: 42"
+            text: appStateText
         )
     }
 
