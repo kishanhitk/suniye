@@ -2709,13 +2709,13 @@ final class AppState {
     }
 
     @discardableResult
-    func pasteLastTranscript() -> Bool {
+    func pasteLastTranscript() async -> Bool {
         guard let text = lastTranscriptText, !text.isEmpty else {
             return false
         }
 
         do {
-            try textInsertionService.insertText(text)
+            try await textInsertionService.insertText(text)
             clearInsertionRecoveryWarning()
             AppLogger.shared.log(.info, "paste last transcript completed")
             return true
@@ -3487,7 +3487,7 @@ final class AppState {
         hotkeyService.onPasteLastTranscript = { [weak self] in
             AppLogger.shared.log(.debug, "paste last transcript hotkey callback")
             Task { @MainActor in
-                self?.pasteLastTranscript()
+                await self?.pasteLastTranscript()
             }
         }
 
@@ -3887,7 +3887,7 @@ final class AppState {
                     insertionContext: textInsertionService.captureInsertionContext()
                 )
                 do {
-                    try textInsertionService.insertText(insertionText)
+                    try await textInsertionService.insertText(insertionText)
                     didInsertFinalText = true
                     dictationTiming.inserted = .now()
                     beginEditLearningTracking(insertedText: insertionText)
@@ -4094,7 +4094,7 @@ final class AppState {
             )
 
             try await requireAccessibilityForInsertion()
-            try textInsertionService.insertText(rewritten)
+            try await textInsertionService.insertText(rewritten)
             recentResults.insert(
                 RecentResult(
                     id: UUID(),

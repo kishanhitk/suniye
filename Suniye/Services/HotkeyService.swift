@@ -220,25 +220,27 @@ final class HotkeyService: HotkeyServiceProtocol {
         return noErr
     }
 
-    private func downCallback(for slot: Slot) -> (() -> Void)? {
+    func downCallback(for slot: Slot) -> (() -> Void)? {
         switch slot {
         case .dictation:
             return onHotkeyDown
         case .editMode:
             return onEditModeHotkeyDown
         case .pasteLastTranscript:
-            return onPasteLastTranscript
+            // The recovery path may synthesize Command+V. Wait until the
+            // physical shortcut key is released so the paste is not swallowed.
+            return nil
         }
     }
 
-    private func upCallback(for slot: Slot) -> (() -> Void)? {
+    func upCallback(for slot: Slot) -> (() -> Void)? {
         switch slot {
         case .dictation:
             return onHotkeyUp
         case .editMode:
             return onEditModeHotkeyUp
         case .pasteLastTranscript:
-            return nil
+            return onPasteLastTranscript
         }
     }
 }

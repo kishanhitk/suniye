@@ -63,7 +63,7 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "previous clipboard")
     }
 
-    func testPasteLastTranscriptWorksWhileBusyWithoutChangingHistoryOrSubmitting() {
+    func testPasteLastTranscriptWorksWhileBusyWithoutChangingHistoryOrSubmitting() async {
         let result = RecentResult(
             id: UUID(),
             text: "latest transcript",
@@ -80,9 +80,11 @@ final class AppStateSettingsTests: XCTestCase {
         )
 
         appState.phase = .recording
-        XCTAssertTrue(appState.pasteLastTranscript())
+        let didPasteWhileRecording = await appState.pasteLastTranscript()
+        XCTAssertTrue(didPasteWhileRecording)
         appState.phase = .transcribing
-        XCTAssertTrue(appState.pasteLastTranscript())
+        let didPasteWhileTranscribing = await appState.pasteLastTranscript()
+        XCTAssertTrue(didPasteWhileTranscribing)
 
         XCTAssertEqual(textInsertionService.insertedTexts, ["latest transcript", "latest transcript"])
         XCTAssertEqual(textInsertionService.submitCallCount, 0)
@@ -90,17 +92,18 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.phase, .transcribing)
     }
 
-    func testPasteLastTranscriptSilentlyReturnsFalseWhenHistoryIsEmpty() {
+    func testPasteLastTranscriptSilentlyReturnsFalseWhenHistoryIsEmpty() async {
         let textInsertionService = SpyTextInsertionService()
         let appState = makeTestAppState(textInsertionService: textInsertionService)
 
-        XCTAssertFalse(appState.pasteLastTranscript())
+        let didPaste = await appState.pasteLastTranscript()
+        XCTAssertFalse(didPaste)
         XCTAssertTrue(textInsertionService.attemptedTexts.isEmpty)
         XCTAssertNil(appState.lastError)
         XCTAssertEqual(appState.floatingIndicatorState, .idle)
     }
 
-    func testPasteLastTranscriptSilentlyReturnsFalseWhenLatestHistoryTextIsEmpty() {
+    func testPasteLastTranscriptSilentlyReturnsFalseWhenLatestHistoryTextIsEmpty() async {
         let historyStore = TestHistoryStore()
         historyStore.value = [
             RecentResult(id: UUID(), text: "", createdAt: .now, durationSeconds: 1, wasLLMPolished: false)
@@ -111,13 +114,14 @@ final class AppStateSettingsTests: XCTestCase {
             historyStore: historyStore
         )
 
-        XCTAssertFalse(appState.pasteLastTranscript())
+        let didPaste = await appState.pasteLastTranscript()
+        XCTAssertFalse(didPaste)
         XCTAssertTrue(textInsertionService.attemptedTexts.isEmpty)
         XCTAssertNil(appState.lastError)
         XCTAssertEqual(appState.floatingIndicatorState, .idle)
     }
 
-    func testPasteLastTranscriptFailureUsesConfiguredShortcutInWarning() {
+    func testPasteLastTranscriptFailureUsesConfiguredShortcutInWarning() async {
         let historyStore = TestHistoryStore()
         historyStore.value = [
             RecentResult(id: UUID(), text: "latest transcript", createdAt: .now, durationSeconds: 1, wasLLMPolished: false)
@@ -132,7 +136,8 @@ final class AppStateSettingsTests: XCTestCase {
             .keyCombo(keyCode: UInt32(kVK_ANSI_P), carbonModifiers: UInt32(controlKey | cmdKey))
         )
 
-        XCTAssertFalse(appState.pasteLastTranscript())
+        let didPaste = await appState.pasteLastTranscript()
+        XCTAssertFalse(didPaste)
 
         XCTAssertEqual(appState.lastError, "Couldn't insert text. Focus a text field, then press ⌃⌘P.")
         XCTAssertEqual(
@@ -768,7 +773,8 @@ final class AppStateSettingsTests: XCTestCase {
         )
 
         textInsertionService.insertError = nil
-        XCTAssertTrue(appState.pasteLastTranscript())
+        let didPaste = await appState.pasteLastTranscript()
+        XCTAssertTrue(didPaste)
         XCTAssertEqual(textInsertionService.insertedTexts, ["Hello"])
         XCTAssertEqual(textInsertionService.submitCallCount, 0)
         XCTAssertEqual(appState.recentResults.count, 1)

@@ -77,7 +77,8 @@ final class SpyTextInsertionService: TextInsertionServiceProtocol {
         fieldValueProvider
     }
 
-    func insertText(_ text: String) throws {
+    @MainActor
+    func insertText(_ text: String) async throws {
         attemptedTexts.append(text)
         if let insertError {
             throw insertError
