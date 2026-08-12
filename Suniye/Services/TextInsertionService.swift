@@ -118,6 +118,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
 
         try postKey(pasteKeyCode(), flags: .maskCommand)
         try await verifyFallbackInsertion(
+            expectedText: text,
             from: initialState,
             focusedElement: focusedElement
         )
@@ -157,11 +158,12 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     }
 
     private func verifyFallbackInsertion(
+        expectedText: String,
         from initialState: FocusedTextSnapshot?,
         focusedElement: AXUIElement
     ) async throws {
         guard let initialState, Self.focusedTextStateIsObservable(initialState) else {
-            return
+            throw InsertError.insertionNotObserved
         }
 
         // CGEvent posting is asynchronous. Give the target app a short window
@@ -174,7 +176,11 @@ final class TextInsertionService: TextInsertionServiceProtocol {
             }
 
             if let currentState = captureFocusedTextState(for: focusedElement),
-               Self.focusedTextDidChange(from: initialState, to: currentState) {
+               Self.focusedTextReflectsInsertion(
+                   expectedText,
+                   from: initialState,
+                   to: currentState
+               ) {
                 return
             }
         }
@@ -277,7 +283,28 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     }
 
     private static func focusedTextStateIsObservable(_ state: FocusedTextSnapshot) -> Bool {
-        state.value != nil || state.selectedText != nil || state.selectedRange != nil
+        state.value != nil
+    }
+
+    private static func focusedTextReflectsInsertion(
+        _ expectedText: String,
+        from initialState: FocusedTextSnapshot,
+        to currentState: FocusedTextSnapshot
+    ) -> Bool {
+        guard let initialValue = initialState.value,
+              let currentValue = currentState.value,
+              currentValue != initialValue else {
+            return false
+        }
+
+        if let selectedRange = initialState.selectedRange,
+           let replacementRange = Range(selectedRange, in: initialValue) {
+            var expectedValue = initialValue
+            expectedValue.replaceSubrange(replacementRange, with: expectedText)
+            return currentValue == expectedValue
+        }
+
+        return !expectedText.isEmpty && currentValue.contains(expectedText)
     }
 
     private func pasteKeyCode() -> CGKeyCode {
