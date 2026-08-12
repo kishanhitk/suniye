@@ -38,6 +38,46 @@ final class TestLLMSettingsStore: LLMSettingsStoreProtocol {
     }
 }
 
+final class TestComputerUseModelSettingsStore: ComputerUseModelSettingsStoreProtocol {
+    private var value: ComputerUseModelSettings
+
+    init(value: ComputerUseModelSettings = ComputerUseModelSettings()) {
+        self.value = value
+    }
+
+    var latest: ComputerUseModelSettings { value }
+
+    func load() -> ComputerUseModelSettings { value }
+    func save(_ settings: ComputerUseModelSettings) { value = settings }
+}
+
+final class TestComputerUseCredentialStore: ComputerUseCredentialStoring {
+    private var value: String?
+
+    init(value: String? = nil) {
+        self.value = value
+    }
+
+    func setAPIKey(_ key: String) throws { value = key }
+    func hasAPIKey() -> Bool { value?.isEmpty == false }
+    func getAPIKey() throws -> String? { value }
+    func deleteAPIKey() throws { value = nil }
+}
+
+actor StubComputerUseModelConnectionTester: ComputerUseModelConnectionTesting {
+    var error: Error?
+    private var receivedConfigurations: [ComputerUseRemoteModelConfiguration] = []
+
+    func test(configuration: ComputerUseRemoteModelConfiguration) async throws {
+        receivedConfigurations.append(configuration)
+        if let error { throw error }
+    }
+
+    func configurations() -> [ComputerUseRemoteModelConfiguration] {
+        receivedConfigurations
+    }
+}
+
 final class TestGeneralSettingsStore: GeneralSettingsStoreProtocol {
     private var value: GeneralSettings
 
@@ -775,6 +815,9 @@ func makeTestAppState(
     generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
     historyStore: HistoryStoreProtocol = TestHistoryStore(),
     computerUseCoordinator: ComputerUseCoordinator? = nil,
+    computerUseModelSettingsStore: ComputerUseModelSettingsStoreProtocol = TestComputerUseModelSettingsStore(),
+    computerUseCredentialStore: ComputerUseCredentialStoring = TestComputerUseCredentialStore(),
+    computerUseConnectionTester: ComputerUseModelConnectionTesting = StubComputerUseModelConnectionTester(),
     keychainService: KeychainServiceProtocol = TestKeychainService(value: nil),
     appUpdateController: AppUpdateControllerProtocol? = nil,
     launchAtLoginService: LaunchAtLoginServiceProtocol = StubLaunchAtLoginService(),
@@ -816,6 +859,9 @@ func makeTestAppState(
         generalSettingsStore: generalSettingsStore,
         historyStore: historyStore,
         computerUseCoordinator: computerUseCoordinator,
+        computerUseModelSettingsStore: computerUseModelSettingsStore,
+        computerUseCredentialStore: computerUseCredentialStore,
+        computerUseConnectionTester: computerUseConnectionTester,
         keychainService: keychainService,
         appUpdateController: appUpdateController ?? StubAppUpdateController(),
         launchAtLoginService: launchAtLoginService,

@@ -1297,8 +1297,8 @@ XCTest runs, coverage, and E2E scripts.
   reference evidence does not expose a Swift storage format that Suniye could reproduce.
 - `[Verified]` The full suite passes 1,098 tests with 2 skipped and zero failures. Gated coverage
   is 88.35% (13,558/15,346), above the 80% floor. E2E preflight and smoke pass.
-- `[Next]` Dedicated Computer Use model settings and a separate global voice hotkey remain the
-  next implementation slices; the existing model-setting bridge is temporary.
+- `[Superseded by Entries 73 and 74]` The global voice hotkey and independent Computer Use model
+  settings are now implemented; the temporary model-setting bridge has been removed.
 
 ### Entry 73: Global voice-to-task hotkey
 
@@ -1319,3 +1319,25 @@ XCTest runs, coverage, and E2E scripts.
   is 88.41% (13,663/15,454), above the 80% floor. E2E preflight and smoke pass.
 - `[Next]` Computer Use provider, model, endpoint, and credential settings must be separated from
   Magic Format before live voice-to-action validation.
+
+### Entry 74: Independent Computer Use model settings
+
+Sources: `phase-17-independent-model-settings-2026-08-12.md`, production Swift sources, focused
+and full XCTest runs, coverage, and E2E scripts.
+
+- `[Verified]` Computer Use previously inherited Magic Format's model, endpoint, request limits,
+  and file-backed credential. Any Magic Format mutation could reconfigure the Computer Use
+  coordinator.
+- `[Implemented]` Computer Use now owns a separate persisted provider, endpoint, model ID,
+  timeout, and token limit plus a separate generic-password item in macOS Keychain.
+- `[Implemented]` Its bottom settings disclosure exposes the endpoint directly, an editable custom
+  endpoint, model ID, credential Save/Clear, and connection testing alongside Accessibility and
+  Screen Recording.
+- `[Verified]` Magic Format model, endpoint, and API-key changes no longer affect the Computer Use
+  coordinator or settings.
+- `[Independent choice]` New settings default to OpenAI and `gpt-5.6-luna`; no Magic Format
+  credential is copied or migrated.
+- `[Verified]` The full suite passes 1,111 tests with 2 skipped and zero failures. Gated coverage
+  is 86.82% (13,789/15,882), above the 80% floor. E2E preflight and smoke pass.
+- `[Next]` Context normalization, tool-output cleanup, screenshot retention, and bounded
+  compaction remain separate model-runtime work.

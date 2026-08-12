@@ -817,13 +817,6 @@ final class AppState {
         magicFormatSetupState.detail
     }
 
-    var computerUseRemoteModelConfiguration: ComputerUseRemoteModelConfiguration? {
-        ComputerUseModelConfigurationFactory.make(
-            settings: currentLLMSettings(),
-            apiKey: try? keychainService.getLLMKey()
-        )
-    }
-
     var llmSelectedModelIdPreview: String {
         currentLLMSettings().validatedModelId ?? ""
     }
@@ -1513,7 +1506,7 @@ final class AppState {
     private let generalSettingsStore: GeneralSettingsStoreProtocol
     private let historyStore: HistoryStoreProtocol
     let computerUseCoordinator: ComputerUseCoordinator
-    @ObservationIgnored private let ownsComputerUseCoordinator: Bool
+    let computerUseModelSettings: ComputerUseModelSettingsController
     private let keychainService: KeychainServiceProtocol
     private let appUpdateController: AppUpdateControllerProtocol
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
@@ -1636,6 +1629,9 @@ final class AppState {
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
         historyStore: HistoryStoreProtocol = HistoryStore(),
         computerUseCoordinator: ComputerUseCoordinator? = nil,
+        computerUseModelSettingsStore: ComputerUseModelSettingsStoreProtocol = ComputerUseModelSettingsStore(),
+        computerUseCredentialStore: ComputerUseCredentialStoring = ComputerUseCredentialStore(),
+        computerUseConnectionTester: ComputerUseModelConnectionTesting = ComputerUseModelConnectionTester(),
         keychainService: KeychainServiceProtocol = KeychainService(),
         appUpdateController: AppUpdateControllerProtocol? = nil,
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
@@ -1701,11 +1697,21 @@ final class AppState {
         self.magicFormatPromptFileStore = magicFormatPromptFileStore
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
-        ownsComputerUseCoordinator = computerUseCoordinator == nil
-        self.computerUseCoordinator = computerUseCoordinator ?? ComputerUseCoordinator(
+        let ownsComputerUseCoordinator = computerUseCoordinator == nil
+        let resolvedComputerUseCoordinator = computerUseCoordinator ?? ComputerUseCoordinator(
             conversationStore: startServices
                 ? ComputerUseConversationStore()
                 : NoopComputerUseConversationStore()
+        )
+        self.computerUseCoordinator = resolvedComputerUseCoordinator
+        computerUseModelSettings = ComputerUseModelSettingsController(
+            settingsStore: computerUseModelSettingsStore,
+            credentialStore: computerUseCredentialStore,
+            connectionTester: computerUseConnectionTester,
+            onConfigurationChange: { configuration in
+                guard ownsComputerUseCoordinator else { return }
+                resolvedComputerUseCoordinator.configureModel(configuration)
+            }
         )
         self.keychainService = keychainService
         self.appUpdateController = appUpdateController ?? AppUpdateControllerFactory.makeDefault()
@@ -1781,7 +1787,7 @@ final class AppState {
         refreshInputDevices()
         refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
-        syncComputerUseModelConfiguration()
+        computerUseModelSettings.publishConfiguration()
         refreshLocalGemmaInstallState()
 
         if floatingIndicatorEnabled {
@@ -2283,7 +2289,6 @@ final class AppState {
             try keychainService.setLLMKey(normalized)
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
-            syncComputerUseModelConfiguration()
             clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key saved")
         } catch {
@@ -2298,7 +2303,6 @@ final class AppState {
             try keychainService.deleteLLMKey()
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
-            syncComputerUseModelConfiguration()
             clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key cleared")
         } catch {
@@ -4356,15 +4360,7 @@ final class AppState {
         clearMagicFormatSetupTestResult()
         let settings = currentLLMSettings()
         llmSettingsStore.save(settings)
-        syncComputerUseModelConfiguration()
         onStateChange?()
-    }
-
-    private func syncComputerUseModelConfiguration() {
-        guard ownsComputerUseCoordinator else {
-            return
-        }
-        computerUseCoordinator.configureModel(computerUseRemoteModelConfiguration)
     }
 
     private func saveProviderPromptFile(_ prompt: MagicFormatProviderPromptFile, content: String) {

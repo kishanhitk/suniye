@@ -3,20 +3,17 @@ import SwiftUI
 
 struct ComputerUsePage: View {
     @Bindable var coordinator: ComputerUseCoordinator
-    let modelConfiguration: ComputerUseRemoteModelConfiguration?
-    let openModelSettings: () -> Void
+    @Bindable var modelSettings: ComputerUseModelSettingsController
     let onPageActiveChange: (Bool) -> Void
     @State private var copiedDebugSessionID: ComputerUseDebugSessionID?
 
     init(
         coordinator: ComputerUseCoordinator,
-        modelConfiguration: ComputerUseRemoteModelConfiguration?,
-        openModelSettings: @escaping () -> Void,
+        modelSettings: ComputerUseModelSettingsController,
         onPageActiveChange: @escaping (Bool) -> Void = { _ in }
     ) {
         self.coordinator = coordinator
-        self.modelConfiguration = modelConfiguration
-        self.openModelSettings = openModelSettings
+        self.modelSettings = modelSettings
         self.onPageActiveChange = onPageActiveChange
     }
 
@@ -35,11 +32,7 @@ struct ComputerUsePage: View {
             onPageActiveChange(false)
         }
         .task {
-            coordinator.configureModel(modelConfiguration)
             await coordinator.refreshPermissions()
-        }
-        .onChange(of: modelConfiguration) { _, configuration in
-            coordinator.configureModel(configuration)
         }
     }
 
@@ -111,7 +104,7 @@ struct ComputerUsePage: View {
 
                     ComputerUseSettingsDisclosure(
                         coordinator: coordinator,
-                        openModelSettings: openModelSettings
+                        modelSettings: modelSettings
                     )
                     .padding(.top, 8)
                 }

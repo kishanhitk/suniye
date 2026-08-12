@@ -116,6 +116,8 @@ cross-process input still require separate validation.
   session, page-independent voice handoff, and storage validation.
 - `phase-16-global-voice-hotkey-2026-08-12.md` records the optional global Hold to Run Task
   shortcut, raw local voice route, collision policy, and Escape cancellation.
+- `phase-17-independent-model-settings-2026-08-12.md` records the dedicated provider, endpoint,
+  model, Keychain credential, connection test, and Magic Format isolation.
 - `deep-code-parity-audit-2026-08-12.md` consolidates three independent code-level audits of the
   model/runtime, native mechanics, and cursor/UX, with verified gaps kept explicit.
 
@@ -210,4 +212,15 @@ Historical page-visible slice; Phase 16 adds the page-independent global shortcu
   new shortcut to disabled.
 - `[Verified]` The full suite passes 1,106 tests with 2 skipped and zero failures; gated coverage
   is 88.41% (13,663/15,454), and E2E preflight and smoke pass.
-- `[Next]` Dedicated Computer Use model configuration remains the next slice.
+- `[Superseded by Phase 17]` Dedicated Computer Use model configuration is now implemented.
+
+## Independent Computer Use model settings — 2026-08-12
+
+- `[Verified]` Computer Use now has its own provider, API endpoint, model ID, timeout, token limit,
+  and separate macOS Keychain credential. Magic Format mutations no longer reconfigure it.
+- `[Verified]` The bottom Computer Use settings disclosure exposes provider, model, endpoint,
+  credential Save/Clear, connection testing, Accessibility, and Screen Recording controls.
+- `[Verified]` The full suite passes 1,111 tests with 2 skipped and zero failures; gated coverage
+  is 86.82% (13,789/15,882), and E2E preflight and smoke pass.
+- `[Next]` Model-visible context normalization, cleanup, and bounded compaction remain the next
+  parity slice.

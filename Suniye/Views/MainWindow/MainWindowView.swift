@@ -63,8 +63,7 @@ struct MainWindowView: View {
             case .computerUse:
                 ComputerUsePage(
                     coordinator: appState.computerUseCoordinator,
-                    modelConfiguration: appState.computerUseRemoteModelConfiguration,
-                    openModelSettings: { selection = .style },
+                    modelSettings: appState.computerUseModelSettings,
                     onPageActiveChange: appState.setComputerUsePageActive
                 )
             case .history:

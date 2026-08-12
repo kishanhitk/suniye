@@ -2,18 +2,12 @@ import SwiftUI
 
 struct ComputerUseSettingsDisclosure: View {
     @Bindable var coordinator: ComputerUseCoordinator
-    let openModelSettings: () -> Void
+    @Bindable var modelSettings: ComputerUseModelSettingsController
 
     var body: some View {
         DisclosureGroup {
             VStack(spacing: 0) {
-                settingsRow(
-                    title: "Model",
-                    detail: coordinator.modelID ?? "Not configured",
-                    isReady: coordinator.isModelConfigured,
-                    buttonTitle: "Model Settings",
-                    action: openModelSettings
-                )
+                modelConfiguration
                 Divider().padding(.vertical, 10)
                 permissionRow(
                     title: "Accessibility",
@@ -47,6 +41,118 @@ struct ComputerUseSettingsDisclosure: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
         )
+    }
+
+    private var modelConfiguration: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: modelSettings.isReady ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(modelSettings.isReady ? Color.green : MainWindowPalette.tertiaryText)
+                Text("Model")
+                    .font(AppTypography.bodyMedium)
+                Spacer()
+                Picker("Provider", selection: $modelSettings.settings.provider) {
+                    ForEach(ComputerUseModelProvider.allCases, id: \.self) { provider in
+                        Text(provider.displayName).tag(provider)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 150)
+            }
+
+            labeledField("Model ID") {
+                TextField("gpt-5.6-luna", text: $modelSettings.settings.modelID)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            labeledField("API endpoint") {
+                if modelSettings.settings.provider == .custom {
+                    TextField(
+                        "https://example.com/v1/chat/completions",
+                        text: $modelSettings.settings.customEndpointURLString
+                    )
+                    .textFieldStyle(.roundedBorder)
+                } else {
+                    Text(modelSettings.settings.endpointURLString)
+                        .font(AppTypography.codeBody)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            labeledField("API key") {
+                HStack(spacing: 8) {
+                    SecureField(
+                        modelSettings.hasAPIKey ? "Saved" : "Required",
+                        text: $modelSettings.apiKeyDraft
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    Button("Save") {
+                        modelSettings.saveAPIKey()
+                    }
+                    .disabled(modelSettings.apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if modelSettings.hasAPIKey {
+                        Button("Clear", action: modelSettings.clearAPIKey)
+                    }
+                }
+            }
+
+            if let message = modelStatusMessage {
+                Text(message)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(modelStatusIsError ? Color.red : MainWindowPalette.secondaryText)
+                    .textSelection(.enabled)
+            }
+
+            HStack {
+                Spacer()
+                Button("Test connection") {
+                    Task { await modelSettings.testConnection() }
+                }
+                .disabled(!modelSettings.isReady || modelSettings.connectionState == .testing)
+            }
+        }
+    }
+
+    private func labeledField<Content: View>(
+        _ label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(AppTypography.caption)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+            content()
+        }
+    }
+
+    private var modelStatusMessage: String? {
+        if let error = modelSettings.settings.modelValidationError
+            ?? modelSettings.settings.endpointValidationError
+            ?? modelSettings.credentialError {
+            return error
+        }
+        switch modelSettings.connectionState {
+        case .idle:
+            return modelSettings.hasAPIKey ? "API key saved in Keychain." : "Enter an API key to enable Computer Use."
+        case .testing:
+            return "Testing connection…"
+        case .connected:
+            return "Connected."
+        case let .failed(message):
+            return message
+        }
+    }
+
+    private var modelStatusIsError: Bool {
+        if modelSettings.settings.modelValidationError != nil
+            || modelSettings.settings.endpointValidationError != nil
+            || modelSettings.credentialError != nil {
+            return true
+        }
+        if case .failed = modelSettings.connectionState { return true }
+        return false
     }
 
     private func permissionRow(
