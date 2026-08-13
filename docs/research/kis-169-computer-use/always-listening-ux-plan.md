@@ -43,9 +43,8 @@ Computer Use settings contain a **Voice Activation** section with:
 - a sound-feedback toggle;
 - the selected microphone and a shortcut to microphone settings;
 - a **Voice Output** subsection: an on/off toggle (off by default) and a voice picker. Speech is
-  generated on-device by default (Chatterbox). An optional cloud provider (Fish Audio) with its
-  own API key is available for maximum expressiveness; choosing it explains that response text is
-  sent to that provider.
+  generated on-device (Chatterbox). Voice Output requires Apple Silicon with enough free memory;
+  the subsection does not appear on machines that cannot run it.
 
 Turning Voice Activation on for the first time explains, with concrete numbers, how listening
 works: audio is processed on the Mac in a rolling in-memory buffer of at most 35 seconds, is
@@ -268,6 +267,7 @@ Rules:
 - The sensitive-information rule extends to speech: content the indicator must not display,
   the voice must not read aloud.
 - Voice Output is off by default and independent of Voice Activation — either can be on alone.
+  It is available only on Apple Silicon machines with enough free memory.
 - If speech synthesis fails or is slow, the visual result appears immediately regardless;
   speech is additive, never load-bearing.
 - Latency budget: the visual result appears immediately; speech starts within 1 second of the
@@ -287,9 +287,8 @@ behind a default-off setting until real-world use shows the false-capture rate i
 ## Privacy and trust UX
 
 - Voice Activation is off by default.
-- Voice Output is on-device by default — spoken responses never leave the Mac. Only the optional
-  cloud voice tier sends response text to its provider; selecting it states plainly what is sent
-  (response text; never audio, never the wake stream), and it uses its own key.
+- Voice Output is on-device — spoken responses never leave the Mac. There is no cloud voice
+  option.
 - The microphone-in-use state is always visible in the menu bar and through normal macOS privacy
   indicators.
 - Settings explain, in plain language, the difference between waiting for the wake phrase and

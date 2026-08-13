@@ -623,18 +623,14 @@
     </div>
 
     <div class="sec-title" style="margin-top:18px">Voice Output</div>
-    <div class="sec-sub">Suniye speaks results and questions aloud — generated on your Mac (Chatterbox), nothing leaves the machine. Off by default.</div>
+    <div class="sec-sub">Suniye speaks results and questions aloud — generated on your Mac (Chatterbox), nothing leaves the machine. Off by default. Requires Apple Silicon with enough free memory.</div>
     <div class="row">
       <div><div class="label">Speak responses</div><div class="sub">Done, Couldn’t finish, and Needs-input — never step statuses or tool activity.</div></div>
       <button class="toggle" id="voSettingsToggle" onclick="toggleVoiceOutput()"></button>
     </div>
     <div class="row">
-      <div><div class="label">Voice</div><div class="sub">On-device voices; expressiveness dial. Apple Silicon; Intel Macs use the system voice.</div></div>
+      <div><div class="label">Voice</div><div class="sub">On-device voices with an expressiveness dial.</div></div>
       <button class="mini-btn">Ember (default) ▾</button>
-    </div>
-    <div class="row">
-      <div><div class="label">Cloud voice (optional)</div><div class="sub">Fish Audio s2.1-pro for maximum expressiveness. Sends response text — never audio. Key in Keychain.</div></div>
-      <span class="hotkey-chip">Off ▾</span>
     </div>
   </div>
 
@@ -742,14 +738,14 @@ function renderPill(mode, opts = {}) {
   if (mode === 'failed')  { pill.classList.add('failed'); pill.innerHTML = `<span class="cross">✕</span><span>${opts.text}</span><span class="openlink" onclick="openChat()">Open</span>`; }
 }
 
-/* ---------------- voice output (browser TTS stands in for Fish s2.1-pro) ---------------- */
+/* ---------------- voice output (browser TTS stands in for local Chatterbox) ---------------- */
 let voiceOutput = false;
 function toggleVoiceOutput() {
   voiceOutput = !voiceOutput;
   window.speechSynthesis && speechSynthesis.cancel();
   document.getElementById('voToggleBtn').textContent = voiceOutput ? 'Turn Voice Output Off' : 'Turn Voice Output On';
   document.getElementById('voSettingsToggle').classList.toggle('on', voiceOutput);
-  log(`Voice Output <b>${voiceOutput ? 'on' : 'off'}</b>${voiceOutput ? ' — results and questions will be spoken (simulated with browser TTS; the app uses Fish s2.1-pro)' : ''}`, true);
+  log(`Voice Output <b>${voiceOutput ? 'on' : 'off'}</b>${voiceOutput ? ' — results and questions will be spoken (simulated with browser TTS; the app uses local Chatterbox)' : ''}`, true);
 }
 function speak(text) {
   if (!voiceOutput || !window.speechSynthesis) return;

@@ -60,7 +60,7 @@ Suniye/Services/
   VoiceTurnEndpointer.swift          pure logic; detects end of speech from frames
   VoiceActivationStateMachine.swift  pure value type; the seven UX states
   VoiceActivationController.swift    @MainActor @Observable; owns the loop
-  SpeechOutputService.swift          protocol; Chatterbox, AVSpeech, and Fish implementations
+  SpeechOutputService.swift          protocol; Chatterbox (local MLX helper) implementation
 ```
 
 **WakeWordDetector.** Defines `protocol WakeWordDetecting` with a sherpa-backed implementation.
@@ -253,11 +253,12 @@ Each slice keeps the build green.
    unload after a configurable idle period. Model load takes 1.5 s, so re-warming on the
    first speech of a session is acceptable.
 
-   Fallbacks: Intel Macs and low-RAM machines use `AVSpeechSynthesizer`. It is also the
-   fallback when the engine fails at runtime. Fish Audio `s2.1-pro` remains an optional
-   cloud tier with the user's own API key stored in the Keychain. Kokoro remains documented
-   as the replacement if Chatterbox's memory use becomes a problem; the sherpa TTS rebuild
-   that enables Kokoro also enables ZipVoice voice cloning.
+   Chatterbox is the only engine (decision 2026-08-14; the Fish Audio cloud tier and the
+   AVSpeech fallback were cut for v1). Consequences: Voice Output is unavailable on Intel
+   Macs and on machines without enough free memory — the settings subsection is hidden
+   there; a synthesis failure skips speech for that turn, which the UX plan already permits
+   because speech is additive. Kokoro (0.69 GB, both architectures, sherpa) remains the
+   documented replacement if Chatterbox's memory use becomes a problem.
 
    Barge-in: a wake hit, Escape, or a new turn cancels playback and stops the MLX evaluation
    loop. The wake detector is suppressed while Suniye speaks, using the same mechanism as the
@@ -286,9 +287,9 @@ Slices 1–2 and 3–4 can pair into two PRs if review size matters. Otherwise, 
   audio is unmeasured.
 - **Voice output memory and platform split.** Chatterbox Turbo peaks at about 2.3 GB of
   unified memory on top of the ASR model and Gemma, and MLX requires Apple Silicon. Intel
-  users get the AVSpeech fallback. Mitigations: RAM-gated enablement, idle unload, and Kokoro
-  (0.69 GB, both architectures) as the documented downgrade path. The default remains fully
-  local. Only the optional Fish tier sends response text to a cloud provider.
+  and low-memory users have no Voice Output. Mitigations: RAM-gated enablement, idle unload,
+  and Kokoro (0.69 GB, both architectures) as the documented downgrade path. All speech is
+  generated locally; nothing is sent to a cloud provider.
 - **Echo self-trigger.** Media playback or Suniye's own audio could contain wake-like sounds.
   Suniye's own speech playback is the worst case, so the wake detector is suppressed during
   it. The existing `echoCancellationEnabled` path applies to the audio engine; verify the tap
