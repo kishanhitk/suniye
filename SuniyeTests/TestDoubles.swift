@@ -625,6 +625,7 @@ final class StubHotkeyService: HotkeyServiceProtocol {
     var onComputerUseHotkeyUp: (() -> Void)?
     var onCancel: (() -> Bool)?
     var onPasteLastTranscript: (() -> Void)?
+    var onVoiceActivationToggle: (() -> Void)?
     private(set) var startMonitoringCallCount = 0
     private(set) var lastAssignments: HotkeySlotAssignments?
 

@@ -377,12 +377,28 @@ struct HotkeySlotAssignments: Equatable {
         case pasteLastTranscript
         case editMode
         case computerUse
+        case voiceActivationToggle
     }
 
     var dictation: HotkeyConfiguration
     var pasteLastTranscript: HotkeyConfiguration
     var editMode: HotkeyConfiguration?
     var computerUse: HotkeyConfiguration?
+    var voiceActivationToggle: HotkeyConfiguration?
+
+    init(
+        dictation: HotkeyConfiguration,
+        pasteLastTranscript: HotkeyConfiguration,
+        editMode: HotkeyConfiguration? = nil,
+        computerUse: HotkeyConfiguration? = nil,
+        voiceActivationToggle: HotkeyConfiguration? = nil
+    ) {
+        self.dictation = dictation
+        self.pasteLastTranscript = pasteLastTranscript
+        self.editMode = editMode
+        self.computerUse = computerUse
+        self.voiceActivationToggle = voiceActivationToggle
+    }
 
     subscript(slot: Slot) -> HotkeyConfiguration? {
         switch slot {
@@ -390,6 +406,7 @@ struct HotkeySlotAssignments: Equatable {
         case .pasteLastTranscript: return pasteLastTranscript
         case .editMode: return editMode
         case .computerUse: return computerUse
+        case .voiceActivationToggle: return voiceActivationToggle
         }
     }
 
@@ -425,6 +442,10 @@ struct HotkeySlotAssignments: Equatable {
                 computerUse = nil
                 cleared.append(.computerUse)
             }
+            if voiceActivationToggle == configuration {
+                voiceActivationToggle = nil
+                cleared.append(.voiceActivationToggle)
+            }
             dictation = configuration
             return .applied(cleared: cleared)
         case .pasteLastTranscript:
@@ -459,6 +480,16 @@ struct HotkeySlotAssignments: Equatable {
             }
             computerUse = configuration
             return .applied(cleared: [])
+        case .voiceActivationToggle:
+            guard let configuration else {
+                voiceActivationToggle = nil
+                return .applied(cleared: [])
+            }
+            if let conflict = collision(of: configuration, excluding: slot) {
+                return .rejected(.collision(conflict))
+            }
+            voiceActivationToggle = configuration
+            return .applied(cleared: [])
         }
     }
 
@@ -474,6 +505,7 @@ struct HotkeySlotAssignments: Equatable {
         pasteLastTranscript: HotkeyConfiguration,
         editMode: HotkeyConfiguration?,
         computerUse: HotkeyConfiguration?,
+        voiceActivationToggle: HotkeyConfiguration? = nil,
         pasteFallbacks: [HotkeyConfiguration]
     ) -> (assignments: HotkeySlotAssignments, changed: Set<Slot>) {
         var changed: Set<Slot> = []
@@ -497,11 +529,19 @@ struct HotkeySlotAssignments: Equatable {
             normalizedComputerUse = nil
             changed.insert(.computerUse)
         }
+        var normalizedVoiceActivationToggle = voiceActivationToggle
+        if voiceActivationToggle != nil,
+           voiceActivationToggle == dictation || voiceActivationToggle == normalizedEditMode
+               || voiceActivationToggle == normalizedPaste || voiceActivationToggle == normalizedComputerUse {
+            normalizedVoiceActivationToggle = nil
+            changed.insert(.voiceActivationToggle)
+        }
         let assignments = HotkeySlotAssignments(
             dictation: dictation,
             pasteLastTranscript: normalizedPaste,
             editMode: normalizedEditMode,
-            computerUse: normalizedComputerUse
+            computerUse: normalizedComputerUse,
+            voiceActivationToggle: normalizedVoiceActivationToggle
         )
         return (assignments, changed)
     }
@@ -551,6 +591,16 @@ struct GeneralSettings: Codable, Equatable {
     /// Opt-out toggle for anonymous usage analytics. Default on; disclosed in
     /// onboarding and controllable in Settings. When false, nothing is emitted.
     var shareAnalyticsEnabled: Bool = true
+    /// Always-listening Computer Use ("Hey Suniye"). Off by default.
+    var voiceActivationEnabled: Bool = false
+    /// Cue sounds for wake-up, end of turn, needs input, completion.
+    var voiceActivationSoundFeedbackEnabled: Bool = true
+    /// Post-completion follow-up window (experimental). Off by default.
+    var voiceActivationFollowUpWindowEnabled: Bool = false
+    /// Global shortcut that toggles Voice Activation; nil means none.
+    var voiceActivationToggleHotkeyConfiguration: HotkeyConfiguration? = nil
+    /// Spoken responses at turn boundaries (local Chatterbox). Off by default.
+    var voiceOutputEnabled: Bool = false
 
     init(
         preferredInputDeviceID: String? = nil,
@@ -575,7 +625,12 @@ struct GeneralSettings: Codable, Equatable {
         selectedASRModelID: ASRModelID = .parakeetV3,
         updateChannel: UpdateChannel = .stable,
         accessibilityDragHelperEnabled: Bool = true,
-        shareAnalyticsEnabled: Bool = true
+        shareAnalyticsEnabled: Bool = true,
+        voiceActivationEnabled: Bool = false,
+        voiceActivationSoundFeedbackEnabled: Bool = true,
+        voiceActivationFollowUpWindowEnabled: Bool = false,
+        voiceActivationToggleHotkeyConfiguration: HotkeyConfiguration? = nil,
+        voiceOutputEnabled: Bool = false
     ) {
         self.preferredInputDeviceID = preferredInputDeviceID
         self.preferredInputDeviceName = preferredInputDeviceName
@@ -600,6 +655,11 @@ struct GeneralSettings: Codable, Equatable {
         self.updateChannel = updateChannel
         self.accessibilityDragHelperEnabled = accessibilityDragHelperEnabled
         self.shareAnalyticsEnabled = shareAnalyticsEnabled
+        self.voiceActivationEnabled = voiceActivationEnabled
+        self.voiceActivationSoundFeedbackEnabled = voiceActivationSoundFeedbackEnabled
+        self.voiceActivationFollowUpWindowEnabled = voiceActivationFollowUpWindowEnabled
+        self.voiceActivationToggleHotkeyConfiguration = voiceActivationToggleHotkeyConfiguration
+        self.voiceOutputEnabled = voiceOutputEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -626,6 +686,11 @@ struct GeneralSettings: Codable, Equatable {
         case updateChannel
         case accessibilityDragHelperEnabled
         case shareAnalyticsEnabled
+        case voiceActivationEnabled
+        case voiceActivationSoundFeedbackEnabled
+        case voiceActivationFollowUpWindowEnabled
+        case voiceActivationToggleHotkeyConfiguration
+        case voiceOutputEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -661,6 +726,11 @@ struct GeneralSettings: Codable, Equatable {
         updateChannel = storedUpdateChannel.flatMap(UpdateChannel.init(rawValue:)) ?? .stable
         accessibilityDragHelperEnabled = try container.decodeIfPresent(Bool.self, forKey: .accessibilityDragHelperEnabled) ?? true
         shareAnalyticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .shareAnalyticsEnabled) ?? true
+        voiceActivationEnabled = try container.decodeIfPresent(Bool.self, forKey: .voiceActivationEnabled) ?? false
+        voiceActivationSoundFeedbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .voiceActivationSoundFeedbackEnabled) ?? true
+        voiceActivationFollowUpWindowEnabled = try container.decodeIfPresent(Bool.self, forKey: .voiceActivationFollowUpWindowEnabled) ?? false
+        voiceActivationToggleHotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .voiceActivationToggleHotkeyConfiguration)
+        voiceOutputEnabled = try container.decodeIfPresent(Bool.self, forKey: .voiceOutputEnabled) ?? false
     }
 }
 

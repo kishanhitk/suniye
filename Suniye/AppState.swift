@@ -352,6 +352,43 @@ final class AppState {
             onStateChange?()
         }
     }
+    var voiceActivationEnabled = false {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != voiceActivationEnabled else {
+                return
+            }
+            persistGeneralSettings()
+            applyVoiceActivationEnabled()
+            onStateChange?()
+        }
+    }
+    var voiceActivationSoundFeedbackEnabled = true {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != voiceActivationSoundFeedbackEnabled else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
+    var voiceActivationFollowUpWindowEnabled = false {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != voiceActivationFollowUpWindowEnabled else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
+    var voiceOutputEnabled = false {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != voiceOutputEnabled else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
     var hideFloatingIndicatorWhenIdle = false {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -430,6 +467,15 @@ final class AppState {
             resolveHotkeyChange(of: .computerUse, from: oldValue, to: computerUseHotkeyConfiguration)
         }
     }
+    var voiceActivationToggleHotkeyConfiguration: HotkeyConfiguration? = nil {
+        didSet {
+            resolveHotkeyChange(
+                of: .voiceActivationToggle,
+                from: oldValue,
+                to: voiceActivationToggleHotkeyConfiguration
+            )
+        }
+    }
 
     private var isResolvingHotkeyChange = false
 
@@ -451,6 +497,7 @@ final class AppState {
         case .pasteLastTranscript: assignments.pasteLastTranscript = oldValue ?? assignments.pasteLastTranscript
         case .editMode: assignments.editMode = oldValue
         case .computerUse: assignments.computerUse = oldValue
+        case .voiceActivationToggle: assignments.voiceActivationToggle = oldValue
         }
         let outcome = assignments.assign(proposed, to: slot)
         isResolvingHotkeyChange = true
@@ -480,7 +527,8 @@ final class AppState {
             dictation: hotkeyConfiguration,
             pasteLastTranscript: pasteLastTranscriptHotkeyConfiguration,
             editMode: editModeHotkeyConfiguration,
-            computerUse: computerUseHotkeyConfiguration
+            computerUse: computerUseHotkeyConfiguration,
+            voiceActivationToggle: voiceActivationToggleHotkeyConfiguration
         )
     }
 
@@ -489,6 +537,7 @@ final class AppState {
         pasteLastTranscriptHotkeyConfiguration = assignments.pasteLastTranscript
         editModeHotkeyConfiguration = assignments.editMode
         computerUseHotkeyConfiguration = assignments.computerUse
+        voiceActivationToggleHotkeyConfiguration = assignments.voiceActivationToggle
     }
 
     private func reportHotkeySlotCleared(_ slot: HotkeySlotAssignments.Slot) {
@@ -499,6 +548,9 @@ final class AppState {
         case .computerUse:
             AppLogger.shared.log(.warning, "computer use hotkey cleared: matched new dictation hotkey")
             showTransientIndicatorError("Run Task shortcut cleared: it matched dictation")
+        case .voiceActivationToggle:
+            AppLogger.shared.log(.warning, "voice activation toggle cleared: matched new dictation hotkey")
+            showTransientIndicatorError("Voice Activation shortcut cleared: it matched dictation")
         case .dictation, .pasteLastTranscript:
             break
         }
@@ -532,6 +584,9 @@ final class AppState {
         case (.computerUse, _):
             AppLogger.shared.log(.warning, "computer use hotkey rejected: matches another hotkey")
             showTransientIndicatorError("Run Task shortcut is already in use")
+        case (.voiceActivationToggle, _):
+            AppLogger.shared.log(.warning, "voice activation toggle rejected: matches another hotkey")
+            showTransientIndicatorError("Voice Activation shortcut is already in use")
         }
     }
     var selectedASRModelID: ASRModelID = .parakeetV3 {
@@ -3618,6 +3673,13 @@ final class AppState {
             }
         }
 
+        hotkeyService.onVoiceActivationToggle = { [weak self] in
+            AppLogger.shared.log(.debug, "voice activation toggle hotkey callback")
+            Task { @MainActor in
+                self?.toggleVoiceActivation()
+            }
+        }
+
         hotkeyService.startMonitoring(assignments: hotkeySlotAssignments)
         AppLogger.shared.log(
             .info,
@@ -4397,6 +4459,21 @@ final class AppState {
         HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: $0)
     }
 
+    /// Turns Voice Activation on or off (menu bar, toggle shortcut, Settings).
+    /// UX plan: turning listening off never erases the conversation.
+    func toggleVoiceActivation() {
+        voiceActivationEnabled.toggle()
+    }
+
+    /// Reacts to the enabled flag. Settings-only in this slice; the
+    /// turn-capture slice starts and stops the listen pipeline here.
+    private func applyVoiceActivationEnabled() {
+        AppLogger.shared.log(
+            .info,
+            "voice activation \(voiceActivationEnabled ? "enabled" : "disabled")"
+        )
+    }
+
     private func loadGeneralSettings() {
         isHydratingGeneralSettings = true
         let settings = generalSettingsStore.load()
@@ -4405,6 +4482,7 @@ final class AppState {
             pasteLastTranscript: settings.pasteLastTranscriptHotkeyConfiguration,
             editMode: settings.editModeHotkeyConfiguration,
             computerUse: settings.computerUseHotkeyConfiguration,
+            voiceActivationToggle: settings.voiceActivationToggleHotkeyConfiguration,
             pasteFallbacks: Self.pasteLastTranscriptFallbackHotkeys
         )
         selectedInputDeviceID = settings.preferredInputDeviceID
@@ -4414,6 +4492,11 @@ final class AppState {
         pasteLastTranscriptHotkeyConfiguration = normalizedHotkeys.pasteLastTranscript
         editModeHotkeyConfiguration = normalizedHotkeys.editMode
         computerUseHotkeyConfiguration = normalizedHotkeys.computerUse
+        voiceActivationToggleHotkeyConfiguration = normalizedHotkeys.voiceActivationToggle
+        voiceActivationEnabled = settings.voiceActivationEnabled
+        voiceActivationSoundFeedbackEnabled = settings.voiceActivationSoundFeedbackEnabled
+        voiceActivationFollowUpWindowEnabled = settings.voiceActivationFollowUpWindowEnabled
+        voiceOutputEnabled = settings.voiceOutputEnabled
         echoCancellationEnabled = settings.echoCancellationEnabled
         soundFeedbackEnabled = settings.soundFeedbackEnabled
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
@@ -4488,7 +4571,12 @@ final class AppState {
             selectedASRModelID: selectedASRModelID,
             updateChannel: updateChannel,
             accessibilityDragHelperEnabled: accessibilityDragHelperEnabled,
-            shareAnalyticsEnabled: shareAnalyticsEnabled
+            shareAnalyticsEnabled: shareAnalyticsEnabled,
+            voiceActivationEnabled: voiceActivationEnabled,
+            voiceActivationSoundFeedbackEnabled: voiceActivationSoundFeedbackEnabled,
+            voiceActivationFollowUpWindowEnabled: voiceActivationFollowUpWindowEnabled,
+            voiceActivationToggleHotkeyConfiguration: voiceActivationToggleHotkeyConfiguration,
+            voiceOutputEnabled: voiceOutputEnabled
         )
     }
 

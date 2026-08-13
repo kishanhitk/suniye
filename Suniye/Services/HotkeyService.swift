@@ -10,6 +10,7 @@ protocol HotkeyServiceProtocol: AnyObject {
     var onComputerUseHotkeyUp: (() -> Void)? { get set }
     var onCancel: (() -> Bool)? { get set }
     var onPasteLastTranscript: (() -> Void)? { get set }
+    var onVoiceActivationToggle: (() -> Void)? { get set }
     func startMonitoring(assignments: HotkeySlotAssignments)
     func stopMonitoring()
 }
@@ -28,6 +29,7 @@ final class HotkeyService: HotkeyServiceProtocol {
         case editMode = 2
         case computerUse = 3
         case pasteLastTranscript = 4
+        case voiceActivationToggle = 5
     }
 
     var onHotkeyDown: (() -> Void)?
@@ -38,6 +40,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     var onComputerUseHotkeyUp: (() -> Void)?
     var onCancel: (() -> Bool)?
     var onPasteLastTranscript: (() -> Void)?
+    var onVoiceActivationToggle: (() -> Void)?
 
     private var globeGlobalMonitor: Any?
     private var globeLocalMonitor: Any?
@@ -62,6 +65,9 @@ final class HotkeyService: HotkeyServiceProtocol {
         if let computerUse = assignments.computerUse {
             register(computerUse, for: .computerUse)
             installCancellationMonitorsIfNeeded()
+        }
+        if let voiceActivationToggle = assignments.voiceActivationToggle {
+            register(voiceActivationToggle, for: .voiceActivationToggle)
         }
     }
 
@@ -261,6 +267,9 @@ final class HotkeyService: HotkeyServiceProtocol {
             // The recovery path may synthesize Command+V. Wait until the
             // physical shortcut key is released so the paste is not swallowed.
             return nil
+        case .voiceActivationToggle:
+            // A toggle acts on release, not press.
+            return nil
         }
     }
 
@@ -274,6 +283,8 @@ final class HotkeyService: HotkeyServiceProtocol {
             return onComputerUseHotkeyUp
         case .pasteLastTranscript:
             return onPasteLastTranscript
+        case .voiceActivationToggle:
+            return onVoiceActivationToggle
         }
     }
 }

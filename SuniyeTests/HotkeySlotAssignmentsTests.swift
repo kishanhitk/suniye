@@ -146,4 +146,55 @@ final class HotkeySlotAssignmentsTests: XCTestCase {
         XCTAssertNil(normalized.computerUse)
         XCTAssertEqual(changed, [.computerUse])
     }
+
+    // MARK: Voice Activation toggle (slot 5)
+
+    func testVoiceActivationToggleAcceptsDistinctComboAndNil() {
+        var assignments = makeAssignments()
+        XCTAssertEqual(assignments.assign(comboD, to: .voiceActivationToggle), .applied(cleared: []))
+        XCTAssertEqual(assignments.voiceActivationToggle, comboD)
+        XCTAssertEqual(assignments.assign(nil, to: .voiceActivationToggle), .applied(cleared: []))
+        XCTAssertNil(assignments.voiceActivationToggle)
+    }
+
+    func testVoiceActivationToggleRejectedOnCollision() {
+        var assignments = makeAssignments()
+        let outcome = assignments.assign(comboC, to: .voiceActivationToggle)
+        XCTAssertEqual(outcome, .rejected(.collision(.computerUse)))
+        XCTAssertNil(assignments.voiceActivationToggle)
+    }
+
+    func testDictationClearsCollidingVoiceActivationToggle() {
+        var assignments = makeAssignments()
+        assignments.voiceActivationToggle = comboD
+        let outcome = assignments.assign(comboD, to: .dictation)
+        XCTAssertEqual(outcome, .applied(cleared: [.voiceActivationToggle]))
+        XCTAssertNil(assignments.voiceActivationToggle)
+    }
+
+    func testNormalizedClearsCollidingVoiceActivationToggle() {
+        let (normalized, changed) = HotkeySlotAssignments.normalized(
+            dictation: .globe,
+            pasteLastTranscript: comboA,
+            editMode: comboB,
+            computerUse: comboC,
+            voiceActivationToggle: comboC,
+            pasteFallbacks: []
+        )
+        XCTAssertNil(normalized.voiceActivationToggle)
+        XCTAssertEqual(changed, [.voiceActivationToggle])
+    }
+
+    func testNormalizedKeepsDistinctVoiceActivationToggle() {
+        let (normalized, changed) = HotkeySlotAssignments.normalized(
+            dictation: .globe,
+            pasteLastTranscript: comboA,
+            editMode: comboB,
+            computerUse: comboC,
+            voiceActivationToggle: comboD,
+            pasteFallbacks: []
+        )
+        XCTAssertEqual(normalized.voiceActivationToggle, comboD)
+        XCTAssertTrue(changed.isEmpty)
+    }
 }
