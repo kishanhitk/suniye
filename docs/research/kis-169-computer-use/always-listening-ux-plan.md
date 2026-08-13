@@ -277,13 +277,24 @@ Rules:
 
 ### Follow-up window (experimental, off by default)
 
-A setting enables a short follow-up window after a task completes: for about 6 seconds after
-the Done flash, Suniye listens for a follow-up without requiring the wake phrase again, so
+A setting enables a short follow-up window after a task completes: for about 6 seconds,
+Suniye listens for a follow-up without requiring the wake phrase again, so
 "also check the charger" works as a natural continuation. The indicator stays visible in the
 listening treatment for the duration of the window, so the user can always see that Suniye is
 listening. Speech that does not arrive within the window, or silence, returns to Ready without
-creating a turn. The window never opens after Stopped or after a failure. This behavior ships
-behind a default-off setting until real-world use shows the false-capture rate is acceptable.
+creating a turn. The window never opens after Stopped or after a failure. With Voice Output
+on, the window arms when speech playback ends, not when the Done flash ends — Suniye must not
+capture its own voice as a follow-up. This behavior ships behind a default-off setting until
+real-world use shows the false-capture rate is acceptable.
+
+### Deferred refinements
+
+Recorded, intentionally deferred until the core works:
+
+- The transcript flash is display-only in version 1; a cancel affordance during the flash
+  (click or Escape discards the turn) comes later.
+- The Needs-input pill shows a generic label in version 1; showing the agent's question text
+  inline, with the sensitive-information rule applied, comes later.
 
 ## Privacy and trust UX
 

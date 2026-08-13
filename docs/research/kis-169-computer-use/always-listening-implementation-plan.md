@@ -80,8 +80,9 @@ The type is pure and unit-testable.
 One behavior sits in `VoiceActivationController` rather than the conversation path:
 
 - **Follow-up window.** When enabled in Settings and a run ends in Done, the controller keeps
-  the endpointer armed for about 6 seconds without requiring a wake hit. Captured speech in the
-  window submits as a normal turn; silence returns to Ready. Off by default.
+  the endpointer armed for about 6 seconds without requiring a wake hit. The window arms only
+  after speech playback has ended (self-capture guard). Captured speech in the window submits
+  as a normal turn; silence returns to Ready. Off by default.
 
 Mode control by voice goes through the model (decision 2026-08-14; an earlier local
 phrase-matcher design was dropped). Add a `set_voice_activation` tool to
