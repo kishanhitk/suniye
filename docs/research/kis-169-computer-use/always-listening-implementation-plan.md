@@ -72,9 +72,20 @@ API: `start()`, `accept(samples:sampleRate:) -> WakeWordHit?`, `reset()`, `stop(
 22-band level meter energy. Tunable parameters: minimum speech 300 ms, trailing silence 900 ms,
 maximum turn 30 s, no-speech timeout after wake 5 s. The type is pure and unit-testable.
 
-**VoiceActivationStateMachine.** Encodes the seven user-visible states from the UX plan and
-their legal transitions. Emits effects: start turn capture, submit turn, set indicator state.
+**VoiceActivationStateMachine.** Encodes the user-visible states from the UX plan and their
+legal transitions, including the manual-handoff state ("Your turn") and the optional follow-up
+window after completion. Emits effects: start turn capture, submit turn, set indicator state.
 The type is pure and unit-testable.
+
+Two behaviors sit in `VoiceActivationController` rather than the conversation path:
+
+- **Mode-control intent.** After transcription and before `submitVoiceTask`, the transcript is
+  checked against a small local list ("stop listening", "stop voice activation"). A match turns
+  Voice Activation off and creates no conversation turn. This must work with no model
+  configured. The check covers mode control only; task phrases are never matched locally.
+- **Follow-up window.** When enabled in Settings and a run ends in Done, the controller keeps
+  the endpointer armed for about 6 seconds without requiring a wake hit. Captured speech in the
+  window submits as a normal turn; silence returns to Ready. Off by default.
 
 **VoiceActivationController.** Connects the other components. It subscribes to audio frames,
 drives the detector, endpointer, and state machine, calls
@@ -153,11 +164,13 @@ The voice output model is not bundled. See section 5, slice 5.
 | Surface | Change |
 |---|---|
 | `GeneralSettings` (`SettingsModels.swift`) | Add `voiceActivationEnabled: Bool = false`, `voiceActivationSoundFeedback: Bool = true`, `voiceActivationToggleHotkey: HotkeyConfiguration?`. Each field needs: property, init parameter, `CodingKeys` entry, tolerant decode, a mirrored `AppState` observable property with a persisting `didSet`, hydration in `applyGeneralSettings`, and a write in `persistGeneralSettings`. |
-| `HotkeyService` | Add slot 5 `voiceActivationToggle` and the `onVoiceActivationToggle` callback. Slot 4 is taken by `pasteLastTranscript`. Add collision checks against the four existing hotkeys in `AppState`. |
+| `HotkeyService` | Add slot 5 `voiceActivationToggle` and the `onVoiceActivationToggle` callback. Slot 4 is taken by `pasteLastTranscript`. The parity branch now routes registration through `HotkeySlotAssignments`, which owns the collision policy; extend that type with the new slot instead of adding checks in `AppState`. |
 | `FloatingIndicatorState` | Add cases `voiceActivationListening(levels:preview:)` and `voiceActivationNeedsInput`. Terminal flashes reuse `.computerUseCompleted` and the transient error path. Every exhaustive switch must be updated: `layoutAnimationKey`, `logValue`, `tracksPointerScreen`; controller `panelShouldCaptureMouseEvents`, `canDragCurrentState`, `size(for:)`; view `capsuleContent`, `isInteractive`, `pillWidth`, `pillHeight`, and the color properties. The Ready state appears in the menu bar only. There is no idle floating panel. |
 | `StatusItemController` | Add menu items: a Voice Activation on/off toggle, "Open Conversation", and "Stop Task" (enabled only while `coordinator.isRunning`). Follow the existing pattern: field, `configureMenu()`, `refresh()`, `@objc` handler, `AppState` method. Add a menu-bar icon variant for the Ready state so microphone use stays visible. |
 | `ComputerUseSettingsDisclosure` | Add a "Voice Activation" section: enable toggle, wake-phrase display ("Hey Suniye"), try-wake-phrase flow, toggle-shortcut recorder, sound toggle, and a microphone settings link. Show a one-time notice on first enable explaining that the microphone stays in use while waiting. |
-| `ComputerUseCoordinator` | No structural change. Version 1 maps the `completed`, `failed`, and `cancelled` phases to terminal indicator states through the existing `onPhaseChange`. Add an `onNeedsInput` signal only if the agent gains an ask-user tool later. |
+| `ComputerUseCoordinator` | Version 1 maps the `completed`, `failed`, and `cancelled` phases to terminal indicator states through the existing `onPhaseChange`. Add an `onNeedsInput` signal only if the agent gains an ask-user tool later. |
+| Manual handoff (auth walls) | New `paused` phase on the coordinator. The agent reports a blocked-on-user condition (login, CAPTCHA, 2FA) through a structured tool result; the coordinator pauses the run, stops observation, and sets the indicator to "Your turn" with the reason. Resume paths: "Hey Suniye, continue" (submits as an intervention that unpauses), the indicator's Continue control, or a typed message. Resuming forces a fresh observation. A paused run does not time out. |
+| `FloatingIndicatorState` (additions) | `voiceActivationYourTurn(reason:)` with a Continue control, following the same exhaustive-switch checklist as the other new cases. |
 | Agent step status | The working indicator shows one-line statuses emitted by the agent, such as "Opening Chrome" or "Checking your last 5 emails". Mechanism: add a required `status` string to each tool call in `ComputerUseModelToolContract`. The system prompt instructs the model to phrase it as a user-visible action of at most six words, with no tool or transport terms. The status flows through the existing `ComputerUseActivitySink` to the coordinator and then to `setFloatingIndicatorState`. If the status is absent or invalid, derive a label from the tool name, or show "Working…". The same statuses title the collapsed activity rows in chat, so both surfaces stay consistent. |
 | Escape handling | Today, `hotkeyService.onCancel` cancels an in-progress voice recording only. It does not stop a running agent, and the Escape monitor is installed only when a Computer Use hotkey is configured. Fix both: Escape stops the active run through `coordinator.stop()`, and the monitor is installed whenever Voice Activation is on or a hotkey is set. |
 | `MainWindowSection`, launch args | Add `--e2e-voice-activation` hooks for scripted end-to-end tests, matching the `--e2e-llm-*` precedent. |
@@ -172,8 +185,12 @@ there.
 Planned test files:
 
 - `VoiceActivationStateMachineTests`: the full transition table, including false wake-up,
-  no-speech timeout, wake during a running task, sleep and lock suspension, and toggling off
-  from each state.
+  no-speech timeout, wake during a running task, sleep and lock suspension, toggling off from
+  each state, the manual-handoff pause and resume, and the follow-up window (opens only after
+  Done, closes on silence, never opens after Stopped or failure).
+- Mode-control intent tests: "stop listening" phrasings turn Voice Activation off without a
+  conversation turn and without a configured model; near-miss task phrases pass through to
+  `submitVoiceTask` unchanged.
 - `VoiceTurnEndpointerTests`: synthetic frame sequences for a normal turn, a mid-turn pause
   shorter than the trailing-silence window, the maximum-turn cap, and the no-speech timeout.
 - `VoiceActivationControllerTests`: a stub detector emits scripted hits. Verify submit routing
@@ -247,6 +264,12 @@ Each slice keeps the build green.
    cue-sound suppression. This slice also adds the Voice Output settings rows and the
    one-time disclosure. Voice cloning from a short reference recording is a possible later
    feature; the engine supports it.
+
+   Latency budget (from the UX plan): speech starts within 1 second of the terminal state,
+   target 500 ms; if synthesis has not started within 2 seconds, skip speech for that turn.
+   Measured Chatterbox warm latency is 0.92 s per sentence, so the 1-second bound holds only
+   with the model resident; a cold start (1.5 s load) exceeds the skip threshold, which is
+   acceptable by design.
 
 6. **Lifecycle and polish.** Sleep and wake handling, device-change resilience, the
    Escape-stops-run fix, sounds, the first-enable notice, the end-to-end script, and
