@@ -863,7 +863,14 @@ func makeTestAppState(
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
     magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
     startServices: Bool = false,
-    llmE2EMode: LLME2EMode = .none
+    llmE2EMode: LLME2EMode = .none,
+    wakeWordDetectorFactory: (() throws -> WakeWordDetecting)? = nil,
+    speechActivityDetectorFactory: (() throws -> SpeechActivityDetecting)? = nil,
+    voiceActivationConfiguration: VoiceActivationController.Configuration = .init(
+        transcriptFlashSeconds: 0,
+        followUpWindowSeconds: 0.2,
+        maximumTurnBufferSeconds: 35
+    )
 ) -> AppState {
     AppState(
         modelManager: modelManager,
@@ -909,8 +916,68 @@ func makeTestAppState(
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
         magicFormatSlowWarningDelaySeconds: magicFormatSlowWarningDelaySeconds,
         startServices: startServices,
-        llmE2EMode: llmE2EMode
+        llmE2EMode: llmE2EMode,
+        wakeWordDetectorFactory: wakeWordDetectorFactory ?? { StubWakeWordDetector() },
+        speechActivityDetectorFactory: speechActivityDetectorFactory ?? { StubSpeechActivityDetector() },
+        voiceActivationConfiguration: voiceActivationConfiguration
     )
+}
+
+/// Scripted wake detector: fires once per queued hit.
+final class StubWakeWordDetector: WakeWordDetecting, @unchecked Sendable {
+    private let lock = NSLock()
+    private var pendingHits = 0
+    private(set) var resetCallCount = 0
+
+    func queueWakeHit() {
+        lock.lock()
+        pendingHits += 1
+        lock.unlock()
+    }
+
+    func accept(samples: [Float], sampleRate: Double) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if pendingHits > 0 {
+            pendingHits -= 1
+            return true
+        }
+        return false
+    }
+
+    func reset() {
+        lock.lock()
+        resetCallCount += 1
+        lock.unlock()
+    }
+}
+
+/// Scripted VAD on the pipeline's own sample clock: frames are judged speech
+/// inside scheduled windows measured in seconds of *processed* audio. Frames
+/// are processed asynchronously, so wall-clock flags would race; the sample
+/// clock is deterministic.
+final class StubSpeechActivityDetector: SpeechActivityDetecting, @unchecked Sendable {
+    private let lock = NSLock()
+    private var processedSeconds: Double = 0
+    private var speechWindows: [ClosedRange<Double>] = []
+
+    /// Window bounds are seconds of audio fed through `isSpeech` (which the
+    /// pipeline calls only while capturing a turn).
+    func scheduleSpeech(in window: ClosedRange<Double>) {
+        lock.lock()
+        speechWindows.append(window)
+        lock.unlock()
+    }
+
+    func isSpeech(samples16k: [Float]) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let time = processedSeconds
+        processedSeconds += Double(samples16k.count) / 16_000
+        return speechWindows.contains { $0.contains(time) }
+    }
+
+    func reset() {}
 }
 
 private final class NoopLLMPostProcessor: LLMPostProcessor {

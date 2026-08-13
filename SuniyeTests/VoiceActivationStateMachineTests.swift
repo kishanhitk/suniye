@@ -164,6 +164,26 @@ final class VoiceActivationStateMachineTests: XCTestCase {
         XCTAssertEqual(machine.state, .listening(.initial))
     }
 
+    // UX plan: the window must not expire under a turn the user is speaking.
+    // Speech onset moves to listening and cancels only the expiry timer.
+    func testSpeechInFollowUpWindowCancelsExpiryAndKeepsCapture() {
+        var machine = makeReady(followUp: true)
+        machine.handle(.runCompleted(speechWillPlay: false))
+        let effects = machine.handle(.speechStarted)
+        XCTAssertEqual(effects, [.cancelFollowUpExpiryTimer])
+        XCTAssertEqual(machine.state, .listening(.followUp))
+        // Expiry arriving late is a no-op outside the window state.
+        XCTAssertEqual(machine.handle(.followUpWindowExpired), [])
+        XCTAssertEqual(machine.state, .listening(.followUp))
+    }
+
+    func testSpeechStartedOutsideWindowIsIgnored() {
+        var machine = makeReady()
+        machine.handle(.wakeDetected(runActive: false))
+        XCTAssertEqual(machine.handle(.speechStarted), [])
+        XCTAssertEqual(machine.state, .listening(.initial))
+    }
+
     func testFollowUpWindowExpiryReturnsToReady() {
         var machine = makeReady(followUp: true)
         machine.handle(.runCompleted(speechWillPlay: false))

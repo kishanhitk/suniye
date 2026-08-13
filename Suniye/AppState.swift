@@ -377,6 +377,7 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
+            voiceActivationController?.setFollowUpWindowEnabled(voiceActivationFollowUpWindowEnabled)
             onStateChange?()
         }
     }
@@ -1601,6 +1602,10 @@ final class AppState {
     private let editModeSelectionProvider: EditModeSelectionProviding
     private let hotkeyService: HotkeyServiceProtocol
     private let soundFeedbackService: SoundFeedbackServiceProtocol
+    private(set) var voiceActivationController: VoiceActivationController?
+    /// True while the floating indicator shows a Voice Activation state, so
+    /// leaving those states clears only what Voice Activation set.
+    private var indicatorOwnedByVoiceActivation = false
     private let partialTranscriptionScheduler: PartialTranscriptionScheduler
     private let floatingIndicatorController = FloatingIndicatorController()
     private let llmPostProcessor: LLMPostProcessor
@@ -1776,7 +1781,10 @@ final class AppState {
         },
         magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
         startServices: Bool = true,
-        llmE2EMode: LLME2EMode? = nil
+        llmE2EMode: LLME2EMode? = nil,
+        wakeWordDetectorFactory: (() throws -> WakeWordDetecting)? = nil,
+        speechActivityDetectorFactory: (() throws -> SpeechActivityDetecting)? = nil,
+        voiceActivationConfiguration: VoiceActivationController.Configuration = .init()
     ) {
         self.modelManager = modelManager
         self.transcriptionService = transcriptionService
@@ -1867,6 +1875,7 @@ final class AppState {
         }
         resolvedComputerUseCoordinator.onPhaseChange = { [weak self] phase in
             self?.handleComputerUsePhaseChange(phase)
+            self?.voiceActivationController?.handleRunPhase(phase)
         }
         self.editLearningService.onLearnedTerms = { [weak self] terms in
             self?.handleLearnedVocabularyTerms(terms)
@@ -1879,6 +1888,10 @@ final class AppState {
                 guard let self else { return }
                 switch event {
                 case let .levelsUpdated(sessionID, levels):
+                    if voiceActivationController?.ownsTapSession(sessionID) == true {
+                        handleVoiceActivationLevels(levels)
+                        return
+                    }
                     guard activeAudioCaptureSessionID == sessionID else { return }
                     handleAudioLevelsUpdate(levels)
                 case let .devicesChanged(devices):
@@ -1895,6 +1908,36 @@ final class AppState {
                     await handleAudioCaptureInterruption(sessionID: sessionID, reason: reason)
                 }
             }
+        }
+
+        let voiceController = VoiceActivationController(
+            audioCaptureService: audioCaptureService,
+            transcriptionService: transcriptionService,
+            submitVoiceTask: { [weak resolvedComputerUseCoordinator] text in
+                resolvedComputerUseCoordinator?.submitVoiceTask(text) ?? .rejected(message: "Unavailable")
+            },
+            isRunActive: { [weak resolvedComputerUseCoordinator] in
+                resolvedComputerUseCoordinator?.isRunning ?? false
+            },
+            playWakeCue: { [weak self] in
+                guard let self, self.voiceActivationSoundFeedbackEnabled else { return }
+                self.soundFeedbackService.play(.voiceActivationWake)
+            },
+            preferredInputDeviceID: { [weak self] in self?.selectedInputDeviceID },
+            echoCancellationEnabled: { [weak self] in self?.echoCancellationEnabled ?? false },
+            makeWakeDetector: wakeWordDetectorFactory ?? { try SherpaWakeWordDetector() },
+            makeSpeechDetector: speechActivityDetectorFactory ?? { try SileroSpeechActivityDetector() },
+            configuration: voiceActivationConfiguration
+        )
+        voiceActivationController = voiceController
+        voiceController.onStateChange = { [weak self] state in
+            self?.handleVoiceActivationStateChange(state)
+        }
+        voiceController.onTranscriptFlash = { [weak self] text in
+            self?.showVoiceActivationTranscriptFlash(text)
+        }
+        voiceController.onSubmissionOutcome = { [weak self] outcome in
+            self?.handleVoiceActivationSubmissionOutcome(outcome)
         }
 
         AppLogger.shared.log(.info, "app state init")
@@ -1928,6 +1971,11 @@ final class AppState {
             analytics.start()
             emitAppLaunchEvent()
             wireHotkey()
+            voiceController.setFollowUpWindowEnabled(voiceActivationFollowUpWindowEnabled)
+            if voiceActivationEnabled {
+                // Hydration bypasses the didSet; start the persisted-on state.
+                applyVoiceActivationEnabled()
+            }
             Task {
                 await bootstrap()
             }
@@ -2373,12 +2421,18 @@ final class AppState {
     }
 
     func handleSystemWillSleep() async {
+        await voiceActivationController?.handleSystemSleep()
         await audioCaptureService.handleSystemSleep()
     }
 
     func handleSystemDidWake() {
         audioCaptureService.handleSystemWake()
         refreshInputDevices()
+        if voiceActivationEnabled {
+            Task { [weak self] in
+                await self?.voiceActivationController?.handleSystemWake()
+            }
+        }
     }
 
     func refreshLaunchAtLoginStatus() {
@@ -3381,6 +3435,12 @@ final class AppState {
     }
 
     func toggleFloatingIndicatorRecording() {
+        // UX plan: while Voice Activation listens, the pill's action cancels
+        // the turn (no chat turn is created).
+        if case .listening = voiceActivationController?.state {
+            voiceActivationController?.cancelListening()
+            return
+        }
         if computerUseCoordinator.isRunning {
             computerUseCoordinator.stop()
             return
@@ -3911,6 +3971,10 @@ final class AppState {
             onboardingPracticeResult = nil
         }
         setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0), source: trigger))
+
+        // UX rule: never two microphone captures. The listen tap yields to the
+        // hold-to-talk session and resumes when the session clears.
+        await voiceActivationController?.suspendForCaptureSession()
 
         do {
             let session = try await audioCaptureService.startCapture(
@@ -4465,13 +4529,71 @@ final class AppState {
         voiceActivationEnabled.toggle()
     }
 
-    /// Reacts to the enabled flag. Settings-only in this slice; the
-    /// turn-capture slice starts and stops the listen pipeline here.
     private func applyVoiceActivationEnabled() {
         AppLogger.shared.log(
             .info,
             "voice activation \(voiceActivationEnabled ? "enabled" : "disabled")"
         )
+        guard runtimeServicesEnabled else {
+            return
+        }
+        let enabled = voiceActivationEnabled
+        Task { [weak self] in
+            await self?.voiceActivationController?.setEnabled(enabled)
+        }
+    }
+
+    private func handleVoiceActivationStateChange(_ state: VoiceActivationState) {
+        switch state {
+        case .listening:
+            indicatorOwnedByVoiceActivation = true
+            setFloatingIndicatorState(.listening(
+                levels: Self.defaultIndicatorLevels(level: 0),
+                source: .voiceActivation
+            ))
+        case .transcribing:
+            indicatorOwnedByVoiceActivation = true
+            setFloatingIndicatorState(.processing())
+        case .ready, .off, .suspended, .followUpWindow:
+            if indicatorOwnedByVoiceActivation {
+                indicatorOwnedByVoiceActivation = false
+                if computerUseCoordinator.isRunning {
+                    setFloatingIndicatorState(.computerUseWorking)
+                } else {
+                    setFloatingIndicatorState(.idle)
+                }
+            }
+        }
+        onStateChange?()
+    }
+
+    private func handleVoiceActivationLevels(_ levels: [Float]) {
+        guard indicatorOwnedByVoiceActivation,
+              case .listening(_, .voiceActivation, let preview) = floatingIndicatorState else {
+            return
+        }
+        setFloatingIndicatorState(.listening(levels: levels, source: .voiceActivation, preview: preview))
+    }
+
+    /// UX plan: the captured transcript flashes briefly before submission.
+    private func showVoiceActivationTranscriptFlash(_ text: String) {
+        indicatorOwnedByVoiceActivation = true
+        setFloatingIndicatorState(.listening(
+            levels: Self.defaultIndicatorLevels(level: 0),
+            source: .voiceActivation,
+            preview: .text(text)
+        ))
+    }
+
+    private func handleVoiceActivationSubmissionOutcome(_ outcome: ComputerUseVoiceTaskSubmission) {
+        switch outcome {
+        case .started, .queued, .intervened:
+            if soundFeedbackEnabled {
+                soundFeedbackService.play(.transcriptionSucceeded)
+            }
+        case .rejected(let message):
+            showTransientIndicatorError(message)
+        }
     }
 
     private func loadGeneralSettings() {
@@ -4944,6 +5066,11 @@ final class AppState {
         }
         activeDictationSession = nil
         stopLivePreview()
+        if voiceActivationEnabled {
+            Task { [weak self] in
+                await self?.voiceActivationController?.resumeAfterCaptureSession()
+            }
+        }
     }
 
     private func startLivePreview(sessionID: UUID) {

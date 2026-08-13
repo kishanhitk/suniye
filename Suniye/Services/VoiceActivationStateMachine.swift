@@ -19,6 +19,7 @@ enum VoiceActivationEvent: Equatable, Sendable {
     case tapSuspended
     case tapRestored
     case wakeDetected(runActive: Bool)
+    case speechStarted
     case speechEnded
     case noSpeechTimeout
     case cancelRequested
@@ -38,6 +39,10 @@ enum VoiceActivationEffect: Equatable, Sendable {
     case playWakeCue
     case armFollowUpWindow
     case disarmFollowUpWindow
+    /// Stops the expiry timer only; the in-progress capture continues. Fired
+    /// when speech begins inside the follow-up window (the window must not
+    /// expire under a turn the user is speaking).
+    case cancelFollowUpExpiryTimer
 }
 
 /// The user-visible states from the UX plan that belong to the listening
@@ -104,6 +109,9 @@ struct VoiceActivationStateMachine: Equatable, Sendable {
             state = .listening(context)
             return [.disarmFollowUpWindow, .playWakeCue, .startTurnCapture(context)]
 
+        case (.followUpWindow, .speechStarted):
+            state = .listening(.followUp)
+            return [.cancelFollowUpExpiryTimer]
         case (.followUpWindow, .speechEnded):
             state = .transcribing(.followUp)
             return [.stopTurnCapture, .transcribeAndSubmit(.followUp)]
