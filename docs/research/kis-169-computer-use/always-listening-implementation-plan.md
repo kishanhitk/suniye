@@ -77,15 +77,20 @@ legal transitions, including the manual-handoff state ("Your turn") and the opti
 window after completion. Emits effects: start turn capture, submit turn, set indicator state.
 The type is pure and unit-testable.
 
-Two behaviors sit in `VoiceActivationController` rather than the conversation path:
+One behavior sits in `VoiceActivationController` rather than the conversation path:
 
-- **Mode-control intent.** After transcription and before `submitVoiceTask`, the transcript is
-  checked against a small local list ("stop listening", "stop voice activation"). A match turns
-  Voice Activation off and creates no conversation turn. This must work with no model
-  configured. The check covers mode control only; task phrases are never matched locally.
 - **Follow-up window.** When enabled in Settings and a run ends in Done, the controller keeps
   the endpointer armed for about 6 seconds without requiring a wake hit. Captured speech in the
   window submits as a normal turn; silence returns to Ready. Off by default.
+
+Mode control by voice goes through the model (decision 2026-08-14; an earlier local
+phrase-matcher design was dropped). Add a `set_voice_activation` tool to
+`ComputerUseModelToolContract` with a single `enabled: false` action; the system prompt
+describes when to call it. This handles any phrasing and any language the model understands.
+The tool result confirms, the coordinator forwards it to `AppState`, and the state machine
+moves to Off with the indicator flash and cue sound. During a provider outage the spoken
+off-switch is unavailable; the physical routes (menu bar, shortcut, Settings) are the
+guaranteed exits.
 
 **VoiceActivationController.** Connects the other components. It subscribes to audio frames,
 drives the detector, endpointer, and state machine, calls
@@ -188,9 +193,9 @@ Planned test files:
   no-speech timeout, wake during a running task, sleep and lock suspension, toggling off from
   each state, the manual-handoff pause and resume, and the follow-up window (opens only after
   Done, closes on silence, never opens after Stopped or failure).
-- Mode-control intent tests: "stop listening" phrasings turn Voice Activation off without a
-  conversation turn and without a configured model; near-miss task phrases pass through to
-  `submitVoiceTask` unchanged.
+- Mode-control tests: a `set_voice_activation` tool call from the agent turns Voice Activation
+  off, flashes confirmation, and preserves the conversation; the physical routes work with a
+  stub coordinator that rejects submissions (provider-outage case).
 - `VoiceTurnEndpointerTests`: synthetic frame sequences for a normal turn, a mid-turn pause
   shorter than the trailing-silence window, the maximum-turn cap, and the no-speech timeout.
 - `VoiceActivationControllerTests`: a stub detector emits scripted hits. Verify submit routing

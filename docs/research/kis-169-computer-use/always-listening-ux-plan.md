@@ -135,11 +135,12 @@ meaning comes from the full spoken turn and conversation context. Escape and the
 control remain immediate cancellation controls when the user does not want semantic
 interpretation.
 
-One exception exists for mode control. Turns such as “Hey Suniye, stop listening” turn Voice
-Activation off through a small local intent check, not through the conversation. Mode control
-must work when no model is configured and no task is running, so it cannot ride the semantic
-path. The recognized phrasing is shown in Settings next to the wake phrase. This exception
-covers turning listening off only; task control stays conversational.
+Mode control is also conversational. A turn such as “Hey Suniye, stop listening” goes to the
+model like any other turn; the model recognizes the intent, turns Voice Activation off through
+a dedicated tool, and confirms briefly. Any phrasing works, in any language the model
+understands. Settings show “stop listening” as the example phrase. If the model provider is
+unreachable, the spoken off-switch is unavailable; the menu bar, the toggle shortcut, and
+Settings always work.
 
 This wake-gated interruption design is deliberate. Voice-activity-based interruption, where any
 sound can barge in, is the top complaint against assistants that use it (false triggers from
@@ -216,10 +217,10 @@ For immediate non-conversational cancellation, the user presses Escape or clicks
 ### Turn Voice Activation off
 
 The user turns it off from Settings, the menu bar, the configured toggle shortcut, or by saying
-“Hey Suniye, stop listening.” The spoken route confirms with a brief indicator flash and a cue
-sound, and works with no model configured. Any active Computer Use task remains visible and
+“Hey Suniye, stop listening.” The spoken route is interpreted by the model and confirms with a
+brief indicator flash and a cue sound. Any active Computer Use task remains visible and
 controllable, but Suniye no longer waits for spoken turns. Turning off listening does not
-silently erase or create a conversation.
+silently erase the conversation.
 
 ## Conversation behavior
 
@@ -368,5 +369,6 @@ The UX is ready for implementation when the following can be tested from a user�
     Escape interrupts playback instantly, and Suniye never wakes itself from its own speech.
 12. When a task hits a login or CAPTCHA, the user can complete it by hand and resume with
     "Hey Suniye, continue" without losing the run or the conversation.
-13. "Hey Suniye, stop listening" turns Voice Activation off, with visible confirmation, even
-    when no model is configured.
+13. "Hey Suniye, stop listening" — in any natural phrasing — turns Voice Activation off with
+    visible confirmation. The menu bar, shortcut, and Settings work regardless of model
+    availability.
