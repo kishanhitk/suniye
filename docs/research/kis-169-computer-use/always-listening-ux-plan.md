@@ -97,7 +97,11 @@ without creating a chat turn.
 The floating indicator changes to a compact generic working state. It does not show internal
 transport details. It contains:
 
-- a short shimmering status label such as **Working…**;
+- a short shimmering status label. It starts as **Working…** and updates with a brief,
+  plain-language description of the current step (for example **Opening Chrome…** or
+  **Checking your last 5 emails…**). The agent is instructed to keep emitting these
+  one-line statuses as it works; each names the user-visible action, never internal
+  transport, provider, or tool-call details;
 - a Stop control;
 - an **Open conversation** action.
 
@@ -202,7 +206,8 @@ The floating indicator is intentionally small. It communicates only the state th
 
 - Ready is represented in the menu bar, not by a permanent floating panel.
 - Listening uses a live voice-level animation.
-- Working uses generic shimmering text.
+- Working uses shimmering text with brief step status; it falls back to **Working…** when no
+  clear step description exists.
 - Needs input uses a distinct but non-alarming accent.
 - Done, Stopped, and Couldn’t finish are brief terminal states.
 

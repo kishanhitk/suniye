@@ -535,11 +535,11 @@
     </div>
 
     <div class="card state-card">
-      <div class="stage"><div class="pill"><span class="shimmer">Working…</span><button class="stopbtn" title="Stop"></button><span class="openlink">Open</span></div></div>
+      <div class="stage"><div class="pill"><span class="shimmer">Checking your last 5 emails…</span><button class="stopbtn" title="Stop"></button><span class="openlink">Open</span></div></div>
       <div class="body">
         <div class="name"><span class="num">4</span> Working</div>
-        <div class="desc">Compact generic working state: shimmer label, one Stop control, Open-conversation action. No transport details.</div>
-        <div class="rule"><b>Rule:</b> the Computer Use window does <b>not</b> open automatically. Exactly one Stop control per surface.</div>
+        <div class="desc">Shimmer label with <b>agent-emitted step status</b> — the agent is instructed to keep narrating its current action in plain language (“Opening Chrome…”, “Checking your last 5 emails…”). Falls back to <b>Working…</b>. One Stop control, Open-conversation action.</div>
+        <div class="rule"><b>Rule:</b> statuses name the user-visible action — never transport, provider, or tool-call details. The window does <b>not</b> open automatically. Exactly one Stop control per surface.</div>
       </div>
     </div>
 
@@ -715,7 +715,7 @@ function renderPill(mode, opts = {}) {
   }
   if (mode === 'working') {
     pill.classList.add('interactive');
-    pill.innerHTML = `<span class="shimmer">Working…</span><button class="stopbtn" title="Stop" onclick="userStop('pill')"></button><span class="openlink" onclick="openChat()">Open</span>`;
+    pill.innerHTML = `<span class="shimmer" id="workingStatus">${opts.status || 'Working…'}</span><button class="stopbtn" title="Stop" onclick="userStop('pill')"></button><span class="openlink" onclick="openChat()">Open</span>`;
   }
   if (mode === 'needs-input') {
     pill.classList.add('needs-input');
@@ -724,6 +724,12 @@ function renderPill(mode, opts = {}) {
   if (mode === 'done')    { pill.classList.add('done');   pill.innerHTML = `<span class="check">✓</span><span>${opts.text}</span>`; }
   if (mode === 'stopped') { pill.innerHTML = `<span>Stopped</span>`; }
   if (mode === 'failed')  { pill.classList.add('failed'); pill.innerHTML = `<span class="cross">✕</span><span>${opts.text}</span><span class="openlink" onclick="openChat()">Open</span>`; }
+}
+
+function setWorkingStatus(text) {
+  const el = document.getElementById('workingStatus');
+  if (el) el.textContent = text;
+  log(`agent status → “${text}”`, true);
 }
 
 function showTranscriptFlash(text, cb) {
@@ -832,7 +838,8 @@ function startRun() {
   chatWorking(true);
   log('turn submitted → <b>Working</b>. Window does not open automatically; conversation records the turn.', true);
   setBadge();
-  runLater(() => chatAdd('activity', '▸ run_shell — pmset -g batt; system_profiler…'), 1600);
+  runLater(() => { setWorkingStatus('Checking battery health…'); chatAdd('activity', '▸ Checking battery health… — run_shell'); }, 1600);
+  runLater(() => setWorkingStatus('Reading the result…'), 3600);
   runLater(() => finishRun('done', 'Done — battery is at 91%, Normal condition'), 5200);
 }
 
@@ -847,8 +854,8 @@ function sayCorrection() {
     setBadge();
     // the correction extends the run: push completion out and show the redirected action
     clearRunTimers();
-    runLater(() => chatAdd('activity', '▸ open_app — Terminal'), 1800);
-    runLater(() => chatAdd('activity', '▸ run_shell — pmset -g batt (in Terminal)'), 3400);
+    runLater(() => { setWorkingStatus('Opening Terminal…'); chatAdd('activity', '▸ Opening Terminal… — open_app'); }, 1800);
+    runLater(() => { setWorkingStatus('Checking battery health…'); chatAdd('activity', '▸ Checking battery health… — run_shell'); }, 3400);
     runLater(() => finishRun('done', 'Done — battery is at 91%, Normal condition'), 5600);
   });
 }
