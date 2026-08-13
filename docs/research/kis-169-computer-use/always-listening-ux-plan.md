@@ -288,8 +288,10 @@ behind a default-off setting until real-world use shows the false-capture rate i
 ## Privacy and trust UX
 
 - Voice Activation is off by default.
-- Voice Output is on-device — spoken responses never leave the Mac. There is no cloud voice
-  option.
+- Voice Output adds no new network destination. Speech synthesis runs on the Mac; no audio and
+  no text is sent to a speech provider. The text being spoken is the model's response, which
+  already passed through the user's configured model provider (for example OpenRouter) as part
+  of normal Computer Use.
 - The microphone-in-use state is always visible in the menu bar and through normal macOS privacy
   indicators.
 - Settings explain, in plain language, the difference between waiting for the wake phrase and

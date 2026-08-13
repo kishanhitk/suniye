@@ -293,8 +293,9 @@ Slices 1–2 and 3–4 can pair into two PRs if review size matters. Otherwise, 
 - **Voice output memory and platform split.** Chatterbox Turbo peaks at about 2.3 GB of
   unified memory on top of the ASR model and Gemma, and MLX requires Apple Silicon. Intel
   and low-memory users have no Voice Output. Mitigations: RAM-gated enablement, idle unload,
-  and Kokoro (0.69 GB, both architectures) as the documented downgrade path. All speech is
-  generated locally; nothing is sent to a cloud provider.
+  and Kokoro (0.69 GB, both architectures) as the documented downgrade path. Speech synthesis is
+  local and adds no new network destination; the spoken text is the model response, which
+  already transited the user's configured model provider (OpenRouter or similar).
 - **Echo self-trigger.** Media playback or Suniye's own audio could contain wake-like sounds.
   Suniye's own speech playback is the worst case, so the wake detector is suppressed during
   it. The existing `echoCancellationEnabled` path applies to the audio engine; verify the tap
