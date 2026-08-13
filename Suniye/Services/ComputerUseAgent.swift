@@ -292,13 +292,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
             if case let .appState(state) = result,
                let screenshot = state.screenshot,
                let dataURL = try? await screenshots.dataURL(for: screenshot) {
-                messages.append(
-                    .image(
-                        role: .user,
-                        text: "Current \(state.app) screenshot.",
-                        dataURL: dataURL
-                    )
-                )
+                messages.append(.screenshot(app: state.app, dataURL: dataURL))
             }
             let observationWasUnchanged: Bool
             if case let .appState(state) = result {
@@ -380,10 +374,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
     }
 
     private func encodeInterventionObservationArguments(app: String) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        let data = try encoder.encode(InterventionObservationArguments(app: app))
-        return String(decoding: data, as: UTF8.self)
+        try ComputerUseCompactJSON.encode(InterventionObservationArguments(app: app))
     }
 
     private func emitFailure(

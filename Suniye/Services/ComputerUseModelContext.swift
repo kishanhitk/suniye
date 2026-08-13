@@ -48,13 +48,7 @@ struct ComputerUseModelContextBuilder: Sendable {
             guard let (reference, dataURL) = loadedScreenshots[index] else {
                 continue
             }
-            messages.append(
-                .image(
-                    role: .user,
-                    text: "Current \(reference.app) screenshot.",
-                    dataURL: dataURL
-                )
-            )
+            messages.append(.screenshot(app: reference.app, dataURL: dataURL))
         }
         messages.append(.text(role: .user, text: instruction))
         return compact(messages, currentInstruction: instruction)
@@ -111,20 +105,30 @@ struct ComputerUseModelContextBuilder: Sendable {
                 return []
             }
             let callID = "history-\(activity.id.uuidString.lowercased())"
+            // Replay goes through the same typed projection as the live path;
+            // only error payloads (which never decode) replay verbatim.
+            let content: String
+            if let result = ComputerUseToolResultEncoder.decode(
+                toolName: activity.toolName,
+                output: output
+            ), let projected = try? ComputerUseModelToolOutput.encode(
+                result,
+                maximumTokens: policy.maximumToolOutputTokens
+            ) {
+                content = projected
+            } else {
+                content = ComputerUseTokenTruncator.truncateMiddle(
+                    output,
+                    maximumTokens: policy.maximumToolOutputTokens
+                )
+            }
             return [
                 .toolCall(
                     id: callID,
                     name: activity.toolName,
                     arguments: activity.arguments
                 ),
-                .toolResult(
-                    id: callID,
-                    content: ComputerUseModelToolOutput.normalizePersisted(
-                        toolName: activity.toolName,
-                        output: output,
-                        maximumTokens: policy.maximumToolOutputTokens
-                    )
-                ),
+                .toolResult(id: callID, content: content),
             ]
         }
     }
@@ -134,13 +138,16 @@ struct ComputerUseModelContextBuilder: Sendable {
     ) -> PersistedScreenshotReference? {
         guard message.role == .activity,
               let activity = message.activity,
-              let output = activity.output else {
+              let output = activity.output,
+              case let .appState(state)? = ComputerUseToolResultEncoder.decode(
+                  toolName: activity.toolName,
+                  output: output
+              ),
+              let screenshot = state.screenshot,
+              screenshot.isFileURL else {
             return nil
         }
-        return ComputerUseModelToolOutput.persistedScreenshotReference(
-            toolName: activity.toolName,
-            output: output
-        )
+        return PersistedScreenshotReference(app: state.app, url: screenshot)
     }
 
     private func groupProtocolMessages(
@@ -182,58 +189,15 @@ enum ComputerUseModelToolOutput {
         let output: String
         switch result {
         case let .applications(applications):
-            output = try encodeJSON(applications)
+            output = try ComputerUseCompactJSON.encode(applications)
         case let .appState(state):
-            output = try encodeJSON(ModelVisibleAppState(app: state.app, text: state.text))
+            output = try ComputerUseCompactJSON.encode(
+                ModelVisibleAppState(app: state.app, text: state.text)
+            )
         case .actionCompleted:
             output = "null"
         }
         return ComputerUseTokenTruncator.truncateMiddle(output, maximumTokens: maximumTokens)
-    }
-
-    static func normalizePersisted(
-        toolName: String,
-        output: String,
-        maximumTokens: Int
-    ) -> String {
-        var normalized = output
-        if toolName == ComputerUseToolName.getAppState.rawValue,
-           let data = output.data(using: .utf8),
-           var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            object.removeValue(forKey: "screenshot")
-            if let cleanData = try? JSONSerialization.data(
-                withJSONObject: object,
-                options: [.sortedKeys, .withoutEscapingSlashes]
-            ) {
-                normalized = String(decoding: cleanData, as: UTF8.self)
-            }
-        }
-        return ComputerUseTokenTruncator.truncateMiddle(
-            normalized,
-            maximumTokens: maximumTokens
-        )
-    }
-
-    static func persistedScreenshotReference(
-        toolName: String,
-        output: String
-    ) -> PersistedScreenshotReference? {
-        guard toolName == ComputerUseToolName.getAppState.rawValue,
-              let data = output.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let app = object["app"] as? String,
-              let screenshot = object["screenshot"] as? String,
-              let url = URL(string: screenshot),
-              url.isFileURL else {
-            return nil
-        }
-        return PersistedScreenshotReference(app: app, url: url)
-    }
-
-    private static func encodeJSON<T: Encodable>(_ value: T) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        return String(decoding: try encoder.encode(value), as: UTF8.self)
     }
 
     private struct ModelVisibleAppState: Encodable {
