@@ -1,29 +1,31 @@
-# Always-listening Computer Use — implementation plan
+# Always-listening Computer Use: implementation plan
 
 Date: 2026-08-13
-Status: proposed. Companion to `always-listening-ux-plan.md` (UX contract). No code written yet.
-Branch strategy: stacked PR — `kis-169-always-listening` on top of `kis-169-computer-use-parity` (PR #93).
+Status: Proposed. No code is written yet.
+Companion document: `always-listening-ux-plan.md` defines the UX contract.
+Branch: `kis-169-always-listening`, stacked on `kis-169-computer-use-parity` (PR #93).
 
-Per product decision, safety gates (deterministic spoken-stop carve-out, per-action guards) are
-**deferred until pre-release**. This plan builds the full experience first.
+Safety gates (a deterministic spoken-stop path and per-action guards) are deferred until before
+release. This decision is recorded in the project notes. The plan builds the full feature first.
 
-## 1. Feasibility — validated today
+## 1. Feasibility
 
-The bundled sherpa-onnx dylib (`Suniye/Frameworks/libsherpa-onnx-c-api.dylib`, v1.12.25) exports
-`SherpaOnnxCreateKeywordSpotter` and `SherpaOnnxCreateVoiceActivityDetector`. A throwaway C
-harness against the pretrained English KWS model
-(`sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01`, int8 files ≈ 5 MB total) gave:
+The bundled sherpa-onnx dylib (`Suniye/Frameworks/libsherpa-onnx-c-api.dylib`, version 1.12.25)
+exports `SherpaOnnxCreateKeywordSpotter` and `SherpaOnnxCreateVoiceActivityDetector`.
 
-- **3/3 positives detected** — `say`-synthesized "Hey Suniye" (two voices, with and without a
-  trailing task sentence).
-- **0/6 false alarms** — including the near-misses "hey sunny day", "hey sonny", "hey so nice",
-  "hey seriously".
+A test harness was run on 2026-08-13 against the pretrained English keyword-spotting model
+`sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01` (int8 files, about 5 MB total). Results:
+
+- 3 of 3 positive samples detected. Samples were synthesized with `say` in two voices, with and
+  without a trailing task sentence.
+- 0 of 6 negative samples triggered a detection. Negatives included "hey sunny day", "hey sonny",
+  "hey so nice", and "hey seriously".
 
 Working configuration:
 
-- Keywords passed in-memory via `keywords_buf` (no keywords file on disk).
-- Keyword lines are pre-computed BPE token sequences (computed once with the model's `bpe.model`;
-  hardcoded as constants — no tokenizer at runtime). The set that works:
+- Pass keywords in memory through `keywords_buf`. Do not write a keywords file to disk.
+- Keyword lines are BPE token sequences. Compute them once with the model's `bpe.model` and store
+  them as constants. No tokenizer runs at runtime. The validated set:
 
   ```
   ▁HE Y ▁SU N I Y E :3.0 #0.05
@@ -31,16 +33,20 @@ Working configuration:
   ▁HE Y ▁SU N I Y A Y :3.0 #0.05
   ▁HE Y ▁SO ON I Y A Y :3.0 #0.05
   ▁HE Y ▁SU NE E Y E :3.0 #0.05
-  ▁HE Y ▁SU N I :3.0 #0.05        <- the variant that actually fires; keep the others for coverage
+  ▁HE Y ▁SU N I :3.0 #0.05
   ```
 
-- Spotter config: `max_active_paths 4`, `num_trailing_blanks 1`, `keywords_score 2.0`,
-  `keywords_threshold 0.25`, per-keyword boost/threshold overrides as above.
-- After each detection, call `SherpaOnnxResetKeywordStream` and keep feeding.
+  In testing, the last line produced the detections. Keep the other lines for coverage.
+- Spotter configuration: `max_active_paths 4`, `num_trailing_blanks 1`, `keywords_score 2.0`,
+  `keywords_threshold 0.25`, with the per-keyword overrides shown above.
+- After each detection, call `SherpaOnnxResetKeywordStream` and continue feeding samples.
 
-Caveats: validation used TTS audio only. Real-mic thresholds need a live tuning pass — that is
-what the Settings "Try wake phrase" flow is for. The KWS model is English-acoustic; it spots the
-fixed phrase, it is not general ASR, so CPU cost is a 3.3M-param streaming zipformer (negligible).
+Limitations of this validation:
+
+- All test audio was synthesized. Thresholds must be tuned with live microphone audio during
+  implementation. The Settings "Try wake phrase" flow exists for this purpose.
+- The model is English-acoustic and detects only the fixed phrase. It is not general ASR.
+  The model is a 3.3M-parameter streaming zipformer. CPU cost is negligible.
 
 ## 2. Architecture
 
@@ -48,195 +54,216 @@ fixed phrase, it is not general ASR, so CPU cost is a 3.3M-param streaming zipfo
 
 ```
 Suniye/Services/
-  WakeWordDetector.swift          actor; wraps SherpaOnnxKeywordSpotter (pattern: TranscriptionService)
-  VoiceTurnEndpointer.swift       pure logic: speech-end detection over level/VAD frames
-  VoiceActivationStateMachine.swift  pure value type: Off/Ready/Listening/Working/NeedsInput/Terminal
-  VoiceActivationController.swift @MainActor @Observable; owns the loop, bridges everything
-  SpeechOutputService.swift       protocol; Chatterbox (local MLX helper) + AVSpeech + Fish impls
+  WakeWordDetector.swift            actor; wraps SherpaOnnxKeywordSpotter
+  VoiceTurnEndpointer.swift         speech-end detection over level/VAD frames
+  VoiceActivationStateMachine.swift the seven UX states and their transitions
+  VoiceActivationController.swift   @MainActor @Observable; owns the loop
+  SpeechOutputService.swift         protocol; Chatterbox, AVSpeech, and Fish implementations
 ```
 
+**WakeWordDetector.** A `WakeWordDetecting` protocol with a sherpa-backed implementation. API:
+`start()`, `accept(samples:sampleRate:) -> WakeWordHit?`, `reset()`, `stop()`. It follows the
+`TranscriptionServiceProtocol` dependency-injection pattern. Tests use a stub.
 
-- `WakeWordDetector` — `protocol WakeWordDetecting` + sherpa impl. API:
-  `start()`, `accept(samples:[Float], sampleRate:) -> WakeWordHit?`, `reset()`, `stop()`.
-  Follows the `TranscriptionServiceProtocol` DI pattern so tests use a stub.
-- `VoiceTurnEndpointer` — decides "turn finished" from a frame stream. Primary signal: sherpa
-  silero VAD (`SherpaOnnxCreateVoiceActivityDetector`, silero model ≈ 1.7 MB); fallback signal:
-  the existing 22-band level meter energy. Tunables: min-speech 300 ms, trailing-silence 900 ms,
-  max-turn 30 s, no-speech-after-wake timeout 5 s (UX plan: silent wake-up returns to Ready).
-  Pure and fully unit-testable.
-- `VoiceActivationStateMachine` — encodes the seven UX states and legal transitions; emits
-  effects (start turn capture, submit turn, show indicator state). Pure, exhaustively tested.
-- `VoiceActivationController` — glue. Subscribes to audio, drives detector + endpointer + state
-  machine, calls `ComputerUseCoordinator.submitVoiceTask`, maps states to the floating indicator
-  via AppState callbacks. Constructor-injected seams: detector, endpointer clock, coordinator
-  (as `ComputerUseVoiceTaskHandling`), capture service, transcription service, settings store.
+**VoiceTurnEndpointer.** Decides when a spoken turn has ended, from a stream of frames. The
+primary signal is the sherpa silero VAD (`SherpaOnnxCreateVoiceActivityDetector`, model size
+about 1.7 MB). The fallback signal is the existing 22-band level meter. Tunable parameters:
+minimum speech 300 ms, trailing silence 900 ms, maximum turn 30 s, no-speech timeout after wake
+5 s. The type contains no I/O and is unit-testable.
 
-### Audio: one engine, a tap — not a second capture
+**VoiceActivationStateMachine.** Encodes the seven user-visible states from the UX plan and the
+legal transitions between them. It emits effects: start turn capture, submit turn, set indicator
+state. The type is pure and is tested exhaustively.
 
-`AudioCaptureService` enforces exactly one `ActiveCapture` (`startCapture` discards the previous
-one) and a 10-minute session cap. Rather than fight that, add a **listen tap**:
+**VoiceActivationController.** Connects the other components. It subscribes to audio frames,
+drives the detector, endpointer, and state machine, calls
+`ComputerUseCoordinator.submitVoiceTask`, and maps states to the floating indicator through
+AppState callbacks. All dependencies are constructor-injected: detector, clock, coordinator (as
+`ComputerUseVoiceTaskHandling`), capture service, transcription service, and settings store.
+
+### Audio capture
+
+`AudioCaptureService` allows exactly one active capture. `startCapture` discards the previous
+session, and sessions have a 10-minute cap. The always-listening path does not use capture
+sessions. It adds a listen tap:
 
 - New API on `AudioCaptureServiceProtocol`:
-  `startListenTap(onFrames: @Sendable ([Float], Double) -> Void) async throws` /
+  `startListenTap(onFrames: @Sendable ([Float], Double) -> Void) async throws` and
   `stopListenTap() async`.
-- The tap keeps the engine + ring-buffer drain running continuously and streams ~20 ms frames to
-  one subscriber. It does **not** accumulate samples (no 10-min cap, no unbounded memory) and it
-  coexists with a normal capture session: when hold-to-talk `startCapture` begins, the tap pauses
-  (detector reset); when the session ends, the tap resumes. This satisfies the UX rule "never two
-  microphone captures" with zero engine churn, and inherits the existing device-change /
-  sleep-wake / engine-restart machinery for free.
-- Turn capture after wake-up: `VoiceActivationController` buffers tap frames itself from the
-  wake-hit timestamp (bounded ring, 35 s) — no `startCapture` call, so the drain path stays
-  simple. Live preview reuses the `PartialTranscriptionScheduler` shape over that buffer.
-- Final transcription: existing `transcriptionService.transcribe(samples:sampleRate:purpose:.final)`.
+- The tap keeps the audio engine and ring-buffer drain running and delivers frames of about
+  20 ms to one subscriber. It does not accumulate samples, so the 10-minute cap and memory
+  growth do not apply.
+- The tap coexists with normal capture sessions. When a hold-to-talk `startCapture` begins, the
+  tap pauses and the detector resets. When the session ends, the tap resumes. This satisfies the
+  UX rule that two microphone captures never run at once.
+- The tap inherits the existing device-change, sleep-wake, and engine-restart handling.
+- After a wake hit, `VoiceActivationController` buffers tap frames in a bounded ring (35 s). It
+  does not call `startCapture`. Live preview reuses the `PartialTranscriptionScheduler` pattern
+  over this buffer.
+- Final transcription uses the existing
+  `transcriptionService.transcribe(samples:sampleRate:purpose: .final)`.
 
 ### Turn flow
 
 ```
 Ready:      tap frames -> WakeWordDetector
-wake hit:   play cue, indicator .voiceActivationListening, start turn buffer + endpointer
-            (+ PartialTranscriptionScheduler for the live preview tail)
-endpoint:   transcribe(final) -> brief transcript flash (UX plan) -> submitVoiceTask(text)
-              .started / .queued  -> indicator .computerUseWorking (existing state)
-              .intervened         -> same; turn already appended to the running conversation
-              .rejected(message)  -> transient indicator error (existing path)
-no speech:  5 s timeout -> back to Ready, no chat turn
+wake hit:   play cue, set indicator to .voiceActivationListening,
+            start turn buffer + endpointer + live preview
+endpoint:   transcribe(final) -> transcript flash -> submitVoiceTask(text)
+              .started / .queued  -> indicator .computerUseWorking
+              .intervened         -> same; the turn is already in the running conversation
+              .rejected(message)  -> transient indicator error
+no speech:  5 s timeout -> return to Ready; no chat turn is created
 ```
 
-Mid-run turns need **no new plumbing**: `submitVoiceTask` already routes to
-`ComputerUseInterventionChannel` when running, and `ComputerUseAgent.run` drains interventions
-twice per iteration (before the model call and after the response, discarding stale responses).
-"Hey Suniye, use Chrome instead" and "Hey Suniye, stop" both become interventions; the model
-interprets "stop" semantically, per the UX plan. (Deterministic stop carve-out: deferred, see
-Safety note above.)
+Mid-run turns require no new conversation plumbing. `submitVoiceTask` already routes to
+`ComputerUseInterventionChannel` while a run is active, and `ComputerUseAgent.run` drains
+interventions twice per iteration: before the model call, and after the response, discarding a
+stale response. Corrections such as "use Chrome instead" and stop requests are both
+interventions. The model interprets "stop" from context, per the UX plan. The deterministic stop
+path is deferred; see the note at the top of this document.
 
-### Wake / sleep / device changes
+### Sleep, wake, and device changes
 
-- Reuse `handleSystemSleep()/handleSystemWake()` forwarding (`AppState.handleSystemDidWake`):
-  sleep stops the tap and moves the state machine to a suspended flavor of Off; wake restores
-  Ready only if the tap restarts cleanly (UX plan §Mac sleeps or locks).
-- `ComputerUseRuntimeGuard` already gates on screen lock for the agent side.
+- Reuse the `handleSystemSleep()` and `handleSystemWake()` forwarding in
+  `AppState.handleSystemDidWake`. Sleep stops the tap and moves the state machine to a suspended
+  variant of Off. Wake restores Ready only if the tap restarts without error. See the UX plan,
+  "Mac sleeps or locks".
+- `ComputerUseRuntimeGuard` already gates the agent on screen lock.
 
 ### Model packaging
 
-Bundle both models in app resources (no download flow, offline-first, tiny next to the 33 MB
-onnxruntime dylib):
+Bundle both detection models in app resources. No download flow is needed:
 
-- KWS int8: encoder 4.6 MB + decoder 272 KB + joiner 160 KB + `tokens.txt` ≈ 5.0 MB
-- silero VAD: ≈ 1.7 MB
+- Keyword-spotting model (int8): encoder 4.6 MB, decoder 272 KB, joiner 160 KB, `tokens.txt`.
+  Total about 5.0 MB.
+- silero VAD model: about 1.7 MB.
 
-`project.yml` resources addition + `xcodegen generate`. If bundle-size pressure appears later,
-move to `ModelManager`-style download; not worth the flow now.
+Add the resources in `project.yml` and run `xcodegen generate`. If bundle size becomes a concern
+later, move these to a `ModelManager`-style download.
 
-## 3. Integration inventory (exact seams, from code audit)
+## 3. Integration points
 
 | Surface | Change |
 |---|---|
-| `GeneralSettings` (`SettingsModels.swift`) | `voiceActivationEnabled: Bool = false`, `voiceActivationSoundFeedback: Bool = true`, `voiceActivationToggleHotkey: HotkeyConfiguration?` — property + init + CodingKeys + tolerant decode, mirrored in `AppState` observable properties with persisting `didSet`, hydrated in `applyGeneralSettings`, written in `persistGeneralSettings`. |
-| `HotkeyService` | New slot (4) `voiceActivationToggle` + `onVoiceActivationToggle` callback; collision checks against the three existing hotkeys in `AppState`. |
-| `FloatingIndicatorState` | New cases `voiceActivationListening(levels:preview:)`, `voiceActivationNeedsInput`, plus terminal flashes reusing `.computerUseCompleted` / transient error. Touch every exhaustive switch: `layoutAnimationKey`, `logValue`, `tracksPointerScreen`, controller `panelShouldCaptureMouseEvents` / `canDragCurrentState` / `size(for:)`, view `capsuleContent` / `isInteractive` / `pillWidth` / `pillHeight` / colors. Ready state lives in the **menu bar only** (UX plan) — no new idle panel. |
-| `StatusItemController` | Items: "Voice Activation On/Off" toggle, "Open Conversation", "Stop Task" (enabled iff `coordinator.isRunning`). Field → `configureMenu()` → `refresh()` → `@objc` handler → `AppState` method, per existing pattern. Menu-bar icon variant while Ready (mic-in-use visibility, UX plan §Privacy). |
-| `ComputerUseSettingsDisclosure` | New "Voice Activation" section: toggle, wake-phrase display ("Hey Suniye"), Try-wake-phrase flow, toggle-shortcut recorder, sound toggle, mic picker link. First-enable one-time notice sheet (mic stays in use while waiting). |
-| `ComputerUseCoordinator` | No structural change. Add an `onNeedsInput` signal only if the agent gains an ask-user tool later — v1 maps `completed/failed/cancelled` phases to terminal indicator states via the existing `onPhaseChange`. |
-| Agent step status | The Working label shows agent-emitted one-line statuses ("Opening Chrome…", "Checking your last 5 emails…"). Mechanism: add a required short `status` string to each tool call in `ComputerUseModelToolContract` (system prompt instructs the model to phrase it as a user-visible action, ≤ 6 words, no tool/transport terms). It flows through the existing `ComputerUseActivitySink` → coordinator → `setFloatingIndicatorState`. Fallback when absent or invalid: derive from the tool name ("Taking a look…", "Typing…") or plain **Working…**. Statuses also render as the collapsed activity rows' titles in chat, so both surfaces stay consistent. |
-| Escape gap | Today `hotkeyService.onCancel` only cancels an in-progress voice **recording**; it does not stop a running agent, and the Escape monitor is only installed when a Computer Use hotkey is configured. Close both while here: Escape stops the active run (`coordinator.stop()`), monitor installed whenever Voice Activation is on **or** a hotkey is set. |
-| `MainWindowSection` / launch args | Optional `--e2e-voice-activation` style hooks for scripted e2e, matching `--e2e-llm-*` precedent. |
+| `GeneralSettings` (`SettingsModels.swift`) | Add `voiceActivationEnabled: Bool = false`, `voiceActivationSoundFeedback: Bool = true`, `voiceActivationToggleHotkey: HotkeyConfiguration?`. Each field needs the property, the init parameter, the CodingKeys case, and a tolerant decode. Mirror each field as an `AppState` observable property with a persisting `didSet`. Hydrate in `applyGeneralSettings` and write in `persistGeneralSettings`. |
+| `HotkeyService` | Add slot 5 `voiceActivationToggle` and an `onVoiceActivationToggle` callback. Slot 4 is used by the Paste Last Transcript shortcut. Add collision checks against the four existing hotkeys in `AppState`. |
+| `FloatingIndicatorState` | Add cases `voiceActivationListening(levels:preview:)` and `voiceActivationNeedsInput`. Terminal flashes reuse `.computerUseCompleted` and the transient error path. Update every exhaustive switch: `layoutAnimationKey`, `logValue`, `tracksPointerScreen`; in the controller, `panelShouldCaptureMouseEvents`, `canDragCurrentState`, `size(for:)`; in the view, `capsuleContent`, `isInteractive`, `pillWidth`, `pillHeight`, and the color properties. The Ready state appears in the menu bar only. There is no idle floating panel. |
+| `StatusItemController` | Add menu items: a Voice Activation on/off toggle, "Open Conversation", and "Stop Task" (enabled only while `coordinator.isRunning`). Follow the existing pattern: field, `configureMenu()`, `refresh()`, `@objc` handler, `AppState` method. Add a menu-bar icon variant for the Ready state, per the UX plan's privacy section. |
+| `ComputerUseSettingsDisclosure` | Add a "Voice Activation" section: enable toggle, wake-phrase display, "Try wake phrase" flow, toggle-shortcut recorder, sound toggle, and a microphone settings link. Show a one-time notice on first enable that the microphone stays in use. |
+| `ComputerUseCoordinator` | No structural change. Version 1 maps the `completed`, `failed`, and `cancelled` phases to terminal indicator states through the existing `onPhaseChange`. Add an `onNeedsInput` signal only if the agent gains an ask-user tool. |
+| Agent step status | The Working label shows one-line statuses that the agent emits, such as "Opening Chrome…". Add a required `status` string to each tool call in `ComputerUseModelToolContract`. The system prompt instructs the model to phrase the status as a user-visible action of six words or fewer, with no tool or transport terms. The status flows through the existing `ComputerUseActivitySink` to the coordinator and then to `setFloatingIndicatorState`. If the status is absent or invalid, derive a label from the tool name, or show "Working…". The same statuses become the titles of the collapsed activity rows in chat, so both surfaces stay consistent. |
+| Escape handling | Today, `hotkeyService.onCancel` cancels an in-progress voice recording only. It does not stop a running agent, and the Escape monitor is installed only when a Computer Use hotkey is configured. Change both: Escape stops the active run through `coordinator.stop()`, and the monitor is installed whenever Voice Activation is on or a hotkey is set. |
+| `MainWindowSection`, launch arguments | Add `--e2e-voice-activation` hooks for scripted end-to-end tests, following the `--e2e-llm-*` pattern. |
 
-## 4. Testing strategy (95% gate)
+## 4. Testing
 
-All new logic is behind seams that already have stub patterns in `SuniyeTests/TestDoubles.swift`
+All new logic sits behind seams that have stub patterns in `SuniyeTests/TestDoubles.swift`
 (`StubAudioCaptureService`, `StubTranscriptionService`, `StubHotkeyService`,
-`makeTestAppState(...)` — new services get parameters there).
+`makeTestAppState(...)`). New services get parameters there. The CI coverage gate is 95%.
 
-- `VoiceActivationStateMachineTests` — exhaustive transition table, incl. false wake-up, no-speech
-  timeout, wake-during-working, sleep/lock suspension, toggle-off during each state.
-- `VoiceTurnEndpointerTests` — synthetic frame sequences: normal turn, mid-thought pause under
-  the trailing-silence window, max-turn cap, no-speech timeout.
-- `VoiceActivationControllerTests` — stub detector emits scripted hits; verify submit routing for
-  all four `ComputerUseVoiceTaskSubmission` outcomes, indicator state sequence, tap pause/resume
-  around a hold-to-talk session.
-- `WakeWordDetector` (sherpa-backed) cannot run headless → `coverage_exclusions.txt` with reason,
-  same as the real `TranscriptionService` decode path; keep the wrapper thin so exclusion is small.
-- Extend `AppStateComputerUseVoiceTests` with the always-listening path;
-  `GeneralSettingsStoreTests` round-trip for the three new fields;
-  `FloatingIndicatorStateTests` / `LayoutTests` for new cases.
-- Live validation: `scripts/e2e_voice_activation.sh` (speaker-plays-wav variant of the existing
-  physical voice e2e recorded in `phase-21-background-voice-resilience-and-e2e-2026-08-12.md`).
+- `VoiceActivationStateMachineTests`: the full transition table, including false wake-up,
+  no-speech timeout, wake during a run, sleep and lock suspension, and toggle-off from each
+  state.
+- `VoiceTurnEndpointerTests`: synthetic frame sequences for a normal turn, a mid-turn pause
+  shorter than the trailing-silence window, the maximum-turn cap, and the no-speech timeout.
+- `VoiceActivationControllerTests`: a stub detector emits scripted hits. Verify submit routing
+  for all four `ComputerUseVoiceTaskSubmission` outcomes, the indicator state sequence, and tap
+  pause and resume around a hold-to-talk session.
+- The sherpa-backed `WakeWordDetector` cannot run headless. List it in
+  `coverage_exclusions.txt` with a reason, as the real `TranscriptionService` decode path is
+  listed. Keep the wrapper thin so the exclusion stays small.
+- Extend `AppStateComputerUseVoiceTests` with the always-listening path. Add round-trip coverage
+  for the three new fields in `GeneralSettingsStoreTests`. Add the new cases to
+  `FloatingIndicatorStateTests` and `FloatingIndicatorLayoutTests`.
+- Live validation: add `scripts/e2e_voice_activation.sh`, a speaker-plays-audio variant of the
+  physical voice test recorded in `phase-21-background-voice-resilience-and-e2e-2026-08-12.md`.
 
-## 5. Implementation slices (each keeps the build green)
+## 5. Implementation slices
 
-1. **Settings + state machine + menu bar** — settings fields, `VoiceActivationStateMachine`,
-   menu-bar toggle showing state; no audio yet. Tests land with it.
-2. **Listen tap** — `AudioCaptureService` tap API + pause/resume around sessions; stub-driven
-   tests for coexistence rules.
-3. **Wake word** — bundle models, `WakeWordDetector`, wire tap → detector → state machine;
-   "Try wake phrase" flow in settings.
-4. **Turn capture** — endpointer, turn buffer, live preview, final transcribe,
-   `submitVoiceTask` routing; floating indicator states.
-5. **Voice Output** — `SpeechOutputService` speaking Done / Couldn't finish / Needs-input text
-   at turn boundaries. **Engine decision (2026-08-13): Chatterbox Turbo, local, MLX 8-bit.**
-   Chosen over Kokoro for expressiveness (emotion control, blind-test wins over ElevenLabs) after
-   measured evals on an M-series Mac:
+Each slice keeps the build green.
+
+1. **Settings, state machine, menu bar.** Settings fields, `VoiceActivationStateMachine`, and
+   the menu-bar toggle with state display. No audio. Tests land with the slice.
+2. **Listen tap.** The `AudioCaptureService` tap API and pause/resume around capture sessions.
+   Stub-driven tests for the coexistence rules.
+3. **Wake word.** Bundle the models, implement `WakeWordDetector`, and wire tap → detector →
+   state machine. Implement the "Try wake phrase" flow. Tune thresholds with live microphone
+   audio in this slice.
+4. **Turn capture.** Endpointer, turn buffer, live preview, final transcription,
+   `submitVoiceTask` routing, and the new floating indicator states.
+5. **Voice Output.** `SpeechOutputService` speaks the Done, Couldn't-finish, and Needs-input
+   text at turn boundaries.
+
+   Engine decision (2026-08-13): Chatterbox Turbo, local, MLX 8-bit. It was chosen over Kokoro
+   for expressiveness: it has an emotion-control parameter and won blind listening tests against
+   ElevenLabs in vendor studies. Measurements from an M-series Mac:
 
    | | Chatterbox Turbo 8-bit | Kokoro (runner-up) |
    |---|---|---|
-   | Latency/sentence (warm) | 0.92 s (Metal) | 1.05 s (CPU) |
-   | Peak memory footprint | ~2.3 GB (with `mx.set_cache_limit(256MB)`) | ~0.69 GB |
+   | Latency per sentence (warm) | 0.92 s (Metal) | 1.05 s (CPU) |
+   | Peak memory footprint | ~2.3 GB with `mx.set_cache_limit(256MB)` | ~0.69 GB |
    | Model load | 1.5 s | 0.3 s |
    | Disk | 675 MB | 330 MB |
-   | Platforms | Apple Silicon only | AS + Intel |
+   | Platforms | Apple Silicon only | Apple Silicon and Intel |
 
-   Best-practice config (measured): 8-bit quant (4-bit is *slower* — dequant cost — and barely
-   smaller in peak footprint), warm resident model, `mx.set_cache_limit(256 MB)`,
+   Measured configuration guidance: use the 8-bit quantization. The 4-bit variant is slower
+   because of dequantization cost and its peak footprint is only slightly smaller. Keep the
+   model resident while Voice Output is active. Set `mx.set_cache_limit(256 MB)` and call
    `mx.clear_cache()` after each utterance.
 
-   **Integration cost (the real work):** no native Swift runtime exists for Chatterbox — MLX is
-   the only maintained path. Options, in recommended order:
-   1. Helper process over HTTP, like the Gemma `llama-server` precedent — a frozen (PyInstaller
-      or similar) `mlx-audio` server bundle. Ships large (~300–500 MB) but decouples the app
-      from Python and lands fastest.
-   2. Port to `mlx-swift` in-process — cleanest long-term, but the model stack (T3 + S3 tokenizer
-      + flow decoder) is a multi-week port. Not v1.
-   RAM gating like the Gemma helper: enable only when the machine has headroom; unload after a
-   configurable idle period (load is 1.5 s — acceptable to re-warm on first speech of a session).
+   Integration: no Swift runtime exists for Chatterbox. MLX is the only maintained path. Two
+   options, in order of preference for version 1:
 
-   **Fallbacks:** Intel Macs and low-RAM machines get `AVSpeechSynthesizer` (flat but functional);
-   it is also the runtime failure fallback. Fish `s2.1-pro` stays as an optional
-   bring-your-own-key cloud tier (settings + Keychain per the earlier design). Kokoro remains
-   documented as the drop-in replacement if Chatterbox's RAM draws complaints — the sherpa TTS
-   rebuild that would enable it also unlocks ZipVoice cloning.
+   1. A helper process over HTTP, following the Gemma `llama-server` pattern: a frozen
+      `mlx-audio` server bundle (PyInstaller or similar). The bundle is large (about
+      300–500 MB) but decouples the app from Python and is the fastest to build.
+   2. An in-process port to `mlx-swift`. This is cleaner but the model stack (T3, S3 tokenizer,
+      flow decoder) is a multi-week port. Not in version 1.
 
-   Barge-in: wake hit, Escape, or a new turn cancels playback and stops the MLX eval loop; the
-   wake detector is suppressed while Suniye speaks (self-wake guard, same mechanism as the
-   cue-sound suppression). Settings rows + one-time disclosure. Voice cloning ("speak in my
-   voice", ~5 s reference) is a natural later feature this engine gets for free.
-6. **Lifecycle + polish** — sleep/wake, device-change resilience, Escape-stops-run fix, sounds,
-   first-enable notice, e2e script, docs.
+   Gate enablement on available RAM, as the Gemma helper does. Unload the model after a
+   configurable idle period; reload takes 1.5 s.
 
-Slices 1–2 and 3–4 pair naturally into two PRs if review size matters; otherwise one stacked PR
-on `kis-169-computer-use-parity`.
+   Fallbacks: Intel Macs and low-RAM machines use `AVSpeechSynthesizer`, which is also the
+   runtime failure fallback. Fish Audio `s2.1-pro` is an optional cloud tier with a user-provided
+   API key stored in the Keychain. Kokoro is the documented replacement if Chatterbox's memory
+   use becomes a problem; the sherpa rebuild that enables Kokoro also enables ZipVoice, which
+   supports voice cloning.
 
-## 6. Open questions / risks
+   Barge-in: a wake hit, Escape, or a new turn cancels playback and stops the MLX evaluation
+   loop. The wake detector is suppressed while Suniye speaks, using the same mechanism as the
+   cue-sound suppression. Add the settings rows and the one-time disclosure. Voice cloning from
+   a short reference sample is a possible later feature; the engine supports it.
 
-- **Real-mic wake accuracy.** TTS-validated only; thresholds (`#0.05` per keyword) must be tuned
-  with live audio early in slice 3. The truncated `▁HE Y ▁SU N I` keyword carries recall today;
-  false-alarm behavior on real ambient audio is the thing to watch.
-- **Voice Output RAM and platform split.** Chatterbox Turbo peaks at ~2.3 GB in unified memory on
-  top of ASR + Gemma, and MLX is Apple Silicon-only — Intel users silently get the flat AVSpeech
-  fallback. Mitigations: RAM-gated enablement, idle unload, and Kokoro (0.69 GB, AS+Intel) as the
-  documented downgrade path. The default remains fully local; only the optional Fish tier sends
-  response text to a cloud provider.
-- **Echo self-trigger.** Media playback or Suniye's own cue sounds could contain wake-like audio.
-  Suniye's own TTS playback is the worst case — the wake detector must be suppressed during it.
-  Existing echo-cancellation path (`echoCancellationEnabled`) applies to the engine; verify the
-  tap inherits it. Mitigation: suppress detector for ~1 s after our own cue sounds.
-- **Power/privacy.** Mic stays hot in Ready — the orange mic indicator is permanent while
-  enabled. This is by design (UX plan makes it a visible promise) but worth a battery sanity
-  check; the KWS compute itself is negligible.
-- **Stop latency.** Semantic stop rides the intervention channel: worst case one full model
-  round-trip + one atomic action. Escape/Stop are the fast path. Deterministic spoken-stop is
-  the flagged pre-release safety item.
-- **Conversation staleness.** UX plan says the next wake-up continues the conversation with no
-  time bound. Flagged for a future staleness rule; out of scope here.
-- **English-only wake model.** Fine for the fixed English-adjacent phrase; a localized wake
-  phrase would need the zh-en model or a retrain. Out of scope.
+6. **Lifecycle and polish.** Sleep and wake handling, device-change resilience, the
+   Escape-stops-run change, sounds, the first-enable notice, the end-to-end script, and
+   documentation.
+
+Slices 1–2 and 3–4 can pair into two PRs if review size matters. Otherwise, one stacked PR on
+`kis-169-computer-use-parity`.
+
+## 6. Open questions and risks
+
+- **Wake accuracy on real microphones.** Validation used synthesized audio only. The
+  per-keyword thresholds (`#0.05`) must be tuned with live audio in slice 3. Detection currently
+  depends on the truncated `▁HE Y ▁SU N I` keyword. Measure the false-alarm rate on real
+  ambient audio.
+- **Voice Output memory use and platform split.** Chatterbox Turbo peaks at about 2.3 GB of
+  unified memory, in addition to the ASR model and Gemma. MLX requires Apple Silicon, so Intel
+  users get the AVSpeech fallback. Mitigations: RAM-gated enablement, idle unload, and Kokoro
+  (0.69 GB, both architectures) as the documented downgrade path. The default engine is local.
+  Only the optional Fish tier sends response text to a cloud provider.
+- **Echo self-trigger.** Media playback or Suniye's own audio could contain wake-like sounds.
+  Suniye's own TTS playback is the most likely trigger; the wake detector must be suppressed
+  during playback. The existing `echoCancellationEnabled` path applies to the engine; verify
+  that the tap inherits it. Suppress the detector for about one second after cue sounds.
+- **Power.** The microphone stays active in the Ready state, and the system microphone
+  indicator stays visible. This is intended behavior per the UX plan. Run a battery check;
+  the keyword-spotting compute itself is negligible.
+- **Stop latency.** A semantic stop travels through the intervention channel. The worst case is
+  one model round-trip plus one atomic action. Escape and the Stop control are the fast paths.
+  The deterministic spoken-stop path is the flagged pre-release safety item.
+- **Conversation staleness.** The UX plan continues the conversation at the next wake-up with no
+  time limit. A staleness rule is flagged for later and is out of scope here.
+- **English-only wake model.** Acceptable for the fixed phrase. A localized wake phrase would
+  require the zh-en model or retraining. Out of scope.
