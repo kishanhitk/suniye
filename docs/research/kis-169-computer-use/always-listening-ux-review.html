@@ -31,6 +31,8 @@
     --pill-fill: rgba(10,10,12,0.96);
     --pill-idle: rgba(10,10,12,0.58);
     --radius: 10px;
+    --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -152,10 +154,12 @@
     font-size: 12.5px; line-height: 1.45;
     box-shadow: 0 4px 12px rgba(0,0,0,0.25);
     opacity: 0; transform: translateY(6px) scale(0.96);
-    transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+    transition: opacity 250ms var(--ease-out-strong), transform 250ms var(--ease-out-strong);
     pointer-events: none;
   }
   .preview-bubble.show { opacity: 1; transform: none; }
+  .preview-bubble { transform-origin: bottom center; }
+  .preview-bubble:not(.show) { transition: opacity 150ms var(--ease-out-strong); }
 
   .pill {
     display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -166,11 +170,19 @@
     border: 1px solid rgba(255,255,255,0.14);
     color: #fff;
     box-shadow: 0 6px 18px rgba(0,0,0,0.3);
-    transition: all 0.3s cubic-bezier(0.3, 0.9, 0.4, 1);
+    transition: opacity 200ms var(--ease-out-strong),
+                transform 200ms var(--ease-out-strong),
+                min-width 250ms var(--ease-in-out-strong),
+                padding 250ms var(--ease-in-out-strong),
+                border-color 200ms ease, box-shadow 200ms ease,
+                background-color 200ms ease;
     cursor: default; white-space: nowrap;
     font-size: 12.5px;
   }
-  .pill.hidden { opacity: 0; transform: scale(0.9) translateY(6px); pointer-events: none; }
+  .pill.hidden {
+    opacity: 0; transform: scale(0.97) translateY(8px); pointer-events: none;
+    transition-duration: 150ms;   /* exit faster than enter, same downward path */
+  }
   .pill.idle { background: var(--pill-idle); padding: 0; width: 34px; }
   .pill.interactive { cursor: pointer; }
   .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; opacity: 0.9; }
@@ -196,8 +208,15 @@
     background: rgba(255,255,255,0.18); border: none; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     color: #fff; font-size: 8px; padding: 0;
+    transition: transform 100ms var(--ease-out-strong), background 150ms ease;
   }
-  .pill .stopbtn:hover { background: rgba(255,255,255,0.32); }
+  .pill .stopbtn:active, .pill .openlink:active, .pill .cancelbtn:active { transform: scale(0.97); }
+  .pill .openlink { transition: transform 100ms var(--ease-out-strong), color 150ms ease; }
+  @media (hover: hover) and (pointer: fine) {
+    .pill .stopbtn:hover { background: rgba(255,255,255,0.32); }
+  }
+  .pill .statusfade { transition: opacity 200ms ease, filter 200ms ease; }
+  .pill .statusfade.swapping { opacity: 0.35; filter: blur(2px); }
   .pill .stopbtn::before { content: ""; width: 7px; height: 7px; background: #fff; border-radius: 1.5px; }
   .pill .cancelbtn::before { display:none; }
   .pill .cancelbtn { font-size: 11px; }
@@ -399,6 +418,17 @@
   .criterion .demo-link:hover { text-decoration: underline; }
 
   .footer-note { margin-top: 40px; color: var(--tertiary); font-size: 11px; line-height: 1.6; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pill, .pill.hidden { transition: opacity 150ms ease; transform: none; }
+    .preview-bubble, .preview-bubble.show { transition: opacity 150ms ease; transform: none; }
+    .shimmer {
+      animation: none;
+      background: none; -webkit-text-fill-color: currentColor; color: rgba(255,255,255,0.9);
+    }
+    .pill .meter i, .suniye-status .wave i, .menubar-mini .wave i { animation: none; transform: scaleY(0.7); }
+    .pill .statusfade.swapping { filter: none; }
+  }
 </style>
 </head>
 <body>
@@ -727,7 +757,7 @@ function renderPill(mode, opts = {}) {
   }
   if (mode === 'working') {
     pill.classList.add('interactive');
-    pill.innerHTML = `<span class="shimmer" id="workingStatus">${opts.status || 'Working…'}</span><button class="stopbtn" title="Stop" onclick="userStop('pill')"></button><span class="openlink" onclick="openChat()">Open</span>`;
+    pill.innerHTML = `<span class="shimmer statusfade" id="workingStatus">${opts.status || 'Working…'}</span><button class="stopbtn" title="Stop" onclick="userStop('pill')"></button><span class="openlink" onclick="openChat()">Open</span>`;
   }
   if (mode === 'needs-input') {
     pill.classList.add('needs-input');
@@ -764,7 +794,13 @@ function stopSpeaking(reason) {
 
 function setWorkingStatus(text) {
   const el = document.getElementById('workingStatus');
-  if (el) el.textContent = text;
+  if (el) {
+    el.classList.add('swapping');
+    setTimeout(() => {
+      el.textContent = text;
+      el.classList.remove('swapping');
+    }, 100);
+  }
   log(`agent status → “${text}”`, true);
 }
 
