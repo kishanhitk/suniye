@@ -58,6 +58,9 @@ cross-process input still require separate validation.
 - `open-questions.md` records gaps that need a decision or a live test.
 - `direct-voice-integration-plan.md` records the direct voice routing seam, lifecycle, UX, and
   manual validation plan.
+- `always-listening-ux-plan.md` defines the proposed always-listening voice experience, including
+  activation, wake-up, conversational intervention, session continuity, feedback, privacy, and
+  failure behavior. It intentionally contains no implementation design.
 - `e2e-computer.md` records the live `@Computer` run, failures, fixes, and remaining unknowns.
 - `parity-audit.md` is the current reference-to-Suniye parity matrix and corrective-slice record.
 - `target-scope-implementation.md` records the target-lock correction and its validation boundary.
