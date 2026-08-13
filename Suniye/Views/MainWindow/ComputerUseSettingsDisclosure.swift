@@ -135,14 +135,12 @@ struct ComputerUseSettingsDisclosure: View {
         }
         switch modelSettings.connectionState {
         case .idle:
-            if modelSettings.usesSharedOpenRouterAPIKey {
-                return "OpenRouter API key shared with Magic Format."
+            guard modelSettings.hasAPIKey else {
+                return "Enter an API key to enable Computer Use."
             }
-            if modelSettings.hasDedicatedAPIKey,
-               modelSettings.settings.provider != .openRouter {
-                return "Computer Use API key saved in Keychain."
-            }
-            return "Enter an API key to enable Computer Use."
+            return modelSettings.settings.provider == .openRouter
+                ? "OpenRouter API key shared with Magic Format."
+                : "Computer Use API key saved in Keychain."
         case .testing:
             return "Testing connection…"
         case .connected:
