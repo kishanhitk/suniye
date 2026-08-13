@@ -42,8 +42,10 @@ Computer Use settings contain a **Voice Activation** section with:
 - an optional global shortcut to toggle Voice Activation;
 - a sound-feedback toggle;
 - the selected microphone and a shortcut to microphone settings;
-- a **Voice Output** subsection: an on/off toggle (off by default), a voice picker, and the
-  provider API key. Enabling it explains that response text is sent to the speech provider.
+- a **Voice Output** subsection: an on/off toggle (off by default) and a voice picker. Speech is
+  generated on-device by default (Chatterbox). An optional cloud provider (Fish Audio) with its
+  own API key is available for maximum expressiveness; choosing it explains that response text is
+  sent to that provider.
 
 Turning Voice Activation on for the first time explains that the microphone remains in use while
 Suniye waits for the wake phrase. The user must confirm this once. This is an enablement notice,
@@ -242,9 +244,9 @@ Rules:
 ## Privacy and trust UX
 
 - Voice Activation is off by default.
-- Voice Output sends response text to a speech provider — a second cloud service beyond the
-  Computer Use model provider. It is off by default, uses its own key, and its enablement flow
-  states plainly what is sent (response text; never audio, never the wake stream).
+- Voice Output is on-device by default — spoken responses never leave the Mac. Only the optional
+  cloud voice tier sends response text to its provider; selecting it states plainly what is sent
+  (response text; never audio, never the wake stream), and it uses its own key.
 - The microphone-in-use state is always visible in the menu bar and through normal macOS privacy
   indicators.
 - Settings explain, in plain language, the difference between waiting for the wake phrase and

@@ -52,7 +52,7 @@ Suniye/Services/
   VoiceTurnEndpointer.swift       pure logic: speech-end detection over level/VAD frames
   VoiceActivationStateMachine.swift  pure value type: Off/Ready/Listening/Working/NeedsInput/Terminal
   VoiceActivationController.swift @MainActor @Observable; owns the loop, bridges everything
-  SpeechOutputService.swift       protocol + Fish Audio impl; speaks results/questions aloud
+  SpeechOutputService.swift       protocol; Chatterbox (local MLX helper) + AVSpeech + Fish impls
 ```
 
 
@@ -173,13 +173,43 @@ All new logic is behind seams that already have stub patterns in `SuniyeTests/Te
    "Try wake phrase" flow in settings.
 4. **Turn capture** — endpointer, turn buffer, live preview, final transcribe,
    `submitVoiceTask` routing; floating indicator states.
-5. **Voice Output** — `SpeechOutputService` (Fish Audio `s2.1-pro`, `POST /v1/tts`, key in
-   Keychain, ~300 ms TTFA in `balanced` mode; request PCM/WAV and play via `AVAudioPlayer`).
-   Speaks Done / Couldn't finish / Needs-input text at turn boundaries. Barge-in: wake hit,
-   Escape, or a new turn cancels playback; the wake detector is suppressed while Suniye speaks
-   (self-wake guard, same mechanism as the cue-sound suppression). Settings rows + one-time
-   disclosure. Streaming via `stream_websocket` is a later upgrade if final-response latency
-   annoys; not needed for v1 since the full text is available when speech starts.
+5. **Voice Output** — `SpeechOutputService` speaking Done / Couldn't finish / Needs-input text
+   at turn boundaries. **Engine decision (2026-08-13): Chatterbox Turbo, local, MLX 8-bit.**
+   Chosen over Kokoro for expressiveness (emotion control, blind-test wins over ElevenLabs) after
+   measured evals on an M-series Mac:
+
+   | | Chatterbox Turbo 8-bit | Kokoro (runner-up) |
+   |---|---|---|
+   | Latency/sentence (warm) | 0.92 s (Metal) | 1.05 s (CPU) |
+   | Peak memory footprint | ~2.3 GB (with `mx.set_cache_limit(256MB)`) | ~0.69 GB |
+   | Model load | 1.5 s | 0.3 s |
+   | Disk | 675 MB | 330 MB |
+   | Platforms | Apple Silicon only | AS + Intel |
+
+   Best-practice config (measured): 8-bit quant (4-bit is *slower* — dequant cost — and barely
+   smaller in peak footprint), warm resident model, `mx.set_cache_limit(256 MB)`,
+   `mx.clear_cache()` after each utterance.
+
+   **Integration cost (the real work):** no native Swift runtime exists for Chatterbox — MLX is
+   the only maintained path. Options, in recommended order:
+   1. Helper process over HTTP, like the Gemma `llama-server` precedent — a frozen (PyInstaller
+      or similar) `mlx-audio` server bundle. Ships large (~300–500 MB) but decouples the app
+      from Python and lands fastest.
+   2. Port to `mlx-swift` in-process — cleanest long-term, but the model stack (T3 + S3 tokenizer
+      + flow decoder) is a multi-week port. Not v1.
+   RAM gating like the Gemma helper: enable only when the machine has headroom; unload after a
+   configurable idle period (load is 1.5 s — acceptable to re-warm on first speech of a session).
+
+   **Fallbacks:** Intel Macs and low-RAM machines get `AVSpeechSynthesizer` (flat but functional);
+   it is also the runtime failure fallback. Fish `s2.1-pro` stays as an optional
+   bring-your-own-key cloud tier (settings + Keychain per the earlier design). Kokoro remains
+   documented as the drop-in replacement if Chatterbox's RAM draws complaints — the sherpa TTS
+   rebuild that would enable it also unlocks ZipVoice cloning.
+
+   Barge-in: wake hit, Escape, or a new turn cancels playback and stops the MLX eval loop; the
+   wake detector is suppressed while Suniye speaks (self-wake guard, same mechanism as the
+   cue-sound suppression). Settings rows + one-time disclosure. Voice cloning ("speak in my
+   voice", ~5 s reference) is a natural later feature this engine gets for free.
 6. **Lifecycle + polish** — sleep/wake, device-change resilience, Escape-stops-run fix, sounds,
    first-enable notice, e2e script, docs.
 
@@ -191,10 +221,11 @@ on `kis-169-computer-use-parity`.
 - **Real-mic wake accuracy.** TTS-validated only; thresholds (`#0.05` per keyword) must be tuned
   with live audio early in slice 3. The truncated `▁HE Y ▁SU N I` keyword carries recall today;
   false-alarm behavior on real ambient audio is the thing to watch.
-- **Voice Output is a second cloud dependency.** Response text goes to Fish Audio in addition to
-  the Computer Use model provider. Off by default, own key, plain disclosure — but it dilutes the
-  local-only story; a future on-device TTS fallback (AVSpeechSynthesizer) would let privacy-strict
-  users keep spoken output. AVSpeechSynthesizer is also the degradation path when the API fails.
+- **Voice Output RAM and platform split.** Chatterbox Turbo peaks at ~2.3 GB in unified memory on
+  top of ASR + Gemma, and MLX is Apple Silicon-only — Intel users silently get the flat AVSpeech
+  fallback. Mitigations: RAM-gated enablement, idle unload, and Kokoro (0.69 GB, AS+Intel) as the
+  documented downgrade path. The default remains fully local; only the optional Fish tier sends
+  response text to a cloud provider.
 - **Echo self-trigger.** Media playback or Suniye's own cue sounds could contain wake-like audio.
   Suniye's own TTS playback is the worst case — the wake detector must be suppressed during it.
   Existing echo-cancellation path (`echoCancellationEnabled`) applies to the engine; verify the
