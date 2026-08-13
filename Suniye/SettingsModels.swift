@@ -79,6 +79,10 @@ struct HotkeyConfiguration: Codable, Equatable {
     var carbonModifiers: UInt32
 
     static let globe = HotkeyConfiguration(kind: .globe, keyCode: UInt32(kVK_Function), carbonModifiers: 0)
+    static let pasteLastTranscriptDefault = HotkeyConfiguration.keyCombo(
+        keyCode: UInt32(kVK_ANSI_V),
+        carbonModifiers: UInt32(controlKey | cmdKey)
+    )
 
     static func keyCombo(keyCode: UInt32, carbonModifiers: UInt32) -> HotkeyConfiguration {
         HotkeyConfiguration(kind: .keyCombo, keyCode: keyCode, carbonModifiers: carbonModifiers)
@@ -92,6 +96,19 @@ struct HotkeyConfiguration: Codable, Equatable {
             let parts = modifierLabels + [Self.keyName(for: keyCode)]
             return parts.joined(separator: " + ")
         }
+    }
+
+    var compactDisplayString: String {
+        switch kind {
+        case .globe:
+            return "Globe"
+        case .keyCombo:
+            return compactModifierLabels.joined() + Self.keyName(for: keyCode)
+        }
+    }
+
+    var isModifiedKeyCombo: Bool {
+        kind == .keyCombo && carbonModifiers != 0
     }
 
     var exampleDescription: String {
@@ -120,6 +137,27 @@ struct HotkeyConfiguration: Codable, Equatable {
         }
         if carbonModifiers & UInt32(cmdKey) != 0 {
             labels.append("Command")
+        }
+        return labels
+    }
+
+    private var compactModifierLabels: [String] {
+        guard kind == .keyCombo else {
+            return []
+        }
+
+        var labels: [String] = []
+        if carbonModifiers & UInt32(controlKey) != 0 {
+            labels.append("⌃")
+        }
+        if carbonModifiers & UInt32(optionKey) != 0 {
+            labels.append("⌥")
+        }
+        if carbonModifiers & UInt32(shiftKey) != 0 {
+            labels.append("⇧")
+        }
+        if carbonModifiers & UInt32(cmdKey) != 0 {
+            labels.append("⌘")
         }
         return labels
     }
@@ -334,6 +372,7 @@ struct GeneralSettings: Codable, Equatable {
     var preferredInputDeviceName: String?
     var autoSubmitEnabled: Bool = false
     var hotkeyConfiguration: HotkeyConfiguration = .globe
+    var pasteLastTranscriptHotkeyConfiguration: HotkeyConfiguration = .pasteLastTranscriptDefault
     /// Edit Mode shortcut; nil means Edit Mode is disabled.
     var editModeHotkeyConfiguration: HotkeyConfiguration? = nil
     /// Computer Use voice shortcut; nil means direct voice task capture is disabled.
@@ -378,6 +417,7 @@ struct GeneralSettings: Codable, Equatable {
         preferredInputDeviceName: String? = nil,
         autoSubmitEnabled: Bool = false,
         hotkeyConfiguration: HotkeyConfiguration = .globe,
+        pasteLastTranscriptHotkeyConfiguration: HotkeyConfiguration = .pasteLastTranscriptDefault,
         editModeHotkeyConfiguration: HotkeyConfiguration? = nil,
         computerUseHotkeyConfiguration: HotkeyConfiguration? = nil,
         echoCancellationEnabled: Bool = false,
@@ -401,6 +441,7 @@ struct GeneralSettings: Codable, Equatable {
         self.preferredInputDeviceName = preferredInputDeviceName
         self.autoSubmitEnabled = autoSubmitEnabled
         self.hotkeyConfiguration = hotkeyConfiguration
+        self.pasteLastTranscriptHotkeyConfiguration = pasteLastTranscriptHotkeyConfiguration
         self.editModeHotkeyConfiguration = editModeHotkeyConfiguration
         self.computerUseHotkeyConfiguration = computerUseHotkeyConfiguration
         self.echoCancellationEnabled = echoCancellationEnabled
@@ -426,6 +467,7 @@ struct GeneralSettings: Codable, Equatable {
         case preferredInputDeviceName
         case autoSubmitEnabled
         case hotkeyConfiguration
+        case pasteLastTranscriptHotkeyConfiguration
         case editModeHotkeyConfiguration
         case computerUseHotkeyConfiguration
         case echoCancellationEnabled
@@ -452,6 +494,10 @@ struct GeneralSettings: Codable, Equatable {
         preferredInputDeviceName = try container.decodeIfPresent(String.self, forKey: .preferredInputDeviceName)
         autoSubmitEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSubmitEnabled) ?? false
         hotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .hotkeyConfiguration) ?? .globe
+        pasteLastTranscriptHotkeyConfiguration = try container.decodeIfPresent(
+            HotkeyConfiguration.self,
+            forKey: .pasteLastTranscriptHotkeyConfiguration
+        ) ?? .pasteLastTranscriptDefault
         editModeHotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .editModeHotkeyConfiguration)
         computerUseHotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .computerUseHotkeyConfiguration)
         echoCancellationEnabled = try container.decodeIfPresent(Bool.self, forKey: .echoCancellationEnabled) ?? false

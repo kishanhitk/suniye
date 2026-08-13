@@ -13,6 +13,10 @@ final class GeneralSettingsStoreTests: XCTestCase {
             preferredInputDeviceName: "USB Microphone",
             autoSubmitEnabled: true,
             hotkeyConfiguration: .keyCombo(keyCode: UInt32(kVK_Space), carbonModifiers: UInt32(optionKey)),
+            pasteLastTranscriptHotkeyConfiguration: .keyCombo(
+                keyCode: UInt32(kVK_ANSI_P),
+                carbonModifiers: UInt32(controlKey | cmdKey)
+            ),
             computerUseHotkeyConfiguration: .keyCombo(
                 keyCode: UInt32(kVK_ANSI_R),
                 carbonModifiers: UInt32(controlKey | optionKey)
@@ -170,6 +174,12 @@ final class GeneralSettingsStoreTests: XCTestCase {
             HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_Grave), carbonModifiers: 0).displayString,
             "`"
         )
+        XCTAssertEqual(HotkeyConfiguration.pasteLastTranscriptDefault.compactDisplayString, "⌃⌘V")
+        XCTAssertTrue(HotkeyConfiguration.pasteLastTranscriptDefault.isModifiedKeyCombo)
+        XCTAssertFalse(HotkeyConfiguration.globe.isModifiedKeyCombo)
+        XCTAssertFalse(
+            HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: 0).isModifiedKeyCombo
+        )
     }
 
     func testStoreLoadBackfillsNewIndicatorFields() throws {
@@ -199,6 +209,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertNil(settings.floatingIndicatorPlacement)
         XCTAssertFalse(settings.soundFeedbackEnabled)
         XCTAssertNil(settings.preferredInputDeviceName)
+        XCTAssertEqual(settings.pasteLastTranscriptHotkeyConfiguration, .pasteLastTranscriptDefault)
         XCTAssertEqual(settings.updateChannel, .stable)
     }
 }

@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import Carbon
 import Foundation
 import Observation
 import SuniyeAnalytics
@@ -413,6 +414,16 @@ final class AppState {
             guard !isHydratingGeneralSettings else {
                 return
             }
+            guard oldValue != hotkeyConfiguration else {
+                return
+            }
+            guard hotkeyConfiguration != pasteLastTranscriptHotkeyConfiguration else {
+                hotkeyConfiguration = oldValue
+                hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
+                onStateChange?()
+                return
+            }
+            hotkeyValidationMessage = nil
             // Collision policy lives at this settings boundary: the Edit Mode slot always yields.
             if editModeHotkeyConfiguration == hotkeyConfiguration {
                 editModeHotkeyConfiguration = nil
@@ -431,26 +442,68 @@ final class AppState {
             onStateChange?()
         }
     }
+    private(set) var pasteLastTranscriptHotkeyConfiguration: HotkeyConfiguration = .pasteLastTranscriptDefault {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != pasteLastTranscriptHotkeyConfiguration else {
+                return
+            }
+            guard pasteLastTranscriptHotkeyConfiguration.isModifiedKeyCombo else {
+                pasteLastTranscriptHotkeyConfiguration = oldValue
+                hotkeyValidationMessage = "Paste Last Transcript requires at least one modifier key."
+                onStateChange?()
+                return
+            }
+            guard pasteLastTranscriptHotkeyConfiguration != hotkeyConfiguration else {
+                pasteLastTranscriptHotkeyConfiguration = oldValue
+                hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
+                onStateChange?()
+                return
+            }
+            guard pasteLastTranscriptHotkeyConfiguration != editModeHotkeyConfiguration else {
+                pasteLastTranscriptHotkeyConfiguration = oldValue
+                hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
+                onStateChange?()
+                return
+            }
+            hotkeyValidationMessage = nil
+            persistGeneralSettings()
+            if runtimeServicesEnabled {
+                wireHotkey()
+            }
+            if isShowingInsertionRecoveryWarning {
+                showInsertionRecoveryWarning()
+            }
+            onStateChange?()
+        }
+    }
+    var hotkeyValidationMessage: String?
     var editModeHotkeyConfiguration: HotkeyConfiguration? {
         didSet {
             guard !isHydratingGeneralSettings, oldValue != editModeHotkeyConfiguration else {
                 return
             }
-            let collidesWithDictation = editModeHotkeyConfiguration == hotkeyConfiguration
-            let collidesWithAnotherHotkey = editModeHotkeyConfiguration != nil
-                && (collidesWithDictation
-                    || editModeHotkeyConfiguration == computerUseHotkeyConfiguration)
-            if collidesWithAnotherHotkey {
-                let previousValueIsAvailable = oldValue != hotkeyConfiguration
-                    && oldValue != computerUseHotkeyConfiguration
-                editModeHotkeyConfiguration = previousValueIsAvailable ? oldValue : nil
-                AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches another hotkey")
-                let message = collidesWithDictation
-                    ? "Edit Mode shortcut must differ from dictation"
-                    : "Edit Mode shortcut is already in use"
-                showTransientIndicatorError(message)
-                return
+            if let editModeHotkeyConfiguration {
+                if editModeHotkeyConfiguration == hotkeyConfiguration {
+                    self.editModeHotkeyConfiguration = oldValue == hotkeyConfiguration ? nil : oldValue
+                    AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches dictation hotkey")
+                    showTransientIndicatorError("Edit Mode shortcut must differ from dictation")
+                    return
+                }
+                if editModeHotkeyConfiguration == pasteLastTranscriptHotkeyConfiguration {
+                    self.editModeHotkeyConfiguration = oldValue == pasteLastTranscriptHotkeyConfiguration ? nil : oldValue
+                    hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
+                    AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches paste last transcript hotkey")
+                    showTransientIndicatorError("Edit Mode shortcut must differ from Paste Last Transcript")
+                    return
+                }
+                if editModeHotkeyConfiguration == computerUseHotkeyConfiguration {
+                    self.editModeHotkeyConfiguration = oldValue == computerUseHotkeyConfiguration ? nil : oldValue
+                    AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches computer use hotkey")
+                    showTransientIndicatorError("Edit Mode shortcut is already in use")
+                    return
+                }
             }
+            hotkeyValidationMessage = nil
             persistGeneralSettings()
             if runtimeServicesEnabled {
                 wireHotkey()
@@ -465,15 +518,18 @@ final class AppState {
             }
             let collidesWithAnotherHotkey = computerUseHotkeyConfiguration != nil
                 && (computerUseHotkeyConfiguration == hotkeyConfiguration
-                    || computerUseHotkeyConfiguration == editModeHotkeyConfiguration)
+                    || computerUseHotkeyConfiguration == editModeHotkeyConfiguration
+                    || computerUseHotkeyConfiguration == pasteLastTranscriptHotkeyConfiguration)
             if collidesWithAnotherHotkey {
                 let previousValueIsAvailable = oldValue != hotkeyConfiguration
                     && oldValue != editModeHotkeyConfiguration
+                    && oldValue != pasteLastTranscriptHotkeyConfiguration
                 computerUseHotkeyConfiguration = previousValueIsAvailable ? oldValue : nil
                 AppLogger.shared.log(.warning, "computer use hotkey rejected: matches another hotkey")
                 showTransientIndicatorError("Run Task shortcut is already in use")
                 return
             }
+            hotkeyValidationMessage = nil
             persistGeneralSettings()
             if runtimeServicesEnabled {
                 wireHotkey()
@@ -1566,6 +1622,7 @@ final class AppState {
     private var recordingStart: Date? { activeDictationSession?.context.startedAt }
     private var overlayErrorResetTask: Task<Void, Never>?
     private var computerUseIndicatorResetTask: Task<Void, Never>?
+    private var isShowingInsertionRecoveryWarning = false
     private var asrDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
@@ -2730,6 +2787,25 @@ final class AppState {
         return true
     }
 
+    @discardableResult
+    func pasteLastTranscript() async -> Bool {
+        guard let text = lastTranscriptText, !text.isEmpty else {
+            return false
+        }
+
+        do {
+            try await textInsertionService.insertText(text)
+            clearInsertionRecoveryWarning()
+            AppLogger.shared.log(.info, "paste last transcript completed")
+            return true
+        } catch {
+            AppLogger.shared.log(.warning, "paste last transcript failed: \(error.localizedDescription)")
+            playSoundFeedback(.error)
+            showInsertionRecoveryWarning()
+            return false
+        }
+    }
+
     func deleteRecentResult(_ result: RecentResult) {
         recentResults.removeAll { $0.id == result.id }
     }
@@ -3270,6 +3346,14 @@ final class AppState {
         floatingIndicatorPlacement = nil
     }
 
+    func updateDictationHotkey(_ configuration: HotkeyConfiguration) {
+        hotkeyConfiguration = configuration
+    }
+
+    func updatePasteLastTranscriptHotkey(_ configuration: HotkeyConfiguration) {
+        pasteLastTranscriptHotkeyConfiguration = configuration
+    }
+
     func startRecordingFromUI() {
         Task { @MainActor in
             await beginRecordingFlow(trigger: .manual)
@@ -3528,14 +3612,22 @@ final class AppState {
             return true
         }
 
+        hotkeyService.onPasteLastTranscript = { [weak self] in
+            AppLogger.shared.log(.debug, "paste last transcript hotkey callback")
+            Task { @MainActor in
+                await self?.pasteLastTranscript()
+            }
+        }
+
         hotkeyService.startMonitoring(
             configuration: hotkeyConfiguration,
             editModeConfiguration: editModeHotkeyConfiguration,
-            computerUseConfiguration: computerUseHotkeyConfiguration
+            computerUseConfiguration: computerUseHotkeyConfiguration,
+            pasteLastTranscriptConfiguration: pasteLastTranscriptHotkeyConfiguration
         )
         AppLogger.shared.log(
             .info,
-            "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off") computerUse=\(computerUseHotkeyConfiguration?.displayString ?? "off")"
+            "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off") computerUse=\(computerUseHotkeyConfiguration?.displayString ?? "off") pasteLast=\(pasteLastTranscriptHotkeyConfiguration.displayString)"
         )
     }
 
@@ -3945,6 +4037,22 @@ final class AppState {
         // honest Magic Format adoption signal.
         let wasLLMPolished = llmOutcome?.ran ?? false
         var didCompleteDictation = false
+        var didFailInsertion = false
+        var didInsertFinalText = finalText.isEmpty
+
+        let result = RecentResult(
+            id: UUID(),
+            text: finalText,
+            createdAt: Date(),
+            durationSeconds: duration,
+            wasLLMPolished: wasLLMPolished
+        )
+
+        // A completed system transcript must be recoverable even if insertion
+        // fails because focus moved before transcription finished.
+        if usesSystemInsertion && !finalText.isEmpty {
+            recentResults.insert(result, at: 0)
+        }
 
         if usesSystemInsertion && (!finalText.isEmpty || shouldSubmit) {
             try await requireAccessibilityForInsertion()
@@ -3957,30 +4065,28 @@ final class AppState {
                     finalText,
                     insertionContext: textInsertionService.captureInsertionContext()
                 )
-                try textInsertionService.insertText(insertionText)
-                beginEditLearningTracking(insertedText: insertionText)
+                do {
+                    try await textInsertionService.insertText(insertionText)
+                    didInsertFinalText = true
+                    dictationTiming.inserted = .now()
+                    beginEditLearningTracking(insertedText: insertionText)
+                    AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
+                    didCompleteDictation = true
+                } catch {
+                    didFailInsertion = true
+                    AppLogger.shared.log(.warning, "text insertion failed: \(error.localizedDescription)")
+                    playSoundFeedback(.error)
+                }
             } else {
                 try textInsertionService.copyTextToClipboard(finalText)
+                dictationTiming.inserted = .now()
+                recentResults.insert(result, at: 0)
                 AppLogger.shared.log(.info, "transcription copied to clipboard words=\(wordCount)")
+                didCompleteDictation = true
             }
-            dictationTiming.inserted = .now()
-            recentResults.insert(
-                RecentResult(
-                    id: UUID(),
-                    text: finalText,
-                    createdAt: Date(),
-                    durationSeconds: duration,
-                    wasLLMPolished: wasLLMPolished
-                ),
-                at: 0
-            )
-            if usesSystemInsertion {
-                AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
-            }
-            didCompleteDictation = true
         }
 
-        if usesSystemInsertion && shouldSubmit {
+        if usesSystemInsertion && shouldSubmit && didInsertFinalText {
             if !finalText.isEmpty {
                 try? await Task.sleep(nanoseconds: 120_000_000)
             }
@@ -4008,6 +4114,11 @@ final class AppState {
         }
 
         completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation)
+        if didFailInsertion {
+            showInsertionRecoveryWarning()
+        } else {
+            isShowingInsertionRecoveryWarning = false
+        }
     }
 
     /// Records which audio-capture backend a session resolved to, whether it
@@ -4162,7 +4273,7 @@ final class AppState {
             )
 
             try await requireAccessibilityForInsertion()
-            try textInsertionService.insertText(rewritten)
+            try await textInsertionService.insertText(rewritten)
             recentResults.insert(
                 RecentResult(
                     id: UUID(),
@@ -4283,14 +4394,48 @@ final class AppState {
         totalDictationSeconds = recentResults.reduce(0) { $0 + $1.durationSeconds }
     }
 
+    private static func normalizedPasteLastTranscriptHotkey(
+        _ configuredHotkey: HotkeyConfiguration,
+        dictationHotkey: HotkeyConfiguration,
+        editModeHotkey: HotkeyConfiguration?
+    ) -> HotkeyConfiguration {
+        let fallbackModifiers: [UInt32] = [
+            UInt32(controlKey | cmdKey),
+            UInt32(controlKey | optionKey | cmdKey),
+            UInt32(controlKey | shiftKey | cmdKey),
+            UInt32(controlKey | optionKey | shiftKey | cmdKey),
+        ]
+        let candidates = [configuredHotkey] + fallbackModifiers.map {
+            HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: $0)
+        }
+
+        return candidates.first { candidate in
+            candidate.isModifiedKeyCombo
+                && candidate != dictationHotkey
+                && candidate != editModeHotkey
+        } ?? .pasteLastTranscriptDefault
+    }
+
     private func loadGeneralSettings() {
         isHydratingGeneralSettings = true
         let settings = generalSettingsStore.load()
+        let normalizedPasteLastTranscriptHotkey = Self.normalizedPasteLastTranscriptHotkey(
+            settings.pasteLastTranscriptHotkeyConfiguration,
+            dictationHotkey: settings.hotkeyConfiguration,
+            editModeHotkey: settings.editModeHotkeyConfiguration
+        )
+        let normalizedEditModeHotkey = settings.editModeHotkeyConfiguration == settings.hotkeyConfiguration
+            || settings.editModeHotkeyConfiguration == normalizedPasteLastTranscriptHotkey
+            ? nil
+            : settings.editModeHotkeyConfiguration
+        let didNormalizeHotkeys = normalizedPasteLastTranscriptHotkey != settings.pasteLastTranscriptHotkeyConfiguration
+            || normalizedEditModeHotkey != settings.editModeHotkeyConfiguration
         selectedInputDeviceID = settings.preferredInputDeviceID
         preferredInputDeviceName = settings.preferredInputDeviceName
         autoSubmitEnabled = settings.autoSubmitEnabled
         hotkeyConfiguration = settings.hotkeyConfiguration
-        editModeHotkeyConfiguration = settings.editModeHotkeyConfiguration
+        pasteLastTranscriptHotkeyConfiguration = normalizedPasteLastTranscriptHotkey
+        editModeHotkeyConfiguration = normalizedEditModeHotkey
         computerUseHotkeyConfiguration = settings.computerUseHotkeyConfiguration
         echoCancellationEnabled = settings.echoCancellationEnabled
         soundFeedbackEnabled = settings.soundFeedbackEnabled
@@ -4318,20 +4463,17 @@ final class AppState {
             legacyUserShowsUsage: legacyUserHasUsage
         )
         isHydratingGeneralSettings = false
-        // A persisted collision (e.g. hand-edited settings) would silently kill Edit Mode.
+        // A persisted collision (e.g. hand-edited settings) would silently kill Computer Use.
         var normalizedHotkeyCollision = false
-        if editModeHotkeyConfiguration != nil, editModeHotkeyConfiguration == hotkeyConfiguration {
-            editModeHotkeyConfiguration = nil
-            normalizedHotkeyCollision = true
-        }
         if computerUseHotkeyConfiguration != nil,
            (computerUseHotkeyConfiguration == hotkeyConfiguration
-            || computerUseHotkeyConfiguration == editModeHotkeyConfiguration) {
+            || computerUseHotkeyConfiguration == editModeHotkeyConfiguration
+            || computerUseHotkeyConfiguration == pasteLastTranscriptHotkeyConfiguration) {
             computerUseHotkeyConfiguration = nil
             normalizedHotkeyCollision = true
         }
         applyUpdateChannelToController()
-        if needsProgressMigration || needsFirstLaunchMigration || normalizedHotkeyCollision {
+        if needsProgressMigration || needsFirstLaunchMigration || didNormalizeHotkeys || normalizedHotkeyCollision {
             persistGeneralSettings()
         }
     }
@@ -4358,6 +4500,7 @@ final class AppState {
             preferredInputDeviceName: preferredInputDeviceName,
             autoSubmitEnabled: autoSubmitEnabled,
             hotkeyConfiguration: hotkeyConfiguration,
+            pasteLastTranscriptHotkeyConfiguration: pasteLastTranscriptHotkeyConfiguration,
             editModeHotkeyConfiguration: editModeHotkeyConfiguration,
             computerUseHotkeyConfiguration: computerUseHotkeyConfiguration,
             echoCancellationEnabled: echoCancellationEnabled,
@@ -4692,6 +4835,31 @@ final class AppState {
 
     func handleFloatingIndicatorPlacementChanged(_ placement: FloatingIndicatorPlacement?) {
         floatingIndicatorPlacement = placement
+    }
+
+    private var insertionRecoveryMessage: String {
+        "Couldn't insert text. Focus a text field, then press \(pasteLastTranscriptHotkeyConfiguration.compactDisplayString)."
+    }
+
+    private func showInsertionRecoveryWarning() {
+        let restoreState = blockedStartRestoreIndicatorState()
+        isShowingInsertionRecoveryWarning = true
+        lastError = insertionRecoveryMessage
+        showTransientIndicatorError(insertionRecoveryMessage, restoreState: restoreState, duration: 3.5)
+    }
+
+    private func clearInsertionRecoveryWarning() {
+        guard isShowingInsertionRecoveryWarning else {
+            return
+        }
+
+        isShowingInsertionRecoveryWarning = false
+        lastError = nil
+        overlayErrorResetTask?.cancel()
+        overlayErrorResetTask = nil
+        if case .error = floatingIndicatorState {
+            setFloatingIndicatorState(blockedStartRestoreIndicatorState())
+        }
     }
 
     private func showTransientIndicatorError(
