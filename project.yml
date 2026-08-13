@@ -37,6 +37,11 @@ targets:
           - Frameworks/**
           - LocalLLM/**
           - Vendor/Permiso/PERMISO_UPSTREAM.md
+          - WakeWord/**
+      # Wake-word + VAD models, copied into Resources as a directory.
+      - path: Suniye/WakeWord
+        type: folder
+        buildPhase: resources
     info:
       path: Suniye/Info.plist
       properties:
