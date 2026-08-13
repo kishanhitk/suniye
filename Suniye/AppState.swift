@@ -411,130 +411,127 @@ final class AppState {
     }
     var hotkeyConfiguration: HotkeyConfiguration = .globe {
         didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            guard oldValue != hotkeyConfiguration else {
-                return
-            }
-            guard hotkeyConfiguration != pasteLastTranscriptHotkeyConfiguration else {
-                hotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
-                onStateChange?()
-                return
-            }
-            hotkeyValidationMessage = nil
-            // Collision policy lives at this settings boundary: the Edit Mode slot always yields.
-            if editModeHotkeyConfiguration == hotkeyConfiguration {
-                editModeHotkeyConfiguration = nil
-                AppLogger.shared.log(.warning, "edit mode hotkey cleared: matched new dictation hotkey")
-                showTransientIndicatorError("Edit Mode shortcut cleared: it matched dictation")
-            }
-            if computerUseHotkeyConfiguration == hotkeyConfiguration {
-                computerUseHotkeyConfiguration = nil
-                AppLogger.shared.log(.warning, "computer use hotkey cleared: matched new dictation hotkey")
-                showTransientIndicatorError("Run Task shortcut cleared: it matched dictation")
-            }
-            persistGeneralSettings()
-            if runtimeServicesEnabled {
-                wireHotkey()
-            }
-            onStateChange?()
+            resolveHotkeyChange(of: .dictation, from: oldValue, to: hotkeyConfiguration)
         }
     }
     private(set) var pasteLastTranscriptHotkeyConfiguration: HotkeyConfiguration = .pasteLastTranscriptDefault {
         didSet {
-            guard !isHydratingGeneralSettings, oldValue != pasteLastTranscriptHotkeyConfiguration else {
-                return
-            }
-            guard pasteLastTranscriptHotkeyConfiguration.isModifiedKeyCombo else {
-                pasteLastTranscriptHotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Paste Last Transcript requires at least one modifier key."
-                onStateChange?()
-                return
-            }
-            guard pasteLastTranscriptHotkeyConfiguration != hotkeyConfiguration else {
-                pasteLastTranscriptHotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
-                onStateChange?()
-                return
-            }
-            guard pasteLastTranscriptHotkeyConfiguration != editModeHotkeyConfiguration else {
-                pasteLastTranscriptHotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
-                onStateChange?()
-                return
-            }
-            hotkeyValidationMessage = nil
-            persistGeneralSettings()
-            if runtimeServicesEnabled {
-                wireHotkey()
-            }
-            if isShowingInsertionRecoveryWarning {
-                showInsertionRecoveryWarning()
-            }
-            onStateChange?()
+            resolveHotkeyChange(of: .pasteLastTranscript, from: oldValue, to: pasteLastTranscriptHotkeyConfiguration)
         }
     }
     var hotkeyValidationMessage: String?
     var editModeHotkeyConfiguration: HotkeyConfiguration? {
         didSet {
-            guard !isHydratingGeneralSettings, oldValue != editModeHotkeyConfiguration else {
-                return
-            }
-            if let editModeHotkeyConfiguration {
-                if editModeHotkeyConfiguration == hotkeyConfiguration {
-                    self.editModeHotkeyConfiguration = oldValue == hotkeyConfiguration ? nil : oldValue
-                    AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches dictation hotkey")
-                    showTransientIndicatorError("Edit Mode shortcut must differ from dictation")
-                    return
-                }
-                if editModeHotkeyConfiguration == pasteLastTranscriptHotkeyConfiguration {
-                    self.editModeHotkeyConfiguration = oldValue == pasteLastTranscriptHotkeyConfiguration ? nil : oldValue
-                    hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
-                    AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches paste last transcript hotkey")
-                    showTransientIndicatorError("Edit Mode shortcut must differ from Paste Last Transcript")
-                    return
-                }
-                if editModeHotkeyConfiguration == computerUseHotkeyConfiguration {
-                    self.editModeHotkeyConfiguration = oldValue == computerUseHotkeyConfiguration ? nil : oldValue
-                    AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches computer use hotkey")
-                    showTransientIndicatorError("Edit Mode shortcut is already in use")
-                    return
-                }
-            }
-            hotkeyValidationMessage = nil
-            persistGeneralSettings()
-            if runtimeServicesEnabled {
-                wireHotkey()
-            }
-            onStateChange?()
+            resolveHotkeyChange(of: .editMode, from: oldValue, to: editModeHotkeyConfiguration)
         }
     }
     var computerUseHotkeyConfiguration: HotkeyConfiguration? = nil {
         didSet {
-            guard !isHydratingGeneralSettings, oldValue != computerUseHotkeyConfiguration else {
-                return
-            }
-            let collidesWithAnotherHotkey = computerUseHotkeyConfiguration != nil
-                && (computerUseHotkeyConfiguration == hotkeyConfiguration
-                    || computerUseHotkeyConfiguration == editModeHotkeyConfiguration
-                    || computerUseHotkeyConfiguration == pasteLastTranscriptHotkeyConfiguration)
-            if collidesWithAnotherHotkey {
-                let previousValueIsAvailable = oldValue != hotkeyConfiguration
-                    && oldValue != editModeHotkeyConfiguration
-                    && oldValue != pasteLastTranscriptHotkeyConfiguration
-                computerUseHotkeyConfiguration = previousValueIsAvailable ? oldValue : nil
-                AppLogger.shared.log(.warning, "computer use hotkey rejected: matches another hotkey")
-                showTransientIndicatorError("Run Task shortcut is already in use")
-                return
-            }
+            resolveHotkeyChange(of: .computerUse, from: oldValue, to: computerUseHotkeyConfiguration)
+        }
+    }
+
+    private var isResolvingHotkeyChange = false
+
+    /// The four shortcut properties exist for SwiftUI bindings; the collision
+    /// policy lives in `HotkeySlotAssignments`. Every setter funnels through
+    /// here: build the pre-change assignments, apply the proposed change, then
+    /// write back whatever the policy decided.
+    private func resolveHotkeyChange(
+        of slot: HotkeySlotAssignments.Slot,
+        from oldValue: HotkeyConfiguration?,
+        to proposed: HotkeyConfiguration?
+    ) {
+        guard !isHydratingGeneralSettings, !isResolvingHotkeyChange, oldValue != proposed else {
+            return
+        }
+        var assignments = hotkeySlotAssignments
+        switch slot {
+        case .dictation: assignments.dictation = oldValue ?? assignments.dictation
+        case .pasteLastTranscript: assignments.pasteLastTranscript = oldValue ?? assignments.pasteLastTranscript
+        case .editMode: assignments.editMode = oldValue
+        case .computerUse: assignments.computerUse = oldValue
+        }
+        let outcome = assignments.assign(proposed, to: slot)
+        isResolvingHotkeyChange = true
+        applyHotkeySlotAssignments(assignments)
+        isResolvingHotkeyChange = false
+        switch outcome {
+        case .applied(let cleared):
             hotkeyValidationMessage = nil
+            for clearedSlot in cleared {
+                reportHotkeySlotCleared(clearedSlot)
+            }
             persistGeneralSettings()
             if runtimeServicesEnabled {
                 wireHotkey()
             }
-            onStateChange?()
+            if slot == .pasteLastTranscript, isShowingInsertionRecoveryWarning {
+                showInsertionRecoveryWarning()
+            }
+        case .rejected(let rejection):
+            reportHotkeyRejection(rejection, of: slot)
+        }
+        onStateChange?()
+    }
+
+    private var hotkeySlotAssignments: HotkeySlotAssignments {
+        HotkeySlotAssignments(
+            dictation: hotkeyConfiguration,
+            pasteLastTranscript: pasteLastTranscriptHotkeyConfiguration,
+            editMode: editModeHotkeyConfiguration,
+            computerUse: computerUseHotkeyConfiguration
+        )
+    }
+
+    private func applyHotkeySlotAssignments(_ assignments: HotkeySlotAssignments) {
+        hotkeyConfiguration = assignments.dictation
+        pasteLastTranscriptHotkeyConfiguration = assignments.pasteLastTranscript
+        editModeHotkeyConfiguration = assignments.editMode
+        computerUseHotkeyConfiguration = assignments.computerUse
+    }
+
+    private func reportHotkeySlotCleared(_ slot: HotkeySlotAssignments.Slot) {
+        switch slot {
+        case .editMode:
+            AppLogger.shared.log(.warning, "edit mode hotkey cleared: matched new dictation hotkey")
+            showTransientIndicatorError("Edit Mode shortcut cleared: it matched dictation")
+        case .computerUse:
+            AppLogger.shared.log(.warning, "computer use hotkey cleared: matched new dictation hotkey")
+            showTransientIndicatorError("Run Task shortcut cleared: it matched dictation")
+        case .dictation, .pasteLastTranscript:
+            break
+        }
+    }
+
+    private func reportHotkeyRejection(
+        _ rejection: HotkeySlotAssignments.Rejection,
+        of slot: HotkeySlotAssignments.Slot
+    ) {
+        switch (slot, rejection) {
+        case (.dictation, _):
+            hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
+        case (.pasteLastTranscript, .missingModifier):
+            hotkeyValidationMessage = "Paste Last Transcript requires at least one modifier key."
+        case (.pasteLastTranscript, .collision(.dictation)):
+            hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
+        case (.pasteLastTranscript, .collision(.editMode)):
+            hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
+        case (.pasteLastTranscript, .collision):
+            hotkeyValidationMessage = "Paste Last Transcript and Run Task must use different shortcuts."
+        case (.editMode, .collision(.dictation)):
+            AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches dictation hotkey")
+            showTransientIndicatorError("Edit Mode shortcut must differ from dictation")
+        case (.editMode, .collision(.pasteLastTranscript)):
+            hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
+            AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches paste last transcript hotkey")
+            showTransientIndicatorError("Edit Mode shortcut must differ from Paste Last Transcript")
+        case (.editMode, _):
+            AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches computer use hotkey")
+            showTransientIndicatorError("Edit Mode shortcut is already in use")
+        case (.computerUse, _):
+            AppLogger.shared.log(.warning, "computer use hotkey rejected: matches another hotkey")
+            showTransientIndicatorError("Run Task shortcut is already in use")
         }
     }
     var selectedASRModelID: ASRModelID = .parakeetV3 {
@@ -3619,12 +3616,7 @@ final class AppState {
             }
         }
 
-        hotkeyService.startMonitoring(
-            configuration: hotkeyConfiguration,
-            editModeConfiguration: editModeHotkeyConfiguration,
-            computerUseConfiguration: computerUseHotkeyConfiguration,
-            pasteLastTranscriptConfiguration: pasteLastTranscriptHotkeyConfiguration
-        )
+        hotkeyService.startMonitoring(assignments: hotkeySlotAssignments)
         AppLogger.shared.log(
             .info,
             "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off") computerUse=\(computerUseHotkeyConfiguration?.displayString ?? "off") pasteLast=\(pasteLastTranscriptHotkeyConfiguration.displayString)"
@@ -4394,49 +4386,32 @@ final class AppState {
         totalDictationSeconds = recentResults.reduce(0) { $0 + $1.durationSeconds }
     }
 
-    private static func normalizedPasteLastTranscriptHotkey(
-        _ configuredHotkey: HotkeyConfiguration,
-        dictationHotkey: HotkeyConfiguration,
-        editModeHotkey: HotkeyConfiguration?
-    ) -> HotkeyConfiguration {
-        let fallbackModifiers: [UInt32] = [
-            UInt32(controlKey | cmdKey),
-            UInt32(controlKey | optionKey | cmdKey),
-            UInt32(controlKey | shiftKey | cmdKey),
-            UInt32(controlKey | optionKey | shiftKey | cmdKey),
-        ]
-        let candidates = [configuredHotkey] + fallbackModifiers.map {
-            HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: $0)
-        }
-
-        return candidates.first { candidate in
-            candidate.isModifiedKeyCombo
-                && candidate != dictationHotkey
-                && candidate != editModeHotkey
-        } ?? .pasteLastTranscriptDefault
+    private static let pasteLastTranscriptFallbackHotkeys: [HotkeyConfiguration] = [
+        UInt32(controlKey | cmdKey),
+        UInt32(controlKey | optionKey | cmdKey),
+        UInt32(controlKey | shiftKey | cmdKey),
+        UInt32(controlKey | optionKey | shiftKey | cmdKey),
+    ].map {
+        HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: $0)
     }
 
     private func loadGeneralSettings() {
         isHydratingGeneralSettings = true
         let settings = generalSettingsStore.load()
-        let normalizedPasteLastTranscriptHotkey = Self.normalizedPasteLastTranscriptHotkey(
-            settings.pasteLastTranscriptHotkeyConfiguration,
-            dictationHotkey: settings.hotkeyConfiguration,
-            editModeHotkey: settings.editModeHotkeyConfiguration
+        let (normalizedHotkeys, changedHotkeySlots) = HotkeySlotAssignments.normalized(
+            dictation: settings.hotkeyConfiguration,
+            pasteLastTranscript: settings.pasteLastTranscriptHotkeyConfiguration,
+            editMode: settings.editModeHotkeyConfiguration,
+            computerUse: settings.computerUseHotkeyConfiguration,
+            pasteFallbacks: Self.pasteLastTranscriptFallbackHotkeys
         )
-        let normalizedEditModeHotkey = settings.editModeHotkeyConfiguration == settings.hotkeyConfiguration
-            || settings.editModeHotkeyConfiguration == normalizedPasteLastTranscriptHotkey
-            ? nil
-            : settings.editModeHotkeyConfiguration
-        let didNormalizeHotkeys = normalizedPasteLastTranscriptHotkey != settings.pasteLastTranscriptHotkeyConfiguration
-            || normalizedEditModeHotkey != settings.editModeHotkeyConfiguration
         selectedInputDeviceID = settings.preferredInputDeviceID
         preferredInputDeviceName = settings.preferredInputDeviceName
         autoSubmitEnabled = settings.autoSubmitEnabled
-        hotkeyConfiguration = settings.hotkeyConfiguration
-        pasteLastTranscriptHotkeyConfiguration = normalizedPasteLastTranscriptHotkey
-        editModeHotkeyConfiguration = normalizedEditModeHotkey
-        computerUseHotkeyConfiguration = settings.computerUseHotkeyConfiguration
+        hotkeyConfiguration = normalizedHotkeys.dictation
+        pasteLastTranscriptHotkeyConfiguration = normalizedHotkeys.pasteLastTranscript
+        editModeHotkeyConfiguration = normalizedHotkeys.editMode
+        computerUseHotkeyConfiguration = normalizedHotkeys.computerUse
         echoCancellationEnabled = settings.echoCancellationEnabled
         soundFeedbackEnabled = settings.soundFeedbackEnabled
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
@@ -4463,17 +4438,8 @@ final class AppState {
             legacyUserShowsUsage: legacyUserHasUsage
         )
         isHydratingGeneralSettings = false
-        // A persisted collision (e.g. hand-edited settings) would silently kill Computer Use.
-        var normalizedHotkeyCollision = false
-        if computerUseHotkeyConfiguration != nil,
-           (computerUseHotkeyConfiguration == hotkeyConfiguration
-            || computerUseHotkeyConfiguration == editModeHotkeyConfiguration
-            || computerUseHotkeyConfiguration == pasteLastTranscriptHotkeyConfiguration) {
-            computerUseHotkeyConfiguration = nil
-            normalizedHotkeyCollision = true
-        }
         applyUpdateChannelToController()
-        if needsProgressMigration || needsFirstLaunchMigration || didNormalizeHotkeys || normalizedHotkeyCollision {
+        if needsProgressMigration || needsFirstLaunchMigration || !changedHotkeySlots.isEmpty {
             persistGeneralSettings()
         }
     }

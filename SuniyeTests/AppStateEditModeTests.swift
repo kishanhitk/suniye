@@ -20,7 +20,7 @@ final class AppStateEditModeTests: XCTestCase {
         appState.computerUseHotkeyConfiguration = taskHotkey
 
         XCTAssertEqual(settingsStore.latest.computerUseHotkeyConfiguration, taskHotkey)
-        XCTAssertEqual(hotkeyService.lastComputerUseConfiguration, taskHotkey)
+        XCTAssertEqual(hotkeyService.lastAssignments?.computerUse, taskHotkey)
         XCTAssertGreaterThanOrEqual(hotkeyService.startMonitoringCallCount, 2)
     }
 
@@ -106,12 +106,12 @@ final class AppStateEditModeTests: XCTestCase {
 
         XCTAssertEqual(settingsStore.latest.editModeHotkeyConfiguration, editHotkey)
         XCTAssertGreaterThanOrEqual(hotkeyService.startMonitoringCallCount, 2)
-        XCTAssertEqual(hotkeyService.lastEditModeConfiguration, editHotkey)
+        XCTAssertEqual(hotkeyService.lastAssignments?.editMode, editHotkey)
 
         appState.editModeHotkeyConfiguration = nil
 
         XCTAssertNil(settingsStore.latest.editModeHotkeyConfiguration)
-        XCTAssertNil(hotkeyService.lastEditModeConfiguration)
+        XCTAssertNil(hotkeyService.lastAssignments?.editMode)
     }
 
     func testEditModeHotkeyConfigurationLoadsFromSettings() {

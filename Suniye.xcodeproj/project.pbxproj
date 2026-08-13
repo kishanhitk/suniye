@@ -128,6 +128,7 @@
 		81A60C95C84B724430F89DD2 /* LLMSettingsMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A32517298CA486729883F93 /* LLMSettingsMoreTests.swift */; };
 		81F6D8FCAFCBE596A30B1381 /* FragmentMono-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = D4416B992248F8B51B0E9DE1 /* FragmentMono-Italic.ttf */; };
 		823795E1243615DFFBBEDC9F /* RoutingTranscriptionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7C23F9B077871C0A935834 /* RoutingTranscriptionServiceTests.swift */; };
+		82862C9E36E36F26147AF640 /* HotkeySlotAssignmentsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 097D577A12AA69B2B8E3050E /* HotkeySlotAssignmentsTests.swift */; };
 		83681464B14AD92EBCFCD908 /* IssueReportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 104370E76CFD4D8D685CEAC7 /* IssueReportService.swift */; };
 		84CB629AA94E239EEC0911F6 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4213B4B666CF5B60F3371019 /* AppLogger.swift */; };
 		8557A42A25A6F4F119B8788F /* ASRLatencyBenchmarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 635BB3CFFBC759E73B59157C /* ASRLatencyBenchmarkTests.swift */; };
@@ -276,6 +277,7 @@
 		045F7AACA142A791AFFA7C43 /* SettingsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModels.swift; sourceTree = "<group>"; };
 		04E33FF11064C2DA41B9C90F /* ComputerUseToolBackendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseToolBackendTests.swift; sourceTree = "<group>"; };
 		095EB5A6DAE3904492FBB2D9 /* ComputerUseCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseCoordinator.swift; sourceTree = "<group>"; };
+		097D577A12AA69B2B8E3050E /* HotkeySlotAssignmentsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySlotAssignmentsTests.swift; sourceTree = "<group>"; };
 		0A447F6ABB74C48E00FCCD9A /* ComputerUseActionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseActionService.swift; sourceTree = "<group>"; };
 		0AB5F4E5BE5423B13525904E /* ComputerUseConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseConversationStore.swift; sourceTree = "<group>"; };
 		0ABC102B8597627BF82FF72D /* TranscriptionServiceCoverageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionServiceCoverageTests.swift; sourceTree = "<group>"; };
@@ -645,6 +647,7 @@
 				5E4DBF938AD8D245D78A33C9 /* HistoryStoreMoreTests.swift */,
 				66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */,
 				3C602055B3CC305FEC183E6E /* HotkeyServiceTests.swift */,
+				097D577A12AA69B2B8E3050E /* HotkeySlotAssignmentsTests.swift */,
 				88138019F3746810DB6BB7ED /* IssueReportServiceMoreTests.swift */,
 				A90D5B82089314B9767C0F6D /* IssueReportServiceTests.swift */,
 				5F8CAE1D0035428B5509358E /* KeychainServiceMoreTests.swift */,
@@ -1182,6 +1185,7 @@
 				C3EE76D359ECB20D36DC4D0A /* HistoryStoreMoreTests.swift in Sources */,
 				538CCC22F273225E882F7463 /* HistoryStoreTests.swift in Sources */,
 				6A57CEC5F78930A4FE876C8D /* HotkeyServiceTests.swift in Sources */,
+				82862C9E36E36F26147AF640 /* HotkeySlotAssignmentsTests.swift in Sources */,
 				FCBA5FAA13E312C3FA20CFF7 /* IssueReportServiceMoreTests.swift in Sources */,
 				6CED932755ECE82560241EC0 /* IssueReportServiceTests.swift in Sources */,
 				9B01738708A5E0777F9DDFB9 /* KeychainServiceMoreTests.swift in Sources */,

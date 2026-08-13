@@ -10,12 +10,7 @@ protocol HotkeyServiceProtocol: AnyObject {
     var onComputerUseHotkeyUp: (() -> Void)? { get set }
     var onCancel: (() -> Bool)? { get set }
     var onPasteLastTranscript: (() -> Void)? { get set }
-    func startMonitoring(
-        configuration: HotkeyConfiguration,
-        editModeConfiguration: HotkeyConfiguration?,
-        computerUseConfiguration: HotkeyConfiguration?,
-        pasteLastTranscriptConfiguration: HotkeyConfiguration
-    )
+    func startMonitoring(assignments: HotkeySlotAssignments)
     func stopMonitoring()
 }
 
@@ -53,35 +48,19 @@ final class HotkeyService: HotkeyServiceProtocol {
     private var heldSlots: Set<Slot> = []
     private var globeSlot: Slot?
 
-    func startMonitoring(
-        configuration: HotkeyConfiguration,
-        editModeConfiguration: HotkeyConfiguration?,
-        computerUseConfiguration: HotkeyConfiguration?,
-        pasteLastTranscriptConfiguration: HotkeyConfiguration
-    ) {
+    /// Assignments arrive pairwise-distinct by construction
+    /// (`HotkeySlotAssignments` owns the collision policy), so registration is
+    /// unconditional.
+    func startMonitoring(assignments: HotkeySlotAssignments) {
         stopMonitoring()
 
-        register(configuration, for: .dictation)
-        if pasteLastTranscriptConfiguration == configuration {
-            AppLogger.shared.log(.warning, "paste last transcript hotkey ignored: matches dictation hotkey")
-        } else {
-            register(pasteLastTranscriptConfiguration, for: .pasteLastTranscript)
+        register(assignments.dictation, for: .dictation)
+        register(assignments.pasteLastTranscript, for: .pasteLastTranscript)
+        if let editMode = assignments.editMode {
+            register(editMode, for: .editMode)
         }
-        if let editModeConfiguration {
-            if editModeConfiguration == configuration || editModeConfiguration == pasteLastTranscriptConfiguration {
-                AppLogger.shared.log(.warning, "edit mode hotkey ignored: matches another hotkey")
-            } else {
-                register(editModeConfiguration, for: .editMode)
-            }
-        }
-        if let computerUseConfiguration {
-            if computerUseConfiguration == configuration
-                || computerUseConfiguration == editModeConfiguration
-                || computerUseConfiguration == pasteLastTranscriptConfiguration {
-                AppLogger.shared.log(.warning, "computer use hotkey ignored: matches another hotkey")
-            } else {
-                register(computerUseConfiguration, for: .computerUse)
-            }
+        if let computerUse = assignments.computerUse {
+            register(computerUse, for: .computerUse)
             installCancellationMonitorsIfNeeded()
         }
     }
