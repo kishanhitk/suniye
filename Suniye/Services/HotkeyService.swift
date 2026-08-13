@@ -11,7 +11,7 @@ protocol HotkeyServiceProtocol: AnyObject {
     var onCancel: (() -> Bool)? { get set }
     var onPasteLastTranscript: (() -> Void)? { get set }
     var onVoiceActivationToggle: (() -> Void)? { get set }
-    func startMonitoring(assignments: HotkeySlotAssignments)
+    func startMonitoring(assignments: HotkeySlotAssignments, installCancellationMonitors: Bool)
     func stopMonitoring()
 }
 
@@ -54,7 +54,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     /// Assignments arrive pairwise-distinct by construction
     /// (`HotkeySlotAssignments` owns the collision policy), so registration is
     /// unconditional.
-    func startMonitoring(assignments: HotkeySlotAssignments) {
+    func startMonitoring(assignments: HotkeySlotAssignments, installCancellationMonitors: Bool) {
         stopMonitoring()
 
         register(assignments.dictation, for: .dictation)
@@ -64,10 +64,14 @@ final class HotkeyService: HotkeyServiceProtocol {
         }
         if let computerUse = assignments.computerUse {
             register(computerUse, for: .computerUse)
-            installCancellationMonitorsIfNeeded()
         }
         if let voiceActivationToggle = assignments.voiceActivationToggle {
             register(voiceActivationToggle, for: .voiceActivationToggle)
+        }
+        // Escape must work while a Computer Use hotkey exists or Voice
+        // Activation is on (a listening turn has no hotkey to release).
+        if assignments.computerUse != nil || installCancellationMonitors {
+            installCancellationMonitorsIfNeeded()
         }
     }
 

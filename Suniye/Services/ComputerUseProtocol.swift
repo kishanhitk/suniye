@@ -11,6 +11,7 @@ enum ComputerUseToolName: String, CaseIterable, Codable, Equatable, Sendable {
     case drag
     case pressKey = "press_key"
     case typeText = "type_text"
+    case setVoiceActivation = "set_voice_activation"
 }
 
 struct ComputerUseApplication: Codable, Equatable, Sendable {
@@ -166,6 +167,7 @@ enum ComputerUseToolCall: Equatable, Sendable {
     case drag(app: String, fromX: Double, fromY: Double, toX: Double, toY: Double)
     case pressKey(app: String, key: String)
     case typeText(app: String, text: String)
+    case setVoiceActivation(enabled: Bool)
 
     var name: ComputerUseToolName {
         switch self {
@@ -189,6 +191,8 @@ enum ComputerUseToolCall: Equatable, Sendable {
             .pressKey
         case .typeText:
             .typeText
+        case .setVoiceActivation:
+            .setVoiceActivation
         }
     }
 

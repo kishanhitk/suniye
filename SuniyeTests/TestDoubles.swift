@@ -655,10 +655,12 @@ final class StubHotkeyService: HotkeyServiceProtocol {
     var onVoiceActivationToggle: (() -> Void)?
     private(set) var startMonitoringCallCount = 0
     private(set) var lastAssignments: HotkeySlotAssignments?
+    private(set) var lastInstallCancellationMonitors: Bool?
 
-    func startMonitoring(assignments: HotkeySlotAssignments) {
+    func startMonitoring(assignments: HotkeySlotAssignments, installCancellationMonitors: Bool) {
         startMonitoringCallCount += 1
         lastAssignments = assignments
+        lastInstallCancellationMonitors = installCancellationMonitors
     }
 
     func stopMonitoring() {}

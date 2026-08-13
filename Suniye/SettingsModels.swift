@@ -601,6 +601,9 @@ struct GeneralSettings: Codable, Equatable {
     var voiceActivationToggleHotkeyConfiguration: HotkeyConfiguration? = nil
     /// Spoken responses at turn boundaries (local Chatterbox). Off by default.
     var voiceOutputEnabled: Bool = false
+    /// The one-time enablement notice was confirmed (UX plan: an enablement
+    /// notice, not a repeated approval).
+    var voiceActivationNoticeAcknowledged: Bool = false
 
     init(
         preferredInputDeviceID: String? = nil,
@@ -630,7 +633,8 @@ struct GeneralSettings: Codable, Equatable {
         voiceActivationSoundFeedbackEnabled: Bool = true,
         voiceActivationFollowUpWindowEnabled: Bool = false,
         voiceActivationToggleHotkeyConfiguration: HotkeyConfiguration? = nil,
-        voiceOutputEnabled: Bool = false
+        voiceOutputEnabled: Bool = false,
+        voiceActivationNoticeAcknowledged: Bool = false
     ) {
         self.preferredInputDeviceID = preferredInputDeviceID
         self.preferredInputDeviceName = preferredInputDeviceName
@@ -660,6 +664,7 @@ struct GeneralSettings: Codable, Equatable {
         self.voiceActivationFollowUpWindowEnabled = voiceActivationFollowUpWindowEnabled
         self.voiceActivationToggleHotkeyConfiguration = voiceActivationToggleHotkeyConfiguration
         self.voiceOutputEnabled = voiceOutputEnabled
+        self.voiceActivationNoticeAcknowledged = voiceActivationNoticeAcknowledged
     }
 
     enum CodingKeys: String, CodingKey {
@@ -691,6 +696,7 @@ struct GeneralSettings: Codable, Equatable {
         case voiceActivationFollowUpWindowEnabled
         case voiceActivationToggleHotkeyConfiguration
         case voiceOutputEnabled
+        case voiceActivationNoticeAcknowledged
     }
 
     init(from decoder: Decoder) throws {
@@ -731,6 +737,7 @@ struct GeneralSettings: Codable, Equatable {
         voiceActivationFollowUpWindowEnabled = try container.decodeIfPresent(Bool.self, forKey: .voiceActivationFollowUpWindowEnabled) ?? false
         voiceActivationToggleHotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .voiceActivationToggleHotkeyConfiguration)
         voiceOutputEnabled = try container.decodeIfPresent(Bool.self, forKey: .voiceOutputEnabled) ?? false
+        voiceActivationNoticeAcknowledged = try container.decodeIfPresent(Bool.self, forKey: .voiceActivationNoticeAcknowledged) ?? false
     }
 }
 

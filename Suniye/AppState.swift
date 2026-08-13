@@ -390,6 +390,14 @@ final class AppState {
             onStateChange?()
         }
     }
+    var voiceActivationNoticeAcknowledged = false {
+        didSet {
+            guard !isHydratingGeneralSettings, oldValue != voiceActivationNoticeAcknowledged else {
+                return
+            }
+            persistGeneralSettings()
+        }
+    }
     var hideFloatingIndicatorWhenIdle = false {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -1876,6 +1884,18 @@ final class AppState {
         resolvedComputerUseCoordinator.onPhaseChange = { [weak self] phase in
             self?.handleComputerUsePhaseChange(phase)
             self?.voiceActivationController?.handleRunPhase(phase)
+        }
+        resolvedComputerUseCoordinator.voiceActivationControl = { [weak self] enabled in
+            await MainActor.run {
+                guard let self, self.voiceActivationEnabled != enabled else {
+                    return
+                }
+                AppLogger.shared.log(.info, "voice activation set by agent tool enabled=\(enabled)")
+                self.voiceActivationEnabled = enabled
+                if self.voiceActivationSoundFeedbackEnabled {
+                    self.soundFeedbackService.play(.transcriptionSucceeded)
+                }
+            }
         }
         self.editLearningService.onLearnedTerms = { [weak self] terms in
             self?.handleLearnedVocabularyTerms(terms)
@@ -3715,15 +3735,28 @@ final class AppState {
         }
 
         hotkeyService.onCancel = { [weak self] in
-            guard let self,
-                  self.phase == .recording,
-                  self.activeDictationSession?.context.destination == .computerUseTask else {
+            guard let self else {
                 return false
             }
-            Task { @MainActor in
-                await self.cancelComputerUseRecording()
+            // Escape priority: cancel a Voice Activation turn, then a voice
+            // recording, then stop a running agent (UX plan: Escape is the
+            // immediate, non-semantic cancellation path).
+            if case .listening = self.voiceActivationController?.state {
+                self.voiceActivationController?.cancelListening()
+                return true
             }
-            return true
+            if self.phase == .recording,
+               self.activeDictationSession?.context.destination == .computerUseTask {
+                Task { @MainActor in
+                    await self.cancelComputerUseRecording()
+                }
+                return true
+            }
+            if self.computerUseCoordinator.isRunning {
+                self.computerUseCoordinator.stop()
+                return true
+            }
+            return false
         }
 
         hotkeyService.onPasteLastTranscript = { [weak self] in
@@ -3740,7 +3773,10 @@ final class AppState {
             }
         }
 
-        hotkeyService.startMonitoring(assignments: hotkeySlotAssignments)
+        hotkeyService.startMonitoring(
+            assignments: hotkeySlotAssignments,
+            installCancellationMonitors: voiceActivationEnabled
+        )
         AppLogger.shared.log(
             .info,
             "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off") computerUse=\(computerUseHotkeyConfiguration?.displayString ?? "off") pasteLast=\(pasteLastTranscriptHotkeyConfiguration.displayString)"
@@ -4537,6 +4573,7 @@ final class AppState {
         guard runtimeServicesEnabled else {
             return
         }
+        wireHotkey()
         let enabled = voiceActivationEnabled
         Task { [weak self] in
             await self?.voiceActivationController?.setEnabled(enabled)
@@ -4619,6 +4656,7 @@ final class AppState {
         voiceActivationSoundFeedbackEnabled = settings.voiceActivationSoundFeedbackEnabled
         voiceActivationFollowUpWindowEnabled = settings.voiceActivationFollowUpWindowEnabled
         voiceOutputEnabled = settings.voiceOutputEnabled
+        voiceActivationNoticeAcknowledged = settings.voiceActivationNoticeAcknowledged
         echoCancellationEnabled = settings.echoCancellationEnabled
         soundFeedbackEnabled = settings.soundFeedbackEnabled
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
@@ -4698,7 +4736,8 @@ final class AppState {
             voiceActivationSoundFeedbackEnabled: voiceActivationSoundFeedbackEnabled,
             voiceActivationFollowUpWindowEnabled: voiceActivationFollowUpWindowEnabled,
             voiceActivationToggleHotkeyConfiguration: voiceActivationToggleHotkeyConfiguration,
-            voiceOutputEnabled: voiceOutputEnabled
+            voiceOutputEnabled: voiceOutputEnabled,
+            voiceActivationNoticeAcknowledged: voiceActivationNoticeAcknowledged
         )
     }
 

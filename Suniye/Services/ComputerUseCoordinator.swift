@@ -17,7 +17,8 @@ enum ComputerUseCoordinatorPhase: Equatable {
 final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     typealias AgentFactory = @MainActor (
         ComputerUseRemoteModelConfiguration,
-        ComputerUseActivitySink
+        ComputerUseActivitySink,
+        ComputerUseAgentEnvironment
     ) -> any ComputerUseAgentRunning
 
     var phase: ComputerUseCoordinatorPhase = .idle {
@@ -50,6 +51,9 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     @ObservationIgnored private let cursorSession: any ComputerUseCursorSessionManaging
     @ObservationIgnored private let conversationStore: any ComputerUseConversationStoring
     @ObservationIgnored private let makeAgent: AgentFactory
+    /// Host-provided seam for the `set_voice_activation` tool (UX plan: the
+    /// spoken off-switch goes through the model).
+    @ObservationIgnored var voiceActivationControl: (@Sendable (Bool) async -> Void)?
     @ObservationIgnored private var configuration: ComputerUseRemoteModelConfiguration?
     @ObservationIgnored private var activeRun: ActiveRun?
     @ObservationIgnored private var pendingVoiceInstruction: String?
@@ -180,7 +184,11 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         let activitySink = ComputerUseActivitySink { [weak self] activity in
             await self?.appendActivity(activity, for: runID)
         }
-        let agent = makeAgent(configuration, activitySink)
+        let agent = makeAgent(
+            configuration,
+            activitySink,
+            ComputerUseAgentEnvironment(voiceActivationControl: voiceActivationControl)
+        )
         let task = ComputerUseAgentTask(
             instruction: instruction,
             conversation: history,
@@ -343,13 +351,21 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
 
     private static func makeProductionAgent(
         configuration: ComputerUseRemoteModelConfiguration,
-        activitySink: ComputerUseActivitySink
+        activitySink: ComputerUseActivitySink,
+        environment: ComputerUseAgentEnvironment
     ) -> any ComputerUseAgentRunning {
         ComputerUseAgent(
             model: ComputerUseRemoteModelClient(configuration: configuration),
-            tools: ComputerUseToolBackend(),
+            tools: ComputerUseToolBackend(
+                voiceActivationControl: environment.voiceActivationControl
+            ),
             activitySink: activitySink,
             contextPolicy: .referenceAligned(modelID: configuration.modelID)
         )
     }
+}
+
+/// Coordinator-owned context handed to the agent factory.
+struct ComputerUseAgentEnvironment: Sendable {
+    var voiceActivationControl: (@Sendable (Bool) async -> Void)?
 }

@@ -466,6 +466,8 @@ private extension ComputerUseToolCall {
             app
         case let .click(request):
             request.app
+        case .setVoiceActivation:
+            nil
         }
     }
 
@@ -478,7 +480,7 @@ private extension ComputerUseToolCall {
 
     var isAction: Bool {
         switch self {
-        case .listApps, .getAppState:
+        case .listApps, .getAppState, .setVoiceActivation:
             false
         case .click, .performSecondaryAction, .setValue, .selectText,
              .scroll, .drag, .pressKey, .typeText:

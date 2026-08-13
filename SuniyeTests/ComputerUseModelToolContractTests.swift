@@ -95,7 +95,23 @@ final class ComputerUseModelToolContractTests: XCTestCase {
                     properties: ["app", "text"],
                     required: ["app", "text"]
                 ),
+                "set_voice_activation": ToolContract(
+                    properties: ["enabled"],
+                    required: ["enabled"]
+                ),
             ]
+        )
+    }
+
+    // UX plan: the spoken off-switch goes through the model, so the tool
+    // decodes for any phrasing the model maps onto it.
+    func testSetVoiceActivationDecodes() throws {
+        XCTAssertEqual(
+            try ComputerUseModelToolCallDecoder.decode(
+                name: "set_voice_activation",
+                arguments: #"{"enabled": false}"#
+            ),
+            .setVoiceActivation(enabled: false)
         )
     }
 

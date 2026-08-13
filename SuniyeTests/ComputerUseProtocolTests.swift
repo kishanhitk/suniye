@@ -16,6 +16,7 @@ final class ComputerUseProtocolTests: XCTestCase {
                 "drag",
                 "press_key",
                 "type_text",
+                "set_voice_activation",
             ]
         )
     }
@@ -39,6 +40,7 @@ final class ComputerUseProtocolTests: XCTestCase {
             .drag(app: "Calculator", fromX: 1, fromY: 2, toX: 3, toY: 4),
             .pressKey(app: "Calculator", key: "Return"),
             .typeText(app: "Calculator", text: "hello"),
+            .setVoiceActivation(enabled: false),
         ]
 
         XCTAssertEqual(calls.map(\.name), ComputerUseToolName.allCases)
@@ -210,7 +212,8 @@ private actor RecordingComputerUseBackend: ComputerUseToolServing {
             lastClick = request
         case let .selectText(_, _, _, _, _, selectionType):
             lastSelectionType = selectionType
-        case .performSecondaryAction, .setValue, .scroll, .drag, .pressKey, .typeText:
+        case .performSecondaryAction, .setValue, .scroll, .drag, .pressKey, .typeText,
+             .setVoiceActivation:
             break
         }
         actionNames.append(call.name)

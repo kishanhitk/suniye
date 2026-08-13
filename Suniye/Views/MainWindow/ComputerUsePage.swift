@@ -4,16 +4,19 @@ import SwiftUI
 struct ComputerUsePage: View {
     @Bindable var coordinator: ComputerUseCoordinator
     @Bindable var modelSettings: ComputerUseModelSettingsController
+    @Bindable var appState: AppState
     let onPageActiveChange: (Bool) -> Void
     @State private var copiedDebugSessionID: ComputerUseDebugSessionID?
 
     init(
         coordinator: ComputerUseCoordinator,
         modelSettings: ComputerUseModelSettingsController,
+        appState: AppState,
         onPageActiveChange: @escaping (Bool) -> Void = { _ in }
     ) {
         self.coordinator = coordinator
         self.modelSettings = modelSettings
+        self.appState = appState
         self.onPageActiveChange = onPageActiveChange
     }
 
@@ -104,7 +107,8 @@ struct ComputerUsePage: View {
 
                     ComputerUseSettingsDisclosure(
                         coordinator: coordinator,
-                        modelSettings: modelSettings
+                        modelSettings: modelSettings,
+                        appState: appState
                     )
                     .padding(.top, 8)
                 }

@@ -359,6 +359,43 @@ final class ComputerUseToolBackendTests: XCTestCase {
         XCTAssertEqual(delays, [.seconds(1), .milliseconds(500), .milliseconds(500)])
         XCTAssertEqual(checkCount, 3)
     }
+
+    // The set_voice_activation tool routes to the host-provided seam and
+    // fails loudly when the host did not provide one.
+    func testSetVoiceActivationRoutesToControlSeam() async throws {
+        let received = ReceivedVoiceActivationValues()
+        let backend = ComputerUseToolBackend(
+            voiceActivationControl: { enabled in
+                await received.append(enabled)
+            }
+        )
+
+        let result = try await backend.execute(.setVoiceActivation(enabled: false))
+
+        XCTAssertEqual(result, .actionCompleted)
+        let values = await received.values
+        XCTAssertEqual(values, [false])
+    }
+
+    func testSetVoiceActivationWithoutSeamThrows() async {
+        let backend = ComputerUseToolBackend()
+        do {
+            _ = try await backend.execute(.setVoiceActivation(enabled: false))
+            XCTFail("expected unavailable error")
+        } catch let error as ComputerUseVoiceActivationToolError {
+            XCTAssertEqual(error, .unavailable)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+}
+
+private actor ReceivedVoiceActivationValues {
+    private(set) var values: [Bool] = []
+
+    func append(_ value: Bool) {
+        values.append(value)
+    }
 }
 
 /// Unwraps the `.appState` payload so observation assertions stay readable.

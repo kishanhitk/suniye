@@ -94,8 +94,15 @@ enum ComputerUseModelToolCallDecoder {
         case .typeText:
             let arguments = try decoder.decode(TextArguments.self, from: data)
             return .typeText(app: arguments.app, text: arguments.text)
+        case .setVoiceActivation:
+            let arguments = try decoder.decode(SetVoiceActivationArguments.self, from: data)
+            return .setVoiceActivation(enabled: arguments.enabled)
         }
     }
+}
+
+private struct SetVoiceActivationArguments: Decodable {
+    let enabled: Bool
 }
 
 private struct EmptyArguments: Decodable {}

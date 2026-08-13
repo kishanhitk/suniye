@@ -3,11 +3,15 @@ import SwiftUI
 struct ComputerUseSettingsDisclosure: View {
     @Bindable var coordinator: ComputerUseCoordinator
     @Bindable var modelSettings: ComputerUseModelSettingsController
+    @Bindable var appState: AppState
+    @State private var showVoiceActivationNotice = false
 
     var body: some View {
         DisclosureGroup {
             VStack(spacing: 0) {
                 modelConfiguration
+                Divider().padding(.vertical, 10)
+                voiceActivationSection
                 Divider().padding(.vertical, 10)
                 permissionRow(
                     title: "Accessibility",
@@ -41,6 +45,64 @@ struct ComputerUseSettingsDisclosure: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
         )
+    }
+
+    /// UX plan: Voice Activation section — toggle, wake phrase display,
+    /// toggle shortcut, sound feedback, follow-up window (experimental).
+    private var voiceActivationSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: appState.voiceActivationEnabled ? "waveform.circle.fill" : "waveform.circle")
+                    .foregroundStyle(appState.voiceActivationEnabled ? Color.green : MainWindowPalette.tertiaryText)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Voice Activation")
+                        .font(AppTypography.bodyMedium)
+                    Text("Say “Hey Suniye” from anywhere to start, correct, or stop a task. Say “stop listening” to turn it off.")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { appState.voiceActivationEnabled },
+                    set: { enabled in
+                        if enabled, !appState.voiceActivationNoticeAcknowledged {
+                            showVoiceActivationNotice = true
+                        } else {
+                            appState.voiceActivationEnabled = enabled
+                        }
+                    }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+            }
+            if appState.voiceActivationEnabled {
+                HStack(spacing: 12) {
+                    Text("Toggle shortcut")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                    Spacer()
+                    HotkeyRecorderButton(
+                        configuration: $appState.voiceActivationToggleHotkeyConfiguration,
+                        idleIcon: "waveform",
+                        allowsClear: true,
+                        clearHelp: "Remove the Voice Activation shortcut"
+                    )
+                }
+                Toggle("Sound feedback for wake-up and completion", isOn: $appState.voiceActivationSoundFeedbackEnabled)
+                    .font(AppTypography.subheadline)
+                Toggle("Follow-up window after a task completes (experimental)", isOn: $appState.voiceActivationFollowUpWindowEnabled)
+                    .font(AppTypography.subheadline)
+            }
+        }
+        .alert("Voice Activation keeps the microphone in use", isPresented: $showVoiceActivationNotice) {
+            Button("Turn On") {
+                appState.voiceActivationNoticeAcknowledged = true
+                appState.voiceActivationEnabled = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("While waiting for “Hey Suniye,” audio is processed on this Mac in a rolling in-memory buffer of at most 35 seconds. It is never written to disk, and nothing leaves the machine before the wake phrase. The macOS microphone indicator stays visible the whole time.")
+        }
     }
 
     private var modelConfiguration: some View {

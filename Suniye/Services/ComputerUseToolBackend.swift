@@ -1,5 +1,10 @@
 import Foundation
 
+enum ComputerUseVoiceActivationToolError: Error, Equatable {
+    /// The host did not provide a Voice Activation control seam.
+    case unavailable
+}
+
 actor ComputerUseToolBackend: ComputerUseToolServing {
     private let applications: ComputerUseApplicationCatalogProviding
     private let windows: ComputerUseWindowDiscovering
@@ -9,6 +14,7 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
     private let runtimeGuard: ComputerUseRuntimeGuarding
     private let windowReacquisitionTimeout: Duration
     private let windowReacquisitionPollingInterval: Duration
+    private let voiceActivationControl: (@Sendable (Bool) async -> Void)?
     private var observationsByTarget: [String: ComputerUseObservation] = [:]
 
     init(
@@ -21,7 +27,8 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
         settler: ComputerUseActionSettling = SystemComputerUseActionSettler(),
         runtimeGuard: ComputerUseRuntimeGuarding = ComputerUseRuntimeGuard(),
         windowReacquisitionTimeout: Duration = .seconds(5),
-        windowReacquisitionPollingInterval: Duration = .milliseconds(50)
+        windowReacquisitionPollingInterval: Duration = .milliseconds(50),
+        voiceActivationControl: (@Sendable (Bool) async -> Void)? = nil
     ) {
         self.applications = applications
         self.windows = windows
@@ -33,6 +40,7 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
         self.runtimeGuard = runtimeGuard
         self.windowReacquisitionTimeout = windowReacquisitionTimeout
         self.windowReacquisitionPollingInterval = windowReacquisitionPollingInterval
+        self.voiceActivationControl = voiceActivationControl
     }
 
     @discardableResult
@@ -97,6 +105,11 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
             try await performAction(app: app) { context in
                 try await actions.typeText(text, context: context)
             }
+        case let .setVoiceActivation(enabled):
+            guard let voiceActivationControl else {
+                throw ComputerUseVoiceActivationToolError.unavailable
+            }
+            await voiceActivationControl(enabled)
         }
         return .actionCompleted
     }
