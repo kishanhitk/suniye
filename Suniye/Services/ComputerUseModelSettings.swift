@@ -267,6 +267,34 @@ final class ComputerUseModelSettingsController {
         settings.configuration(apiKey: effectiveAPIKey)
     }
 
+    /// The one derivation of the settings-status line and its severity; the
+    /// view renders this verbatim.
+    var status: (message: String?, isError: Bool) {
+        if let error = settings.modelValidationError
+            ?? settings.endpointValidationError
+            ?? credentialError {
+            return (error, true)
+        }
+        switch connectionState {
+        case .idle:
+            guard hasAPIKey else {
+                return ("Enter an API key to enable Computer Use.", false)
+            }
+            return (
+                settings.provider == .openRouter
+                    ? "OpenRouter API key shared with Magic Format."
+                    : "Computer Use API key saved in Keychain.",
+                false
+            )
+        case .testing:
+            return ("Testing connection…", false)
+        case .connected:
+            return ("Connected.", false)
+        case let .failed(message):
+            return (message, true)
+        }
+    }
+
     var isReady: Bool { modelConfiguration != nil }
 
     func publishConfiguration() {

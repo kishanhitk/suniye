@@ -52,6 +52,7 @@
 		237D0D22A1C786814988A96F /* LocalLLMModelManagerMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665F43A799AF8C25D0302526 /* LocalLLMModelManagerMoreTests.swift */; };
 		2B9DC39F27DDB3A27AA51D6C /* AnalyticsSupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3DF52035E54A48042A83D42 /* AnalyticsSupportTests.swift */; };
 		2DE70201D8B65AE12CAA0E24 /* SystemComputerUseWindowInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF9A2105698B412DA156394B /* SystemComputerUseWindowInventory.swift */; };
+		2FCF4B20D8E07CE3A3B00EDD /* ComputerUseIndicatorPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6A8B97E32A1B176E54F18C /* ComputerUseIndicatorPresenter.swift */; };
 		2FD2254875BF111D3522E161 /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E2ECDB4CFB11C5B9831460F /* HistoryStore.swift */; };
 		305CB2DFC0FA4FD60803A30D /* libsherpa-onnx-c-api.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 75E6194F3E61C3D677F93DA9 /* libsherpa-onnx-c-api.dylib */; };
 		333852D3F7D107BEDBDB5000 /* SettingsWindowLocator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73B49F1E40E87BF78702B0A5 /* SettingsWindowLocator.swift */; };
@@ -452,6 +453,7 @@
 		C7F3C3D023876B9EE8256C00 /* Suniye.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Suniye.swift; sourceTree = "<group>"; };
 		CA71D523EC88C51E2E911E4B /* LocalGemmaPostProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaPostProcessorTests.swift; sourceTree = "<group>"; };
 		CB8BDFE6C9896219254CC03D /* AudioRingBuffer.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = AudioRingBuffer.c; sourceTree = "<group>"; };
+		CC6A8B97E32A1B176E54F18C /* ComputerUseIndicatorPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseIndicatorPresenter.swift; sourceTree = "<group>"; };
 		CE6DBCE0BBD218C71FFFA9A4 /* ComputerUseApplicationCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseApplicationCatalogTests.swift; sourceTree = "<group>"; };
 		CF1DD54B813C7230F0B16B34 /* MagicFormatOutputPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatOutputPolicy.swift; sourceTree = "<group>"; };
 		CF483C4F8F43B591D1E13ABA /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -780,6 +782,7 @@
 				095EB5A6DAE3904492FBB2D9 /* ComputerUseCoordinator.swift */,
 				DE5095ABED2B7F2B3FD6E030 /* ComputerUseCursorOverlayController.swift */,
 				A078FB8F387695BDA59615EB /* ComputerUseCursorPresentation.swift */,
+				CC6A8B97E32A1B176E54F18C /* ComputerUseIndicatorPresenter.swift */,
 				C4A56768AB5F4A5EEDF7A7B2 /* ComputerUseInputTranslation.swift */,
 				ACD8C594890A1EC0B70D9120 /* ComputerUseInterventionChannel.swift */,
 				42F1C02C57E67331C707FC09 /* ComputerUseKeyChord.swift */,
@@ -1017,6 +1020,7 @@
 				BFDB45CB069C025CECF01143 /* ComputerUseCoordinator.swift in Sources */,
 				7F9E9217F6F55113E889B867 /* ComputerUseCursorOverlayController.swift in Sources */,
 				04CCDD36CBA6C757037A8BFE /* ComputerUseCursorPresentation.swift in Sources */,
+				2FCF4B20D8E07CE3A3B00EDD /* ComputerUseIndicatorPresenter.swift in Sources */,
 				BA7AA29E9FC6D0523562AD61 /* ComputerUseInputTranslation.swift in Sources */,
 				8A9BAD0F96CA3E5803DDE0B1 /* ComputerUseInterventionChannel.swift in Sources */,
 				55ABF25461C39CFCAE868B77 /* ComputerUseKeyChord.swift in Sources */,

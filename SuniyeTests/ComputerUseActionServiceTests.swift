@@ -2,27 +2,13 @@ import XCTest
 @testable import Suniye
 
 final class ComputerUseActionServiceTests: XCTestCase {
-    func testMouseEventDescriptorTargetsObservedWindowUsingLocalCoordinates() {
-        let descriptor = ComputerUseMouseEventDescriptor(
+    func testWindowEventLocationFlipsWindowLocalYCoordinate() {
+        let location = computerUseWindowEventLocation(
             screenPoint: CGPoint(x: 140, y: 90),
-            windowID: 9,
-            windowBounds: CGRect(x: 100, y: 50, width: 200, height: 100),
-            windowUsesFlippedCoordinates: false
+            windowBounds: CGRect(x: 100, y: 50, width: 200, height: 100)
         )
 
-        XCTAssertEqual(descriptor.eventLocation, CGPoint(x: 40, y: 40))
-        XCTAssertEqual(descriptor.windowID, 9)
-    }
-
-    func testMouseEventDescriptorFlipsWindowLocalYCoordinateWhenRequired() {
-        let descriptor = ComputerUseMouseEventDescriptor(
-            screenPoint: CGPoint(x: 140, y: 90),
-            windowID: 9,
-            windowBounds: CGRect(x: 100, y: 50, width: 200, height: 100),
-            windowUsesFlippedCoordinates: true
-        )
-
-        XCTAssertEqual(descriptor.eventLocation, CGPoint(x: 40, y: 60))
+        XCTAssertEqual(location, CGPoint(x: 40, y: 60))
     }
 
     func testActionErrorsHaveUserReadableDescriptions() {
@@ -651,8 +637,7 @@ private func computerUseTestInputTarget() -> ComputerUseInputEventTarget {
     ComputerUseInputEventTarget(
         processIdentifier: 42,
         windowID: 9,
-        windowBounds: CGRect(x: 100, y: 50, width: 200, height: 100),
-        windowUsesFlippedCoordinates: true
+        windowBounds: CGRect(x: 100, y: 50, width: 200, height: 100)
     )
 }
 

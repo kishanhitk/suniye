@@ -613,7 +613,6 @@ final class AppState {
     @ObservationIgnored private var hasTrackedMagicFormatNudgeShown = false
     @ObservationIgnored private var firstLaunchRecorded = false
     @ObservationIgnored private var lastKnownAccessibilityGranted = false
-    private var isComputerUsePageActive = false
     private var magicFormatNudgeDismissed = false {
         didSet {
             guard !isHydratingGeneralSettings, oldValue != magicFormatNudgeDismissed else {
@@ -1618,7 +1617,11 @@ final class AppState {
     private var activeRecordingSource: RecordingSource? { activeDictationSession?.context.source }
     private var recordingStart: Date? { activeDictationSession?.context.startedAt }
     private var overlayErrorResetTask: Task<Void, Never>?
-    private var computerUseIndicatorResetTask: Task<Void, Never>?
+    @ObservationIgnored private lazy var computerUseIndicatorPresenter = ComputerUseIndicatorPresenter(
+        currentState: { [weak self] in self?.floatingIndicatorState ?? .idle },
+        setState: { [weak self] state in self?.setFloatingIndicatorState(state) },
+        showError: { [weak self] message in self?.showTransientIndicatorError(message) }
+    )
     private var isShowingInsertionRecoveryWarning = false
     private var asrDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
@@ -3358,13 +3361,12 @@ final class AppState {
     }
 
     func setComputerUsePageActive(_ isActive: Bool) {
-        isComputerUsePageActive = isActive
+        computerUseCoordinator.isPageActive = isActive
     }
 
     func startNewComputerUseConversation() {
         guard !computerUseCoordinator.isRunning else { return }
-        computerUseIndicatorResetTask?.cancel()
-        computerUseIndicatorResetTask = nil
+        computerUseIndicatorPresenter.cancelReset()
         computerUseCoordinator.startNewConversation()
         setFloatingIndicatorState(.idle)
     }
@@ -4734,45 +4736,11 @@ final class AppState {
     }
 
     private func handleComputerUsePhaseChange(_ phase: ComputerUseCoordinatorPhase) {
-        switch phase {
-        case .running:
-            computerUseIndicatorResetTask?.cancel()
-            computerUseIndicatorResetTask = nil
-            guard activeDictationSession == nil else { return }
-            setFloatingIndicatorState(.computerUseWorking)
-        case .completed:
-            guard activeDictationSession == nil else { return }
-            showComputerUseCompletedIndicator()
-        case .cancelled:
-            computerUseIndicatorResetTask?.cancel()
-            computerUseIndicatorResetTask = nil
-            guard activeDictationSession == nil else { return }
-            setFloatingIndicatorState(.idle)
-        case .failed:
-            computerUseIndicatorResetTask?.cancel()
-            computerUseIndicatorResetTask = nil
-            guard activeDictationSession == nil else { return }
-            showTransientIndicatorError(
-                computerUseCoordinator.errorMessage ?? "Computer Use failed"
-            )
-        case .idle, .checkingPermissions, .requestingPermission, .ready:
-            break
-        }
-    }
-
-    private func showComputerUseCompletedIndicator() {
-        computerUseIndicatorResetTask?.cancel()
-        setFloatingIndicatorState(.computerUseCompleted)
-        computerUseIndicatorResetTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 1_400_000_000)
-            guard let self, !Task.isCancelled else { return }
-            guard self.floatingIndicatorState == .computerUseCompleted else {
-                self.computerUseIndicatorResetTask = nil
-                return
-            }
-            self.setFloatingIndicatorState(.idle)
-            self.computerUseIndicatorResetTask = nil
-        }
+        computerUseIndicatorPresenter.handlePhase(
+            phase,
+            errorMessage: computerUseCoordinator.errorMessage,
+            indicatorAvailable: activeDictationSession == nil
+        )
     }
 
     private func startMagicFormatSlowWarningTask() -> Task<Void, Never> {
@@ -4876,7 +4844,7 @@ final class AppState {
         if activeOnboardingStep == .speak {
             return .onboardingPractice
         }
-        if isComputerUsePageActive {
+        if computerUseCoordinator.isPageActive {
             return .computerUseTask
         }
         return hasAccessibilityPermission ? .systemInsertion : .clipboardOnly

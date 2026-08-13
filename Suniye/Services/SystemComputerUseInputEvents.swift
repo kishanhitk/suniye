@@ -5,23 +5,17 @@ struct ComputerUseInputEventTarget: Equatable, Sendable {
     let processIdentifier: Int32
     let windowID: UInt32
     let windowBounds: CGRect
-    let windowUsesFlippedCoordinates: Bool
 }
 
-struct ComputerUseMouseEventDescriptor: Equatable, Sendable {
-    let screenPoint: CGPoint
-    let windowID: UInt32
-    let windowBounds: CGRect
-    let windowUsesFlippedCoordinates: Bool
-
-    var eventLocation: CGPoint {
-        let localX = screenPoint.x - windowBounds.minX
-        let localY = screenPoint.y - windowBounds.minY
-        return CGPoint(
-            x: localX,
-            y: windowUsesFlippedCoordinates ? windowBounds.height - localY : localY
-        )
-    }
+/// CGEvent locations are window-local with a flipped (top-left origin) Y axis.
+func computerUseWindowEventLocation(
+    screenPoint: CGPoint,
+    windowBounds: CGRect
+) -> CGPoint {
+    CGPoint(
+        x: screenPoint.x - windowBounds.minX,
+        y: windowBounds.height - (screenPoint.y - windowBounds.minY)
+    )
 }
 
 struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
@@ -237,23 +231,20 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
         button: CGMouseButton,
         target: ComputerUseInputEventTarget
     ) {
-        let descriptor = ComputerUseMouseEventDescriptor(
-            screenPoint: screenPoint,
-            windowID: target.windowID,
-            windowBounds: target.windowBounds,
-            windowUsesFlippedCoordinates: target.windowUsesFlippedCoordinates
-        )
         event.setIntegerValueField(.mouseEventButtonNumber, value: Int64(button.rawValue))
         event.setIntegerValueField(.mouseEventSubtype, value: 0)
         event.setIntegerValueField(
             .mouseEventWindowUnderMousePointer,
-            value: Int64(descriptor.windowID)
+            value: Int64(target.windowID)
         )
         event.setIntegerValueField(
             .mouseEventWindowUnderMousePointerThatCanHandleThisEvent,
-            value: Int64(descriptor.windowID)
+            value: Int64(target.windowID)
         )
-        event.location = descriptor.eventLocation
+        event.location = computerUseWindowEventLocation(
+            screenPoint: screenPoint,
+            windowBounds: target.windowBounds
+        )
     }
 }
 

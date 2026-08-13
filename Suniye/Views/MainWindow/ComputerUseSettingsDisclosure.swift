@@ -98,10 +98,12 @@ struct ComputerUseSettingsDisclosure: View {
                 }
             }
 
-            if let message = modelStatusMessage {
+            if let message = modelSettings.status.message {
                 Text(message)
                     .font(AppTypography.caption)
-                    .foregroundStyle(modelStatusIsError ? Color.red : MainWindowPalette.secondaryText)
+                    .foregroundStyle(
+                        modelSettings.status.isError ? Color.red : MainWindowPalette.secondaryText
+                    )
                     .textSelection(.enabled)
             }
 
@@ -127,42 +129,9 @@ struct ComputerUseSettingsDisclosure: View {
         }
     }
 
-    private var modelStatusMessage: String? {
-        if let error = modelSettings.settings.modelValidationError
-            ?? modelSettings.settings.endpointValidationError
-            ?? modelSettings.credentialError {
-            return error
-        }
-        switch modelSettings.connectionState {
-        case .idle:
-            guard modelSettings.hasAPIKey else {
-                return "Enter an API key to enable Computer Use."
-            }
-            return modelSettings.settings.provider == .openRouter
-                ? "OpenRouter API key shared with Magic Format."
-                : "Computer Use API key saved in Keychain."
-        case .testing:
-            return "Testing connection…"
-        case .connected:
-            return "Connected."
-        case let .failed(message):
-            return message
-        }
-    }
-
     private var apiKeyPlaceholder: String {
         if modelSettings.hasAPIKey { return "Saved" }
         return "Required"
-    }
-
-    private var modelStatusIsError: Bool {
-        if modelSettings.settings.modelValidationError != nil
-            || modelSettings.settings.endpointValidationError != nil
-            || modelSettings.credentialError != nil {
-            return true
-        }
-        if case .failed = modelSettings.connectionState { return true }
-        return false
     }
 
     private func permissionRow(

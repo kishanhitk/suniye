@@ -38,6 +38,11 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         var task: Task<Void, Never>?
     }
 
+    /// True while the Computer Use page is on screen. Dictation with no
+    /// explicit destination routes here so spoken text lands in the
+    /// conversation instead of the focused text field.
+    @ObservationIgnored var isPageActive = false
+
     @ObservationIgnored var onPhaseChange: ((ComputerUseCoordinatorPhase) -> Void)?
     @ObservationIgnored private let permissions: any ComputerUsePermissionServing
     @ObservationIgnored private let permissionSettings:

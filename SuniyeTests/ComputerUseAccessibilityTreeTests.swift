@@ -235,17 +235,6 @@ final class ComputerUseAccessibilityTreeTests: XCTestCase {
         )
     }
 
-    func testPrimaryClickUsesReferenceSemanticOrderOnlyForSingleClicks() {
-        XCTAssertEqual(
-            ComputerUseAccessibilityActionResolver.primaryClickOperations(clickCount: 1),
-            [.pick, .press]
-        )
-        XCTAssertEqual(
-            ComputerUseAccessibilityActionResolver.primaryClickOperations(clickCount: 2),
-            []
-        )
-    }
-
     func testInsertedElementGetsNewIDAndRemovedElementLeavesCurrentMap() async {
         let store = ComputerUseAccessibilityRevisionStore()
         _ = await store.revision(
