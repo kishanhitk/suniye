@@ -52,7 +52,9 @@ Suniye/Services/
   VoiceTurnEndpointer.swift       pure logic: speech-end detection over level/VAD frames
   VoiceActivationStateMachine.swift  pure value type: Off/Ready/Listening/Working/NeedsInput/Terminal
   VoiceActivationController.swift @MainActor @Observable; owns the loop, bridges everything
+  SpeechOutputService.swift       protocol + Fish Audio impl; speaks results/questions aloud
 ```
+
 
 - `WakeWordDetector` — `protocol WakeWordDetecting` + sherpa impl. API:
   `start()`, `accept(samples:[Float], sampleRate:) -> WakeWordHit?`, `reset()`, `stop()`.
@@ -171,7 +173,14 @@ All new logic is behind seams that already have stub patterns in `SuniyeTests/Te
    "Try wake phrase" flow in settings.
 4. **Turn capture** — endpointer, turn buffer, live preview, final transcribe,
    `submitVoiceTask` routing; floating indicator states.
-5. **Lifecycle + polish** — sleep/wake, device-change resilience, Escape-stops-run fix, sounds,
+5. **Voice Output** — `SpeechOutputService` (Fish Audio `s2.1-pro`, `POST /v1/tts`, key in
+   Keychain, ~300 ms TTFA in `balanced` mode; request PCM/WAV and play via `AVAudioPlayer`).
+   Speaks Done / Couldn't finish / Needs-input text at turn boundaries. Barge-in: wake hit,
+   Escape, or a new turn cancels playback; the wake detector is suppressed while Suniye speaks
+   (self-wake guard, same mechanism as the cue-sound suppression). Settings rows + one-time
+   disclosure. Streaming via `stream_websocket` is a later upgrade if final-response latency
+   annoys; not needed for v1 since the full text is available when speech starts.
+6. **Lifecycle + polish** — sleep/wake, device-change resilience, Escape-stops-run fix, sounds,
    first-enable notice, e2e script, docs.
 
 Slices 1–2 and 3–4 pair naturally into two PRs if review size matters; otherwise one stacked PR
@@ -182,7 +191,12 @@ on `kis-169-computer-use-parity`.
 - **Real-mic wake accuracy.** TTS-validated only; thresholds (`#0.05` per keyword) must be tuned
   with live audio early in slice 3. The truncated `▁HE Y ▁SU N I` keyword carries recall today;
   false-alarm behavior on real ambient audio is the thing to watch.
+- **Voice Output is a second cloud dependency.** Response text goes to Fish Audio in addition to
+  the Computer Use model provider. Off by default, own key, plain disclosure — but it dilutes the
+  local-only story; a future on-device TTS fallback (AVSpeechSynthesizer) would let privacy-strict
+  users keep spoken output. AVSpeechSynthesizer is also the degradation path when the API fails.
 - **Echo self-trigger.** Media playback or Suniye's own cue sounds could contain wake-like audio.
+  Suniye's own TTS playback is the worst case — the wake detector must be suppressed during it.
   Existing echo-cancellation path (`echoCancellationEnabled`) applies to the engine; verify the
   tap inherits it. Mitigation: suppress detector for ~1 s after our own cue sounds.
 - **Power/privacy.** Mic stays hot in Ready — the orange mic indicator is permanent while

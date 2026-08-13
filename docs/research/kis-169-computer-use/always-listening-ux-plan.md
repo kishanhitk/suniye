@@ -41,7 +41,9 @@ Computer Use settings contain a **Voice Activation** section with:
 - a short **Try wake phrase** flow;
 - an optional global shortcut to toggle Voice Activation;
 - a sound-feedback toggle;
-- the selected microphone and a shortcut to microphone settings.
+- the selected microphone and a shortcut to microphone settings;
+- a **Voice Output** subsection: an on/off toggle (off by default), a voice picker, and the
+  provider API key. Enabling it explains that response text is sent to the speech provider.
 
 Turning Voice Activation on for the first time explains that the microphone remains in use while
 Suniye waits for the wake phrase. The user must confirm this once. This is an enablement notice,
@@ -217,9 +219,32 @@ button and a second Stop action below the status.
 Audio feedback is subtle and optional. Sounds distinguish wake-up, end of turn, needs input, and
 completion without reading the task aloud.
 
+## Spoken responses (Voice Output)
+
+When Voice Output is enabled, Suniye speaks at turn boundaries — and only there:
+
+- **Done**: the final response is read aloud.
+- **Couldn't finish**: the short reason is read aloud.
+- **Needs input**: the question is read aloud so the user can answer hands-free.
+
+Rules:
+
+- Step statuses, tool activity, and intermediate thoughts are never spoken. The existing
+  non-goal stands.
+- Speech is **interruptible (barge-in)**: saying the wake phrase, pressing Escape, or starting
+  any new turn stops playback immediately. Suniye must not wake itself from its own speech.
+- The sensitive-information rule extends to speech: content the indicator must not display,
+  the voice must not read aloud.
+- Voice Output is off by default and independent of Voice Activation — either can be on alone.
+- If speech synthesis fails or is slow, the visual result appears immediately regardless;
+  speech is additive, never load-bearing.
+
 ## Privacy and trust UX
 
 - Voice Activation is off by default.
+- Voice Output sends response text to a speech provider — a second cloud service beyond the
+  Computer Use model provider. It is off by default, uses its own key, and its enablement flow
+  states plainly what is sent (response text; never audio, never the wake stream).
 - The microphone-in-use state is always visible in the menu bar and through normal macOS privacy
   indicators.
 - Settings explain, in plain language, the difference between waiting for the wake phrase and
@@ -293,3 +318,5 @@ The UX is ready for implementation when the following can be tested from a user�
 8. False wake-ups and empty speech do not create tasks.
 9. Missing permissions and provider failures are recoverable without losing the spoken request.
 10. The user can use the existing hold-to-talk route with Voice Activation disabled.
+11. With Voice Output on, results and questions are spoken; speaking the wake phrase or pressing
+    Escape interrupts playback instantly, and Suniye never wakes itself from its own speech.

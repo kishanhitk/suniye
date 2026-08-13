@@ -470,6 +470,7 @@
     <button class="ctl" data-need="running" onclick="userStop('escape')"><kbd>esc</kbd>&nbsp; Escape</button>
     <button class="ctl" onclick="openChat()">Open Computer Use window</button>
     <button class="ctl" id="vaToggleBtn" onclick="menuToggleVA()">Turn Voice Activation On</button>
+    <button class="ctl" id="voToggleBtn" onclick="toggleVoiceOutput()">Turn Voice Output On</button>
   </div>
 
   <div class="sim-log" id="simLog"></div>
@@ -620,6 +621,21 @@
       <div><div class="label">Microphone</div><div class="sub">MacBook Pro Microphone</div></div>
       <button class="mini-btn">Microphone Settings…</button>
     </div>
+
+    <div class="sec-title" style="margin-top:18px">Voice Output</div>
+    <div class="sec-sub">Suniye speaks results and questions aloud. Response text is sent to Fish Audio (s2.1-pro) — off by default.</div>
+    <div class="row">
+      <div><div class="label">Speak responses</div><div class="sub">Done, Couldn’t finish, and Needs-input — never step statuses or tool activity.</div></div>
+      <button class="toggle" id="voSettingsToggle" onclick="toggleVoiceOutput()"></button>
+    </div>
+    <div class="row">
+      <div><div class="label">Voice</div><div class="sub">From the Fish Audio voice library, or a custom reference ID.</div></div>
+      <button class="mini-btn">Ember (default) ▾</button>
+    </div>
+    <div class="row">
+      <div><div class="label">Fish Audio API key</div><div class="sub">Stored in your Keychain. Only response text is sent — never audio.</div></div>
+      <span class="hotkey-chip">fa_••••••••3kq1</span>
+    </div>
   </div>
 
   <!-- ================= ACCEPTANCE ================= -->
@@ -726,6 +742,30 @@ function renderPill(mode, opts = {}) {
   if (mode === 'failed')  { pill.classList.add('failed'); pill.innerHTML = `<span class="cross">✕</span><span>${opts.text}</span><span class="openlink" onclick="openChat()">Open</span>`; }
 }
 
+/* ---------------- voice output (browser TTS stands in for Fish s2.1-pro) ---------------- */
+let voiceOutput = false;
+function toggleVoiceOutput() {
+  voiceOutput = !voiceOutput;
+  window.speechSynthesis && speechSynthesis.cancel();
+  document.getElementById('voToggleBtn').textContent = voiceOutput ? 'Turn Voice Output Off' : 'Turn Voice Output On';
+  document.getElementById('voSettingsToggle').classList.toggle('on', voiceOutput);
+  log(`Voice Output <b>${voiceOutput ? 'on' : 'off'}</b>${voiceOutput ? ' — results and questions will be spoken (simulated with browser TTS; the app uses Fish s2.1-pro)' : ''}`, true);
+}
+function speak(text) {
+  if (!voiceOutput || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 1.05;
+  speechSynthesis.speak(u);
+  log('speaking aloud — wake detector suppressed during playback (self-wake guard). Barge-in: wake phrase, Escape, or a new turn stops it.', true);
+}
+function stopSpeaking(reason) {
+  if (window.speechSynthesis && speechSynthesis.speaking) {
+    speechSynthesis.cancel();
+    log(`speech interrupted (${reason}) — barge-in`, true);
+  }
+}
+
 function setWorkingStatus(text) {
   const el = document.getElementById('workingStatus');
   if (el) el.textContent = text;
@@ -788,6 +828,7 @@ function settingsToggleVA() {
 
 function sayWake() {
   if (state === S.OFF) return;
+  stopSpeaking('wake phrase');
   const during = running;
   state = during ? S.LISTENING_RUNNING : S.LISTENING;
   renderPill('listening', { running: during });
@@ -875,6 +916,7 @@ function sayStop() {
 }
 
 function userStop(source) {
+  stopSpeaking(source === 'escape' ? 'Escape' : 'Stop control');
   if (!running) return;
   clearSilenceTimer();
   log(`<b>${source === 'escape' ? 'Escape' : source === 'pill' ? 'Stop control' : 'menu Stop'}</b> — immediate, non-semantic cancellation`, true);
@@ -890,12 +932,14 @@ function finishRun(kind, text) {
   if (kind === 'done') {
     chatAdd('assistant', 'Your battery is at 91% with Normal condition — no service needed.');
     renderPill('done', { text });
+    speak('Your battery is at 91% with Normal condition. No service needed.');
   } else if (kind === 'stopped') {
     chatAdd('assistant', 'Stopped.');
     renderPill('stopped');
   } else {
     chatAdd('assistant', 'Couldn’t finish — ' + text);
     renderPill('failed', { text: 'Couldn’t finish — ' + text });
+    speak('I couldn’t finish. ' + text);
   }
   log(`terminal state <b>${kind}</b> → brief flash, auto-dismiss, back to Ready. Conversation preserved; next wake-up continues it.`, true);
   setBadge();
@@ -921,7 +965,12 @@ document.addEventListener('click', (e) => {
 /* ---------------- scenarios ---------------- */
 let scenarioTimer = null;
 function playScenario(name) {
+  if (name === 'voice') {                 // criterion 11 demo: start-task flow with speech on
+    if (!voiceOutput) toggleVoiceOutput();
+    name = 'start';
+  }
   clearTimers(); clearRunTimers(); clearSilenceTimer(); clearTimeout(scenarioTimer);
+  stopSpeaking('new scenario');
   document.querySelectorAll('.scenario').forEach(s => s.classList.remove('playing'));
   document.getElementById('sc-' + name).classList.add('playing');
   // reset world
@@ -980,6 +1029,7 @@ const CRITERIA = [
   ["False wake-ups and empty speech do not create tasks", "false"],
   ["Missing permissions and provider failures are recoverable without losing the spoken request", null],
   ["The user can use the existing hold-to-talk route with Voice Activation disabled", null],
+  ["With Voice Output on, results and questions are spoken; wake phrase or Escape interrupts playback instantly, and Suniye never wakes itself from its own speech", "voice"],
 ];
 const critWrap = document.getElementById('criteria');
 CRITERIA.forEach(([text, demo], i) => {
