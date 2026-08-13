@@ -28,13 +28,15 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     }
     var permissionSnapshot: ComputerUsePermissionSnapshot
     var draft = ""
-    var conversation: [ComputerUseConversationMessage] = [] {
-        didSet {
-            conversationStore.save(conversation)
-        }
-    }
+    var conversation: [ComputerUseConversationMessage] = []
     var errorMessage: String?
     var debugSessionID: ComputerUseDebugSessionID?
+
+    private struct ActiveRun {
+        let id: UUID
+        let interventions: ComputerUseInterventionChannel
+        var task: Task<Void, Never>?
+    }
 
     @ObservationIgnored var onPhaseChange: ((ComputerUseCoordinatorPhase) -> Void)?
     @ObservationIgnored private let permissions: any ComputerUsePermissionServing
@@ -44,9 +46,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     @ObservationIgnored private let conversationStore: any ComputerUseConversationStoring
     @ObservationIgnored private let makeAgent: AgentFactory
     @ObservationIgnored private var configuration: ComputerUseRemoteModelConfiguration?
-    @ObservationIgnored private var activeRun: Task<Void, Never>?
-    @ObservationIgnored private var activeRunID: UUID?
-    @ObservationIgnored private var activeInterventions: ComputerUseInterventionChannel?
+    @ObservationIgnored private var activeRun: ActiveRun?
     @ObservationIgnored private var pendingVoiceInstruction: String?
     @ObservationIgnored private var permissionOperationID: UUID?
 
@@ -166,11 +166,11 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         let debugSessionID = ComputerUseDebugSessionID.generate(uuid: runID)
         let history = conversation
         conversation.append(.init(role: .user, text: instruction))
+        persistConversation()
         draft = ""
         errorMessage = nil
         phase = .running
-        activeRunID = runID
-        activeInterventions = interventions
+        activeRun = ActiveRun(id: runID, interventions: interventions, task: nil)
         self.debugSessionID = debugSessionID
         let activitySink = ComputerUseActivitySink { [weak self] activity in
             await self?.appendActivity(activity, for: runID)
@@ -182,11 +182,11 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
             debugSessionID: debugSessionID,
             interventions: interventions
         )
-        activeRun = Task { [weak self] in
+        activeRun?.task = Task { [weak self] in
             let result = await agent.run(task: task)
             guard !Task.isCancelled,
                   let self,
-                  self.activeRunID == runID else {
+                  self.activeRun?.id == runID else {
                 return
             }
             self.finish(result)
@@ -198,23 +198,20 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         guard !normalized.isEmpty else {
             return .rejected(message: "No Computer Use task was transcribed.")
         }
-        if isRunning, let activeInterventions {
+        if isRunning, let activeRun {
             conversation.append(.init(role: .user, text: normalized))
-            activeInterventions.submit(normalized)
+            persistConversation()
+            activeRun.interventions.submit(normalized)
             return .intervened
         }
         guard pendingVoiceInstruction == nil else {
             return .rejected(message: "A Computer Use voice task is already pending.")
         }
 
-        draft = normalized
         pendingVoiceInstruction = normalized
         conversationStore.savePendingVoiceInstruction(normalized)
-        if isModelConfigured && permissionSnapshot.canControlComputer {
-            startPendingVoiceTaskIfPossible()
-            return .started
-        }
-        return .queued
+        draft = normalized
+        return startPendingVoiceTaskIfPossible() ? .started : .queued
     }
 
     func stop() {
@@ -239,6 +236,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         conversationStore.savePendingVoiceInstruction(nil)
         draft = ""
         conversation = []
+        persistConversation()
         errorMessage = nil
         debugSessionID = nil
         phase = .ready
@@ -263,10 +261,11 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
 
     private func finish(_ result: ComputerUseAgentResult) {
         activeRun = nil
-        activeRunID = nil
-        activeInterventions = nil
         cursorSession.endSession()
         appendAssistantMessage(result.message)
+        // The run's activity rows only persist at terminal states; a crash
+        // mid-run loses them, which recovery treats as acceptable.
+        persistConversation()
         switch result.outcome {
         case .completed:
             phase = .completed
@@ -289,10 +288,11 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
             return
         }
         conversation.append(.init(role: .assistant, text: normalized))
+        persistConversation()
     }
 
     private func appendActivity(_ activity: ComputerUseActivity, for runID: UUID) {
-        guard activeRunID == runID else {
+        guard activeRun?.id == runID else {
             return
         }
         if let index = conversation.firstIndex(where: { $0.activity?.id == activity.id }) {
@@ -305,12 +305,14 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         conversation.append(.init(activity: activity))
     }
 
+    private func persistConversation() {
+        conversationStore.save(conversation)
+    }
+
     private func invalidateActiveRun() {
-        activeRun?.cancel()
+        activeRun?.task?.cancel()
+        activeRun?.interventions.removeAll()
         activeRun = nil
-        activeRunID = nil
-        activeInterventions?.removeAll()
-        activeInterventions = nil
     }
 
     func cancelPendingVoiceTask() {
@@ -318,18 +320,20 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         conversationStore.savePendingVoiceInstruction(nil)
     }
 
-    private func startPendingVoiceTaskIfPossible() {
-        guard let instruction = pendingVoiceInstruction,
-              !isBusy,
-              isModelConfigured,
-              permissionSnapshot.canControlComputer else {
-            return
-        }
+    /// The one launch gate for a pending voice instruction. Every async
+    /// completion point that can change the preconditions (model configured,
+    /// permissions refreshed or granted) calls this; the return value reports
+    /// whether a run actually started.
+    @discardableResult
+    private func startPendingVoiceTaskIfPossible() -> Bool {
+        guard let instruction = pendingVoiceInstruction else { return false }
         draft = instruction
+        guard canSubmit else { return false }
         submit()
-        guard isRunning else { return }
+        guard isRunning else { return false }
         pendingVoiceInstruction = nil
         conversationStore.savePendingVoiceInstruction(nil)
+        return true
     }
 
     private static func makeProductionAgent(
