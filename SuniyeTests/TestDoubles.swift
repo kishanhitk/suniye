@@ -513,6 +513,11 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
     var startCaptureError: Error?
     var routeSnapshotError: Error?
     var suspendsStartCapture = false
+    var startListenTapCallCount = 0
+    var stopListenTapCallCount = 0
+    var lastListenTapSessionID: UUID?
+    var startListenTapError: Error?
+    var listenTapFrames: (@Sendable ([Float], Double) -> Void)?
     var onStartCapture: ((UUID) -> Void)?
     var onStopCapture: ((UUID) -> Void)?
     var onCancelCapture: ((UUID) -> Void)?
@@ -555,6 +560,28 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
             throw startCaptureError
         }
         return AudioCaptureSession(id: sessionID, route: route)
+    }
+
+    func startListenTap(
+        sessionID: UUID,
+        preferredInputDeviceID: String?,
+        echoCancellationEnabled: Bool,
+        onFrames: @escaping @Sendable (_ samples: [Float], _ sampleRate: Double) -> Void
+    ) async throws -> AudioCaptureSession {
+        startListenTapCallCount += 1
+        lastListenTapSessionID = sessionID
+        lastPreferredInputDeviceID = preferredInputDeviceID
+        listenTapFrames = onFrames
+        if let startListenTapError {
+            throw startListenTapError
+        }
+        return AudioCaptureSession(id: sessionID, route: route)
+    }
+
+    func stopListenTap(sessionID: UUID) async {
+        stopListenTapCallCount += 1
+        lastListenTapSessionID = sessionID
+        listenTapFrames = nil
     }
 
     func stopCapture(sessionID: UUID) async -> CapturedAudio {
