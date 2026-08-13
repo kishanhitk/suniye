@@ -110,21 +110,14 @@ protocol ComputerUseCredentialStoring {
     func deleteAPIKey() throws
 }
 
-protocol SharedOpenRouterCredentialStoring {
-    func setAPIKey(_ key: String) throws
-    func hasAPIKey() -> Bool
-    func getAPIKey() throws -> String?
-    func deleteAPIKey() throws
-}
-
-struct NoopSharedOpenRouterCredentialStore: SharedOpenRouterCredentialStoring {
+struct NoopSharedOpenRouterCredentialStore: ComputerUseCredentialStoring {
     func setAPIKey(_ key: String) throws { throw KeychainServiceError.writeFailed }
     func hasAPIKey() -> Bool { false }
     func getAPIKey() throws -> String? { nil }
     func deleteAPIKey() throws {}
 }
 
-struct MagicFormatOpenRouterCredentialStore: SharedOpenRouterCredentialStoring {
+struct MagicFormatOpenRouterCredentialStore: ComputerUseCredentialStoring {
     let keychainService: any KeychainServiceProtocol
 
     func setAPIKey(_ key: String) throws { try keychainService.setLLMKey(key) }
@@ -235,14 +228,13 @@ final class ComputerUseModelSettingsController {
         }
     }
     var apiKeyDraft = ""
-    private(set) var hasDedicatedAPIKey: Bool
-    private(set) var usesSharedOpenRouterAPIKey = false
+    private(set) var hasAPIKey = false
     private(set) var credentialError: String?
     private(set) var connectionState: ComputerUseModelConnectionState = .idle
 
     private let settingsStore: ComputerUseModelSettingsStoreProtocol
     private let credentialStore: ComputerUseCredentialStoring
-    private let sharedOpenRouterCredentialStore: SharedOpenRouterCredentialStoring
+    private let sharedOpenRouterCredentialStore: ComputerUseCredentialStoring
     private let connectionTester: ComputerUseModelConnectionTesting
     private let onConfigurationChange: (ComputerUseRemoteModelConfiguration?) -> Void
     @ObservationIgnored var onSharedOpenRouterCredentialChange: (() -> Void)?
@@ -250,7 +242,7 @@ final class ComputerUseModelSettingsController {
     init(
         settingsStore: ComputerUseModelSettingsStoreProtocol = ComputerUseModelSettingsStore(),
         credentialStore: ComputerUseCredentialStoring = ComputerUseCredentialStore(),
-        sharedOpenRouterCredentialStore: SharedOpenRouterCredentialStoring =
+        sharedOpenRouterCredentialStore: ComputerUseCredentialStoring =
             NoopSharedOpenRouterCredentialStore(),
         connectionTester: ComputerUseModelConnectionTesting = ComputerUseModelConnectionTester(),
         onConfigurationChange: @escaping (ComputerUseRemoteModelConfiguration?) -> Void = { _ in }
@@ -261,16 +253,46 @@ final class ComputerUseModelSettingsController {
         self.connectionTester = connectionTester
         self.onConfigurationChange = onConfigurationChange
         settings = settingsStore.load()
-        hasDedicatedAPIKey = credentialStore.hasAPIKey()
         refreshCredentialState()
     }
 
-    var hasAPIKey: Bool {
-        settings.provider == .openRouter ? usesSharedOpenRouterAPIKey : hasDedicatedAPIKey
+    /// OpenRouter shares Magic Format's key; every other provider uses the
+    /// dedicated Computer Use keychain entry. This is the only place that
+    /// chooses between them.
+    private var activeCredentialStore: ComputerUseCredentialStoring {
+        settings.provider == .openRouter ? sharedOpenRouterCredentialStore : credentialStore
     }
 
     var modelConfiguration: ComputerUseRemoteModelConfiguration? {
         settings.configuration(apiKey: effectiveAPIKey)
+    }
+
+    /// The one derivation of the settings-status line and its severity; the
+    /// view renders this verbatim.
+    var status: (message: String?, isError: Bool) {
+        if let error = settings.modelValidationError
+            ?? settings.endpointValidationError
+            ?? credentialError {
+            return (error, true)
+        }
+        switch connectionState {
+        case .idle:
+            guard hasAPIKey else {
+                return ("Enter an API key to enable Computer Use.", false)
+            }
+            return (
+                settings.provider == .openRouter
+                    ? "OpenRouter API key shared with Magic Format."
+                    : "Computer Use API key saved in Keychain.",
+                false
+            )
+        case .testing:
+            return ("Testing connection…", false)
+        case .connected:
+            return ("Connected.", false)
+        case let .failed(message):
+            return (message, true)
+        }
     }
 
     var isReady: Bool { modelConfiguration != nil }
@@ -287,11 +309,9 @@ final class ComputerUseModelSettingsController {
             return
         }
         do {
+            try activeCredentialStore.setAPIKey(value)
             if settings.provider == .openRouter {
-                try sharedOpenRouterCredentialStore.setAPIKey(value)
                 onSharedOpenRouterCredentialChange?()
-            } else {
-                try credentialStore.setAPIKey(value)
             }
             apiKeyDraft = ""
             credentialError = nil
@@ -304,11 +324,9 @@ final class ComputerUseModelSettingsController {
 
     func clearAPIKey() {
         do {
+            try activeCredentialStore.deleteAPIKey()
             if settings.provider == .openRouter {
-                try sharedOpenRouterCredentialStore.deleteAPIKey()
                 onSharedOpenRouterCredentialChange?()
-            } else {
-                try credentialStore.deleteAPIKey()
             }
             apiKeyDraft = ""
             credentialError = nil
@@ -336,16 +354,11 @@ final class ComputerUseModelSettingsController {
     }
 
     private var effectiveAPIKey: String? {
-        if settings.provider == .openRouter {
-            return normalizedAPIKey(try? sharedOpenRouterCredentialStore.getAPIKey())
-        }
-        return normalizedAPIKey(try? credentialStore.getAPIKey())
+        normalizedAPIKey(try? activeCredentialStore.getAPIKey())
     }
 
     private func refreshCredentialState() {
-        hasDedicatedAPIKey = credentialStore.hasAPIKey()
-        usesSharedOpenRouterAPIKey = settings.provider == .openRouter
-            && sharedOpenRouterCredentialStore.hasAPIKey()
+        hasAPIKey = activeCredentialStore.hasAPIKey()
     }
 
     private func normalizedAPIKey(_ value: String?) -> String? {

@@ -200,8 +200,7 @@ struct ComputerUsePage: View {
         if !coordinator.isModelConfigured {
             return "Configure a model below to start."
         }
-        if coordinator.permissionSnapshot.accessibility != .granted
-            || coordinator.permissionSnapshot.screenRecording != .granted {
+        if !coordinator.permissionSnapshot.canControlComputer {
             return "Grant the required permissions below to start."
         }
         if case .failed = coordinator.phase {

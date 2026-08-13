@@ -8,24 +8,12 @@ struct SystemComputerUseAccessibilityActions: ComputerUseAccessibilityActionPerf
         clickCount: Int
     ) async throws -> Bool {
         try await run(reference: reference, target: target) { worker, element in
-            for operation in ComputerUseAccessibilityActionResolver.primaryClickOperations(
-                clickCount: clickCount
-            ) {
-                switch operation {
-                case .pick:
-                    if try worker.performPrimaryActionIfPossible(
-                        ComputerUseAccessibilityActionResolver.pickAction,
-                        on: element
-                    ) {
-                        return true
-                    }
-                case .press:
-                    if try worker.performPrimaryActionIfPossible(
-                        kAXPressAction as String,
-                        on: element
-                    ) {
-                        return true
-                    }
+            // AX actions only cover single clicks; multi-clicks fall through
+            // to synthetic mouse events.
+            guard clickCount == 1 else { return false }
+            for action in [ComputerUseAccessibilityActionResolver.pickAction, kAXPressAction as String] {
+                if try worker.performPrimaryActionIfPossible(action, on: element) {
+                    return true
                 }
             }
             return false
@@ -241,10 +229,8 @@ private struct Worker: Sendable {
             throw ComputerUseActionError.staleObservation(target.application.displayName)
         }
         let app = AXUIElementCreateApplication(pid)
-        let windowResult = SystemComputerUseAccessibilityAPI.applicationWindows(from: app)
-        let windows = windowResult.error == .success
-            ? SystemComputerUseAccessibilityAPI.elements(from: windowResult.value)
-            : []
+        let windowResult = SystemComputerUseAccessibilityAPI.applicationWindowElements(from: app)
+        let windows = windowResult.error == .success ? windowResult.windows : []
         guard windows.indices.contains(target.window.accessibilityOrdinal) else {
             throw ComputerUseActionError.staleObservation(target.application.displayName)
         }

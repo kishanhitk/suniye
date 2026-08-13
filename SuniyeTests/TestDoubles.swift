@@ -626,22 +626,11 @@ final class StubHotkeyService: HotkeyServiceProtocol {
     var onCancel: (() -> Bool)?
     var onPasteLastTranscript: (() -> Void)?
     private(set) var startMonitoringCallCount = 0
-    private(set) var lastConfiguration: HotkeyConfiguration?
-    private(set) var lastEditModeConfiguration: HotkeyConfiguration?
-    private(set) var lastComputerUseConfiguration: HotkeyConfiguration?
-    private(set) var lastPasteLastTranscriptConfiguration: HotkeyConfiguration?
+    private(set) var lastAssignments: HotkeySlotAssignments?
 
-    func startMonitoring(
-        configuration: HotkeyConfiguration,
-        editModeConfiguration: HotkeyConfiguration?,
-        computerUseConfiguration: HotkeyConfiguration?,
-        pasteLastTranscriptConfiguration: HotkeyConfiguration
-    ) {
+    func startMonitoring(assignments: HotkeySlotAssignments) {
         startMonitoringCallCount += 1
-        lastConfiguration = configuration
-        lastEditModeConfiguration = editModeConfiguration
-        lastComputerUseConfiguration = computerUseConfiguration
-        lastPasteLastTranscriptConfiguration = pasteLastTranscriptConfiguration
+        lastAssignments = assignments
     }
 
     func stopMonitoring() {}

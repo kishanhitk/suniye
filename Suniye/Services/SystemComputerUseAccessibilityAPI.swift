@@ -6,11 +6,6 @@ struct ComputerUseAccessibilityActionDescriptor: Equatable, Sendable {
     let exposedName: String
 }
 
-enum ComputerUsePrimaryClickOperation: Equatable {
-    case pick
-    case press
-}
-
 enum ComputerUseAccessibilityActionResolver {
     static let pickAction = "AXPick"
 
@@ -41,9 +36,6 @@ enum ComputerUseAccessibilityActionResolver {
         return matches.count == 1 ? matches[0].rawName : nil
     }
 
-    static func primaryClickOperations(clickCount: Int) -> [ComputerUsePrimaryClickOperation] {
-        clickCount == 1 ? [.pick, .press] : []
-    }
 }
 
 enum SystemComputerUseAccessibilityAPI {
@@ -68,7 +60,16 @@ enum SystemComputerUseAccessibilityAPI {
         return elements(from: value)
     }
 
-    static func applicationWindows(from application: AXUIElement)
+    /// The canonical windows-of-application unwrap. Callers map a non-success
+    /// error into their own domain; the raw `AXError` is preserved for that.
+    static func applicationWindowElements(from application: AXUIElement)
+        -> (error: AXError, windows: [AXUIElement])
+    {
+        let result = applicationWindows(from: application)
+        return (result.error, elements(from: result.value))
+    }
+
+    private static func applicationWindows(from application: AXUIElement)
         -> (error: AXError, value: CFTypeRef?)
     {
         let result = copy(kAXWindowsAttribute, from: application)

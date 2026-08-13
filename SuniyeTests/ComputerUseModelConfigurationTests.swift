@@ -119,8 +119,6 @@ final class ComputerUseModelConfigurationTests: XCTestCase {
 
         XCTAssertEqual(controller.modelConfiguration?.apiKey, "shared-key")
         XCTAssertTrue(controller.hasAPIKey)
-        XCTAssertFalse(controller.hasDedicatedAPIKey)
-        XCTAssertTrue(controller.usesSharedOpenRouterAPIKey)
     }
 
     func testOpenRouterAlwaysUsesSharedCredentialInsteadOfDedicatedCredential() {
@@ -137,8 +135,6 @@ final class ComputerUseModelConfigurationTests: XCTestCase {
 
         XCTAssertEqual(controller.modelConfiguration?.apiKey, "shared-key")
         XCTAssertTrue(controller.hasAPIKey)
-        XCTAssertTrue(controller.hasDedicatedAPIKey)
-        XCTAssertTrue(controller.usesSharedOpenRouterAPIKey)
     }
 
     func testSharedOpenRouterKeyIsNotUsedForOtherProviders() {
@@ -207,7 +203,7 @@ final class ComputerUseModelConfigurationTests: XCTestCase {
         appState.saveLLMAPIKey("shared-openrouter-key")
 
         XCTAssertTrue(appState.computerUseCoordinator.isModelConfigured)
-        XCTAssertTrue(appState.computerUseModelSettings.usesSharedOpenRouterAPIKey)
+        XCTAssertTrue(appState.computerUseModelSettings.hasAPIKey)
 
         appState.clearLLMAPIKey()
 

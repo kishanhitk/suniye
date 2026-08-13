@@ -12,11 +12,8 @@ enum ComputerUseRuntimeError: LocalizedError, Equatable, Sendable {
     }
 }
 
-struct ComputerUseRuntimeAuthorization: Equatable, Sendable {}
-
 protocol ComputerUseRuntimeGuarding: Sendable {
-    func prepareForObservation() async throws -> ComputerUseRuntimeAuthorization
-    func validateAction(_ authorization: ComputerUseRuntimeAuthorization) async throws
+    func ensureScreenUnlocked() async throws
 }
 
 protocol ComputerUseScreenLockChecking: Sendable {
@@ -32,16 +29,7 @@ struct ComputerUseRuntimeGuard: ComputerUseRuntimeGuarding {
         self.screenLock = screenLock
     }
 
-    func prepareForObservation() async throws -> ComputerUseRuntimeAuthorization {
-        try await requireUnlockedScreen()
-        return ComputerUseRuntimeAuthorization()
-    }
-
-    func validateAction(_ authorization: ComputerUseRuntimeAuthorization) async throws {
-        try await requireUnlockedScreen()
-    }
-
-    private func requireUnlockedScreen() async throws {
+    func ensureScreenUnlocked() async throws {
         guard !(await screenLock.isScreenLocked()) else {
             throw ComputerUseRuntimeError.screenLocked
         }

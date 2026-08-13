@@ -167,18 +167,20 @@ struct ComputerUseActionService: ComputerUseActionServing {
         switch request.target {
         case let .element(index):
             let reference = try element(index, in: context)
-            let cursorPoint: CGPoint?
+            // A center() failure is held, not thrown: the AX-only click below
+            // can still succeed without a screen point. It resurfaces only if
+            // synthetic input ends up needing that point.
+            let centerResult: Result<CGPoint, Error>
             do {
-                cursorPoint = try await accessibility.center(
-                    reference: reference,
-                    target: context.target
+                centerResult = .success(
+                    try await accessibility.center(reference: reference, target: context.target)
                 )
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                cursorPoint = nil
+                centerResult = .failure(error)
             }
-            if let cursorPoint {
+            if case let .success(cursorPoint) = centerResult {
                 try await presentClick(
                     request,
                     at: cursorPoint,
@@ -194,20 +196,8 @@ struct ComputerUseActionService: ComputerUseActionServing {
                ) {
                 return
             }
-            let point: CGPoint
-            if let cursorPoint {
-                point = cursorPoint
-            } else {
-                point = try await accessibility.center(reference: reference, target: context.target)
-                try await presentClick(
-                    request,
-                    at: point,
-                    processIdentifier: pid,
-                    context: context
-                )
-            }
             try await input.click(
-                at: point,
+                at: centerResult.get(),
                 mouseButton: request.mouseButton,
                 clickCount: request.clickCount,
                 target: inputTarget(context, processIdentifier: pid)
@@ -385,8 +375,7 @@ struct ComputerUseActionService: ComputerUseActionServing {
         ComputerUseInputEventTarget(
             processIdentifier: processIdentifier,
             windowID: context.target.window.id,
-            windowBounds: context.target.window.bounds,
-            windowUsesFlippedCoordinates: true
+            windowBounds: context.target.window.bounds
         )
     }
 

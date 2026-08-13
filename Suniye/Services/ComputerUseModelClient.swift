@@ -77,6 +77,11 @@ struct ComputerUseModelMessage: Encodable, Equatable, Sendable {
             toolCallID: nil
         )
     }
+
+    /// The one shape a screenshot takes in model context, live and replayed.
+    static func screenshot(app: String, dataURL: String) -> Self {
+        .image(role: .user, text: "Current \(app) screenshot.", dataURL: dataURL)
+    }
 }
 
 enum ComputerUseModelContent: Encodable, Equatable, Sendable {

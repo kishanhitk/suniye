@@ -97,13 +97,15 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
         private func requiredApplicationWindows(from application: AXUIElement) throws
             -> [AXUIElement]
         {
-            let result = SystemComputerUseAccessibilityAPI.applicationWindows(from: application)
+            let result = SystemComputerUseAccessibilityAPI.applicationWindowElements(
+                from: application
+            )
             guard result.error == .success else {
                 throw ComputerUseAccessibilitySnapshotError.attributeUnavailable(
                     kAXWindowsAttribute
                 )
             }
-            return SystemComputerUseAccessibilityAPI.elements(from: result.value)
+            return result.windows
         }
 
         private func string(_ attribute: String, from element: AXUIElement) -> String? {

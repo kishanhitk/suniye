@@ -45,11 +45,13 @@ struct SystemComputerUseWindowInventory: ComputerUseWindowInventoryProviding {
     private func requiredApplicationWindows(from application: AXUIElement) throws
         -> [AXUIElement]
     {
-        let result = SystemComputerUseAccessibilityAPI.applicationWindows(from: application)
+        let result = SystemComputerUseAccessibilityAPI.applicationWindowElements(
+            from: application
+        )
         guard result.error == .success else {
             throw ComputerUseWindowInventoryError.accessibilityFailure(result.error.rawValue)
         }
-        return SystemComputerUseAccessibilityAPI.elements(from: result.value)
+        return result.windows
     }
 
     private func bounds(of element: AXUIElement) -> CGRect? {

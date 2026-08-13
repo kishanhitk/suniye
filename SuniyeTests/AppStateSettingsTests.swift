@@ -1008,8 +1008,8 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hotkeyConfiguration = .keyCombo(keyCode: UInt32(kVK_ANSI_Grave), carbonModifiers: 0)
 
         XCTAssertGreaterThanOrEqual(hotkeyService.startMonitoringCallCount, 2)
-        XCTAssertEqual(hotkeyService.lastConfiguration, .keyCombo(keyCode: UInt32(kVK_ANSI_Grave), carbonModifiers: 0))
-        XCTAssertEqual(hotkeyService.lastPasteLastTranscriptConfiguration, .pasteLastTranscriptDefault)
+        XCTAssertEqual(hotkeyService.lastAssignments?.dictation, .keyCombo(keyCode: UInt32(kVK_ANSI_Grave), carbonModifiers: 0))
+        XCTAssertEqual(hotkeyService.lastAssignments?.pasteLastTranscript, .pasteLastTranscriptDefault)
     }
 
     func testChangingPasteLastTranscriptHotkeyPersistsAndRewiresMonitoring() {
@@ -1032,7 +1032,7 @@ final class AppStateSettingsTests: XCTestCase {
 
         XCTAssertEqual(appState.pasteLastTranscriptHotkeyConfiguration, configuration)
         XCTAssertEqual(generalSettingsStore.latest.pasteLastTranscriptHotkeyConfiguration, configuration)
-        XCTAssertEqual(hotkeyService.lastPasteLastTranscriptConfiguration, configuration)
+        XCTAssertEqual(hotkeyService.lastAssignments?.pasteLastTranscript, configuration)
         XCTAssertGreaterThanOrEqual(hotkeyService.startMonitoringCallCount, 2)
     }
 

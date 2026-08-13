@@ -260,24 +260,17 @@ actor RecordingComputerUseSettler: ComputerUseActionSettling {
 
 actor ControllableComputerUseRuntimeGuard: ComputerUseRuntimeGuarding {
     private var isScreenLocked: Bool
-    private(set) var observationCount = 0
+    private(set) var checkCount = 0
 
     init(isScreenLocked: Bool = false) {
         self.isScreenLocked = isScreenLocked
     }
 
-    func prepareForObservation() throws -> ComputerUseRuntimeAuthorization {
+    func ensureScreenUnlocked() throws {
         guard !isScreenLocked else {
             throw ComputerUseRuntimeError.screenLocked
         }
-        observationCount += 1
-        return ComputerUseRuntimeAuthorization()
-    }
-
-    func validateAction(_ authorization: ComputerUseRuntimeAuthorization) throws {
-        guard !isScreenLocked else {
-            throw ComputerUseRuntimeError.screenLocked
-        }
+        checkCount += 1
     }
 
     func recordPhysicalInput() {}

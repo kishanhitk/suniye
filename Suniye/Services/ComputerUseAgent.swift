@@ -91,7 +91,7 @@ struct SystemComputerUseLogger: ComputerUseLogging {
 
 actor ComputerUseAgent: ComputerUseAgentRunning {
     private let model: ComputerUseModelServing
-    private let session: ComputerUseSession
+    private let tools: any ComputerUseToolServing
     private let screenshots: ComputerUseScreenshotLoading
     private let logger: ComputerUseLogging
     private let activitySink: ComputerUseActivitySink
@@ -99,14 +99,14 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
 
     init(
         model: ComputerUseModelServing,
-        session: ComputerUseSession,
+        tools: any ComputerUseToolServing,
         screenshots: ComputerUseScreenshotLoading = SystemComputerUseScreenshotLoader(),
         logger: ComputerUseLogging = SystemComputerUseLogger(),
         activitySink: ComputerUseActivitySink = .disabled,
         contextPolicy: ComputerUseModelContextPolicy = .referenceAligned(modelID: "")
     ) {
         self.model = model
-        self.session = session
+        self.tools = tools
         self.screenshots = screenshots
         self.logger = logger
         self.activitySink = activitySink
@@ -130,11 +130,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         )
         var step = 0
         var lastTargetApp: String?
-        var hasSuccessfulObservation = false
-        var hasPerformedAction = false
-        var needsPostActionObservation = false
-        var requestedCompletionAudit = false
-        var consecutiveUnchangedPostActionObservations = 0
+        var audits = RunAuditState()
         log(.info, "computer use run started", session: debugSessionID)
         do {
             while true {
@@ -145,8 +141,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                     debugSessionID: debugSessionID,
                     messages: &messages
                 ) {
-                    hasSuccessfulObservation = true
-                    needsPostActionObservation = false
+                    audits.noteInterventionObserved()
                 }
                 messages = contextBuilder.compact(
                     messages,
@@ -161,31 +156,15 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                         debugSessionID: debugSessionID,
                         messages: &messages
                     ) {
-                        hasSuccessfulObservation = true
-                        needsPostActionObservation = false
+                        audits.noteInterventionObserved()
                     }
                     continue
                 }
                 switch response {
                 case let .text(text):
-                    if needsPostActionObservation {
+                    if let audit = audits.auditForCompletionAttempt() {
                         messages.append(.text(role: .assistant, text: text))
-                        messages.append(
-                            .text(
-                                role: .user,
-                                text: Self.postActionObservationAudit
-                            )
-                        )
-                        continue
-                    }
-                    if hasSuccessfulObservation,
-                       !hasPerformedAction,
-                       !requestedCompletionAudit {
-                        requestedCompletionAudit = true
-                        messages.append(.text(role: .assistant, text: text))
-                        messages.append(
-                            .text(role: .user, text: Self.completionAudit)
-                        )
+                        messages.append(.text(role: .user, text: audit))
                         continue
                     }
                     log(
@@ -217,27 +196,13 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                         debugSessionID: debugSessionID,
                         messages: &messages
                     )
-                    if let app = execution?.call.targetApp {
-                        lastTargetApp = app
-                    }
-                    if execution?.call.isObservation == true {
-                        hasSuccessfulObservation = true
-                        if needsPostActionObservation,
-                           execution?.observationWasUnchanged == true {
-                            consecutiveUnchangedPostActionObservations += 1
-                        } else {
-                            consecutiveUnchangedPostActionObservations = 0
+                    if let execution {
+                        if let app = execution.call.targetApp {
+                            lastTargetApp = app
                         }
-                        needsPostActionObservation = false
-                        if consecutiveUnchangedPostActionObservations >= 2 {
-                            messages.append(
-                                .text(role: .user, text: Self.unchangedStateRecovery)
-                            )
-                            consecutiveUnchangedPostActionObservations = 0
+                        if let recovery = audits.noteExecuted(execution) {
+                            messages.append(.text(role: .user, text: recovery))
                         }
-                    } else if execution?.call.isAction == true {
-                        hasPerformedAction = true
-                        needsPostActionObservation = true
                     }
                 }
             }
@@ -274,7 +239,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 name: name,
                 arguments: arguments
             )
-            let result = try await session.execute(call)
+            let result = try await tools.execute(call)
             let localResult = try ComputerUseToolResultEncoder.encode(result)
             let modelResult = try ComputerUseModelToolOutput.encode(
                 result,
@@ -292,13 +257,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
             if case let .appState(state) = result,
                let screenshot = state.screenshot,
                let dataURL = try? await screenshots.dataURL(for: screenshot) {
-                messages.append(
-                    .image(
-                        role: .user,
-                        text: "Current \(state.app) screenshot.",
-                        dataURL: dataURL
-                    )
-                )
+                messages.append(.screenshot(app: state.app, dataURL: dataURL))
             }
             let observationWasUnchanged: Bool
             if case let .appState(state) = result {
@@ -380,10 +339,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
     }
 
     private func encodeInterventionObservationArguments(app: String) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        let data = try encoder.encode(InterventionObservationArguments(app: app))
-        return String(decoding: data, as: UTF8.self)
+        try ComputerUseCompactJSON.encode(InterventionObservationArguments(app: app))
     }
 
     private func emitFailure(
@@ -408,6 +364,57 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         session debugSessionID: ComputerUseDebugSessionID
     ) {
         logger.log(level, "\(message) session=\(debugSessionID.rawValue)")
+    }
+
+    /// Cross-iteration audit bookkeeping for the run loop. Every flag
+    /// transition lives here, so the loop body cannot drift per branch.
+    private struct RunAuditState {
+        private var hasSuccessfulObservation = false
+        private var hasPerformedAction = false
+        private var needsPostActionObservation = false
+        private var requestedCompletionAudit = false
+        private var unchangedObservationStreak = 0
+
+        /// An intervention forces a fresh observation into the transcript.
+        mutating func noteInterventionObserved() {
+            hasSuccessfulObservation = true
+            needsPostActionObservation = false
+        }
+
+        /// The audit prompt to inject instead of accepting a text completion,
+        /// or nil when the completion may stand.
+        mutating func auditForCompletionAttempt() -> String? {
+            if needsPostActionObservation {
+                return ComputerUseAgent.postActionObservationAudit
+            }
+            if hasSuccessfulObservation, !hasPerformedAction, !requestedCompletionAudit {
+                requestedCompletionAudit = true
+                return ComputerUseAgent.completionAudit
+            }
+            return nil
+        }
+
+        /// Records an executed tool call. Returns the recovery prompt when
+        /// post-action observations keep reporting an unchanged state.
+        mutating func noteExecuted(_ execution: ComputerUseExecutedToolCall) -> String? {
+            if execution.call.isObservation {
+                if needsPostActionObservation, execution.observationWasUnchanged {
+                    unchangedObservationStreak += 1
+                } else {
+                    unchangedObservationStreak = 0
+                }
+                hasSuccessfulObservation = true
+                needsPostActionObservation = false
+                if unchangedObservationStreak >= 2 {
+                    unchangedObservationStreak = 0
+                    return ComputerUseAgent.unchangedStateRecovery
+                }
+            } else if execution.call.isAction {
+                hasPerformedAction = true
+                needsPostActionObservation = true
+            }
+            return nil
+        }
     }
 
     private static let completionAudit = """

@@ -74,7 +74,7 @@ final class ComputerUseProtocolTests: XCTestCase {
         )
     }
 
-    func testSessionListsAppsWithoutSelectingOrLockingATarget() async throws {
+    func testExecuteListsAppsWithoutSelectingOrLockingATarget() async throws {
         let calculator = ComputerUseApplication(
             id: "/System/Applications/Calculator.app",
             displayName: "Calculator",
@@ -83,21 +83,21 @@ final class ComputerUseProtocolTests: XCTestCase {
             isRunning: true
         )
         let backend = RecordingComputerUseBackend(applications: [calculator])
-        let session = ComputerUseSession(backend: backend)
+        let tools: any ComputerUseToolServing = backend
 
-        let result = try await session.execute(.listApps)
+        let result = try await tools.execute(.listApps)
 
         XCTAssertEqual(result, .applications([calculator]))
-        _ = try await session.execute(.pressKey(app: "Calculator", key: "Return"))
+        _ = try await tools.execute(.pressKey(app: "Calculator", key: "Return"))
         let actionNames = await backend.actionNames
         XCTAssertEqual(actionNames, [.pressKey])
     }
 
-    func testSessionDoesNotImposeAnExactAppIdentifierLock() async throws {
+    func testExecuteDoesNotImposeAnExactAppIdentifierLock() async throws {
         let backend = RecordingComputerUseBackend()
-        let session = ComputerUseSession(backend: backend)
+        let tools: any ComputerUseToolServing = backend
 
-        let state = try await session.execute(
+        let state = try await tools.execute(
             .getAppState(app: "Calculator", disableDiff: false)
         )
         XCTAssertEqual(
@@ -111,10 +111,10 @@ final class ComputerUseProtocolTests: XCTestCase {
             )
         )
 
-        _ = try await session.execute(
+        _ = try await tools.execute(
             .click(ComputerUseClickRequest(app: "com.apple.calculator", elementIndex: 4))
         )
-        _ = try await session.execute(.pressKey(app: "Calculator", key: "Return"))
+        _ = try await tools.execute(.pressKey(app: "Calculator", key: "Return"))
 
         let actionNames = await backend.actionNames
         XCTAssertEqual(actionNames, [.click, .pressKey])
@@ -122,8 +122,8 @@ final class ComputerUseProtocolTests: XCTestCase {
 
     func testEveryActionRoutesThroughTheTypedBackendBoundary() async throws {
         let backend = RecordingComputerUseBackend()
-        let session = ComputerUseSession(backend: backend)
-        _ = try await session.execute(.getAppState(app: "Calculator", disableDiff: true))
+        let tools: any ComputerUseToolServing = backend
+        _ = try await tools.execute(.getAppState(app: "Calculator", disableDiff: true))
 
         let actions: [ComputerUseToolCall] = [
             .click(
@@ -152,7 +152,7 @@ final class ComputerUseProtocolTests: XCTestCase {
         ]
 
         for action in actions {
-            let result = try await session.execute(action)
+            let result = try await tools.execute(action)
             XCTAssertEqual(result, .actionCompleted)
         }
 
@@ -192,68 +192,28 @@ private actor RecordingComputerUseBackend: ComputerUseToolServing {
         self.applications = applications
     }
 
-    func listApps() async throws -> [ComputerUseApplication] {
-        applications
-    }
-
-    func getAppState(app: String, disableDiff: Bool) async throws -> ComputerUseAppState {
-        lastDisableDiff = disableDiff
-        return ComputerUseAppState(
-            app: app,
-            screenshot: URL(fileURLWithPath: "/tmp/\(app.lowercased()).jpg"),
-            text: "0 AXWindow: \(app)"
-        )
-    }
-
-    func click(_ request: ComputerUseClickRequest) async throws {
-        lastClick = request
-        actionNames.append(.click)
-    }
-
-    func performSecondaryAction(app: String, elementIndex: Int, action: String) async throws {
-        actionNames.append(.performSecondaryAction)
-    }
-
-    func setValue(app: String, elementIndex: Int, value: String) async throws {
-        actionNames.append(.setValue)
-    }
-
-    func selectText(
-        app: String,
-        elementIndex: Int,
-        text: String,
-        prefix: String?,
-        suffix: String?,
-        selectionType: ComputerUseTextSelectionType
-    ) async throws {
-        lastSelectionType = selectionType
-        actionNames.append(.selectText)
-    }
-
-    func scroll(
-        app: String,
-        elementIndex: Int,
-        direction: ComputerUseScrollDirection,
-        pages: Double
-    ) async throws {
-        actionNames.append(.scroll)
-    }
-
-    func drag(
-        app: String,
-        fromX: Double,
-        fromY: Double,
-        toX: Double,
-        toY: Double
-    ) async throws {
-        actionNames.append(.drag)
-    }
-
-    func pressKey(app: String, key: String) async throws {
-        actionNames.append(.pressKey)
-    }
-
-    func typeText(app: String, text: String) async throws {
-        actionNames.append(.typeText)
+    @discardableResult
+    func execute(_ call: ComputerUseToolCall) async throws -> ComputerUseToolResult {
+        switch call {
+        case .listApps:
+            return .applications(applications)
+        case let .getAppState(app, disableDiff):
+            lastDisableDiff = disableDiff
+            return .appState(
+                ComputerUseAppState(
+                    app: app,
+                    screenshot: URL(fileURLWithPath: "/tmp/\(app.lowercased()).jpg"),
+                    text: "0 AXWindow: \(app)"
+                )
+            )
+        case let .click(request):
+            lastClick = request
+        case let .selectText(_, _, _, _, _, selectionType):
+            lastSelectionType = selectionType
+        case .performSecondaryAction, .setValue, .scroll, .drag, .pressKey, .typeText:
+            break
+        }
+        actionNames.append(call.name)
+        return .actionCompleted
     }
 }
