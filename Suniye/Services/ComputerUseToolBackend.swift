@@ -9,17 +9,7 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
     private let runtimeGuard: ComputerUseRuntimeGuarding
     private let windowReacquisitionTimeout: Duration
     private let windowReacquisitionPollingInterval: Duration
-    private var observationsByTarget: [String: AuthorizedObservation] = [:]
-
-    private struct AuthorizedObservation {
-        let observation: ComputerUseObservation
-        let runtimeAuthorization: ComputerUseRuntimeAuthorization
-    }
-
-    private struct PreparedAction {
-        let context: ComputerUseActionContext
-        let runtimeAuthorization: ComputerUseRuntimeAuthorization
-    }
+    private var observationsByTarget: [String: ComputerUseObservation] = [:]
 
     init(
         applications: ComputerUseApplicationCatalogProviding = ComputerUseApplicationCatalog(),
@@ -45,26 +35,82 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
         self.windowReacquisitionPollingInterval = windowReacquisitionPollingInterval
     }
 
-    func listApps() async throws -> [ComputerUseApplication] {
+    @discardableResult
+    func execute(_ call: ComputerUseToolCall) async throws -> ComputerUseToolResult {
         try Task.checkCancellation()
-        return try await applications.listApps()
+        switch call {
+        case .listApps:
+            return .applications(try await applications.listApps())
+        case let .getAppState(app, disableDiff):
+            return .appState(try await getAppState(app: app, disableDiff: disableDiff))
+        case let .click(request):
+            try await performAction(app: request.app) { context in
+                try await actions.click(request, context: context)
+            }
+        case let .performSecondaryAction(app, elementIndex, action):
+            try await performAction(app: app) { context in
+                try await actions.performSecondaryAction(
+                    action,
+                    elementIndex: elementIndex,
+                    context: context
+                )
+            }
+        case let .setValue(app, elementIndex, value):
+            try await performAction(app: app) { context in
+                try await actions.setValue(value, elementIndex: elementIndex, context: context)
+            }
+        case let .selectText(app, elementIndex, text, prefix, suffix, selectionType):
+            try await performAction(app: app) { context in
+                try await actions.selectText(
+                    text,
+                    elementIndex: elementIndex,
+                    prefix: prefix,
+                    suffix: suffix,
+                    selectionType: selectionType,
+                    context: context
+                )
+            }
+        case let .scroll(app, elementIndex, direction, pages):
+            try await performAction(app: app) { context in
+                try await actions.scroll(
+                    elementIndex: elementIndex,
+                    direction: direction,
+                    pages: pages,
+                    context: context
+                )
+            }
+        case let .drag(app, fromX, fromY, toX, toY):
+            try await performAction(app: app) { context in
+                try await actions.drag(
+                    fromX: fromX,
+                    fromY: fromY,
+                    toX: toX,
+                    toY: toY,
+                    context: context
+                )
+            }
+        case let .pressKey(app, key):
+            try await performAction(app: app) { context in
+                try await actions.pressKey(key, context: context)
+            }
+        case let .typeText(app, text):
+            try await performAction(app: app) { context in
+                try await actions.typeText(text, context: context)
+            }
+        }
+        return .actionCompleted
     }
 
-    func getAppState(app: String, disableDiff: Bool) async throws -> ComputerUseAppState {
-        try Task.checkCancellation()
-        let runtimeAuthorization = try await runtimeGuard.prepareForObservation()
+    private func getAppState(app: String, disableDiff: Bool) async throws -> ComputerUseAppState {
+        try await runtimeGuard.ensureScreenUnlocked()
         let application = try await applications.resolveOrLaunch(app)
-        let key = targetKey(application)
-        observationsByTarget.removeValue(forKey: key)
+        observationsByTarget.removeValue(forKey: application.identityKey)
         let observation = try await observe(
             application: application,
             requestedIdentifier: app,
             disableDiff: disableDiff
         )
-        observationsByTarget[key] = AuthorizedObservation(
-            observation: observation,
-            runtimeAuthorization: runtimeAuthorization
-        )
+        observationsByTarget[application.identityKey] = observation
         return observation.state
     }
 
@@ -102,115 +148,26 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
         }
     }
 
-    func click(_ request: ComputerUseClickRequest) async throws {
-        try await performAction(app: request.app) { context in
-            try await actions.click(request, context: context)
-        }
-    }
-
-    func performSecondaryAction(app: String, elementIndex: Int, action: String) async throws {
-        try await performAction(app: app) { context in
-            try await actions.performSecondaryAction(
-                action,
-                elementIndex: elementIndex,
-                context: context
-            )
-        }
-    }
-
-    func setValue(app: String, elementIndex: Int, value: String) async throws {
-        try await performAction(app: app) { context in
-            try await actions.setValue(value, elementIndex: elementIndex, context: context)
-        }
-    }
-
-    func selectText(
-        app: String,
-        elementIndex: Int,
-        text: String,
-        prefix: String?,
-        suffix: String?,
-        selectionType: ComputerUseTextSelectionType
-    ) async throws {
-        try await performAction(app: app) { context in
-            try await actions.selectText(
-                text,
-                elementIndex: elementIndex,
-                prefix: prefix,
-                suffix: suffix,
-                selectionType: selectionType,
-                context: context
-            )
-        }
-    }
-
-    func scroll(
-        app: String,
-        elementIndex: Int,
-        direction: ComputerUseScrollDirection,
-        pages: Double
-    ) async throws {
-        try await performAction(app: app) { context in
-            try await actions.scroll(
-                elementIndex: elementIndex,
-                direction: direction,
-                pages: pages,
-                context: context
-            )
-        }
-    }
-
-    func drag(
-        app: String,
-        fromX: Double,
-        fromY: Double,
-        toX: Double,
-        toY: Double
-    ) async throws {
-        try await performAction(app: app) { context in
-            try await actions.drag(
-                fromX: fromX,
-                fromY: fromY,
-                toX: toX,
-                toY: toY,
-                context: context
-            )
-        }
-    }
-
-    func pressKey(app: String, key: String) async throws {
-        try await performAction(app: app) { context in
-            try await actions.pressKey(key, context: context)
-        }
-    }
-
-    func typeText(app: String, text: String) async throws {
-        try await performAction(app: app) { context in
-            try await actions.typeText(text, context: context)
-        }
-    }
-
     private func performAction(
         app: String,
         operation: (ComputerUseActionContext) async throws -> Void
     ) async throws {
-        let preparedAction = try await prepareAction(for: app)
-        try await operation(preparedAction.context)
-        try await finishAction(
-            target: preparedAction.context.target,
-            authorization: preparedAction.runtimeAuthorization
-        )
+        let context = try await prepareAction(for: app)
+        try await operation(context)
+        try Task.checkCancellation()
+        try await settler.waitForUIToSettle(target: context.target)
+        try Task.checkCancellation()
+        try await runtimeGuard.ensureScreenUnlocked()
     }
 
-    private func prepareAction(for app: String) async throws -> PreparedAction {
-        try Task.checkCancellation()
+    private func prepareAction(for app: String) async throws -> ComputerUseActionContext {
         let application = try await applications.resolveOrLaunch(app)
-        let key = targetKey(application)
-        guard let authorizedObservation = observationsByTarget.removeValue(forKey: key) else {
+        // Observe-before-act: each observation is consumed by exactly one action.
+        guard let observation = observationsByTarget.removeValue(forKey: application.identityKey)
+        else {
             throw ComputerUseActionError.observationRequired(app)
         }
-        try await runtimeGuard.validateAction(authorizedObservation.runtimeAuthorization)
-        let observation = authorizedObservation.observation
+        try await runtimeGuard.ensureScreenUnlocked()
         guard application.processIdentifier == observation.target.application.processIdentifier,
               let pid = application.processIdentifier else {
             throw ComputerUseActionError.staleObservation(app)
@@ -220,27 +177,10 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
         else {
             throw ComputerUseActionError.staleObservation(app)
         }
-        return PreparedAction(
-            context: ComputerUseActionContext(
-                target: ComputerUseObservedTarget(application: application, window: window),
-                revision: observation.revision,
-                screenshot: observation.screenshot
-            ),
-            runtimeAuthorization: authorizedObservation.runtimeAuthorization
+        return ComputerUseActionContext(
+            target: ComputerUseObservedTarget(application: application, window: window),
+            revision: observation.revision,
+            screenshot: observation.screenshot
         )
-    }
-
-    private func finishAction(
-        target: ComputerUseObservedTarget,
-        authorization: ComputerUseRuntimeAuthorization
-    ) async throws {
-        try Task.checkCancellation()
-        try await settler.waitForUIToSettle(target: target)
-        try Task.checkCancellation()
-        try await runtimeGuard.validateAction(authorization)
-    }
-
-    private func targetKey(_ application: ComputerUseApplicationRecord) -> String {
-        application.bundleIdentifier ?? application.applicationURL.standardizedFileURL.path
     }
 }

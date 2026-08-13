@@ -96,7 +96,6 @@
 		5B615577C5A73DBC3C0F456D /* AudioCaptureModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F41BA6275400494E6FAD024A /* AudioCaptureModels.swift */; };
 		5C1C1BD251A821042F98AD34 /* AppLoggerMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 715AFE1E79EE4A464901082F /* AppLoggerMoreTests.swift */; };
 		5CEBE7C5B635C70620A16FF3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0D96966D22AF827757DB24D /* Assets.xcassets */; };
-		5DC47A7B51029C0EF900F18D /* ComputerUseSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A576C215AC2B9ACD4DB086C /* ComputerUseSession.swift */; };
 		5DC6B15541C02823AB13E0A7 /* ComputerUseActionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A447F6ABB74C48E00FCCD9A /* ComputerUseActionService.swift */; };
 		60DD5304C8A38B9FE28E2B5C /* LocalGemmaLlamaCppClientMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9F972E159D2C73AD2E548F9 /* LocalGemmaLlamaCppClientMoreTests.swift */; };
 		61086DA9674771F3966207E6 /* ModelManagerCoverageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F071EC20B9165DA02529D09C /* ModelManagerCoverageTests.swift */; };
@@ -401,7 +400,6 @@
 		88138019F3746810DB6BB7ED /* IssueReportServiceMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueReportServiceMoreTests.swift; sourceTree = "<group>"; };
 		897FC3AE1270CBE7E26BE606 /* AppStateIssueReportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateIssueReportTests.swift; sourceTree = "<group>"; };
 		8A16E593550418D25E53DADE /* AppleFoundationModelsPostProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessorTests.swift; sourceTree = "<group>"; };
-		8A576C215AC2B9ACD4DB086C /* ComputerUseSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseSession.swift; sourceTree = "<group>"; };
 		8A8C4EB347A24D4AE75A0462 /* AppStateCoverageRecordingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateCoverageRecordingTests.swift; sourceTree = "<group>"; };
 		8D4C44D5D8846E9AC198372D /* AppleFoundationModelsPostProcessorMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessorMoreTests.swift; sourceTree = "<group>"; };
 		920198666EB5634CA199A1B4 /* FloatingIndicatorStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorStateTests.swift; sourceTree = "<group>"; };
@@ -795,7 +793,6 @@
 				5ED3582AEA30366887AD9399 /* ComputerUseProtocol.swift */,
 				56A1BAC7BDF41C159A70E413 /* ComputerUseRuntimeGuard.swift */,
 				766A787CD5FFA0EFE4B8A714 /* ComputerUseScreenshotLoader.swift */,
-				8A576C215AC2B9ACD4DB086C /* ComputerUseSession.swift */,
 				D978A2D0318ABF6A43658693 /* ComputerUseTextSelection.swift */,
 				F60EC103F5AE7479F817F152 /* ComputerUseToolBackend.swift */,
 				D29FC0918B96FB3F030D7EE7 /* ComputerUseToolResultEncoder.swift */,
@@ -1034,7 +1031,6 @@
 				7CF0F632EA9799DB8AFF5A63 /* ComputerUseProtocol.swift in Sources */,
 				5AA8145F2A8C584931804E5B /* ComputerUseRuntimeGuard.swift in Sources */,
 				EDCFCDA488EA0E122728E5EB /* ComputerUseScreenshotLoader.swift in Sources */,
-				5DC47A7B51029C0EF900F18D /* ComputerUseSession.swift in Sources */,
 				22F3E2B64E86B5582E9AE56D /* ComputerUseSettingsDisclosure.swift in Sources */,
 				39F4237E3A2D6D4D65A99ABD /* ComputerUseTextSelection.swift in Sources */,
 				8B5DBE4305E9D788FBFE42E0 /* ComputerUseToolBackend.swift in Sources */,

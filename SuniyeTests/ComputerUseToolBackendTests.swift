@@ -28,9 +28,9 @@ final class ComputerUseToolBackendTests: XCTestCase {
             runtimeGuard: fixture.runtimeGuard
         )
 
-        let applications = try await backend.listApps()
+        let result = try await backend.execute(.listApps)
 
-        XCTAssertEqual(applications, [computerUseTestActionContext().target.application.publicApplication])
+        XCTAssertEqual(result, .applications([computerUseTestActionContext().target.application.publicApplication]))
     }
 
     func testObservationFeedsStateAndEnablesAnActionForTheSameWindow() async throws {
@@ -44,8 +44,8 @@ final class ComputerUseToolBackendTests: XCTestCase {
             runtimeGuard: fixture.runtimeGuard
         )
 
-        let state = try await backend.getAppState(app: "Calculator", disableDiff: false)
-        try await backend.typeText(app: "Calculator", text: "42")
+        let state = try await backend.appState(app: "Calculator", disableDiff: false)
+        try await backend.execute(.typeText(app: "Calculator", text: "42"))
 
         let actionCalls = await fixture.actions.calls
         let waitCount = await fixture.settler.waitCount
@@ -70,7 +70,7 @@ final class ComputerUseToolBackendTests: XCTestCase {
             windowReacquisitionPollingInterval: .milliseconds(1)
         )
 
-        let state = try await backend.getAppState(app: "Calculator", disableDiff: false)
+        let state = try await backend.appState(app: "Calculator", disableDiff: false)
 
         XCTAssertEqual(state.text, "0: AXWindow")
         let callCount = await fixture.windows.callCount
@@ -97,7 +97,7 @@ final class ComputerUseToolBackendTests: XCTestCase {
         )
 
         do {
-            _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+            _ = try await backend.appState(app: "Calculator", disableDiff: false)
             XCTFail("Expected launch failure")
         } catch {
             XCTAssertEqual(
@@ -123,7 +123,7 @@ final class ComputerUseToolBackendTests: XCTestCase {
             windowReacquisitionPollingInterval: .milliseconds(1)
         )
 
-        let state = try await backend.getAppState(app: "Calculator", disableDiff: false)
+        let state = try await backend.appState(app: "Calculator", disableDiff: false)
 
         XCTAssertEqual(state.text, "0: AXWindow")
         let reopenCount = await fixture.applications.reopenCount
@@ -142,7 +142,7 @@ final class ComputerUseToolBackendTests: XCTestCase {
         )
 
         do {
-            try await backend.pressKey(app: "Calculator", key: "Return")
+            try await backend.execute(.pressKey(app: "Calculator", key: "Return"))
             XCTFail("Expected an observation-required error")
         } catch {
             XCTAssertEqual(error as? ComputerUseActionError, .observationRequired("Calculator"))
@@ -159,11 +159,11 @@ final class ComputerUseToolBackendTests: XCTestCase {
             settler: fixture.settler,
             runtimeGuard: fixture.runtimeGuard
         )
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
-        try await backend.typeText(app: "Calculator", text: "42")
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
+        try await backend.execute(.typeText(app: "Calculator", text: "42"))
 
         do {
-            try await backend.pressKey(app: "Calculator", key: "Return")
+            try await backend.execute(.pressKey(app: "Calculator", key: "Return"))
             XCTFail("Expected a new observation before the next action")
         } catch {
             XCTAssertEqual(error as? ComputerUseActionError, .observationRequired("Calculator"))
@@ -184,15 +184,15 @@ final class ComputerUseToolBackendTests: XCTestCase {
             settler: fixture.settler,
             runtimeGuard: fixture.runtimeGuard
         )
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
         await observations.failSubsequentObservations()
 
         await XCTAssertThrowsErrorAsync(
-            _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+            _ = try await backend.appState(app: "Calculator", disableDiff: false)
         )
 
         do {
-            try await backend.typeText(app: "Calculator", text: "42")
+            try await backend.execute(.typeText(app: "Calculator", text: "42"))
             XCTFail("Expected the failed refresh to invalidate the previous observation")
         } catch {
             XCTAssertEqual(error as? ComputerUseActionError, .observationRequired("Calculator"))
@@ -211,27 +211,27 @@ final class ComputerUseToolBackendTests: XCTestCase {
         )
         let click = ComputerUseClickRequest(app: "Calculator", elementIndex: 7)
 
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
-        try await backend.click(click)
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
-        try await backend.performSecondaryAction(app: "Calculator", elementIndex: 7, action: "Show Menu")
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
-        try await backend.setValue(app: "Calculator", elementIndex: 7, value: "42")
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
-        try await backend.selectText(
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
+        try await backend.execute(.click(click))
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
+        try await backend.execute(.performSecondaryAction(app: "Calculator", elementIndex: 7, action: "Show Menu"))
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
+        try await backend.execute(.setValue(app: "Calculator", elementIndex: 7, value: "42"))
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
+        try await backend.execute(.selectText(
             app: "Calculator",
             elementIndex: 7,
             text: "4",
             prefix: nil,
             suffix: "2",
             selectionType: .cursorAfter
-        )
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
-        try await backend.scroll(app: "Calculator", elementIndex: 7, direction: .down, pages: 2)
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
-        try await backend.drag(app: "Calculator", fromX: 1, fromY: 2, toX: 3, toY: 4)
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
-        try await backend.pressKey(app: "Calculator", key: "Return")
+        ))
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
+        try await backend.execute(.scroll(app: "Calculator", elementIndex: 7, direction: .down, pages: 2))
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
+        try await backend.execute(.drag(app: "Calculator", fromX: 1, fromY: 2, toX: 3, toY: 4))
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
+        try await backend.execute(.pressKey(app: "Calculator", key: "Return"))
 
         let calls = await fixture.actions.calls
         let waitCount = await fixture.settler.waitCount
@@ -266,11 +266,11 @@ final class ComputerUseToolBackendTests: XCTestCase {
             settler: fixture.settler,
             runtimeGuard: fixture.runtimeGuard
         )
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
         await fixture.windows.replaceWindowID(with: 99)
 
         do {
-            try await backend.typeText(app: "Calculator", text: "42")
+            try await backend.execute(.typeText(app: "Calculator", text: "42"))
             XCTFail("Expected stale observation")
         } catch {
             XCTAssertEqual(error as? ComputerUseActionError, .staleObservation("Calculator"))
@@ -291,10 +291,10 @@ final class ComputerUseToolBackendTests: XCTestCase {
             settler: fixture.settler,
             runtimeGuard: fixture.runtimeGuard
         )
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
 
         await XCTAssertThrowsErrorAsync(
-            try await backend.typeText(app: "Calculator", text: "42")
+            _ = try await backend.execute(.typeText(app: "Calculator", text: "42"))
         )
         let waitCount = await fixture.settler.waitCount
         XCTAssertEqual(waitCount, 0)
@@ -313,13 +313,13 @@ final class ComputerUseToolBackendTests: XCTestCase {
         )
 
         do {
-            _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+            _ = try await backend.appState(app: "Calculator", disableDiff: false)
             XCTFail("Expected a screen-locked error")
         } catch {
             XCTAssertEqual(error as? ComputerUseRuntimeError, .screenLocked)
         }
-        let observationCount = await runtimeGuard.observationCount
-        XCTAssertEqual(observationCount, 0)
+        let checkCount = await runtimeGuard.checkCount
+        XCTAssertEqual(checkCount, 0)
     }
 
     func testPhysicalInputAfterObservationDoesNotCancelTheAction() async throws {
@@ -333,10 +333,10 @@ final class ComputerUseToolBackendTests: XCTestCase {
             settler: fixture.settler,
             runtimeGuard: runtimeGuard
         )
-        _ = try await backend.getAppState(app: "Calculator", disableDiff: false)
+        _ = try await backend.appState(app: "Calculator", disableDiff: false)
         await runtimeGuard.recordPhysicalInput()
 
-        try await backend.typeText(app: "Calculator", text: "42")
+        try await backend.execute(.typeText(app: "Calculator", text: "42"))
         let actionCalls = await fixture.actions.calls
         XCTAssertEqual(actionCalls, [.typeText("42")])
     }
@@ -358,5 +358,17 @@ final class ComputerUseToolBackendTests: XCTestCase {
         let checkCount = await loading.checkCount
         XCTAssertEqual(delays, [.seconds(1), .milliseconds(500), .milliseconds(500)])
         XCTAssertEqual(checkCount, 3)
+    }
+}
+
+/// Unwraps the `.appState` payload so observation assertions stay readable.
+private extension ComputerUseToolBackend {
+    func appState(app: String, disableDiff: Bool) async throws -> ComputerUseAppState {
+        let result = try await execute(.getAppState(app: app, disableDiff: disableDiff))
+        guard case let .appState(state) = result else {
+            struct UnexpectedToolResult: Error {}
+            throw UnexpectedToolResult()
+        }
+        return state
     }
 }

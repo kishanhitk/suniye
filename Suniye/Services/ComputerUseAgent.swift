@@ -91,7 +91,7 @@ struct SystemComputerUseLogger: ComputerUseLogging {
 
 actor ComputerUseAgent: ComputerUseAgentRunning {
     private let model: ComputerUseModelServing
-    private let session: ComputerUseSession
+    private let tools: any ComputerUseToolServing
     private let screenshots: ComputerUseScreenshotLoading
     private let logger: ComputerUseLogging
     private let activitySink: ComputerUseActivitySink
@@ -99,14 +99,14 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
 
     init(
         model: ComputerUseModelServing,
-        session: ComputerUseSession,
+        tools: any ComputerUseToolServing,
         screenshots: ComputerUseScreenshotLoading = SystemComputerUseScreenshotLoader(),
         logger: ComputerUseLogging = SystemComputerUseLogger(),
         activitySink: ComputerUseActivitySink = .disabled,
         contextPolicy: ComputerUseModelContextPolicy = .referenceAligned(modelID: "")
     ) {
         self.model = model
-        self.session = session
+        self.tools = tools
         self.screenshots = screenshots
         self.logger = logger
         self.activitySink = activitySink
@@ -274,7 +274,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 name: name,
                 arguments: arguments
             )
-            let result = try await session.execute(call)
+            let result = try await tools.execute(call)
             let localResult = try ComputerUseToolResultEncoder.encode(result)
             let modelResult = try ComputerUseModelToolOutput.encode(
                 result,

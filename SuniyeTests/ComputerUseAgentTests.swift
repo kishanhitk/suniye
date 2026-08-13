@@ -20,7 +20,7 @@ final class ComputerUseAgentTests: XCTestCase {
         }
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend()),
+            tools: FreshnessCheckingComputerUseBackend(),
             activitySink: activitySink
         )
 
@@ -52,8 +52,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let recorder = RecordingComputerUseActivitySink()
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(
-                backend: FreshnessCheckingComputerUseBackend(shouldFailObservation: true)
+            tools: FreshnessCheckingComputerUseBackend(shouldFailObservation: true
             ),
             activitySink: ComputerUseActivitySink { activity in
                 await recorder.record(activity)
@@ -83,7 +82,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let logger = RecordingComputerUseLogger()
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend()),
+            tools: FreshnessCheckingComputerUseBackend(),
             logger: logger
         )
         let debugSessionID = ComputerUseDebugSessionID(rawValue: "CU-ABC123DEF456")
@@ -128,7 +127,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let backend = FreshnessCheckingComputerUseBackend()
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: backend)
+            tools: backend
         )
 
         let result = await agent.run(
@@ -185,7 +184,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let backend = FreshnessCheckingComputerUseBackend()
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: backend)
+            tools: backend
         )
 
         let result = await agent.run(
@@ -237,7 +236,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let backend = FreshnessCheckingComputerUseBackend()
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: backend)
+            tools: backend
         )
 
         let result = await agent.run(
@@ -316,7 +315,7 @@ final class ComputerUseAgentTests: XCTestCase {
         )
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: backend)
+            tools: backend
         )
 
         let result = await agent.run(
@@ -355,7 +354,7 @@ final class ComputerUseAgentTests: XCTestCase {
         )
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: backend),
+            tools: backend,
             screenshots: MissingComputerUseScreenshotLoader()
         )
 
@@ -389,7 +388,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let backend = FreshnessCheckingComputerUseBackend()
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: backend),
+            tools: backend,
             screenshots: MissingComputerUseScreenshotLoader()
         )
 
@@ -424,7 +423,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let backend = FreshnessCheckingComputerUseBackend(screenshotURL: screenshotURL)
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: backend)
+            tools: backend
         )
 
         _ = await agent.run(
@@ -446,7 +445,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let model = ScriptedComputerUseModel(responses: [.text("Done.")])
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend())
+            tools: FreshnessCheckingComputerUseBackend()
         )
 
         _ = await agent.run(
@@ -480,7 +479,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let model = ScriptedComputerUseModel(responses: [.text("Done.")])
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend())
+            tools: FreshnessCheckingComputerUseBackend()
         )
         let activity = ComputerUseActivity(
             toolName: "get_app_state",
@@ -515,7 +514,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let model = ScriptedComputerUseModel(responses: [.text("Done.")])
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend())
+            tools: FreshnessCheckingComputerUseBackend()
         )
         let conversation = (0..<70).map { index in
             ComputerUseConversationMessage(
@@ -542,7 +541,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let model = ScriptedComputerUseModel(responses: [.text("Done.")])
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend())
+            tools: FreshnessCheckingComputerUseBackend()
         )
         let observation = ComputerUseActivity(
             toolName: "get_app_state",
@@ -582,8 +581,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let recorder = RecordingComputerUseActivitySink()
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(
-                backend: FreshnessCheckingComputerUseBackend(screenshotURL: screenshotURL)
+            tools: FreshnessCheckingComputerUseBackend(screenshotURL: screenshotURL
             ),
             screenshots: MissingComputerUseScreenshotLoader(),
             activitySink: ComputerUseActivitySink { activity in
@@ -615,8 +613,7 @@ final class ComputerUseAgentTests: XCTestCase {
         )
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(
-                backend: FreshnessCheckingComputerUseBackend(appStateText: longText)
+            tools: FreshnessCheckingComputerUseBackend(appStateText: longText
             ),
             screenshots: MissingComputerUseScreenshotLoader(),
             contextPolicy: .referenceAligned(modelID: "gpt-5.6-luna")
@@ -679,7 +676,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let model = ScriptedComputerUseModel(responses: [.text("Done.")])
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend()),
+            tools: FreshnessCheckingComputerUseBackend(),
             screenshots: StubComputerUseScreenshotLoader()
         )
         let conversation = (0..<3).map { index in
@@ -715,7 +712,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let model = ScriptedComputerUseModel(responses: [.text("Done.")])
         let agent = ComputerUseAgent(
             model: model,
-            session: ComputerUseSession(backend: FreshnessCheckingComputerUseBackend()),
+            tools: FreshnessCheckingComputerUseBackend(),
             screenshots: SelectiveComputerUseScreenshotLoader(missingFile: "state-2.jpg")
         )
         let conversation = (0..<3).map { index in
@@ -890,75 +887,32 @@ private actor FreshnessCheckingComputerUseBackend: ComputerUseToolServing {
         self.intervention = intervention
     }
 
-    func listApps() async throws -> [ComputerUseApplication] {
-        calls.append(.listApps)
-        return []
-    }
-
-    func getAppState(app: String, disableDiff: Bool) async throws -> ComputerUseAppState {
-        calls.append(.getAppState)
-        if shouldFailObservation {
-            throw StubComputerUseToolError.failed
+    @discardableResult
+    func execute(_ call: ComputerUseToolCall) async throws -> ComputerUseToolResult {
+        switch call {
+        case .listApps:
+            calls.append(.listApps)
+            return .applications([])
+        case let .getAppState(app, _):
+            calls.append(.getAppState)
+            if shouldFailObservation {
+                throw StubComputerUseToolError.failed
+            }
+            hasObservedState = true
+            let text = appStateTexts.count > 1
+                ? appStateTexts.removeFirst()
+                : appStateTexts.first ?? ""
+            return .appState(
+                ComputerUseAppState(
+                    app: app,
+                    screenshot: screenshotURL,
+                    text: text
+                )
+            )
+        default:
+            try requireObservedState(for: call.name)
+            return .actionCompleted
         }
-        hasObservedState = true
-        let text = appStateTexts.count > 1
-            ? appStateTexts.removeFirst()
-            : appStateTexts.first ?? ""
-        return ComputerUseAppState(
-            app: app,
-            screenshot: screenshotURL,
-            text: text
-        )
-    }
-
-    func click(_ request: ComputerUseClickRequest) async throws {
-        try requireObservedState(for: .click)
-    }
-
-    func performSecondaryAction(app: String, elementIndex: Int, action: String) async throws {
-        try requireObservedState(for: .performSecondaryAction)
-    }
-
-    func setValue(app: String, elementIndex: Int, value: String) async throws {
-        try requireObservedState(for: .setValue)
-    }
-
-    func selectText(
-        app: String,
-        elementIndex: Int,
-        text: String,
-        prefix: String?,
-        suffix: String?,
-        selectionType: ComputerUseTextSelectionType
-    ) async throws {
-        try requireObservedState(for: .selectText)
-    }
-
-    func scroll(
-        app: String,
-        elementIndex: Int,
-        direction: ComputerUseScrollDirection,
-        pages: Double
-    ) async throws {
-        try requireObservedState(for: .scroll)
-    }
-
-    func drag(
-        app: String,
-        fromX: Double,
-        fromY: Double,
-        toX: Double,
-        toY: Double
-    ) async throws {
-        try requireObservedState(for: .drag)
-    }
-
-    func pressKey(app: String, key: String) async throws {
-        try requireObservedState(for: .pressKey)
-    }
-
-    func typeText(app: String, text: String) async throws {
-        try requireObservedState(for: .typeText)
     }
 
     private func requireObservedState(for call: ComputerUseToolName) throws {

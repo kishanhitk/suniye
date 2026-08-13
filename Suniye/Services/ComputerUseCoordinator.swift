@@ -338,7 +338,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     ) -> any ComputerUseAgentRunning {
         ComputerUseAgent(
             model: ComputerUseRemoteModelClient(configuration: configuration),
-            session: ComputerUseSession(backend: ComputerUseToolBackend()),
+            tools: ComputerUseToolBackend(),
             activitySink: activitySink,
             contextPolicy: .referenceAligned(modelID: configuration.modelID)
         )

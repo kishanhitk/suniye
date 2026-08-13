@@ -13,6 +13,13 @@ struct ComputerUseApplicationRecord: Equatable, Sendable {
         processIdentifier != nil
     }
 
+    /// Storage identity for observation bookkeeping. Distinct from
+    /// `publicApplication.id`, which prefers the display name for
+    /// model-visible listings.
+    var identityKey: String {
+        bundleIdentifier ?? applicationURL.standardizedFileURL.path
+    }
+
     var publicApplication: ComputerUseApplication {
         ComputerUseApplication(
             id: bundleIdentifier ?? displayName,

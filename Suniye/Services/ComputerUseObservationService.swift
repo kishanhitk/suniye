@@ -95,9 +95,7 @@ actor ComputerUseObservationService: ComputerUseObserving {
         let capturedScreenshot = try await screenshot
         try Task.checkCancellation()
 
-        let applicationKey = application.bundleIdentifier
-            ?? application.applicationURL.standardizedFileURL.path
-        let targetKey = "\(applicationKey)#\(window.id)"
+        let targetKey = "\(application.identityKey)#\(window.id)"
         let revision = await revisions.revision(
             targetKey: targetKey,
             snapshot: capturedSnapshot,

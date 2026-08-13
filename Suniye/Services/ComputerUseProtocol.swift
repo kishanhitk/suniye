@@ -201,32 +201,6 @@ enum ComputerUseToolResult: Equatable, Sendable {
 }
 
 protocol ComputerUseToolServing: Sendable {
-    func listApps() async throws -> [ComputerUseApplication]
-    func getAppState(app: String, disableDiff: Bool) async throws -> ComputerUseAppState
-    func click(_ request: ComputerUseClickRequest) async throws
-    func performSecondaryAction(app: String, elementIndex: Int, action: String) async throws
-    func setValue(app: String, elementIndex: Int, value: String) async throws
-    func selectText(
-        app: String,
-        elementIndex: Int,
-        text: String,
-        prefix: String?,
-        suffix: String?,
-        selectionType: ComputerUseTextSelectionType
-    ) async throws
-    func scroll(
-        app: String,
-        elementIndex: Int,
-        direction: ComputerUseScrollDirection,
-        pages: Double
-    ) async throws
-    func drag(
-        app: String,
-        fromX: Double,
-        fromY: Double,
-        toX: Double,
-        toY: Double
-    ) async throws
-    func pressKey(app: String, key: String) async throws
-    func typeText(app: String, text: String) async throws
+    @discardableResult
+    func execute(_ call: ComputerUseToolCall) async throws -> ComputerUseToolResult
 }
