@@ -9,10 +9,12 @@ protocol HotkeyServiceProtocol: AnyObject {
     var onComputerUseHotkeyDown: (() -> Void)? { get set }
     var onComputerUseHotkeyUp: (() -> Void)? { get set }
     var onCancel: (() -> Bool)? { get set }
+    var onPasteLastTranscript: (() -> Void)? { get set }
     func startMonitoring(
         configuration: HotkeyConfiguration,
         editModeConfiguration: HotkeyConfiguration?,
-        computerUseConfiguration: HotkeyConfiguration?
+        computerUseConfiguration: HotkeyConfiguration?,
+        pasteLastTranscriptConfiguration: HotkeyConfiguration
     )
     func stopMonitoring()
 }
@@ -30,6 +32,7 @@ final class HotkeyService: HotkeyServiceProtocol {
         case dictation = 1
         case editMode = 2
         case computerUse = 3
+        case pasteLastTranscript = 4
     }
 
     var onHotkeyDown: (() -> Void)?
@@ -39,6 +42,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     var onComputerUseHotkeyDown: (() -> Void)?
     var onComputerUseHotkeyUp: (() -> Void)?
     var onCancel: (() -> Bool)?
+    var onPasteLastTranscript: (() -> Void)?
 
     private var globeGlobalMonitor: Any?
     private var globeLocalMonitor: Any?
@@ -52,21 +56,28 @@ final class HotkeyService: HotkeyServiceProtocol {
     func startMonitoring(
         configuration: HotkeyConfiguration,
         editModeConfiguration: HotkeyConfiguration?,
-        computerUseConfiguration: HotkeyConfiguration?
+        computerUseConfiguration: HotkeyConfiguration?,
+        pasteLastTranscriptConfiguration: HotkeyConfiguration
     ) {
         stopMonitoring()
 
         register(configuration, for: .dictation)
+        if pasteLastTranscriptConfiguration == configuration {
+            AppLogger.shared.log(.warning, "paste last transcript hotkey ignored: matches dictation hotkey")
+        } else {
+            register(pasteLastTranscriptConfiguration, for: .pasteLastTranscript)
+        }
         if let editModeConfiguration {
-            if editModeConfiguration == configuration {
-                AppLogger.shared.log(.warning, "edit mode hotkey ignored: matches dictation hotkey")
+            if editModeConfiguration == configuration || editModeConfiguration == pasteLastTranscriptConfiguration {
+                AppLogger.shared.log(.warning, "edit mode hotkey ignored: matches another hotkey")
             } else {
                 register(editModeConfiguration, for: .editMode)
             }
         }
         if let computerUseConfiguration {
             if computerUseConfiguration == configuration
-                || computerUseConfiguration == editModeConfiguration {
+                || computerUseConfiguration == editModeConfiguration
+                || computerUseConfiguration == pasteLastTranscriptConfiguration {
                 AppLogger.shared.log(.warning, "computer use hotkey ignored: matches another hotkey")
             } else {
                 register(computerUseConfiguration, for: .computerUse)
@@ -259,7 +270,7 @@ final class HotkeyService: HotkeyServiceProtocol {
         return noErr
     }
 
-    private func downCallback(for slot: Slot) -> (() -> Void)? {
+    func downCallback(for slot: Slot) -> (() -> Void)? {
         switch slot {
         case .dictation:
             return onHotkeyDown
@@ -267,10 +278,14 @@ final class HotkeyService: HotkeyServiceProtocol {
             return onEditModeHotkeyDown
         case .computerUse:
             return onComputerUseHotkeyDown
+        case .pasteLastTranscript:
+            // The recovery path may synthesize Command+V. Wait until the
+            // physical shortcut key is released so the paste is not swallowed.
+            return nil
         }
     }
 
-    private func upCallback(for slot: Slot) -> (() -> Void)? {
+    func upCallback(for slot: Slot) -> (() -> Void)? {
         switch slot {
         case .dictation:
             return onHotkeyUp
@@ -278,6 +293,8 @@ final class HotkeyService: HotkeyServiceProtocol {
             return onEditModeHotkeyUp
         case .computerUse:
             return onComputerUseHotkeyUp
+        case .pasteLastTranscript:
+            return onPasteLastTranscript
         }
     }
 }

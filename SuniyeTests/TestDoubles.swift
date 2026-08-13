@@ -99,6 +99,7 @@ final class TestGeneralSettingsStore: GeneralSettingsStoreProtocol {
 }
 
 final class SpyTextInsertionService: TextInsertionServiceProtocol {
+    private(set) var attemptedTexts: [String] = []
     private(set) var insertedTexts: [String] = []
     private(set) var copiedTexts: [String] = []
     private(set) var submitCallCount = 0
@@ -116,7 +117,9 @@ final class SpyTextInsertionService: TextInsertionServiceProtocol {
         fieldValueProvider
     }
 
-    func insertText(_ text: String) throws {
+    @MainActor
+    func insertText(_ text: String) async throws {
+        attemptedTexts.append(text)
         if let insertError {
             throw insertError
         }
@@ -621,20 +624,24 @@ final class StubHotkeyService: HotkeyServiceProtocol {
     var onComputerUseHotkeyDown: (() -> Void)?
     var onComputerUseHotkeyUp: (() -> Void)?
     var onCancel: (() -> Bool)?
+    var onPasteLastTranscript: (() -> Void)?
     private(set) var startMonitoringCallCount = 0
     private(set) var lastConfiguration: HotkeyConfiguration?
     private(set) var lastEditModeConfiguration: HotkeyConfiguration?
     private(set) var lastComputerUseConfiguration: HotkeyConfiguration?
+    private(set) var lastPasteLastTranscriptConfiguration: HotkeyConfiguration?
 
     func startMonitoring(
         configuration: HotkeyConfiguration,
         editModeConfiguration: HotkeyConfiguration?,
-        computerUseConfiguration: HotkeyConfiguration?
+        computerUseConfiguration: HotkeyConfiguration?,
+        pasteLastTranscriptConfiguration: HotkeyConfiguration
     ) {
         startMonitoringCallCount += 1
         lastConfiguration = configuration
         lastEditModeConfiguration = editModeConfiguration
         lastComputerUseConfiguration = computerUseConfiguration
+        lastPasteLastTranscriptConfiguration = pasteLastTranscriptConfiguration
     }
 
     func stopMonitoring() {}
