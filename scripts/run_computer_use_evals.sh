@@ -15,7 +15,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SUNIYE_CU_EVALS=1 xcodebuild \
+# xcodebuild forwards environment to the test process only through the
+# TEST_RUNNER_ prefix (stripped on delivery).
+export TEST_RUNNER_SUNIYE_CU_EVALS=1
+for name in SUNIYE_CU_EVAL_ENDPOINT SUNIYE_CU_EVAL_MODEL SUNIYE_CU_EVAL_API_KEY; do
+  if [[ -n "${(P)name:-}" ]]; then
+    export "TEST_RUNNER_${name}"="${(P)name}"
+  fi
+done
+
+output="$(mktemp)"
+xcodebuild \
   -project Suniye.xcodeproj \
   -scheme Suniye \
   -destination 'platform=macOS' \
@@ -23,4 +33,10 @@ SUNIYE_CU_EVALS=1 xcodebuild \
   -parallel-testing-enabled NO \
   test \
   -only-testing:SuniyeTests/ComputerUseEvalTests \
-  2>&1 | grep -E "^eval |^===|^  |results written|Test Case|TEST EXECUTE"
+  2>&1 | tee "$output" | grep -E "eval task=|eval summary|overall:|results written|Test Case|TEST EXECUTE"
+
+# A skipped eval is a broken invocation, not a passed sweep.
+if grep -q "skipped" "$output" || ! grep -q "results written" "$output"; then
+  echo "ERROR: the eval did not actually run (skipped or produced no results)." >&2
+  exit 1
+fi
