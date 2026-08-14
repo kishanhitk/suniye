@@ -25,6 +25,44 @@ struct ComputerUseAccessibilityElementReference: Equatable, Sendable {
     let path: [Int]
     let role: String
     let identifier: String?
+    let traits: ComputerUseAccessibilityElementTraits
+}
+
+/// Stable observed traits that distinguish an identifier-less element from a
+/// same-role sibling that took its child-path slot after a reorder or replace.
+/// Only traits present at observation constrain the live element, so an absent
+/// or late-populated label imposes nothing. `value` and `help` are excluded:
+/// value is what editable controls change by design, and help is low-signal.
+struct ComputerUseAccessibilityElementTraits: Equatable, Sendable {
+    let subrole: String?
+    let roleDescription: String?
+    let title: String?
+    let description: String?
+
+    init(subrole: String?, roleDescription: String?, title: String?, description: String?) {
+        self.subrole = Self.normalized(subrole)
+        self.roleDescription = Self.normalized(roleDescription)
+        self.title = Self.normalized(title)
+        self.description = Self.normalized(description)
+    }
+
+    func isConsistent(with live: ComputerUseAccessibilityElementTraits) -> Bool {
+        func consistent(_ observed: String?, _ current: String?) -> Bool {
+            observed == nil || observed == current
+        }
+        return consistent(subrole, live.subrole)
+            && consistent(roleDescription, live.roleDescription)
+            && consistent(title, live.title)
+            && consistent(description, live.description)
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
 }
 
 struct ComputerUseAccessibilityRevision: Equatable, Sendable {
@@ -192,7 +230,13 @@ actor ComputerUseAccessibilityRevisionStore {
             rootIndex: rootIndex,
             path: path,
             role: node.role,
-            identifier: normalized(node.identifier)
+            identifier: normalized(node.identifier),
+            traits: ComputerUseAccessibilityElementTraits(
+                subrole: node.subrole,
+                roleDescription: node.roleDescription,
+                title: node.title,
+                description: node.description
+            )
         )
         let key: MatchKey
         if let identifier = reference.identifier {

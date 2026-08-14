@@ -22,6 +22,11 @@ extension ComputerUseScrollDirection {
     }
 }
 
+enum ComputerUseTypedTextEvent: Equatable, Sendable {
+    case text(String)
+    case returnKey
+}
+
 enum ComputerUseUnicodeEventChunker {
     static let maximumUTF16UnitsPerEvent = 20
 
@@ -49,5 +54,30 @@ enum ComputerUseUnicodeEventChunker {
             chunks.append(current)
         }
         return chunks
+    }
+
+    /// Newlines become Return keystrokes so typed text can submit a form or send
+    /// a message, which the tool contract promises. CR, LF, and CRLF each
+    /// collapse to a single Return; text between newlines keeps the Unicode
+    /// chunking path.
+    static func typingEvents(
+        in text: String,
+        maximumUTF16Units: Int = maximumUTF16UnitsPerEvent
+    ) -> [ComputerUseTypedTextEvent] {
+        let normalized = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        var events: [ComputerUseTypedTextEvent] = []
+        for (index, line) in normalized
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .enumerated() {
+            if index > 0 {
+                events.append(.returnKey)
+            }
+            for chunk in chunks(in: String(line), maximumUTF16Units: maximumUTF16Units) {
+                events.append(.text(chunk))
+            }
+        }
+        return events
     }
 }

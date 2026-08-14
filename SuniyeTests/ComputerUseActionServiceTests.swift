@@ -478,7 +478,13 @@ func computerUseTestActionContext(
                     rootIndex: 0,
                     path: [0],
                     role: "AXButton",
-                    identifier: "equals"
+                    identifier: "equals",
+                    traits: ComputerUseAccessibilityElementTraits(
+                        subrole: nil,
+                        roleDescription: nil,
+                        title: nil,
+                        description: nil
+                    )
                 ),
             ]
         ),

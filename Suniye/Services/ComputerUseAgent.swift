@@ -6,6 +6,22 @@ enum ComputerUseAgentOutcome: Equatable, Sendable {
     case failed
 }
 
+enum ComputerUseAgentError: LocalizedError, Equatable, Sendable {
+    case stepLimitExceeded(Int)
+    case timeLimitExceeded
+
+    var errorDescription: String? {
+        switch self {
+        case let .stepLimitExceeded(limit):
+            "Computer Use stopped after \(limit) steps without finishing the task. "
+                + "Try a smaller task or run it again."
+        case .timeLimitExceeded:
+            "Computer Use stopped after running too long without finishing the task. "
+                + "Try a smaller task or run it again."
+        }
+    }
+}
+
 struct ComputerUseDebugSessionID: Equatable, Sendable {
     let rawValue: String
 
@@ -96,6 +112,9 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
     private let logger: ComputerUseLogging
     private let activitySink: ComputerUseActivitySink
     private let contextBuilder: ComputerUseModelContextBuilder
+    private let maximumSteps: Int
+    private let maximumRunDuration: Duration
+    private let now: @Sendable () -> ContinuousClock.Instant
 
     init(
         model: ComputerUseModelServing,
@@ -103,7 +122,10 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         screenshots: ComputerUseScreenshotLoading = SystemComputerUseScreenshotLoader(),
         logger: ComputerUseLogging = SystemComputerUseLogger(),
         activitySink: ComputerUseActivitySink = .disabled,
-        contextPolicy: ComputerUseModelContextPolicy = .referenceAligned(modelID: "")
+        contextPolicy: ComputerUseModelContextPolicy = .referenceAligned(modelID: ""),
+        maximumSteps: Int = 60,
+        maximumRunDuration: Duration = .seconds(300),
+        now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock().now }
     ) {
         self.model = model
         self.tools = tools
@@ -111,6 +133,9 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         self.logger = logger
         self.activitySink = activitySink
         contextBuilder = ComputerUseModelContextBuilder(policy: contextPolicy)
+        self.maximumSteps = maximumSteps
+        self.maximumRunDuration = maximumRunDuration
+        self.now = now
     }
 
     func run(task: ComputerUseAgentTask) async -> ComputerUseAgentResult {
@@ -131,10 +156,12 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         var step = 0
         var lastTargetApp: String?
         var audits = RunAuditState()
+        let deadline = now().advanced(by: maximumRunDuration)
         log(.info, "computer use run started", session: debugSessionID)
         do {
             while true {
                 try Task.checkCancellation()
+                try enforceRunLimits(step: step, deadline: deadline)
                 if try await applyInterventions(
                     task.interventions.takeAll(),
                     lastTargetApp: lastTargetApp,
@@ -213,6 +240,16 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 session: debugSessionID
             )
             return ComputerUseAgentResult(outcome: .cancelled, message: "Stopped.")
+        } catch let error as ComputerUseAgentError {
+            log(
+                .warning,
+                "computer use run stopped reason=\(error) steps=\(step)",
+                session: debugSessionID
+            )
+            return ComputerUseAgentResult(
+                outcome: .failed,
+                message: localizedMessage(error)
+            )
         } catch {
             log(
                 .warning,
@@ -294,6 +331,20 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 )
             )
             return nil
+        }
+    }
+
+    /// Bounds a run that the model never completes. Without these an agent can
+    /// act on the machine indefinitely and keep billing the provider.
+    private func enforceRunLimits(
+        step: Int,
+        deadline: ContinuousClock.Instant
+    ) throws {
+        if step >= maximumSteps {
+            throw ComputerUseAgentError.stepLimitExceeded(maximumSteps)
+        }
+        if now() >= deadline {
+            throw ComputerUseAgentError.timeLimitExceeded
         }
     }
 

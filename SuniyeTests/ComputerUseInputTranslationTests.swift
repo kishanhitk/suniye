@@ -39,6 +39,37 @@ final class ComputerUseInputTranslationTests: XCTestCase {
         )
     }
 
+    func testTypingEventsConvertNewlinesToReturnKeystrokes() {
+        XCTAssertEqual(ComputerUseUnicodeEventChunker.typingEvents(in: ""), [])
+        XCTAssertEqual(ComputerUseUnicodeEventChunker.typingEvents(in: "hello"), [.text("hello")])
+        XCTAssertEqual(
+            ComputerUseUnicodeEventChunker.typingEvents(in: "hello\n"),
+            [.text("hello"), .returnKey]
+        )
+        XCTAssertEqual(
+            ComputerUseUnicodeEventChunker.typingEvents(in: "a\n\nb"),
+            [.text("a"), .returnKey, .returnKey, .text("b")]
+        )
+        XCTAssertEqual(
+            ComputerUseUnicodeEventChunker.typingEvents(in: "a\r\nb"),
+            [.text("a"), .returnKey, .text("b")]
+        )
+        XCTAssertEqual(ComputerUseUnicodeEventChunker.typingEvents(in: "\r"), [.returnKey])
+        XCTAssertEqual(
+            ComputerUseUnicodeEventChunker.typingEvents(in: "\n\n"),
+            [.returnKey, .returnKey]
+        )
+    }
+
+    func testTypingEventsPreserveUnicodeChunkingWithinLines() {
+        let line = String(repeating: "a", count: 19) + "🙂" + "b"
+
+        XCTAssertEqual(
+            ComputerUseUnicodeEventChunker.typingEvents(in: line + "\n"),
+            [.text(String(repeating: "a", count: 19)), .text("🙂" + "b"), .returnKey]
+        )
+    }
+
     func testKeyChordSupportsDocumentedNamesAndAliases() throws {
         XCTAssertEqual(
             try ComputerUseKeyChord.parse("Control_L + Shift + a"),

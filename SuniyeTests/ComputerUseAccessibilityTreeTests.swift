@@ -260,6 +260,77 @@ final class ComputerUseAccessibilityTreeTests: XCTestCase {
         XCTAssertTrue(revision.text.contains("+ 2: AXButton \"Add\" ID: \"add\""))
     }
 
+    func testTraitsConstrainOnlyTheTraitsObservedAtCaptureTime() {
+        let observed = ComputerUseAccessibilityElementTraits(
+            subrole: nil,
+            roleDescription: nil,
+            title: "  Play  ",
+            description: nil
+        )
+
+        XCTAssertEqual(observed.title, "Play")
+        XCTAssertTrue(
+            observed.isConsistent(
+                with: ComputerUseAccessibilityElementTraits(
+                    subrole: "AXToggle",
+                    roleDescription: "button",
+                    title: "Play",
+                    description: "Start playback"
+                )
+            ),
+            "traits absent at observation must not constrain the live element"
+        )
+        XCTAssertFalse(
+            observed.isConsistent(
+                with: ComputerUseAccessibilityElementTraits(
+                    subrole: nil,
+                    roleDescription: nil,
+                    title: "Delete",
+                    description: nil
+                )
+            ),
+            "a different label means a different control took the path slot"
+        )
+    }
+
+    func testTraitsTreatEmptyAndMissingLabelsAlike() {
+        let blank = ComputerUseAccessibilityElementTraits(
+            subrole: "   ",
+            roleDescription: nil,
+            title: "",
+            description: nil
+        )
+
+        XCTAssertNil(blank.subrole)
+        XCTAssertNil(blank.title)
+        XCTAssertTrue(
+            blank.isConsistent(
+                with: ComputerUseAccessibilityElementTraits(
+                    subrole: "AXToggle",
+                    roleDescription: nil,
+                    title: "Play",
+                    description: nil
+                )
+            )
+        )
+    }
+
+    func testFlattenCarriesNodeTraitsOntoTheElementReference() async {
+        let store = ComputerUseAccessibilityRevisionStore()
+        let snapshot = ComputerUseAXSnapshot(
+            roots: [node(role: "AXButton", title: "Play", description: "Start playback")]
+        )
+
+        let revision = await store.revision(
+            targetKey: "traits",
+            snapshot: snapshot,
+            disableDiff: false
+        )
+
+        XCTAssertEqual(revision.elements[0]?.traits.title, "Play")
+        XCTAssertEqual(revision.elements[0]?.traits.description, "Start playback")
+    }
+
     private func node(
         role: String,
         title: String? = nil,

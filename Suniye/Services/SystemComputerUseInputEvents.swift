@@ -159,10 +159,38 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
 
     func typeText(_ text: String, pid: Int32) async throws {
         try await perform {
-            for chunk in ComputerUseUnicodeEventChunker.chunks(in: text) {
+            for event in ComputerUseUnicodeEventChunker.typingEvents(in: text) {
                 try Task.checkCancellation()
-                try postUnicodeChunk(chunk, pid: pid)
+                switch event {
+                case let .text(chunk):
+                    try postUnicodeChunk(chunk, pid: pid)
+                case .returnKey:
+                    try postReturnKey(pid: pid)
+                }
             }
+        }
+    }
+
+    private func postReturnKey(pid: Int32) throws {
+        guard let down = CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: Self.returnVirtualKey,
+            keyDown: true
+        ),
+            let up = CGEvent(
+                keyboardEventSource: nil,
+                virtualKey: Self.returnVirtualKey,
+                keyDown: false
+            ) else {
+            throw ComputerUseActionError.eventCreationFailed
+        }
+        down.postToPid(pid)
+        do {
+            try Task.checkCancellation()
+            up.postToPid(pid)
+        } catch {
+            up.postToPid(pid)
+            throw error
         }
     }
 
@@ -224,6 +252,8 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
         configure(event, screenPoint: point, button: .left, target: target)
         event.postToPid(target.processIdentifier)
     }
+
+    private static let returnVirtualKey: CGKeyCode = 36
 
     /// Clamps in floating point first: `Int(_: Double)` traps outside the
     /// `Int` range, and the model controls the page count.

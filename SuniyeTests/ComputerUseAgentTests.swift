@@ -331,6 +331,54 @@ final class ComputerUseAgentTests: XCTestCase {
         )
     }
 
+    func testStepLimitTerminatesTheRunAsFailure() async {
+        let model = ScriptedComputerUseModel(
+            responses: Array(
+                repeating: .toolCall(
+                    id: "state",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Calculator"}"#
+                ),
+                count: 6
+            )
+        )
+        let agent = ComputerUseAgent(
+            model: model,
+            tools: FreshnessCheckingComputerUseBackend(),
+            maximumSteps: 2
+        )
+
+        let result = await agent.run(task: ComputerUseAgentTask(instruction: "Loop forever."))
+
+        XCTAssertEqual(result.outcome, .failed)
+        XCTAssertTrue(result.message.contains("2 steps"))
+    }
+
+    func testWallClockDeadlineTerminatesTheRunAsFailure() async {
+        let clock = ManualComputerUseClock(advancingBy: .seconds(20))
+        let model = ScriptedComputerUseModel(
+            responses: Array(
+                repeating: .toolCall(
+                    id: "state",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Calculator"}"#
+                ),
+                count: 6
+            )
+        )
+        let agent = ComputerUseAgent(
+            model: model,
+            tools: FreshnessCheckingComputerUseBackend(),
+            maximumRunDuration: .seconds(30),
+            now: { clock.now }
+        )
+
+        let result = await agent.run(task: ComputerUseAgentTask(instruction: "Take too long."))
+
+        XCTAssertEqual(result.outcome, .failed)
+        XCTAssertTrue(result.message.contains("running too long"))
+    }
+
     func testInterventionAfterAnAtomicActionForcesFreshObservationBeforeContinuing() async {
         let interventions = ComputerUseInterventionChannel()
         let model = ScriptedComputerUseModel(
@@ -775,6 +823,26 @@ private actor RecordingComputerUseActivitySink {
 
     func record(_ activity: ComputerUseActivity) {
         activities.append(activity)
+    }
+}
+
+/// Advances a fixed step on every read, so a run reaches its deadline
+/// deterministically without sleeping.
+private final class ManualComputerUseClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private let step: Duration
+    private var instant = ContinuousClock().now
+
+    init(advancingBy step: Duration) {
+        self.step = step
+    }
+
+    var now: ContinuousClock.Instant {
+        lock.withLock {
+            let current = instant
+            instant = instant.advanced(by: step)
+            return current
+        }
     }
 }
 
