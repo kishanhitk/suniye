@@ -168,6 +168,17 @@ to emit a `node_repl` script (proves the voice pipeline is agnostic).
 3. Prompt rewrite.
 4. Full suite, preview install, live verification (typed chat first, then voice).
 
+## Decisions on record
+
+- **Sync-runaway handling: in-process, accept the gap** (product decision,
+  2026-08-14). The public macOS SDK does not expose
+  `JSContextGroupSetExecutionTimeLimit` (private API), so a pure-CPU
+  `while(true){}` cannot be interrupted in-process. An async hang (hung native
+  call or never-settling promise — the realistic failure) is fully recovered by
+  the off-queue watchdog; a sync runaway fails the run and leaks one spinning
+  thread until app restart. A killable subprocess runner was considered and
+  declined for now; revisit only if sync runaways are observed in practice.
+
 ## Deferred, tracked
 
 - Per-app approval elicitation at the bridge (safety layer; mirrors
