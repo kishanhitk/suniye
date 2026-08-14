@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00957CF195B991167A1DFF31 /* ComputerUseEvalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBFFE1D8E7A33CAA303EABC4 /* ComputerUseEvalTests.swift */; };
 		011573BC5508772E6B3BFC63 /* ComputerUseActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80CFBAD174ECF98CB61CEEB8 /* ComputerUseActivity.swift */; };
 		0173E6427AE50E82819D4D1C /* VoiceActivationControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81C5464F15B84B7225F58899 /* VoiceActivationControllerTests.swift */; };
 		01989238B5D7396C7DB8C856 /* AppStateEditLearningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 667CD8D078A7298D136D4BC5 /* AppStateEditLearningTests.swift */; };
@@ -470,6 +471,7 @@
 		BACB700EFAB40AF2BE0D05D2 /* EditLearningMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditLearningMoreTests.swift; sourceTree = "<group>"; };
 		BAD363F5B6346BBC43B06E2E /* FloatingIndicatorState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorState.swift; sourceTree = "<group>"; };
 		BB8D402E8332D5CA9A674A4F /* SpeechOutputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechOutputService.swift; sourceTree = "<group>"; };
+		BBFFE1D8E7A33CAA303EABC4 /* ComputerUseEvalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseEvalTests.swift; sourceTree = "<group>"; };
 		BC99DF5A7CB434D72CF94894 /* ComputerUseModelSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseModelSettings.swift; sourceTree = "<group>"; };
 		BDD66CF413C1ACA8DB2719C4 /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
 		BF32A97362B13A4984C14FA6 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
@@ -668,6 +670,7 @@
 				3701FE2D60E73A1F3EDD9356 /* ComputerUseConversationStoreTests.swift */,
 				755CDA46051DAA1EEF641C2B /* ComputerUseCoordinatorTests.swift */,
 				13731A06E8C3CA71B59F9B46 /* ComputerUseCursorPresenterTests.swift */,
+				BBFFE1D8E7A33CAA303EABC4 /* ComputerUseEvalTests.swift */,
 				437827FB3E73E85A61541002 /* ComputerUseInputTranslationTests.swift */,
 				865C713832C141D8B0774005 /* ComputerUseModelConfigurationTests.swift */,
 				77E28CDB66B92AF35FAB32D1 /* ComputerUseModelToolContractTests.swift */,
@@ -1256,6 +1259,7 @@
 				0835D19EE5581E867B55D7A4 /* ComputerUseConversationStoreTests.swift in Sources */,
 				927A52C8CD5753D379ABFA8C /* ComputerUseCoordinatorTests.swift in Sources */,
 				1036294FDAD331BE2AE40B78 /* ComputerUseCursorPresenterTests.swift in Sources */,
+				00957CF195B991167A1DFF31 /* ComputerUseEvalTests.swift in Sources */,
 				0A011A2C3536B1B1F565B3BA /* ComputerUseInputTranslationTests.swift in Sources */,
 				E7FDC247323F09DDF262ADCE /* ComputerUseModelConfigurationTests.swift in Sources */,
 				3D4EF67E5B006E00511DD97B /* ComputerUseModelToolContractTests.swift in Sources */,
