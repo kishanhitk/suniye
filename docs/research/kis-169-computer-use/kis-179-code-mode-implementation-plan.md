@@ -106,9 +106,11 @@ computer-use-only, so we take the simple path:
 
 - `ComputerUseToolName` gains `nodeRepl = "node_repl"`. The catalog advertises only
   that tool: one required string parameter `code`.
-- The agent accepts both `node_repl` and direct legacy tool calls. The direct path
-  costs nothing (the decoder is shared with the bridge), keeps the intervention
-  observation injection unchanged, and keeps the existing agent tests meaningful.
+- **Hard cutover.** The function-calling path is removed, not kept as a fallback
+  (the ten-tool contract lives on the parity branch history). The agent handles
+  exactly one tool — `node_repl` — plus a final text answer. The ten tool calls
+  exist only as `sky.*` bridge targets inside a script, decoded by the shared
+  decoder. Agent tests are rewritten for the script shape, not preserved.
 - `ComputerUseModelInstructions` is rewritten from the reference
   `computer-use-node-repl.md`, with these deltas:
   - No bootstrap section; `sky` and `nodeRepl` are pre-injected.
