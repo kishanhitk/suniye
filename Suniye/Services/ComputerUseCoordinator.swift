@@ -19,7 +19,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     typealias AgentFactory = @MainActor (
         ComputerUseRemoteModelConfiguration,
         ComputerUseActivitySink,
-        ComputerUseAgentEnvironment
+        (@Sendable (Bool) async -> Void)?
     ) -> any ComputerUseAgentRunning
 
     var phase: ComputerUseCoordinatorPhase = .idle {
@@ -70,12 +70,12 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         self.permissionSnapshot = initialPermissionSnapshot
         self.cursorSession = cursorSession
         self.conversationStore = conversationStore
-        self.makeAgent = makeAgent ?? { configuration, activitySink, environment in
+        self.makeAgent = makeAgent ?? { configuration, activitySink, voiceActivationControl in
             ComputerUseCoordinator.makeProductionAgent(
                 configuration: configuration,
                 activitySink: activitySink,
                 analytics: analytics,
-                environment: environment
+                voiceActivationControl: voiceActivationControl
             )
         }
         conversation = conversationStore.load()
@@ -191,7 +191,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         let agent = makeAgent(
             configuration,
             activitySink,
-            ComputerUseAgentEnvironment(voiceActivationControl: voiceActivationControl)
+            voiceActivationControl
         )
         let task = ComputerUseAgentTask(
             instruction: instruction,
@@ -357,12 +357,12 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         configuration: ComputerUseRemoteModelConfiguration,
         activitySink: ComputerUseActivitySink,
         analytics: any Analytics,
-        environment: ComputerUseAgentEnvironment
+        voiceActivationControl: (@Sendable (Bool) async -> Void)?
     ) -> any ComputerUseAgentRunning {
         ComputerUseAgent(
             model: ComputerUseRemoteModelClient(configuration: configuration),
             tools: ComputerUseToolBackend(
-                voiceActivationControl: environment.voiceActivationControl
+                voiceActivationControl: voiceActivationControl
             ),
             activitySink: activitySink,
             analytics: analytics,
@@ -370,9 +370,4 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
             contextPolicy: .referenceAligned(modelID: configuration.modelID)
         )
     }
-}
-
-/// Coordinator-owned context handed to the agent factory.
-struct ComputerUseAgentEnvironment: Sendable {
-    var voiceActivationControl: (@Sendable (Bool) async -> Void)?
 }

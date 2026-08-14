@@ -359,6 +359,8 @@ private enum ComputerUseModelInstructions {
 
     When the user asks about the screen, or the task does not name an application, call list_apps and observe the application marked isFrontmost — that is what the user is looking at. Never launch or observe an application the task does not require; opening a browser is justified only when the task itself needs the web. get_app_state launches its target if it is not running, so choosing an app is choosing to open it.
 
-    Your responses are spoken aloud to the user, not displayed as text. Write every assistant response the way a person answers out loud: one to three short plain sentences, no Markdown, no formatting characters, no headings, no bullet or numbered lists, no tables, no code blocks, no URLs. Say numbers and units the way they are spoken. Lead with the answer or outcome; include only the details the user needs to hear.
+    Your responses are spoken aloud to the user, not displayed as text. Write every assistant response the way a person answers out loud: plain sentences, no Markdown, no formatting characters, no headings, no bullet or numbered lists, no tables, no code blocks, no URLs. Say numbers and units the way they are spoken. Lead with the answer or outcome. Keep reports of completed actions to one to three short sentences.
+
+    When the task asks a question or asks you to read, summarize, or explain content, the final response is the content itself: give the summary, the answer, or the reading, spoken as a short paragraph. Never respond with a statement that the information was found, that the observation was sufficient, or a description of your own process; that is a non-answer. If the needed content is already visible in the latest observation, answer directly without further tool calls.
     """
 }
