@@ -78,19 +78,33 @@ final class SherpaWakeWordDetector: WakeWordDetecting {
                 joiner: joiner.path
             ),
             numThreads: 1,
-            provider: "cpu"
+            provider: "cpu",
+            // The vendored helper defaults modelingUnit to "cjkchar", which
+            // makes sherpa misparse the BPE keyword file for this English
+            // model. Empty matches the validated C configuration.
+            modelingUnit: ""
         )
+        // keywords_buf is silently ignored by sherpa-onnx 1.12.25 (verified
+        // against identical file-based config), so the keywords go through a
+        // file. Verified root cause of wake detection never firing.
+        let keywordsURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("suniye-wake-keywords-\(ProcessInfo.processInfo.processIdentifier).txt")
+        try Self.effectiveKeywords.write(to: keywordsURL, atomically: true, encoding: .utf8)
+
         var config = sherpaOnnxKeywordSpotterConfig(
             featConfig: sherpaOnnxFeatureConfig(sampleRate: 16000, featureDim: 80),
             modelConfig: modelConfig,
-            keywordsFile: "",
+            keywordsFile: keywordsURL.path,
             maxActivePaths: 4,
             numTrailingBlanks: 1,
             keywordsScore: 2.0,
-            keywordsThreshold: 0.25,
-            keywordsBuf: Self.effectiveKeywords,
-            keywordsBufSize: Self.effectiveKeywords.utf8.count
+            keywordsThreshold: 0.25
         )
+        // The vendored helper fills keywords_buf with a non-null empty string,
+        // and a non-null buffer makes sherpa ignore keywords_file entirely.
+        // Null it so the file is authoritative.
+        config.keywords_buf = nil
+        config.keywords_buf_size = 0
         spotter = SherpaOnnxKeywordSpotterWrapper(config: &config)
         guard spotter.spotter != nil, spotter.stream != nil else {
             throw WakeWordDetectorError.spotterCreationFailed
