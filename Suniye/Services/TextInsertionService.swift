@@ -54,6 +54,8 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         NSWorkspace.shared.frontmostApplication?.processIdentifier
     }
     var manualAccessibilitySetter: ((pid_t) -> Void)?
+    var focusedElementRetryCount = 8
+    var focusedElementRetryIntervalNanoseconds: UInt64 = 150_000_000
 
     func captureInsertionContext() -> TextInsertionContext? {
         guard let focusedElement = getFocusedTextElement(),
@@ -97,7 +99,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         // No focused text input means the paste would land on an arbitrary
         // control — and a presumed success would let auto-submit post Return
         // there. Fail before touching the clipboard; ⌃⌘V recovers the text.
-        guard let focusedElement = getFocusedTextElement() else {
+        guard let focusedElement = await focusedTextElementAwaitingHydration() else {
             throw InsertError.noFocusedTextInput
         }
 
@@ -124,6 +126,22 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         // read as nil, terminals read stale — KIS-178), so a posted paste into
         // a focused text element is reported as success.
         try postKey(pasteKeyCode(), flags: .maskCommand)
+    }
+
+    /// Chromium hydrates its accessibility tree asynchronously after
+    /// warmTargetAppAccessibility; a cold Electron app needs up to ~1s before
+    /// the focused composer exists (KIS-181). Covers the paste-last path,
+    /// which warms and inserts back to back.
+    private func focusedTextElementAwaitingHydration() async -> AXUIElement? {
+        for attempt in 0 ..< max(focusedElementRetryCount, 1) {
+            if let element = getFocusedTextElement() {
+                return element
+            }
+            if attempt < focusedElementRetryCount - 1 {
+                try? await Task.sleep(nanoseconds: focusedElementRetryIntervalNanoseconds)
+            }
+        }
+        return nil
     }
 
     /// Electron/Chromium apps leave their accessibility tree unbuilt until a
