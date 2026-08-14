@@ -43,19 +43,21 @@ final class SherpaWakeWordDetector: WakeWordDetecting {
     /// Two variant groups, tuned live: the anglicized pronunciations
     /// ("suh-nee-yay", from TTS validation) and the native Hindi
     /// pronunciations (transcribed from real dictation as "son yeah",
-    /// "sonia"), the latter with stricter thresholds because they sit closer
-    /// to English near-misses ("sunny", "sonny") in acoustic space.
+    /// "sonia"). The native group's thresholds favor recall over rejecting
+    /// the acoustic neighbors ("sunny", "sonny"): a false wake costs a
+    /// five-second listening pill that times out; a miss makes the feature
+    /// feel dead.
     static let keywords = """
     ▁HE Y ▁SU N I Y E :3.0 #0.05
     ▁HE Y ▁SO ON I Y E :3.0 #0.05
     ▁HE Y ▁SU N I Y A Y :3.0 #0.05
     ▁HE Y ▁SU NE E Y E :3.0 #0.05
     ▁HE Y ▁SU N I :3.0 #0.05
-    ▁HE Y ▁SO N ▁YEAH :2.0 #0.20
-    ▁HE Y ▁SU N ▁YEAH :2.0 #0.20
-    ▁HE Y ▁SO N IA :2.0 #0.25
-    ▁HE Y ▁SU N IA :2.0 #0.25
-    ▁HE Y ▁SU N Y E :2.0 #0.20
+    ▁HE Y ▁SO N ▁YEAH :2.0 #0.15
+    ▁HE Y ▁SU N ▁YEAH :2.0 #0.15
+    ▁HE Y ▁SO N IA :2.0 #0.15
+    ▁HE Y ▁SU N IA :2.0 #0.15
+    ▁HE Y ▁SU N Y E :2.0 #0.15
     """
 
     /// Wake-tuning mode: near-zero thresholds plus per-candidate logging, so a
