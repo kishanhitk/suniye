@@ -63,6 +63,7 @@ final class SpyTextInsertionService: TextInsertionServiceProtocol {
     private(set) var insertedTexts: [String] = []
     private(set) var copiedTexts: [String] = []
     private(set) var submitCallCount = 0
+    private(set) var warmTargetAppAccessibilityCallCount = 0
     var insertionContext: TextInsertionContext?
     var insertError: Error?
     var copyError: Error?
@@ -75,6 +76,10 @@ final class SpyTextInsertionService: TextInsertionServiceProtocol {
 
     func makeFocusedFieldValueProvider() -> (() -> String?)? {
         fieldValueProvider
+    }
+
+    func warmTargetAppAccessibility() {
+        warmTargetAppAccessibilityCallCount += 1
     }
 
     @MainActor

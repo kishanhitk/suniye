@@ -210,6 +210,28 @@ final class TextInsertionServiceTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "previous")
     }
 
+    func testWarmTargetAppAccessibilityAppliesToFrontmostApp() {
+        let service = TextInsertionService()
+        var warmedPIDs: [pid_t] = []
+        service.frontmostAppPIDProvider = { 4242 }
+        service.manualAccessibilitySetter = { warmedPIDs.append($0) }
+
+        service.warmTargetAppAccessibility()
+
+        XCTAssertEqual(warmedPIDs, [4242])
+    }
+
+    func testWarmTargetAppAccessibilityDoesNothingWithoutFrontmostApp() {
+        let service = TextInsertionService()
+        var warmedPIDs: [pid_t] = []
+        service.frontmostAppPIDProvider = { nil }
+        service.manualAccessibilitySetter = { warmedPIDs.append($0) }
+
+        service.warmTargetAppAccessibility()
+
+        XCTAssertTrue(warmedPIDs.isEmpty)
+    }
+
     func testSubmitActiveInputPostsReturnKey() throws {
         let service = TextInsertionService()
         var posted: [(CGKeyCode, CGEventFlags)] = []

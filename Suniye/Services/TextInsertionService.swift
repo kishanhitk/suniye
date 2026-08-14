@@ -9,6 +9,7 @@ protocol TextInsertionServiceProtocol {
     func copyTextToClipboard(_ text: String) throws
     func submitActiveInput() throws
     func makeFocusedFieldValueProvider() -> (() -> String?)?
+    func warmTargetAppAccessibility()
 }
 
 struct TextInsertionContext: Equatable {
@@ -49,6 +50,10 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     var keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)?
     var pasteKeyCodeProvider: (() -> CGKeyCode?)?
     var clipboardRestoreDelay: TimeInterval = 0.45
+    var frontmostAppPIDProvider: () -> pid_t? = {
+        NSWorkspace.shared.frontmostApplication?.processIdentifier
+    }
+    var manualAccessibilitySetter: ((pid_t) -> Void)?
 
     func captureInsertionContext() -> TextInsertionContext? {
         guard let focusedElement = getFocusedTextElement(),
@@ -119,6 +124,21 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         // read as nil, terminals read stale — KIS-178), so a posted paste into
         // a focused text element is reported as success.
         try postKey(pasteKeyCode(), flags: .maskCommand)
+    }
+
+    /// Electron/Chromium apps leave their accessibility tree unbuilt until a
+    /// client opts in via AXManualAccessibility; a cold tree makes the focused
+    /// composer invisible to getFocusedTextElement (KIS-181). Called when
+    /// recording starts so the tree hydrates while the user speaks. Apps that
+    /// do not support the attribute reject the write harmlessly.
+    func warmTargetAppAccessibility() {
+        guard let pid = frontmostAppPIDProvider() else { return }
+        if let manualAccessibilitySetter {
+            manualAccessibilitySetter(pid)
+            return
+        }
+        let application = AXUIElementCreateApplication(pid)
+        AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue)
     }
 
     func copyTextToClipboard(_ text: String) throws {
