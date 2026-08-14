@@ -75,7 +75,8 @@ LINEAR_API_KEY=... bun scripts/smoke.ts
 ```
 
 The endpoint applies a server-side Cloudflare Cache API rate limit before any Linear
-calls: 6 POST requests per 10 minutes per IP (the smoke test consumes one).
+calls: 6 POST requests per 10 minutes per IP, best-effort and per data center (the
+Cache API is not global), not a hard cap. The smoke test consumes one request.
 
 Shipped app builds post to `https://suniye.kishans.in/api/issue-reports`; that path is
 excluded from the old domain's 301 and 308-redirected to the new endpoint instead,

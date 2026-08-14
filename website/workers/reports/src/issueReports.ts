@@ -145,6 +145,7 @@ interface LinearAttachmentCreateResponse {
 
 export const maxDiagnosticsBytes = 10 * 1024 * 1024;
 const maxRequestBytes = maxDiagnosticsBytes + 128 * 1024;
+const linearRequestTimeoutMs = 30_000;
 const defaultRateLimitMaxRequests = 6;
 const defaultRateLimitWindowSeconds = 10 * 60;
 
@@ -393,6 +394,7 @@ async function uploadFileToLinear(
     method: "PUT",
     headers,
     body: file,
+    signal: AbortSignal.timeout(linearRequestTimeoutMs),
   });
 
   if (!uploadResponse.ok) {
@@ -505,6 +507,7 @@ async function linearGraphQL<T>(
       Accept: "application/json",
     },
     body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(linearRequestTimeoutMs),
   });
 
   if (!response.ok) {

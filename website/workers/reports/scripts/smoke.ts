@@ -87,7 +87,6 @@ const archiveBody = (await archive.json()) as {
 if (!archive.ok || !archiveBody.data?.issueArchive?.success) {
   console.error(`WARN: could not archive ${body.issueIdentifier} — archive it manually.`);
   console.error(JSON.stringify(archiveBody.errors ?? archiveBody));
-  process.exit(1);
+} else {
+  console.log(`Archived ${body.issueIdentifier}.`);
 }
-
-console.log(`Archived ${body.issueIdentifier}.`);

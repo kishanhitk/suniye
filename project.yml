@@ -47,7 +47,7 @@ targets:
         LSUIElement: true
         NSMicrophoneUsageDescription: Suniye needs microphone access to capture dictation.
         NSSpeechRecognitionUsageDescription: Suniye uses on-device speech recognition to transcribe your dictation.
-        SuniyeIssueReportEndpointURL: https://suniye.kishans.in/api/issue-reports
+        SuniyeIssueReportEndpointURL: https://suniye.app/api/issue-reports
         SuniyeAnalyticsEndpointURL: https://ingest.suniye.kishans.in/api/v1/events
         SuniyeBuildChannel: $(SUNIYE_BUILD_CHANNEL)
         SuniyeUpdatesEnabled: $(SUNIYE_UPDATES_ENABLED)
