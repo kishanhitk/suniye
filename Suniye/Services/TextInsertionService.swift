@@ -155,8 +155,13 @@ final class TextInsertionService: TextInsertionServiceProtocol {
             manualAccessibilitySetter(pid)
             return
         }
-        let application = AXUIElementCreateApplication(pid)
-        AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        // The AX write is a synchronous cross-process call with a multi-second
+        // timeout when the target app hangs; keep it off the caller's (main)
+        // thread so the hotkey flow never stalls.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let application = AXUIElementCreateApplication(pid)
+            AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        }
     }
 
     func copyTextToClipboard(_ text: String) throws {
