@@ -3,11 +3,15 @@ import SwiftUI
 struct ComputerUseSettingsDisclosure: View {
     @Bindable var coordinator: ComputerUseCoordinator
     @Bindable var modelSettings: ComputerUseModelSettingsController
+    @Bindable var appState: AppState
+    @State private var showVoiceActivationNotice = false
 
     var body: some View {
         DisclosureGroup {
             VStack(spacing: 0) {
                 modelConfiguration
+                Divider().padding(.vertical, 10)
+                voiceActivationSection
                 Divider().padding(.vertical, 10)
                 permissionRow(
                     title: "Accessibility",
@@ -41,6 +45,147 @@ struct ComputerUseSettingsDisclosure: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
         )
+    }
+
+    /// UX plan: Voice Activation section — toggle, wake phrase display,
+    /// toggle shortcut, sound feedback, follow-up window (experimental).
+    private var voiceActivationSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: appState.voiceActivationEnabled ? "waveform.circle.fill" : "waveform.circle")
+                    .foregroundStyle(appState.voiceActivationEnabled ? Color.green : MainWindowPalette.tertiaryText)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Voice Activation")
+                        .font(AppTypography.bodyMedium)
+                    Text("Say “Hey Suniye” from anywhere to start, correct, or stop a task. Say “stop listening” to turn it off.")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { appState.voiceActivationEnabled },
+                    set: { enabled in
+                        if enabled, !appState.voiceActivationNoticeAcknowledged {
+                            showVoiceActivationNotice = true
+                        } else {
+                            appState.voiceActivationEnabled = enabled
+                        }
+                    }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+            }
+            if appState.voiceActivationEnabled {
+                HStack(spacing: 12) {
+                    Text("Toggle shortcut")
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                    Spacer()
+                    HotkeyRecorderButton(
+                        configuration: $appState.voiceActivationToggleHotkeyConfiguration,
+                        idleIcon: "waveform",
+                        allowsClear: true,
+                        clearHelp: "Remove the Voice Activation shortcut"
+                    )
+                }
+                Toggle("Sound feedback for wake-up and completion", isOn: $appState.voiceActivationSoundFeedbackEnabled)
+                    .font(AppTypography.subheadline)
+                Toggle("Follow-up window after a task completes (experimental)", isOn: $appState.voiceActivationFollowUpWindowEnabled)
+                    .font(AppTypography.subheadline)
+                tryWakePhraseRow
+            }
+            voiceOutputRow
+        }
+        .alert("Voice Activation keeps the microphone in use", isPresented: $showVoiceActivationNotice) {
+            Button("Turn On") {
+                appState.voiceActivationNoticeAcknowledged = true
+                appState.voiceActivationEnabled = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("While waiting for “Hey Suniye,” audio is processed on this Mac in a rolling in-memory buffer of at most 35 seconds. It is never written to disk, and nothing leaves the machine before the wake phrase. The macOS microphone indicator stays visible the whole time.")
+        }
+    }
+
+    /// UX plan: the try-wake-phrase flow. Live microphone levels plus the
+    /// current listening state, so both the wake word and a dead microphone
+    /// are testable without leaving Settings.
+    private var tryWakePhraseRow: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 2) {
+                let levels = appState.voiceActivationLiveLevels
+                ForEach(0..<12, id: \.self) { index in
+                    let level = levels.indices.contains(index * 2) ? levels[index * 2] : 0
+                    Capsule()
+                        .fill(level > 0.05 ? Color.green : MainWindowPalette.tertiaryText.opacity(0.4))
+                        .frame(width: 3, height: 4 + CGFloat(min(1, level)) * 14)
+                }
+            }
+            .frame(height: 20)
+            .animation(.linear(duration: 0.05), value: appState.voiceActivationLiveLevels)
+
+            Text(tryWakePhraseStatus)
+                .font(AppTypography.subheadline)
+                .foregroundStyle(tryWakePhraseIsHot ? Color.green : MainWindowPalette.secondaryText)
+            Spacer()
+        }
+        .padding(10)
+        .background(MainWindowPalette.selectedFill)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    /// UX plan: Voice Output — spoken responses at turn boundaries, generated
+    /// on-device by Chatterbox. Apple Silicon only; hidden where unsupported.
+    @ViewBuilder
+    private var voiceOutputRow: some View {
+        if VoiceHelperRuntimeLocator.isAppleSilicon {
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("Speak responses aloud (Voice Output)", isOn: $appState.voiceOutputEnabled)
+                    .font(AppTypography.subheadline)
+                    .padding(.top, 4)
+                Text(voiceOutputDetail)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.tertiaryText)
+            }
+        }
+    }
+
+    private var voiceOutputDetail: String {
+        switch VoiceHelperRuntimeLocator().availability() {
+        case .available:
+            return "Done, Couldn’t finish, and questions are spoken by an on-device voice. Say “Hey Suniye” or press Escape to interrupt."
+        case .helperNotInstalled:
+            return "Requires the local voice helper: run scripts/setup_voice_helper.sh, then re-enable."
+        case .unsupportedHardware:
+            return "Requires Apple Silicon."
+        }
+    }
+
+    private var tryWakePhraseIsHot: Bool {
+        if case .listening = appState.voiceActivationDisplayState {
+            return true
+        }
+        if case .transcribing = appState.voiceActivationDisplayState {
+            return true
+        }
+        return false
+    }
+
+    private var tryWakePhraseStatus: String {
+        switch appState.voiceActivationDisplayState {
+        case .off:
+            return "Voice Activation is off."
+        case .suspended:
+            return "Paused — the microphone is in use elsewhere or unavailable."
+        case .ready:
+            return "Try it: say “Hey Suniye.” The bars should move as you speak; if they stay flat, check the Microphone permission."
+        case .listening:
+            return "Heard it — listening. Say a task, or wait to return to ready."
+        case .transcribing:
+            return "Transcribing your turn…"
+        case .followUpWindow:
+            return "Follow-up window open — speak to continue without the wake phrase."
+        }
     }
 
     private var modelConfiguration: some View {

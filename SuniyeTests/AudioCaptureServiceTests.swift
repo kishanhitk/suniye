@@ -498,6 +498,80 @@ final class AudioCaptureServiceTests: XCTestCase {
         return Array(result.prefix(readCount))
     }
 
+    // MARK: Listen tap (always-listening wake-word path)
+
+    func testListenTapDeliversFramesWithoutAccumulating() async throws {
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1),
+            samples: Array(repeating: 0.25, count: 1_600)
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        let sessionID = UUID()
+        let framesArrived = expectation(description: "frames delivered")
+        framesArrived.assertForOverFulfill = false
+        let received = ReceivedFrames()
+
+        _ = try await service.startListenTap(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        ) { samples, sampleRate in
+            received.append(samples: samples, sampleRate: sampleRate)
+            framesArrived.fulfill()
+        }
+        await fulfillment(of: [framesArrived], timeout: 2)
+
+        // Tap frames stream out; nothing accumulates for snapshots.
+        let snapshot = await service.snapshotSamples(sessionID: sessionID, maxDurationSeconds: 10)
+        XCTAssertEqual(snapshot?.samples.isEmpty, true)
+        XCTAssertEqual(received.sampleRates().first, 16_000)
+        XCTAssertGreaterThanOrEqual(received.totalSamples(), 1_600)
+
+        await service.stopListenTap(sessionID: sessionID)
+        XCTAssertEqual(factory.drivers.first?.stopCallCount, 1)
+    }
+
+    func testStartCaptureDisplacesListenTap() async throws {
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 160)
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        let tapID = UUID()
+        _ = try await service.startListenTap(
+            sessionID: tapID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        ) { _, _ in }
+
+        let captureID = UUID()
+        _ = try await service.startCapture(
+            sessionID: captureID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+
+        // The tap's driver was stopped by the displacing capture; stopping the
+        // tap afterwards must not touch the live capture.
+        XCTAssertEqual(factory.drivers.first?.stopCallCount, 1)
+        await service.stopListenTap(sessionID: tapID)
+        let captured = await service.stopCapture(sessionID: captureID)
+        // The capture kept running through the tap stop: it accumulated the
+        // stub driver's frames and ended by normal stop, not interruption.
+        XCTAssertFalse(captured.samples.isEmpty)
+        XCTAssertEqual(captured.sessionID, captureID)
+    }
+
     private func makeDeviceRoute(
         effectiveInputDeviceID: String = "test-device",
         inputTransport: AudioDeviceTransport = .builtIn,
@@ -512,6 +586,30 @@ final class AudioCaptureServiceTests: XCTestCase {
             nominalInputSampleRate: 16_000,
             inputChannelCount: 1
         )
+    }
+}
+
+/// Thread-safe collector for listen-tap frames (delivered on an internal queue).
+private final class ReceivedFrames: @unchecked Sendable {
+    private let lock = NSLock()
+    private var frames: [(samples: [Float], sampleRate: Double)] = []
+
+    func append(samples: [Float], sampleRate: Double) {
+        lock.lock()
+        frames.append((samples, sampleRate))
+        lock.unlock()
+    }
+
+    func sampleRates() -> [Double] {
+        lock.lock()
+        defer { lock.unlock() }
+        return frames.map(\.sampleRate)
+    }
+
+    func totalSamples() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return frames.reduce(0) { $0 + $1.samples.count }
     }
 }
 

@@ -15,6 +15,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         action: #selector(startNewComputerUseConversation),
         keyEquivalent: ""
     )
+    private let voiceActivationToggleItem = NSMenuItem(
+        title: "Turn Voice Activation On",
+        action: #selector(toggleVoiceActivation),
+        keyEquivalent: ""
+    )
+    private let stopComputerUseTaskItem = NSMenuItem(
+        title: "Stop Current Task",
+        action: #selector(stopComputerUseTask),
+        keyEquivalent: ""
+    )
     private let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
     private let reportIssueItem = NSMenuItem(title: "Report a Problem...", action: #selector(reportIssue), keyEquivalent: "")
@@ -41,6 +51,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         openSettingsItem.target = self
         copyLastTranscriptItem.target = self
         newComputerUseConversationItem.target = self
+        voiceActivationToggleItem.target = self
+        stopComputerUseTaskItem.target = self
         checkUpdatesItem.target = self
         downloadItem.target = self
         reportIssueItem.target = self
@@ -53,6 +65,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(openSettingsItem)
         menu.addItem(copyLastTranscriptItem)
         menu.addItem(newComputerUseConversationItem)
+        menu.addItem(voiceActivationToggleItem)
+        menu.addItem(stopComputerUseTaskItem)
         menu.addItem(.separator())
         menu.addItem(checkUpdatesItem)
         menu.addItem(downloadItem)
@@ -90,6 +104,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         copyLastTranscriptItem.isEnabled = appState.lastTranscriptText != nil
         newComputerUseConversationItem.isEnabled = !appState.computerUseCoordinator.isRunning
             && !appState.computerUseCoordinator.conversation.isEmpty
+
+        // UX plan: the menu bar always tells the user whether Suniye is
+        // waiting for the wake phrase.
+        voiceActivationToggleItem.title = appState.voiceActivationEnabled
+            ? "Turn Voice Activation Off"
+            : "Turn Voice Activation On"
+        stopComputerUseTaskItem.isEnabled = appState.computerUseCoordinator.isRunning
+        stopComputerUseTaskItem.isHidden = !appState.computerUseCoordinator.isRunning
 
         checkUpdatesItem.title = "Check for Updates..."
         checkUpdatesItem.action = #selector(checkForUpdates)
@@ -165,6 +187,18 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func startNewComputerUseConversation() {
         AppLogger.shared.log(.info, "menu action: new computer use conversation")
         appState.startNewComputerUseConversation()
+    }
+
+    @objc
+    private func toggleVoiceActivation() {
+        AppLogger.shared.log(.info, "menu action: toggle voice activation")
+        appState.toggleVoiceActivation()
+    }
+
+    @objc
+    private func stopComputerUseTask() {
+        AppLogger.shared.log(.info, "menu action: stop computer use task")
+        appState.computerUseCoordinator.stop()
     }
 
     @objc

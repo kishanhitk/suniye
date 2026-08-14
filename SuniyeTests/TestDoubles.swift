@@ -448,6 +448,7 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
 @MainActor
 final class StubTranscriptionService: TranscriptionServiceProtocol {
     var transcribeResult: Result<String, Error> = .success("")
+    private(set) var lastTranscribedSamples: [Float] = []
     /// Consumed in order before falling back to `transcribeResult`.
     var scriptedTranscribeResults: [Result<String, Error>] = []
     var loadModelResult: Result<Void, Error> = .success(())
@@ -476,6 +477,7 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String {
         transcribeCallCount += 1
         transcribePurposes.append(purpose)
+        lastTranscribedSamples = samples
         let callNumber = transcribeCallCount
         onTranscribe?()
         let result = scriptedTranscribeResults.isEmpty
@@ -513,6 +515,11 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
     var startCaptureError: Error?
     var routeSnapshotError: Error?
     var suspendsStartCapture = false
+    var startListenTapCallCount = 0
+    var stopListenTapCallCount = 0
+    var lastListenTapSessionID: UUID?
+    var startListenTapError: Error?
+    var listenTapFrames: (@Sendable ([Float], Double) -> Void)?
     var onStartCapture: ((UUID) -> Void)?
     var onStopCapture: ((UUID) -> Void)?
     var onCancelCapture: ((UUID) -> Void)?
@@ -555,6 +562,28 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
             throw startCaptureError
         }
         return AudioCaptureSession(id: sessionID, route: route)
+    }
+
+    func startListenTap(
+        sessionID: UUID,
+        preferredInputDeviceID: String?,
+        echoCancellationEnabled: Bool,
+        onFrames: @escaping @Sendable (_ samples: [Float], _ sampleRate: Double) -> Void
+    ) async throws -> AudioCaptureSession {
+        startListenTapCallCount += 1
+        lastListenTapSessionID = sessionID
+        lastPreferredInputDeviceID = preferredInputDeviceID
+        listenTapFrames = onFrames
+        if let startListenTapError {
+            throw startListenTapError
+        }
+        return AudioCaptureSession(id: sessionID, route: route)
+    }
+
+    func stopListenTap(sessionID: UUID) async {
+        stopListenTapCallCount += 1
+        lastListenTapSessionID = sessionID
+        listenTapFrames = nil
     }
 
     func stopCapture(sessionID: UUID) async -> CapturedAudio {
@@ -625,12 +654,15 @@ final class StubHotkeyService: HotkeyServiceProtocol {
     var onComputerUseHotkeyUp: (() -> Void)?
     var onCancel: (() -> Bool)?
     var onPasteLastTranscript: (() -> Void)?
+    var onVoiceActivationToggle: (() -> Void)?
     private(set) var startMonitoringCallCount = 0
     private(set) var lastAssignments: HotkeySlotAssignments?
+    private(set) var lastInstallCancellationMonitors: Bool?
 
-    func startMonitoring(assignments: HotkeySlotAssignments) {
+    func startMonitoring(assignments: HotkeySlotAssignments, installCancellationMonitors: Bool) {
         startMonitoringCallCount += 1
         lastAssignments = assignments
+        lastInstallCancellationMonitors = installCancellationMonitors
     }
 
     func stopMonitoring() {}
@@ -835,7 +867,15 @@ func makeTestAppState(
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
     magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
     startServices: Bool = false,
-    llmE2EMode: LLME2EMode = .none
+    llmE2EMode: LLME2EMode = .none,
+    wakeWordDetectorFactory: (() throws -> WakeWordDetecting)? = nil,
+    speechActivityDetectorFactory: (() throws -> SpeechActivityDetecting)? = nil,
+    voiceActivationConfiguration: VoiceActivationController.Configuration = .init(
+        transcriptFlashSeconds: 0,
+        followUpWindowSeconds: 0.2,
+        maximumTurnBufferSeconds: 35
+    ),
+    speechOutputFactory: (@MainActor () -> (any SpeechOutputServing)?)? = nil
 ) -> AppState {
     AppState(
         modelManager: modelManager,
@@ -881,8 +921,115 @@ func makeTestAppState(
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
         magicFormatSlowWarningDelaySeconds: magicFormatSlowWarningDelaySeconds,
         startServices: startServices,
-        llmE2EMode: llmE2EMode
+        llmE2EMode: llmE2EMode,
+        wakeWordDetectorFactory: wakeWordDetectorFactory ?? { StubWakeWordDetector() },
+        speechActivityDetectorFactory: speechActivityDetectorFactory ?? { StubSpeechActivityDetector() },
+        voiceActivationConfiguration: voiceActivationConfiguration,
+        speechOutputFactory: speechOutputFactory ?? { nil }
     )
+}
+
+@MainActor
+final class StubSpeechOutputService: SpeechOutputServing {
+    private(set) var spoken: [String] = []
+    private(set) var stopCallCount = 0
+    var isSpeaking = false
+    var onPlaybackFinished: (() -> Void)?
+
+    func speak(_ text: String) async {
+        spoken.append(text)
+        isSpeaking = true
+    }
+
+    func stopSpeaking() {
+        stopCallCount += 1
+        isSpeaking = false
+    }
+
+    func finishPlayback() {
+        isSpeaking = false
+        onPlaybackFinished?()
+    }
+}
+
+/// RIFF-chunk-aware PCM16 wav reader for audio fixtures; `say(1)` output
+/// carries a JUNK chunk, so a fixed 44-byte header offset would misread it.
+enum WavFixture {
+    static func pcm16MonoSamples(from url: URL) throws -> [Float] {
+        let data = try Data(contentsOf: url)
+        var offset = 12
+        while offset + 8 <= data.count {
+            let chunkID = String(decoding: data[offset..<offset + 4], as: UTF8.self)
+            let size = data[offset + 4..<offset + 8].withUnsafeBytes {
+                $0.loadUnaligned(as: UInt32.self)
+            }
+            if chunkID == "data" {
+                let payload = data.subdata(in: (offset + 8)..<min(offset + 8 + Int(size), data.count))
+                return payload.withUnsafeBytes { raw in
+                    raw.bindMemory(to: Int16.self).map { Float($0) / 32_768 }
+                }
+            }
+            offset += 8 + Int(size) + (Int(size) % 2)
+        }
+        return []
+    }
+}
+
+/// Scripted wake detector: fires once per queued hit.
+final class StubWakeWordDetector: WakeWordDetecting, @unchecked Sendable {
+    private let lock = NSLock()
+    private var pendingHits = 0
+    private(set) var resetCallCount = 0
+
+    func queueWakeHit() {
+        lock.lock()
+        pendingHits += 1
+        lock.unlock()
+    }
+
+    func accept(samples: [Float], sampleRate: Double) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if pendingHits > 0 {
+            pendingHits -= 1
+            return true
+        }
+        return false
+    }
+
+    func reset() {
+        lock.lock()
+        resetCallCount += 1
+        lock.unlock()
+    }
+}
+
+/// Scripted VAD on the pipeline's own sample clock: frames are judged speech
+/// inside scheduled windows measured in seconds of *processed* audio. Frames
+/// are processed asynchronously, so wall-clock flags would race; the sample
+/// clock is deterministic.
+final class StubSpeechActivityDetector: SpeechActivityDetecting, @unchecked Sendable {
+    private let lock = NSLock()
+    private var processedSeconds: Double = 0
+    private var speechWindows: [ClosedRange<Double>] = []
+
+    /// Window bounds are seconds of audio fed through `isSpeech` (which the
+    /// pipeline calls only while capturing a turn).
+    func scheduleSpeech(in window: ClosedRange<Double>) {
+        lock.lock()
+        speechWindows.append(window)
+        lock.unlock()
+    }
+
+    func isSpeech(samples16k: [Float]) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let time = processedSeconds
+        processedSeconds += Double(samples16k.count) / 16_000
+        return speechWindows.contains { $0.contains(time) }
+    }
+
+    func reset() {}
 }
 
 private final class NoopLLMPostProcessor: LLMPostProcessor {

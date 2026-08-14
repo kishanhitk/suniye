@@ -4,14 +4,17 @@ import SwiftUI
 struct ComputerUsePage: View {
     @Bindable var coordinator: ComputerUseCoordinator
     @Bindable var modelSettings: ComputerUseModelSettingsController
+    @Bindable var appState: AppState
     @State private var copiedDebugSessionID: ComputerUseDebugSessionID?
 
     init(
         coordinator: ComputerUseCoordinator,
-        modelSettings: ComputerUseModelSettingsController
+        modelSettings: ComputerUseModelSettingsController,
+        appState: AppState
     ) {
         self.coordinator = coordinator
         self.modelSettings = modelSettings
+        self.appState = appState
     }
 
     var body: some View {
@@ -95,7 +98,8 @@ struct ComputerUsePage: View {
 
                     ComputerUseSettingsDisclosure(
                         coordinator: coordinator,
-                        modelSettings: modelSettings
+                        modelSettings: modelSettings,
+                        appState: appState
                     )
                     .padding(.top, 8)
                 }

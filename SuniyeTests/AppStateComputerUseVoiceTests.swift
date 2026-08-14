@@ -45,7 +45,7 @@ final class AppStateComputerUseVoiceTests: XCTestCase {
         let coordinator = ComputerUseCoordinator(
             permissions: VoiceTaskComputerUsePermissions(),
             initialPermissionSnapshot: .notGranted,
-            makeAgent: { _, _ in VoiceTaskComputerUseAgent() }
+            makeAgent: { _, _, _ in VoiceTaskComputerUseAgent() }
         )
         coordinator.configureModel(testConfiguration)
         let appState = makeTestAppState(
@@ -99,7 +99,7 @@ final class AppStateComputerUseVoiceTests: XCTestCase {
         let coordinator = ComputerUseCoordinator(
             permissions: VoiceTaskComputerUsePermissions(),
             initialPermissionSnapshot: .notGranted,
-            makeAgent: { _, _ in VoiceTaskComputerUseAgent() }
+            makeAgent: { _, _, _ in VoiceTaskComputerUseAgent() }
         )
         coordinator.configureModel(testConfiguration)
 
@@ -174,7 +174,7 @@ final class AppStateComputerUseVoiceTests: XCTestCase {
         let coordinator = ComputerUseCoordinator(
             permissions: VoiceTaskComputerUsePermissions(),
             initialPermissionSnapshot: .granted,
-            makeAgent: { _, _ in agent }
+            makeAgent: { _, _, _ in agent }
         )
         coordinator.configureModel(testConfiguration)
         return coordinator

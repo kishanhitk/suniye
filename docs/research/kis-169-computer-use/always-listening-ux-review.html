@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Always-listening Voice Mode — UX Review</title>
+<style>
+  @font-face {
+    font-family: "Google Sans";
+    src: url("../../../Suniye/Fonts/GoogleSans-Variable.ttf") format("truetype");
+    font-weight: 100 900;
+  }
+  @font-face {
+    font-family: "Fragment Mono";
+    src: url("../../../Suniye/Fonts/FragmentMono-Regular.ttf") format("truetype");
+  }
+
+  :root {
+    --window-bg: #f9f9f9;
+    --card-bg: #ffffff;
+    --card-stroke: rgba(0,0,0,0.07);
+    --divider: rgba(0,0,0,0.06);
+    --selected: rgba(0,0,0,0.05);
+    --text: #1d1d1f;
+    --secondary: rgba(60,60,67,0.6);
+    --tertiary: rgba(60,60,67,0.45);
+    --accent: #c4441a;
+    --accent-soft: #e07a5f;
+    --green: #2e9e4f;
+    --red: rgba(255,59,48,0.85);
+    --pill-fill: rgba(10,10,12,0.96);
+    --pill-idle: rgba(10,10,12,0.58);
+    --radius: 10px;
+    --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: "Google Sans", -apple-system, sans-serif;
+    font-size: 13px;
+    background: var(--window-bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 80px;
+  }
+
+  .page { max-width: 980px; margin: 0 auto; padding: 40px 28px 24px; }
+
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.2px; }
+  .subtitle { color: var(--secondary); margin-top: 6px; font-size: 13px; max-width: 620px; line-height: 1.5; }
+  .subtitle code, .note code { font-family: "Fragment Mono", monospace; font-size: 12px; }
+
+  h2 { font-size: 15px; font-weight: 600; margin: 44px 0 4px; }
+  .section-note { color: var(--secondary); font-size: 12px; margin-bottom: 14px; line-height: 1.5; max-width: 640px; }
+
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-stroke);
+    border-radius: var(--radius);
+    padding: 12px;
+  }
+
+  /* ---------- Simulator desktop ---------- */
+  .desktop {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--card-stroke);
+    background: linear-gradient(160deg, #d8d3cc 0%, #cbc7c4 45%, #b7b4b6 100%);
+    height: 430px;
+    user-select: none;
+  }
+
+  .menubar {
+    position: absolute; top: 0; left: 0; right: 0; height: 26px;
+    background: rgba(250,250,250,0.82);
+    backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    z-index: 30;
+  }
+  .menubar .left { display: flex; gap: 14px; align-items: center; color: rgba(0,0,0,0.8); }
+  .menubar .left .apple { font-size: 13px; }
+  .menubar .right { display: flex; gap: 12px; align-items: center; color: rgba(0,0,0,0.7); }
+
+  .mic-active-dot {
+    display: none;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #ff9f0a;
+    box-shadow: 0 0 5px rgba(255,159,10,0.8);
+  }
+  .desktop.va-enabled .mic-active-dot { display: block; }
+
+  .suniye-status {
+    display: flex; align-items: center; gap: 5px; cursor: pointer;
+    padding: 2px 6px; border-radius: 5px;
+  }
+  .suniye-status:hover, .suniye-status.open { background: rgba(0,0,0,0.1); }
+  .suniye-status .glyph { font-size: 13px; }
+  .suniye-status .wave {
+    display: none; gap: 1.5px; align-items: center; height: 10px;
+  }
+  .desktop.va-enabled .suniye-status .wave { display: flex; }
+  .suniye-status .wave i {
+    width: 2px; border-radius: 1px; background: rgba(0,0,0,0.65);
+    animation: ambient 1.6s ease-in-out infinite;
+  }
+  .suniye-status .wave i:nth-child(1) { height: 4px; animation-delay: 0s; }
+  .suniye-status .wave i:nth-child(2) { height: 7px; animation-delay: 0.25s; }
+  .suniye-status .wave i:nth-child(3) { height: 5px; animation-delay: 0.5s; }
+  @keyframes ambient { 0%,100% { transform: scaleY(0.6);} 50% { transform: scaleY(1);} }
+
+  /* ---------- Menu bar dropdown ---------- */
+  .statusmenu {
+    position: absolute; top: 28px; right: 8px; width: 260px;
+    background: rgba(250,250,250,0.96);
+    backdrop-filter: blur(20px);
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.12);
+    box-shadow: 0 10px 32px rgba(0,0,0,0.22);
+    padding: 5px;
+    z-index: 40;
+    display: none;
+    font-size: 13px;
+  }
+  .statusmenu.open { display: block; }
+  .statusmenu .item {
+    padding: 5px 10px; border-radius: 5px; cursor: pointer;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .statusmenu .item:hover { background: var(--accent); color: #fff; }
+  .statusmenu .item.disabled { color: var(--tertiary); pointer-events: none; }
+  .statusmenu .sep { height: 1px; background: rgba(0,0,0,0.08); margin: 5px 8px; }
+  .statusmenu .state-line { padding: 4px 10px; color: var(--secondary); font-size: 11px; }
+  .statusmenu .state-line b { color: var(--text); font-weight: 600; }
+
+  /* ---------- Floating indicator pill ---------- */
+  .pill-anchor {
+    position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    z-index: 20;
+  }
+
+  .preview-bubble {
+    background: var(--pill-fill); color: rgba(255,255,255,0.92);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 14px;
+    padding: 8px 14px;
+    max-width: 340px;
+    font-size: 12.5px; line-height: 1.45;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    opacity: 0; transform: translateY(6px) scale(0.96);
+    transition: opacity 250ms var(--ease-out-strong), transform 250ms var(--ease-out-strong);
+    pointer-events: none;
+  }
+  .preview-bubble.show { opacity: 1; transform: none; }
+  .preview-bubble { transform-origin: bottom center; }
+  .preview-bubble:not(.show) { transition: opacity 150ms var(--ease-out-strong); }
+
+  .pill {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    height: 34px; min-width: 34px;
+    padding: 0 14px;
+    border-radius: 17px;
+    background: var(--pill-fill);
+    border: 1px solid rgba(255,255,255,0.14);
+    color: #fff;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+    transition: opacity 200ms var(--ease-out-strong),
+                transform 200ms var(--ease-out-strong),
+                min-width 250ms var(--ease-in-out-strong),
+                padding 250ms var(--ease-in-out-strong),
+                border-color 200ms ease, box-shadow 200ms ease,
+                background-color 200ms ease;
+    cursor: default; white-space: nowrap;
+    font-size: 12.5px;
+  }
+  .pill.hidden {
+    opacity: 0; transform: scale(0.97) translateY(8px); pointer-events: none;
+    transition-duration: 150ms;   /* exit faster than enter, same downward path */
+  }
+  .pill.idle { background: var(--pill-idle); padding: 0; width: 34px; }
+  .pill.interactive { cursor: pointer; }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; opacity: 0.9; }
+
+  .pill .meter { display: flex; gap: 2.5px; align-items: center; height: 16px; }
+  .pill .meter i {
+    width: 2.5px; border-radius: 1.5px; background: #fff;
+    animation: meter 0.9s ease-in-out infinite;
+  }
+  @keyframes meter { 0%,100% { transform: scaleY(0.35);} 50% { transform: scaleY(1);} }
+
+  .shimmer {
+    background: linear-gradient(90deg, rgba(255,255,255,0.45) 25%, #fff 50%, rgba(255,255,255,0.45) 75%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 1.8s linear infinite;
+  }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+  .pill .stopbtn {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: rgba(255,255,255,0.18); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 8px; padding: 0;
+    transition: transform 100ms var(--ease-out-strong), background 150ms ease;
+  }
+  .pill .stopbtn:active, .pill .openlink:active, .pill .cancelbtn:active { transform: scale(0.97); }
+  .pill .openlink { transition: transform 100ms var(--ease-out-strong), color 150ms ease; }
+  @media (hover: hover) and (pointer: fine) {
+    .pill .stopbtn:hover { background: rgba(255,255,255,0.32); }
+  }
+  .pill .statusfade { transition: opacity 200ms ease, filter 200ms ease; }
+  .pill .statusfade.swapping { opacity: 0.35; filter: blur(2px); }
+  .pill .stopbtn::before { content: ""; width: 7px; height: 7px; background: #fff; border-radius: 1.5px; }
+  .pill .cancelbtn::before { display:none; }
+  .pill .cancelbtn { font-size: 11px; }
+  .pill .openlink {
+    color: rgba(255,255,255,0.65); font-size: 11px; cursor: pointer;
+    border-left: 1px solid rgba(255,255,255,0.2); padding-left: 8px; margin-left: 2px;
+  }
+  .pill .openlink:hover { color: #fff; }
+  .pill.needs-input { border-color: rgba(224,122,95,0.85); box-shadow: 0 6px 18px rgba(196,68,26,0.35); }
+  .pill.needs-input .dot { background: var(--accent-soft); }
+  .pill.done .check { color: #6ee787; font-size: 13px; }
+  .pill.failed .cross { color: #ff8a80; font-size: 12px; }
+
+  /* ---------- Chat window in desktop ---------- */
+  .chat-window {
+    position: absolute; top: 48px; right: 22px; width: 340px; max-height: 330px;
+    background: var(--window-bg);
+    border-radius: 10px;
+    border: 1px solid rgba(0,0,0,0.14);
+    box-shadow: 0 18px 44px rgba(0,0,0,0.3);
+    display: none; flex-direction: column;
+    overflow: hidden;
+    z-index: 25;
+  }
+  .chat-window.open { display: flex; }
+  .chat-titlebar {
+    height: 34px; display: flex; align-items: center; padding: 0 12px; gap: 8px;
+    background: var(--window-bg); border-bottom: 1px solid var(--divider);
+    flex-shrink: 0;
+  }
+  .traffic { display: flex; gap: 6px; }
+  .traffic i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+  .traffic i:nth-child(1) { background: #ff5f57; }
+  .traffic i:nth-child(2) { background: #febc2e; }
+  .traffic i:nth-child(3) { background: #28c840; }
+  .chat-titlebar .title { font-weight: 600; font-size: 12px; margin-left: 4px; }
+  .chat-scroll { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+  .msg { max-width: 85%; padding: 7px 11px; border-radius: 12px; font-size: 12px; line-height: 1.45; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.user .via-voice { display: block; font-size: 9.5px; opacity: 0.75; margin-top: 3px; }
+  .msg.assistant { align-self: flex-start; background: var(--card-bg); border: 1px solid var(--card-stroke); }
+  .msg.activity {
+    align-self: flex-start; background: none; border: none;
+    color: var(--secondary); font-family: "Fragment Mono", monospace; font-size: 10.5px;
+    padding: 1px 4px;
+  }
+  .msg.working { align-self: flex-start; color: var(--secondary); font-size: 12px; padding: 2px 4px; }
+  .msg.working .shimmer-dark {
+    background: linear-gradient(90deg, rgba(60,60,67,0.4) 25%, rgba(60,60,67,0.95) 50%, rgba(60,60,67,0.4) 75%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 1.8s linear infinite;
+  }
+
+  /* ---------- Simulator controls ---------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+  .controls .group-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--tertiary); width: 100%; margin-top: 6px; }
+  button.ctl {
+    font-family: inherit; font-size: 12px;
+    background: var(--card-bg); color: var(--text);
+    border: 1px solid var(--card-stroke); border-radius: 7px;
+    padding: 6px 12px; cursor: pointer;
+    transition: background 0.15s;
+  }
+  button.ctl:hover:not(:disabled) { background: var(--selected); }
+  button.ctl:disabled { opacity: 0.4; cursor: default; }
+  button.ctl.speak { border-color: rgba(196,68,26,0.35); color: var(--accent); }
+  button.ctl.speak::before { content: "🎙 "; font-size: 11px; }
+  button.ctl.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.ctl.primary:hover:not(:disabled) { background: #a83a16; }
+  kbd {
+    font-family: "Fragment Mono", monospace; font-size: 10px;
+    background: var(--selected); border: 1px solid var(--card-stroke);
+    border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px;
+  }
+
+  .sim-log {
+    margin-top: 14px; padding: 10px 12px;
+    background: var(--card-bg); border: 1px solid var(--card-stroke); border-radius: var(--radius);
+    font-family: "Fragment Mono", monospace; font-size: 10.5px; line-height: 1.7;
+    height: 110px; overflow-y: auto; color: var(--secondary);
+  }
+  .sim-log .t { color: var(--tertiary); }
+  .sim-log .ux { color: var(--accent); }
+  .sim-log b { color: var(--text); font-weight: 500; }
+
+  .statebadge {
+    position: absolute; top: 38px; left: 14px; z-index: 20;
+    font-family: "Fragment Mono", monospace; font-size: 10px;
+    background: rgba(0,0,0,0.55); color: #fff;
+    padding: 3px 9px; border-radius: 20px;
+  }
+
+  /* ---------- Scenario player ---------- */
+  .scenarios { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+  .scenario {
+    background: var(--card-bg); border: 1px solid var(--card-stroke); border-radius: var(--radius);
+    padding: 12px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .scenario:hover { border-color: rgba(196,68,26,0.4); }
+  .scenario.playing { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .scenario h4 { font-size: 12.5px; font-weight: 600; margin-bottom: 4px; }
+  .scenario p { font-size: 11px; color: var(--secondary); line-height: 1.45; }
+  .scenario .play { color: var(--accent); font-size: 11px; margin-top: 8px; display: block; font-weight: 500; }
+
+  /* ---------- States gallery ---------- */
+  .states-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .state-card { padding: 0; overflow: hidden; }
+  .state-card .stage {
+    background: linear-gradient(160deg, #d8d3cc, #bbb8ba);
+    padding: 26px 16px; display: flex; justify-content: center; align-items: center; min-height: 86px;
+  }
+  .state-card .stage .pill { position: static; transform: none; }
+  .state-card .body { padding: 12px 14px 14px; }
+  .state-card .name { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .state-card .name .num {
+    font-family: "Fragment Mono", monospace; font-size: 10px; color: var(--accent);
+    background: rgba(196,68,26,0.09); padding: 1px 7px; border-radius: 10px;
+  }
+  .state-card .desc { color: var(--secondary); font-size: 11.5px; line-height: 1.5; margin-top: 5px; }
+  .state-card .rule { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--divider); font-size: 11px; color: var(--tertiary); line-height: 1.5; }
+  .state-card .rule b { color: var(--secondary); font-weight: 600; }
+  .menubar-mini {
+    display: inline-flex; gap: 5px; align-items: center;
+    background: rgba(250,250,250,0.9); border-radius: 6px; padding: 4px 10px; font-size: 12px;
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+  .menubar-mini .wave { display: flex; gap: 1.5px; align-items: center; height: 10px; }
+  .menubar-mini .wave i { width: 2px; border-radius: 1px; background: rgba(0,0,0,0.65); animation: ambient 1.6s ease-in-out infinite; }
+  .menubar-mini .wave i:nth-child(1) { height: 4px; }
+  .menubar-mini .wave i:nth-child(2) { height: 7px; animation-delay: 0.25s; }
+  .menubar-mini .wave i:nth-child(3) { height: 5px; animation-delay: 0.5s; }
+
+  /* ---------- Settings mockup ---------- */
+  .settings-mock { max-width: 560px; }
+  .settings-mock .sec-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .settings-mock .sec-sub { font-size: 11px; color: var(--secondary); margin-bottom: 10px; }
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; gap: 16px; }
+  .row + .row, .row + .caption-row, .caption-row + .row { border-top: 1px solid var(--divider); }
+  .row .label { font-size: 13px; }
+  .row .sub { font-size: 11px; color: var(--secondary); margin-top: 2px; line-height: 1.45; }
+  .caption-row { padding: 8px 0 10px; font-size: 11px; color: var(--secondary); line-height: 1.5; }
+
+  .toggle {
+    width: 38px; height: 22px; border-radius: 11px; background: rgba(0,0,0,0.15);
+    position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; border: none;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+    background: #fff; border-radius: 50%; transition: left 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .toggle.on::after { left: 18px; }
+
+  .hotkey-chip {
+    font-family: "Fragment Mono", monospace; font-size: 11px;
+    background: var(--selected); border: 1px solid var(--card-stroke); border-radius: 6px;
+    padding: 4px 10px; color: var(--text);
+  }
+  .wake-chip {
+    font-size: 12.5px; font-weight: 600; color: var(--accent);
+    background: rgba(196,68,26,0.08); border-radius: 6px; padding: 4px 12px;
+  }
+  .mini-btn {
+    font-family: inherit; font-size: 11.5px; background: var(--card-bg);
+    border: 1px solid var(--card-stroke); border-radius: 6px; padding: 4px 11px; cursor: pointer;
+  }
+  .mini-btn:hover { background: var(--selected); }
+
+  .first-run-note {
+    margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+    background: rgba(196,68,26,0.06); border: 1px solid rgba(196,68,26,0.18);
+    font-size: 11.5px; line-height: 1.5; color: var(--text);
+  }
+  .first-run-note b { color: var(--accent); }
+
+  .try-flow { margin-top: 12px; display: none; }
+  .try-flow.open { display: block; }
+  .try-stage {
+    background: linear-gradient(160deg, #d8d3cc, #bbb8ba); border-radius: 8px;
+    min-height: 74px; display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .try-stage .pill { position: static; }
+
+  /* ---------- Acceptance criteria ---------- */
+  .criteria { display: flex; flex-direction: column; gap: 6px; }
+  .criterion {
+    display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px;
+    background: var(--card-bg); border: 1px solid var(--card-stroke); border-radius: 8px;
+    cursor: pointer; font-size: 12.5px; line-height: 1.45;
+  }
+  .criterion input { margin-top: 2px; accent-color: var(--accent); }
+  .criterion .n { font-family: "Fragment Mono", monospace; color: var(--tertiary); font-size: 10.5px; margin-top: 2px; }
+  .criterion.checked { opacity: 0.55; }
+  .criterion .demo-link { margin-left: auto; color: var(--accent); font-size: 11px; white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
+  .criterion .demo-link:hover { text-decoration: underline; }
+
+  .footer-note { margin-top: 40px; color: var(--tertiary); font-size: 11px; line-height: 1.6; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pill, .pill.hidden { transition: opacity 150ms ease; transform: none; }
+    .preview-bubble, .preview-bubble.show { transition: opacity 150ms ease; transform: none; }
+    .shimmer {
+      animation: none;
+      background: none; -webkit-text-fill-color: currentColor; color: rgba(255,255,255,0.9);
+    }
+    .pill .meter i, .suniye-status .wave i, .menubar-mini .wave i { animation: none; transform: scaleY(0.7); }
+    .pill .statusfade.swapping { filter: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Always-listening Voice Mode</h1>
+  <p class="subtitle">
+    Interactive review of the proposed UX (<code>always-listening-ux-plan.md</code>, KIS-169).
+    Everything below is simulated in-browser with the app's real palette, type, and floating-indicator
+    design. Drive it manually, or play the scripted end-to-end flows.
+  </p>
+
+  <!-- ================= SIMULATOR ================= -->
+  <h2>Live simulator</h2>
+  <p class="section-note">
+    A mock desktop. The menu-bar item (top right) and the floating indicator (bottom center) are the
+    only Suniye surfaces — the Computer Use window opens only if you open it. The 🎙 buttons simulate
+    what your microphone would hear.
+  </p>
+
+  <div class="desktop" id="desktop">
+    <div class="menubar">
+      <div class="left"><span class="apple"></span> <b>Finder</b> <span>File</span> <span>Edit</span> <span>View</span></div>
+      <div class="right">
+        <span class="mic-active-dot" title="macOS microphone-in-use indicator"></span>
+        <div class="suniye-status" id="statusItem" onclick="toggleMenu(event)">
+          <span class="glyph">◎</span>
+          <span class="wave"><i></i><i></i><i></i></span>
+        </div>
+        <span>Wed 13 Aug&nbsp;&nbsp;11:24</span>
+      </div>
+    </div>
+
+    <div class="statusmenu" id="statusMenu">
+      <div class="state-line">Voice Activation: <b id="menuStateLabel">Off</b></div>
+      <div class="sep"></div>
+      <div class="item" id="menuToggle" onclick="menuToggleVA()">Turn Voice Activation On</div>
+      <div class="item" onclick="openChat(); closeMenu()">Open Conversation</div>
+      <div class="item disabled" id="menuStop" onclick="userStop('menu'); closeMenu()">Stop Current Task</div>
+      <div class="sep"></div>
+      <div class="item disabled">Settings…</div>
+    </div>
+
+    <div class="statebadge" id="stateBadge">state: off</div>
+
+    <div class="chat-window" id="chatWindow">
+      <div class="chat-titlebar">
+        <div class="traffic" onclick="closeChat()" style="cursor:pointer"><i></i><i></i><i></i></div>
+        <span class="title">Computer Use</span>
+      </div>
+      <div class="chat-scroll" id="chatScroll"></div>
+    </div>
+
+    <div class="pill-anchor">
+      <div class="preview-bubble" id="previewBubble"></div>
+      <div class="pill hidden" id="pill"></div>
+    </div>
+  </div>
+
+  <div class="controls" id="controls">
+    <span class="group-label">You say (microphone)</span>
+    <button class="ctl speak" data-need="ready" onclick="sayWake()">“Hey Suniye”</button>
+    <button class="ctl speak" data-need="listening" onclick="sayTask()">“Check my battery health and tell me the result”</button>
+    <button class="ctl speak" data-need="listening-running" onclick="sayCorrection()">“Use Terminal instead of System Settings”</button>
+    <button class="ctl speak" data-need="listening-running" onclick="sayStop()">“Stop”</button>
+    <button class="ctl speak" data-need="listening" onclick="saySilence()">…nothing (stay silent)</button>
+    <button class="ctl speak" data-need="ready" onclick="sayAmbient()">“hey sunny day, isn’t it?” (ambient)</button>
+    <span class="group-label">Physical controls</span>
+    <button class="ctl" data-need="running" onclick="userStop('escape')"><kbd>esc</kbd>&nbsp; Escape</button>
+    <button class="ctl" onclick="openChat()">Open Computer Use window</button>
+    <button class="ctl" id="vaToggleBtn" onclick="menuToggleVA()">Turn Voice Activation On</button>
+    <button class="ctl" id="voToggleBtn" onclick="toggleVoiceOutput()">Turn Voice Output On</button>
+  </div>
+
+  <div class="sim-log" id="simLog"></div>
+
+  <!-- ================= SCENARIOS ================= -->
+  <h2>Scripted flows</h2>
+  <p class="section-note">The four end-to-end flows from the UX plan, played against the simulator above.</p>
+  <div class="scenarios">
+    <div class="scenario" id="sc-start" onclick="playScenario('start')">
+      <h4>Start a task from anywhere</h4>
+      <p>Wake → speak → transcript flash → Working → Done. Window never opens.</p>
+      <span class="play">▶ Play</span>
+    </div>
+    <div class="scenario" id="sc-correct" onclick="playScenario('correct')">
+      <h4>Correct an active task</h4>
+      <p>Second wake-up mid-run becomes an intervention in the same conversation.</p>
+      <span class="play">▶ Play</span>
+    </div>
+    <div class="scenario" id="sc-stop" onclick="playScenario('stop')">
+      <h4>Stop by voice</h4>
+      <p>“Hey Suniye, stop” is interpreted in context; run ends as Stopped.</p>
+      <span class="play">▶ Play</span>
+    </div>
+    <div class="scenario" id="sc-false" onclick="playScenario('false')">
+      <h4>False wake-up</h4>
+      <p>Wake with no meaningful speech quietly returns to Ready. No chat turn.</p>
+      <span class="play">▶ Play</span>
+    </div>
+  </div>
+
+  <!-- ================= STATES GALLERY ================= -->
+  <h2>The seven user-visible states</h2>
+  <p class="section-note">Each card shows the exact indicator treatment proposed for that state, plus the governing rules.</p>
+  <div class="states-grid">
+
+    <div class="card state-card">
+      <div class="stage" style="min-height:86px; color: var(--secondary); font-size:12px;">no Suniye surface visible</div>
+      <div class="body">
+        <div class="name"><span class="num">1</span> Off</div>
+        <div class="desc">Voice Activation disabled. No wake-phrase processing, no mic use beyond normal dictation.</div>
+        <div class="rule"><b>Menu bar:</b> plain icon, “Voice Activation Off”. Turning it on moves to Ready.</div>
+      </div>
+    </div>
+
+    <div class="card state-card">
+      <div class="stage"><div class="menubar-mini"><span>◎</span><span class="wave"><i></i><i></i><i></i></span></div></div>
+      <div class="body">
+        <div class="name"><span class="num">2</span> Ready</div>
+        <div class="desc">Waiting for “Hey Suniye.” Represented in the <b>menu bar only</b> — a quiet persistent listening indicator. No floating panel.</div>
+        <div class="rule"><b>Rule:</b> ambient speech is never shown in chat or history. macOS mic indicator stays visible — a deliberate privacy promise.</div>
+      </div>
+    </div>
+
+    <div class="card state-card">
+      <div class="stage"><div class="pill"><span class="meter">
+        <i style="height:6px"></i><i style="height:12px;animation-delay:.1s"></i><i style="height:8px;animation-delay:.2s"></i><i style="height:14px;animation-delay:.3s"></i><i style="height:7px;animation-delay:.4s"></i><i style="height:11px;animation-delay:.5s"></i><i style="height:5px;animation-delay:.6s"></i>
+      </span><span>Listening…</span><span class="openlink cancelbtn" style="border:none;padding-left:2px">✕</span></div></div>
+      <div class="body">
+        <div class="name"><span class="num">3</span> Listening</div>
+        <div class="desc">After wake-up: cue sound (optional), live level meter, Cancel. The user speaks naturally — no key held. Turn end is detected automatically.</div>
+        <div class="rule"><b>Rule:</b> captured transcript flashes briefly before submission so recognition mistakes are visible. Silence → back to Ready, no chat turn.</div>
+      </div>
+    </div>
+
+    <div class="card state-card">
+      <div class="stage"><div class="pill"><span class="shimmer">Checking your last 5 emails…</span><button class="stopbtn" title="Stop"></button><span class="openlink">Open</span></div></div>
+      <div class="body">
+        <div class="name"><span class="num">4</span> Working</div>
+        <div class="desc">Shimmer label with <b>agent-emitted step status</b> — the agent is instructed to keep narrating its current action in plain language (“Opening Chrome…”, “Checking your last 5 emails…”). Falls back to <b>Working…</b>. One Stop control, Open-conversation action.</div>
+        <div class="rule"><b>Rule:</b> statuses name the user-visible action — never transport, provider, or tool-call details. The window does <b>not</b> open automatically. Exactly one Stop control per surface.</div>
+      </div>
+    </div>
+
+    <div class="card state-card">
+      <div class="stage"><div class="pill"><span class="meter">
+        <i style="height:6px"></i><i style="height:12px;animation-delay:.15s"></i><i style="height:9px;animation-delay:.3s"></i><i style="height:13px;animation-delay:.45s"></i><i style="height:6px;animation-delay:.6s"></i>
+      </span><span>Listening…</span><span class="openlink" style="opacity:.7">task running</span></div></div>
+      <div class="body">
+        <div class="name"><span class="num">5</span> Listening during a task</div>
+        <div class="desc">“Hey Suniye” while Working accepts a correction, follow-up, or stop request as a new turn in the <b>same conversation</b>.</div>
+        <div class="rule"><b>Rule:</b> no exact phrase matching — meaning comes from the full turn plus context. An in-flight atomic action finishes first; the correction governs the next decision.</div>
+      </div>
+    </div>
+
+    <div class="card state-card">
+      <div class="stage"><div class="pill needs-input"><span class="dot"></span><span>Needs your input</span><span class="openlink">Open</span></div></div>
+      <div class="body">
+        <div class="name"><span class="num">6</span> Needs input</div>
+        <div class="desc">The task cannot continue without the user. Distinct, non-alarming accent; optional subtle prompt sound. Answer by voice: “Hey Suniye, …”.</div>
+        <div class="rule"><b>Rule:</b> Suniye must not repeatedly announce — or display — sensitive information while waiting.</div>
+      </div>
+    </div>
+
+    <div class="card state-card">
+      <div class="stage"><div class="pill done"><span class="check">✓</span><span>Done — battery is at 91%, Normal condition</span></div></div>
+      <div class="body">
+        <div class="name"><span class="num">7</span> Completed / Stopped / Failed</div>
+        <div class="desc">Brief terminal flash: <b>Done</b> with the final response, <b>Stopped</b>, or <b>Couldn’t finish</b> with a short reason + Open action. Auto-dismisses.</div>
+        <div class="rule"><b>Rule:</b> returns to Ready and <b>preserves the conversation</b>. The next wake-up continues it; a new conversation only on explicit New/Clear.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================= SETTINGS ================= -->
+  <h2>Settings — Voice Activation section</h2>
+  <p class="section-note">Lives in the Computer Use settings disclosure, following the existing card + row idiom.</p>
+
+  <div class="card settings-mock">
+    <div class="sec-title">Voice Activation</div>
+    <div class="sec-sub">Start, correct, or stop Computer Use tasks by speaking from anywhere on your Mac.</div>
+
+    <div class="row">
+      <div><div class="label">Enable Voice Activation</div></div>
+      <button class="toggle" id="settingsToggle" onclick="settingsToggleVA()"></button>
+    </div>
+    <div class="caption-row" id="firstRunNoteWrap" style="display:none">
+      <div class="first-run-note">
+        <b>Suniye keeps using your microphone while it waits for the wake phrase.</b>
+        Nothing you say is stored, shown, or sent anywhere until you say “Hey Suniye.”
+        The macOS microphone indicator stays visible the whole time. <span style="white-space:nowrap">— confirmed once, on first enable.</span>
+      </div>
+    </div>
+    <div class="row">
+      <div><div class="label">Wake phrase</div><div class="sub">Shown here so you never need to remember it.</div></div>
+      <span class="wake-chip">“Hey Suniye”</span>
+    </div>
+    <div class="row">
+      <div><div class="label">Try the wake phrase</div><div class="sub">Practice once — say it, watch it trigger.</div></div>
+      <button class="mini-btn" onclick="toggleTryFlow()">Try it</button>
+    </div>
+    <div class="try-flow" id="tryFlow">
+      <div class="try-stage"><div class="pill" id="tryPill"><span style="opacity:.75">Say “Hey Suniye”…</span></div></div>
+      <div style="margin-top:8px; display:flex; gap:8px;">
+        <button class="ctl speak" onclick="tryWakeDemo()">“Hey Suniye”</button>
+        <span style="font-size:11px;color:var(--tertiary);align-self:center">← simulated; the real flow listens to your mic</span>
+      </div>
+    </div>
+    <div class="row">
+      <div><div class="label">Toggle shortcut</div><div class="sub">Optional. Turns Voice Activation on or off globally.</div></div>
+      <span class="hotkey-chip">⌃⌥ V</span>
+    </div>
+    <div class="row">
+      <div><div class="label">Sound feedback</div><div class="sub">Subtle cues for wake-up, end of turn, needs-input, and completion.</div></div>
+      <button class="toggle on" onclick="this.classList.toggle('on')"></button>
+    </div>
+    <div class="row">
+      <div><div class="label">Microphone</div><div class="sub">MacBook Pro Microphone</div></div>
+      <button class="mini-btn">Microphone Settings…</button>
+    </div>
+
+    <div class="sec-title" style="margin-top:18px">Voice Output</div>
+    <div class="sec-sub">Suniye speaks results and questions aloud. The voice is generated on your Mac (Chatterbox) — no audio or text goes to a speech service. Off by default. Requires Apple Silicon with enough free memory.</div>
+    <div class="row">
+      <div><div class="label">Speak responses</div><div class="sub">Done, Couldn’t finish, and Needs-input — never step statuses or tool activity.</div></div>
+      <button class="toggle" id="voSettingsToggle" onclick="toggleVoiceOutput()"></button>
+    </div>
+    <div class="row">
+      <div><div class="label">Voice</div><div class="sub">On-device voices with an expressiveness dial.</div></div>
+      <button class="mini-btn">Ember (default) ▾</button>
+    </div>
+  </div>
+
+  <!-- ================= ACCEPTANCE ================= -->
+  <h2>Acceptance criteria — review checklist</h2>
+  <p class="section-note">
+    The ten criteria from the UX plan. Tick what the simulation demonstrates convincingly;
+    anything unticked is feedback for the plan. State persists locally in this browser.
+  </p>
+  <div class="criteria" id="criteria"></div>
+
+  <p class="footer-note">
+    Sources: <code>always-listening-ux-plan.md</code> (UX contract) ·
+    <code>always-listening-implementation-plan.md</code> (technical plan) ·
+    palette/type from <code>MainWindowComponents.swift</code>, indicator design from
+    <code>FloatingIndicatorView.swift</code>.<br>
+    Known simplifications: wake detection and endpointing are instant here; real latencies
+    (wake ≈ instant, endpoint ≈ 0.9 s trailing silence, model round-trips) are noted in the log
+    where they apply. Safety controls are intentionally out of scope per current product decision.
+  </p>
+</div>
+
+<script>
+/* ---------------- state machine ---------------- */
+const S = { OFF:'off', READY:'ready', LISTENING:'listening', WORKING:'working',
+            LISTENING_RUNNING:'listening-running', NEEDS_INPUT:'needs-input' };
+let state = S.OFF;
+let running = false;          // an agent run is active
+let timers = [];              // scenario-scripted steps only
+let silenceTimer = null;      // no-speech-after-wake timeout
+let runTimers = [];           // scheduled progress of the active run
+
+const pill = document.getElementById('pill');
+const bubble = document.getElementById('previewBubble');
+const desktop = document.getElementById('desktop');
+const badge = document.getElementById('stateBadge');
+const logEl = document.getElementById('simLog');
+const chatScroll = document.getElementById('chatScroll');
+
+function later(fn, ms) { const t = setTimeout(fn, ms); timers.push(t); return t; }
+function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+function runLater(fn, ms) { const t = setTimeout(fn, ms); runTimers.push(t); return t; }
+function clearRunTimers() { runTimers.forEach(clearTimeout); runTimers = []; }
+function clearSilenceTimer() { clearTimeout(silenceTimer); silenceTimer = null; }
+
+function log(msg, ux) {
+  const time = new Date().toTimeString().slice(0,8);
+  const line = document.createElement('div');
+  line.innerHTML = `<span class="t">${time}</span> ${ux ? '<span class="ux">ux</span> ' : ''}${msg}`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setBadge() {
+  badge.textContent = 'state: ' + state + (running ? ' · run active' : '');
+  document.getElementById('menuStateLabel').textContent =
+    state === S.OFF ? 'Off' : (state === S.READY && !running ? 'Ready' : state === S.READY ? 'Ready (task running)' : state);
+  document.getElementById('menuToggle').textContent =
+    state === S.OFF ? 'Turn Voice Activation On' : 'Turn Voice Activation Off';
+  document.getElementById('vaToggleBtn').textContent =
+    state === S.OFF ? 'Turn Voice Activation On' : 'Turn Voice Activation Off';
+  document.getElementById('menuStop').classList.toggle('disabled', !running);
+  refreshControls();
+}
+
+function refreshControls() {
+  document.querySelectorAll('#controls [data-need]').forEach(b => {
+    const need = b.dataset.need;
+    let ok = false;
+    if (need === 'ready') ok = (state === S.READY || state === S.NEEDS_INPUT || (state === S.WORKING));
+    if (need === 'listening') ok = (state === S.LISTENING);
+    if (need === 'listening-running') ok = (state === S.LISTENING_RUNNING);
+    if (need === 'running') ok = running;
+    // wake button only when not already capturing a turn
+    if (b.textContent.includes('Hey Suniye') && (state === S.LISTENING || state === S.LISTENING_RUNNING)) ok = false;
+    if (b.textContent.includes('ambient') ) ok = (state === S.READY);
+    b.disabled = !ok || state === S.OFF && !b.id;
+    if (state === S.OFF && b.dataset.need) b.disabled = true;
+  });
+}
+
+function renderPill(mode, opts = {}) {
+  pill.className = 'pill';
+  bubble.classList.remove('show');
+  if (mode === 'hidden') { pill.classList.add('hidden'); return; }
+  if (mode === 'listening') {
+    pill.innerHTML = `<span class="meter">${'<i></i>'.repeat(9)}</span><span>Listening…</span>` +
+      (opts.running ? `<span class="openlink" style="opacity:.7">task running</span>`
+                    : `<span class="openlink cancelbtn" style="border:none;padding-left:2px;cursor:pointer" onclick="cancelListening()">✕</span>`);
+    pill.querySelectorAll('.meter i').forEach((el,i) => {
+      el.style.height = (4 + Math.round(Math.random()*11)) + 'px';
+      el.style.animationDelay = (i * 0.08) + 's';
+    });
+  }
+  if (mode === 'working') {
+    pill.classList.add('interactive');
+    pill.innerHTML = `<span class="shimmer statusfade" id="workingStatus">${opts.status || 'Working…'}</span><button class="stopbtn" title="Stop" onclick="userStop('pill')"></button><span class="openlink" onclick="openChat()">Open</span>`;
+  }
+  if (mode === 'needs-input') {
+    pill.classList.add('needs-input');
+    pill.innerHTML = `<span class="dot"></span><span>Needs your input</span><span class="openlink" onclick="openChat()">Open</span>`;
+  }
+  if (mode === 'done')    { pill.classList.add('done');   pill.innerHTML = `<span class="check">✓</span><span>${opts.text}</span>`; }
+  if (mode === 'stopped') { pill.innerHTML = `<span>Stopped</span>`; }
+  if (mode === 'failed')  { pill.classList.add('failed'); pill.innerHTML = `<span class="cross">✕</span><span>${opts.text}</span><span class="openlink" onclick="openChat()">Open</span>`; }
+}
+
+/* ---------------- voice output (browser TTS stands in for local Chatterbox) ---------------- */
+let voiceOutput = false;
+function toggleVoiceOutput() {
+  voiceOutput = !voiceOutput;
+  window.speechSynthesis && speechSynthesis.cancel();
+  document.getElementById('voToggleBtn').textContent = voiceOutput ? 'Turn Voice Output Off' : 'Turn Voice Output On';
+  document.getElementById('voSettingsToggle').classList.toggle('on', voiceOutput);
+  log(`Voice Output <b>${voiceOutput ? 'on' : 'off'}</b>${voiceOutput ? ' — results and questions will be spoken (simulated with browser TTS; the app uses local Chatterbox)' : ''}`, true);
+}
+function speak(text) {
+  if (!voiceOutput || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 1.05;
+  speechSynthesis.speak(u);
+  log('speaking aloud — wake detector suppressed during playback (self-wake guard). Barge-in: wake phrase, Escape, or a new turn stops it.', true);
+}
+function stopSpeaking(reason) {
+  if (window.speechSynthesis && speechSynthesis.speaking) {
+    speechSynthesis.cancel();
+    log(`speech interrupted (${reason}) — barge-in`, true);
+  }
+}
+
+function setWorkingStatus(text) {
+  const el = document.getElementById('workingStatus');
+  if (el) {
+    el.classList.add('swapping');
+    setTimeout(() => {
+      el.textContent = text;
+      el.classList.remove('swapping');
+    }, 100);
+  }
+  log(`agent status → “${text}”`, true);
+}
+
+function showTranscriptFlash(text, cb) {
+  bubble.textContent = '“' + text + '”';
+  bubble.classList.add('show');
+  log('transcript flash — obvious recognition mistakes are visible before submit', true);
+  setTimeout(() => { bubble.classList.remove('show'); cb && cb(); }, 1300);
+}
+
+/* ---------------- chat ---------------- */
+function chatAdd(role, html) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = html;
+  chatScroll.appendChild(div);
+  chatScroll.scrollTop = chatScroll.scrollHeight;
+  return div;
+}
+let workingRow = null;
+function chatWorking(on) {
+  if (on && !workingRow) workingRow = chatAdd('working', '<span class="shimmer-dark">Working…</span>');
+  if (!on && workingRow) { workingRow.remove(); workingRow = null; }
+}
+function openChat()  { document.getElementById('chatWindow').classList.add('open'); }
+function closeChat() { document.getElementById('chatWindow').classList.remove('open'); }
+
+/* ---------------- transitions ---------------- */
+function setVA(on, source) {
+  clearSilenceTimer();
+  if (on) {
+    state = S.READY;
+    desktop.classList.add('va-enabled');
+    renderPill('hidden');
+    log(`Voice Activation <b>on</b> (${source}). Menu-bar indicator active; mic-in-use dot visible. No floating panel in Ready.`, true);
+  } else {
+    state = S.OFF; // running task stays controllable
+    desktop.classList.remove('va-enabled');
+    renderPill(running ? 'working' : 'hidden');
+    log(`Voice Activation <b>off</b> (${source}). ${running ? 'Active task remains visible and controllable.' : ''} Conversation is not erased.`, true);
+  }
+  setBadge();
+}
+function menuToggleVA() { closeMenu(); setVA(state === S.OFF, 'menu bar'); }
+function settingsToggleVA() {
+  const t = document.getElementById('settingsToggle');
+  const firstEnable = !t.classList.contains('on') && !t.dataset.everEnabled;
+  t.classList.toggle('on');
+  if (t.classList.contains('on')) {
+    if (firstEnable) { document.getElementById('firstRunNoteWrap').style.display = 'block'; t.dataset.everEnabled = '1'; }
+    setVA(true, 'settings');
+  } else {
+    document.getElementById('firstRunNoteWrap').style.display = 'none';
+    setVA(false, 'settings');
+  }
+}
+
+function sayWake() {
+  if (state === S.OFF) return;
+  stopSpeaking('wake phrase');
+  const during = running;
+  state = during ? S.LISTENING_RUNNING : S.LISTENING;
+  renderPill('listening', { running: during });
+  log(`wake phrase detected${during ? ' <b>during an active run</b>' : ''} → cue sound, indicator appears near screen edge`, true);
+  setBadge();
+  // silence timeout: 5s of no meaningful speech returns to Ready
+  clearSilenceTimer();
+  silenceTimer = setTimeout(() => {
+    if (state === S.LISTENING || state === S.LISTENING_RUNNING) saySilence(true);
+  }, 6500);
+}
+
+function cancelListening() {
+  clearSilenceTimer();
+  state = S.READY;
+  renderPill(running ? 'working' : 'hidden');
+  log('listening cancelled via ✕ — no chat turn created', true);
+  setBadge();
+}
+
+function saySilence(auto) {
+  clearSilenceTimer();
+  const during = state === S.LISTENING_RUNNING;
+  state = S.READY;
+  renderPill(during || running ? 'working' : 'hidden');
+  log(`${auto ? 'no-speech timeout (5 s)' : 'silence'} → indicator closes, back to Ready. <b>No conversation turn created.</b>`, true);
+  setBadge();
+}
+
+function sayAmbient() {
+  log('ambient speech “hey sunny day…” — KWS does not fire (validated against near-miss phrases). Nothing happens, nothing is recorded.', true);
+}
+
+function sayTask() {
+  if (state !== S.LISTENING) return;
+  clearSilenceTimer();
+  log('speech ends → endpoint detected after ~0.9 s trailing silence (no button, no fixed ritual)');
+  showTranscriptFlash('Check my battery health and tell me the result', () => {
+    chatAdd('user', 'Check my battery health and tell me the result<span class="via-voice">◎ via voice</span>');
+    startRun();
+  });
+}
+
+function startRun() {
+  running = true;
+  state = S.READY; // listening for next wake-up while working
+  renderPill('working');
+  chatWorking(true);
+  log('turn submitted → <b>Working</b>. Window does not open automatically; conversation records the turn.', true);
+  setBadge();
+  runLater(() => { setWorkingStatus('Checking battery health…'); chatAdd('activity', '▸ Checking battery health… — run_shell'); }, 1600);
+  runLater(() => setWorkingStatus('Reading the result…'), 3600);
+  runLater(() => finishRun('done', 'Done — battery is at 91%, Normal condition'), 5200);
+}
+
+function sayCorrection() {
+  if (state !== S.LISTENING_RUNNING) return;
+  clearSilenceTimer();
+  showTranscriptFlash('Use Terminal instead of System Settings', () => {
+    chatAdd('user', 'Use Terminal instead of System Settings<span class="via-voice">◎ via voice · intervention</span>');
+    state = S.READY;
+    renderPill('working');
+    log('intervention queued in the <b>same conversation</b>. Current atomic action finishes; then a fresh observation + the correction govern the next decision.', true);
+    setBadge();
+    // the correction extends the run: push completion out and show the redirected action
+    clearRunTimers();
+    runLater(() => { setWorkingStatus('Opening Terminal…'); chatAdd('activity', '▸ Opening Terminal… — open_app'); }, 1800);
+    runLater(() => { setWorkingStatus('Checking battery health…'); chatAdd('activity', '▸ Checking battery health… — run_shell'); }, 3400);
+    runLater(() => finishRun('done', 'Done — battery is at 91%, Normal condition'), 5600);
+  });
+}
+
+function sayStop() {
+  if (state !== S.LISTENING_RUNNING) return;
+  clearSilenceTimer();
+  showTranscriptFlash('Stop', () => {
+    chatAdd('user', 'Stop<span class="via-voice">◎ via voice</span>');
+    log('“stop” interpreted <b>semantically from context</b> — no phrase list. Run halts before the next action. (Latency note: up to one model round-trip; Escape is the immediate path.)', true);
+    state = S.READY;
+    renderPill('working');
+    setBadge();
+    clearRunTimers();
+    runLater(() => finishRun('stopped'), 1400);
+  });
+}
+
+function userStop(source) {
+  stopSpeaking(source === 'escape' ? 'Escape' : 'Stop control');
+  if (!running) return;
+  clearSilenceTimer();
+  log(`<b>${source === 'escape' ? 'Escape' : source === 'pill' ? 'Stop control' : 'menu Stop'}</b> — immediate, non-semantic cancellation`, true);
+  finishRun('stopped');
+}
+
+function finishRun(kind, text) {
+  running = false;
+  chatWorking(false);
+  clearRunTimers();
+  clearSilenceTimer();
+  if (state !== S.OFF) state = S.READY;
+  if (kind === 'done') {
+    chatAdd('assistant', 'Your battery is at 91% with Normal condition — no service needed.');
+    renderPill('done', { text });
+    speak('Your battery is at 91% with Normal condition. No service needed.');
+  } else if (kind === 'stopped') {
+    chatAdd('assistant', 'Stopped.');
+    renderPill('stopped');
+  } else {
+    chatAdd('assistant', 'Couldn’t finish — ' + text);
+    renderPill('failed', { text: 'Couldn’t finish — ' + text });
+    speak('I couldn’t finish. ' + text);
+  }
+  log(`terminal state <b>${kind}</b> → brief flash, auto-dismiss, back to Ready. Conversation preserved; next wake-up continues it.`, true);
+  setBadge();
+  setTimeout(() => {
+    if (!running && state !== S.LISTENING && state !== S.LISTENING_RUNNING) renderPill('hidden');
+  }, 2600);
+}
+
+/* ---------------- menu ---------------- */
+function toggleMenu(e) {
+  e.stopPropagation();
+  document.getElementById('statusMenu').classList.toggle('open');
+  document.getElementById('statusItem').classList.toggle('open');
+}
+function closeMenu() {
+  document.getElementById('statusMenu').classList.remove('open');
+  document.getElementById('statusItem').classList.remove('open');
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.statusmenu') && !e.target.closest('.suniye-status')) closeMenu();
+});
+
+/* ---------------- scenarios ---------------- */
+let scenarioTimer = null;
+function playScenario(name) {
+  if (name === 'voice') {                 // criterion 11 demo: start-task flow with speech on
+    if (!voiceOutput) toggleVoiceOutput();
+    name = 'start';
+  }
+  clearTimers(); clearRunTimers(); clearSilenceTimer(); clearTimeout(scenarioTimer);
+  stopSpeaking('new scenario');
+  document.querySelectorAll('.scenario').forEach(s => s.classList.remove('playing'));
+  document.getElementById('sc-' + name).classList.add('playing');
+  // reset world
+  running = false; chatWorking(false);
+  chatScroll.innerHTML = ''; closeChat();
+  setVA(true, 'scenario');
+  log(`—— scenario: <b>${name}</b> ——`);
+  const done = () => later(() => document.getElementById('sc-' + name).classList.remove('playing'), 3200);
+
+  if (name === 'start') {
+    later(sayWake, 700);
+    later(sayTask, 1900);
+    done();
+  }
+  if (name === 'correct') {
+    later(sayWake, 700);
+    later(sayTask, 1700);
+    later(openChat, 5200);          // open mid-run so the intervention is visible
+    later(sayWake, 5600);           // second wake during run
+    later(sayCorrection, 6600);
+    done();
+  }
+  if (name === 'stop') {
+    later(sayWake, 700);
+    later(sayTask, 1700);
+    later(sayWake, 5400);
+    later(sayStop, 6400);
+    done();
+  }
+  if (name === 'false') {
+    later(sayWake, 700);
+    later(() => saySilence(true), 3400);
+    done();
+  }
+}
+
+/* ---------------- try-flow ---------------- */
+function toggleTryFlow() { document.getElementById('tryFlow').classList.toggle('open'); }
+function tryWakeDemo() {
+  const p = document.getElementById('tryPill');
+  p.innerHTML = `<span class="meter">${'<i></i>'.repeat(7)}</span><span>Heard it — say a task, or just wait</span>`;
+  p.querySelectorAll('.meter i').forEach((el,i) => { el.style.height = (5+Math.round(Math.random()*9))+'px'; el.style.animationDelay = (i*0.08)+'s'; });
+  setTimeout(() => { p.innerHTML = `<span class="check" style="color:#6ee787">✓</span><span>Wake phrase works</span>`; }, 2200);
+  setTimeout(() => { p.innerHTML = `<span style="opacity:.75">Say “Hey Suniye”…</span>`; }, 4600);
+}
+
+/* ---------------- acceptance criteria ---------------- */
+const CRITERIA = [
+  ["The user can turn Voice Activation on and off and always tell which state it is in", null],
+  ["“Hey Suniye” starts a natural task without opening the Suniye window", "start"],
+  ["The end of a spoken turn does not require a button or fixed pause ritual", "start"],
+  ["A second spoken turn corrects or continues the same task and conversation", "correct"],
+  ["Natural stop language is handled as conversation, while Escape and Stop cancel immediately", "stop"],
+  ["Completing a task returns to Ready without discarding the current conversation", "start"],
+  ["Ambient speech before wake-up does not appear in chat or history", null],
+  ["False wake-ups and empty speech do not create tasks", "false"],
+  ["Missing permissions and provider failures are recoverable without losing the spoken request", null],
+  ["The user can use the existing hold-to-talk route with Voice Activation disabled", null],
+  ["With Voice Output on, results and questions are spoken; wake phrase or Escape interrupts playback instantly, and Suniye never wakes itself from its own speech", "voice"],
+];
+const critWrap = document.getElementById('criteria');
+CRITERIA.forEach(([text, demo], i) => {
+  const key = 'va-crit-' + i;
+  const label = document.createElement('label');
+  label.className = 'criterion';
+  label.innerHTML = `<input type="checkbox"><span class="n">${String(i+1).padStart(2,'0')}</span><span>${text}</span>` +
+    (demo ? `<a class="demo-link" href="javascript:void(0)" onclick="event.preventDefault(); playScenario('${demo}'); document.getElementById('desktop').scrollIntoView({behavior:'smooth', block:'center'})">▶ demo</a>` : '');
+  const cb = label.querySelector('input');
+  cb.checked = localStorage.getItem(key) === '1';
+  label.classList.toggle('checked', cb.checked);
+  cb.addEventListener('change', () => {
+    localStorage.setItem(key, cb.checked ? '1' : '0');
+    label.classList.toggle('checked', cb.checked);
+  });
+  critWrap.appendChild(label);
+});
+
+/* ---------------- init ---------------- */
+renderPill('hidden');
+setBadge();
+log('simulator ready — Voice Activation is <b>off by default</b>, per the plan. Turn it on to begin.');
+</script>
+</body>
+</html>

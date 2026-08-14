@@ -77,7 +77,7 @@ enum TargetCategoryMapper {
 enum AnalyticsMapping {
     static func source(_ source: FloatingIndicatorState.Source) -> SuniyeAnalytics.DictationSource {
         switch source {
-        case .hotkey, .editHotkey, .computerUseHotkey: return .hotkey
+        case .hotkey, .editHotkey, .computerUseHotkey, .voiceActivation: return .hotkey
         case .manual: return .manual
         }
     }
@@ -150,6 +150,7 @@ enum AnalyticsMapping {
         case .drag: return .drag
         case .pressKey: return .pressKey
         case .typeText: return .typeText
+        case .setVoiceActivation: return .setVoiceActivation
         }
     }
 

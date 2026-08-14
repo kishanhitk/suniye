@@ -160,6 +160,12 @@ enum ComputerUseModelToolCatalog {
             ["app": app, "text": string("Exact text to type.")],
             ["app", "text"]
         ),
+        tool(
+            .setVoiceActivation,
+            "Turn Suniye's always-listening Voice Activation on or off. Call with enabled=false when the user asks to stop listening (any phrasing, any language). This controls listening only; it does not end the current task or conversation.",
+            ["enabled": boolean("false to stop listening for the wake phrase; true to resume.")],
+            ["enabled"]
+        ),
     ]
 
     private static let app = string(

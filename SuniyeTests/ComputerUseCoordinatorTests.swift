@@ -14,7 +14,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         )
         let coordinator = ComputerUseCoordinator(
             permissions: permissions,
-            makeAgent: { _, _ in StubComputerUseAgent() }
+            makeAgent: { _, _, _ in StubComputerUseAgent() }
         )
 
         await coordinator.refreshPermissions()
@@ -43,7 +43,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         )
         let coordinator = ComputerUseCoordinator(
             permissions: permissions,
-            makeAgent: { _, _ in StubComputerUseAgent() }
+            makeAgent: { _, _, _ in StubComputerUseAgent() }
         )
 
         await coordinator.refreshPermissions()
@@ -111,7 +111,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         let coordinator = ComputerUseCoordinator(
             permissions: StubComputerUsePermissions(snapshots: []),
             initialPermissionSnapshot: .granted,
-            makeAgent: { _, activitySink in
+            makeAgent: { _, activitySink, _ in
                 ActivityEmittingComputerUseAgent(
                     activities: [activity, completedActivity],
                     sink: activitySink
@@ -180,7 +180,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
     func testSubmitRequiresModelAndBothPermissions() {
         let coordinator = ComputerUseCoordinator(
             permissions: StubComputerUsePermissions(snapshots: []),
-            makeAgent: { _, _ in StubComputerUseAgent() }
+            makeAgent: { _, _, _ in StubComputerUseAgent() }
         )
         coordinator.draft = "Do something"
 
@@ -226,7 +226,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         let coordinator = ComputerUseCoordinator(
             permissions: StubComputerUsePermissions(snapshots: []),
             conversationStore: store,
-            makeAgent: { _, _ in StubComputerUseAgent() }
+            makeAgent: { _, _, _ in StubComputerUseAgent() }
         )
 
         XCTAssertEqual(coordinator.conversation, storedConversation)
@@ -245,7 +245,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
             permissions: StubComputerUsePermissions(snapshots: []),
             initialPermissionSnapshot: .granted,
             conversationStore: store,
-            makeAgent: { _, activitySink in
+            makeAgent: { _, activitySink, _ in
                 ActivityEmittingComputerUseAgent(
                     activities: [activity, completedActivity],
                     sink: activitySink
@@ -267,7 +267,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         let coordinator = ComputerUseCoordinator(
             permissions: StubComputerUsePermissions(snapshots: []),
             permissionSettings: opener,
-            makeAgent: { _, _ in StubComputerUseAgent() }
+            makeAgent: { _, _, _ in StubComputerUseAgent() }
         )
 
         coordinator.openPermissionSettings(.accessibility)
@@ -283,7 +283,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         let coordinator = ComputerUseCoordinator(
             permissions: permissions,
             conversationStore: store,
-            makeAgent: { _, _ in agent }
+            makeAgent: { _, _, _ in agent }
         )
         coordinator.configureModel(testConfiguration)
 
@@ -307,7 +307,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
         let coordinator = ComputerUseCoordinator(
             permissions: StubComputerUsePermissions(snapshots: [.granted]),
             conversationStore: store,
-            makeAgent: { _, _ in agent }
+            makeAgent: { _, _, _ in agent }
         )
 
         XCTAssertEqual(coordinator.draft, "Check battery health")
@@ -356,7 +356,7 @@ final class ComputerUseCoordinatorTests: XCTestCase {
             initialPermissionSnapshot: .granted,
             cursorSession: cursorSession,
             conversationStore: conversationStore,
-            makeAgent: { _, _ in agent }
+            makeAgent: { _, _, _ in agent }
         )
         coordinator.configureModel(testConfiguration)
         return coordinator

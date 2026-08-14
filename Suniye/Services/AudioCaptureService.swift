@@ -45,6 +45,17 @@ protocol AudioCaptureServiceProtocol: AnyObject {
         echoCancellationEnabled: Bool
     ) async throws -> AudioCaptureSession
     func stopCapture(sessionID: UUID) async -> CapturedAudio
+    /// Continuous low-cost listening for the wake-word path. Frames are
+    /// delivered on an internal queue and are not accumulated; there is no
+    /// duration cap. A normal `startCapture` displaces the tap (one capture at
+    /// a time); the tap owner restarts it when the session ends.
+    func startListenTap(
+        sessionID: UUID,
+        preferredInputDeviceID: String?,
+        echoCancellationEnabled: Bool,
+        onFrames: @escaping @Sendable (_ samples: [Float], _ sampleRate: Double) -> Void
+    ) async throws -> AudioCaptureSession
+    func stopListenTap(sessionID: UUID) async
     func snapshotSamples(sessionID: UUID, maxDurationSeconds: Double) async -> AudioSampleSnapshot?
     func cancelCapture(sessionID: UUID, reason: AudioCaptureInterruption?) async
     func availableInputDevices() -> [AudioInputDevice]
@@ -66,6 +77,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         let inputDeviceID: AudioObjectID
         let deviceRoute: AudioDeviceRoute
         let ring: OpaquePointer
+        /// Non-nil marks a listen tap: frames stream out, nothing accumulates.
+        let framesHandler: (@Sendable ([Float], Double) -> Void)?
         var route: AudioRouteSnapshot
         var driver: AudioCaptureDriver?
         var currentPlan: AudioCapturePlan?
@@ -86,7 +99,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
             inputDeviceID: AudioObjectID,
             deviceRoute: AudioDeviceRoute,
             route: AudioRouteSnapshot,
-            ring: OpaquePointer
+            ring: OpaquePointer,
+            framesHandler: (@Sendable ([Float], Double) -> Void)? = nil
         ) {
             self.id = id
             self.preferredInputDeviceID = preferredInputDeviceID
@@ -95,6 +109,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
             self.deviceRoute = deviceRoute
             self.route = route
             self.ring = ring
+            self.framesHandler = framesHandler
         }
 
         deinit {
@@ -161,6 +176,46 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         preferredInputDeviceID: String?,
         echoCancellationEnabled: Bool
     ) async throws -> AudioCaptureSession {
+        try await start(
+            sessionID: sessionID,
+            preferredInputDeviceID: preferredInputDeviceID,
+            echoCancellationEnabled: echoCancellationEnabled,
+            framesHandler: nil
+        )
+    }
+
+    func startListenTap(
+        sessionID: UUID,
+        preferredInputDeviceID: String?,
+        echoCancellationEnabled: Bool,
+        onFrames: @escaping @Sendable (_ samples: [Float], _ sampleRate: Double) -> Void
+    ) async throws -> AudioCaptureSession {
+        try await start(
+            sessionID: sessionID,
+            preferredInputDeviceID: preferredInputDeviceID,
+            echoCancellationEnabled: echoCancellationEnabled,
+            framesHandler: onFrames
+        )
+    }
+
+    func stopListenTap(sessionID: UUID) async {
+        await withCheckedContinuation { continuation in
+            controlQueue.async {
+                if let active = self.activeCapture, active.id == sessionID, active.framesHandler != nil {
+                    self.discardActiveCapture()
+                    AppLogger.shared.log(.info, "listen tap stop session=\(sessionID.uuidString)")
+                }
+                continuation.resume()
+            }
+        }
+    }
+
+    private func start(
+        sessionID: UUID,
+        preferredInputDeviceID: String?,
+        echoCancellationEnabled: Bool,
+        framesHandler: (@Sendable ([Float], Double) -> Void)?
+    ) async throws -> AudioCaptureSession {
         try await withCheckedThrowingContinuation { continuation in
             controlQueue.async {
                 do {
@@ -183,7 +238,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                         inputDeviceID: resolution.inputDeviceID,
                         deviceRoute: resolution.route,
                         route: plan.snapshot(),
-                        ring: ring
+                        ring: ring,
+                        framesHandler: framesHandler
                     )
                     self.activeCapture = active
                     self.startDrainTimer(for: active)
@@ -198,7 +254,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                         deviceID: self.hardwareCatalog.deviceID(forUID: active.route.effectiveInputDeviceID)
                     )
                     self.scheduleFirstFrameDeadline(for: active)
-                    AppLogger.shared.log(.info, "audio capture start session=\(sessionID.uuidString) \(active.route.privacySafeLogValue)")
+                    let kind = framesHandler == nil ? "capture" : "listen tap"
+                    AppLogger.shared.log(.info, "audio \(kind) start session=\(sessionID.uuidString) \(active.route.privacySafeLogValue)")
                     continuation.resume(returning: AudioCaptureSession(id: sessionID, route: active.route))
                 } catch {
                     self.discardActiveCapture()
@@ -392,6 +449,16 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         var count = SuniyeAudioRingBufferRead(active.ring, drainScratch, drainCapacity)
         while count > 0 {
             active.firstFrameSeen = true
+            if let framesHandler = active.framesHandler {
+                // Listen tap: stream out, never accumulate, no duration cap.
+                framesHandler(
+                    Array(UnsafeBufferPointer(start: drainScratch, count: count)),
+                    Double(active.route.inputSampleRate)
+                )
+                updateLevels(active: active, values: UnsafeBufferPointer(start: drainScratch, count: count))
+                count = SuniyeAudioRingBufferRead(active.ring, drainScratch, drainCapacity)
+                continue
+            }
             let remainingCapacity = max(0, maximumSampleCount(for: active) - active.samples.count)
             let accepted = min(count, remainingCapacity)
             if accepted > 0 {

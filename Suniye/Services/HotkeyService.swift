@@ -10,7 +10,8 @@ protocol HotkeyServiceProtocol: AnyObject {
     var onComputerUseHotkeyUp: (() -> Void)? { get set }
     var onCancel: (() -> Bool)? { get set }
     var onPasteLastTranscript: (() -> Void)? { get set }
-    func startMonitoring(assignments: HotkeySlotAssignments)
+    var onVoiceActivationToggle: (() -> Void)? { get set }
+    func startMonitoring(assignments: HotkeySlotAssignments, installCancellationMonitors: Bool)
     func stopMonitoring()
 }
 
@@ -28,6 +29,7 @@ final class HotkeyService: HotkeyServiceProtocol {
         case editMode = 2
         case computerUse = 3
         case pasteLastTranscript = 4
+        case voiceActivationToggle = 5
     }
 
     var onHotkeyDown: (() -> Void)?
@@ -38,6 +40,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     var onComputerUseHotkeyUp: (() -> Void)?
     var onCancel: (() -> Bool)?
     var onPasteLastTranscript: (() -> Void)?
+    var onVoiceActivationToggle: (() -> Void)?
 
     private var globeGlobalMonitor: Any?
     private var globeLocalMonitor: Any?
@@ -51,7 +54,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     /// Assignments arrive pairwise-distinct by construction
     /// (`HotkeySlotAssignments` owns the collision policy), so registration is
     /// unconditional.
-    func startMonitoring(assignments: HotkeySlotAssignments) {
+    func startMonitoring(assignments: HotkeySlotAssignments, installCancellationMonitors: Bool) {
         stopMonitoring()
 
         register(assignments.dictation, for: .dictation)
@@ -61,6 +64,13 @@ final class HotkeyService: HotkeyServiceProtocol {
         }
         if let computerUse = assignments.computerUse {
             register(computerUse, for: .computerUse)
+        }
+        if let voiceActivationToggle = assignments.voiceActivationToggle {
+            register(voiceActivationToggle, for: .voiceActivationToggle)
+        }
+        // Escape must work while a Computer Use hotkey exists or Voice
+        // Activation is on (a listening turn has no hotkey to release).
+        if assignments.computerUse != nil || installCancellationMonitors {
             installCancellationMonitorsIfNeeded()
         }
     }
@@ -261,6 +271,9 @@ final class HotkeyService: HotkeyServiceProtocol {
             // The recovery path may synthesize Command+V. Wait until the
             // physical shortcut key is released so the paste is not swallowed.
             return nil
+        case .voiceActivationToggle:
+            // A toggle acts on release, not press.
+            return nil
         }
     }
 
@@ -274,6 +287,8 @@ final class HotkeyService: HotkeyServiceProtocol {
             return onComputerUseHotkeyUp
         case .pasteLastTranscript:
             return onPasteLastTranscript
+        case .voiceActivationToggle:
+            return onVoiceActivationToggle
         }
     }
 }

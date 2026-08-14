@@ -18,7 +18,8 @@ enum ComputerUseCoordinatorPhase: Equatable {
 final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     typealias AgentFactory = @MainActor (
         ComputerUseRemoteModelConfiguration,
-        ComputerUseActivitySink
+        ComputerUseActivitySink,
+        (@Sendable (Bool) async -> Void)?
     ) -> any ComputerUseAgentRunning
 
     var phase: ComputerUseCoordinatorPhase = .idle {
@@ -46,6 +47,9 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     @ObservationIgnored private let cursorSession: any ComputerUseCursorSessionManaging
     @ObservationIgnored private let conversationStore: any ComputerUseConversationStoring
     @ObservationIgnored private let makeAgent: AgentFactory
+    /// Host-provided seam for the `set_voice_activation` tool (UX plan: the
+    /// spoken off-switch goes through the model).
+    @ObservationIgnored var voiceActivationControl: (@Sendable (Bool) async -> Void)?
     @ObservationIgnored private var configuration: ComputerUseRemoteModelConfiguration?
     @ObservationIgnored private var activeRun: ActiveRun?
     @ObservationIgnored private var pendingVoiceInstruction: String?
@@ -66,11 +70,12 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         self.permissionSnapshot = initialPermissionSnapshot
         self.cursorSession = cursorSession
         self.conversationStore = conversationStore
-        self.makeAgent = makeAgent ?? { configuration, activitySink in
+        self.makeAgent = makeAgent ?? { configuration, activitySink, voiceActivationControl in
             ComputerUseCoordinator.makeProductionAgent(
                 configuration: configuration,
                 activitySink: activitySink,
-                analytics: analytics
+                analytics: analytics,
+                voiceActivationControl: voiceActivationControl
             )
         }
         conversation = conversationStore.load()
@@ -183,7 +188,11 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         let activitySink = ComputerUseActivitySink { [weak self] activity in
             await self?.appendActivity(activity, for: runID)
         }
-        let agent = makeAgent(configuration, activitySink)
+        let agent = makeAgent(
+            configuration,
+            activitySink,
+            voiceActivationControl
+        )
         let task = ComputerUseAgentTask(
             instruction: instruction,
             conversation: history,
@@ -347,11 +356,14 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     private static func makeProductionAgent(
         configuration: ComputerUseRemoteModelConfiguration,
         activitySink: ComputerUseActivitySink,
-        analytics: any Analytics
+        analytics: any Analytics,
+        voiceActivationControl: (@Sendable (Bool) async -> Void)?
     ) -> any ComputerUseAgentRunning {
         ComputerUseAgent(
             model: ComputerUseRemoteModelClient(configuration: configuration),
-            tools: ComputerUseToolBackend(),
+            tools: ComputerUseToolBackend(
+                voiceActivationControl: voiceActivationControl
+            ),
             activitySink: activitySink,
             analytics: analytics,
             modelID: configuration.modelID,

@@ -28,7 +28,15 @@ final class GeneralSettingsStoreTests: XCTestCase {
             hasCompletedCoreOnboarding: true,
             selectedASRModelID: .senseVoice,
             updateChannel: .tip,
-            shareAnalyticsEnabled: false
+            shareAnalyticsEnabled: false,
+            voiceActivationEnabled: true,
+            voiceActivationSoundFeedbackEnabled: false,
+            voiceActivationFollowUpWindowEnabled: true,
+            voiceActivationToggleHotkeyConfiguration: .keyCombo(
+                keyCode: UInt32(kVK_ANSI_L),
+                carbonModifiers: UInt32(controlKey | optionKey)
+            ),
+            voiceOutputEnabled: true
         )
 
         store.save(settings)
@@ -211,5 +219,33 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertNil(settings.preferredInputDeviceName)
         XCTAssertEqual(settings.pasteLastTranscriptHotkeyConfiguration, .pasteLastTranscriptDefault)
         XCTAssertEqual(settings.updateChannel, .stable)
+    }
+
+    // UX plan: Voice Activation and Voice Output are off by default; legacy
+    // settings blobs must decode with the same defaults.
+    func testVoiceActivationFieldsDefaultForLegacyBlob() throws {
+        let suite = "dev.suniye.tests.general.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+
+        let legacyJSON = """
+        {
+          "autoSubmitEnabled": true,
+          "hotkeyConfiguration": {
+            "kind": "globe",
+            "keyCode": 63,
+            "carbonModifiers": 0
+          }
+        }
+        """
+        defaults.set(try XCTUnwrap(legacyJSON.data(using: .utf8)), forKey: "general")
+
+        let settings = store.load()
+
+        XCTAssertFalse(settings.voiceActivationEnabled)
+        XCTAssertTrue(settings.voiceActivationSoundFeedbackEnabled)
+        XCTAssertFalse(settings.voiceActivationFollowUpWindowEnabled)
+        XCTAssertNil(settings.voiceActivationToggleHotkeyConfiguration)
+        XCTAssertFalse(settings.voiceOutputEnabled)
     }
 }

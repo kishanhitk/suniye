@@ -11,6 +11,7 @@ enum ComputerUseToolName: String, CaseIterable, Codable, Equatable, Sendable {
     case drag
     case pressKey = "press_key"
     case typeText = "type_text"
+    case setVoiceActivation = "set_voice_activation"
 }
 
 struct ComputerUseApplication: Codable, Equatable, Sendable {
@@ -19,6 +20,25 @@ struct ComputerUseApplication: Codable, Equatable, Sendable {
     let lastUsedDate: Date?
     let useCount: Int?
     let isRunning: Bool?
+    /// The app the user is currently looking at. Present (true) only for the
+    /// frontmost app so compact encodings stay small.
+    let isFrontmost: Bool?
+
+    init(
+        id: String,
+        displayName: String?,
+        lastUsedDate: Date?,
+        useCount: Int?,
+        isRunning: Bool?,
+        isFrontmost: Bool? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.lastUsedDate = lastUsedDate
+        self.useCount = useCount
+        self.isRunning = isRunning
+        self.isFrontmost = isFrontmost
+    }
 }
 
 struct ComputerUseAppState: Codable, Equatable, Sendable {
@@ -166,6 +186,7 @@ enum ComputerUseToolCall: Equatable, Sendable {
     case drag(app: String, fromX: Double, fromY: Double, toX: Double, toY: Double)
     case pressKey(app: String, key: String)
     case typeText(app: String, text: String)
+    case setVoiceActivation(enabled: Bool)
 
     var name: ComputerUseToolName {
         switch self {
@@ -189,6 +210,8 @@ enum ComputerUseToolCall: Equatable, Sendable {
             .pressKey
         case .typeText:
             .typeText
+        case .setVoiceActivation:
+            .setVoiceActivation
         }
     }
 

@@ -26,7 +26,8 @@ struct ComputerUseApplicationRecord: Equatable, Sendable {
             displayName: displayName,
             lastUsedDate: lastUsedDate,
             useCount: useCount,
-            isRunning: isRunning
+            isRunning: isRunning,
+            isFrontmost: isFrontmost ? true : nil
         )
     }
 }

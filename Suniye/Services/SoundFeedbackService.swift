@@ -3,6 +3,8 @@ import AppKit
 enum SoundFeedbackEvent: Equatable {
     case transcriptionSucceeded
     case error
+    /// Voice Activation heard the wake phrase (UX plan: subtle cue).
+    case voiceActivationWake
 }
 
 protocol SoundFeedbackServiceProtocol: AnyObject {
@@ -39,6 +41,8 @@ private extension SoundFeedbackEvent {
             return NSSound.Name("Ping")
         case .error:
             return NSSound.Name("Basso")
+        case .voiceActivationWake:
+            return NSSound.Name("Morse")
         }
     }
 }

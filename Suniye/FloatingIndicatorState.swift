@@ -65,6 +65,8 @@ enum FloatingIndicatorState: Equatable {
         case manual
         case editHotkey
         case computerUseHotkey
+        /// Wake-phrase listening (always-on Voice Activation).
+        case voiceActivation
     }
 
     /// Lifecycle of the live-preview bubble during a listening session.

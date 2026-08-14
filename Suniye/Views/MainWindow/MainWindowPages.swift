@@ -813,7 +813,7 @@ private struct InputDeviceChoice: Hashable {
     let title: String
 }
 
-private struct HotkeyRecorderButton: View {
+struct HotkeyRecorderButton: View {
     @Binding var configuration: HotkeyConfiguration?
     var idleIcon = "globe"
     var allowsClear = false

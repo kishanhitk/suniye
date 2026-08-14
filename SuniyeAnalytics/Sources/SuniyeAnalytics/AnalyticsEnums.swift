@@ -139,6 +139,7 @@ public enum ComputerUseTool: String, Sendable, CaseIterable {
     case drag
     case pressKey = "press_key"
     case typeText = "type_text"
+    case setVoiceActivation = "set_voice_activation"
     case unknown
 }
 

@@ -37,15 +37,20 @@ Always listening is optional and off by default.
 Computer Use settings contain a **Voice Activation** section with:
 
 - an on/off toggle;
-- the current wake phrase;
+- the current wake phrase, and the spoken off-switch phrase (“Hey Suniye, stop listening”);
 - a short **Try wake phrase** flow;
 - an optional global shortcut to toggle Voice Activation;
 - a sound-feedback toggle;
-- the selected microphone and a shortcut to microphone settings.
+- the selected microphone and a shortcut to microphone settings;
+- a **Voice Output** subsection: an on/off toggle (off by default) and a voice picker. Speech is
+  generated on-device (Chatterbox). Voice Output requires Apple Silicon with enough free memory;
+  the subsection does not appear on machines that cannot run it.
 
-Turning Voice Activation on for the first time explains that the microphone remains in use while
-Suniye waits for the wake phrase. The user must confirm this once. This is an enablement notice,
-not a repeated approval before each task.
+Turning Voice Activation on for the first time explains, with concrete numbers, how listening
+works: audio is processed on the Mac in a rolling in-memory buffer of at most 35 seconds, is
+never written to disk, and nothing leaves the machine while Suniye waits for the wake phrase.
+The user must confirm this once. This is an enablement notice, not a repeated approval before
+each task.
 
 ### Menu bar
 
@@ -97,7 +102,11 @@ without creating a chat turn.
 The floating indicator changes to a compact generic working state. It does not show internal
 transport details. It contains:
 
-- a short shimmering status label such as **Working…**;
+- a short shimmering status label. It starts as **Working…** and updates with a brief,
+  plain-language description of the current step (for example **Opening Chrome…** or
+  **Checking your last 5 emails…**). The agent is instructed to keep emitting these
+  one-line statuses as it works; each names the user-visible action, never internal
+  transport, provider, or tool-call details;
 - a Stop control;
 - an **Open conversation** action.
 
@@ -126,6 +135,18 @@ meaning comes from the full spoken turn and conversation context. Escape and the
 control remain immediate cancellation controls when the user does not want semantic
 interpretation.
 
+Mode control is also conversational. A turn such as “Hey Suniye, stop listening” goes to the
+model like any other turn; the model recognizes the intent, turns Voice Activation off through
+a dedicated tool, and confirms briefly. Any phrasing works, in any language the model
+understands. Settings show “stop listening” as the example phrase. If the model provider is
+unreachable, the spoken off-switch is unavailable; the menu bar, the toggle shortcut, and
+Settings always work.
+
+This wake-gated interruption design is deliberate. Voice-activity-based interruption, where any
+sound can barge in, is the top complaint against assistants that use it (false triggers from
+coughs and pauses). Requiring the wake phrase for a new turn avoids that failure by
+construction. Do not replace it with VAD-based barge-in.
+
 ### 6. Needs input
 
 When the task cannot continue without the user, the floating indicator says **Needs your input**
@@ -133,6 +154,21 @@ and may play a subtle prompt sound. The user can answer by saying “Hey Suniye�
 missing information. The answer continues the same conversation.
 
 Suniye must not repeatedly announce or speak sensitive information while waiting.
+
+### 6a. Your turn (manual handoff)
+
+Some blockers cannot be answered by voice: login screens, CAPTCHAs, two-factor prompts, and
+anything involving a password. For these, the indicator switches to **Your turn** with a short
+reason, for example “Your turn — finish signing in to Gmail.” The agent stops acting and does
+not observe the screen while the handoff is active.
+
+The user completes the step by hand, then resumes with “Hey Suniye, continue,” the Continue
+control on the indicator, or a typed message. The run continues in the same conversation from a
+fresh observation. If the user does nothing, the run stays parked; it does not time out into a
+failure while a handoff is pending.
+
+Suniye never asks the user to speak a password or code, and never displays one in the
+indicator.
 
 ### 7. Completed or failed
 
@@ -180,9 +216,11 @@ For immediate non-conversational cancellation, the user presses Escape or clicks
 
 ### Turn Voice Activation off
 
-The user turns it off from Settings, the menu bar, or the configured toggle shortcut. Any active
-Computer Use task remains visible and controllable, but Suniye no longer waits for spoken turns.
-Turning off listening does not silently erase or create a conversation.
+The user turns it off from Settings, the menu bar, the configured toggle shortcut, or by saying
+“Hey Suniye, stop listening.” The spoken route is interpreted by the model and confirms with a
+brief indicator flash and a cue sound. Any active Computer Use task remains visible and
+controllable, but Suniye no longer waits for spoken turns. Turning off listening does not
+silently erase the conversation.
 
 ## Conversation behavior
 
@@ -202,7 +240,8 @@ The floating indicator is intentionally small. It communicates only the state th
 
 - Ready is represented in the menu bar, not by a permanent floating panel.
 - Listening uses a live voice-level animation.
-- Working uses generic shimmering text.
+- Working uses shimmering text with brief step status; it falls back to **Working…** when no
+  clear step description exists.
 - Needs input uses a distinct but non-alarming accent.
 - Done, Stopped, and Couldn’t finish are brief terminal states.
 
@@ -212,14 +251,65 @@ button and a second Stop action below the status.
 Audio feedback is subtle and optional. Sounds distinguish wake-up, end of turn, needs input, and
 completion without reading the task aloud.
 
+## Spoken responses (Voice Output)
+
+When Voice Output is enabled, Suniye speaks at turn boundaries — and only there:
+
+- **Done**: the final response is read aloud.
+- **Couldn't finish**: the short reason is read aloud.
+- **Needs input**: the question is read aloud so the user can answer hands-free.
+
+Rules:
+
+- Step statuses, tool activity, and intermediate thoughts are never spoken. The existing
+  non-goal stands.
+- Speech is **interruptible (barge-in)**: saying the wake phrase, pressing Escape, or starting
+  any new turn stops playback immediately. Suniye must not wake itself from its own speech.
+- The sensitive-information rule extends to speech: content the indicator must not display,
+  the voice must not read aloud.
+- Voice Output is off by default and independent of Voice Activation — either can be on alone.
+  It is available only on Apple Silicon machines with enough free memory.
+- If speech synthesis fails or is slow, the visual result appears immediately regardless;
+  speech is additive, never load-bearing.
+- Latency budget: the visual result appears immediately; speech starts within 1 second of the
+  terminal state, with 500 ms as the target. If synthesis has not started within 2 seconds,
+  skip speech for that turn rather than speak late.
+
+### Follow-up window (experimental, off by default)
+
+A setting enables a short follow-up window after a task completes: for about 6 seconds,
+Suniye listens for a follow-up without requiring the wake phrase again, so
+"also check the charger" works as a natural continuation. The indicator stays visible in the
+listening treatment for the duration of the window, so the user can always see that Suniye is
+listening. Speech that does not arrive within the window, or silence, returns to Ready without
+creating a turn. The window never opens after Stopped or after a failure. With Voice Output
+on, the window arms when speech playback ends, not when the Done flash ends — Suniye must not
+capture its own voice as a follow-up. This behavior ships behind a default-off setting until
+real-world use shows the false-capture rate is acceptable.
+
+### Deferred refinements
+
+Recorded, intentionally deferred until the core works:
+
+- The transcript flash is display-only in version 1; a cancel affordance during the flash
+  (click or Escape discards the turn) comes later.
+- The Needs-input pill shows a generic label in version 1; showing the agent's question text
+  inline, with the sensitive-information rule applied, comes later.
+
 ## Privacy and trust UX
 
 - Voice Activation is off by default.
+- Voice Output adds no new network destination. Speech synthesis runs on the Mac; no audio and
+  no text is sent to a speech provider. The text being spoken is the model's response, which
+  already passed through the user's configured model provider (for example OpenRouter) as part
+  of normal Computer Use.
 - The microphone-in-use state is always visible in the menu bar and through normal macOS privacy
   indicators.
 - Settings explain, in plain language, the difference between waiting for the wake phrase and
   recording a conversational turn.
-- Speech heard before wake-up is not shown in chat or history.
+- Speech heard before wake-up is not shown in chat or history. It exists only in a rolling
+  in-memory buffer of at most 35 seconds and is never written to disk. The same bound appears in
+  the enablement notice and in Settings.
 - The transcript after wake-up is visibly associated with the current Computer Use conversation.
 - Turning Voice Activation off has an immediate, visible effect.
 - Microphone, Accessibility, and Screen Recording permission problems name the missing permission
@@ -288,3 +378,10 @@ The UX is ready for implementation when the following can be tested from a user�
 8. False wake-ups and empty speech do not create tasks.
 9. Missing permissions and provider failures are recoverable without losing the spoken request.
 10. The user can use the existing hold-to-talk route with Voice Activation disabled.
+11. With Voice Output on, results and questions are spoken; speaking the wake phrase or pressing
+    Escape interrupts playback instantly, and Suniye never wakes itself from its own speech.
+12. When a task hits a login or CAPTCHA, the user can complete it by hand and resume with
+    "Hey Suniye, continue" without losing the run or the conversation.
+13. "Hey Suniye, stop listening" — in any natural phrasing — turns Voice Activation off with
+    visible confirmation. The menu bar, shortcut, and Settings work regardless of model
+    availability.

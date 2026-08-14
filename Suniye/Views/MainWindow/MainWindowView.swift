@@ -63,7 +63,8 @@ struct MainWindowView: View {
             case .computerUse:
                 ComputerUsePage(
                     coordinator: appState.computerUseCoordinator,
-                    modelSettings: appState.computerUseModelSettings
+                    modelSettings: appState.computerUseModelSettings,
+                    appState: appState
                 )
             case .history:
                 HistoryPage(appState: appState)

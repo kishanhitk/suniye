@@ -50,3 +50,6 @@ Suniye/Views/MainWindow/MainWindowComponents.swift    # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowPages.swift         # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowView.swift          # SwiftUI render only
 Suniye/Views/MainWindow/MagicFormatProviderPresentation.swift  # SwiftUI render only
+Suniye/Services/WakeWordDetector.swift  # sherpa-onnx keyword spotter; needs native lib + bundled KWS model inference
+Suniye/Services/SpeechActivityDetector.swift  # silero VAD via native sherpa lib; energy fallback covered separately
+Suniye/Services/SpeechOutputService.swift  # helper Process + URLSession + AVAudioPlayer playback; needs the mlx-audio helper and audio output
