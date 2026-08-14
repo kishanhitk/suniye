@@ -3692,7 +3692,9 @@ final class AppState {
         dictationTiming = DictationTiming()
         dictationTiming.recordStart = .now()
         // Capture the target app before any Suniye UI can steal focus.
-        textInsertionService.warmTargetAppAccessibility()
+        if destination.needsAccessibility {
+            textInsertionService.warmTargetAppAccessibility()
+        }
         let context = DictationSessionContext(
             id: sessionID,
             source: trigger,
