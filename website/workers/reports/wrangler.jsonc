@@ -1,0 +1,19 @@
+{
+  // Issue-report Worker. Serves POST /api/issue-reports on the suniye.app zone,
+  // taking the path over from the Astro site worker (a matching route wins over
+  // the site's domain attachment). Lives outside Astro so no CSRF origin check
+  // blocks the native app's multipart POSTs (native clients send no Origin header).
+  // Deploy: wrangler deploy --config wrangler.jsonc
+  // Secrets (wrangler secret put, never committed):
+  //   LINEAR_API_KEY           # secret
+  //   LINEAR_TEAM_ID           # required, team UUID
+  //   LINEAR_REPORT_LABEL_ID   # optional
+  //   LINEAR_REPORT_PROJECT_ID # optional
+  //   LINEAR_REPORT_STATE_ID   # optional
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "suniye-reports",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-15",
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "suniye.app/api/issue-reports*", "zone_name": "suniye.app" }]
+}

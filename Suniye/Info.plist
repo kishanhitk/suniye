@@ -47,7 +47,7 @@
 	<key>SuniyeBuildChannel</key>
 	<string>$(SUNIYE_BUILD_CHANNEL)</string>
 	<key>SuniyeIssueReportEndpointURL</key>
-	<string>https://suniye.kishans.in/api/issue-reports</string>
+	<string>https://suniye.app/api/issue-reports</string>
 	<key>SuniyeUpdatesEnabled</key>
 	<string>$(SUNIYE_UPDATES_ENABLED)</string>
 </dict>
