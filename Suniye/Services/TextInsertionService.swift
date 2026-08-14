@@ -27,7 +27,6 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     enum InsertError: LocalizedError {
         case cannotCreateEvent
         case cannotCopyToClipboard
-        case noFocusedTextInput
         case insertionNotObserved
 
         var errorDescription: String? {
@@ -36,8 +35,6 @@ final class TextInsertionService: TextInsertionServiceProtocol {
                 return "Unable to generate keyboard event"
             case .cannotCopyToClipboard:
                 return "Unable to copy transcription to the clipboard"
-            case .noFocusedTextInput:
-                return "No editable text field is focused"
             case .insertionNotObserved:
                 return "Text insertion was not observed in the focused field"
             }
@@ -94,12 +91,11 @@ final class TextInsertionService: TextInsertionServiceProtocol {
 
     @MainActor
     func insertText(_ text: String) async throws {
-        guard let focusedElement = getFocusedTextElement() else {
-            throw InsertError.noFocusedTextInput
-        }
+        let focusedElement = getFocusedTextElement()
+        let initialState = focusedElement.flatMap { captureFocusedTextState(for: $0) }
 
-        let initialState = captureFocusedTextState(for: focusedElement)
-        if let initialState,
+        if let focusedElement,
+           let initialState,
            insertDirectlyIntoFocusedTextElement(
                text,
                focusedElement: focusedElement,
@@ -117,11 +113,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         scheduleClipboardRestore(previousItems, to: pasteboard)
 
         try postKey(pasteKeyCode(), flags: .maskCommand)
-        try await verifyFallbackInsertion(
-            expectedText: text,
-            from: initialState,
-            focusedElement: focusedElement
-        )
+        try await verifyFallbackInsertion(from: initialState, focusedElement: focusedElement)
     }
 
     func copyTextToClipboard(_ text: String) throws {
@@ -158,12 +150,17 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     }
 
     private func verifyFallbackInsertion(
-        expectedText: String,
         from initialState: FocusedTextSnapshot?,
-        focusedElement: AXUIElement
+        focusedElement: AXUIElement?
     ) async throws {
-        guard let initialState, Self.focusedTextStateIsObservable(initialState) else {
-            throw InsertError.insertionNotObserved
+        // Verification can only prove success, never failure: the paste keystroke
+        // is already posted, so fields with no AX-readable state (Electron/web
+        // composers like Slack) must be presumed successful or every paste into
+        // them reports a false failure (KIS-178).
+        guard let focusedElement,
+              let initialState,
+              Self.focusedTextStateIsObservable(initialState) else {
+            return
         }
 
         // CGEvent posting is asynchronous. Give the target app a short window
@@ -176,11 +173,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
             }
 
             if let currentState = captureFocusedTextState(for: focusedElement),
-               Self.focusedTextReflectsInsertion(
-                   expectedText,
-                   from: initialState,
-                   to: currentState
-               ) {
+               Self.focusedTextDidChange(from: initialState, to: currentState) {
                 return
             }
         }
@@ -284,27 +277,6 @@ final class TextInsertionService: TextInsertionServiceProtocol {
 
     private static func focusedTextStateIsObservable(_ state: FocusedTextSnapshot) -> Bool {
         state.value != nil
-    }
-
-    private static func focusedTextReflectsInsertion(
-        _ expectedText: String,
-        from initialState: FocusedTextSnapshot,
-        to currentState: FocusedTextSnapshot
-    ) -> Bool {
-        guard let initialValue = initialState.value,
-              let currentValue = currentState.value,
-              currentValue != initialValue else {
-            return false
-        }
-
-        if let selectedRange = initialState.selectedRange,
-           let replacementRange = Range(selectedRange, in: initialValue) {
-            var expectedValue = initialValue
-            expectedValue.replaceSubrange(replacementRange, with: expectedText)
-            return currentValue == expectedValue
-        }
-
-        return !expectedText.isEmpty && currentValue.contains(expectedText)
     }
 
     private func pasteKeyCode() -> CGKeyCode {

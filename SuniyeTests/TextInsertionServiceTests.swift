@@ -116,7 +116,7 @@ final class TextInsertionServiceTests: XCTestCase {
         XCTAssertEqual(postedFlags, [.maskCommand])
     }
 
-    func testInsertTextThrowsWhenFocusedFieldStateIsNotObservable() async {
+    func testInsertTextSucceedsWithoutVerificationWhenFocusedFieldStateIsNotObservable() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
         let element = AXUIElementCreateSystemWide()
@@ -130,16 +130,10 @@ final class TextInsertionServiceTests: XCTestCase {
         service.selectedTextSetter = { _, _ in false }
         service.keyPoster = { _, _ in didPostPaste = true }
 
-        do {
-            try await service.insertText("fallback")
-            XCTFail("Expected insertionNotObserved")
-        } catch {
-            guard case TextInsertionService.InsertError.insertionNotObserved = error else {
-                return XCTFail("Expected insertionNotObserved, got \(error)")
-            }
-        }
+        try await service.insertText("fallback")
 
         XCTAssertTrue(didPostPaste)
+        XCTAssertEqual(pasteboard.string(forType: .string), "fallback")
     }
 
     func testInsertTextThrowsWhenFallbackDoesNotChangeFocusedField() async {
@@ -170,7 +164,7 @@ final class TextInsertionServiceTests: XCTestCase {
         }
     }
 
-    func testInsertTextThrowsWhenFallbackOnlyChangesSelection() async {
+    func testInsertTextTreatsSelectionOnlyChangeAsObservedInsertion() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
         let element = AXUIElementCreateSystemWide()
@@ -190,37 +184,25 @@ final class TextInsertionServiceTests: XCTestCase {
         service.pasteVerificationAttemptCount = 1
         service.pasteVerificationIntervalNanoseconds = 0
 
-        do {
-            try await service.insertText("fallback")
-            XCTFail("Expected insertionNotObserved")
-        } catch {
-            guard case TextInsertionService.InsertError.insertionNotObserved = error else {
-                return XCTFail("Expected insertionNotObserved, got \(error)")
-            }
-        }
+        try await service.insertText("fallback")
     }
 
-    func testInsertTextThrowsBeforeChangingClipboardWhenNoTextInputIsFocused() async {
+    func testInsertTextPostsClipboardPasteWhenNoTextInputIsFocused() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setString("previous", forType: .string)
+        var postedKeyCodes: [CGKeyCode] = []
 
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementProvider = { nil }
-        service.keyPoster = { _, _ in
-            XCTFail("No key should be posted without a focused text input")
-        }
+        service.pasteKeyCodeProvider = { 42 }
+        service.keyPoster = { keyCode, _ in postedKeyCodes.append(keyCode) }
 
-        do {
-            try await service.insertText("fallback")
-            XCTFail("Expected noFocusedTextInput")
-        } catch {
-            guard case TextInsertionService.InsertError.noFocusedTextInput = error else {
-                return XCTFail("Expected noFocusedTextInput, got \(error)")
-            }
-        }
-        XCTAssertEqual(pasteboard.string(forType: .string), "previous")
+        try await service.insertText("fallback")
+
+        XCTAssertEqual(postedKeyCodes, [42])
+        XCTAssertEqual(pasteboard.string(forType: .string), "fallback")
     }
 
     func testInsertTextStillRestoresClipboardWhenPasteKeyPostingThrows() async throws {
