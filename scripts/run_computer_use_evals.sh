@@ -24,6 +24,15 @@ for name in SUNIYE_CU_EVAL_ENDPOINT SUNIYE_CU_EVAL_MODEL SUNIYE_CU_EVAL_API_KEY;
   fi
 done
 
+# The ad-hoc-signed test host loses its TCC grants whenever it is rebuilt
+# (the signature changes). Default to running the existing binary; pass
+# --rebuild only when code changed, then re-grant Accessibility and Screen
+# Recording to the fresh binary before the next sweep.
+action="test-without-building"
+if [[ "${1:-}" == "--rebuild" ]]; then
+  action="test"
+fi
+
 output="$(mktemp)"
 xcodebuild \
   -project Suniye.xcodeproj \
@@ -31,7 +40,7 @@ xcodebuild \
   -destination 'platform=macOS' \
   -derivedDataPath .derivedData \
   -parallel-testing-enabled NO \
-  test \
+  "$action" \
   -only-testing:SuniyeTests/ComputerUseEvalTests \
   2>&1 | tee "$output" | grep -E "eval task=|eval summary|overall:|results written|Test Case|TEST EXECUTE"
 

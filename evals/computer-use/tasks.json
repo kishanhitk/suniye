@@ -18,13 +18,19 @@
     {
       "id": "macos-version",
       "prompt": "Uh what macOS version am I running?",
-      "verify": { "type": "answer", "pattern": "(?i)(macOS|version).*(2[0-9]|[0-9]+\\.[0-9])" },
+      "verify": {
+        "type": "answer",
+        "pattern": "(?i)(golden gate|tahoe|twenty[- ]?seven|2[0-9]([\\.,][0-9])?|version .*(zero|one|two|three|four|five|six|seven|eight|nine))"
+      },
       "timeoutSeconds": 180
     },
     {
       "id": "battery-health",
       "prompt": "check my battery health percentage",
-      "verify": { "type": "answer", "pattern": "(?i)([0-9]{1,3}\\s*(%|percent))" },
+      "verify": {
+        "type": "answer",
+        "pattern": "(?i)([0-9]{1,3}\\s*(%|percent)|(one|two|three|four|five|six|seven|eight|nine|ten|hundred|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)([ -][a-z]+)?\\s+percent)"
+      },
       "timeoutSeconds": 240
     },
     {

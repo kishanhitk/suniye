@@ -96,6 +96,12 @@ final class ComputerUseEvalTests: XCTestCase {
             return runShell(command) == 0
         case "answer":
             guard let pattern = verify.pattern else { return false }
+            // An apologetic non-answer must never score as a pass, whatever
+            // the positive pattern happens to match inside it.
+            let refusal = "(?i)(can['’]?t|cannot|unable|not (authorized|enabled|available)|blocked|disabled|permission)"
+            guard answer.range(of: refusal, options: .regularExpression) == nil else {
+                return false
+            }
             return answer.range(of: pattern, options: .regularExpression) != nil
         default:
             return false
