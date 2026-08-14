@@ -9,6 +9,7 @@ protocol TextInsertionServiceProtocol {
     func copyTextToClipboard(_ text: String) throws
     func submitActiveInput() throws
     func makeFocusedFieldValueProvider() -> (() -> String?)?
+    func warmTargetAppAccessibility()
 }
 
 struct TextInsertionContext: Equatable {
@@ -49,6 +50,12 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     var keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)?
     var pasteKeyCodeProvider: (() -> CGKeyCode?)?
     var clipboardRestoreDelay: TimeInterval = 0.45
+    var frontmostAppPIDProvider: () -> pid_t? = {
+        NSWorkspace.shared.frontmostApplication?.processIdentifier
+    }
+    var manualAccessibilitySetter: ((pid_t) -> Void)?
+    var focusedElementRetryCount = 8
+    var focusedElementRetryIntervalNanoseconds: UInt64 = 150_000_000
 
     func captureInsertionContext() -> TextInsertionContext? {
         guard let focusedElement = getFocusedTextElement(),
@@ -92,7 +99,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         // No focused text input means the paste would land on an arbitrary
         // control — and a presumed success would let auto-submit post Return
         // there. Fail before touching the clipboard; ⌃⌘V recovers the text.
-        guard let focusedElement = getFocusedTextElement() else {
+        guard let focusedElement = await focusedTextElementAwaitingHydration() else {
             throw InsertError.noFocusedTextInput
         }
 
@@ -119,6 +126,42 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         // read as nil, terminals read stale — KIS-178), so a posted paste into
         // a focused text element is reported as success.
         try postKey(pasteKeyCode(), flags: .maskCommand)
+    }
+
+    /// Chromium hydrates its accessibility tree asynchronously after
+    /// warmTargetAppAccessibility; a cold Electron app needs up to ~1s before
+    /// the focused composer exists (KIS-181). Covers the paste-last path,
+    /// which warms and inserts back to back.
+    private func focusedTextElementAwaitingHydration() async -> AXUIElement? {
+        for attempt in 0 ..< max(focusedElementRetryCount, 1) {
+            if let element = getFocusedTextElement() {
+                return element
+            }
+            if attempt < focusedElementRetryCount - 1 {
+                try? await Task.sleep(nanoseconds: focusedElementRetryIntervalNanoseconds)
+            }
+        }
+        return nil
+    }
+
+    /// Electron/Chromium apps leave their accessibility tree unbuilt until a
+    /// client opts in via AXManualAccessibility; a cold tree makes the focused
+    /// composer invisible to getFocusedTextElement (KIS-181). Called when
+    /// recording starts so the tree hydrates while the user speaks. Apps that
+    /// do not support the attribute reject the write harmlessly.
+    func warmTargetAppAccessibility() {
+        guard let pid = frontmostAppPIDProvider() else { return }
+        if let manualAccessibilitySetter {
+            manualAccessibilitySetter(pid)
+            return
+        }
+        // The AX write is a synchronous cross-process call with a multi-second
+        // timeout when the target app hangs; keep it off the caller's (main)
+        // thread so the hotkey flow never stalls.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let application = AXUIElementCreateApplication(pid)
+            AXUIElementSetAttributeValue(application, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        }
     }
 
     func copyTextToClipboard(_ text: String) throws {

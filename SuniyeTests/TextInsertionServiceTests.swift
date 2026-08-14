@@ -166,6 +166,7 @@ final class TextInsertionServiceTests: XCTestCase {
 
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementProvider = { nil }
+        service.focusedElementRetryIntervalNanoseconds = 0
         service.keyPoster = { _, _ in
             XCTFail("No key should be posted without a focused text input")
         }
@@ -208,6 +209,53 @@ final class TextInsertionServiceTests: XCTestCase {
 
         try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertEqual(pasteboard.string(forType: .string), "previous")
+    }
+
+    func testInsertTextWaitsForFocusedElementHydration() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
+        let element = AXUIElementCreateSystemWide()
+        var lookups = 0
+        var didPostPaste = false
+
+        service.pasteboardProvider = { pasteboard }
+        service.focusedElementRetryIntervalNanoseconds = 0
+        service.focusedTextElementProvider = {
+            lookups += 1
+            return lookups < 3 ? nil : element
+        }
+        service.focusedTextSnapshotProvider = { _ in
+            (value: nil, selectedText: nil, selectedRange: nil)
+        }
+        service.selectedTextSetter = { _, _ in false }
+        service.keyPoster = { _, _ in didPostPaste = true }
+
+        try await service.insertText("fallback")
+
+        XCTAssertEqual(lookups, 3)
+        XCTAssertTrue(didPostPaste)
+    }
+
+    func testWarmTargetAppAccessibilityAppliesToFrontmostApp() {
+        let service = TextInsertionService()
+        var warmedPIDs: [pid_t] = []
+        service.frontmostAppPIDProvider = { 4242 }
+        service.manualAccessibilitySetter = { warmedPIDs.append($0) }
+
+        service.warmTargetAppAccessibility()
+
+        XCTAssertEqual(warmedPIDs, [4242])
+    }
+
+    func testWarmTargetAppAccessibilityDoesNothingWithoutFrontmostApp() {
+        let service = TextInsertionService()
+        var warmedPIDs: [pid_t] = []
+        service.frontmostAppPIDProvider = { nil }
+        service.manualAccessibilitySetter = { warmedPIDs.append($0) }
+
+        service.warmTargetAppAccessibility()
+
+        XCTAssertTrue(warmedPIDs.isEmpty)
     }
 
     func testSubmitActiveInputPostsReturnKey() throws {
