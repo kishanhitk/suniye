@@ -214,9 +214,7 @@ export async function handleIssueReportRequest(
   }
   const issueReportPayload = payload as IssueReportPayload;
 
-  // workers-types mistypes FormData.get() as `string | null` while the runtime
-  // returns a File; `unknown` is required so `instanceof File` can narrow (an
-  // explicit `File | string | null` annotation fails TS2358).
+  // workers-types mistypes FormData.get() as string|null; unknown lets instanceof File narrow.
   const diagnosticsPart: unknown = form.get("diagnostics");
   const diagnosticsFile = diagnosticsPart instanceof File && diagnosticsPart.size > 0 ? diagnosticsPart : undefined;
   const diagnosticsError = validateDiagnosticsFile(issueReportPayload, diagnosticsFile);
@@ -524,10 +522,7 @@ async function linearGraphQL<T>(
   return payload.data;
 }
 
-// Near-duplicate of workers/ingest/src/rateLimit.ts (which was extracted from
-// this code, then tuned for ingest's budgets and cache namespace). Kept as
-// separate copies deliberately: the workers bundle independently and the repo
-// has no shared-module convention between them yet.
+// Deliberate near-duplicate of workers/ingest/src/rateLimit.ts; the workers bundle independently.
 async function checkRateLimit(
   request: Request,
   config: IssueReportRateLimitConfig | false | undefined
