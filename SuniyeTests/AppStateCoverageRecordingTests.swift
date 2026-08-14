@@ -47,6 +47,16 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         await drainScheduledTasks()
     }
 
+    func testRecordingStartWarmsTargetAppAccessibility() async {
+        let audioCapture = StubAudioCaptureService()
+        let insertion = SpyTextInsertionService()
+        let appState = readyAppState(audioCapture: audioCapture, textInsertionService: insertion)
+
+        await startRecording(appState, audioCapture: audioCapture)
+
+        XCTAssertEqual(insertion.warmTargetAppAccessibilityCallCount, 1)
+    }
+
     // MARK: - Stop guards
 
     func testStopRecordingFromUIIgnoredWhenNotRecording() {
