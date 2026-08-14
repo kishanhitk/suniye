@@ -2,105 +2,33 @@ import XCTest
 @testable import Suniye
 
 final class ComputerUseModelToolContractTests: XCTestCase {
-    func testModelReceivesExactlyTheDesktopToolSurface() {
-        XCTAssertEqual(
-            ComputerUseModelToolCatalog.all.map(\.name),
-            ComputerUseToolName.allCases
-        )
+    func testModelReceivesOnlyTheCodeModeTool() {
+        XCTAssertEqual(ComputerUseModelToolCatalog.all.map(\.name), [.nodeRepl])
     }
 
-    func testClickToolExplainsTheElementOrCoordinateChoice() throws {
-        let click = try XCTUnwrap(
-            ComputerUseModelToolCatalog.all.first { $0.name == .click }
-        )
+    func testNodeReplToolTakesASingleRequiredCodeArgument() throws {
+        let tool = try XCTUnwrap(ComputerUseModelToolCatalog.all.first { $0.name == .nodeRepl })
 
-        XCTAssertTrue(click.function.description.contains("Omit element_index"))
-        XCTAssertTrue(
-            try XCTUnwrap(click.function.parameters.properties["x"])
-                .description.contains("no element_index")
-        )
-        XCTAssertTrue(
-            try XCTUnwrap(click.function.parameters.properties["y"])
-                .description.contains("no element_index")
-        )
-        XCTAssertEqual(
-            click.function.parameters.oneOf?.map(\.required),
-            [["element_index"], ["x", "y"]]
-        )
+        XCTAssertEqual(Set(tool.function.parameters.properties.keys), ["code"])
+        XCTAssertEqual(tool.function.parameters.required, ["code"])
+        XCTAssertTrue(tool.function.description.contains("computer"))
+        XCTAssertTrue(tool.function.description.contains("await"))
     }
 
-    func testObservationToolRequiresFreshStateAtTheStartOfEachTurn() throws {
-        let observation = try XCTUnwrap(
-            ComputerUseModelToolCatalog.all.first { $0.name == .getAppState }
-        )
-
-        XCTAssertTrue(
-            observation.function.description.contains(
-                "must be called once per assistant turn before interacting with the app"
-            )
-        )
-    }
-
-    func testToolSchemasPreserveRecoveredArgumentsAndRequiredFields() throws {
+    func testNodeReplSchemaEncodesToSingleCodeStringField() throws {
         let encoded = try JSONEncoder().encode(ComputerUseModelToolCatalog.all)
         let tools = try XCTUnwrap(
             JSONSerialization.jsonObject(with: encoded) as? [[String: Any]]
         )
-        let contracts = Dictionary(uniqueKeysWithValues: try tools.map { tool in
-            let function = try XCTUnwrap(tool["function"] as? [String: Any])
-            let name = try XCTUnwrap(function["name"] as? String)
-            let parameters = try XCTUnwrap(function["parameters"] as? [String: Any])
-            let properties = try XCTUnwrap(parameters["properties"] as? [String: Any])
-            let required = try XCTUnwrap(parameters["required"] as? [String])
-            return (name, ToolContract(properties: Set(properties.keys), required: Set(required)))
-        })
-
-        XCTAssertEqual(
-            contracts,
-            [
-                "list_apps": ToolContract(properties: [], required: []),
-                "get_app_state": ToolContract(
-                    properties: ["app", "disableDiff"],
-                    required: ["app"]
-                ),
-                "click": ToolContract(
-                    properties: ["app", "element_index", "x", "y", "mouse_button", "click_count"],
-                    required: ["app"]
-                ),
-                "perform_secondary_action": ToolContract(
-                    properties: ["app", "element_index", "action"],
-                    required: ["app", "element_index", "action"]
-                ),
-                "set_value": ToolContract(
-                    properties: ["app", "element_index", "value"],
-                    required: ["app", "element_index", "value"]
-                ),
-                "select_text": ToolContract(
-                    properties: ["app", "element_index", "text", "prefix", "suffix", "selection_type"],
-                    required: ["app", "element_index", "text"]
-                ),
-                "scroll": ToolContract(
-                    properties: ["app", "element_index", "direction", "pages"],
-                    required: ["app", "element_index", "direction"]
-                ),
-                "drag": ToolContract(
-                    properties: ["app", "from_x", "from_y", "to_x", "to_y"],
-                    required: ["app", "from_x", "from_y", "to_x", "to_y"]
-                ),
-                "press_key": ToolContract(
-                    properties: ["app", "key"],
-                    required: ["app", "key"]
-                ),
-                "type_text": ToolContract(
-                    properties: ["app", "text"],
-                    required: ["app", "text"]
-                ),
-                "set_voice_activation": ToolContract(
-                    properties: ["enabled"],
-                    required: ["enabled"]
-                ),
-            ]
-        )
+        XCTAssertEqual(tools.count, 1)
+        let function = try XCTUnwrap(tools[0]["function"] as? [String: Any])
+        XCTAssertEqual(function["name"] as? String, "node_repl")
+        let parameters = try XCTUnwrap(function["parameters"] as? [String: Any])
+        let properties = try XCTUnwrap(parameters["properties"] as? [String: Any])
+        XCTAssertEqual(Set(properties.keys), ["code"])
+        let code = try XCTUnwrap(properties["code"] as? [String: Any])
+        XCTAssertEqual(code["type"] as? String, "string")
+        XCTAssertEqual(parameters["required"] as? [String], ["code"])
     }
 
     // UX plan: the spoken off-switch goes through the model, so the tool
@@ -183,9 +111,4 @@ final class ComputerUseModelToolContractTests: XCTestCase {
             )
         }
     }
-}
-
-private struct ToolContract: Equatable {
-    let properties: Set<String>
-    let required: Set<String>
 }

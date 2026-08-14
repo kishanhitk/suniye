@@ -56,18 +56,24 @@ actor ComputerUseObservationService: ComputerUseObserving {
     private let accessibility: ComputerUseAccessibilitySnapshotProviding
     private let screenshots: ComputerUseScreenshotCapturing
     private let revisions: ComputerUseAccessibilityRevisionStore
+    private let guidance: ComputerUseAppGuidanceProviding
+    /// Apps whose guidance has already been injected this run, so the hint
+    /// appears only on the first observation of each app.
+    private var guidedApps: Set<String> = []
 
     init(
         windows: ComputerUseWindowDiscovering = ComputerUseWindowDiscovery(),
         accessibility: ComputerUseAccessibilitySnapshotProviding =
             SystemComputerUseAccessibilitySnapshotProvider(),
         screenshots: ComputerUseScreenshotCapturing = SystemComputerUseScreenshotCapturer(),
-        revisions: ComputerUseAccessibilityRevisionStore = ComputerUseAccessibilityRevisionStore()
+        revisions: ComputerUseAccessibilityRevisionStore = ComputerUseAccessibilityRevisionStore(),
+        guidance: ComputerUseAppGuidanceProviding = ComputerUseAppGuidance()
     ) {
         self.windows = windows
         self.accessibility = accessibility
         self.screenshots = screenshots
         self.revisions = revisions
+        self.guidance = guidance
     }
 
     func observe(
@@ -111,10 +117,24 @@ actor ComputerUseObservationService: ComputerUseObserving {
             state: ComputerUseAppState(
                 app: requestedIdentifier,
                 screenshot: capturedScreenshot?.url,
-                text: revision.text
+                text: guidedText(revision.text, for: application)
             ),
             revision: revision,
             screenshot: capturedScreenshot
         )
+    }
+
+    /// Prepends the app's navigation hint to its first observation this run,
+    /// tagged so the model can tell guidance from observed state. Later
+    /// observations of the same app return the raw tree.
+    private func guidedText(_ text: String, for application: ComputerUseApplicationRecord) -> String {
+        guard guidedApps.insert(application.identityKey).inserted,
+              let hint = guidance.instructions(
+                  bundleIdentifier: application.bundleIdentifier,
+                  displayName: application.displayName
+              ) else {
+            return text
+        }
+        return "<app_navigation_hint>\n\(hint)\n</app_navigation_hint>\n\(text)"
     }
 }

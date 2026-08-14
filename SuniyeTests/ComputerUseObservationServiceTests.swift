@@ -78,6 +78,56 @@ final class ComputerUseObservationServiceTests: XCTestCase {
         }
     }
 
+    func testAppGuidanceIsPrependedOnlyToTheFirstObservationOfAnApp() async throws {
+        let settings = ComputerUseApplicationRecord(
+            displayName: "System Settings",
+            bundleIdentifier: "com.apple.systempreferences",
+            applicationURL: URL(fileURLWithPath: "/System/Applications/System Settings.app"),
+            lastUsedDate: nil,
+            useCount: nil,
+            processIdentifier: 200,
+            isFrontmost: true
+        )
+        let service = ComputerUseObservationService(
+            windows: StubWindowDiscovery(result: [makeWindow(id: 1, ordinal: 0)]),
+            accessibility: StubAccessibilitySnapshotProvider(
+                result: ComputerUseAXSnapshot(roots: [makeNode(role: "AXWindow", title: "General")])
+            ),
+            screenshots: StubScreenshotCapturer(result: nil)
+        )
+
+        let first = try await service.observe(
+            application: settings, requestedIdentifier: "System Settings", disableDiff: true
+        )
+        XCTAssertTrue(first.state.text.hasPrefix("<app_navigation_hint>"), first.state.text)
+        XCTAssertTrue(first.state.text.contains("sidebar search field"))
+        XCTAssertTrue(first.state.text.contains("Battery health"))
+        // The raw tree still follows the hint.
+        XCTAssertTrue(first.state.text.contains("AXWindow \"General\""))
+
+        let second = try await service.observe(
+            application: settings, requestedIdentifier: "System Settings", disableDiff: true
+        )
+        XCTAssertFalse(second.state.text.contains("<app_navigation_hint>"), second.state.text)
+    }
+
+    func testAppsWithoutGuidanceReturnTheRawTree() async throws {
+        let service = ComputerUseObservationService(
+            windows: StubWindowDiscovery(result: [makeWindow(id: 1, ordinal: 0)]),
+            accessibility: StubAccessibilitySnapshotProvider(
+                result: ComputerUseAXSnapshot(roots: [makeNode(role: "AXWindow", title: "Document")])
+            ),
+            screenshots: StubScreenshotCapturer(result: nil)
+        )
+
+        let observation = try await service.observe(
+            application: makeApplication(processIdentifier: 123),
+            requestedIdentifier: "TextEdit",
+            disableDiff: true
+        )
+        XCTAssertFalse(observation.state.text.contains("<app_navigation_hint>"))
+    }
+
     private func makeService(windows: [ComputerUseWindow]) -> ComputerUseObservationService {
         ComputerUseObservationService(
             windows: StubWindowDiscovery(result: windows),

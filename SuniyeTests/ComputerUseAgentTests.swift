@@ -3,14 +3,11 @@ import SuniyeAnalytics
 @testable import Suniye
 
 final class ComputerUseAgentTests: XCTestCase {
-    func testPublishesRawToolCallThenUpdatesItWithRawOutput() async {
+    func testPublishesScriptActivityThenUpdatesItWithScriptOutput() async {
+        let code = observeCalculatorScript
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(
-                    id: "state-1",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Calculator"}"#
-                ),
+                nodeReplCall(id: "script-1", code: code),
                 .text("Done."),
                 .text("Done."),
             ]
@@ -30,23 +27,16 @@ final class ComputerUseAgentTests: XCTestCase {
         let activities = await recorder.activities
         XCTAssertEqual(activities.count, 2)
         XCTAssertEqual(activities[0].id, activities[1].id)
-        XCTAssertEqual(activities[0].toolName, "get_app_state")
-        XCTAssertEqual(activities[0].arguments, #"{"app":"Calculator"}"#)
+        XCTAssertEqual(activities[0].toolName, "node_repl")
+        XCTAssertEqual(activities[0].arguments, nodeReplArguments(code))
         XCTAssertNil(activities[0].output)
-        XCTAssertEqual(
-            activities[1].output,
-            #"{"app":"Calculator","screenshot":null,"text":"0 AXStaticText: 42"}"#
-        )
+        XCTAssertEqual(activities[1].output, "0 AXStaticText: 42")
     }
 
-    func testPublishesEncodedToolFailureAsActivityOutput() async {
+    func testScriptFailureSurfacesAsErrorOutput() async {
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(
-                    id: "state-1",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Calculator"}"#
-                ),
+                nodeReplCall(id: "script-1", code: observeCalculatorScript),
                 .text("Could not inspect Calculator."),
             ]
         )
@@ -65,17 +55,13 @@ final class ComputerUseAgentTests: XCTestCase {
         let activities = await recorder.activities
         XCTAssertEqual(activities.count, 2)
         XCTAssertEqual(activities[0].id, activities[1].id)
-        XCTAssertEqual(activities[1].output, #"{"error":"Tool failed."}"#)
+        XCTAssertEqual(activities[1].output, "Error: Tool failed.")
     }
 
     func testEveryLifecycleAndToolLogIncludesTheTaskDebugSessionID() async {
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(
-                    id: "state-1",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Calculator"}"#
-                ),
+                nodeReplCall(id: "script-1", code: observeCalculatorScript),
                 .text("Done."),
                 .text("Done."),
             ]
@@ -99,29 +85,21 @@ final class ComputerUseAgentTests: XCTestCase {
         XCTAssertEqual(messages.count, 4)
         XCTAssertTrue(messages.allSatisfy { $0.contains("session=CU-ABC123DEF456") })
         XCTAssertTrue(messages.contains { $0.contains("computer use run started") })
-        XCTAssertTrue(messages.contains { $0.contains("computer use tool started") })
-        XCTAssertTrue(messages.contains { $0.contains("computer use tool completed") })
+        XCTAssertTrue(messages.contains { $0.contains("computer use script started") })
+        XCTAssertTrue(messages.contains { $0.contains("computer use script completed") })
         XCTAssertTrue(messages.contains { $0.contains("computer use run completed") })
     }
 
-    func testModelChoosesTheApplicationAndCompletesThroughOrderedToolResults() async {
+    func testModelBatchesObserveActObserveInOneScript() async {
+        let code = """
+        const s1 = await computer.get_app_state({ app: "Calculator" });
+        await computer.press_key({ app: "Calculator", key: "Return" });
+        const s2 = await computer.get_app_state({ app: "Calculator" });
+        nodeRepl.write(s2.text);
+        """
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(
-                    id: "state-1",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Calculator"}"#
-                ),
-                .toolCall(
-                    id: "key-1",
-                    name: "press_key",
-                    arguments: #"{"app":"Calculator","key":"Return"}"#
-                ),
-                .toolCall(
-                    id: "state-2",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Calculator"}"#
-                ),
+                nodeReplCall(id: "script-1", code: code),
                 .text("The Calculator result is 42."),
             ]
         )
@@ -145,40 +123,33 @@ final class ComputerUseAgentTests: XCTestCase {
         let calls = await backend.calls
         XCTAssertEqual(calls, [.getAppState, .pressKey, .getAppState])
         let requests = await model.requests
-        XCTAssertEqual(requests.count, 4)
+        XCTAssertEqual(requests.count, 2)
         XCTAssertEqual(requests[0], [.text(role: .user, text: "Read the Calculator result.")])
         XCTAssertEqual(requests[1].suffix(2), [
             .toolCall(
-                id: "state-1",
-                name: "get_app_state",
-                arguments: #"{"app":"Calculator"}"#
+                id: "script-1",
+                name: "node_repl",
+                arguments: nodeReplArguments(code)
             ),
-            .toolResult(
-                id: "state-1",
-                content: #"{"app":"Calculator","text":"0 AXStaticText: 42"}"#
-            ),
+            .toolResult(id: "script-1", content: "0 AXStaticText: 42"),
         ])
     }
 
     func testObservationOnlyCompletionGetsOneGenericOutcomeAudit() async {
+        let observeOnly = """
+        const s = await computer.get_app_state({ app: "Google Chrome" });
+        nodeRepl.write(s.text);
+        """
+        let clickAndConfirm = """
+        await computer.click({ app: "Google Chrome", element_index: 7 });
+        const s = await computer.get_app_state({ app: "Google Chrome" });
+        nodeRepl.write(s.text);
+        """
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(
-                    id: "state-1",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Google Chrome"}"#
-                ),
+                nodeReplCall(id: "script-1", code: observeOnly),
                 .text("The requested email is open."),
-                .toolCall(
-                    id: "click-1",
-                    name: "click",
-                    arguments: #"{"app":"Google Chrome","element_index":7}"#
-                ),
-                .toolCall(
-                    id: "state-2",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Google Chrome"}"#
-                ),
+                nodeReplCall(id: "script-2", code: clickAndConfirm),
                 .text("The requested email is open."),
             ]
         )
@@ -203,34 +174,20 @@ final class ComputerUseAgentTests: XCTestCase {
         )
     }
 
-    func testAgentForwardsAFreshObservationBetweenSequentialActions() async {
+    func testScriptedActionsStillRequireFreshObservationsBetweenThem() async {
+        // The backend's freshness rule (observe before every action) holds
+        // inside a script exactly as it did across separate tool calls.
+        let code = """
+        await computer.get_app_state({ app: "Notes" });
+        await computer.press_key({ app: "Notes", key: "Return" });
+        await computer.get_app_state({ app: "Notes" });
+        await computer.type_text({ app: "Notes", text: "hello" });
+        await computer.get_app_state({ app: "Notes" });
+        nodeRepl.write("typed");
+        """
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(
-                    id: "state-1",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Notes"}"#
-                ),
-                .toolCall(
-                    id: "key-1",
-                    name: "press_key",
-                    arguments: #"{"app":"Notes","key":"Return"}"#
-                ),
-                .toolCall(
-                    id: "state-2",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Notes"}"#
-                ),
-                .toolCall(
-                    id: "text-1",
-                    name: "type_text",
-                    arguments: #"{"app":"Notes","text":"hello"}"#
-                ),
-                .toolCall(
-                    id: "state-3",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Notes"}"#
-                ),
+                nodeReplCall(id: "script-1", code: code),
                 .text("Done."),
             ]
         )
@@ -251,58 +208,34 @@ final class ComputerUseAgentTests: XCTestCase {
             [.getAppState, .pressKey, .getAppState, .typeText, .getAppState]
         )
         let requests = await model.requests
-        XCTAssertEqual(requests.count, 6)
+        XCTAssertEqual(requests.count, 2)
         XCTAssertEqual(
-            requests[4].suffix(2),
+            requests[1].suffix(2),
             [
-                .toolCall(
-                    id: "text-1",
-                    name: "type_text",
-                    arguments: #"{"app":"Notes","text":"hello"}"#
-                ),
-                .toolResult(id: "text-1", content: "null"),
+                nodeReplCallMessage(id: "script-1", code: code),
+                .toolResult(id: "script-1", content: "typed"),
             ]
         )
     }
 
     func testTwoUnchangedPostActionObservationsRequestADifferentRecoveryStrategy() async {
+        func clickAndObserve(x: Int) -> String {
+            """
+            await computer.click({ app: "Google Chrome", x: \(x), y: 200 });
+            const s = await computer.get_app_state({ app: "Google Chrome" });
+            nodeRepl.write(s.text);
+            """
+        }
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(
-                    id: "state-1",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Google Chrome"}"#
-                ),
-                .toolCall(
-                    id: "click-1",
-                    name: "click",
-                    arguments: #"{"app":"Google Chrome","x":100,"y":200}"#
-                ),
-                .toolCall(
-                    id: "state-2",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Google Chrome"}"#
-                ),
-                .toolCall(
-                    id: "click-2",
-                    name: "click",
-                    arguments: #"{"app":"Google Chrome","x":101,"y":200}"#
-                ),
-                .toolCall(
-                    id: "state-3",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Google Chrome"}"#
-                ),
-                .toolCall(
-                    id: "key-1",
-                    name: "press_key",
-                    arguments: #"{"app":"Google Chrome","key":"Return"}"#
-                ),
-                .toolCall(
-                    id: "state-4",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Google Chrome"}"#
-                ),
+                nodeReplCall(id: "script-1", code: observeChromeScript),
+                nodeReplCall(id: "script-2", code: clickAndObserve(x: 100)),
+                nodeReplCall(id: "script-3", code: clickAndObserve(x: 101)),
+                nodeReplCall(id: "script-4", code: """
+                await computer.press_key({ app: "Google Chrome", key: "Return" });
+                const s = await computer.get_app_state({ app: "Google Chrome" });
+                nodeRepl.write(s.text);
+                """),
                 .text("The requested email is open."),
             ]
         )
@@ -324,7 +257,7 @@ final class ComputerUseAgentTests: XCTestCase {
         )
 
         XCTAssertEqual(result.outcome, .completed)
-        let recoveryRequest = await model.requests[5]
+        let recoveryRequest = await model.requests[3]
         XCTAssertTrue(
             recoveryRequest.contains { message in
                 message.textContent?.contains("Repeated unchanged-state recovery") == true
@@ -336,11 +269,10 @@ final class ComputerUseAgentTests: XCTestCase {
         let analytics = SpyAnalytics()
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(
-                    id: "state-1",
-                    name: "get_app_state",
-                    arguments: #"{"app":"com.apple.Safari"}"#
-                ),
+                nodeReplCall(id: "script-1", code: """
+                const s = await computer.get_app_state({ app: "com.apple.Safari" });
+                nodeRepl.write(s.text);
+                """),
                 .text("Done."),
                 .text("Done."),
             ]
@@ -373,11 +305,9 @@ final class ComputerUseAgentTests: XCTestCase {
         let analytics = SpyAnalytics()
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(
-                    id: "key-1",
-                    name: "press_key",
-                    arguments: #"{"app":"Calculator","key":"Return"}"#
-                ),
+                nodeReplCall(id: "script-1", code: """
+                await computer.press_key({ app: "Calculator", key: "Return" });
+                """),
                 .text("Done."),
                 .text("Done."),
             ]
@@ -403,11 +333,7 @@ final class ComputerUseAgentTests: XCTestCase {
     func testStepLimitTerminatesTheRunAsFailure() async {
         let model = ScriptedComputerUseModel(
             responses: Array(
-                repeating: .toolCall(
-                    id: "state",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Calculator"}"#
-                ),
+                repeating: nodeReplCall(id: "script", code: observeCalculatorScript),
                 count: 6
             )
         )
@@ -427,11 +353,7 @@ final class ComputerUseAgentTests: XCTestCase {
         let clock = ManualComputerUseClock(advancingBy: .seconds(20))
         let model = ScriptedComputerUseModel(
             responses: Array(
-                repeating: .toolCall(
-                    id: "state",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Calculator"}"#
-                ),
+                repeating: nodeReplCall(id: "script", code: observeCalculatorScript),
                 count: 6
             )
         )
@@ -452,16 +374,10 @@ final class ComputerUseAgentTests: XCTestCase {
         let interventions = ComputerUseInterventionChannel()
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(
-                    id: "state-1",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Calculator"}"#
-                ),
-                .toolCall(
-                    id: "click-1",
-                    name: "click",
-                    arguments: #"{"app":"Calculator","element_index":7}"#
-                ),
+                nodeReplCall(id: "script-1", code: observeCalculatorScript),
+                nodeReplCall(id: "script-2", code: """
+                await computer.click({ app: "Calculator", element_index: 7 });
+                """),
                 .text("Stopped after the correction."),
             ]
         )
@@ -491,11 +407,13 @@ final class ComputerUseAgentTests: XCTestCase {
                 .text(role: .user, text: "Actually, do not click anything")
             )
         )
-        XCTAssertEqual(
-            finalRequest.filter {
-                $0.toolCalls?.first?.function.name == ComputerUseToolName.getAppState.rawValue
-            }.count,
-            2
+        // The forced observation enters context as a user message carrying the
+        // fresh state, since the model never made a get_app_state tool call.
+        XCTAssertTrue(
+            finalRequest.contains { message in
+                message.role == .user
+                    && message.textContent?.hasPrefix("Current state of Calculator") == true
+            }
         )
     }
 
@@ -528,11 +446,7 @@ final class ComputerUseAgentTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: screenshotURL) }
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(
-                    id: "state-image",
-                    name: "get_app_state",
-                    arguments: #"{"app":"Calculator"}"#
-                ),
+                nodeReplCall(id: "state-image", code: observeCalculatorScript),
                 .text("Done."),
                 .text("Done."),
             ]
@@ -686,11 +600,11 @@ final class ComputerUseAgentTests: XCTestCase {
         })
     }
 
-    func testLocalActivityKeepsRawScreenshotURLWhileModelReceivesCleanOutput() async throws {
+    func testActivityKeepsObservationScreenshotURLWhileModelReceivesScriptOutput() async throws {
         let screenshotURL = URL(fileURLWithPath: "/private/tmp/computer-use-state.jpg")
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(id: "state-1", name: "get_app_state", arguments: #"{"app":"Calculator"}"#),
+                nodeReplCall(id: "script-1", code: observeCalculatorScript),
                 .text("Done."),
                 .text("Done."),
             ]
@@ -710,20 +624,21 @@ final class ComputerUseAgentTests: XCTestCase {
 
         let activities = await recorder.activities
         let requests = await model.requests
-        XCTAssertTrue(try XCTUnwrap(activities.last?.output).contains(screenshotURL.absoluteString))
-        let modelResult = try XCTUnwrap(requests[1].first { $0.toolCallID == "state-1" })
+        // The raw screenshot URL persists on the activity for replay, even
+        // though the file could not be loaded for the model right now.
+        let completed = try XCTUnwrap(activities.last)
+        XCTAssertEqual(completed.observedScreenshotURL, screenshotURL)
+        XCTAssertEqual(completed.observedApp, "Calculator")
+        let modelResult = try XCTUnwrap(requests[1].first { $0.toolCallID == "script-1" })
         XCTAssertFalse(modelResult.textContent?.contains("file://") == true)
-        XCTAssertEqual(
-            modelResult.textContent,
-            #"{"app":"Calculator","text":"0 AXStaticText: 42"}"#
-        )
+        XCTAssertEqual(modelResult.textContent, "0 AXStaticText: 42")
     }
 
-    func testLargeToolOutputUsesReferenceMiddleTokenTruncation() async {
+    func testLargeScriptOutputUsesReferenceMiddleTokenTruncation() async {
         let longText = String(repeating: "a", count: 50_000) + "TAIL"
         let model = ScriptedComputerUseModel(
             responses: [
-                .toolCall(id: "state-1", name: "get_app_state", arguments: #"{"app":"Calculator"}"#),
+                nodeReplCall(id: "script-1", code: observeCalculatorScript),
                 .text("Done."),
                 .text("Done."),
             ]
@@ -739,10 +654,10 @@ final class ComputerUseAgentTests: XCTestCase {
         _ = await agent.run(task: ComputerUseAgentTask(instruction: "Inspect Calculator."))
 
         let request = await model.requests[1]
-        let result = request.first { $0.toolCallID == "state-1" }?.textContent ?? ""
+        let result = request.first { $0.toolCallID == "script-1" }?.textContent ?? ""
         XCTAssertLessThanOrEqual(result.utf8.count, 40_100)
         XCTAssertTrue(result.contains("tokens truncated"))
-        XCTAssertTrue(result.hasSuffix("TAIL\"}"))
+        XCTAssertTrue(result.hasSuffix("TAIL"))
     }
 
     func testContextTokenBudgetKeepsCurrentInstructionAndNewestUsefulMessages() {
@@ -887,6 +802,31 @@ final class ComputerUseAgentTests: XCTestCase {
 
 }
 
+/// Scripts observe Calculator/Chrome and write the observed text — the
+/// code-mode equivalent of the old single get_app_state tool call.
+private let observeCalculatorScript = """
+const s = await computer.get_app_state({ app: "Calculator" });
+nodeRepl.write(s.text);
+"""
+
+private let observeChromeScript = """
+const s = await computer.get_app_state({ app: "Google Chrome" });
+nodeRepl.write(s.text);
+"""
+
+private func nodeReplArguments(_ code: String) -> String {
+    let data = try! JSONEncoder().encode(["code": code])
+    return String(decoding: data, as: UTF8.self)
+}
+
+private func nodeReplCall(id: String, code: String) -> ComputerUseModelResponse {
+    .toolCall(id: id, name: "node_repl", arguments: nodeReplArguments(code))
+}
+
+private func nodeReplCallMessage(id: String, code: String) -> ComputerUseModelMessage {
+    .toolCall(id: id, name: "node_repl", arguments: nodeReplArguments(code))
+}
+
 private actor RecordingComputerUseActivitySink {
     private(set) var activities: [ComputerUseActivity] = []
 
@@ -959,18 +899,12 @@ private actor InterventionInjectingComputerUseModel: ComputerUseModelServing {
         defer { responseIndex += 1 }
         switch responseIndex {
         case 0:
-            return .toolCall(
-                id: "state-1",
-                name: "get_app_state",
-                arguments: #"{"app":"Calculator"}"#
-            )
+            return nodeReplCall(id: "script-1", code: observeCalculatorScript)
         case 1:
             interventions.submit("Actually, do not click anything")
-            return .toolCall(
-                id: "stale-click",
-                name: "click",
-                arguments: #"{"app":"Calculator","element_index":7}"#
-            )
+            return nodeReplCall(id: "stale-script", code: """
+            await computer.click({ app: "Calculator", element_index: 7 });
+            """)
         default:
             return .text("Understood the correction.")
         }

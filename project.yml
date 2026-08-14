@@ -16,6 +16,10 @@ schemes:
       gatherCoverageData: false
       targets:
         - name: SuniyeTests
+  SuniyeEvalRunner:
+    build:
+      targets:
+        SuniyeEvalRunner: all
 settings:
   base:
     MACOSX_DEPLOYMENT_TARGET: 14.0
@@ -113,6 +117,60 @@ targets:
           else
             echo "Skipping local LLM helper embed; helper not found at ${HELPER_SOURCE}."
           fi
+  # VM-lane eval runner (KIS-182): the Computer Use agent stack without the
+  # dictation/audio machinery, so the guest needs no Xcode and no sherpa. An
+  # app bundle (LSUIElement) so TCC has a stable identity to grant.
+  SuniyeEvalRunner:
+    type: application
+    platform: macOS
+    sources:
+      - path: SuniyeEvalRunner
+      - path: Suniye/Services
+        includes:
+          - "ComputerUse*.swift"
+          - "SystemComputerUse*.swift"
+          - "AppLogger.swift"
+          - "ChatCompletionClient.swift"
+          - "TextInsertionService.swift"
+          - "LLMTransportError.swift"
+        excludes:
+          # App-UI only: drives the floating indicator, not the agent.
+          - "ComputerUseIndicatorPresenter.swift"
+          # App-only settings persistence (keychain); the runner takes its
+          # model configuration from the environment.
+          - "ComputerUseModelSettings.swift"
+      - path: Suniye/Analytics/ComputerUseAnalyticsMapping.swift
+      - path: Suniye/SuniyeNativeBridge.mm
+    info:
+      path: SuniyeEvalRunner/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+    settings:
+      base:
+        PRODUCT_NAME: SuniyeEvalRunner
+        PRODUCT_BUNDLE_IDENTIFIER: dev.suniye.evalrunner
+        # The VM guest is arm64 and the vendored dylibs are arm64-only; no
+        # universal slice is needed or possible.
+        ARCHS: arm64
+        SWIFT_OBJC_BRIDGING_HEADER: Suniye/Suniye-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          - $(PROJECT_DIR)/Suniye
+        OTHER_LDFLAGS:
+          - -ObjC
+        LD_RUNPATH_SEARCH_PATHS:
+          - $(inherited)
+          - "@executable_path/../Frameworks"
+        LIBRARY_SEARCH_PATHS:
+          - $(inherited)
+          - $(PROJECT_DIR)/Suniye/Frameworks
+    dependencies:
+      - package: SuniyeAnalytics
+        product: SuniyeAnalytics
+      - framework: Suniye/Frameworks/libsherpa-onnx-c-api.dylib
+      - framework: Suniye/Frameworks/libonnxruntime.dylib
   SuniyeTests:
     type: bundle.unit-test
     platform: macOS

@@ -97,6 +97,11 @@ enum ComputerUseModelToolCallDecoder {
         case .setVoiceActivation:
             let arguments = try decoder.decode(SetVoiceActivationArguments.self, from: data)
             return .setVoiceActivation(enabled: arguments.enabled)
+        case .nodeRepl:
+            // node_repl is the outer code-mode tool handled by the agent; the
+            // sky calls inside a script decode to concrete tool calls, never to
+            // node_repl itself.
+            throw ComputerUseModelToolCallError.unknownTool(ComputerUseToolName.nodeRepl.rawValue)
         }
     }
 }

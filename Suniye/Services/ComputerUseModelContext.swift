@@ -136,9 +136,15 @@ struct ComputerUseModelContextBuilder: Sendable {
     private func persistedScreenshotReference(
         for message: ComputerUseConversationMessage
     ) -> PersistedScreenshotReference? {
-        guard message.role == .activity,
-              let activity = message.activity,
-              let output = activity.output,
+        guard message.role == .activity, let activity = message.activity else {
+            return nil
+        }
+        // Code-mode: the script's last observation carries the screenshot to
+        // replay, since the tool output is plain script text, not app state.
+        if let url = activity.observedScreenshotURL, url.isFileURL {
+            return PersistedScreenshotReference(app: activity.observedApp ?? activity.toolName, url: url)
+        }
+        guard let output = activity.output,
               case let .appState(state)? = ComputerUseToolResultEncoder.decode(
                   toolName: activity.toolName,
                   output: output
@@ -169,7 +175,10 @@ struct ComputerUseModelContextBuilder: Sendable {
                 groups.append(
                     MessageGroup(
                         messages: grouped,
+                        // A node_repl group carries the latest observation(s) made
+                        // inside the script, so retain it like an observation.
                         isObservation: call.function.name == ComputerUseToolName.getAppState.rawValue
+                            || call.function.name == ComputerUseToolName.nodeRepl.rawValue
                     )
                 )
                 continue

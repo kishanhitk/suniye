@@ -1,0 +1,43 @@
+{
+  "trials": 3,
+  "tasks": [
+    {
+      "id": "open-calculator",
+      "prompt": "Uh open the calculator app",
+      "verify": { "type": "shell", "command": "pgrep -x Calculator" },
+      "reset": "pkill -x Calculator || true",
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "open-textedit",
+      "prompt": "open text edit for me",
+      "verify": { "type": "shell", "command": "pgrep -x TextEdit" },
+      "reset": "pkill -x TextEdit || true",
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "macos-version",
+      "prompt": "Uh what macOS version am I running?",
+      "verify": {
+        "type": "answer",
+        "pattern": "(?i)(golden gate|tahoe|twenty[- ]?seven|2[0-9]([\\.,][0-9])?|version .*(zero|one|two|three|four|five|six|seven|eight|nine))"
+      },
+      "timeoutSeconds": 180
+    },
+    {
+      "id": "battery-health",
+      "prompt": "check my battery health percentage",
+      "verify": {
+        "type": "answer",
+        "pattern": "(?i)([0-9]{1,3}\\s*(%|percent)|(one|two|three|four|five|six|seven|eight|nine|ten|hundred|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)([ -][a-z]+)?\\s+percent)"
+      },
+      "timeoutSeconds": 240
+    },
+    {
+      "id": "frontmost-question",
+      "prompt": "Uh what is on my screen right now?",
+      "verify": { "type": "answer", "pattern": "(?i)(window|screen|app|showing|open)" },
+      "timeoutSeconds": 180
+    }
+  ]
+}

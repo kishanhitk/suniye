@@ -120,6 +120,13 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
     private let modelID: String
     private var toolFailureCount = 0
 
+    /// Scratch for the script currently executing; reset at the start of each
+    /// node_repl call. `performSkyCall` (invoked from the JS bridge) fills these
+    /// and `runScript` reads them once the script settles.
+    private var scriptExecutions: [ComputerUseExecutedToolCall] = []
+    private var scriptObservations: [ScriptObservation] = []
+    private var scriptLastTargetApp: String?
+
     init(
         model: ComputerUseModelServing,
         tools: any ComputerUseToolServing,
@@ -217,32 +224,27 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                     )
                     return ComputerUseAgentResult(outcome: .completed, message: text)
                 case let .toolCall(id, name, arguments):
-                    step += 1
-                    log(
-                        .debug,
-                        "computer use tool started step=\(step) name=\(name)",
-                        session: debugSessionID
-                    )
-                    let activity = ComputerUseActivity(
-                        toolName: name,
-                        arguments: arguments
-                    )
-                    await activitySink.emit(activity)
-                    messages.append(
-                        .toolCall(id: id, name: name, arguments: arguments)
-                    )
-                    let execution = try await execute(
+                    guard name == ComputerUseToolName.nodeRepl.rawValue else {
+                        // Only node_repl is advertised; anything else is a model
+                        // error surfaced back as a tool result it can recover from.
+                        messages.append(.toolCall(id: id, name: name, arguments: arguments))
+                        messages.append(.toolResult(
+                            id: id,
+                            content: "Unknown tool \(name). Use node_repl and drive computer.* from JavaScript."
+                        ))
+                        continue
+                    }
+                    let scriptOutcome = try await runScript(
                         id: id,
-                        name: name,
                         arguments: arguments,
-                        activity: activity,
                         debugSessionID: debugSessionID,
                         messages: &messages
                     )
-                    if let execution {
-                        if let app = execution.call.targetApp {
-                            lastTargetApp = app
-                        }
+                    step += scriptOutcome.executedCalls
+                    if let app = scriptOutcome.lastTargetApp {
+                        lastTargetApp = app
+                    }
+                    for execution in scriptOutcome.executions {
                         if let recovery = audits.noteExecuted(execution) {
                             messages.append(.text(role: .user, text: recovery))
                         }
@@ -291,16 +293,16 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 .computerUseToolFailed(
                     tool: .unknown,
                     target: TargetCategoryMapper.category(for: targetApp),
-                    reason: AnalyticsMapping.computerUseFailureReason(error)
+                    reason: ComputerUseAnalyticsMapping.computerUseFailureReason(error)
                 )
             )
             return
         }
         analytics.track(
             .computerUseToolFailed(
-                tool: AnalyticsMapping.computerUseTool(tool),
+                tool: ComputerUseAnalyticsMapping.computerUseTool(tool),
                 target: TargetCategoryMapper.category(for: targetApp),
-                reason: AnalyticsMapping.computerUseFailureReason(error)
+                reason: ComputerUseAnalyticsMapping.computerUseFailureReason(error)
             )
         )
     }
@@ -317,7 +319,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         analytics.track(
             .computerUseRun(
                 ComputerUseRunMetrics(
-                    outcome: AnalyticsMapping.computerUseOutcome(outcome),
+                    outcome: ComputerUseAnalyticsMapping.computerUseOutcome(outcome),
                     steps: steps,
                     toolFailures: toolFailureCount,
                     durationMs: Int(elapsed / .milliseconds(1)),
@@ -328,77 +330,137 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         )
     }
 
-    private func execute(
+    /// Runs one model-authored node_repl script. Each `computer.*` call inside
+    /// drives `performSkyCall`; the script's text output becomes one tool
+    /// result, and observations made during the script attach their screenshots.
+    private func runScript(
         id: String,
-        name: String,
         arguments: String,
-        activity: ComputerUseActivity,
         debugSessionID: ComputerUseDebugSessionID,
         messages: inout [ComputerUseModelMessage]
-    ) async throws -> ComputerUseExecutedToolCall? {
-        do {
-            let call = try ComputerUseModelToolCallDecoder.decode(
-                name: name,
-                arguments: arguments
-            )
-            let result = try await tools.execute(call)
-            let localResult = try ComputerUseToolResultEncoder.encode(result)
-            let modelResult = try ComputerUseModelToolOutput.encode(
-                result,
-                maximumTokens: contextBuilder.policy.maximumToolOutputTokens
-            )
-            log(
-                .debug,
-                "computer use tool completed name=\(name) result=\(result.logValue)",
-                session: debugSessionID
-            )
-            await activitySink.emit(activity.completed(output: localResult))
-            messages.append(
-                .toolResult(id: id, content: modelResult)
-            )
-            if case let .appState(state) = result,
-               let screenshot = state.screenshot,
-               let dataURL = try? await screenshots.dataURL(for: screenshot) {
-                messages.append(.screenshot(app: state.app, dataURL: dataURL))
+    ) async throws -> ScriptOutcome {
+        messages.append(.toolCall(id: id, name: ComputerUseToolName.nodeRepl.rawValue, arguments: arguments))
+
+        guard let code = decodeScriptCode(arguments) else {
+            messages.append(.toolResult(
+                id: id,
+                content: "node_repl requires a JSON object with a string 'code' field."
+            ))
+            return ScriptOutcome(executions: [], executedCalls: 0, lastTargetApp: nil)
+        }
+
+        scriptExecutions = []
+        scriptObservations = []
+        scriptLastTargetApp = nil
+
+        let startActivity = ComputerUseActivity(
+            toolName: ComputerUseToolName.nodeRepl.rawValue,
+            arguments: arguments
+        )
+        await activitySink.emit(startActivity)
+        log(.debug, "computer use script started", session: debugSessionID)
+
+        let runtime = ComputerUseScriptRuntime { [weak self] call in
+            guard let self else {
+                return .failure(CancellationError())
             }
-            let observationWasUnchanged: Bool
+            return await self.performSkyCall(call)
+        }
+        let scriptResult = await runtime.run(script: code)
+        try Task.checkCancellation()
+
+        let output = composeOutput(scriptResult)
+        let modelOutput = ComputerUseTokenTruncator.truncateMiddle(
+            output,
+            maximumTokens: contextBuilder.policy.maximumToolOutputTokens
+        )
+        messages.append(.toolResult(
+            id: id,
+            content: modelOutput.isEmpty ? "(script produced no output)" : modelOutput
+        ))
+
+        let attachedObservations = scriptObservations
+            .filter { $0.dataURL != nil }
+            .suffix(contextBuilder.policy.maximumScreenshots)
+        for observation in attachedObservations {
+            guard let dataURL = observation.dataURL else { continue }
+            messages.append(.screenshot(app: observation.app, dataURL: dataURL))
+        }
+
+        let lastObservation = scriptObservations.last
+        await activitySink.emit(startActivity.completed(
+            output: output,
+            observedApp: lastObservation?.app,
+            observedScreenshotURL: lastObservation?.url
+        ))
+        log(
+            .debug,
+            "computer use script completed calls=\(scriptExecutions.count) "
+                + "failures=\(scriptResult.error == nil ? 0 : 1)",
+            session: debugSessionID
+        )
+        return ScriptOutcome(
+            executions: scriptExecutions,
+            executedCalls: scriptExecutions.count,
+            lastTargetApp: scriptLastTargetApp
+        )
+    }
+
+    /// Executes one decoded `computer.*` call from a running script, recording
+    /// the observation, audit signal, and target app into the script scratch.
+    /// Returns the result to resolve the JS promise, or a failure to reject it.
+    private func performSkyCall(
+        _ call: ComputerUseToolCall
+    ) async -> Result<ComputerUseToolResult, Error> {
+        if let app = call.targetApp {
+            scriptLastTargetApp = app
+        }
+        do {
+            let result = try await tools.execute(call)
+            var observationWasUnchanged = false
             if case let .appState(state) = result {
                 observationWasUnchanged = state.text.hasPrefix(
                     "There has been no change in the accessibility tree"
                 )
-            } else {
-                observationWasUnchanged = false
+                if let screenshot = state.screenshot {
+                    // The URL persists for replay even when the file cannot be
+                    // loaded right now; only the model attachment needs the data.
+                    scriptObservations.append(ScriptObservation(
+                        app: state.app,
+                        url: screenshot,
+                        dataURL: try? await screenshots.dataURL(for: screenshot)
+                    ))
+                }
             }
-            return ComputerUseExecutedToolCall(
-                call: call,
-                observationWasUnchanged: observationWasUnchanged
+            scriptExecutions.append(
+                ComputerUseExecutedToolCall(call: call, observationWasUnchanged: observationWasUnchanged)
             )
+            return .success(result)
         } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as ComputerUseRuntimeError {
-            recordToolFailure(name: name, error: error, targetApp: nil)
-            await emitFailure(error, for: activity)
-            throw error
+            return .failure(CancellationError())
         } catch {
-            recordToolFailure(name: name, error: error, targetApp: nil)
-            let errorMessage = localizedMessage(error)
-            log(
-                .warning,
-                "computer use tool failed name=\(name) "
-                    + "error_type=\(String(describing: type(of: error))) "
-                    + "error=\(errorMessage)",
-                session: debugSessionID
-            )
-            let encodedError = try ComputerUseToolResultEncoder.encode(error: errorMessage)
-            await activitySink.emit(activity.completed(output: encodedError))
-            messages.append(
-                .toolResult(
-                    id: id,
-                    content: encodedError
-                )
-            )
+            recordToolFailure(name: call.name.rawValue, error: error, targetApp: call.targetApp)
+            return .failure(error)
+        }
+    }
+
+    private func decodeScriptCode(_ arguments: String) -> String? {
+        struct ScriptArguments: Decodable {
+            let code: String
+        }
+        guard let data = arguments.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(ScriptArguments.self, from: data),
+              !decoded.code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
         }
+        return decoded.code
+    }
+
+    private func composeOutput(_ result: ComputerUseScriptResult) -> String {
+        guard let error = result.error else {
+            return result.output
+        }
+        return result.output.isEmpty ? "Error: \(error)" : "\(result.output)\nError: \(error)"
     }
 
     /// Bounds a run that the model never completes. Without these an agent can
@@ -431,45 +493,30 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
             session: debugSessionID
         )
         guard let lastTargetApp else { return false }
-        let arguments = try encodeInterventionObservationArguments(app: lastTargetApp)
-        let id = "intervention-observation-\(UUID().uuidString.lowercased())"
-        let activity = ComputerUseActivity(
-            toolName: ComputerUseToolName.getAppState.rawValue,
-            arguments: arguments
-        )
-        await activitySink.emit(activity)
-        messages.append(
-            .toolCall(
-                id: id,
-                name: ComputerUseToolName.getAppState.rawValue,
-                arguments: arguments
-            )
-        )
-        _ = try await execute(
-            id: id,
-            name: ComputerUseToolName.getAppState.rawValue,
-            arguments: arguments,
-            activity: activity,
-            debugSessionID: debugSessionID,
-            messages: &messages
-        )
+        await observeForIntervention(app: lastTargetApp, messages: &messages)
         return true
     }
 
-    private func encodeInterventionObservationArguments(app: String) throws -> String {
-        try ComputerUseCompactJSON.encode(InterventionObservationArguments(app: app))
-    }
-
-    private func emitFailure(
-        _ error: Error,
-        for activity: ComputerUseActivity
+    /// Fresh observation seeded after an intervention. The advertised tool is
+    /// node_repl, so the observation enters context as a user message with its
+    /// screenshot rather than a get_app_state tool call the model never made.
+    private func observeForIntervention(
+        app: String,
+        messages: inout [ComputerUseModelMessage]
     ) async {
-        guard let encodedError = try? ComputerUseToolResultEncoder.encode(
-            error: localizedMessage(error)
-        ) else {
+        guard let result = try? await tools.execute(.getAppState(app: app, disableDiff: false)),
+              case let .appState(state) = result else {
             return
         }
-        await activitySink.emit(activity.completed(output: encodedError))
+        let text = (try? ComputerUseModelToolOutput.encode(
+            result,
+            maximumTokens: contextBuilder.policy.maximumToolOutputTokens
+        )) ?? state.text
+        messages.append(.text(role: .user, text: "Current state of \(state.app) after your input:\n\(text)"))
+        if let screenshot = state.screenshot,
+           let dataURL = try? await screenshots.dataURL(for: screenshot) {
+            messages.append(.screenshot(app: state.app, dataURL: dataURL))
+        }
     }
 
     private func localizedMessage(_ error: Error) -> String {
@@ -564,8 +611,19 @@ private struct ComputerUseExecutedToolCall {
     let observationWasUnchanged: Bool
 }
 
-private struct InterventionObservationArguments: Encodable {
+/// A `get_app_state` observation made inside a script, retained so its
+/// screenshot can attach to the tool result and seed a later run. `dataURL`
+/// is nil when the file could not be loaded; the URL still persists.
+private struct ScriptObservation {
     let app: String
+    let url: URL
+    let dataURL: String?
+}
+
+private struct ScriptOutcome {
+    let executions: [ComputerUseExecutedToolCall]
+    let executedCalls: Int
+    let lastTargetApp: String?
 }
 
 private extension ComputerUseToolCall {
