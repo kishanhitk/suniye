@@ -202,6 +202,7 @@
 		D1CBBBF88E8F6C29A715E9D1 /* AppStateAnalyticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484DD46A1F033CDDBA2F98DA /* AppStateAnalyticsTests.swift */; };
 		D3BEEF763F085BD841431430 /* OpenRouterPostProcessorMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C7E8D1051162AD963AE58F /* OpenRouterPostProcessorMoreTests.swift */; };
 		D4A9EDEA500C15F31FEB8CE1 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ECD2622B5D49CEAF4D4736A /* KeychainService.swift */; };
+		D54FDB4EA0FD6C1330502CC5 /* SystemComputerUseFocusEnforcer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3AF6B6559EF658DA946CBF6 /* SystemComputerUseFocusEnforcer.swift */; };
 		D56981268DA6E6B631417822 /* LocalGemmaLlamaCppClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D81C8980964221A020EBB979 /* LocalGemmaLlamaCppClient.swift */; };
 		D592C6064881A1E36EA9E234 /* LocalLLMKeepAliveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F0FD9A7C5E4966A5579DE8 /* LocalLLMKeepAliveTests.swift */; };
 		D5A7F21227246CAF8E15737F /* LearningToastPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CD4592FDE5BC46F045F28BB /* LearningToastPresenter.swift */; };
@@ -464,6 +465,7 @@
 		D1FAF2B003307FDF0EBA9BA0 /* ListeningOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningOverlay.swift; sourceTree = "<group>"; };
 		D29FC0918B96FB3F030D7EE7 /* ComputerUseToolResultEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseToolResultEncoder.swift; sourceTree = "<group>"; };
 		D3161CA1497B7EEA0FB2CE36 /* GeneralSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsStore.swift; sourceTree = "<group>"; };
+		D3AF6B6559EF658DA946CBF6 /* SystemComputerUseFocusEnforcer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemComputerUseFocusEnforcer.swift; sourceTree = "<group>"; };
 		D4416B992248F8B51B0E9DE1 /* FragmentMono-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "FragmentMono-Italic.ttf"; sourceTree = "<group>"; };
 		D483D635E7A8E177A09D311E /* GoogleSans-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "GoogleSans-Variable.ttf"; sourceTree = "<group>"; };
 		D81C8980964221A020EBB979 /* LocalGemmaLlamaCppClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaLlamaCppClient.swift; sourceTree = "<group>"; };
@@ -833,6 +835,7 @@
 				F803FAFA1956148860BCCACF /* SystemComputerUseAccessibilityAPI.swift */,
 				FFA4ABF77342C58F327BD3EC /* SystemComputerUseAccessibilitySnapshotProvider.swift */,
 				3968654FF11FBBDD3DF379A5 /* SystemComputerUseApplicationInventory.swift */,
+				D3AF6B6559EF658DA946CBF6 /* SystemComputerUseFocusEnforcer.swift */,
 				5E296F34F1CD716B433B935B /* SystemComputerUseInputEvents.swift */,
 				665F9512CE95F3BBE102C595 /* SystemComputerUseScreenshotCapturer.swift */,
 				DF9A2105698B412DA156394B /* SystemComputerUseWindowInventory.swift */,
@@ -1099,6 +1102,7 @@
 				F579D30BB8D15B3A99EBDF7F /* SystemComputerUseAccessibilityActions.swift in Sources */,
 				6D399296AEC7E00B43019D73 /* SystemComputerUseAccessibilitySnapshotProvider.swift in Sources */,
 				AD1126C55615D20E9BCA6D3D /* SystemComputerUseApplicationInventory.swift in Sources */,
+				D54FDB4EA0FD6C1330502CC5 /* SystemComputerUseFocusEnforcer.swift in Sources */,
 				661F70D0B200F56AF17BBC9A /* SystemComputerUseInputEvents.swift in Sources */,
 				6504B9615DEBC4ADEAC06C83 /* SystemComputerUseScreenshotCapturer.swift in Sources */,
 				2DE70201D8B65AE12CAA0E24 /* SystemComputerUseWindowInventory.swift in Sources */,

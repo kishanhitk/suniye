@@ -55,6 +55,13 @@ public enum AnalyticsEvent: Sendable {
     case updateAction(kind: UpdateActionKind, fromVersion: SafeLabel?, toVersion: SafeLabel?)
     case error(type: AnalyticsErrorType, code: AnalyticsErrorCode)
 
+    case computerUseRun(ComputerUseRunMetrics)
+    case computerUseToolFailed(
+        tool: ComputerUseTool,
+        target: TargetCategory,
+        reason: ComputerUseFailureReason
+    )
+
     /// Self-observability of the analytics pipeline itself.
     case analyticsHealth(queueDepth: Int, uploadFailures: Int, evictedByTTL: Int, evictedBySize: Int)
 
@@ -84,6 +91,8 @@ public enum AnalyticsEvent: Sendable {
         case .featureToggled: return "feature_toggled"
         case .updateAction: return "update_action"
         case .error: return "error"
+        case .computerUseRun: return "computer_use_run"
+        case .computerUseToolFailed: return "computer_use_tool_failed"
         case .analyticsHealth: return "analytics_health"
         }
     }
@@ -158,6 +167,14 @@ public enum AnalyticsEvent: Sendable {
             return out
         case let .error(type, code):
             return ["type": .label(type), "code": .label(code)]
+        case let .computerUseRun(metrics):
+            return metrics.props
+        case let .computerUseToolFailed(tool, target, reason):
+            return [
+                "tool": .label(tool),
+                "target_category": .label(target),
+                "reason": .label(reason),
+            ]
         case let .analyticsHealth(queueDepth, uploadFailures, evictedByTTL, evictedBySize):
             return [
                 "queue_depth": .int(queueDepth),

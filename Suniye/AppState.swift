@@ -1759,7 +1759,8 @@ final class AppState {
         let resolvedComputerUseCoordinator = computerUseCoordinator ?? ComputerUseCoordinator(
             conversationStore: startServices
                 ? ComputerUseConversationStore()
-                : NoopComputerUseConversationStore()
+                : NoopComputerUseConversationStore(),
+            analytics: analytics
         )
         self.computerUseCoordinator = resolvedComputerUseCoordinator
         computerUseModelSettings = ComputerUseModelSettingsController(

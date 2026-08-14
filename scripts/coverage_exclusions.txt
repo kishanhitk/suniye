@@ -29,6 +29,7 @@ Suniye/Services/SystemComputerUseScreenshotCapturer.swift # ScreenCaptureKit win
 Suniye/Services/SystemComputerUseAccessibilityActions.swift # AXUIElement refetch and mutation require a live target process and Accessibility permission; text-range resolution is extracted and tested
 Suniye/Services/SystemComputerUseAccessibilityAPI.swift # Thin Core Foundation AX adapter requires live Accessibility objects; callers keep pure traversal and matching logic testable
 Suniye/Services/SystemComputerUseInputEvents.swift # process-scoped CGEvent posting requires a live target process and Accessibility permission; key, scroll, and Unicode translation are extracted and tested
+Suniye/Services/SystemComputerUseFocusEnforcer.swift # AXUIElementPerformAction(kAXRaiseAction) and NSRunningApplication.activate require a live target process, window server, and Accessibility permission; the when-to-focus decision is tested through the ComputerUseFocusEnforcing seam
 
 # --- Window-server bound UI shells (logic lives in state/services) ---
 Suniye/Services/LearningToastPresenter.swift          # transient NSPanel toast

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SuniyeAnalytics
 
 enum ComputerUseCoordinatorPhase: Equatable {
     case idle
@@ -56,7 +57,8 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         initialPermissionSnapshot: ComputerUsePermissionSnapshot = .notGranted,
         cursorSession: any ComputerUseCursorSessionManaging = SystemComputerUseCursorPresenter(),
         conversationStore: any ComputerUseConversationStoring = NoopComputerUseConversationStore(),
-        makeAgent: @escaping AgentFactory = ComputerUseCoordinator.makeProductionAgent
+        analytics: any Analytics = NoopAnalytics(),
+        makeAgent: AgentFactory? = nil
     ) {
         self.permissions = permissions
         self.permissionSettings = permissionSettings
@@ -64,7 +66,13 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         self.permissionSnapshot = initialPermissionSnapshot
         self.cursorSession = cursorSession
         self.conversationStore = conversationStore
-        self.makeAgent = makeAgent
+        self.makeAgent = makeAgent ?? { configuration, activitySink in
+            ComputerUseCoordinator.makeProductionAgent(
+                configuration: configuration,
+                activitySink: activitySink,
+                analytics: analytics
+            )
+        }
         conversation = conversationStore.load()
         pendingVoiceInstruction = conversationStore.loadPendingVoiceInstruction()
         draft = pendingVoiceInstruction ?? ""
@@ -338,12 +346,15 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
 
     private static func makeProductionAgent(
         configuration: ComputerUseRemoteModelConfiguration,
-        activitySink: ComputerUseActivitySink
+        activitySink: ComputerUseActivitySink,
+        analytics: any Analytics
     ) -> any ComputerUseAgentRunning {
         ComputerUseAgent(
             model: ComputerUseRemoteModelClient(configuration: configuration),
             tools: ComputerUseToolBackend(),
             activitySink: activitySink,
+            analytics: analytics,
+            modelID: configuration.modelID,
             contextPolicy: .referenceAligned(modelID: configuration.modelID)
         )
     }

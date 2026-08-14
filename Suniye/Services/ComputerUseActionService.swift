@@ -106,6 +106,10 @@ protocol ComputerUseInputEventPosting: Sendable {
     func typeText(_ text: String, pid: Int32) async throws
 }
 
+protocol ComputerUseFocusEnforcing: Sendable {
+    func focusForKeyInput(target: ComputerUseObservedTarget) async throws
+}
+
 protocol ComputerUseActionServing: Sendable {
     func click(_ request: ComputerUseClickRequest, context: ComputerUseActionContext) async throws
     func performSecondaryAction(
@@ -147,16 +151,19 @@ struct ComputerUseActionService: ComputerUseActionServing {
     private let accessibility: ComputerUseAccessibilityActionPerforming
     private let input: ComputerUseInputEventPosting
     private let cursor: ComputerUseCursorPresenting
+    private let focus: ComputerUseFocusEnforcing
 
     init(
         accessibility: ComputerUseAccessibilityActionPerforming =
             SystemComputerUseAccessibilityActions(),
         input: ComputerUseInputEventPosting = SystemComputerUseInputEvents(),
-        cursor: ComputerUseCursorPresenting = NoopComputerUseCursorPresenter()
+        cursor: ComputerUseCursorPresenting = NoopComputerUseCursorPresenter(),
+        focus: ComputerUseFocusEnforcing = SystemComputerUseFocusEnforcer()
     ) {
         self.accessibility = accessibility
         self.input = input
         self.cursor = cursor
+        self.focus = focus
     }
 
     func click(_ request: ComputerUseClickRequest, context: ComputerUseActionContext) async throws {
@@ -327,11 +334,15 @@ struct ComputerUseActionService: ComputerUseActionServing {
         guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ComputerUseActionError.invalidArgument("key is required")
         }
-        try await input.pressKey(key, pid: processIdentifier(context))
+        let pid = try processIdentifier(context)
+        try await focus.focusForKeyInput(target: context.target)
+        try await input.pressKey(key, pid: pid)
     }
 
     func typeText(_ text: String, context: ComputerUseActionContext) async throws {
-        try await input.typeText(text, pid: processIdentifier(context))
+        let pid = try processIdentifier(context)
+        try await focus.focusForKeyInput(target: context.target)
+        try await input.typeText(text, pid: pid)
     }
 
     private func element(

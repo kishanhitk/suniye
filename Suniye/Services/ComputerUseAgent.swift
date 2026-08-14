@@ -1,4 +1,5 @@
 import Foundation
+import SuniyeAnalytics
 
 enum ComputerUseAgentOutcome: Equatable, Sendable {
     case completed
@@ -115,6 +116,9 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
     private let maximumSteps: Int
     private let maximumRunDuration: Duration
     private let now: @Sendable () -> ContinuousClock.Instant
+    private let analytics: any Analytics
+    private let modelID: String
+    private var toolFailureCount = 0
 
     init(
         model: ComputerUseModelServing,
@@ -122,6 +126,8 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         screenshots: ComputerUseScreenshotLoading = SystemComputerUseScreenshotLoader(),
         logger: ComputerUseLogging = SystemComputerUseLogger(),
         activitySink: ComputerUseActivitySink = .disabled,
+        analytics: any Analytics = NoopAnalytics(),
+        modelID: String = "",
         contextPolicy: ComputerUseModelContextPolicy = .referenceAligned(modelID: ""),
         maximumSteps: Int = 60,
         maximumRunDuration: Duration = .seconds(300),
@@ -136,6 +142,8 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         self.maximumSteps = maximumSteps
         self.maximumRunDuration = maximumRunDuration
         self.now = now
+        self.analytics = analytics
+        self.modelID = modelID
     }
 
     func run(task: ComputerUseAgentTask) async -> ComputerUseAgentResult {
@@ -157,6 +165,8 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         var lastTargetApp: String?
         var audits = RunAuditState()
         let deadline = now().advanced(by: maximumRunDuration)
+        let startedAt = now()
+        toolFailureCount = 0
         log(.info, "computer use run started", session: debugSessionID)
         do {
             while true {
@@ -199,6 +209,12 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                         "computer use run completed steps=\(step)",
                         session: debugSessionID
                     )
+                    recordRun(
+                        .completed,
+                        steps: step,
+                        startedAt: startedAt,
+                        targetApp: lastTargetApp
+                    )
                     return ComputerUseAgentResult(outcome: .completed, message: text)
                 case let .toolCall(id, name, arguments):
                     step += 1
@@ -239,6 +255,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 "computer use run cancelled reason=requested",
                 session: debugSessionID
             )
+            recordRun(.cancelled, steps: step, startedAt: startedAt, targetApp: lastTargetApp)
             return ComputerUseAgentResult(outcome: .cancelled, message: "Stopped.")
         } catch let error as ComputerUseAgentError {
             log(
@@ -246,6 +263,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 "computer use run stopped reason=\(error) steps=\(step)",
                 session: debugSessionID
             )
+            recordRun(.failed, steps: step, startedAt: startedAt, targetApp: lastTargetApp)
             return ComputerUseAgentResult(
                 outcome: .failed,
                 message: localizedMessage(error)
@@ -256,11 +274,58 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 "computer use run failed error_type=\(String(describing: type(of: error)))",
                 session: debugSessionID
             )
+            recordRun(.failed, steps: step, startedAt: startedAt, targetApp: lastTargetApp)
             return ComputerUseAgentResult(
                 outcome: .failed,
                 message: localizedMessage(error)
             )
         }
+    }
+
+    /// Which tool failed and why, in closed vocabularies. Error associated
+    /// values carry app names and user text, so only the case is reported.
+    private func recordToolFailure(name: String, error: Error, targetApp: String?) {
+        toolFailureCount += 1
+        guard let tool = ComputerUseToolName(rawValue: name) else {
+            analytics.track(
+                .computerUseToolFailed(
+                    tool: .unknown,
+                    target: TargetCategoryMapper.category(for: targetApp),
+                    reason: AnalyticsMapping.computerUseFailureReason(error)
+                )
+            )
+            return
+        }
+        analytics.track(
+            .computerUseToolFailed(
+                tool: AnalyticsMapping.computerUseTool(tool),
+                target: TargetCategoryMapper.category(for: targetApp),
+                reason: AnalyticsMapping.computerUseFailureReason(error)
+            )
+        )
+    }
+
+    /// One record per finished run. The target app is reported as a category,
+    /// never as an identifier, and no instruction or screen content is included.
+    private func recordRun(
+        _ outcome: ComputerUseAgentOutcome,
+        steps: Int,
+        startedAt: ContinuousClock.Instant,
+        targetApp: String?
+    ) {
+        let elapsed = startedAt.duration(to: now())
+        analytics.track(
+            .computerUseRun(
+                ComputerUseRunMetrics(
+                    outcome: AnalyticsMapping.computerUseOutcome(outcome),
+                    steps: steps,
+                    toolFailures: toolFailureCount,
+                    durationMs: Int(elapsed / .milliseconds(1)),
+                    model: SafeLabel(modelID),
+                    target: TargetCategoryMapper.category(for: targetApp)
+                )
+            )
+        )
     }
 
     private func execute(
@@ -311,9 +376,11 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as ComputerUseRuntimeError {
+            recordToolFailure(name: name, error: error, targetApp: nil)
             await emitFailure(error, for: activity)
             throw error
         } catch {
+            recordToolFailure(name: name, error: error, targetApp: nil)
             let errorMessage = localizedMessage(error)
             log(
                 .warning,
