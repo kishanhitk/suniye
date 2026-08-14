@@ -60,11 +60,13 @@ final class ComputerUseRemoteModelClientTests: XCTestCase {
         let tools = try XCTUnwrap(body["tools"] as? [[String: Any]])
         XCTAssertEqual(
             tools.compactMap { ($0["function"] as? [String: Any])?["name"] as? String },
-            ComputerUseToolName.allCases.map(\.rawValue)
+            ["node_repl"]
         )
         let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
         XCTAssertEqual(messages.compactMap { $0["role"] as? String }, ["system", "user"])
         let systemInstructions = try XCTUnwrap(messages.first?["content"] as? String)
+        XCTAssertTrue(systemInstructions.contains("Control macOS by writing JavaScript"))
+        XCTAssertTrue(systemInstructions.contains("computer.get_app_state"))
         XCTAssertTrue(systemInstructions.contains("never substitute or inspect an unrelated app"))
         XCTAssertTrue(
             systemInstructions.contains(
@@ -73,22 +75,12 @@ final class ComputerUseRemoteModelClientTests: XCTestCase {
         )
         XCTAssertTrue(
             systemInstructions.contains(
-                "You may not report success for a requested UI change after an observation-only path"
+                "never report success for a requested change after an observation-only path"
             )
         )
         XCTAssertTrue(
             systemInstructions.contains(
-                "confirm the requested result in the fresh state captured after that action"
-            )
-        )
-        XCTAssertTrue(
-            systemInstructions.contains(
-                "A focused or selected item is not proof that it was activated or opened"
-            )
-        )
-        XCTAssertTrue(
-            systemInstructions.contains(
-                "If a click focuses the intended control without activating it, press Return"
+                "confirm the requested result in the fresh state before reporting success"
             )
         )
         XCTAssertTrue(
@@ -98,16 +90,10 @@ final class ComputerUseRemoteModelClientTests: XCTestCase {
         )
         XCTAssertTrue(
             systemInstructions.contains(
-                "The current app content may be unrelated to the user's request"
-            )
-        )
-        XCTAssertTrue(
-            systemInstructions.contains(
-                "Match the requested subject before acting on a visible result"
+                "match the requested subject before acting"
             )
         )
         XCTAssertEqual(messages.last?["content"] as? String, "Read the Calculator result.")
-
     }
 
     func testProviderRequestPreservesToolResultAndScreenshotOrdering() async throws {

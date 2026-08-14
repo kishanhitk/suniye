@@ -2,7 +2,7 @@ import XCTest
 @testable import Suniye
 
 final class ComputerUseProtocolTests: XCTestCase {
-    func testDesktopToolSurfaceMatchesTheRecoveredTenOperations() {
+    func testToolNamesCoverTheTenActionsPlusVoiceAndTheCodeModeTool() {
         XCTAssertEqual(
             ComputerUseToolName.allCases.map(\.rawValue),
             [
@@ -17,6 +17,7 @@ final class ComputerUseProtocolTests: XCTestCase {
                 "press_key",
                 "type_text",
                 "set_voice_activation",
+                "node_repl",
             ]
         )
     }
@@ -43,7 +44,12 @@ final class ComputerUseProtocolTests: XCTestCase {
             .setVoiceActivation(enabled: false),
         ]
 
-        XCTAssertEqual(calls.map(\.name), ComputerUseToolName.allCases)
+        // node_repl is a tool name with no corresponding tool call: the model
+        // calls it, and the computer.* calls inside a script map to these.
+        XCTAssertEqual(
+            calls.map(\.name),
+            ComputerUseToolName.allCases.filter { $0 != .nodeRepl }
+        )
     }
 
     func testPublicMouseAndScrollAliasesDecodeToCanonicalValues() throws {
