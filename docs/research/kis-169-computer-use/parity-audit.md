@@ -2,14 +2,14 @@
 
 Date: 2026-08-03
 
-Reference: `/Users/kishan/Downloads/ChatGPT (1).dmg`
+Reference: `<home>/Downloads/ChatGPT (1).dmg`
 
 Mounted reference paths used in this audit:
 
 - `/private/tmp/suniye-chatgpt-dmg-mount/ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/@oai/sky/docs/sky-window2-api.md`
 - `/private/tmp/suniye-chatgpt-dmg-mount/ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/@oai/sky/docs/sky-window-api.md`
 - `/private/tmp/suniye-chatgpt-dmg-mount/ChatGPT.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/skills/computer-use/SKILL.md`
-- `/Users/kishan/.codex/worktrees/eaaa/suniye/docs/research/kis-169-computer-use/parity-audit-dmg-agent.md`
+- `<repo>/docs/research/kis-169-computer-use/parity-audit-dmg-agent.md`
 
 This is a behavior and boundary comparison. It does not copy source code from the reference.
 

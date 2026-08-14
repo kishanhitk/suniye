@@ -313,7 +313,11 @@ final class ComputerUseActionServiceTests: XCTestCase {
     func testAccessibilityAndInputActionsForwardExactArguments() async throws {
         let accessibility = RecordingAccessibilityActions(center: CGPoint(x: 120, y: 80))
         let input = RecordingInputEvents()
-        let service = ComputerUseActionService(accessibility: accessibility, input: input)
+        let service = ComputerUseActionService(
+            accessibility: accessibility,
+            input: input,
+            focus: RecordingFocusEnforcer()
+        )
         let context = computerUseTestActionContext()
 
         try await service.performSecondaryAction("Show Menu", elementIndex: 7, context: context)
@@ -360,6 +364,43 @@ final class ComputerUseActionServiceTests: XCTestCase {
         )
         XCTAssertEqual(keys, [.init(chord: "Super_L+a", pid: 42)])
         XCTAssertEqual(typedText, [.init(text: "hello", pid: 42)])
+    }
+
+    func testKeyInputActionsEnforceFocusOnTheObservedWindow() async throws {
+        let focus = RecordingFocusEnforcer()
+        let service = ComputerUseActionService(
+            accessibility: RecordingAccessibilityActions(center: CGPoint(x: 120, y: 80)),
+            input: RecordingInputEvents(),
+            focus: focus
+        )
+        let context = computerUseTestActionContext()
+
+        try await service.pressKey("Return", context: context)
+        try await service.typeText("hello", context: context)
+
+        let focused = await focus.focusedTargets
+        XCTAssertEqual(focused.count, 2)
+        XCTAssertEqual(focused.first?.window.id, context.target.window.id)
+    }
+
+    func testMouseAndValueActionsDoNotEnforceFocus() async throws {
+        let focus = RecordingFocusEnforcer()
+        let service = ComputerUseActionService(
+            accessibility: RecordingAccessibilityActions(center: CGPoint(x: 120, y: 80)),
+            input: RecordingInputEvents(),
+            focus: focus
+        )
+        let context = computerUseTestActionContext()
+
+        try await service.click(
+            ComputerUseClickRequest(app: "Calculator", elementIndex: 7),
+            context: context
+        )
+        try await service.scroll(elementIndex: 7, direction: .down, pages: 1, context: context)
+        try await service.setValue("42", elementIndex: 7, context: context)
+
+        let focused = await focus.focusedTargets
+        XCTAssertTrue(focused.isEmpty, "observation and pointer actions must not steal the foreground")
     }
 
     func testRejectsOnlyInvalidPublicArguments() async {
@@ -478,7 +519,13 @@ func computerUseTestActionContext(
                     rootIndex: 0,
                     path: [0],
                     role: "AXButton",
-                    identifier: "equals"
+                    identifier: "equals",
+                    traits: ComputerUseAccessibilityElementTraits(
+                        subrole: nil,
+                        roleDescription: nil,
+                        title: nil,
+                        description: nil
+                    )
                 ),
             ]
         ),
@@ -572,6 +619,14 @@ private actor RecordingAccessibilityActions: ComputerUseAccessibilityActionPerfo
 
     private func index(for reference: ComputerUseAccessibilityElementReference) -> Int {
         reference.identifier == "equals" ? 7 : -1
+    }
+}
+
+private actor RecordingFocusEnforcer: ComputerUseFocusEnforcing {
+    private(set) var focusedTargets: [ComputerUseObservedTarget] = []
+
+    func focusForKeyInput(target: ComputerUseObservedTarget) {
+        focusedTargets.append(target)
     }
 }
 

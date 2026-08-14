@@ -129,6 +129,55 @@ enum AnalyticsMapping {
         case .openAICompatible: return .openAICompatible
         }
     }
+
+    static func computerUseOutcome(_ outcome: ComputerUseAgentOutcome) -> ComputerUseOutcome {
+        switch outcome {
+        case .completed: return .completed
+        case .cancelled: return .cancelled
+        case .failed: return .failed
+        }
+    }
+
+    static func computerUseTool(_ name: ComputerUseToolName) -> ComputerUseTool {
+        switch name {
+        case .listApps: return .listApps
+        case .getAppState: return .getAppState
+        case .click: return .click
+        case .performSecondaryAction: return .performSecondaryAction
+        case .setValue: return .setValue
+        case .selectText: return .selectText
+        case .scroll: return .scroll
+        case .drag: return .drag
+        case .pressKey: return .pressKey
+        case .typeText: return .typeText
+        case .setVoiceActivation: return .setVoiceActivation
+        }
+    }
+
+    /// Maps a tool failure to a closed reason vocabulary. The associated values
+    /// of these errors carry app names and user text, so only the case is kept.
+    static func computerUseFailureReason(_ error: Error) -> ComputerUseFailureReason {
+        if let error = error as? ComputerUseActionError {
+            switch error {
+            case .observationRequired: return .observationRequired
+            case .staleObservation: return .staleObservation
+            case .elementUnavailable: return .elementUnavailable
+            case .elementChanged: return .elementChanged
+            case .elementDisabled: return .elementDisabled
+            case .actionUnavailable: return .actionUnavailable
+            case .textNotFound: return .textNotFound
+            case .invalidArgument: return .invalidArgument
+            default: return .unknown
+            }
+        }
+        if error is ComputerUseRuntimeError {
+            return .screenLocked
+        }
+        if error is ComputerUseModelToolCallError {
+            return .decodeFailed
+        }
+        return .unknown
+    }
 }
 
 /// Monotonic per-dictation latency marks. Dictation is serialized by the phase

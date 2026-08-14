@@ -31,7 +31,7 @@ final class VoiceActivationStateMachineTests: XCTestCase {
     func testWakeFromReadyStartsListening() {
         var machine = makeReady()
         let effects = machine.handle(.wakeDetected(runActive: false))
-        XCTAssertEqual(effects, [.playWakeCue, .startTurnCapture(.initial)])
+        XCTAssertEqual(effects, [.playWakeCue, .startTurnCapture])
         XCTAssertEqual(machine.state, .listening(.initial))
     }
 
@@ -41,7 +41,7 @@ final class VoiceActivationStateMachineTests: XCTestCase {
         machine.handle(.wakeDetected(runActive: true))
         XCTAssertEqual(machine.state, .listening(.duringRun))
         let effects = machine.handle(.speechEnded)
-        XCTAssertEqual(effects, [.stopTurnCapture, .transcribeAndSubmit(.duringRun)])
+        XCTAssertEqual(effects, [.stopTurnCapture, .transcribeAndSubmit])
         XCTAssertEqual(machine.state, .transcribing(.duringRun))
     }
 
@@ -113,7 +113,7 @@ final class VoiceActivationStateMachineTests: XCTestCase {
 
         machine = makeReady(followUp: true)
         machine.handle(.runCompleted(speechWillPlay: false))
-        XCTAssertEqual(machine.handle(.disabled), [.disarmFollowUpWindow])
+        XCTAssertEqual(machine.handle(.disabled), [.stopTurnCapture])
         XCTAssertEqual(machine.state, .off)
     }
 
@@ -151,29 +151,28 @@ final class VoiceActivationStateMachineTests: XCTestCase {
         var machine = makeReady(followUp: true)
         machine.handle(.runCompleted(speechWillPlay: false))
         let effects = machine.handle(.speechEnded)
-        XCTAssertEqual(effects, [.stopTurnCapture, .transcribeAndSubmit(.followUp)])
+        XCTAssertEqual(effects, [.stopTurnCapture, .transcribeAndSubmit])
         XCTAssertEqual(machine.state, .transcribing(.followUp))
     }
 
-    // A wake phrase inside the window behaves like a normal wake-up.
-    func testWakeInsideFollowUpWindowDisarmsAndListens() {
+    // A wake phrase inside the window behaves like a normal wake-up. The
+    // capture restart resets the window's buffer; no separate disarm exists.
+    func testWakeInsideFollowUpWindowRestartsCapture() {
         var machine = makeReady(followUp: true)
         machine.handle(.runCompleted(speechWillPlay: false))
         let effects = machine.handle(.wakeDetected(runActive: false))
-        XCTAssertEqual(effects, [.disarmFollowUpWindow, .playWakeCue, .startTurnCapture(.initial)])
+        XCTAssertEqual(effects, [.playWakeCue, .startTurnCapture])
         XCTAssertEqual(machine.state, .listening(.initial))
     }
 
     // UX plan: the window must not expire under a turn the user is speaking.
-    // Speech onset moves to listening and cancels only the expiry timer.
-    func testSpeechInFollowUpWindowCancelsExpiryAndKeepsCapture() {
+    // Speech onset moves to listening; the endpointer's no-speech timeout can
+    // no longer fire once speech began, so no effect is needed.
+    func testSpeechInFollowUpWindowMovesToListeningKeepingCapture() {
         var machine = makeReady(followUp: true)
         machine.handle(.runCompleted(speechWillPlay: false))
         let effects = machine.handle(.speechStarted)
-        XCTAssertEqual(effects, [.cancelFollowUpExpiryTimer])
-        XCTAssertEqual(machine.state, .listening(.followUp))
-        // Expiry arriving late is a no-op outside the window state.
-        XCTAssertEqual(machine.handle(.followUpWindowExpired), [])
+        XCTAssertEqual(effects, [])
         XCTAssertEqual(machine.state, .listening(.followUp))
     }
 
@@ -184,10 +183,11 @@ final class VoiceActivationStateMachineTests: XCTestCase {
         XCTAssertEqual(machine.state, .listening(.initial))
     }
 
+    // The endpointer's no-speech timeout is the window's only expiry.
     func testFollowUpWindowExpiryReturnsToReady() {
         var machine = makeReady(followUp: true)
         machine.handle(.runCompleted(speechWillPlay: false))
-        XCTAssertEqual(machine.handle(.followUpWindowExpired), [.disarmFollowUpWindow])
+        XCTAssertEqual(machine.handle(.noSpeechTimeout), [.stopTurnCapture])
         XCTAssertEqual(machine.state, .ready)
     }
 }

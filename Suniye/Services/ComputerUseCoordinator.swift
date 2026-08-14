@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SuniyeAnalytics
 
 enum ComputerUseCoordinatorPhase: Equatable {
     case idle
@@ -60,7 +61,8 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         initialPermissionSnapshot: ComputerUsePermissionSnapshot = .notGranted,
         cursorSession: any ComputerUseCursorSessionManaging = SystemComputerUseCursorPresenter(),
         conversationStore: any ComputerUseConversationStoring = NoopComputerUseConversationStore(),
-        makeAgent: @escaping AgentFactory = ComputerUseCoordinator.makeProductionAgent
+        analytics: any Analytics = NoopAnalytics(),
+        makeAgent: AgentFactory? = nil
     ) {
         self.permissions = permissions
         self.permissionSettings = permissionSettings
@@ -68,7 +70,14 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
         self.permissionSnapshot = initialPermissionSnapshot
         self.cursorSession = cursorSession
         self.conversationStore = conversationStore
-        self.makeAgent = makeAgent
+        self.makeAgent = makeAgent ?? { configuration, activitySink, environment in
+            ComputerUseCoordinator.makeProductionAgent(
+                configuration: configuration,
+                activitySink: activitySink,
+                analytics: analytics,
+                environment: environment
+            )
+        }
         conversation = conversationStore.load()
         pendingVoiceInstruction = conversationStore.loadPendingVoiceInstruction()
         draft = pendingVoiceInstruction ?? ""
@@ -347,6 +356,7 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
     private static func makeProductionAgent(
         configuration: ComputerUseRemoteModelConfiguration,
         activitySink: ComputerUseActivitySink,
+        analytics: any Analytics,
         environment: ComputerUseAgentEnvironment
     ) -> any ComputerUseAgentRunning {
         ComputerUseAgent(
@@ -355,6 +365,8 @@ final class ComputerUseCoordinator: ComputerUseVoiceTaskHandling {
                 voiceActivationControl: environment.voiceActivationControl
             ),
             activitySink: activitySink,
+            analytics: analytics,
+            modelID: configuration.modelID,
             contextPolicy: .referenceAligned(modelID: configuration.modelID)
         )
     }

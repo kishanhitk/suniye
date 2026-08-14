@@ -15,7 +15,7 @@ final class WakeWordStreamingTests: XCTestCase {
                 withExtension: "wav"
             )
         )
-        let samples = try Self.pcm16MonoSamples(from: url)
+        let samples = try WavFixture.pcm16MonoSamples(from: url)
         XCTAssertGreaterThan(samples.count, 8_000)
 
         let detector = try SherpaWakeWordDetector()
@@ -35,26 +35,5 @@ final class WakeWordStreamingTests: XCTestCase {
             }
         }
         XCTAssertTrue(detected, "wake keywords failed to load or match")
-    }
-
-    /// RIFF-chunk-aware PCM16 reader; `say(1)` fixtures carry a JUNK chunk,
-    /// so a fixed 44-byte header offset would misread them.
-    private static func pcm16MonoSamples(from url: URL) throws -> [Float] {
-        let data = try Data(contentsOf: url)
-        var offset = 12
-        while offset + 8 <= data.count {
-            let chunkID = String(decoding: data[offset..<offset + 4], as: UTF8.self)
-            let size = data[offset + 4..<offset + 8].withUnsafeBytes {
-                $0.loadUnaligned(as: UInt32.self)
-            }
-            if chunkID == "data" {
-                let payload = data.subdata(in: (offset + 8)..<min(offset + 8 + Int(size), data.count))
-                return payload.withUnsafeBytes { raw in
-                    raw.bindMemory(to: Int16.self).map { Float($0) / 32_768 }
-                }
-            }
-            offset += 8 + Int(size) + (Int(size) % 2)
-        }
-        return []
     }
 }

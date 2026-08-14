@@ -3,7 +3,7 @@
 Research date: 2026-08-09
 
 Scope: the native Computer Use client and helper shipped in
-`/Users/kishan/Downloads/ChatGPT (1).dmg`, plus symbol, import, string, and targeted ARM64
+`<home>/Downloads/ChatGPT (1).dmg`, plus symbol, import, string, and targeted ARM64
 disassembly inspection. The native client was exercised only with read-only `list_apps` and
 `get_app_state` calls against Calculator. No Suniye production code was changed.
 

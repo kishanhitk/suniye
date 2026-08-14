@@ -1,4 +1,5 @@
 import XCTest
+import SuniyeAnalytics
 @testable import Suniye
 
 final class ComputerUseAgentTests: XCTestCase {
@@ -329,6 +330,122 @@ final class ComputerUseAgentTests: XCTestCase {
                 message.textContent?.contains("Repeated unchanged-state recovery") == true
             }
         )
+    }
+
+    func testRunEmitsOneCategorizedAnalyticsRecordWithoutAppIdentity() async {
+        let analytics = SpyAnalytics()
+        let model = ScriptedComputerUseModel(
+            responses: [
+                .toolCall(
+                    id: "state-1",
+                    name: "get_app_state",
+                    arguments: #"{"app":"com.apple.Safari"}"#
+                ),
+                .text("Done."),
+                .text("Done."),
+            ]
+        )
+        let agent = ComputerUseAgent(
+            model: model,
+            tools: FreshnessCheckingComputerUseBackend(),
+            analytics: analytics,
+            modelID: "gpt-5.6-luna"
+        )
+
+        _ = await agent.run(task: ComputerUseAgentTask(instruction: "Read the page."))
+
+        let runs = analytics.trackedEvents.compactMap { event -> ComputerUseRunMetrics? in
+            if case let .computerUseRun(metrics) = event { return metrics }
+            return nil
+        }
+        XCTAssertEqual(runs.count, 1)
+        XCTAssertEqual(runs[0].outcome, .completed)
+        XCTAssertEqual(runs[0].target, .browser)
+        XCTAssertEqual(runs[0].toolFailures, 0)
+        XCTAssertEqual(runs[0].model, SafeLabel("gpt-5.6-luna"))
+        XCTAssertFalse(
+            "\(runs[0])".contains("Safari"),
+            "the app identifier must never leave the device; only its category does"
+        )
+    }
+
+    func testToolFailureIsReportedWithClosedVocabularies() async {
+        let analytics = SpyAnalytics()
+        let model = ScriptedComputerUseModel(
+            responses: [
+                .toolCall(
+                    id: "key-1",
+                    name: "press_key",
+                    arguments: #"{"app":"Calculator","key":"Return"}"#
+                ),
+                .text("Done."),
+                .text("Done."),
+            ]
+        )
+        let agent = ComputerUseAgent(
+            model: model,
+            tools: FreshnessCheckingComputerUseBackend(),
+            analytics: analytics
+        )
+
+        _ = await agent.run(task: ComputerUseAgentTask(instruction: "Press return."))
+
+        let failures = analytics.trackedEvents.compactMap {
+            event -> (ComputerUseTool, ComputerUseFailureReason)? in
+            if case let .computerUseToolFailed(tool, _, reason) = event { return (tool, reason) }
+            return nil
+        }
+        XCTAssertEqual(failures.count, 1)
+        XCTAssertEqual(failures[0].0, .pressKey)
+        XCTAssertEqual(failures[0].1, .observationRequired)
+    }
+
+    func testStepLimitTerminatesTheRunAsFailure() async {
+        let model = ScriptedComputerUseModel(
+            responses: Array(
+                repeating: .toolCall(
+                    id: "state",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Calculator"}"#
+                ),
+                count: 6
+            )
+        )
+        let agent = ComputerUseAgent(
+            model: model,
+            tools: FreshnessCheckingComputerUseBackend(),
+            maximumSteps: 2
+        )
+
+        let result = await agent.run(task: ComputerUseAgentTask(instruction: "Loop forever."))
+
+        XCTAssertEqual(result.outcome, .failed)
+        XCTAssertTrue(result.message.contains("2 steps"))
+    }
+
+    func testWallClockDeadlineTerminatesTheRunAsFailure() async {
+        let clock = ManualComputerUseClock(advancingBy: .seconds(20))
+        let model = ScriptedComputerUseModel(
+            responses: Array(
+                repeating: .toolCall(
+                    id: "state",
+                    name: "get_app_state",
+                    arguments: #"{"app":"Calculator"}"#
+                ),
+                count: 6
+            )
+        )
+        let agent = ComputerUseAgent(
+            model: model,
+            tools: FreshnessCheckingComputerUseBackend(),
+            maximumRunDuration: .seconds(30),
+            now: { clock.now }
+        )
+
+        let result = await agent.run(task: ComputerUseAgentTask(instruction: "Take too long."))
+
+        XCTAssertEqual(result.outcome, .failed)
+        XCTAssertTrue(result.message.contains("running too long"))
     }
 
     func testInterventionAfterAnAtomicActionForcesFreshObservationBeforeContinuing() async {
@@ -775,6 +892,26 @@ private actor RecordingComputerUseActivitySink {
 
     func record(_ activity: ComputerUseActivity) {
         activities.append(activity)
+    }
+}
+
+/// Advances a fixed step on every read, so a run reaches its deadline
+/// deterministically without sleeping.
+private final class ManualComputerUseClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private let step: Duration
+    private var instant = ContinuousClock().now
+
+    init(advancingBy step: Duration) {
+        self.step = step
+    }
+
+    var now: ContinuousClock.Instant {
+        lock.withLock {
+            let current = instant
+            instant = instant.advanced(by: step)
+            return current
+        }
     }
 }
 

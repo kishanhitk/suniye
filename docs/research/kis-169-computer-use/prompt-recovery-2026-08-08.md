@@ -2,7 +2,7 @@
 
 Research date: 2026-08-08
 
-Scope: static inspection of `/Users/kishan/Downloads/ChatGPT (1).dmg` and its mounted app at
+Scope: static inspection of `<home>/Downloads/ChatGPT (1).dmg` and its mounted app at
 `/private/tmp/suniye-chatgpt-dmg-mount/ChatGPT.app`. No production code was changed.
 
 ## Evidence labels

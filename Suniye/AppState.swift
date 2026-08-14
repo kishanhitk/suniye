@@ -1611,6 +1611,8 @@ final class AppState {
     private let hotkeyService: HotkeyServiceProtocol
     private let soundFeedbackService: SoundFeedbackServiceProtocol
     private(set) var voiceActivationController: VoiceActivationController?
+    private(set) var speechOutputService: (any SpeechOutputServing)?
+    private let speechOutputFactory: @MainActor () -> (any SpeechOutputServing)?
     /// True while the floating indicator shows a Voice Activation state, so
     /// leaving those states clears only what Voice Activation set.
     private var indicatorOwnedByVoiceActivation = false
@@ -1796,7 +1798,8 @@ final class AppState {
         llmE2EMode: LLME2EMode? = nil,
         wakeWordDetectorFactory: (() throws -> WakeWordDetecting)? = nil,
         speechActivityDetectorFactory: (() throws -> SpeechActivityDetecting)? = nil,
-        voiceActivationConfiguration: VoiceActivationController.Configuration = .init()
+        voiceActivationConfiguration: VoiceActivationController.Configuration = .init(),
+        speechOutputFactory: (@MainActor () -> (any SpeechOutputServing)?)? = nil
     ) {
         self.modelManager = modelManager
         self.transcriptionService = transcriptionService
@@ -1834,7 +1837,8 @@ final class AppState {
         let resolvedComputerUseCoordinator = computerUseCoordinator ?? ComputerUseCoordinator(
             conversationStore: startServices
                 ? ComputerUseConversationStore()
-                : NoopComputerUseConversationStore()
+                : NoopComputerUseConversationStore(),
+            analytics: analytics
         )
         self.computerUseCoordinator = resolvedComputerUseCoordinator
         computerUseModelSettings = ComputerUseModelSettingsController(
@@ -1882,12 +1886,18 @@ final class AppState {
         self.runtimeServicesEnabled = startServices
         self.floatingIndicatorEnabled = startServices && ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
+        self.speechOutputFactory = speechOutputFactory ?? {
+            guard VoiceHelperRuntimeLocator().availability() == .available else {
+                return nil
+            }
+            return ChatterboxSpeechService()
+        }
         self.appUpdateController.onStateChange = { [weak self] in
             self?.refreshUpdateControllerState()
         }
         resolvedComputerUseCoordinator.onPhaseChange = { [weak self] phase in
             self?.handleComputerUsePhaseChange(phase)
-            self?.voiceActivationController?.handleRunPhase(phase)
+            self?.handleRunPhaseForVoice(phase)
         }
         resolvedComputerUseCoordinator.voiceActivationControl = { [weak self] enabled in
             await MainActor.run {
@@ -1896,9 +1906,7 @@ final class AppState {
                 }
                 AppLogger.shared.log(.info, "voice activation set by agent tool enabled=\(enabled)")
                 self.voiceActivationEnabled = enabled
-                if self.voiceActivationSoundFeedbackEnabled {
-                    self.soundFeedbackService.play(.transcriptionSucceeded)
-                }
+                self.playVoiceActivationCue(.transcriptionSucceeded)
             }
         }
         self.editLearningService.onLearnedTerms = { [weak self] terms in
@@ -1944,8 +1952,7 @@ final class AppState {
                 resolvedComputerUseCoordinator?.isRunning ?? false
             },
             playWakeCue: { [weak self] in
-                guard let self, self.voiceActivationSoundFeedbackEnabled else { return }
-                self.soundFeedbackService.play(.voiceActivationWake)
+                self?.playVoiceActivationCue(.voiceActivationWake)
             },
             preferredInputDeviceID: { [weak self] in self?.selectedInputDeviceID },
             echoCancellationEnabled: { [weak self] in self?.echoCancellationEnabled ?? false },
@@ -3466,6 +3473,7 @@ final class AppState {
             return
         }
         if computerUseCoordinator.isRunning {
+            stopSpeechPlayback()
             computerUseCoordinator.stop()
             return
         }
@@ -3738,9 +3746,13 @@ final class AppState {
             guard let self else {
                 return false
             }
-            // Escape priority: cancel a Voice Activation turn, then a voice
-            // recording, then stop a running agent (UX plan: Escape is the
-            // immediate, non-semantic cancellation path).
+            // Escape priority: stop speech, cancel a Voice Activation turn,
+            // then a voice recording, then stop a running agent (UX plan:
+            // Escape is the immediate, non-semantic cancellation path).
+            if self.speechOutputService?.isSpeaking == true {
+                self.stopSpeechPlayback()
+                return true
+            }
             if case .listening = self.voiceActivationController?.state {
                 self.voiceActivationController?.cancelListening()
                 return true
@@ -4580,8 +4592,57 @@ final class AppState {
         }
     }
 
+    /// Routes run completion to speech (UX plan: spoken responses at turn
+    /// boundaries only) and tells the state machine whether the follow-up
+    /// window must wait for playback.
+    private func handleRunPhaseForVoice(_ phase: ComputerUseCoordinatorPhase) {
+        // One value decides both the state-machine flag and the actual speak
+        // call; predicting them separately can wedge the follow-up window
+        // waiting for a playback that never starts.
+        let spoken: String? = {
+            guard voiceOutputEnabled,
+                  phase == .completed || phase == .failed,
+                  let text = computerUseCoordinator.conversation.last(where: { $0.role == .assistant })?.text
+            else {
+                return nil
+            }
+            let cleaned = SpokenTextSanitizer.plainSpeech(from: text)
+            return cleaned.isEmpty ? nil : cleaned
+        }()
+        let willSpeak = spoken != nil && resolvedSpeechOutput() != nil
+        voiceActivationController?.handleRunPhase(phase, speechWillPlay: willSpeak)
+        guard willSpeak, let spoken else {
+            return
+        }
+        Task { [weak self] in
+            await self?.speechOutputService?.speak(spoken)
+        }
+    }
+
+    private func resolvedSpeechOutput() -> (any SpeechOutputServing)? {
+        if let speechOutputService {
+            return speechOutputService
+        }
+        guard let service = speechOutputFactory() else {
+            return nil
+        }
+        service.onPlaybackFinished = { [weak self] in
+            self?.voiceActivationController?.handleSpeechPlaybackEnded()
+        }
+        speechOutputService = service
+        return service
+    }
+
+    /// Barge-in: any wake, cancel, or stop halts playback immediately.
+    private func stopSpeechPlayback() {
+        speechOutputService?.stopSpeaking()
+    }
+
     private func handleVoiceActivationStateChange(_ state: VoiceActivationState) {
         voiceActivationDisplayState = state
+        if case .listening = state {
+            stopSpeechPlayback()
+        }
         switch state {
         case .listening:
             indicatorOwnedByVoiceActivation = true
@@ -4627,12 +4688,19 @@ final class AppState {
     private func handleVoiceActivationSubmissionOutcome(_ outcome: ComputerUseVoiceTaskSubmission) {
         switch outcome {
         case .started, .queued, .intervened:
-            if soundFeedbackEnabled {
-                soundFeedbackService.play(.transcriptionSucceeded)
-            }
+            playVoiceActivationCue(.transcriptionSucceeded)
         case .rejected(let message):
             showTransientIndicatorError(message)
         }
+    }
+
+    /// Every Voice Activation cue shares one gate; the dictation sound setting
+    /// does not apply here.
+    private func playVoiceActivationCue(_ event: SoundFeedbackEvent) {
+        guard voiceActivationSoundFeedbackEnabled else {
+            return
+        }
+        soundFeedbackService.play(event)
     }
 
     private func loadGeneralSettings() {

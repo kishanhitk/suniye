@@ -3,7 +3,7 @@
 This folder records the Computer Use research and the Phase 0 through the current desktop parity
 implementation for Suniye.
 
-The source artifact is `/Users/kishan/Downloads/ChatGPT (1).dmg`.
+The source artifact is `<home>/Downloads/ChatGPT (1).dmg`.
 
 ## Current branch baseline
 
@@ -44,10 +44,13 @@ launch installed apps through the application catalog. It is not full runtime pa
 control, helper IPC, and transient screenshot caching remain open or deferred. Direct voice can
 use the existing page-visible dictation route or the dedicated optional global Hold to Run Task
 shortcut; its design history is recorded in `direct-voice-integration-plan.md` and Phase 16.
+The page-visible dictation redirect was removed on 2026-08-14: plain dictation always inserts at
+the cursor, and tasks enter only through the composer or the dedicated shortcut.
 
-The current cleanup validation is recorded in the final evidence-ledger entry after the full test,
-coverage, build, and live safe-target checks. Provider behavior, Screen Recording capture, and
-cross-process input still require separate validation.
+The evidence-ledger validation entries record the state at the revision they were written
+against; later revisions (including the 2026-08-14 review-fix series) are validated by the unit
+suite and coverage gate only. Provider behavior, Screen Recording capture, and cross-process
+input still require separate live validation.
 
 ## Files
 
@@ -180,7 +183,7 @@ as separate evidence entries. Git handoff status is reported with the final comm
 - `[Verified]` The final full suite reports 1,080 tests executed, 1 skipped, and 0 failures;
   gated coverage is 95.02% (13,672/14,389 lines).
 - `[Verified]` E2E preflight and smoke pass, and the installed Preview is
-  `/Users/kishan/Applications/Suniye Preview.app`.
+  `<home>/Applications/Suniye Preview.app`.
 - `[Verified]` A fresh Preview process no longer exposes the removed target lock, window picker,
   Bring Forward control, screenshot choice, manual action surface, or approval card.
 - `[Verified]` The configured model completed a safe read-only Calculator task and reported the

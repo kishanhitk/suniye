@@ -1,9 +1,26 @@
 import Foundation
+import SuniyeAnalytics
 
 enum ComputerUseAgentOutcome: Equatable, Sendable {
     case completed
     case cancelled
     case failed
+}
+
+enum ComputerUseAgentError: LocalizedError, Equatable, Sendable {
+    case stepLimitExceeded(Int)
+    case timeLimitExceeded
+
+    var errorDescription: String? {
+        switch self {
+        case let .stepLimitExceeded(limit):
+            "Computer Use stopped after \(limit) steps without finishing the task. "
+                + "Try a smaller task or run it again."
+        case .timeLimitExceeded:
+            "Computer Use stopped after running too long without finishing the task. "
+                + "Try a smaller task or run it again."
+        }
+    }
 }
 
 struct ComputerUseDebugSessionID: Equatable, Sendable {
@@ -96,6 +113,12 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
     private let logger: ComputerUseLogging
     private let activitySink: ComputerUseActivitySink
     private let contextBuilder: ComputerUseModelContextBuilder
+    private let maximumSteps: Int
+    private let maximumRunDuration: Duration
+    private let now: @Sendable () -> ContinuousClock.Instant
+    private let analytics: any Analytics
+    private let modelID: String
+    private var toolFailureCount = 0
 
     init(
         model: ComputerUseModelServing,
@@ -103,7 +126,12 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         screenshots: ComputerUseScreenshotLoading = SystemComputerUseScreenshotLoader(),
         logger: ComputerUseLogging = SystemComputerUseLogger(),
         activitySink: ComputerUseActivitySink = .disabled,
-        contextPolicy: ComputerUseModelContextPolicy = .referenceAligned(modelID: "")
+        analytics: any Analytics = NoopAnalytics(),
+        modelID: String = "",
+        contextPolicy: ComputerUseModelContextPolicy = .referenceAligned(modelID: ""),
+        maximumSteps: Int = 60,
+        maximumRunDuration: Duration = .seconds(300),
+        now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock().now }
     ) {
         self.model = model
         self.tools = tools
@@ -111,6 +139,11 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         self.logger = logger
         self.activitySink = activitySink
         contextBuilder = ComputerUseModelContextBuilder(policy: contextPolicy)
+        self.maximumSteps = maximumSteps
+        self.maximumRunDuration = maximumRunDuration
+        self.now = now
+        self.analytics = analytics
+        self.modelID = modelID
     }
 
     func run(task: ComputerUseAgentTask) async -> ComputerUseAgentResult {
@@ -131,10 +164,14 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         var step = 0
         var lastTargetApp: String?
         var audits = RunAuditState()
+        let deadline = now().advanced(by: maximumRunDuration)
+        let startedAt = now()
+        toolFailureCount = 0
         log(.info, "computer use run started", session: debugSessionID)
         do {
             while true {
                 try Task.checkCancellation()
+                try enforceRunLimits(step: step, deadline: deadline)
                 if try await applyInterventions(
                     task.interventions.takeAll(),
                     lastTargetApp: lastTargetApp,
@@ -171,6 +208,12 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                         .info,
                         "computer use run completed steps=\(step)",
                         session: debugSessionID
+                    )
+                    recordRun(
+                        .completed,
+                        steps: step,
+                        startedAt: startedAt,
+                        targetApp: lastTargetApp
                     )
                     return ComputerUseAgentResult(outcome: .completed, message: text)
                 case let .toolCall(id, name, arguments):
@@ -212,18 +255,77 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 "computer use run cancelled reason=requested",
                 session: debugSessionID
             )
+            recordRun(.cancelled, steps: step, startedAt: startedAt, targetApp: lastTargetApp)
             return ComputerUseAgentResult(outcome: .cancelled, message: "Stopped.")
+        } catch let error as ComputerUseAgentError {
+            log(
+                .warning,
+                "computer use run stopped reason=\(error) steps=\(step)",
+                session: debugSessionID
+            )
+            recordRun(.failed, steps: step, startedAt: startedAt, targetApp: lastTargetApp)
+            return ComputerUseAgentResult(
+                outcome: .failed,
+                message: localizedMessage(error)
+            )
         } catch {
             log(
                 .warning,
                 "computer use run failed error_type=\(String(describing: type(of: error)))",
                 session: debugSessionID
             )
+            recordRun(.failed, steps: step, startedAt: startedAt, targetApp: lastTargetApp)
             return ComputerUseAgentResult(
                 outcome: .failed,
                 message: localizedMessage(error)
             )
         }
+    }
+
+    /// Which tool failed and why, in closed vocabularies. Error associated
+    /// values carry app names and user text, so only the case is reported.
+    private func recordToolFailure(name: String, error: Error, targetApp: String?) {
+        toolFailureCount += 1
+        guard let tool = ComputerUseToolName(rawValue: name) else {
+            analytics.track(
+                .computerUseToolFailed(
+                    tool: .unknown,
+                    target: TargetCategoryMapper.category(for: targetApp),
+                    reason: AnalyticsMapping.computerUseFailureReason(error)
+                )
+            )
+            return
+        }
+        analytics.track(
+            .computerUseToolFailed(
+                tool: AnalyticsMapping.computerUseTool(tool),
+                target: TargetCategoryMapper.category(for: targetApp),
+                reason: AnalyticsMapping.computerUseFailureReason(error)
+            )
+        )
+    }
+
+    /// One record per finished run. The target app is reported as a category,
+    /// never as an identifier, and no instruction or screen content is included.
+    private func recordRun(
+        _ outcome: ComputerUseAgentOutcome,
+        steps: Int,
+        startedAt: ContinuousClock.Instant,
+        targetApp: String?
+    ) {
+        let elapsed = startedAt.duration(to: now())
+        analytics.track(
+            .computerUseRun(
+                ComputerUseRunMetrics(
+                    outcome: AnalyticsMapping.computerUseOutcome(outcome),
+                    steps: steps,
+                    toolFailures: toolFailureCount,
+                    durationMs: Int(elapsed / .milliseconds(1)),
+                    model: SafeLabel(modelID),
+                    target: TargetCategoryMapper.category(for: targetApp)
+                )
+            )
+        )
     }
 
     private func execute(
@@ -274,9 +376,11 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as ComputerUseRuntimeError {
+            recordToolFailure(name: name, error: error, targetApp: nil)
             await emitFailure(error, for: activity)
             throw error
         } catch {
+            recordToolFailure(name: name, error: error, targetApp: nil)
             let errorMessage = localizedMessage(error)
             log(
                 .warning,
@@ -294,6 +398,20 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 )
             )
             return nil
+        }
+    }
+
+    /// Bounds a run that the model never completes. Without these an agent can
+    /// act on the machine indefinitely and keep billing the provider.
+    private func enforceRunLimits(
+        step: Int,
+        deadline: ContinuousClock.Instant
+    ) throws {
+        if step >= maximumSteps {
+            throw ComputerUseAgentError.stepLimitExceeded(maximumSteps)
+        }
+        if now() >= deadline {
+            throw ComputerUseAgentError.timeLimitExceeded
         }
     }
 

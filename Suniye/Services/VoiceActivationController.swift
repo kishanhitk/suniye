@@ -46,7 +46,6 @@ final class VoiceActivationController {
     private let pipelineQueue = DispatchQueue(label: "dev.suniye.voice.activation", qos: .userInitiated)
     private let pipeline = Pipeline()
     private(set) var tapSessionID: UUID?
-    private var followUpExpiryTask: Task<Void, Never>?
     private var turnTask: Task<Void, Never>?
 
     init(
@@ -135,16 +134,23 @@ final class VoiceActivationController {
     }
 
     /// Coordinator phase changes drive the follow-up window (UX plan: the
-    /// window opens only after Done, never after Stopped or a failure).
-    func handleRunPhase(_ phase: ComputerUseCoordinatorPhase) {
+    /// window opens only after Done, never after Stopped or a failure). With
+    /// speech playing, the window waits for `handleSpeechPlaybackEnded` (the
+    /// self-capture guard).
+    func handleRunPhase(_ phase: ComputerUseCoordinatorPhase, speechWillPlay: Bool = false) {
         switch phase {
         case .completed:
-            dispatch(.runCompleted(speechWillPlay: false))
+            dispatch(.runCompleted(speechWillPlay: speechWillPlay))
         case .cancelled, .failed:
             dispatch(.runStoppedOrFailed)
         case .idle, .checkingPermissions, .requestingPermission, .ready, .running:
             break
         }
+    }
+
+    /// Speech playback finished naturally; the follow-up window may arm now.
+    func handleSpeechPlaybackEnded() {
+        dispatch(.speechPlaybackEnded)
     }
 
     func ownsTapSession(_ sessionID: UUID) -> Bool {
@@ -161,7 +167,6 @@ final class VoiceActivationController {
             try pipeline.prepare(
                 wake: makeWakeDetector,
                 speech: makeSpeechDetector,
-                endpointer: VoiceTurnEndpointer(),
                 maximumTurnBufferSeconds: configuration.maximumTurnBufferSeconds
             )
         } catch {
@@ -246,35 +251,16 @@ final class VoiceActivationController {
             pipelineQueue.async { [pipeline] in
                 pipeline.endTurnCapture()
             }
-        case .transcribeAndSubmit(let context):
-            transcribeAndSubmit(context: context)
+        case .transcribeAndSubmit:
+            transcribeAndSubmit()
         case .armFollowUpWindow:
-            pipelineQueue.async { [pipeline] in
-                pipeline.beginTurnCapture()
+            pipelineQueue.async { [pipeline, window = configuration.followUpWindowSeconds] in
+                pipeline.beginTurnCapture(noSpeechTimeout: window)
             }
-            followUpExpiryTask?.cancel()
-            followUpExpiryTask = Task { [weak self] in
-                try? await Task.sleep(
-                    nanoseconds: UInt64((self?.configuration.followUpWindowSeconds ?? 6) * 1_000_000_000)
-                )
-                guard !Task.isCancelled else {
-                    return
-                }
-                self?.dispatch(.followUpWindowExpired)
-            }
-        case .disarmFollowUpWindow:
-            followUpExpiryTask?.cancel()
-            followUpExpiryTask = nil
-            pipelineQueue.async { [pipeline] in
-                pipeline.endTurnCapture()
-            }
-        case .cancelFollowUpExpiryTimer:
-            followUpExpiryTask?.cancel()
-            followUpExpiryTask = nil
         }
     }
 
-    private func transcribeAndSubmit(context: VoiceTurnContext) {
+    private func transcribeAndSubmit() {
         turnTask = Task { [weak self] in
             guard let self else {
                 return
@@ -344,7 +330,6 @@ private final class Pipeline: @unchecked Sendable {
     func prepare(
         wake: () throws -> WakeWordDetecting,
         speech: () throws -> SpeechActivityDetecting,
-        endpointer: VoiceTurnEndpointer,
         maximumTurnBufferSeconds: TimeInterval
     ) throws {
         if wakeDetector == nil {
@@ -353,15 +338,14 @@ private final class Pipeline: @unchecked Sendable {
         if speechDetector == nil {
             speechDetector = try speech()
         }
-        self.endpointer = endpointer
         maximumTurnSamples = Int(16_000 * maximumTurnBufferSeconds)
     }
 
-    func beginTurnCapture() {
+    func beginTurnCapture(noSpeechTimeout: TimeInterval? = nil) {
         capturingTurn = true
         speechBeganEmitted = false
         turnSamples.removeAll(keepingCapacity: true)
-        endpointer.begin(at: processedSeconds)
+        endpointer.begin(at: processedSeconds, noSpeechTimeout: noSpeechTimeout)
     }
 
     func endTurnCapture() {

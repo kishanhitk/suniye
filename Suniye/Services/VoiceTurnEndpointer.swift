@@ -33,16 +33,20 @@ struct VoiceTurnEndpointer: Equatable, Sendable {
     private var windowStart: TimeInterval?
     private var firstSpeech: TimeInterval?
     private var lastSpeech: TimeInterval?
+    private var windowNoSpeechTimeout: TimeInterval?
 
     init(configuration: Configuration = Configuration()) {
         self.configuration = configuration
     }
 
     /// Starts a capture window (call on wake hit or follow-up window entry).
-    mutating func begin(at time: TimeInterval) {
+    /// `noSpeechTimeout` overrides the configured default for this window only
+    /// (the follow-up window is longer than the post-wake window).
+    mutating func begin(at time: TimeInterval, noSpeechTimeout: TimeInterval? = nil) {
         windowStart = time
         firstSpeech = nil
         lastSpeech = nil
+        windowNoSpeechTimeout = noSpeechTimeout
     }
 
     mutating func process(isSpeech: Bool, at time: TimeInterval) -> Verdict {
@@ -61,8 +65,9 @@ struct VoiceTurnEndpointer: Equatable, Sendable {
             return .speaking
         }
 
+        let noSpeechLimit = windowNoSpeechTimeout ?? configuration.noSpeechTimeoutSeconds
         guard let firstSpeech, let lastSpeech else {
-            return time - windowStart >= configuration.noSpeechTimeoutSeconds
+            return time - windowStart >= noSpeechLimit
                 ? .noSpeechTimeout
                 : .waiting
         }
@@ -76,7 +81,7 @@ struct VoiceTurnEndpointer: Equatable, Sendable {
             // Noise, not a turn: forget it and keep waiting for real speech.
             self.firstSpeech = nil
             self.lastSpeech = nil
-            return time - windowStart >= configuration.noSpeechTimeoutSeconds
+            return time - windowStart >= noSpeechLimit
                 ? .noSpeechTimeout
                 : .waiting
         }

@@ -59,7 +59,7 @@ installed Suniye Preview.
 - `[Verified]` The final full suite executes 1,093 tests with 2 skipped and 0 failures.
 - `[Verified]` Gated line coverage is 88.45% (13,397/15,146), above the 80% floor.
 - `[Verified]` E2E preflight and smoke pass after the final correction.
-- `[Verified live]` `/Users/kishan/Applications/Suniye Preview.app` ran the natural instruction
+- `[Verified live]` `<home>/Applications/Suniye Preview.app` ran the natural instruction
   `Check my battery health percentage.` with model `openai/gpt-5.6-luna`. Session
   `CU-6B4B5D149C26` observed System Settings in the background with a screenshot and executed
   click, set-value, key, and secondary-action tools without bringing System Settings forward.

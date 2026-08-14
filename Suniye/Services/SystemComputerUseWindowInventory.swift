@@ -48,10 +48,18 @@ struct SystemComputerUseWindowInventory: ComputerUseWindowInventoryProviding {
         let result = SystemComputerUseAccessibilityAPI.applicationWindowElements(
             from: application
         )
-        guard result.error == .success else {
+        switch result.error {
+        case .success:
+            return result.windows
+        case .noValue, .attributeUnsupported:
+            // An app without a windows attribute is a no-window outcome,
+            // not a failure.
+            return []
+        case .apiDisabled:
+            throw ComputerUseWindowInventoryError.accessibilityNotAuthorized
+        default:
             throw ComputerUseWindowInventoryError.accessibilityFailure(result.error.rawValue)
         }
-        return result.windows
     }
 
     private func bounds(of element: AXUIElement) -> CGRect? {

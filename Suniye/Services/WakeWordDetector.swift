@@ -58,6 +58,7 @@ final class SherpaWakeWordDetector: WakeWordDetecting {
     ▁HE Y ▁SO N IA :2.0 #0.15
     ▁HE Y ▁SU N IA :2.0 #0.15
     ▁HE Y ▁SU N Y E :2.0 #0.15
+    ▁HE Y ▁SO M I E :2.0 #0.15
     """
 
     /// Wake-tuning mode: near-zero thresholds plus per-candidate logging, so a
@@ -68,9 +69,16 @@ final class SherpaWakeWordDetector: WakeWordDetecting {
     }
 
     private static var effectiveKeywords: String {
-        debugTuning
-            ? keywords.replacingOccurrences(of: "#0.05", with: "#0.001")
-            : keywords
+        guard debugTuning else {
+            return keywords
+        }
+        // Lower every per-variant threshold token uniformly; "#" appears only
+        // in thresholds, never in the BPE token sequences.
+        return keywords.replacingOccurrences(
+            of: #"#[0-9.]+"#,
+            with: "#0.001",
+            options: .regularExpression
+        )
     }
 
     private let spotter: SherpaOnnxKeywordSpotterWrapper

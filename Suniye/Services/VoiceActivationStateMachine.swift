@@ -28,21 +28,19 @@ enum VoiceActivationEvent: Equatable, Sendable {
     case runCompleted(speechWillPlay: Bool)
     case runStoppedOrFailed
     case speechPlaybackEnded
-    case followUpWindowExpired
 }
 
 /// Effects the controller must perform after a transition.
 enum VoiceActivationEffect: Equatable, Sendable {
-    case startTurnCapture(VoiceTurnContext)
+    /// Begin a capture window with the endpointer's default no-speech timeout.
+    case startTurnCapture
     case stopTurnCapture
-    case transcribeAndSubmit(VoiceTurnContext)
+    case transcribeAndSubmit
     case playWakeCue
+    /// Begin a capture window with the (longer) follow-up no-speech timeout.
+    /// Expiry arrives back as `.noSpeechTimeout` — the endpointer is the only
+    /// timer; there is no separate expiry mechanism.
     case armFollowUpWindow
-    case disarmFollowUpWindow
-    /// Stops the expiry timer only; the in-progress capture continues. Fired
-    /// when speech begins inside the follow-up window (the window must not
-    /// expire under a turn the user is speaking).
-    case cancelFollowUpExpiryTimer
 }
 
 /// The user-visible states from the UX plan that belong to the listening
@@ -100,29 +98,22 @@ struct VoiceActivationStateMachine: Equatable, Sendable {
         case (.suspended, _):
             return []
 
-        case (.ready, .wakeDetected(let runActive)):
-            let context: VoiceTurnContext = runActive ? .duringRun : .initial
-            state = .listening(context)
-            return [.playWakeCue, .startTurnCapture(context)]
-        case (.followUpWindow, .wakeDetected(let runActive)):
-            let context: VoiceTurnContext = runActive ? .duringRun : .initial
-            state = .listening(context)
-            return [.disarmFollowUpWindow, .playWakeCue, .startTurnCapture(context)]
+        case (.ready, .wakeDetected(let runActive)), (.followUpWindow, .wakeDetected(let runActive)):
+            state = .listening(runActive ? .duringRun : .initial)
+            return [.playWakeCue, .startTurnCapture]
 
         case (.followUpWindow, .speechStarted):
             state = .listening(.followUp)
-            return [.cancelFollowUpExpiryTimer]
+            return []
         case (.followUpWindow, .speechEnded):
             state = .transcribing(.followUp)
-            return [.stopTurnCapture, .transcribeAndSubmit(.followUp)]
-        case (.followUpWindow, .followUpWindowExpired):
-            state = .ready
-            return [.disarmFollowUpWindow]
+            return [.stopTurnCapture, .transcribeAndSubmit]
 
         case (.listening(let context), .speechEnded):
             state = .transcribing(context)
-            return [.stopTurnCapture, .transcribeAndSubmit(context)]
-        case (.listening, .noSpeechTimeout), (.listening, .cancelRequested):
+            return [.stopTurnCapture, .transcribeAndSubmit]
+        case (.listening, .noSpeechTimeout), (.listening, .cancelRequested),
+             (.followUpWindow, .noSpeechTimeout):
             state = .ready
             return [.stopTurnCapture]
 
@@ -152,10 +143,8 @@ struct VoiceActivationStateMachine: Equatable, Sendable {
 
     private func cancellationEffects() -> [VoiceActivationEffect] {
         switch state {
-        case .listening:
+        case .listening, .followUpWindow:
             return [.stopTurnCapture]
-        case .followUpWindow:
-            return [.disarmFollowUpWindow]
         case .off, .suspended, .ready, .transcribing:
             return []
         }

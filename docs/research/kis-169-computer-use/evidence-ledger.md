@@ -16,9 +16,9 @@ I correct claims when later evidence changes their meaning.
 
 ### Entry 1: Worktree and source scope
 
-- `[Verified]` The worktree is `/Users/kishan/.codex/worktrees/eaaa/suniye`.
+- `[Verified]` The worktree is `<repo>`.
 - `[Verified]` The branch is `kis-169-computer-use`.
-- `[Verified]` The source DMG is `/Users/kishan/Downloads/ChatGPT (1).dmg`.
+- `[Verified]` The source DMG is `<home>/Downloads/ChatGPT (1).dmg`.
 - `[Verified]` The DMG mounted read-only at `/tmp/suniye-chatgpt-dmg-mount`.
 - `[Verified]` No production code was changed before this research folder was created.
 
@@ -578,7 +578,7 @@ Sources: the focused `xcodebuild` run, the full `xcodebuild` result bundle at
 ### Entry 43: Live `@Computer` E2E and corrective fixes
 
 Sources: `docs/research/kis-169-computer-use/e2e-computer.md`, the installed build at
-`/Users/kishan/Applications/Suniye.app`, the Computer Use skill's `node_repl` session, and the
+`<home>/Applications/Suniye.app`, the Computer Use skill's `node_repl` session, and the
 macOS diagnostic reports.
 
 - `[Verified]` The live Suniye UI exposes the Computer Use page, target picker, window picker,
@@ -704,7 +704,7 @@ services and page, the final `xcodebuild` result bundle at
 - `[Verified]` The full suite reports 1,080 tests executed, 1 skipped, and 0 failures. Gated line
   coverage is 95.02% (13,672/14,389 lines) at the 95% threshold.
 - `[Verified]` E2E preflight and smoke checks pass. The Debug Preview build installs at
-  `/Users/kishan/Applications/Suniye Preview.app`.
+  `<home>/Applications/Suniye Preview.app`.
 - `[Verified]` After relaunching the installed Preview, the Computer Use page no longer shows
   the removed window picker, Bring Forward control, screenshot toggle, manual action controls,
   or approval card. Accessibility and Screen Recording permission rows remain visible.
@@ -744,7 +744,7 @@ Sources: `Suniye/AppState.swift`,
 
 ### Entry 51: Refreshed Preview voice UX smoke
 
-Sources: the installed `/Users/kishan/Applications/Suniye Preview.app`, the Computer Use
+Sources: the installed `<home>/Applications/Suniye Preview.app`, the Computer Use
 `node_repl` session, and `docs/research/kis-169-computer-use/e2e-computer.md`.
 
 - `[Verified]` The refreshed Preview build launches and opens the Computer Use page.

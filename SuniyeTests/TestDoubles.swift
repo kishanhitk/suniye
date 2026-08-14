@@ -448,6 +448,7 @@ final class StubLocalLLMModelManager: LocalLLMModelManagerProtocol {
 @MainActor
 final class StubTranscriptionService: TranscriptionServiceProtocol {
     var transcribeResult: Result<String, Error> = .success("")
+    private(set) var lastTranscribedSamples: [Float] = []
     /// Consumed in order before falling back to `transcribeResult`.
     var scriptedTranscribeResults: [Result<String, Error>] = []
     var loadModelResult: Result<Void, Error> = .success(())
@@ -476,6 +477,7 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String {
         transcribeCallCount += 1
         transcribePurposes.append(purpose)
+        lastTranscribedSamples = samples
         let callNumber = transcribeCallCount
         onTranscribe?()
         let result = scriptedTranscribeResults.isEmpty
@@ -872,7 +874,8 @@ func makeTestAppState(
         transcriptFlashSeconds: 0,
         followUpWindowSeconds: 0.2,
         maximumTurnBufferSeconds: 35
-    )
+    ),
+    speechOutputFactory: (@MainActor () -> (any SpeechOutputServing)?)? = nil
 ) -> AppState {
     AppState(
         modelManager: modelManager,
@@ -921,8 +924,55 @@ func makeTestAppState(
         llmE2EMode: llmE2EMode,
         wakeWordDetectorFactory: wakeWordDetectorFactory ?? { StubWakeWordDetector() },
         speechActivityDetectorFactory: speechActivityDetectorFactory ?? { StubSpeechActivityDetector() },
-        voiceActivationConfiguration: voiceActivationConfiguration
+        voiceActivationConfiguration: voiceActivationConfiguration,
+        speechOutputFactory: speechOutputFactory ?? { nil }
     )
+}
+
+@MainActor
+final class StubSpeechOutputService: SpeechOutputServing {
+    private(set) var spoken: [String] = []
+    private(set) var stopCallCount = 0
+    var isSpeaking = false
+    var onPlaybackFinished: (() -> Void)?
+
+    func speak(_ text: String) async {
+        spoken.append(text)
+        isSpeaking = true
+    }
+
+    func stopSpeaking() {
+        stopCallCount += 1
+        isSpeaking = false
+    }
+
+    func finishPlayback() {
+        isSpeaking = false
+        onPlaybackFinished?()
+    }
+}
+
+/// RIFF-chunk-aware PCM16 wav reader for audio fixtures; `say(1)` output
+/// carries a JUNK chunk, so a fixed 44-byte header offset would misread it.
+enum WavFixture {
+    static func pcm16MonoSamples(from url: URL) throws -> [Float] {
+        let data = try Data(contentsOf: url)
+        var offset = 12
+        while offset + 8 <= data.count {
+            let chunkID = String(decoding: data[offset..<offset + 4], as: UTF8.self)
+            let size = data[offset + 4..<offset + 8].withUnsafeBytes {
+                $0.loadUnaligned(as: UInt32.self)
+            }
+            if chunkID == "data" {
+                let payload = data.subdata(in: (offset + 8)..<min(offset + 8 + Int(size), data.count))
+                return payload.withUnsafeBytes { raw in
+                    raw.bindMemory(to: Int16.self).map { Float($0) / 32_768 }
+                }
+            }
+            offset += 8 + Int(size) + (Int(size) % 2)
+        }
+        return []
+    }
 }
 
 /// Scripted wake detector: fires once per queued hit.

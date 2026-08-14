@@ -111,8 +111,8 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
                 scrollWheelEvent2Source: nil,
                 units: .pixel,
                 wheelCount: 2,
-                wheel1: Int32(clamping: Int(delta.vertical.rounded())),
-                wheel2: Int32(clamping: Int(delta.horizontal.rounded())),
+                wheel1: Self.scrollWheelUnits(delta.vertical),
+                wheel2: Self.scrollWheelUnits(delta.horizontal),
                 wheel3: 0
             ) else {
                 throw ComputerUseActionError.eventCreationFailed
@@ -159,10 +159,38 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
 
     func typeText(_ text: String, pid: Int32) async throws {
         try await perform {
-            for chunk in ComputerUseUnicodeEventChunker.chunks(in: text) {
+            for event in ComputerUseUnicodeEventChunker.typingEvents(in: text) {
                 try Task.checkCancellation()
-                try postUnicodeChunk(chunk, pid: pid)
+                switch event {
+                case let .text(chunk):
+                    try postUnicodeChunk(chunk, pid: pid)
+                case .returnKey:
+                    try postReturnKey(pid: pid)
+                }
             }
+        }
+    }
+
+    private func postReturnKey(pid: Int32) throws {
+        guard let down = CGEvent(
+            keyboardEventSource: nil,
+            virtualKey: Self.returnVirtualKey,
+            keyDown: true
+        ),
+            let up = CGEvent(
+                keyboardEventSource: nil,
+                virtualKey: Self.returnVirtualKey,
+                keyDown: false
+            ) else {
+            throw ComputerUseActionError.eventCreationFailed
+        }
+        down.postToPid(pid)
+        do {
+            try Task.checkCancellation()
+            up.postToPid(pid)
+        } catch {
+            up.postToPid(pid)
+            throw error
         }
     }
 
@@ -223,6 +251,14 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
         }
         configure(event, screenPoint: point, button: .left, target: target)
         event.postToPid(target.processIdentifier)
+    }
+
+    private static let returnVirtualKey: CGKeyCode = 36
+
+    /// Clamps in floating point first: `Int(_: Double)` traps outside the
+    /// `Int` range, and the model controls the page count.
+    private static func scrollWheelUnits(_ delta: Double) -> Int32 {
+        Int32(min(max(delta.rounded(), Double(Int32.min)), Double(Int32.max)))
     }
 
     private static func configure(

@@ -174,6 +174,9 @@ final class VoiceActivationControllerTests: XCTestCase {
         await controller.setEnabled(true)
         controller.handleRunPhase(.completed)
         XCTAssertEqual(controller.state, .followUpWindow)
+        // Expiry is the endpointer's no-speech timeout on the sample clock:
+        // silence past followUpWindowSeconds (0.15 s here) ends the window.
+        feed(seconds: 0.5)
         await waitForState { $0 == .ready }
         XCTAssertTrue(submitted.isEmpty)
     }

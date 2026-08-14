@@ -82,7 +82,12 @@ actor ComputerUseObservationService: ComputerUseObserving {
         let discoveredWindows = try await windows.orderedWindows(
             processIdentifier: processIdentifier
         )
-        guard let window = discoveredWindows.first else {
+        // Prefer the window the user is actually working in over raw
+        // front-to-back CG ordering (panels and palettes can sit in front).
+        let window = discoveredWindows.first(where: \.isFocused)
+            ?? discoveredWindows.first(where: \.isMain)
+            ?? discoveredWindows.first
+        guard let window else {
             throw ComputerUseObservationError.noWindow(requestedIdentifier)
         }
 

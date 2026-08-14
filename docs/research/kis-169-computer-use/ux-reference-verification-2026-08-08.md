@@ -2,7 +2,7 @@
 
 Research date: 2026-08-08
 
-Scope: static inspection of `/Users/kishan/Downloads/ChatGPT (1).dmg`, its mounted application at
+Scope: static inspection of `<home>/Downloads/ChatGPT (1).dmg`, its mounted application at
 `/private/tmp/suniye-chatgpt-dmg-mount/ChatGPT.app`, and current first-party OpenAI documentation.
 No production code or visualization was changed for this research.
 
@@ -29,7 +29,7 @@ established and is therefore not claimed.
 
 Primary paths:
 
-- `/Users/kishan/Downloads/ChatGPT (1).dmg`
+- `<home>/Downloads/ChatGPT (1).dmg`
 - `/private/tmp/suniye-chatgpt-dmg-mount/ChatGPT.app/Contents/Info.plist`
 - `/private/tmp/suniye-chatgpt-dmg-mount/ChatGPT.app/Contents/Resources/cua_node/lib/node_modules/@oai/sky/Codex Computer Use.app/Contents/Info.plist`
 

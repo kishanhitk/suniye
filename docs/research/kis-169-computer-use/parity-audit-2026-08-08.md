@@ -4,7 +4,7 @@ Date: 2026-08-08
 
 Branch: `kis-169-computer-use`
 
-Reference artifact: `/Users/kishan/Downloads/ChatGPT (1).dmg`
+Reference artifact: `<home>/Downloads/ChatGPT (1).dmg`
 
 Reference build: `com.openai.codex` 26.727.51351 (6119)
 

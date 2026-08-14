@@ -67,7 +67,8 @@ final class ComputerUseApplicationCatalogTests: XCTestCase {
                     displayName: "TextEdit",
                     lastUsedDate: nil,
                     useCount: nil,
-                    isRunning: true
+                    isRunning: true,
+                    isFrontmost: true
                 ),
                 ComputerUseApplication(
                     id: "com.apple.Preview",

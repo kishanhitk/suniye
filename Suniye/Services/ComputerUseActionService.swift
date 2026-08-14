@@ -106,6 +106,10 @@ protocol ComputerUseInputEventPosting: Sendable {
     func typeText(_ text: String, pid: Int32) async throws
 }
 
+protocol ComputerUseFocusEnforcing: Sendable {
+    func focusForKeyInput(target: ComputerUseObservedTarget) async throws
+}
+
 protocol ComputerUseActionServing: Sendable {
     func click(_ request: ComputerUseClickRequest, context: ComputerUseActionContext) async throws
     func performSecondaryAction(
@@ -147,21 +151,26 @@ struct ComputerUseActionService: ComputerUseActionServing {
     private let accessibility: ComputerUseAccessibilityActionPerforming
     private let input: ComputerUseInputEventPosting
     private let cursor: ComputerUseCursorPresenting
+    private let focus: ComputerUseFocusEnforcing
 
     init(
         accessibility: ComputerUseAccessibilityActionPerforming =
             SystemComputerUseAccessibilityActions(),
         input: ComputerUseInputEventPosting = SystemComputerUseInputEvents(),
-        cursor: ComputerUseCursorPresenting = NoopComputerUseCursorPresenter()
+        cursor: ComputerUseCursorPresenting = NoopComputerUseCursorPresenter(),
+        focus: ComputerUseFocusEnforcing = SystemComputerUseFocusEnforcer()
     ) {
         self.accessibility = accessibility
         self.input = input
         self.cursor = cursor
+        self.focus = focus
     }
 
     func click(_ request: ComputerUseClickRequest, context: ComputerUseActionContext) async throws {
-        guard request.clickCount > 0 else {
-            throw ComputerUseActionError.invalidArgument("click_count must be greater than zero")
+        // The model supplies click_count; triple-click is the largest gesture
+        // macOS recognizes, and an unbounded count drives an unbounded event loop.
+        guard (1...3).contains(request.clickCount) else {
+            throw ComputerUseActionError.invalidArgument("click_count must be between 1 and 3")
         }
         let pid = try processIdentifier(context)
         switch request.target {
@@ -325,11 +334,15 @@ struct ComputerUseActionService: ComputerUseActionServing {
         guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ComputerUseActionError.invalidArgument("key is required")
         }
-        try await input.pressKey(key, pid: processIdentifier(context))
+        let pid = try processIdentifier(context)
+        try await focus.focusForKeyInput(target: context.target)
+        try await input.pressKey(key, pid: pid)
     }
 
     func typeText(_ text: String, context: ComputerUseActionContext) async throws {
-        try await input.typeText(text, pid: processIdentifier(context))
+        let pid = try processIdentifier(context)
+        try await focus.focusForKeyInput(target: context.target)
+        try await input.typeText(text, pid: pid)
     }
 
     private func element(
@@ -388,6 +401,14 @@ struct ComputerUseActionService: ComputerUseActionServing {
               screenshot.pixelWidth > 0,
               screenshot.pixelHeight > 0 else {
             throw ComputerUseActionError.screenshotUnavailable
+        }
+        // Coordinates are screenshot-relative; anything outside its pixel
+        // bounds would map onto an arbitrary point of another window.
+        guard (0...Double(screenshot.pixelWidth)).contains(x),
+              (0...Double(screenshot.pixelHeight)).contains(y) else {
+            throw ComputerUseActionError.invalidArgument(
+                "coordinates must be within the observed screenshot (\(screenshot.pixelWidth)x\(screenshot.pixelHeight))"
+            )
         }
         return CGPoint(
             x: screenshot.windowFrame.minX + x * screenshot.coordinateScale,

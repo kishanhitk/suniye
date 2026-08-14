@@ -6,7 +6,7 @@ This file maps the research notes to the inspected sources.
 
 Source:
 
-`/Users/kishan/Downloads/ChatGPT (1).dmg`
+`<home>/Downloads/ChatGPT (1).dmg`
 
 The image was mounted read-only at:
 

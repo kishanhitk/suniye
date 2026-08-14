@@ -94,6 +94,7 @@ struct ComputerUseSettingsDisclosure: View {
                     .font(AppTypography.subheadline)
                 tryWakePhraseRow
             }
+            voiceOutputRow
         }
         .alert("Voice Activation keeps the microphone in use", isPresented: $showVoiceActivationNotice) {
             Button("Turn On") {
@@ -131,6 +132,33 @@ struct ComputerUseSettingsDisclosure: View {
         .padding(10)
         .background(MainWindowPalette.selectedFill)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    /// UX plan: Voice Output — spoken responses at turn boundaries, generated
+    /// on-device by Chatterbox. Apple Silicon only; hidden where unsupported.
+    @ViewBuilder
+    private var voiceOutputRow: some View {
+        if VoiceHelperRuntimeLocator.isAppleSilicon {
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("Speak responses aloud (Voice Output)", isOn: $appState.voiceOutputEnabled)
+                    .font(AppTypography.subheadline)
+                    .padding(.top, 4)
+                Text(voiceOutputDetail)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.tertiaryText)
+            }
+        }
+    }
+
+    private var voiceOutputDetail: String {
+        switch VoiceHelperRuntimeLocator().availability() {
+        case .available:
+            return "Done, Couldn’t finish, and questions are spoken by an on-device voice. Say “Hey Suniye” or press Escape to interrupt."
+        case .helperNotInstalled:
+            return "Requires the local voice helper: run scripts/setup_voice_helper.sh, then re-enable."
+        case .unsupportedHardware:
+            return "Requires Apple Silicon."
+        }
     }
 
     private var tryWakePhraseIsHot: Bool {

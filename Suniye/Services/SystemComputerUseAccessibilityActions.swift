@@ -288,13 +288,33 @@ private struct Worker: Sendable {
         ) == reference.role else {
             return false
         }
-        guard let identifier = reference.identifier else {
-            return true
+        if let identifier = reference.identifier {
+            return SystemComputerUseAccessibilityAPI.string(
+                kAXIdentifierAttribute,
+                from: element
+            ) == identifier
         }
-        return SystemComputerUseAccessibilityAPI.string(
-            kAXIdentifierAttribute,
-            from: element
-        ) == identifier
+        return reference.traits.isConsistent(with: liveTraits(of: element))
+    }
+
+    private func liveTraits(
+        of element: AXUIElement
+    ) -> ComputerUseAccessibilityElementTraits {
+        ComputerUseAccessibilityElementTraits(
+            subrole: SystemComputerUseAccessibilityAPI.string(
+                kAXSubroleAttribute,
+                from: element
+            ),
+            roleDescription: SystemComputerUseAccessibilityAPI.string(
+                kAXRoleDescriptionAttribute,
+                from: element
+            ),
+            title: SystemComputerUseAccessibilityAPI.string(kAXTitleAttribute, from: element),
+            description: SystemComputerUseAccessibilityAPI.string(
+                kAXDescriptionAttribute,
+                from: element
+            )
+        )
     }
 }
 

@@ -32,7 +32,7 @@ Date: 2026-08-12
 
 ## Installed Preview E2E
 
-Build: Debug Preview at `/Users/kishan/Applications/Suniye Preview.app` from
+Build: Debug Preview at `<home>/Applications/Suniye Preview.app` from
 `kis-169-computer-use-parity`.
 
 - `[Verified live]` A natural task, `Open Calculator, enter 7, and verify the display.`, completed

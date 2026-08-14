@@ -15,14 +15,21 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
     func snapshot(processIdentifier: Int32, windowOrdinal: Int) async throws
         -> ComputerUseAXSnapshot
     {
-        try await Task.detached(priority: .userInitiated) {
+        // Detached to stay off the caller's actor; cancellation is forwarded
+        // explicitly because detached tasks do not inherit it.
+        let traversal = Task.detached(priority: .userInitiated) {
             var reader = Reader(
                 maximumDepth: maximumDepth,
                 maximumElements: maximumElements,
                 maximumValueLength: maximumValueLength
             )
             return try reader.snapshot(pid: processIdentifier, windowOrdinal: windowOrdinal)
-        }.value
+        }
+        return try await withTaskCancellationHandler {
+            try await traversal.value
+        } onCancel: {
+            traversal.cancel()
+        }
     }
 
     private struct Reader {
@@ -32,8 +39,15 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
         var elementCount = 0
         var focusedElement: AXUIElement?
 
+        /// Per-message AX timeout. An unresponsive target process would
+        /// otherwise stall each attribute read indefinitely (the default
+        /// global timeout is 6 s per message, multiplied across a traversal
+        /// of hundreds of elements).
+        private static let messagingTimeout: Float = 1.0
+
         mutating func snapshot(pid: Int32, windowOrdinal: Int) throws -> ComputerUseAXSnapshot {
             let application = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(application, Self.messagingTimeout)
             focusedElement = SystemComputerUseAccessibilityAPI.element(
                 kAXFocusedUIElementAttribute,
                 from: application
@@ -54,7 +68,8 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
         }
 
         mutating func read(_ element: AXUIElement, depth: Int) -> ComputerUseAXNode? {
-            guard depth <= maximumDepth, elementCount < maximumElements else {
+            guard depth <= maximumDepth, elementCount < maximumElements,
+                  !Task.isCancelled else {
                 return nil
             }
             elementCount += 1
@@ -139,8 +154,29 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
             ) else {
                 return nil
             }
-            let rendered = (value as? String) ?? String(describing: value)
+            guard let rendered = Self.renderedValueDescription(value) else {
+                return nil
+            }
             return String(rendered.prefix(maximumValueLength))
+        }
+
+        /// `String(describing:)` on raw AX values prints pointer addresses,
+        /// which change every snapshot and defeat the revision diff. Render
+        /// only value types with a stable textual form.
+        private static func renderedValueDescription(_ value: CFTypeRef) -> String? {
+            if let string = value as? String {
+                return string
+            }
+            if let number = value as? NSNumber {
+                return number.stringValue
+            }
+            if let url = value as? URL {
+                return url.absoluteString
+            }
+            if let attributed = value as? NSAttributedString {
+                return attributed.string
+            }
+            return nil
         }
 
         private func actions(from element: AXUIElement)
