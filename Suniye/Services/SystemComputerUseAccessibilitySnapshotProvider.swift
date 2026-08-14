@@ -45,9 +45,40 @@ struct SystemComputerUseAccessibilitySnapshotProvider: ComputerUseAccessibilityS
         /// of hundreds of elements).
         private static let messagingTimeout: Float = 1.0
 
+        /// Chromium and Electron apps build their accessibility tree lazily:
+        /// web content is exposed only after an assistive client announces
+        /// itself (VoiceOver sets AXEnhancedUserInterface; Electron honors
+        /// AXManualAccessibility). Without this a browser returns a bare
+        /// window shell, and the tree collapses again after navigations.
+        /// The target process remembers the flag, so the settle wait runs
+        /// only on the first activation; other apps ignore the attributes.
+        private static func activateAssistiveAccess(for application: AXUIElement) {
+            var activated = false
+            for attribute in ["AXEnhancedUserInterface", "AXManualAccessibility"] {
+                guard SystemComputerUseAccessibilityAPI.boolean(
+                    attribute,
+                    from: application
+                ) != true else {
+                    continue
+                }
+                if AXUIElementSetAttributeValue(
+                    application,
+                    attribute as CFString,
+                    kCFBooleanTrue
+                ) == .success {
+                    activated = true
+                }
+            }
+            if activated {
+                // Give the renderer time to build the web-content tree.
+                Thread.sleep(forTimeInterval: 0.4)
+            }
+        }
+
         mutating func snapshot(pid: Int32, windowOrdinal: Int) throws -> ComputerUseAXSnapshot {
             let application = AXUIElementCreateApplication(pid)
             AXUIElementSetMessagingTimeout(application, Self.messagingTimeout)
+            Self.activateAssistiveAccess(for: application)
             focusedElement = SystemComputerUseAccessibilityAPI.element(
                 kAXFocusedUIElementAttribute,
                 from: application
