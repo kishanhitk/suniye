@@ -342,6 +342,7 @@ private final class Pipeline: @unchecked Sendable {
     private var processedSeconds: TimeInterval = 0
     private var lastDebugLoggedSecond = -1
     private var debugCapture: [Float] = []
+    private var debugAcceptCount = 0
 
     /// Debug-tuning only: rolling 20-second dumps of the resampled tap audio,
     /// so wake misses reproduce offline against the same model.
@@ -409,6 +410,11 @@ private final class Pipeline: @unchecked Sendable {
         speechDetector?.reset()
         capturingTurn = false
         turnSamples = []
+        if SherpaWakeWordDetector.debugTuning, !debugCapture.isEmpty {
+            // Short sessions must not lose their audio.
+            Self.writeDebugWav(debugCapture)
+            debugCapture.removeAll(keepingCapacity: true)
+        }
     }
 
     func process(samples: [Float], sampleRate: Double) -> [Event] {
@@ -426,7 +432,10 @@ private final class Pipeline: @unchecked Sendable {
             if Int(processedSeconds) > lastDebugLoggedSecond {
                 lastDebugLoggedSecond = Int(processedSeconds)
                 let rms = (resampled.reduce(Float(0)) { $0 + $1 * $1 } / Float(resampled.count)).squareRoot()
-                AppLogger.shared.log(.info, "wake-debug audio t=\(Int(processedSeconds))s rate=\(sampleRate) rms=\(rms)")
+                AppLogger.shared.log(
+                    .info,
+                    "wake-debug audio t=\(Int(processedSeconds))s rate=\(sampleRate) rms=\(rms) accepts=\(debugAcceptCount) capturing=\(capturingTurn)"
+                )
             }
         }
         var events: [Event] = []
@@ -452,8 +461,11 @@ private final class Pipeline: @unchecked Sendable {
                 turnSamples = []
                 events.append(.noSpeechTimeout)
             }
-        } else if wakeDetector?.accept(samples: resampled, sampleRate: 16_000) == true {
-            events.append(.wakeDetected)
+        } else {
+            debugAcceptCount += 1
+            if wakeDetector?.accept(samples: resampled, sampleRate: 16_000) == true {
+                events.append(.wakeDetected)
+            }
         }
         return events
     }

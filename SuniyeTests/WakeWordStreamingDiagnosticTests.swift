@@ -6,7 +6,7 @@ import XCTest
 /// /tmp fixtures); delete after the wake-path investigation.
 final class WakeWordStreamingDiagnosticTests: XCTestCase {
     func testStreamingDetectsSynthesizedPositive() throws {
-        let path = "/tmp/kws_pos1.wav"
+        let path = ProcessInfo.processInfo.environment["WAKE_FIXTURE"] ?? "/tmp/kws_pos1.wav"
         guard FileManager.default.fileExists(atPath: path) else {
             throw XCTSkip("diagnostic fixture missing")
         }
