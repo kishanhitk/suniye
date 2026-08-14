@@ -23,10 +23,6 @@ final class TextInsertionServiceMoreTests: XCTestCase {
             TextInsertionService.InsertError.noFocusedTextInput.localizedDescription,
             "No editable text field is focused"
         )
-        XCTAssertEqual(
-            TextInsertionService.InsertError.insertionNotObserved.localizedDescription,
-            "Text insertion was not observed in the focused field"
-        )
     }
 
     // MARK: - captureInsertionContext guard paths

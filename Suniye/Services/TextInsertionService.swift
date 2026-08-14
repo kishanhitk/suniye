@@ -28,7 +28,6 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         case cannotCreateEvent
         case cannotCopyToClipboard
         case noFocusedTextInput
-        case insertionNotObserved
 
         var errorDescription: String? {
             switch self {
@@ -38,8 +37,6 @@ final class TextInsertionService: TextInsertionServiceProtocol {
                 return "Unable to copy transcription to the clipboard"
             case .noFocusedTextInput:
                 return "No editable text field is focused"
-            case .insertionNotObserved:
-                return "Text insertion was not observed in the focused field"
             }
         }
     }
@@ -52,8 +49,6 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     var keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)?
     var pasteKeyCodeProvider: (() -> CGKeyCode?)?
     var clipboardRestoreDelay: TimeInterval = 0.45
-    var pasteVerificationAttemptCount = 8
-    var pasteVerificationIntervalNanoseconds: UInt64 = 25_000_000
 
     func captureInsertionContext() -> TextInsertionContext? {
         guard let focusedElement = getFocusedTextElement(),
@@ -94,6 +89,9 @@ final class TextInsertionService: TextInsertionServiceProtocol {
 
     @MainActor
     func insertText(_ text: String) async throws {
+        // No focused text input means the paste would land on an arbitrary
+        // control — and a presumed success would let auto-submit post Return
+        // there. Fail before touching the clipboard; ⌃⌘V recovers the text.
         guard let focusedElement = getFocusedTextElement() else {
             throw InsertError.noFocusedTextInput
         }
@@ -116,12 +114,11 @@ final class TextInsertionService: TextInsertionServiceProtocol {
 
         scheduleClipboardRestore(previousItems, to: pasteboard)
 
+        // Fire-and-forget by design: post-paste AX observation cannot tell a
+        // failed paste from a lazy accessibility surface (Electron composers
+        // read as nil, terminals read stale — KIS-178), so a posted paste into
+        // a focused text element is reported as success.
         try postKey(pasteKeyCode(), flags: .maskCommand)
-        try await verifyFallbackInsertion(
-            expectedText: text,
-            from: initialState,
-            focusedElement: focusedElement
-        )
     }
 
     func copyTextToClipboard(_ text: String) throws {
@@ -155,37 +152,6 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         }
 
         return Self.focusedTextDidChange(from: initialState, to: currentState)
-    }
-
-    private func verifyFallbackInsertion(
-        expectedText: String,
-        from initialState: FocusedTextSnapshot?,
-        focusedElement: AXUIElement
-    ) async throws {
-        guard let initialState, Self.focusedTextStateIsObservable(initialState) else {
-            throw InsertError.insertionNotObserved
-        }
-
-        // CGEvent posting is asynchronous. Give the target app a short window
-        // to expose the resulting field change through Accessibility.
-        for _ in 0..<max(pasteVerificationAttemptCount, 1) {
-            if pasteVerificationIntervalNanoseconds > 0 {
-                try await Task.sleep(nanoseconds: pasteVerificationIntervalNanoseconds)
-            } else {
-                await Task.yield()
-            }
-
-            if let currentState = captureFocusedTextState(for: focusedElement),
-               Self.focusedTextReflectsInsertion(
-                   expectedText,
-                   from: initialState,
-                   to: currentState
-               ) {
-                return
-            }
-        }
-
-        throw InsertError.insertionNotObserved
     }
 
     private func getFocusedTextElement() -> AXUIElement? {
@@ -280,31 +246,6 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         initialState.value != currentState.value
             || initialState.selectedText != currentState.selectedText
             || initialState.selectedRange != currentState.selectedRange
-    }
-
-    private static func focusedTextStateIsObservable(_ state: FocusedTextSnapshot) -> Bool {
-        state.value != nil
-    }
-
-    private static func focusedTextReflectsInsertion(
-        _ expectedText: String,
-        from initialState: FocusedTextSnapshot,
-        to currentState: FocusedTextSnapshot
-    ) -> Bool {
-        guard let initialValue = initialState.value,
-              let currentValue = currentState.value,
-              currentValue != initialValue else {
-            return false
-        }
-
-        if let selectedRange = initialState.selectedRange,
-           let replacementRange = Range(selectedRange, in: initialValue) {
-            var expectedValue = initialValue
-            expectedValue.replaceSubrange(replacementRange, with: expectedText)
-            return currentValue == expectedValue
-        }
-
-        return !expectedText.isEmpty && currentValue.contains(expectedText)
     }
 
     private func pasteKeyCode() -> CGKeyCode {
