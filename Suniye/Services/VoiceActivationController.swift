@@ -340,36 +340,6 @@ private final class Pipeline: @unchecked Sendable {
     private var speechBeganEmitted = false
     private var turnSamples: [Float] = []
     private var processedSeconds: TimeInterval = 0
-    private var lastDebugLoggedSecond = -1
-    private var debugCapture: [Float] = []
-    private var debugAcceptCount = 0
-
-    /// Debug-tuning only: rolling 20-second dumps of the resampled tap audio,
-    /// so wake misses reproduce offline against the same model.
-    private static func writeDebugWav(_ samples: [Float]) {
-        let url = URL(fileURLWithPath: "/tmp/suniye-wake-capture.wav")
-        let sampleRate: UInt32 = 16_000
-        var data = Data()
-        let byteCount = UInt32(samples.count * 2)
-        data.append(contentsOf: Array("RIFF".utf8))
-        withUnsafeBytes(of: (36 + byteCount).littleEndian) { data.append(contentsOf: $0) }
-        data.append(contentsOf: Array("WAVEfmt ".utf8))
-        withUnsafeBytes(of: UInt32(16).littleEndian) { data.append(contentsOf: $0) }
-        withUnsafeBytes(of: UInt16(1).littleEndian) { data.append(contentsOf: $0) }
-        withUnsafeBytes(of: UInt16(1).littleEndian) { data.append(contentsOf: $0) }
-        withUnsafeBytes(of: sampleRate.littleEndian) { data.append(contentsOf: $0) }
-        withUnsafeBytes(of: (sampleRate * 2).littleEndian) { data.append(contentsOf: $0) }
-        withUnsafeBytes(of: UInt16(2).littleEndian) { data.append(contentsOf: $0) }
-        withUnsafeBytes(of: UInt16(16).littleEndian) { data.append(contentsOf: $0) }
-        data.append(contentsOf: Array("data".utf8))
-        withUnsafeBytes(of: byteCount.littleEndian) { data.append(contentsOf: $0) }
-        for sample in samples {
-            let clamped = max(-1, min(1, sample))
-            withUnsafeBytes(of: Int16(clamped * 32_767).littleEndian) { data.append(contentsOf: $0) }
-        }
-        try? data.write(to: url)
-        AppLogger.shared.log(.info, "wake-debug wrote \(samples.count / 16_000)s capture to \(url.path)")
-    }
 
     func prepare(
         wake: () throws -> WakeWordDetecting,
@@ -410,11 +380,6 @@ private final class Pipeline: @unchecked Sendable {
         speechDetector?.reset()
         capturingTurn = false
         turnSamples = []
-        if SherpaWakeWordDetector.debugTuning, !debugCapture.isEmpty {
-            // Short sessions must not lose their audio.
-            Self.writeDebugWav(debugCapture)
-            debugCapture.removeAll(keepingCapacity: true)
-        }
     }
 
     func process(samples: [Float], sampleRate: Double) -> [Event] {
@@ -423,21 +388,6 @@ private final class Pipeline: @unchecked Sendable {
             return []
         }
         processedSeconds += Double(resampled.count) / 16_000
-        if SherpaWakeWordDetector.debugTuning {
-            debugCapture.append(contentsOf: resampled)
-            if debugCapture.count >= 16_000 * 20 {
-                Self.writeDebugWav(debugCapture)
-                debugCapture.removeAll(keepingCapacity: true)
-            }
-            if Int(processedSeconds) > lastDebugLoggedSecond {
-                lastDebugLoggedSecond = Int(processedSeconds)
-                let rms = (resampled.reduce(Float(0)) { $0 + $1 * $1 } / Float(resampled.count)).squareRoot()
-                AppLogger.shared.log(
-                    .info,
-                    "wake-debug audio t=\(Int(processedSeconds))s rate=\(sampleRate) rms=\(rms) accepts=\(debugAcceptCount) capturing=\(capturingTurn)"
-                )
-            }
-        }
         var events: [Event] = []
 
         if capturingTurn {
@@ -461,11 +411,8 @@ private final class Pipeline: @unchecked Sendable {
                 turnSamples = []
                 events.append(.noSpeechTimeout)
             }
-        } else {
-            debugAcceptCount += 1
-            if wakeDetector?.accept(samples: resampled, sampleRate: 16_000) == true {
-                events.append(.wakeDetected)
-            }
+        } else if wakeDetector?.accept(samples: resampled, sampleRate: 16_000) == true {
+            events.append(.wakeDetected)
         }
         return events
     }
