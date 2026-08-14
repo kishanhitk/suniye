@@ -10,7 +10,7 @@ struct ComputerUseScriptResult: Equatable, Sendable {
 }
 
 /// Runs model-authored JavaScript for code-mode Computer Use. The single
-/// capability exposed to the script is `sky.*`, bridged to the native tool
+/// capability exposed to the script is `computer.*`, bridged to the native tool
 /// backend; a bare `JSContext` has no filesystem, network, or process access,
 /// so the script is sandboxed by construction.
 ///
@@ -29,7 +29,7 @@ struct ComputerUseScriptResult: Equatable, Sendable {
 /// subprocess. Neither is built here — a hung native call is the realistic case
 /// and it is fully recovered; a pure-CPU runaway from a broken model is not.
 final class ComputerUseScriptRuntime: @unchecked Sendable {
-    /// Executes one decoded `sky.*` call. Side effects (activity, analytics,
+    /// Executes one decoded `computer.*` call. Side effects (activity, analytics,
     /// audit, screenshot collection) belong to the caller; the runtime only
     /// shapes the result back into JavaScript.
     typealias Perform = @Sendable (ComputerUseToolCall) async -> Result<ComputerUseToolResult, Error>
@@ -126,14 +126,14 @@ private final class Execution: @unchecked Sendable {
         }
         context.setObject(console, forKeyedSubscript: "console" as NSString)
 
-        let sky = JSValue(newObjectIn: context)!
+        let computer = JSValue(newObjectIn: context)!
         for tool in ComputerUseToolName.allCases where tool != .nodeRepl {
-            sky.setObject(bridge(for: tool), forKeyedSubscript: tool.rawValue as NSString)
+            computer.setObject(bridge(for: tool), forKeyedSubscript: tool.rawValue as NSString)
         }
-        context.setObject(sky, forKeyedSubscript: "sky" as NSString)
+        context.setObject(computer, forKeyedSubscript: "computer" as NSString)
     }
 
-    /// One `sky.<tool>` method: decode the JS argument object, run the native
+    /// One `computer.<tool>` method: decode the JS argument object, run the native
     /// tool, and resolve/reject the returned promise. Decode and execution
     /// failures reject so the script can `catch` them.
     private func bridge(for tool: ComputerUseToolName) -> JSValue {
@@ -193,7 +193,7 @@ private final class Execution: @unchecked Sendable {
         return promise
     }
 
-    /// Shapes a tool result into the JS value the sky API returns: an app-state
+    /// Shapes a tool result into the JS value the computer API returns: an app-state
     /// object, an app array, or undefined for a completed action.
     private func javaScriptValue(for result: ComputerUseToolResult) -> JSValue {
         switch result {

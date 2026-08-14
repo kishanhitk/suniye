@@ -1,7 +1,7 @@
 import XCTest
 @testable import Suniye
 
-/// The code-mode JS runtime: write capture, the sky bridge round trip, top-level
+/// The code-mode JS runtime: write capture, the computer bridge round trip, top-level
 /// await, error surfacing, and the timeout bound.
 final class ComputerUseScriptRuntimeTests: XCTestCase {
     /// Records every decoded call and returns scripted results.
@@ -51,9 +51,9 @@ final class ComputerUseScriptRuntimeTests: XCTestCase {
             return .success(.actionCompleted)
         }
         let result = await makeRuntime(spy).run(script: """
-        const a = await sky.get_app_state({ app: "Chrome" });
+        const a = await computer.get_app_state({ app: "Chrome" });
         nodeRepl.write(a.text + "|");
-        const b = await sky.get_app_state({ app: "Safari" });
+        const b = await computer.get_app_state({ app: "Safari" });
         nodeRepl.write(b.text);
         """)
         XCTAssertNil(result.error)
@@ -64,7 +64,7 @@ final class ComputerUseScriptRuntimeTests: XCTestCase {
     func testActionArgumentsDecodeThroughTheSharedDecoder() async {
         let spy = SpyPerformer()
         let result = await makeRuntime(spy).run(
-            script: #"await sky.click({ app: "Chrome", element_index: 7, click_count: 2 });"#
+            script: #"await computer.click({ app: "Chrome", element_index: 7, click_count: 2 });"#
         )
         XCTAssertNil(result.error)
         guard case let .click(request) = spy.calls.first else {
@@ -78,7 +78,7 @@ final class ComputerUseScriptRuntimeTests: XCTestCase {
     func testActionCompletedResolvesToUndefined() async {
         let spy = SpyPerformer()
         let result = await makeRuntime(spy).run(script: """
-        const r = await sky.press_key({ app: "Chrome", key: "Return" });
+        const r = await computer.press_key({ app: "Chrome", key: "Return" });
         nodeRepl.write(String(r));
         """)
         XCTAssertNil(result.error)
@@ -90,7 +90,7 @@ final class ComputerUseScriptRuntimeTests: XCTestCase {
         // click with neither element_index nor coordinates fails the shared decoder.
         let result = await makeRuntime(spy).run(script: """
         try {
-          await sky.click({ app: "Chrome" });
+          await computer.click({ app: "Chrome" });
           nodeRepl.write("no-throw");
         } catch (e) {
           nodeRepl.write("caught:" + e.message);
@@ -106,7 +106,7 @@ final class ComputerUseScriptRuntimeTests: XCTestCase {
         spy.handler = { _ in .failure(ComputerUseModelToolCallError.unknownTool("boom")) }
         let result = await makeRuntime(spy).run(script: """
         try {
-          await sky.list_apps();
+          await computer.list_apps();
         } catch (e) {
           nodeRepl.write(e.message);
         }
@@ -131,7 +131,7 @@ final class ComputerUseScriptRuntimeTests: XCTestCase {
             ]))
         }
         let result = await makeRuntime(spy).run(script: """
-        const apps = await sky.list_apps();
+        const apps = await computer.list_apps();
         nodeRepl.write(apps[0].id + ":" + apps[0].isFrontmost);
         """)
         XCTAssertEqual(result.output, "com.apple.TextEdit:true")
@@ -144,7 +144,7 @@ final class ComputerUseScriptRuntimeTests: XCTestCase {
             return .success(.actionCompleted)
         }
         let result = await makeRuntime(spy).run(
-            script: #"await sky.list_apps(); nodeRepl.write("unreachable");"#,
+            script: #"await computer.list_apps(); nodeRepl.write("unreachable");"#,
             timeout: .milliseconds(300)
         )
         XCTAssertEqual(result.output, "")
