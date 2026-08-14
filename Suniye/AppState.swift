@@ -1614,6 +1614,10 @@ final class AppState {
     /// True while the floating indicator shows a Voice Activation state, so
     /// leaving those states clears only what Voice Activation set.
     private var indicatorOwnedByVoiceActivation = false
+    /// Live tap levels and state for the Settings try-wake-phrase row. The
+    /// meter makes a dead microphone visible at a glance.
+    private(set) var voiceActivationLiveLevels: [Float] = []
+    private(set) var voiceActivationDisplayState: VoiceActivationState = .off
     private let partialTranscriptionScheduler: PartialTranscriptionScheduler
     private let floatingIndicatorController = FloatingIndicatorController()
     private let llmPostProcessor: LLMPostProcessor
@@ -4581,6 +4585,7 @@ final class AppState {
     }
 
     private func handleVoiceActivationStateChange(_ state: VoiceActivationState) {
+        voiceActivationDisplayState = state
         switch state {
         case .listening:
             indicatorOwnedByVoiceActivation = true
@@ -4605,6 +4610,7 @@ final class AppState {
     }
 
     private func handleVoiceActivationLevels(_ levels: [Float]) {
+        voiceActivationLiveLevels = levels
         guard indicatorOwnedByVoiceActivation,
               case .listening(_, .voiceActivation, let preview) = floatingIndicatorState else {
             return

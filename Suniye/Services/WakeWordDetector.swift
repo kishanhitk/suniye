@@ -49,6 +49,19 @@ final class SherpaWakeWordDetector: WakeWordDetecting {
     ▁HE Y ▁SU N I :3.0 #0.05
     """
 
+    /// Wake-tuning mode: near-zero thresholds plus per-candidate logging, so a
+    /// live session shows what the spotter hears. Enabled by launching with
+    /// SUNIYE_WAKE_DEBUG=1; never on in a normal launch.
+    static var debugTuning: Bool {
+        ProcessInfo.processInfo.environment["SUNIYE_WAKE_DEBUG"] == "1"
+    }
+
+    private static var effectiveKeywords: String {
+        debugTuning
+            ? keywords.replacingOccurrences(of: "#0.05", with: "#0.001")
+            : keywords
+    }
+
     private let spotter: SherpaOnnxKeywordSpotterWrapper
 
     init(bundle: Bundle = .main) throws {
@@ -75,8 +88,8 @@ final class SherpaWakeWordDetector: WakeWordDetecting {
             numTrailingBlanks: 1,
             keywordsScore: 2.0,
             keywordsThreshold: 0.25,
-            keywordsBuf: Self.keywords,
-            keywordsBufSize: Self.keywords.utf8.count
+            keywordsBuf: Self.effectiveKeywords,
+            keywordsBufSize: Self.effectiveKeywords.utf8.count
         )
         spotter = SherpaOnnxKeywordSpotterWrapper(config: &config)
         guard spotter.spotter != nil, spotter.stream != nil else {
@@ -91,6 +104,9 @@ final class SherpaWakeWordDetector: WakeWordDetecting {
             spotter.decode()
             let result = spotter.getResult()
             if !result.keyword.isEmpty {
+                if Self.debugTuning {
+                    AppLogger.shared.log(.info, "wake-debug candidate keyword=\(result.keyword)")
+                }
                 detected = true
                 spotter.reset()
             }

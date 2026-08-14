@@ -340,6 +340,7 @@ private final class Pipeline: @unchecked Sendable {
     private var speechBeganEmitted = false
     private var turnSamples: [Float] = []
     private var processedSeconds: TimeInterval = 0
+    private var lastDebugLoggedSecond = -1
 
     func prepare(
         wake: () throws -> WakeWordDetecting,
@@ -388,6 +389,11 @@ private final class Pipeline: @unchecked Sendable {
             return []
         }
         processedSeconds += Double(resampled.count) / 16_000
+        if SherpaWakeWordDetector.debugTuning, Int(processedSeconds) > lastDebugLoggedSecond {
+            lastDebugLoggedSecond = Int(processedSeconds)
+            let rms = (resampled.reduce(Float(0)) { $0 + $1 * $1 } / Float(resampled.count)).squareRoot()
+            AppLogger.shared.log(.info, "wake-debug audio t=\(Int(processedSeconds))s rate=\(sampleRate) rms=\(rms)")
+        }
         var events: [Event] = []
 
         if capturingTurn {

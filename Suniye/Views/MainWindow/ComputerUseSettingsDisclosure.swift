@@ -92,6 +92,7 @@ struct ComputerUseSettingsDisclosure: View {
                     .font(AppTypography.subheadline)
                 Toggle("Follow-up window after a task completes (experimental)", isOn: $appState.voiceActivationFollowUpWindowEnabled)
                     .font(AppTypography.subheadline)
+                tryWakePhraseRow
             }
         }
         .alert("Voice Activation keeps the microphone in use", isPresented: $showVoiceActivationNotice) {
@@ -102,6 +103,60 @@ struct ComputerUseSettingsDisclosure: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("While waiting for “Hey Suniye,” audio is processed on this Mac in a rolling in-memory buffer of at most 35 seconds. It is never written to disk, and nothing leaves the machine before the wake phrase. The macOS microphone indicator stays visible the whole time.")
+        }
+    }
+
+    /// UX plan: the try-wake-phrase flow. Live microphone levels plus the
+    /// current listening state, so both the wake word and a dead microphone
+    /// are testable without leaving Settings.
+    private var tryWakePhraseRow: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 2) {
+                let levels = appState.voiceActivationLiveLevels
+                ForEach(0..<12, id: \.self) { index in
+                    let level = levels.indices.contains(index * 2) ? levels[index * 2] : 0
+                    Capsule()
+                        .fill(level > 0.05 ? Color.green : MainWindowPalette.tertiaryText.opacity(0.4))
+                        .frame(width: 3, height: 4 + CGFloat(min(1, level)) * 14)
+                }
+            }
+            .frame(height: 20)
+            .animation(.linear(duration: 0.05), value: appState.voiceActivationLiveLevels)
+
+            Text(tryWakePhraseStatus)
+                .font(AppTypography.subheadline)
+                .foregroundStyle(tryWakePhraseIsHot ? Color.green : MainWindowPalette.secondaryText)
+            Spacer()
+        }
+        .padding(10)
+        .background(MainWindowPalette.selectedFill)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var tryWakePhraseIsHot: Bool {
+        if case .listening = appState.voiceActivationDisplayState {
+            return true
+        }
+        if case .transcribing = appState.voiceActivationDisplayState {
+            return true
+        }
+        return false
+    }
+
+    private var tryWakePhraseStatus: String {
+        switch appState.voiceActivationDisplayState {
+        case .off:
+            return "Voice Activation is off."
+        case .suspended:
+            return "Paused — the microphone is in use elsewhere or unavailable."
+        case .ready:
+            return "Try it: say “Hey Suniye.” The bars should move as you speak; if they stay flat, check the Microphone permission."
+        case .listening:
+            return "Heard it — listening. Say a task, or wait to return to ready."
+        case .transcribing:
+            return "Transcribing your turn…"
+        case .followUpWindow:
+            return "Follow-up window open — speak to continue without the wake phrase."
         }
     }
 
