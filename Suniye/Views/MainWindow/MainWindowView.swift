@@ -64,8 +64,7 @@ struct MainWindowView: View {
                 ComputerUsePage(
                     coordinator: appState.computerUseCoordinator,
                     modelSettings: appState.computerUseModelSettings,
-                    appState: appState,
-                    onPageActiveChange: appState.setComputerUsePageActive
+                    appState: appState
                 )
             case .history:
                 HistoryPage(appState: appState)

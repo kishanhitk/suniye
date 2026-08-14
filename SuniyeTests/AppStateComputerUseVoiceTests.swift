@@ -95,92 +95,15 @@ final class AppStateComputerUseVoiceTests: XCTestCase {
         XCTAssertNil(appState.lastError)
     }
 
-    func testDictationSubmitsComputerUseTaskWithoutInsertion() async {
-        let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = makeValidCapturedAudio()
-        let transcription = StubTranscriptionService()
-        transcription.transcribeResult = .success("check the connected Bluetooth devices")
-        let insertion = SpyTextInsertionService()
-        let agent = VoiceTaskComputerUseAgent()
-        let coordinator = makeReadyCoordinator(agent: agent)
-        let started = expectation(description: "recording started")
-        audioCapture.onStartCapture = { _ in started.fulfill() }
-
-        let appState = makeTestAppState(
-            transcriptionService: transcription,
-            audioCaptureService: audioCapture,
-            textInsertionService: insertion,
-            computerUseCoordinator: coordinator
-        )
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = false
-        appState.setComputerUsePageActive(true)
-
-        appState.startRecordingFromUI()
-        await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
-        await waitUntilVoiceTaskFinishes(appState, coordinator: coordinator)
-
-        let tasks = await agent.receivedTasks()
-        XCTAssertEqual(tasks.map(\.instruction), ["check the connected Bluetooth devices"])
-        XCTAssertTrue(insertion.insertedTexts.isEmpty)
-        XCTAssertTrue(insertion.copiedTexts.isEmpty)
-        XCTAssertEqual(appState.phase, .ready)
-        XCTAssertNil(appState.lastError)
-    }
-
-    func testVoiceTaskDuringRunBecomesAnInterventionWithoutInsertion() async {
-        let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = makeValidCapturedAudio()
-        let transcription = StubTranscriptionService()
-        transcription.transcribeResult = .success("try another task")
-        let insertion = SpyTextInsertionService()
-        let coordinator = makeReadyCoordinator(agent: SuspendedVoiceTaskComputerUseAgent())
-        coordinator.draft = "Existing task"
-        coordinator.submit()
-        let started = expectation(description: "recording started")
-        audioCapture.onStartCapture = { _ in started.fulfill() }
-
-        let appState = makeTestAppState(
-            transcriptionService: transcription,
-            audioCaptureService: audioCapture,
-            textInsertionService: insertion,
-            computerUseCoordinator: coordinator
-        )
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.setComputerUsePageActive(true)
-
-        appState.startRecordingFromUI()
-        await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
-        for _ in 0..<100 where appState.phase != .ready {
-            await Task.yield()
-        }
-
-        XCTAssertTrue(insertion.insertedTexts.isEmpty)
-        XCTAssertTrue(insertion.copiedTexts.isEmpty)
-        XCTAssertNil(appState.lastError)
-        XCTAssertEqual(
-            coordinator.conversation.filter { $0.role == .user }.map(\.text),
-            ["Existing task", "try another task"]
-        )
-        coordinator.stop()
-    }
-
-    func testLeavingComputerUsePageDoesNotCancelQueuedTask() {
+    func testVoiceTaskStaysQueuedWhilePermissionsAreMissing() {
         let coordinator = ComputerUseCoordinator(
             permissions: VoiceTaskComputerUsePermissions(),
             initialPermissionSnapshot: .notGranted,
             makeAgent: { _, _, _ in VoiceTaskComputerUseAgent() }
         )
         coordinator.configureModel(testConfiguration)
-        let appState = makeTestAppState(computerUseCoordinator: coordinator)
-        appState.setComputerUsePageActive(true)
 
         XCTAssertEqual(coordinator.submitVoiceTask("Check battery health"), .queued)
-        appState.setComputerUsePageActive(false)
 
         XCTAssertTrue(coordinator.isVoiceTaskPending)
     }

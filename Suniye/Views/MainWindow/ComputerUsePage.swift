@@ -5,19 +5,16 @@ struct ComputerUsePage: View {
     @Bindable var coordinator: ComputerUseCoordinator
     @Bindable var modelSettings: ComputerUseModelSettingsController
     @Bindable var appState: AppState
-    let onPageActiveChange: (Bool) -> Void
     @State private var copiedDebugSessionID: ComputerUseDebugSessionID?
 
     init(
         coordinator: ComputerUseCoordinator,
         modelSettings: ComputerUseModelSettingsController,
-        appState: AppState,
-        onPageActiveChange: @escaping (Bool) -> Void = { _ in }
+        appState: AppState
     ) {
         self.coordinator = coordinator
         self.modelSettings = modelSettings
         self.appState = appState
-        self.onPageActiveChange = onPageActiveChange
     }
 
     var body: some View {
@@ -28,12 +25,6 @@ struct ComputerUsePage: View {
             composer
         }
         .background(MainWindowPalette.windowBackground)
-        .onAppear {
-            onPageActiveChange(true)
-        }
-        .onDisappear {
-            onPageActiveChange(false)
-        }
         .task {
             await coordinator.refreshPermissions()
         }
