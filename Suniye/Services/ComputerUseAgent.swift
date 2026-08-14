@@ -293,16 +293,16 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
                 .computerUseToolFailed(
                     tool: .unknown,
                     target: TargetCategoryMapper.category(for: targetApp),
-                    reason: AnalyticsMapping.computerUseFailureReason(error)
+                    reason: ComputerUseAnalyticsMapping.computerUseFailureReason(error)
                 )
             )
             return
         }
         analytics.track(
             .computerUseToolFailed(
-                tool: AnalyticsMapping.computerUseTool(tool),
+                tool: ComputerUseAnalyticsMapping.computerUseTool(tool),
                 target: TargetCategoryMapper.category(for: targetApp),
-                reason: AnalyticsMapping.computerUseFailureReason(error)
+                reason: ComputerUseAnalyticsMapping.computerUseFailureReason(error)
             )
         )
     }
@@ -319,7 +319,7 @@ actor ComputerUseAgent: ComputerUseAgentRunning {
         analytics.track(
             .computerUseRun(
                 ComputerUseRunMetrics(
-                    outcome: AnalyticsMapping.computerUseOutcome(outcome),
+                    outcome: ComputerUseAnalyticsMapping.computerUseOutcome(outcome),
                     steps: steps,
                     toolFailures: toolFailureCount,
                     durationMs: Int(elapsed / .milliseconds(1)),

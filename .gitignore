@@ -12,3 +12,4 @@ website/.wrangler/
 Suniye/LocalLLM/
 Suniye.xcodeproj/project.xcworkspace/xcuserdata/
 Suniye.xcodeproj/xcuserdata/
+evals/runs/cu_eval_*.json

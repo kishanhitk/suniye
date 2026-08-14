@@ -1,0 +1,42 @@
+{
+  "trials": 3,
+  "tasks": [
+    {
+      "id": "open-calculator",
+      "prompt": "Uh open the calculator app",
+      "verify": { "type": "shell", "command": "pgrep -x Calculator" },
+      "reset": "pkill -x Calculator || true",
+      "timeoutSeconds": 120
+    },
+    {
+      "id": "macos-version",
+      "prompt": "Uh what macOS version am I running?",
+      "verify": {
+        "type": "answer",
+        "pattern": "(?i)(tahoe|golden gate|2[0-9]([\\.,][0-9])?|version .*(zero|one|two|three|four|five|six|seven|eight|nine))"
+      },
+      "timeoutSeconds": 180
+    },
+    {
+      "id": "create-note",
+      "prompt": "open the Notes app and write a new note that says buy milk and eggs",
+      "verify": { "type": "shell", "command": "pgrep -x Notes" },
+      "reset": "pkill -x Notes || true",
+      "timeoutSeconds": 240
+    },
+    {
+      "id": "textedit-type-and-save",
+      "prompt": "open TextEdit, type the sentence the quick brown fox, and save it to the desktop as fox.txt",
+      "verify": { "type": "shell", "command": "test -f ~/Desktop/fox.txt && grep -qi 'quick brown fox' ~/Desktop/fox.txt" },
+      "reset": "pkill -x TextEdit || true; rm -f ~/Desktop/fox.txt",
+      "timeoutSeconds": 300
+    },
+    {
+      "id": "enable-dark-mode",
+      "prompt": "turn on dark mode in System Settings",
+      "verify": { "type": "shell", "command": "defaults read -g AppleInterfaceStyle 2>/dev/null | grep -qi dark" },
+      "reset": "osascript -e 'tell application \"System Events\" to tell appearance preferences to set dark mode to false' 2>/dev/null || true; pkill -x 'System Settings' || true",
+      "timeoutSeconds": 300
+    }
+  ]
+}
