@@ -411,93 +411,127 @@ final class AppState {
     }
     var hotkeyConfiguration: HotkeyConfiguration = .globe {
         didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            guard oldValue != hotkeyConfiguration else {
-                return
-            }
-            guard hotkeyConfiguration != pasteLastTranscriptHotkeyConfiguration else {
-                hotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
-                onStateChange?()
-                return
-            }
-            hotkeyValidationMessage = nil
-            // Collision policy lives at this settings boundary: the Edit Mode slot always yields.
-            if editModeHotkeyConfiguration == hotkeyConfiguration {
-                editModeHotkeyConfiguration = nil
-                AppLogger.shared.log(.warning, "edit mode hotkey cleared: matched new dictation hotkey")
-                showTransientIndicatorError("Edit Mode shortcut cleared: it matched dictation")
-            }
-            persistGeneralSettings()
-            if runtimeServicesEnabled {
-                wireHotkey()
-            }
-            onStateChange?()
+            resolveHotkeyChange(of: .dictation, from: oldValue, to: hotkeyConfiguration)
         }
     }
     private(set) var pasteLastTranscriptHotkeyConfiguration: HotkeyConfiguration = .pasteLastTranscriptDefault {
         didSet {
-            guard !isHydratingGeneralSettings, oldValue != pasteLastTranscriptHotkeyConfiguration else {
-                return
-            }
-            guard pasteLastTranscriptHotkeyConfiguration.isModifiedKeyCombo else {
-                pasteLastTranscriptHotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Paste Last Transcript requires at least one modifier key."
-                onStateChange?()
-                return
-            }
-            guard pasteLastTranscriptHotkeyConfiguration != hotkeyConfiguration else {
-                pasteLastTranscriptHotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
-                onStateChange?()
-                return
-            }
-            guard pasteLastTranscriptHotkeyConfiguration != editModeHotkeyConfiguration else {
-                pasteLastTranscriptHotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
-                onStateChange?()
-                return
-            }
-            hotkeyValidationMessage = nil
-            persistGeneralSettings()
-            if runtimeServicesEnabled {
-                wireHotkey()
-            }
-            if isShowingInsertionRecoveryWarning {
-                showInsertionRecoveryWarning()
-            }
-            onStateChange?()
+            resolveHotkeyChange(of: .pasteLastTranscript, from: oldValue, to: pasteLastTranscriptHotkeyConfiguration)
         }
     }
     var hotkeyValidationMessage: String?
     var editModeHotkeyConfiguration: HotkeyConfiguration? {
         didSet {
-            guard !isHydratingGeneralSettings, oldValue != editModeHotkeyConfiguration else {
-                return
-            }
-            if let editModeHotkeyConfiguration {
-                if editModeHotkeyConfiguration == hotkeyConfiguration {
-                    self.editModeHotkeyConfiguration = oldValue == hotkeyConfiguration ? nil : oldValue
-                    AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches dictation hotkey")
-                    showTransientIndicatorError("Edit Mode shortcut must differ from dictation")
-                    return
-                }
-                if editModeHotkeyConfiguration == pasteLastTranscriptHotkeyConfiguration {
-                    self.editModeHotkeyConfiguration = oldValue == pasteLastTranscriptHotkeyConfiguration ? nil : oldValue
-                    hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
-                    AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches paste last transcript hotkey")
-                    showTransientIndicatorError("Edit Mode shortcut must differ from Paste Last Transcript")
-                    return
-                }
-            }
+            resolveHotkeyChange(of: .editMode, from: oldValue, to: editModeHotkeyConfiguration)
+        }
+    }
+    var computerUseHotkeyConfiguration: HotkeyConfiguration? = nil {
+        didSet {
+            resolveHotkeyChange(of: .computerUse, from: oldValue, to: computerUseHotkeyConfiguration)
+        }
+    }
+
+    private var isResolvingHotkeyChange = false
+
+    /// The four shortcut properties exist for SwiftUI bindings; the collision
+    /// policy lives in `HotkeySlotAssignments`. Every setter funnels through
+    /// here: build the pre-change assignments, apply the proposed change, then
+    /// write back whatever the policy decided.
+    private func resolveHotkeyChange(
+        of slot: HotkeySlotAssignments.Slot,
+        from oldValue: HotkeyConfiguration?,
+        to proposed: HotkeyConfiguration?
+    ) {
+        guard !isHydratingGeneralSettings, !isResolvingHotkeyChange, oldValue != proposed else {
+            return
+        }
+        var assignments = hotkeySlotAssignments
+        switch slot {
+        case .dictation: assignments.dictation = oldValue ?? assignments.dictation
+        case .pasteLastTranscript: assignments.pasteLastTranscript = oldValue ?? assignments.pasteLastTranscript
+        case .editMode: assignments.editMode = oldValue
+        case .computerUse: assignments.computerUse = oldValue
+        }
+        let outcome = assignments.assign(proposed, to: slot)
+        isResolvingHotkeyChange = true
+        applyHotkeySlotAssignments(assignments)
+        isResolvingHotkeyChange = false
+        switch outcome {
+        case .applied(let cleared):
             hotkeyValidationMessage = nil
+            for clearedSlot in cleared {
+                reportHotkeySlotCleared(clearedSlot)
+            }
             persistGeneralSettings()
             if runtimeServicesEnabled {
                 wireHotkey()
             }
-            onStateChange?()
+            if slot == .pasteLastTranscript, isShowingInsertionRecoveryWarning {
+                showInsertionRecoveryWarning()
+            }
+        case .rejected(let rejection):
+            reportHotkeyRejection(rejection, of: slot)
+        }
+        onStateChange?()
+    }
+
+    private var hotkeySlotAssignments: HotkeySlotAssignments {
+        HotkeySlotAssignments(
+            dictation: hotkeyConfiguration,
+            pasteLastTranscript: pasteLastTranscriptHotkeyConfiguration,
+            editMode: editModeHotkeyConfiguration,
+            computerUse: computerUseHotkeyConfiguration
+        )
+    }
+
+    private func applyHotkeySlotAssignments(_ assignments: HotkeySlotAssignments) {
+        hotkeyConfiguration = assignments.dictation
+        pasteLastTranscriptHotkeyConfiguration = assignments.pasteLastTranscript
+        editModeHotkeyConfiguration = assignments.editMode
+        computerUseHotkeyConfiguration = assignments.computerUse
+    }
+
+    private func reportHotkeySlotCleared(_ slot: HotkeySlotAssignments.Slot) {
+        switch slot {
+        case .editMode:
+            AppLogger.shared.log(.warning, "edit mode hotkey cleared: matched new dictation hotkey")
+            showTransientIndicatorError("Edit Mode shortcut cleared: it matched dictation")
+        case .computerUse:
+            AppLogger.shared.log(.warning, "computer use hotkey cleared: matched new dictation hotkey")
+            showTransientIndicatorError("Run Task shortcut cleared: it matched dictation")
+        case .dictation, .pasteLastTranscript:
+            break
+        }
+    }
+
+    private func reportHotkeyRejection(
+        _ rejection: HotkeySlotAssignments.Rejection,
+        of slot: HotkeySlotAssignments.Slot
+    ) {
+        switch (slot, rejection) {
+        case (.dictation, _):
+            hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
+        case (.pasteLastTranscript, .missingModifier):
+            hotkeyValidationMessage = "Paste Last Transcript requires at least one modifier key."
+        case (.pasteLastTranscript, .collision(.dictation)):
+            hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
+        case (.pasteLastTranscript, .collision(.editMode)):
+            hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
+        case (.pasteLastTranscript, .collision):
+            hotkeyValidationMessage = "Paste Last Transcript and Run Task must use different shortcuts."
+        case (.editMode, .collision(.dictation)):
+            AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches dictation hotkey")
+            showTransientIndicatorError("Edit Mode shortcut must differ from dictation")
+        case (.editMode, .collision(.pasteLastTranscript)):
+            hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
+            AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches paste last transcript hotkey")
+            showTransientIndicatorError("Edit Mode shortcut must differ from Paste Last Transcript")
+        case (.editMode, _):
+            AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches computer use hotkey")
+            showTransientIndicatorError("Edit Mode shortcut is already in use")
+        case (.computerUse, _):
+            AppLogger.shared.log(.warning, "computer use hotkey rejected: matches another hotkey")
+            showTransientIndicatorError("Run Task shortcut is already in use")
         }
     }
     var selectedASRModelID: ASRModelID = .parakeetV3 {
@@ -1523,6 +1557,8 @@ final class AppState {
     private let magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol
     private let generalSettingsStore: GeneralSettingsStoreProtocol
     private let historyStore: HistoryStoreProtocol
+    let computerUseCoordinator: ComputerUseCoordinator
+    let computerUseModelSettings: ComputerUseModelSettingsController
     private let keychainService: KeychainServiceProtocol
     private let appUpdateController: AppUpdateControllerProtocol
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
@@ -1581,6 +1617,11 @@ final class AppState {
     private var activeRecordingSource: RecordingSource? { activeDictationSession?.context.source }
     private var recordingStart: Date? { activeDictationSession?.context.startedAt }
     private var overlayErrorResetTask: Task<Void, Never>?
+    @ObservationIgnored private lazy var computerUseIndicatorPresenter = ComputerUseIndicatorPresenter(
+        currentState: { [weak self] in self?.floatingIndicatorState ?? .idle },
+        setState: { [weak self] state in self?.setFloatingIndicatorState(state) },
+        showError: { [weak self] message in self?.showTransientIndicatorError(message) }
+    )
     private var isShowingInsertionRecoveryWarning = false
     private var asrDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
@@ -1602,13 +1643,14 @@ final class AppState {
         case systemInsertion
         case clipboardOnly
         case onboardingPractice
+        case computerUseTask
         case editRewrite(selectedText: String?)
 
         var needsAccessibility: Bool {
             switch self {
             case .systemInsertion, .editRewrite:
                 true
-            case .clipboardOnly, .onboardingPractice:
+            case .clipboardOnly, .onboardingPractice, .computerUseTask:
                 false
             }
         }
@@ -1621,6 +1663,8 @@ final class AppState {
                 .clipboard
             case .onboardingPractice:
                 .onboardingPractice
+            case .computerUseTask:
+                .unknown
             }
         }
     }
@@ -1642,6 +1686,10 @@ final class AppState {
         magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol = MagicFormatPromptFileStore(),
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
         historyStore: HistoryStoreProtocol = HistoryStore(),
+        computerUseCoordinator: ComputerUseCoordinator? = nil,
+        computerUseModelSettingsStore: ComputerUseModelSettingsStoreProtocol = ComputerUseModelSettingsStore(),
+        computerUseCredentialStore: ComputerUseCredentialStoring = ComputerUseCredentialStore(),
+        computerUseConnectionTester: ComputerUseModelConnectionTesting = ComputerUseModelConnectionTester(),
         keychainService: KeychainServiceProtocol = KeychainService(),
         appUpdateController: AppUpdateControllerProtocol? = nil,
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
@@ -1707,6 +1755,26 @@ final class AppState {
         self.magicFormatPromptFileStore = magicFormatPromptFileStore
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
+        let ownsComputerUseCoordinator = computerUseCoordinator == nil
+        let resolvedComputerUseCoordinator = computerUseCoordinator ?? ComputerUseCoordinator(
+            conversationStore: startServices
+                ? ComputerUseConversationStore()
+                : NoopComputerUseConversationStore(),
+            analytics: analytics
+        )
+        self.computerUseCoordinator = resolvedComputerUseCoordinator
+        computerUseModelSettings = ComputerUseModelSettingsController(
+            settingsStore: computerUseModelSettingsStore,
+            credentialStore: computerUseCredentialStore,
+            sharedOpenRouterCredentialStore: MagicFormatOpenRouterCredentialStore(
+                keychainService: keychainService
+            ),
+            connectionTester: computerUseConnectionTester,
+            onConfigurationChange: { configuration in
+                guard ownsComputerUseCoordinator else { return }
+                resolvedComputerUseCoordinator.configureModel(configuration)
+            }
+        )
         self.keychainService = keychainService
         self.appUpdateController = appUpdateController ?? AppUpdateControllerFactory.makeDefault()
         self.launchAtLoginService = launchAtLoginService
@@ -1742,6 +1810,9 @@ final class AppState {
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
         self.appUpdateController.onStateChange = { [weak self] in
             self?.refreshUpdateControllerState()
+        }
+        resolvedComputerUseCoordinator.onPhaseChange = { [weak self] phase in
+            self?.handleComputerUsePhaseChange(phase)
         }
         self.editLearningService.onLearnedTerms = { [weak self] terms in
             self?.handleLearnedVocabularyTerms(terms)
@@ -1781,6 +1852,12 @@ final class AppState {
         refreshInputDevices()
         refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
+        computerUseModelSettings.onSharedOpenRouterCredentialChange = { [weak self] in
+            self?.refreshLLMKeyStatus()
+            self?.clearMagicFormatSetupTestResult()
+            self?.onStateChange?()
+        }
+        computerUseModelSettings.publishConfiguration()
         refreshLocalGemmaInstallState()
 
         if floatingIndicatorEnabled {
@@ -1854,6 +1931,7 @@ final class AppState {
         }
         statusText = "Checking permissions..."
         await refreshPermissions()
+        await computerUseCoordinator.refreshPermissions()
 
         statusText = "Checking model..."
         let bootstrapCandidates = orderedInstalledASRModelIDs()
@@ -2282,6 +2360,7 @@ final class AppState {
             try keychainService.setLLMKey(normalized)
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
+            computerUseModelSettings.publishConfiguration()
             clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key saved")
         } catch {
@@ -2296,6 +2375,7 @@ final class AppState {
             try keychainService.deleteLLMKey()
             llmKeyOperationError = nil
             refreshLLMKeyStatus()
+            computerUseModelSettings.publishConfiguration()
             clearMagicFormatSetupTestResult()
             AppLogger.shared.log(.info, "llm api key cleared")
         } catch {
@@ -3247,6 +3327,10 @@ final class AppState {
     }
 
     func toggleFloatingIndicatorRecording() {
+        if computerUseCoordinator.isRunning {
+            computerUseCoordinator.stop()
+            return
+        }
         Task { @MainActor in
             switch phase {
             case .ready:
@@ -3275,6 +3359,13 @@ final class AppState {
         Task { @MainActor in
             await beginRecordingFlow(trigger: .manual)
         }
+    }
+
+    func startNewComputerUseConversation() {
+        guard !computerUseCoordinator.isRunning else { return }
+        computerUseIndicatorPresenter.cancelReset()
+        computerUseCoordinator.startNewConversation()
+        setFloatingIndicatorState(.idle)
     }
 
     func stopRecordingFromUI() {
@@ -3412,6 +3503,10 @@ final class AppState {
             try? await Task.sleep(nanoseconds: 220_000_000)
             setFloatingIndicatorState(.processing())
             try? await Task.sleep(nanoseconds: 220_000_000)
+            setFloatingIndicatorState(.computerUseWorking)
+            try? await Task.sleep(nanoseconds: 440_000_000)
+            setFloatingIndicatorState(.computerUseCompleted)
+            try? await Task.sleep(nanoseconds: 220_000_000)
             showTransientIndicatorError("Microphone permission required", restoreState: .idle, duration: 0.35)
             try? await Task.sleep(nanoseconds: 900_000_000)
             AppLogger.shared.log(.info, "e2e indicator smoke done")
@@ -3484,6 +3579,35 @@ final class AppState {
             }
         }
 
+        hotkeyService.onComputerUseHotkeyDown = { [weak self] in
+            AppLogger.shared.log(.debug, "computer use hotkey callback: down")
+            Task { @MainActor in
+                await self?.beginRecordingFlow(
+                    trigger: .computerUseHotkey,
+                    destination: .computerUseTask
+                )
+            }
+        }
+
+        hotkeyService.onComputerUseHotkeyUp = { [weak self] in
+            AppLogger.shared.log(.debug, "computer use hotkey callback: up")
+            Task { @MainActor in
+                await self?.stopRecordingAndTranscribe(trigger: .computerUseHotkey)
+            }
+        }
+
+        hotkeyService.onCancel = { [weak self] in
+            guard let self,
+                  self.phase == .recording,
+                  self.activeDictationSession?.context.destination == .computerUseTask else {
+                return false
+            }
+            Task { @MainActor in
+                await self.cancelComputerUseRecording()
+            }
+            return true
+        }
+
         hotkeyService.onPasteLastTranscript = { [weak self] in
             AppLogger.shared.log(.debug, "paste last transcript hotkey callback")
             Task { @MainActor in
@@ -3491,15 +3615,29 @@ final class AppState {
             }
         }
 
-        hotkeyService.startMonitoring(
-            configuration: hotkeyConfiguration,
-            editModeConfiguration: editModeHotkeyConfiguration,
-            pasteLastTranscriptConfiguration: pasteLastTranscriptHotkeyConfiguration
-        )
+        hotkeyService.startMonitoring(assignments: hotkeySlotAssignments)
         AppLogger.shared.log(
             .info,
-            "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off") pasteLast=\(pasteLastTranscriptHotkeyConfiguration.displayString)"
+            "hotkey monitoring started configuration=\(hotkeyConfiguration.displayString) editMode=\(editModeHotkeyConfiguration?.displayString ?? "off") computerUse=\(computerUseHotkeyConfiguration?.displayString ?? "off") pasteLast=\(pasteLastTranscriptHotkeyConfiguration.displayString)"
         )
+    }
+
+    private func cancelComputerUseRecording() async {
+        guard phase == .recording,
+              let context = activeDictationSession?.context,
+              context.destination == .computerUseTask else {
+            return
+        }
+        await audioCaptureService.cancelCapture(sessionID: context.id, reason: nil)
+        guard activeAudioCaptureSessionID == context.id else {
+            return
+        }
+        clearActiveDictationSession(sessionID: context.id)
+        phase = .ready
+        statusText = "Ready"
+        lastError = nil
+        setFloatingIndicatorState(.idle)
+        AppLogger.shared.log(.info, "computer use voice recording cancelled")
     }
 
     private func orderedInstalledASRModelIDs(excluding excludedModelIDs: Set<ASRModelID> = []) -> [ASRModelID] {
@@ -3796,6 +3934,11 @@ final class AppState {
                     source: context.source,
                     destination: destination
                 )
+            case .computerUseTask:
+                completeComputerUseVoiceTask(
+                    rawText: rawText,
+                    sessionID: sessionID
+                )
             case .onboardingPractice:
                 await completeOnboardingPracticeDictation(
                     rawText: rawText,
@@ -3821,6 +3964,33 @@ final class AppState {
                 indicatorMessage: "Transcription failed"
             )
         }
+    }
+
+    private func completeComputerUseVoiceTask(
+        rawText: String,
+        sessionID: UUID
+    ) {
+        guard !rawText.isEmpty else {
+            failDictationSession(
+                sessionID: sessionID,
+                lastErrorMessage: "No Computer Use task was transcribed.",
+                indicatorMessage: "No task heard"
+            )
+            return
+        }
+        if case let .rejected(message) = computerUseCoordinator.submitVoiceTask(rawText) {
+            failDictationSession(
+                sessionID: sessionID,
+                lastErrorMessage: message,
+                indicatorMessage: message
+            )
+            return
+        }
+        completeDictationSession(
+            sessionID: sessionID,
+            playSuccessSound: true,
+            finalIndicatorState: computerUseCoordinator.isRunning ? .computerUseWorking : .idle
+        )
     }
 
     private func completeDictation(
@@ -4118,7 +4288,11 @@ final class AppState {
     }
 
     /// Shared success epilogue for every dictation/edit session.
-    private func completeDictationSession(sessionID: UUID, playSuccessSound: Bool) {
+    private func completeDictationSession(
+        sessionID: UUID,
+        playSuccessSound: Bool,
+        finalIndicatorState: FloatingIndicatorState = .idle
+    ) {
         if playSuccessSound {
             playSoundFeedback(.transcriptionSucceeded)
         }
@@ -4126,7 +4300,7 @@ final class AppState {
         lastError = nil
         phase = .ready
         statusText = "Ready"
-        setFloatingIndicatorState(.idle)
+        setFloatingIndicatorState(finalIndicatorState)
     }
 
     /// Shared failure epilogue; pass nil to leave the current lastError untouched.
@@ -4211,48 +4385,32 @@ final class AppState {
         totalDictationSeconds = recentResults.reduce(0) { $0 + $1.durationSeconds }
     }
 
-    private static func normalizedPasteLastTranscriptHotkey(
-        _ configuredHotkey: HotkeyConfiguration,
-        dictationHotkey: HotkeyConfiguration,
-        editModeHotkey: HotkeyConfiguration?
-    ) -> HotkeyConfiguration {
-        let fallbackModifiers: [UInt32] = [
-            UInt32(controlKey | cmdKey),
-            UInt32(controlKey | optionKey | cmdKey),
-            UInt32(controlKey | shiftKey | cmdKey),
-            UInt32(controlKey | optionKey | shiftKey | cmdKey),
-        ]
-        let candidates = [configuredHotkey] + fallbackModifiers.map {
-            HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: $0)
-        }
-
-        return candidates.first { candidate in
-            candidate.isModifiedKeyCombo
-                && candidate != dictationHotkey
-                && candidate != editModeHotkey
-        } ?? .pasteLastTranscriptDefault
+    private static let pasteLastTranscriptFallbackHotkeys: [HotkeyConfiguration] = [
+        UInt32(controlKey | cmdKey),
+        UInt32(controlKey | optionKey | cmdKey),
+        UInt32(controlKey | shiftKey | cmdKey),
+        UInt32(controlKey | optionKey | shiftKey | cmdKey),
+    ].map {
+        HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: $0)
     }
 
     private func loadGeneralSettings() {
         isHydratingGeneralSettings = true
         let settings = generalSettingsStore.load()
-        let normalizedPasteLastTranscriptHotkey = Self.normalizedPasteLastTranscriptHotkey(
-            settings.pasteLastTranscriptHotkeyConfiguration,
-            dictationHotkey: settings.hotkeyConfiguration,
-            editModeHotkey: settings.editModeHotkeyConfiguration
+        let (normalizedHotkeys, changedHotkeySlots) = HotkeySlotAssignments.normalized(
+            dictation: settings.hotkeyConfiguration,
+            pasteLastTranscript: settings.pasteLastTranscriptHotkeyConfiguration,
+            editMode: settings.editModeHotkeyConfiguration,
+            computerUse: settings.computerUseHotkeyConfiguration,
+            pasteFallbacks: Self.pasteLastTranscriptFallbackHotkeys
         )
-        let normalizedEditModeHotkey = settings.editModeHotkeyConfiguration == settings.hotkeyConfiguration
-            || settings.editModeHotkeyConfiguration == normalizedPasteLastTranscriptHotkey
-            ? nil
-            : settings.editModeHotkeyConfiguration
-        let didNormalizeHotkeys = normalizedPasteLastTranscriptHotkey != settings.pasteLastTranscriptHotkeyConfiguration
-            || normalizedEditModeHotkey != settings.editModeHotkeyConfiguration
         selectedInputDeviceID = settings.preferredInputDeviceID
         preferredInputDeviceName = settings.preferredInputDeviceName
         autoSubmitEnabled = settings.autoSubmitEnabled
-        hotkeyConfiguration = settings.hotkeyConfiguration
-        pasteLastTranscriptHotkeyConfiguration = normalizedPasteLastTranscriptHotkey
-        editModeHotkeyConfiguration = normalizedEditModeHotkey
+        hotkeyConfiguration = normalizedHotkeys.dictation
+        pasteLastTranscriptHotkeyConfiguration = normalizedHotkeys.pasteLastTranscript
+        editModeHotkeyConfiguration = normalizedHotkeys.editMode
+        computerUseHotkeyConfiguration = normalizedHotkeys.computerUse
         echoCancellationEnabled = settings.echoCancellationEnabled
         soundFeedbackEnabled = settings.soundFeedbackEnabled
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
@@ -4280,7 +4438,7 @@ final class AppState {
         )
         isHydratingGeneralSettings = false
         applyUpdateChannelToController()
-        if needsProgressMigration || needsFirstLaunchMigration || didNormalizeHotkeys {
+        if needsProgressMigration || needsFirstLaunchMigration || !changedHotkeySlots.isEmpty {
             persistGeneralSettings()
         }
     }
@@ -4309,6 +4467,7 @@ final class AppState {
             hotkeyConfiguration: hotkeyConfiguration,
             pasteLastTranscriptHotkeyConfiguration: pasteLastTranscriptHotkeyConfiguration,
             editModeHotkeyConfiguration: editModeHotkeyConfiguration,
+            computerUseHotkeyConfiguration: computerUseHotkeyConfiguration,
             echoCancellationEnabled: echoCancellationEnabled,
             soundFeedbackEnabled: soundFeedbackEnabled,
             hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,
@@ -4348,6 +4507,7 @@ final class AppState {
         clearMagicFormatSetupTestResult()
         let settings = currentLLMSettings()
         llmSettingsStore.save(settings)
+        computerUseModelSettings.publishConfiguration()
         onStateChange?()
     }
 
@@ -4570,6 +4730,14 @@ final class AppState {
         floatingIndicatorState = state
         guard floatingIndicatorEnabled else { return }
         floatingIndicatorController.update(state)
+    }
+
+    private func handleComputerUsePhaseChange(_ phase: ComputerUseCoordinatorPhase) {
+        computerUseIndicatorPresenter.handlePhase(
+            phase,
+            errorMessage: computerUseCoordinator.errorMessage,
+            indicatorAvailable: activeDictationSession == nil
+        )
     }
 
     private func startMagicFormatSlowWarningTask() -> Task<Void, Never> {

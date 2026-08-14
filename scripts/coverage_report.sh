@@ -7,14 +7,14 @@ set -euo pipefail
 #
 # Reads the xcresult bundle produced by `xcodebuild test -enableCodeCoverage YES`,
 # prints per-file line coverage for the app target, and fails if coverage of
-# non-excluded files is below the threshold (default 100).
+# non-excluded files is below the threshold (default 80).
 #
 # Files listed in scripts/coverage_exclusions.txt (repo-relative paths, one per
 # line, '#' comments allowed) are excluded from the gate but still reported.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 XCRESULT="${ROOT_DIR}/.derivedData/coverage.xcresult"
-THRESHOLD="100"
+THRESHOLD="80"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

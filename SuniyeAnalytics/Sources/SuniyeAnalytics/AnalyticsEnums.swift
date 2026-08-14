@@ -124,6 +124,39 @@ public enum UpdateActionKind: String, Sendable, CaseIterable {
     case manualCheck = "manual_check", autoToggle = "auto_toggle", channelChange = "channel_change", completed
 }
 
+public enum ComputerUseOutcome: String, Sendable, CaseIterable {
+    case completed, cancelled, failed
+}
+
+public enum ComputerUseTool: String, Sendable, CaseIterable {
+    case listApps = "list_apps"
+    case getAppState = "get_app_state"
+    case click
+    case performSecondaryAction = "perform_secondary_action"
+    case setValue = "set_value"
+    case selectText = "select_text"
+    case scroll
+    case drag
+    case pressKey = "press_key"
+    case typeText = "type_text"
+    case unknown
+}
+
+public enum ComputerUseFailureReason: String, Sendable, CaseIterable {
+    case decodeFailed = "decode_failed"
+    case observationRequired = "observation_required"
+    case staleObservation = "stale_observation"
+    case elementUnavailable = "element_unavailable"
+    case elementChanged = "element_changed"
+    case elementDisabled = "element_disabled"
+    case actionUnavailable = "action_unavailable"
+    case textNotFound = "text_not_found"
+    case invalidArgument = "invalid_argument"
+    case screenLocked = "screen_locked"
+    case permissionDenied = "permission_denied"
+    case unknown
+}
+
 /// A small, closed set of feature toggles worth tracking adoption for.
 public enum TrackableFeature: String, Sendable, CaseIterable {
     case magicFormat = "magic_format"

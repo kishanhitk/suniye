@@ -6,12 +6,11 @@ protocol HotkeyServiceProtocol: AnyObject {
     var onHotkeyUp: (() -> Void)? { get set }
     var onEditModeHotkeyDown: (() -> Void)? { get set }
     var onEditModeHotkeyUp: (() -> Void)? { get set }
+    var onComputerUseHotkeyDown: (() -> Void)? { get set }
+    var onComputerUseHotkeyUp: (() -> Void)? { get set }
+    var onCancel: (() -> Bool)? { get set }
     var onPasteLastTranscript: (() -> Void)? { get set }
-    func startMonitoring(
-        configuration: HotkeyConfiguration,
-        editModeConfiguration: HotkeyConfiguration?,
-        pasteLastTranscriptConfiguration: HotkeyConfiguration
-    )
+    func startMonitoring(assignments: HotkeySlotAssignments)
     func stopMonitoring()
 }
 
@@ -27,52 +26,61 @@ final class HotkeyService: HotkeyServiceProtocol {
     enum Slot: UInt32 {
         case dictation = 1
         case editMode = 2
-        case pasteLastTranscript = 3
+        case computerUse = 3
+        case pasteLastTranscript = 4
     }
 
     var onHotkeyDown: (() -> Void)?
     var onHotkeyUp: (() -> Void)?
     var onEditModeHotkeyDown: (() -> Void)?
     var onEditModeHotkeyUp: (() -> Void)?
+    var onComputerUseHotkeyDown: (() -> Void)?
+    var onComputerUseHotkeyUp: (() -> Void)?
+    var onCancel: (() -> Bool)?
     var onPasteLastTranscript: (() -> Void)?
 
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
+    private var globeGlobalMonitor: Any?
+    private var globeLocalMonitor: Any?
+    private var cancellationGlobalMonitor: Any?
+    private var cancellationLocalMonitor: Any?
     private var carbonHotKeyRefs: [Slot: EventHotKeyRef] = [:]
     private var carbonEventHandlerRef: EventHandlerRef?
     private var heldSlots: Set<Slot> = []
     private var globeSlot: Slot?
 
-    func startMonitoring(
-        configuration: HotkeyConfiguration,
-        editModeConfiguration: HotkeyConfiguration?,
-        pasteLastTranscriptConfiguration: HotkeyConfiguration
-    ) {
+    /// Assignments arrive pairwise-distinct by construction
+    /// (`HotkeySlotAssignments` owns the collision policy), so registration is
+    /// unconditional.
+    func startMonitoring(assignments: HotkeySlotAssignments) {
         stopMonitoring()
 
-        register(configuration, for: .dictation)
-        if pasteLastTranscriptConfiguration == configuration {
-            AppLogger.shared.log(.warning, "paste last transcript hotkey ignored: matches dictation hotkey")
-        } else {
-            register(pasteLastTranscriptConfiguration, for: .pasteLastTranscript)
+        register(assignments.dictation, for: .dictation)
+        register(assignments.pasteLastTranscript, for: .pasteLastTranscript)
+        if let editMode = assignments.editMode {
+            register(editMode, for: .editMode)
         }
-        if let editModeConfiguration {
-            if editModeConfiguration == configuration || editModeConfiguration == pasteLastTranscriptConfiguration {
-                AppLogger.shared.log(.warning, "edit mode hotkey ignored: matches another hotkey")
-            } else {
-                register(editModeConfiguration, for: .editMode)
-            }
+        if let computerUse = assignments.computerUse {
+            register(computerUse, for: .computerUse)
+            installCancellationMonitorsIfNeeded()
         }
     }
 
     func stopMonitoring() {
-        if let globalMonitor {
-            NSEvent.removeMonitor(globalMonitor)
-            self.globalMonitor = nil
+        if let globeGlobalMonitor {
+            NSEvent.removeMonitor(globeGlobalMonitor)
+            self.globeGlobalMonitor = nil
         }
-        if let localMonitor {
-            NSEvent.removeMonitor(localMonitor)
-            self.localMonitor = nil
+        if let globeLocalMonitor {
+            NSEvent.removeMonitor(globeLocalMonitor)
+            self.globeLocalMonitor = nil
+        }
+        if let cancellationGlobalMonitor {
+            NSEvent.removeMonitor(cancellationGlobalMonitor)
+            self.cancellationGlobalMonitor = nil
+        }
+        if let cancellationLocalMonitor {
+            NSEvent.removeMonitor(cancellationLocalMonitor)
+            self.cancellationLocalMonitor = nil
         }
         for hotKeyRef in carbonHotKeyRefs.values {
             UnregisterEventHotKey(hotKeyRef)
@@ -123,17 +131,31 @@ final class HotkeyService: HotkeyServiceProtocol {
     }
 
     private func installGlobeMonitorsIfNeeded() {
-        guard globalMonitor == nil && localMonitor == nil else {
+        guard globeGlobalMonitor == nil && globeLocalMonitor == nil else {
             return
         }
 
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            self?.handle(event: event)
+        globeGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleGlobeEvent(event)
         }
 
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            self?.handle(event: event)
+        globeLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleGlobeEvent(event)
             return event
+        }
+    }
+
+    private func installCancellationMonitorsIfNeeded() {
+        guard cancellationGlobalMonitor == nil && cancellationLocalMonitor == nil else {
+            return
+        }
+
+        cancellationGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            _ = self?.handleCancellationEvent(event)
+        }
+
+        cancellationLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            self?.handleCancellationEvent(event) == true ? nil : event
         }
     }
 
@@ -164,7 +186,7 @@ final class HotkeyService: HotkeyServiceProtocol {
         return true
     }
 
-    private func handle(event: NSEvent) {
+    private func handleGlobeEvent(_ event: NSEvent) {
         guard event.type == .flagsChanged, let globeSlot else {
             return
         }
@@ -181,6 +203,13 @@ final class HotkeyService: HotkeyServiceProtocol {
             AppLogger.shared.log(.debug, "hotkey fn up keyCode=\(event.keyCode) slot=\(globeSlot.rawValue)")
             upCallback(for: globeSlot)?()
         }
+    }
+
+    private func handleCancellationEvent(_ event: NSEvent) -> Bool {
+        guard event.keyCode == UInt16(kVK_Escape) else {
+            return false
+        }
+        return onCancel?() ?? false
     }
 
     fileprivate func handleCarbonEvent(_ eventRef: EventRef?) -> OSStatus {
@@ -226,6 +255,8 @@ final class HotkeyService: HotkeyServiceProtocol {
             return onHotkeyDown
         case .editMode:
             return onEditModeHotkeyDown
+        case .computerUse:
+            return onComputerUseHotkeyDown
         case .pasteLastTranscript:
             // The recovery path may synthesize Command+V. Wait until the
             // physical shortcut key is released so the paste is not swallowed.
@@ -239,6 +270,8 @@ final class HotkeyService: HotkeyServiceProtocol {
             return onHotkeyUp
         case .editMode:
             return onEditModeHotkeyUp
+        case .computerUse:
+            return onComputerUseHotkeyUp
         case .pasteLastTranscript:
             return onPasteLastTranscript
         }

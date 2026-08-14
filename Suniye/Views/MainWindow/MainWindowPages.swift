@@ -548,6 +548,22 @@ struct GeneralPage: View {
                             .foregroundStyle(MainWindowPalette.secondaryText)
                         CardDivider()
                         HStack(spacing: 12) {
+                            Text("Hold to Run Task")
+                                .font(AppTypography.body)
+                            Spacer(minLength: 12)
+                            HotkeyRecorderButton(
+                                configuration: $appState.computerUseHotkeyConfiguration,
+                                idleIcon: "cursorarrow.motionlines",
+                                allowsClear: true,
+                                clearHelp: "Remove the Run Task shortcut"
+                            )
+                        }
+                        CardDivider()
+                        Text("Hold the shortcut, say what you want Suniye to do, then release. The task continues in the current Computer Use conversation without opening the window.")
+                            .font(AppTypography.subheadline)
+                            .foregroundStyle(MainWindowPalette.secondaryText)
+                        CardDivider()
+                        HStack(spacing: 12) {
                             Text("Paste Last Transcript")
                                 .font(AppTypography.body)
                             Spacer(minLength: 12)

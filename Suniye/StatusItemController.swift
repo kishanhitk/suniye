@@ -10,6 +10,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let finishSetupItem = NSMenuItem(title: "", action: #selector(openMainWindow), keyEquivalent: "")
     private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openMainWindow), keyEquivalent: "o")
     private let copyLastTranscriptItem = NSMenuItem(title: "Copy Last Transcript", action: #selector(copyLastTranscript), keyEquivalent: "")
+    private let newComputerUseConversationItem = NSMenuItem(
+        title: "New Computer Use Conversation",
+        action: #selector(startNewComputerUseConversation),
+        keyEquivalent: ""
+    )
     private let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
     private let reportIssueItem = NSMenuItem(title: "Report a Problem...", action: #selector(reportIssue), keyEquivalent: "")
@@ -35,6 +40,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         finishSetupItem.target = self
         openSettingsItem.target = self
         copyLastTranscriptItem.target = self
+        newComputerUseConversationItem.target = self
         checkUpdatesItem.target = self
         downloadItem.target = self
         reportIssueItem.target = self
@@ -46,6 +52,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(finishSetupItem)
         menu.addItem(openSettingsItem)
         menu.addItem(copyLastTranscriptItem)
+        menu.addItem(newComputerUseConversationItem)
         menu.addItem(.separator())
         menu.addItem(checkUpdatesItem)
         menu.addItem(downloadItem)
@@ -81,6 +88,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         checkUpdatesItem.target = self
 
         copyLastTranscriptItem.isEnabled = appState.lastTranscriptText != nil
+        newComputerUseConversationItem.isEnabled = !appState.computerUseCoordinator.isRunning
+            && !appState.computerUseCoordinator.conversation.isEmpty
 
         checkUpdatesItem.title = "Check for Updates..."
         checkUpdatesItem.action = #selector(checkForUpdates)
@@ -150,6 +159,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func copyLastTranscript() {
         let didCopy = appState.copyLastTranscript()
         AppLogger.shared.log(.info, "menu action: copy last transcript result=\(didCopy ? "copied" : "unavailable")")
+    }
+
+    @objc
+    private func startNewComputerUseConversation() {
+        AppLogger.shared.log(.info, "menu action: new computer use conversation")
+        appState.startNewComputerUseConversation()
     }
 
     @objc

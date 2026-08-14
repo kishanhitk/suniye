@@ -35,6 +35,14 @@ final class FloatingIndicatorAnimationKeyTests: XCTestCase {
             .processing(message: "Transcribing...")
         )
         XCTAssertEqual(
+            FloatingIndicatorState.computerUseWorking.layoutAnimationKey,
+            .computerUseWorking
+        )
+        XCTAssertEqual(
+            FloatingIndicatorState.computerUseCompleted.layoutAnimationKey,
+            .computerUseCompleted
+        )
+        XCTAssertEqual(
             FloatingIndicatorState.error(message: "boom").layoutAnimationKey,
             .error(message: "boom")
         )

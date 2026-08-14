@@ -367,6 +367,146 @@ enum UpdateChannel: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// Single owner of the four-shortcut collision policy. Every mutation path —
+/// settings setters, hydration of persisted values, and registration — goes
+/// through this type, so the pairwise-distinct invariant cannot drift per
+/// call site.
+struct HotkeySlotAssignments: Equatable {
+    enum Slot: CaseIterable {
+        case dictation
+        case pasteLastTranscript
+        case editMode
+        case computerUse
+    }
+
+    var dictation: HotkeyConfiguration
+    var pasteLastTranscript: HotkeyConfiguration
+    var editMode: HotkeyConfiguration?
+    var computerUse: HotkeyConfiguration?
+
+    subscript(slot: Slot) -> HotkeyConfiguration? {
+        switch slot {
+        case .dictation: return dictation
+        case .pasteLastTranscript: return pasteLastTranscript
+        case .editMode: return editMode
+        case .computerUse: return computerUse
+        }
+    }
+
+    enum Rejection: Equatable {
+        case missingModifier
+        case collision(Slot)
+    }
+
+    enum Outcome: Equatable {
+        case applied(cleared: [Slot])
+        case rejected(Rejection)
+    }
+
+    /// Applies one proposed change. Dictation is the primary shortcut: it
+    /// clears colliding optional slots. Every other slot is rejected on
+    /// collision, leaving the assignments unchanged. `nil` clears an optional
+    /// slot unconditionally; `nil` for a required slot is rejected.
+    mutating func assign(_ configuration: HotkeyConfiguration?, to slot: Slot) -> Outcome {
+        switch slot {
+        case .dictation:
+            guard let configuration else {
+                return .rejected(.collision(.dictation))
+            }
+            if configuration == pasteLastTranscript {
+                return .rejected(.collision(.pasteLastTranscript))
+            }
+            var cleared: [Slot] = []
+            if editMode == configuration {
+                editMode = nil
+                cleared.append(.editMode)
+            }
+            if computerUse == configuration {
+                computerUse = nil
+                cleared.append(.computerUse)
+            }
+            dictation = configuration
+            return .applied(cleared: cleared)
+        case .pasteLastTranscript:
+            guard let configuration else {
+                return .rejected(.collision(.pasteLastTranscript))
+            }
+            guard configuration.isModifiedKeyCombo else {
+                return .rejected(.missingModifier)
+            }
+            if let conflict = collision(of: configuration, excluding: slot) {
+                return .rejected(.collision(conflict))
+            }
+            pasteLastTranscript = configuration
+            return .applied(cleared: [])
+        case .editMode:
+            guard let configuration else {
+                editMode = nil
+                return .applied(cleared: [])
+            }
+            if let conflict = collision(of: configuration, excluding: slot) {
+                return .rejected(.collision(conflict))
+            }
+            editMode = configuration
+            return .applied(cleared: [])
+        case .computerUse:
+            guard let configuration else {
+                computerUse = nil
+                return .applied(cleared: [])
+            }
+            if let conflict = collision(of: configuration, excluding: slot) {
+                return .rejected(.collision(conflict))
+            }
+            computerUse = configuration
+            return .applied(cleared: [])
+        }
+    }
+
+    private func collision(of configuration: HotkeyConfiguration, excluding slot: Slot) -> Slot? {
+        Slot.allCases.first { $0 != slot && self[$0] == configuration }
+    }
+
+    /// Repairs persisted values that violate the invariant (for example a
+    /// hand-edited settings file). The paste shortcut walks a fallback ladder
+    /// because the slot is required; optional slots are cleared on collision.
+    static func normalized(
+        dictation: HotkeyConfiguration,
+        pasteLastTranscript: HotkeyConfiguration,
+        editMode: HotkeyConfiguration?,
+        computerUse: HotkeyConfiguration?,
+        pasteFallbacks: [HotkeyConfiguration]
+    ) -> (assignments: HotkeySlotAssignments, changed: Set<Slot>) {
+        var changed: Set<Slot> = []
+        let pasteCandidates = [pasteLastTranscript] + pasteFallbacks
+        let normalizedPaste = pasteCandidates.first { candidate in
+            candidate.isModifiedKeyCombo
+                && candidate != dictation
+                && candidate != editMode
+        } ?? .pasteLastTranscriptDefault
+        if normalizedPaste != pasteLastTranscript {
+            changed.insert(.pasteLastTranscript)
+        }
+        var normalizedEditMode = editMode
+        if editMode == dictation || editMode == normalizedPaste {
+            normalizedEditMode = nil
+            changed.insert(.editMode)
+        }
+        var normalizedComputerUse = computerUse
+        if computerUse != nil,
+           computerUse == dictation || computerUse == normalizedEditMode || computerUse == normalizedPaste {
+            normalizedComputerUse = nil
+            changed.insert(.computerUse)
+        }
+        let assignments = HotkeySlotAssignments(
+            dictation: dictation,
+            pasteLastTranscript: normalizedPaste,
+            editMode: normalizedEditMode,
+            computerUse: normalizedComputerUse
+        )
+        return (assignments, changed)
+    }
+}
+
 struct GeneralSettings: Codable, Equatable {
     var preferredInputDeviceID: String?
     var preferredInputDeviceName: String?
@@ -375,6 +515,8 @@ struct GeneralSettings: Codable, Equatable {
     var pasteLastTranscriptHotkeyConfiguration: HotkeyConfiguration = .pasteLastTranscriptDefault
     /// Edit Mode shortcut; nil means Edit Mode is disabled.
     var editModeHotkeyConfiguration: HotkeyConfiguration? = nil
+    /// Computer Use voice shortcut; nil means direct voice task capture is disabled.
+    var computerUseHotkeyConfiguration: HotkeyConfiguration? = nil
     var echoCancellationEnabled: Bool = false
     var soundFeedbackEnabled: Bool = false
     var hideFloatingIndicatorWhenIdle: Bool = false
@@ -417,6 +559,7 @@ struct GeneralSettings: Codable, Equatable {
         hotkeyConfiguration: HotkeyConfiguration = .globe,
         pasteLastTranscriptHotkeyConfiguration: HotkeyConfiguration = .pasteLastTranscriptDefault,
         editModeHotkeyConfiguration: HotkeyConfiguration? = nil,
+        computerUseHotkeyConfiguration: HotkeyConfiguration? = nil,
         echoCancellationEnabled: Bool = false,
         soundFeedbackEnabled: Bool = false,
         hideFloatingIndicatorWhenIdle: Bool = false,
@@ -440,6 +583,7 @@ struct GeneralSettings: Codable, Equatable {
         self.hotkeyConfiguration = hotkeyConfiguration
         self.pasteLastTranscriptHotkeyConfiguration = pasteLastTranscriptHotkeyConfiguration
         self.editModeHotkeyConfiguration = editModeHotkeyConfiguration
+        self.computerUseHotkeyConfiguration = computerUseHotkeyConfiguration
         self.echoCancellationEnabled = echoCancellationEnabled
         self.soundFeedbackEnabled = soundFeedbackEnabled
         self.hideFloatingIndicatorWhenIdle = hideFloatingIndicatorWhenIdle
@@ -465,6 +609,7 @@ struct GeneralSettings: Codable, Equatable {
         case hotkeyConfiguration
         case pasteLastTranscriptHotkeyConfiguration
         case editModeHotkeyConfiguration
+        case computerUseHotkeyConfiguration
         case echoCancellationEnabled
         case soundFeedbackEnabled
         case hideFloatingIndicatorWhenIdle
@@ -494,6 +639,7 @@ struct GeneralSettings: Codable, Equatable {
             forKey: .pasteLastTranscriptHotkeyConfiguration
         ) ?? .pasteLastTranscriptDefault
         editModeHotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .editModeHotkeyConfiguration)
+        computerUseHotkeyConfiguration = try container.decodeIfPresent(HotkeyConfiguration.self, forKey: .computerUseHotkeyConfiguration)
         echoCancellationEnabled = try container.decodeIfPresent(Bool.self, forKey: .echoCancellationEnabled) ?? false
         soundFeedbackEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundFeedbackEnabled) ?? false
         hideFloatingIndicatorWhenIdle = try container.decodeIfPresent(Bool.self, forKey: .hideFloatingIndicatorWhenIdle) ?? false

@@ -60,6 +60,11 @@ struct MainWindowView: View {
             switch selection {
             case .dashboard:
                 DashboardPage(appState: appState) { selection = $0 }
+            case .computerUse:
+                ComputerUsePage(
+                    coordinator: appState.computerUseCoordinator,
+                    modelSettings: appState.computerUseModelSettings
+                )
             case .history:
                 HistoryPage(appState: appState)
             case .model:

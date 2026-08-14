@@ -50,17 +50,31 @@ enum ChatCompletionRequestFactory {
         payload: ChatCompletionPayload,
         timeoutSeconds: Double
     ) throws -> URLRequest {
+        try makeRequest(
+            endpointURL: endpointURL,
+            apiKey: apiKey,
+            requestBody: JSONEncoder().encode(payload),
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    static func makeRequest(
+        endpointURL: URL,
+        apiKey: String,
+        requestBody: Data,
+        timeoutSeconds: Double
+    ) throws -> URLRequest {
         var request = URLRequest(url: endpointURL)
         request.httpMethod = "POST"
         request.timeoutInterval = timeoutSeconds
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONEncoder().encode(payload)
+        request.httpBody = requestBody
         return request
     }
 }
 
-final class ChatCompletionClient {
+final class ChatCompletionClient: @unchecked Sendable {
     private let session: URLSession
 
     init(session: URLSession = .shared) {
@@ -73,10 +87,42 @@ final class ChatCompletionClient {
         payload: ChatCompletionPayload,
         timeoutSeconds: Double
     ) async throws -> String {
+        try await complete(
+            endpointURL: endpointURL,
+            apiKey: apiKey,
+            requestBody: JSONEncoder().encode(payload),
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    func complete(
+        endpointURL: URL,
+        apiKey: String,
+        requestBody: Data,
+        timeoutSeconds: Double
+    ) async throws -> String {
+        let result = try await completeResult(
+            endpointURL: endpointURL,
+            apiKey: apiKey,
+            requestBody: requestBody,
+            timeoutSeconds: timeoutSeconds
+        )
+        guard let text = result.text, !text.isEmpty else {
+            throw LLMPostProcessorError.malformedResponse
+        }
+        return text
+    }
+
+    func completeResult(
+        endpointURL: URL,
+        apiKey: String,
+        requestBody: Data,
+        timeoutSeconds: Double
+    ) async throws -> ChatCompletionResult {
         let request = try ChatCompletionRequestFactory.makeRequest(
             endpointURL: endpointURL,
             apiKey: apiKey,
-            payload: payload,
+            requestBody: requestBody,
             timeoutSeconds: timeoutSeconds
         )
 
@@ -98,7 +144,7 @@ final class ChatCompletionClient {
                 throw LLMPostProcessorError.provider("http_\(http.statusCode)")
             }
 
-            return try ChatCompletionResponse.extractText(from: data)
+            return try ChatCompletionResponse.extractResult(from: data)
         } catch let error as LLMPostProcessorError {
             throw error
         } catch {
@@ -134,9 +180,23 @@ final class ChatCompletionClient {
             defer {
                 group.cancelAll()
             }
-            return try await group.next()!
+            guard let result = try await group.next() else {
+                throw LLMPostProcessorError.malformedResponse
+            }
+            return result
         }
     }
+}
+
+struct ChatCompletionResult: Equatable, Sendable {
+    let text: String?
+    let toolCalls: [ChatCompletionToolCall]
+}
+
+struct ChatCompletionToolCall: Equatable, Sendable {
+    let id: String
+    let name: String
+    let arguments: String
 }
 
 private struct ChatCompletionResponse: Decodable {
@@ -146,7 +206,23 @@ private struct ChatCompletionResponse: Decodable {
     }
 
     struct Message: Decodable {
-        let content: Content
+        let content: Content?
+        let toolCalls: [ToolCall]?
+
+        enum CodingKeys: String, CodingKey {
+            case content
+            case toolCalls = "tool_calls"
+        }
+    }
+
+    struct ToolCall: Decodable {
+        struct Function: Decodable {
+            let name: String
+            let arguments: String
+        }
+
+        let id: String
+        let function: Function
     }
 
     enum Content: Decodable {
@@ -178,7 +254,7 @@ private struct ChatCompletionResponse: Decodable {
 
     let choices: [Choice]
 
-    static func extractText(from data: Data) throws -> String {
+    static func extractResult(from data: Data) throws -> ChatCompletionResult {
         let response: Self
         do {
             response = try JSONDecoder().decode(Self.self, from: data)
@@ -188,12 +264,20 @@ private struct ChatCompletionResponse: Decodable {
         guard let first = response.choices.first else {
             throw LLMPostProcessorError.malformedResponse
         }
-        if let messageText = first.message?.content.text, !messageText.isEmpty {
-            return messageText
+        let messageText = first.message?.content?.text
+        let text = messageText?.isEmpty == false
+            ? messageText
+            : first.text?.isEmpty == false ? first.text : nil
+        let toolCalls = first.message?.toolCalls?.map {
+            ChatCompletionToolCall(
+                id: $0.id,
+                name: $0.function.name,
+                arguments: $0.function.arguments
+            )
+        } ?? []
+        guard text != nil || !toolCalls.isEmpty else {
+            throw LLMPostProcessorError.malformedResponse
         }
-        if let text = first.text, !text.isEmpty {
-            return text
-        }
-        throw LLMPostProcessorError.malformedResponse
+        return ChatCompletionResult(text: text, toolCalls: toolCalls)
     }
 }
