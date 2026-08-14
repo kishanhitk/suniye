@@ -5,7 +5,7 @@ import {
   makeLinearIssueDescription,
   type IssueReportEndpointConfig,
   type IssueReportPayload,
-} from "../src/lib/issueReports";
+} from "../src/issueReports";
 
 const validPayload: IssueReportPayload = {
   schemaVersion: 1,
