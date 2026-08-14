@@ -12,6 +12,7 @@ enum ComputerUseToolName: String, CaseIterable, Codable, Equatable, Sendable {
     case pressKey = "press_key"
     case typeText = "type_text"
     case setVoiceActivation = "set_voice_activation"
+    case nodeRepl = "node_repl"
 }
 
 struct ComputerUseApplication: Codable, Equatable, Sendable {

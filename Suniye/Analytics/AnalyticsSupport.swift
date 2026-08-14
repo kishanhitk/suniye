@@ -151,6 +151,9 @@ enum AnalyticsMapping {
         case .pressKey: return .pressKey
         case .typeText: return .typeText
         case .setVoiceActivation: return .setVoiceActivation
+        // The outer code-mode tool is never recorded as a leaf tool; the sky
+        // calls inside a script record as their concrete tools.
+        case .nodeRepl: return .unknown
         }
     }
 
