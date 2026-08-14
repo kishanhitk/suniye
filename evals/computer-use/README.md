@@ -35,10 +35,15 @@ SUNIYE_CU_EVAL_API_KEY=sk-... \
   scripts/run_computer_use_evals_vm.sh       # clone -> run -> pull results -> destroy
 ```
 
-The runner is a standalone app (`SuniyeEvalRunner`, bundle id
-`dev.suniye.evalrunner`) linking the same agent stack without the dictation/audio
-machinery, so the guest needs no Xcode. TCC is pre-granted by bundle id in the
-golden image, so re-signed runner builds keep their permissions.
+The runner is a standalone app (`SuniyeEvalRunner`) linking the same agent stack
+without the dictation/audio machinery, so the guest needs no Xcode. `setup_cu_eval_vm.sh`
+installs it into the golden image and pauses for a **one-time manual grant** of
+Accessibility + Screen Recording through the guest UI — the Cirrus base images
+ship with SIP enabled, so the system TCC database cannot be written by sqlite3,
+and a UI grant is the SIP-legal path. Every disposable clone inherits that grant.
+TCC binds it to that exact ad-hoc-signed binary, so after changing agent code,
+re-run `setup_cu_eval_vm.sh` to reinstall and re-grant (the host lane has the same
+rebuild-then-regrant rule).
 
 ## Environment
 
