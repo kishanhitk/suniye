@@ -3360,10 +3360,6 @@ final class AppState {
         }
     }
 
-    func setComputerUsePageActive(_ isActive: Bool) {
-        computerUseCoordinator.isPageActive = isActive
-    }
-
     func startNewComputerUseConversation() {
         guard !computerUseCoordinator.isRunning else { return }
         computerUseIndicatorPresenter.cancelReset()
@@ -4843,9 +4839,6 @@ final class AppState {
     private var currentDictationDestination: DictationDestination {
         if activeOnboardingStep == .speak {
             return .onboardingPractice
-        }
-        if computerUseCoordinator.isPageActive {
-            return .computerUseTask
         }
         return hasAccessibilityPermission ? .systemInsertion : .clipboardOnly
     }

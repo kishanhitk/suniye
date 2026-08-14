@@ -4,17 +4,14 @@ import SwiftUI
 struct ComputerUsePage: View {
     @Bindable var coordinator: ComputerUseCoordinator
     @Bindable var modelSettings: ComputerUseModelSettingsController
-    let onPageActiveChange: (Bool) -> Void
     @State private var copiedDebugSessionID: ComputerUseDebugSessionID?
 
     init(
         coordinator: ComputerUseCoordinator,
-        modelSettings: ComputerUseModelSettingsController,
-        onPageActiveChange: @escaping (Bool) -> Void = { _ in }
+        modelSettings: ComputerUseModelSettingsController
     ) {
         self.coordinator = coordinator
         self.modelSettings = modelSettings
-        self.onPageActiveChange = onPageActiveChange
     }
 
     var body: some View {
@@ -25,12 +22,6 @@ struct ComputerUsePage: View {
             composer
         }
         .background(MainWindowPalette.windowBackground)
-        .onAppear {
-            onPageActiveChange(true)
-        }
-        .onDisappear {
-            onPageActiveChange(false)
-        }
         .task {
             await coordinator.refreshPermissions()
         }
