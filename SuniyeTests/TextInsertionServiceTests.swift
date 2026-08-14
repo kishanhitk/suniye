@@ -107,7 +107,6 @@ final class TextInsertionServiceTests: XCTestCase {
             postedFlags.append(flags)
             state = (value: "hellofallback", selectedText: nil, selectedRange: NSRange(location: 13, length: 0))
         }
-        service.pasteVerificationIntervalNanoseconds = 1
 
         try await service.insertText("fallback")
 
@@ -136,7 +135,7 @@ final class TextInsertionServiceTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "fallback")
     }
 
-    func testInsertTextThrowsWhenFallbackDoesNotChangeFocusedField() async {
+    func testInsertTextPostsFallbackPasteWithoutObservingUnchangedField() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
         let element = AXUIElementCreateSystemWide()
@@ -145,46 +144,18 @@ final class TextInsertionServiceTests: XCTestCase {
             selectedText: nil,
             selectedRange: NSRange(location: 5, length: 0)
         )
+        var didPostPaste = false
 
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementProvider = { element }
         service.focusedTextSnapshotProvider = { _ in unchanged }
         service.selectedTextSetter = { _, _ in false }
-        service.keyPoster = { _, _ in }
-        service.pasteVerificationAttemptCount = 1
-        service.pasteVerificationIntervalNanoseconds = 0
-
-        do {
-            try await service.insertText("fallback")
-            XCTFail("Expected insertionNotObserved")
-        } catch {
-            guard case TextInsertionService.InsertError.insertionNotObserved = error else {
-                return XCTFail("Expected insertionNotObserved, got \(error)")
-            }
-        }
-    }
-
-    func testInsertTextTreatsSelectionOnlyChangeAsObservedInsertion() async throws {
-        let service = TextInsertionService()
-        let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
-        let element = AXUIElementCreateSystemWide()
-        var state = TextInsertionService.FocusedTextSnapshot(
-            value: "hello",
-            selectedText: nil,
-            selectedRange: NSRange(location: 5, length: 0)
-        )
-
-        service.pasteboardProvider = { pasteboard }
-        service.focusedTextElementProvider = { element }
-        service.focusedTextSnapshotProvider = { _ in state }
-        service.selectedTextSetter = { _, _ in false }
-        service.keyPoster = { _, _ in
-            state = (value: "hello", selectedText: "hello", selectedRange: NSRange(location: 0, length: 5))
-        }
-        service.pasteVerificationAttemptCount = 1
-        service.pasteVerificationIntervalNanoseconds = 0
+        service.keyPoster = { _, _ in didPostPaste = true }
 
         try await service.insertText("fallback")
+
+        XCTAssertTrue(didPostPaste)
+        XCTAssertEqual(pasteboard.string(forType: .string), "fallback")
     }
 
     func testInsertTextThrowsBeforeChangingClipboardWhenNoTextInputIsFocused() async {
