@@ -25,13 +25,11 @@ TASKS="${SUNIYE_CU_EVAL_TASKS:-tasks-vm.json}"
 "$TART" list | awk '{print $2}' | grep -qx "$GOLDEN" \
   || { echo "ERROR: golden image missing; run scripts/setup_cu_eval_vm.sh" >&2; exit 1; }
 
-echo "Building the eval runner..."
-xcodegen generate >/dev/null
-xcodebuild -project Suniye.xcodeproj -scheme SuniyeEvalRunner \
-  -destination 'platform=macOS' -derivedDataPath .derivedData -configuration Release build \
-  >/dev/null
-RUNNER=".derivedData/Build/Products/Release/SuniyeEvalRunner.app"
-[[ -d "$RUNNER" ]] || { echo "ERROR: runner build missing at $RUNNER" >&2; exit 1; }
+# The runner lives in the golden image, where it was granted Accessibility and
+# Screen Recording once. TCC binds the grant to that exact (ad-hoc-signed)
+# binary, so a rebuilt runner would lose it — after code changes, re-run
+# setup_cu_eval_vm.sh to reinstall and re-grant, exactly like the host lane.
+RUNNER_IN_GUEST='~/Applications/SuniyeEvalRunner.app/Contents/MacOS/SuniyeEvalRunner'
 
 "$TART" clone "$GOLDEN" "$CLONE"
 cleanup() { "$TART" stop "$CLONE" 2>/dev/null || true; "$TART" delete "$CLONE" 2>/dev/null || true; }
@@ -48,9 +46,8 @@ done
 SSH=(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "admin@$IP")
 SCP=(scp -i "$SSH_KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
 
-echo "Pushing runner, tasks, and dylibs to the guest..."
+echo "Pushing tasks to the guest (runner is pre-installed and pre-granted)..."
 "${SSH[@]}" 'rm -rf ~/suniye-eval && mkdir -p ~/suniye-eval/evals/computer-use ~/suniye-eval/evals/runs'
-"${SCP[@]}" -r "$RUNNER" "admin@$IP:~/suniye-eval/SuniyeEvalRunner.app"
 "${SCP[@]}" "evals/computer-use/$TASKS" "admin@$IP:~/suniye-eval/evals/computer-use/tasks-vm.json"
 
 echo "Running the sweep in the guest..."
@@ -59,7 +56,7 @@ echo "Running the sweep in the guest..."
   SUNIYE_CU_EVAL_TASKS=tasks-vm.json \
   SUNIYE_CU_EVAL_MODEL='${SUNIYE_CU_EVAL_MODEL:-openai/gpt-5.6-luna}' \
   SUNIYE_CU_EVAL_API_KEY='${SUNIYE_CU_EVAL_API_KEY}' \
-  ./SuniyeEvalRunner.app/Contents/MacOS/SuniyeEvalRunner"
+  $RUNNER_IN_GUEST"
 
 echo "Pulling results..."
 mkdir -p evals/runs
