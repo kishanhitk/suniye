@@ -41,7 +41,7 @@ Reference evidence: `fake-cursor-dmg-agent-report.md`
 - `[Verified]` Gated line coverage is 88.95% (13,380/15,043), above the 80% floor. Cursor
   presentation is 100% covered and the AppKit overlay controller is 83.3% covered.
 - `[Verified]` E2E preflight and smoke pass.
-- `[Verified]` The installed Preview at `/Users/kishan/Applications/Suniye Preview.app` accepted
+- `[Verified]` The installed Preview at `<home>/Applications/Suniye Preview.app` accepted
   the natural task `Open Calculator and click the 7 button.` It discovered Calculator, recovered
   from initial observation failures, clicked `7`, re-observed the Calculator value as `71`, and
   completed with `Done.`

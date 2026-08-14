@@ -60,6 +60,9 @@ protocol ComputerUseApplicationLaunching: Sendable {
 
 protocol ComputerUseApplicationCatalogProviding: Sendable {
     func listApps() async throws -> [ComputerUseApplication]
+    /// Lookup without side effects. Action paths use this: acting must never
+    /// change application lifecycle.
+    func resolve(_ identifier: String) async throws -> ComputerUseApplicationRecord
     func resolveOrLaunch(_ identifier: String) async throws -> ComputerUseApplicationRecord
     func reopen(_ application: ComputerUseApplicationRecord) async throws
         -> ComputerUseApplicationRecord
@@ -107,7 +110,8 @@ actor ComputerUseApplicationCatalog: ComputerUseApplicationCatalogProviding {
         }
 
         let bundleMatches = applications.filter {
-            $0.bundleIdentifier == normalizedIdentifier
+            $0.bundleIdentifier?.compare(normalizedIdentifier, options: .caseInsensitive)
+                == .orderedSame
         }
         guard !bundleMatches.isEmpty else {
             throw ComputerUseApplicationCatalogError.notFound(normalizedIdentifier)

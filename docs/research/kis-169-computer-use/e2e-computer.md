@@ -2,7 +2,7 @@
 
 Date: 2026-08-03
 
-Build: Debug build installed at `/Users/kishan/Applications/Suniye.app` with
+Build: Debug build installed at `<home>/Applications/Suniye.app` with
 `./scripts/build_app.sh Debug --install-user --open`.
 
 The test used the Computer Use skill's `node_repl` wrapper. It targeted the full installed app
@@ -75,7 +75,7 @@ the Computer Use skill against Calculator only.
 ## Final installed Preview check — 2026-08-03
 
 - `[Verified]` `./scripts/build_app.sh Debug --preview --install-user` installed a fresh build at
-  `/Users/kishan/Applications/Suniye Preview.app`.
+  `<home>/Applications/Suniye Preview.app`.
 - `[Verified]` After quitting and reopening that path, the Computer Use page opened without the
   removed window picker, Bring Forward control, screenshot toggle, manual action controls, or
   approval card.
@@ -99,7 +99,7 @@ the Computer Use skill against Calculator only.
 
 ### Manual voice test
 
-1. Open `/Users/kishan/Applications/Suniye Preview.app`.
+1. Open `<home>/Applications/Suniye Preview.app`.
 2. Configure `Model → API Endpoint` and save a supported model/key.
 3. Open `Computer Use`, grant the displayed Accessibility and Screen Recording permissions, and
    select a harmless read-only desktop task.
@@ -113,7 +113,7 @@ route.
 
 ## App-owned session and background lifecycle E2E — 2026-08-12
 
-Build: Debug Preview installed at `/Users/kishan/Applications/Suniye Preview.app` from
+Build: Debug Preview installed at `<home>/Applications/Suniye Preview.app` from
 `kis-169-computer-use-parity`.
 
 - `[Verified]` Natural task `Open Calculator, enter 7, and verify the display.` completed through
@@ -185,7 +185,7 @@ Build: Debug Preview installed at `/Users/kishan/Applications/Suniye Preview.app
 
 ### Refreshed Preview UI smoke — 2026-08-03
 
-- `[Verified]` After reinstalling and relaunching `/Users/kishan/Applications/Suniye Preview.app`,
+- `[Verified]` After reinstalling and relaunching `<home>/Applications/Suniye Preview.app`,
   the Computer Use page exposes the direct voice instruction: “Hold your dictation hotkey, speak
   a task, and release. The agent starts automatically after transcription.”
 - `[Verified]` The refreshed page still shows the configured model and Computer Use permission
@@ -195,7 +195,7 @@ Build: Debug Preview installed at `/Users/kishan/Applications/Suniye Preview.app
 
 ## Fresh-branch live provider and launch checks — 2026-08-09
 
-Build: Debug Preview installed at `/Users/kishan/Applications/Suniye Preview.app` from
+Build: Debug Preview installed at `<home>/Applications/Suniye Preview.app` from
 `kis-169-computer-use-parity`.
 
 - `[Verified]` The configured `openai/gpt-5.6-luna` model completed a System Settings Battery task

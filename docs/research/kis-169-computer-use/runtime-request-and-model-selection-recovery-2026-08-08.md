@@ -2,7 +2,7 @@
 
 Research date: 2026-08-08
 
-Scope: the `codex` executable shipped in `/Users/kishan/Downloads/ChatGPT (1).dmg`, the
+Scope: the `codex` executable shipped in `<home>/Downloads/ChatGPT (1).dmg`, the
 matching official OpenAI Codex source tag, and an isolated local request capture. No Suniye
 production code was changed for this audit.
 

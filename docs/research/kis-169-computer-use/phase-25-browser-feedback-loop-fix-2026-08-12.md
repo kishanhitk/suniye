@@ -29,7 +29,7 @@
 - `[Verified]` Gated line coverage is 87.08% (14,493/16,643) against the 80% floor. E2E preflight
   and smoke pass.
 - `[Verified live]` Debug Preview was rebuilt, installed, and restarted at
-  `/Users/kishan/Applications/Suniye Preview.app`.
+  `<home>/Applications/Suniye Preview.app`.
 - `[Verified live]` From the Gmail inbox, installed Preview session `CU-66A245F07512` completed
   the original natural request: `Check my last email from Apple in my browser and see what they're
   asking for.` It selected Chrome, set the Gmail search field, pressed Enter, opened the newest

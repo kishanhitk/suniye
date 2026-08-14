@@ -225,7 +225,7 @@ actor ComputerUseAccessibilityRevisionStore {
         append(label: "ID", value: node.identifier, to: &components)
         if let value = normalized(node.value) {
             components.append("Value:")
-            components.append(isSecure(node.role) ? "[redacted]" : quoted(value))
+            components.append(isSecure(node) ? "[redacted]" : quoted(value))
         }
         if node.isValueSettable {
             components.append("(value settable)")
@@ -265,7 +265,10 @@ actor ComputerUseAccessibilityRevisionStore {
         return "\"\(escaped)\""
     }
 
-    private func isSecure(_ role: String) -> Bool {
-        role == "AXSecureTextField"
+    /// Secure fields surface either as role AXSecureTextField or as a text
+    /// field whose subrole is AXSecureTextField (common for AppKit and web
+    /// content), so both must redact.
+    private func isSecure(_ node: ComputerUseAXNode) -> Bool {
+        node.role == "AXSecureTextField" || node.subrole == "AXSecureTextField"
     }
 }

@@ -4,7 +4,7 @@ Status: draft
 
 Audit date: 2026-08-03
 
-Worktree: /Users/kishan/.codex/worktrees/eaaa/suniye
+Worktree: <repo>
 
 Branch: kis-169-computer-use
 
@@ -12,7 +12,7 @@ Branch: kis-169-computer-use
 
 This audit compares the current Suniye working tree with the local reference artifact:
 
-/Users/kishan/Downloads/ChatGPT (1).dmg
+<home>/Downloads/ChatGPT (1).dmg
 
 The image was already mounted read-only at:
 
@@ -593,7 +593,7 @@ The Node REPL instructions repeat the same surface in:
   approved action.
 - [Verified] Suniye/Info.plist declares microphone and speech-recognition usage descriptions,
   but no Screen Recording usage description was present in the inspected plist.
-- [Verified] /Users/kishan/.codex/worktrees/eaaa/suniye/project.yml defines one Suniye
+- [Verified] <repo>/project.yml defines one Suniye
   application target and one unit-test target. It has a local LLM helper build script, but no
   Computer Use service target.
 - [Inferred] Suniye has no native helper permission catalog, pending-permission state, abandoned

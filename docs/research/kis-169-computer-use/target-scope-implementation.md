@@ -2,7 +2,7 @@
 
 Date: 2026-08-03
 
-Reference: `/Users/kishan/Downloads/ChatGPT (1).dmg`
+Reference: `<home>/Downloads/ChatGPT (1).dmg`
 
 This note records the target-scope correction as one atomic research entry. It separates verified
 reference behavior from implementation choices and remaining unknowns.

@@ -53,12 +53,18 @@ actor SystemComputerUseScreenshotCapturer: ComputerUseScreenshotCapturing {
         ) else {
             throw ComputerUseScreenshotError.encodingFailed
         }
+        // Screenshots can contain anything on screen; keep them owner-only.
         try FileManager.default.createDirectory(
             at: directory,
-            withIntermediateDirectories: true
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
         )
         let url = directory.appendingPathComponent("\(UUID().uuidString).jpg")
         try data.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: url.path
+        )
         if let previousURL = latestURLByWindowID.updateValue(url, forKey: windowID) {
             try? FileManager.default.removeItem(at: previousURL)
         }

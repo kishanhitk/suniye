@@ -2,7 +2,7 @@
 
 Date: 2026-08-11
 
-Artifact: `/Users/kishan/Downloads/ChatGPT (1).dmg`
+Artifact: `<home>/Downloads/ChatGPT (1).dmg`
 
 Current read-only mount: `/Volumes/ChatGPT Installer`
 ASAR extraction used for line-level inspection: `/tmp/suniye-cua-app-asar.iL06DI`

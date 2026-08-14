@@ -61,7 +61,7 @@ Incident: `CU-C96C0E8AAC68`
   Gated line coverage is 87.05% (14,398/16,539 lines), above the required 80% floor.
 - `[Verified]` E2E preflight and smoke pass.
 - `[Verified live]` Debug Preview was rebuilt and installed at
-  `/Users/kishan/Applications/Suniye Preview.app`. The pre-existing Preview process had to be
+  `<home>/Applications/Suniye Preview.app`. The pre-existing Preview process had to be
   restarted before it loaded the new binary; its PID changed from 4573 to 9499.
 - `[Verified live]` With Chrome still running without an observable window, the natural task
   `Open Google Chrome and tell me the title of its current window.` completed as session

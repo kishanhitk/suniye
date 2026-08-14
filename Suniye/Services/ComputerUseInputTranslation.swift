@@ -6,8 +6,13 @@ struct ComputerUseScrollDelta: Equatable, Sendable {
 }
 
 extension ComputerUseScrollDirection {
+    /// Pixel units per "page" of scrolling in CGEvent pixel-unit scroll events.
+    static let scrollPixelsPerPage: Double = 400
+
+    /// Raw CGEvent convention: positive wheel1 scrolls up, positive wheel2
+    /// scrolls left. Synthetic events bypass the natural-scrolling preference.
     func eventDelta(pages: Double) -> ComputerUseScrollDelta {
-        let amount = pages * 400
+        let amount = pages * Self.scrollPixelsPerPage
         return switch self {
         case .up: ComputerUseScrollDelta(horizontal: 0, vertical: amount)
         case .down: ComputerUseScrollDelta(horizontal: 0, vertical: -amount)

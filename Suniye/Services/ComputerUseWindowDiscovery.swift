@@ -201,12 +201,15 @@ enum ComputerUseWindowDescriptionDecoder {
 
 enum ComputerUseWindowInventoryError: LocalizedError, Equatable, Sendable {
     case windowListUnavailable
+    case accessibilityNotAuthorized
     case accessibilityFailure(Int32)
 
     var errorDescription: String? {
         switch self {
         case .windowListUnavailable:
             "Could not read the on-screen window list."
+        case .accessibilityNotAuthorized:
+            "Accessibility access is not authorized. Grant it in System Settings \u{2192} Privacy & Security \u{2192} Accessibility."
         case let .accessibilityFailure(code):
             "Could not read application windows (Accessibility error \(code))."
         }

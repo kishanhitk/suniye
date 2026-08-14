@@ -4,7 +4,7 @@ Research date: 2026-08-12
 
 Scope: only `click(element_index)`, `AXPress`, `AXSelected`, coordinate/pointer fallback,
 fresh observation, no-change recovery, and provider/network retries in the mounted first-party
-ChatGPT/Codex bundle from `/Users/kishan/Downloads/ChatGPT (1).dmg`. The initial inspection was
+ChatGPT/Codex bundle from `<home>/Downloads/ChatGPT (1).dmg`. The initial inspection was
 read-only. The implementation and validation completed afterward are recorded at the end.
 
 ## Evidence labels

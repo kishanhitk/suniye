@@ -161,7 +161,9 @@ actor ComputerUseToolBackend: ComputerUseToolServing {
     }
 
     private func prepareAction(for app: String) async throws -> ComputerUseActionContext {
-        let application = try await applications.resolveOrLaunch(app)
+        // Resolve-only: an action must never relaunch an app that quit after
+        // observation; that surfaces as staleObservation instead.
+        let application = try await applications.resolve(app)
         // Observe-before-act: each observation is consumed by exactly one action.
         guard let observation = observationsByTarget.removeValue(forKey: application.identityKey)
         else {

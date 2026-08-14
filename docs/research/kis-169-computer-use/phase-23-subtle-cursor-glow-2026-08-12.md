@@ -30,4 +30,4 @@ Date: 2026-08-12
 - `[Verified]` The complete suite passes 1,143 tests with 2 skipped and zero failures. Gated line
   coverage is 87.05% (14,469/16,622 lines), above the required 80% floor.
 - `[Verified]` The updated Debug Preview is installed and restarted at
-  `/Users/kishan/Applications/Suniye Preview.app`.
+  `<home>/Applications/Suniye Preview.app`.

@@ -1,7 +1,7 @@
 # Computer Use bootstrap and self-target parity
 
 - Date: 2026-08-08
-- Primary artifact: `/Users/kishan/Downloads/ChatGPT (1).dmg`
+- Primary artifact: `<home>/Downloads/ChatGPT (1).dmg`
 - Inspection mount: `/private/tmp/suniye-chatgpt-dmg-mount` (read-only)
 
 This note is limited to initial app selection, `frontmost`, host-app control, conversational input, app-list filtering, and self-target enforcement. It does not claim behavior that is only available from a provider-side prompt, model, or service.

@@ -45,6 +45,10 @@ actor StubActionApplicationCatalog: ComputerUseApplicationCatalogProviding {
         [application.publicApplication]
     }
 
+    func resolve(_ identifier: String) -> ComputerUseApplicationRecord {
+        application
+    }
+
     func resolveOrLaunch(_ identifier: String) -> ComputerUseApplicationRecord {
         application
     }

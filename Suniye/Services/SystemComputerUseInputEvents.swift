@@ -111,8 +111,8 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
                 scrollWheelEvent2Source: nil,
                 units: .pixel,
                 wheelCount: 2,
-                wheel1: Int32(clamping: Int(delta.vertical.rounded())),
-                wheel2: Int32(clamping: Int(delta.horizontal.rounded())),
+                wheel1: Self.scrollWheelUnits(delta.vertical),
+                wheel2: Self.scrollWheelUnits(delta.horizontal),
                 wheel3: 0
             ) else {
                 throw ComputerUseActionError.eventCreationFailed
@@ -223,6 +223,12 @@ struct SystemComputerUseInputEvents: ComputerUseInputEventPosting {
         }
         configure(event, screenPoint: point, button: .left, target: target)
         event.postToPid(target.processIdentifier)
+    }
+
+    /// Clamps in floating point first: `Int(_: Double)` traps outside the
+    /// `Int` range, and the model controls the page count.
+    private static func scrollWheelUnits(_ delta: Double) -> Int32 {
+        Int32(min(max(delta.rounded(), Double(Int32.min)), Double(Int32.max)))
     }
 
     private static func configure(
