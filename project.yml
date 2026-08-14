@@ -151,6 +151,9 @@ targets:
       base:
         PRODUCT_NAME: SuniyeEvalRunner
         PRODUCT_BUNDLE_IDENTIFIER: dev.suniye.evalrunner
+        # The VM guest is arm64 and the vendored dylibs are arm64-only; no
+        # universal slice is needed or possible.
+        ARCHS: arm64
         SWIFT_OBJC_BRIDGING_HEADER: Suniye/Suniye-Bridging-Header.h
         HEADER_SEARCH_PATHS:
           - $(inherited)
