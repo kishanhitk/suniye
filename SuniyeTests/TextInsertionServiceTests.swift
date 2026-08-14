@@ -187,22 +187,27 @@ final class TextInsertionServiceTests: XCTestCase {
         try await service.insertText("fallback")
     }
 
-    func testInsertTextPostsClipboardPasteWhenNoTextInputIsFocused() async throws {
+    func testInsertTextThrowsBeforeChangingClipboardWhenNoTextInputIsFocused() async {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setString("previous", forType: .string)
-        var postedKeyCodes: [CGKeyCode] = []
 
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementProvider = { nil }
-        service.pasteKeyCodeProvider = { 42 }
-        service.keyPoster = { keyCode, _ in postedKeyCodes.append(keyCode) }
+        service.keyPoster = { _, _ in
+            XCTFail("No key should be posted without a focused text input")
+        }
 
-        try await service.insertText("fallback")
-
-        XCTAssertEqual(postedKeyCodes, [42])
-        XCTAssertEqual(pasteboard.string(forType: .string), "fallback")
+        do {
+            try await service.insertText("fallback")
+            XCTFail("Expected noFocusedTextInput")
+        } catch {
+            guard case TextInsertionService.InsertError.noFocusedTextInput = error else {
+                return XCTFail("Expected noFocusedTextInput, got \(error)")
+            }
+        }
+        XCTAssertEqual(pasteboard.string(forType: .string), "previous")
     }
 
     func testInsertTextStillRestoresClipboardWhenPasteKeyPostingThrows() async throws {

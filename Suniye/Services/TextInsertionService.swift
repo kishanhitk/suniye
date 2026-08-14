@@ -27,6 +27,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     enum InsertError: LocalizedError {
         case cannotCreateEvent
         case cannotCopyToClipboard
+        case noFocusedTextInput
         case insertionNotObserved
 
         var errorDescription: String? {
@@ -35,6 +36,8 @@ final class TextInsertionService: TextInsertionServiceProtocol {
                 return "Unable to generate keyboard event"
             case .cannotCopyToClipboard:
                 return "Unable to copy transcription to the clipboard"
+            case .noFocusedTextInput:
+                return "No editable text field is focused"
             case .insertionNotObserved:
                 return "Text insertion was not observed in the focused field"
             }
@@ -91,11 +94,15 @@ final class TextInsertionService: TextInsertionServiceProtocol {
 
     @MainActor
     func insertText(_ text: String) async throws {
-        let focusedElement = getFocusedTextElement()
-        let initialState = focusedElement.flatMap { captureFocusedTextState(for: $0) }
+        // No focused text input means the paste would land on an arbitrary
+        // control — and a presumed success would let auto-submit post Return
+        // there. Fail before touching the clipboard; ⌃⌘V recovers the text.
+        guard let focusedElement = getFocusedTextElement() else {
+            throw InsertError.noFocusedTextInput
+        }
 
-        if let focusedElement,
-           let initialState,
+        let initialState = captureFocusedTextState(for: focusedElement)
+        if let initialState,
            insertDirectlyIntoFocusedTextElement(
                text,
                focusedElement: focusedElement,
@@ -151,14 +158,13 @@ final class TextInsertionService: TextInsertionServiceProtocol {
 
     private func verifyFallbackInsertion(
         from initialState: FocusedTextSnapshot?,
-        focusedElement: AXUIElement?
+        focusedElement: AXUIElement
     ) async throws {
         // Verification can only prove success, never failure: the paste keystroke
-        // is already posted, so fields with no AX-readable state (Electron/web
-        // composers like Slack) must be presumed successful or every paste into
-        // them reports a false failure (KIS-178).
-        guard let focusedElement,
-              let initialState,
+        // is already posted, so focused fields with no AX-readable state
+        // (Electron/web composers like Slack) must be presumed successful or
+        // every paste into them reports a false failure (KIS-178).
+        guard let initialState,
               Self.focusedTextStateIsObservable(initialState) else {
             return
         }
