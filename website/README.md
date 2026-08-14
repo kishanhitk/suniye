@@ -43,22 +43,44 @@ cd website
 npm run deploy
 ```
 
-The `LINEAR_*` values below and any other secrets are configured as Worker secrets
-in the Cloudflare dashboard (or via `wrangler secret put`), not committed here.
-
 ## Issue report endpoint
 
-The Cloudflare deployment hosts `POST /api/issue-reports`, which creates Linear issues from Suniye's in-app reporter. Configure these Cloudflare values before enabling the feature in production:
+`POST https://suniye.app/api/issue-reports` creates Linear issues from Suniye's in-app
+reporter. It is served by the standalone `suniye-reports` Worker (`workers/reports/`),
+not the Astro site worker — the route `suniye.app/api/issue-reports*` takes that path
+over from the site. It lives outside Astro so no CSRF origin check blocks the app's
+multipart POSTs (native clients send no `Origin` header; that check silently broke
+reporting between 2026-06-06 and 2026-08, see KIS-173).
+
+Deploy and configure secrets (never committed):
 
 ```bash
-LINEAR_API_KEY          # secret
-LINEAR_TEAM_ID          # required, team UUID
-LINEAR_REPORT_LABEL_ID  # optional
-LINEAR_REPORT_PROJECT_ID # optional
-LINEAR_REPORT_STATE_ID # optional
+cd website/workers/reports
+npm run deploy
+wrangler secret put LINEAR_API_KEY           # secret
+wrangler secret put LINEAR_TEAM_ID           # required, team UUID
+wrangler secret put LINEAR_REPORT_LABEL_ID   # optional
+wrangler secret put LINEAR_REPORT_PROJECT_ID # optional
+wrangler secret put LINEAR_REPORT_STATE_ID   # optional
 ```
 
-The endpoint applies a server-side Cloudflare Cache API rate limit before any Linear calls. The default limit is 6 POST requests per 10 minutes per IP and user-agent pair.
+After deploying this worker or the site worker, or changing domains/redirects, run the
+smoke test. It sends the exact request shape the app sends (multipart, no `Origin`
+header) and creates a real Linear issue; with `LINEAR_API_KEY` set it archives the
+issue automatically:
+
+```bash
+cd website/workers/reports
+LINEAR_API_KEY=... bun scripts/smoke.ts
+```
+
+The endpoint applies a server-side Cloudflare Cache API rate limit before any Linear
+calls: 6 POST requests per 10 minutes per IP, best-effort and per data center (the
+Cache API is not global), not a hard cap. The smoke test consumes one request.
+
+Shipped app builds post to `https://suniye.kishans.in/api/issue-reports`; that path is
+excluded from the old domain's 301 and 308-redirected to the new endpoint instead,
+because clients downgrade POST to GET across a 301 but keep method and body on a 308.
 
 ## Sparkle appcast endpoint
 

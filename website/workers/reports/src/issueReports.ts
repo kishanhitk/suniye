@@ -145,6 +145,7 @@ interface LinearAttachmentCreateResponse {
 
 export const maxDiagnosticsBytes = 10 * 1024 * 1024;
 const maxRequestBytes = maxDiagnosticsBytes + 128 * 1024;
+const linearRequestTimeoutMs = 30_000;
 const defaultRateLimitMaxRequests = 6;
 const defaultRateLimitWindowSeconds = 10 * 60;
 
@@ -214,7 +215,8 @@ export async function handleIssueReportRequest(
   }
   const issueReportPayload = payload as IssueReportPayload;
 
-  const diagnosticsPart = form.get("diagnostics");
+  // workers-types mistypes FormData.get() as string|null; unknown lets instanceof File narrow.
+  const diagnosticsPart: unknown = form.get("diagnostics");
   const diagnosticsFile = diagnosticsPart instanceof File && diagnosticsPart.size > 0 ? diagnosticsPart : undefined;
   const diagnosticsError = validateDiagnosticsFile(issueReportPayload, diagnosticsFile);
   if (diagnosticsError) {
@@ -392,6 +394,7 @@ async function uploadFileToLinear(
     method: "PUT",
     headers,
     body: file,
+    signal: AbortSignal.timeout(linearRequestTimeoutMs),
   });
 
   if (!uploadResponse.ok) {
@@ -492,6 +495,10 @@ async function linearGraphQL<T>(
   variables: Record<string, unknown>,
   fetcher: typeof fetch
 ): Promise<T> {
+  if (!config.linearApiKey) {
+    throw new Error("Linear API key is not configured.");
+  }
+
   const response = await fetcher("https://api.linear.app/graphql", {
     method: "POST",
     headers: {
@@ -500,6 +507,7 @@ async function linearGraphQL<T>(
       Accept: "application/json",
     },
     body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(linearRequestTimeoutMs),
   });
 
   if (!response.ok) {
@@ -517,6 +525,7 @@ async function linearGraphQL<T>(
   return payload.data;
 }
 
+// Deliberate near-duplicate of workers/ingest/src/rateLimit.ts; the workers bundle independently.
 async function checkRateLimit(
   request: Request,
   config: IssueReportRateLimitConfig | false | undefined
