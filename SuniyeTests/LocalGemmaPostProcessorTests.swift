@@ -105,8 +105,10 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
     }
 
     /// The probe exists to fill llama-server's prompt cache; that only works if it
-    /// sends the same instruction prefix a real polish sends.
-    func testProbeSharesInstructionPrefixWithPolish() async throws {
+    /// sends the same instructions a real polish sends. For matched (single-line,
+    /// no-keyword) inputs the two must be byte-identical, which is the strongest
+    /// form of the shared-prefix guarantee.
+    func testProbeBuildsIdenticalInstructionsToPolish() async throws {
         let client = FakeLocalGemmaClient(outputs: ["OK", "polished text"])
         let processor = LocalGemmaPostProcessor(client: client)
         let config = makeConfig()
