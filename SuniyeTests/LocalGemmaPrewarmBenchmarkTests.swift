@@ -18,7 +18,7 @@ import XCTest
 ///     ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
 final class LocalGemmaPrewarmBenchmarkTests: XCTestCase {
     /// Cold cycles per run; override with SUNIYE_GEMMA_BENCH_CYCLES.
-    private static let cycles = ProcessInfo.processInfo.environment["SUNIYE_GEMMA_BENCH_CYCLES"].flatMap(Int.init) ?? 3
+    private static let cycles = max(1, ProcessInfo.processInfo.environment["SUNIYE_GEMMA_BENCH_CYCLES"].flatMap(Int.init) ?? 3)
 
     private static let transcripts = [
         "okay so um the meeting got moved to thursday at three can you let uh sarah know and also we need to push the release by a week",

@@ -89,10 +89,16 @@ struct ChatCompletionTimings: Decodable, Equatable {
 
     // llama-server sends prompt_ms/predicted_ms as floats; decode every field as
     // Double and round so a float duration doesn't throw and drop the whole block.
+    // Int(Double) traps on non-finite / out-of-range input and `try?` can't catch a
+    // trap, so range-check before converting.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         func int(_ key: CodingKeys) throws -> Int {
-            Int((try container.decodeIfPresent(Double.self, forKey: key) ?? 0).rounded())
+            let value = try container.decodeIfPresent(Double.self, forKey: key) ?? 0
+            guard value.isFinite, let int = Int(exactly: value.rounded()) else {
+                throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "timing out of Int range")
+            }
+            return int
         }
         promptTokens = try int(.promptTokens)
         cachedTokens = try int(.cachedTokens)

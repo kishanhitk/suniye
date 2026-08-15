@@ -50,8 +50,10 @@ public enum AnalyticsEvent: Sendable {
     case modelDownload(kind: ModelKind, model: SafeLabel, outcome: ModelDownloadOutcome, durationMs: Int?)
     case modelLoad(model: SafeLabel, loadMs: Int, evictedByKeepAlive: Bool)
     /// One user-facing local-LLM generation (polish / rewrite): llama-server's
-    /// per-request counters. `cachedTokens > 0` means the prewarm probe primed the
-    /// KV cache and the prefill stayed off the critical path. Counts and timings only.
+    /// per-request counters. `cache_hit` = more of the prompt was reused from the KV
+    /// cache than freshly processed — the prewarm probe primed it (a primed polish is
+    /// ~2.4k cached / ~40 processed; a miss is ~0 / ~2.5k, and an unrelated previous
+    /// request leaves only a few chat-template tokens cached). Counts and timings only.
     case llmGeneration(model: SafeLabel, promptTokens: Int, cachedTokens: Int, predictedTokens: Int, prefillMs: Int, decodeMs: Int)
 
     case vocabLearnedFromEdit(count: Int)
@@ -160,7 +162,7 @@ public enum AnalyticsEvent: Sendable {
                 "predicted_tokens": .int(predictedTokens),
                 "prefill_ms": .int(prefillMs),
                 "decode_ms": .int(decodeMs),
-                "cache_hit": .bool(cachedTokens > 0),
+                "cache_hit": .bool(cachedTokens > promptTokens),
             ]
         case let .vocabLearnedFromEdit(count):
             return ["count": .int(count)]

@@ -194,13 +194,15 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         XCTAssertEqual(client.idleTimeouts.first, 900)
     }
 
-    func testPrewarmSkipsWhenRuntimeAlreadyWarm() async {
+    /// A warm process is not a primed cache: an Edit Mode rewrite in between leaves
+    /// the single slot holding a different prompt, so the probe must run regardless.
+    func testPrewarmProbesEvenWhenRuntimeAlreadyWarm() async {
         let client = FakeLocalGemmaClient(runtimeWarm: true, outputs: ["OK"])
         let processor = LocalGemmaPostProcessor(client: client)
 
         await processor.prewarm(config: makeConfig())
 
-        XCTAssertEqual(client.callCount, 0)
+        XCTAssertEqual(client.callCount, 1)
     }
 
     func testPrewarmSkipsWhenUnavailable() async {

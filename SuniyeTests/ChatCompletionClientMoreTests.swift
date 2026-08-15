@@ -114,6 +114,17 @@ final class ChatCompletionClientMoreTests: XCTestCase {
         let malformed = try await client.complete(endpointURL: endpointURL, apiKey: "key", payload: makePayload(), timeoutSeconds: 3)
         XCTAssertEqual(malformed.text, "still fine")
         XCTAssertNil(malformed.timings)
+
+        // Out-of-Int-range values must be dropped, not trap in Int(Double).
+        ScriptedResponseURLProtocol.handler = { request in
+            try Self.httpResponse(for: request, json: [
+                "choices": [["message": ["content": "no trap"]]],
+                "timings": ["prompt_n": 1e100, "prompt_ms": 12.5],
+            ])
+        }
+        let huge = try await client.complete(endpointURL: endpointURL, apiKey: "key", payload: makePayload(), timeoutSeconds: 3)
+        XCTAssertEqual(huge.text, "no trap")
+        XCTAssertNil(huge.timings)
     }
 
     func testChoiceWithoutUsableContentThrowsMalformedResponse() async {

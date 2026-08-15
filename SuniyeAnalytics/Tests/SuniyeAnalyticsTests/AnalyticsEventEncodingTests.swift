@@ -48,6 +48,12 @@ final class AnalyticsEventEncodingTests: XCTestCase {
             model: SafeLabel("gemma-4-e2b"), promptTokens: 2476, cachedTokens: 0, predictedTokens: 31, prefillMs: 1696, decodeMs: 504
         )
         XCTAssertEqual(miss.props["cache_hit"], .bool(false))
+
+        // Only the chat-template tokens shared with an unrelated previous request: not a hit.
+        let templateOnly = AnalyticsEvent.llmGeneration(
+            model: SafeLabel("gemma-4-e2b"), promptTokens: 2473, cachedTokens: 3, predictedTokens: 31, prefillMs: 1690, decodeMs: 500
+        )
+        XCTAssertEqual(templateOnly.props["cache_hit"], .bool(false))
     }
 
     func testDictationEditedEvent() {

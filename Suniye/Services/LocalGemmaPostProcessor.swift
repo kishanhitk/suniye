@@ -75,15 +75,18 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
     }
 
     /// Best-effort warm-up so the model is resident (and its Metal/KV kernels compiled)
-    /// before the first real polish request. Safe to call speculatively on dictation
-    /// start: it no-ops when the runtime is already warm or unavailable, shares any
-    /// in-flight startup, never throws into the caller, and aborts promptly when the
-    /// caller cancels it (freeing the generation slot for the real request).
+    /// and the slot's prompt cache holds the polish prefix before the first real
+    /// request. Safe to call speculatively on dictation start: it no-ops when
+    /// unavailable, shares any in-flight startup, never throws into the caller, and
+    /// aborts promptly when the caller cancels it (freeing the generation slot).
+    ///
+    /// It probes even when the process is already warm: llama-server has ONE slot,
+    /// and any other request shape (an Edit Mode rewrite) evicts the polish prefix
+    /// from it. A probe against a primed cache is ~100 ms of slot time off the
+    /// critical path; skipping it would silently hand the next dictation the full
+    /// prefill. Process warmth and cache shape are different things.
     func prewarm(config: LocalGemmaMagicFormatConfig) async {
         guard availability.isAvailable, !Task.isCancelled else {
-            return
-        }
-        if await isRuntimeWarm() {
             return
         }
         let start = DispatchTime.now()
