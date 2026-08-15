@@ -101,7 +101,22 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         try await processor.testSetup(config: makeConfig())
 
         XCTAssertEqual(client.callCount, 1)
-        XCTAssertEqual(client.prompts.first, "Connection test.")
+        XCTAssertEqual(client.prompts.first, "<transcript>\n\(LocalGemmaDefaults.probeText)\n</transcript>")
+    }
+
+    /// The probe exists to fill llama-server's prompt cache; that only works if it
+    /// sends the same instruction prefix a real polish sends.
+    func testProbeSharesInstructionPrefixWithPolish() async throws {
+        let client = FakeLocalGemmaClient(outputs: ["OK", "polished text"])
+        let processor = LocalGemmaPostProcessor(client: client)
+        let config = makeConfig()
+
+        await processor.prewarm(config: config)
+        _ = try await processor.polish(text: "raw text", config: config)
+
+        XCTAssertEqual(client.callCount, 2)
+        XCTAssertEqual(client.instructions[0], client.instructions[1])
+        XCTAssertTrue(client.instructions[0].hasPrefix(LLMDefaults.defaultGemmaMagicFormatPrompt))
     }
 
     func testServerArgumentsDisableReasoning() {

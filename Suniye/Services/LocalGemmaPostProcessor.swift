@@ -15,6 +15,7 @@ enum LocalGemmaDefaults {
     static let shutdownTimeoutSeconds = 2.0
     static let maxTokens = 256
     static let probeMaxTokens = 8
+    static let probeText = "warm up"
 
     static func serverArguments(modelPath: String, port: Int, apiKey: String) -> [String] {
         return [
@@ -78,7 +79,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             return
         }
         do {
-            _ = try await runProbe(prompt: "Warm up.", config: config)
+            _ = try await runProbe(config: config)
             AppLogger.shared.log(.info, "local gemma prewarm complete")
         } catch is CancellationError {
             AppLogger.shared.log(.debug, "local gemma prewarm canceled by real request")
@@ -90,10 +91,23 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
 
     /// Tiny generation used to load the model and compile its kernels. Callers apply
     /// their own tail policy (prewarm swallows failures; testSetup validates output).
-    private func runProbe(prompt: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
-        try await client.generate(
-            instructions: "Reply with OK.",
-            prompt: prompt,
+    ///
+    /// The probe is shaped exactly like a real polish (same instructions, same
+    /// `<transcript>` wrapper) rather than a throwaway "Reply with OK." — llama-server
+    /// caches the KV state of the last prompt, and only a byte-identical prefix hits.
+    /// With the ~2.4k-token system prompt, a mismatched probe left the first real
+    /// request paying ~1.6s of prefill on the critical path.
+    private func runProbe(config: LocalGemmaMagicFormatConfig) async throws -> String {
+        let request = MagicFormatPipeline.makeRequest(
+            text: LocalGemmaDefaults.probeText,
+            systemPrompt: config.systemPrompt,
+            keywords: config.keywords,
+            maxTokens: LocalGemmaDefaults.probeMaxTokens,
+            retrying: false
+        )
+        return try await client.generate(
+            instructions: request.instructions,
+            prompt: request.prompt,
             maxTokens: LocalGemmaDefaults.probeMaxTokens,
             startupTimeoutSeconds: config.startupTimeoutSeconds,
             idleTimeoutSeconds: config.idleTimeoutSeconds,
@@ -161,7 +175,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
         }
 
-        let output = try await runProbe(prompt: "Connection test.", config: config)
+        let output = try await runProbe(config: config)
         guard !sanitizeGemmaOutput(output).isEmpty else {
             throw LLMPostProcessorError.emptyOutput
         }

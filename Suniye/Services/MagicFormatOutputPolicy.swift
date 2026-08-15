@@ -90,15 +90,12 @@ enum MagicFormatPipeline {
                     maxTokens: maxTokens
                 )
             } else {
-                request = MagicFormatGenerationRequest(
-                    instructions: MagicFormatPromptComposer.makeInstructions(
-                        systemPrompt: systemPrompt,
-                        keywords: keywords,
-                        text: trimmedInput,
-                        retrying: attempt > 0
-                    ),
-                    prompt: makePrompt(text: trimmedInput),
-                    maxTokens: maxTokens
+                request = makeRequest(
+                    text: trimmedInput,
+                    systemPrompt: systemPrompt,
+                    keywords: keywords,
+                    maxTokens: maxTokens,
+                    retrying: attempt > 0
                 )
             }
 
@@ -111,6 +108,28 @@ enum MagicFormatPipeline {
         }
 
         throw lastInvalidOutputWasEmpty ? LLMPostProcessorError.emptyOutput : LLMPostProcessorError.malformedResponse
+    }
+
+    /// The instruction-channel request shape (instructions + tagged transcript). Shared
+    /// with the local Gemma warm-up probe so the probe fills llama-server's prompt cache
+    /// with the same multi-thousand-token prefix a real polish will send.
+    static func makeRequest(
+        text: String,
+        systemPrompt: String,
+        keywords: [String],
+        maxTokens: Int?,
+        retrying: Bool
+    ) -> MagicFormatGenerationRequest {
+        MagicFormatGenerationRequest(
+            instructions: MagicFormatPromptComposer.makeInstructions(
+                systemPrompt: systemPrompt,
+                keywords: keywords,
+                text: text,
+                retrying: retrying
+            ),
+            prompt: makePrompt(text: text),
+            maxTokens: maxTokens
+        )
     }
 
     private static func makePrompt(text: String) -> String {
