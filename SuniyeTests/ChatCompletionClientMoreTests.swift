@@ -48,7 +48,7 @@ final class ChatCompletionClientMoreTests: XCTestCase {
             timeoutSeconds: 3
         )
 
-        XCTAssertEqual(output, "part one\npart two")
+        XCTAssertEqual(output.text, "part one\npart two")
     }
 
     func testEmptyChoicesThrowsMalformedResponse() async {
@@ -73,7 +73,47 @@ final class ChatCompletionClientMoreTests: XCTestCase {
             timeoutSeconds: 3
         )
 
-        XCTAssertEqual(output, "legacy completion")
+        XCTAssertEqual(output.text, "legacy completion")
+    }
+
+    /// llama-server attaches `timings` (counts as ints, durations as floats); other
+    /// providers omit it. Both must decode, and a garbage block must not fail the text.
+    func testLlamaServerTimingsAreDecodedWhenPresent() async throws {
+        let client = makeClient()
+        ScriptedResponseURLProtocol.handler = { request in
+            try Self.httpResponse(for: request, json: [
+                "choices": [["message": ["content": "Polished."]]],
+                "timings": ["prompt_n": 38, "cache_n": 2439, "predicted_n": 31, "prompt_ms": 93.6, "predicted_ms": 488.9],
+            ])
+        }
+
+        let output = try await client.complete(endpointURL: endpointURL, apiKey: "key", payload: makePayload(), timeoutSeconds: 3)
+
+        XCTAssertEqual(output.text, "Polished.")
+        XCTAssertEqual(
+            output.timings,
+            ChatCompletionTimings(promptTokens: 38, cachedTokens: 2439, predictedTokens: 31, prefillMs: 94, decodeMs: 489)
+        )
+    }
+
+    func testTimingsAreNilWhenAbsentOrMalformed() async throws {
+        let client = makeClient()
+        ScriptedResponseURLProtocol.handler = { request in
+            try Self.httpResponse(for: request, json: ["choices": [["message": ["content": "no timings"]]]])
+        }
+        let absent = try await client.complete(endpointURL: endpointURL, apiKey: "key", payload: makePayload(), timeoutSeconds: 3)
+        XCTAssertEqual(absent.text, "no timings")
+        XCTAssertNil(absent.timings)
+
+        ScriptedResponseURLProtocol.handler = { request in
+            try Self.httpResponse(for: request, json: [
+                "choices": [["message": ["content": "still fine"]]],
+                "timings": ["prompt_n": "not-a-number"],
+            ])
+        }
+        let malformed = try await client.complete(endpointURL: endpointURL, apiKey: "key", payload: makePayload(), timeoutSeconds: 3)
+        XCTAssertEqual(malformed.text, "still fine")
+        XCTAssertNil(malformed.timings)
     }
 
     func testChoiceWithoutUsableContentThrowsMalformedResponse() async {

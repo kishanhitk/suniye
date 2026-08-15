@@ -32,6 +32,12 @@ enum LocalGemmaDefaults {
     }
 }
 
+struct LocalGemmaGeneration: Equatable {
+    let text: String
+    /// llama-server per-request counters; nil when the server omitted them.
+    let timings: ChatCompletionTimings?
+}
+
 protocol LocalGemmaClient {
     var availability: LocalGemmaAvailability { get }
     func isRuntimeWarm() async -> Bool
@@ -42,7 +48,7 @@ protocol LocalGemmaClient {
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
-    ) async throws -> String
+    ) async throws -> LocalGemmaGeneration
     func stopRuntime() async
 }
 
@@ -53,9 +59,17 @@ extension LocalGemmaClient {
 
 final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
     private let client: LocalGemmaClient
+    /// Fired with llama-server's counters after every user-facing generation
+    /// (polish / Edit Mode rewrite) — never for the warm-up probe, whose full
+    /// prefill is expected and would read as a cache miss. Analytics-only; may be nil.
+    private let onGeneration: (@Sendable (ChatCompletionTimings) -> Void)?
 
-    init(client: LocalGemmaClient = LocalGemmaLlamaCppClient()) {
+    init(
+        client: LocalGemmaClient = LocalGemmaLlamaCppClient(),
+        onGeneration: (@Sendable (ChatCompletionTimings) -> Void)? = nil
+    ) {
         self.client = client
+        self.onGeneration = onGeneration
     }
 
     var availability: LocalGemmaAvailability {
@@ -78,9 +92,11 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
         if await isRuntimeWarm() {
             return
         }
+        let start = DispatchTime.now()
         do {
             _ = try await runProbe(config: config)
-            AppLogger.shared.log(.info, "local gemma prewarm complete")
+            let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
+            AppLogger.shared.log(.info, "local gemma prewarm complete latency_ms=\(elapsedMs)")
         } catch is CancellationError {
             AppLogger.shared.log(.debug, "local gemma prewarm canceled by real request")
         } catch {
@@ -112,7 +128,28 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             startupTimeoutSeconds: config.startupTimeoutSeconds,
             idleTimeoutSeconds: config.idleTimeoutSeconds,
             timeoutSeconds: config.generationTimeoutSeconds
+        ).text
+    }
+
+    /// A user-facing generation: runs the client and reports its counters.
+    private func generateAndReport(
+        instructions: String,
+        prompt: String,
+        maxTokens: Int,
+        config: LocalGemmaMagicFormatConfig
+    ) async throws -> String {
+        let generation = try await client.generate(
+            instructions: instructions,
+            prompt: prompt,
+            maxTokens: maxTokens,
+            startupTimeoutSeconds: config.startupTimeoutSeconds,
+            idleTimeoutSeconds: config.idleTimeoutSeconds,
+            timeoutSeconds: config.generationTimeoutSeconds
         )
+        if let timings = generation.timings {
+            onGeneration?(timings)
+        }
+        return generation.text
     }
 
     func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
@@ -128,13 +165,11 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             sanitize: sanitizeGemmaOutput
         ) { request in
             do {
-                return try await client.generate(
+                return try await generateAndReport(
                     instructions: request.instructions,
                     prompt: request.prompt,
                     maxTokens: request.maxTokens ?? config.maxTokens,
-                    startupTimeoutSeconds: config.startupTimeoutSeconds,
-                    idleTimeoutSeconds: config.idleTimeoutSeconds,
-                    timeoutSeconds: config.generationTimeoutSeconds
+                    config: config
                 )
             } catch let error as LLMPostProcessorError {
                 throw error
@@ -150,13 +185,11 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
         }
 
         do {
-            let raw = try await client.generate(
+            let raw = try await generateAndReport(
                 instructions: instructions,
                 prompt: userText,
                 maxTokens: config.maxTokens,
-                startupTimeoutSeconds: config.startupTimeoutSeconds,
-                idleTimeoutSeconds: config.idleTimeoutSeconds,
-                timeoutSeconds: config.generationTimeoutSeconds
+                config: config
             )
             let sanitized = sanitizeGemmaOutput(raw)
             guard !sanitized.isEmpty else {

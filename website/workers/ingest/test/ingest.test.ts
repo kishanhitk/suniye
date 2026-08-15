@@ -294,6 +294,30 @@ describe("buildDataPoint slot registry", () => {
     expect(outcome.doubles[16]).toBe(1);      // double17 = practiced
     expect(JSON.parse(outcome.blobs[19] as string).ax_granted).toBe(false);
   });
+
+  test("llm_generation maps prefill_ms, cached_tokens and cache_hit to shared slots", () => {
+    const gen = buildDataPoint(
+      event("llm_generation", {
+        model: "gemma-4-e2b", prompt_tokens: 38, cached_tokens: 2439, predicted_tokens: 31,
+        prefill_ms: 94, decode_ms: 489, cache_hit: true,
+      }),
+      b({ device }),
+      ""
+    );
+    expect(gen.blobs[16]).toBe("gemma-4-e2b"); // blob17 = model (not device mac_model)
+    expect(gen.doubles[13]).toBe(94);          // double14 = prefill_ms
+    expect(gen.doubles[14]).toBe(2439);        // double15 = cached_tokens
+    expect(gen.doubles[16]).toBe(1);           // double17 = cache_hit
+    // Everything else is recoverable from the props backstop.
+    const props = JSON.parse(gen.blobs[19] as string);
+    expect(props.prompt_tokens).toBe(38);
+    expect(props.predicted_tokens).toBe(31);
+    expect(props.decode_ms).toBe(489);
+
+    const miss = buildDataPoint(event("llm_generation", { model: "gemma-4-e2b", prefill_ms: 1696, cached_tokens: 0, cache_hit: false }), b({ device }), "");
+    expect(miss.doubles[13]).toBe(1696);
+    expect(miss.doubles[16]).toBe(0);
+  });
 });
 
 describe("ingestConfigFromEnv", () => {

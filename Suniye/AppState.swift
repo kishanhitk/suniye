@@ -1695,7 +1695,17 @@ final class AppState {
                 onKeepAliveEvicted: { model in
                     analytics.track(.modelLoad(model: SafeLabel(model), loadMs: 0, evictedByKeepAlive: true))
                 }
-            )
+            ),
+            onGeneration: { timings in
+                analytics.track(.llmGeneration(
+                    model: SafeLabel(LocalGemmaDefaults.modelDisplayName),
+                    promptTokens: timings.promptTokens,
+                    cachedTokens: timings.cachedTokens,
+                    predictedTokens: timings.predictedTokens,
+                    prefillMs: timings.prefillMs,
+                    decodeMs: timings.decodeMs
+                ))
+            }
         )
         self.localGemmaMagicFormatPostProcessor = resolvedLocalGemmaPostProcessor
         self.magicFormatCoordinator = MagicFormatCoordinator(

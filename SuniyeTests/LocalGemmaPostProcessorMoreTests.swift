@@ -190,8 +190,8 @@ private struct MinimalGemmaClient: LocalGemmaClient {
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
-    ) async throws -> String {
-        "OK"
+    ) async throws -> LocalGemmaGeneration {
+        LocalGemmaGeneration(text: "OK", timings: nil)
     }
 }
 
@@ -218,13 +218,13 @@ private final class ScriptedGemmaClient: LocalGemmaClient {
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
-    ) async throws -> String {
+    ) async throws -> LocalGemmaGeneration {
         self.instructions.append(instructions)
         prompts.append(prompt)
         guard !results.isEmpty else {
             throw LLMPostProcessorError.emptyOutput
         }
-        return try results.removeFirst().get()
+        return LocalGemmaGeneration(text: try results.removeFirst().get(), timings: nil)
     }
 
     func stopRuntime() async {

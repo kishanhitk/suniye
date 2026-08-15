@@ -49,6 +49,10 @@ public enum AnalyticsEvent: Sendable {
     case modelChanged(kind: ModelKind, model: SafeLabel)
     case modelDownload(kind: ModelKind, model: SafeLabel, outcome: ModelDownloadOutcome, durationMs: Int?)
     case modelLoad(model: SafeLabel, loadMs: Int, evictedByKeepAlive: Bool)
+    /// One user-facing local-LLM generation (polish / rewrite): llama-server's
+    /// per-request counters. `cachedTokens > 0` means the prewarm probe primed the
+    /// KV cache and the prefill stayed off the critical path. Counts and timings only.
+    case llmGeneration(model: SafeLabel, promptTokens: Int, cachedTokens: Int, predictedTokens: Int, prefillMs: Int, decodeMs: Int)
 
     case vocabLearnedFromEdit(count: Int)
     case featureToggled(feature: TrackableFeature, enabled: Bool)
@@ -80,6 +84,7 @@ public enum AnalyticsEvent: Sendable {
         case .modelChanged: return "model_changed"
         case .modelDownload: return "model_download"
         case .modelLoad: return "model_load"
+        case .llmGeneration: return "llm_generation"
         case .vocabLearnedFromEdit: return "vocab_learned_from_edit"
         case .featureToggled: return "feature_toggled"
         case .updateAction: return "update_action"
@@ -147,6 +152,16 @@ public enum AnalyticsEvent: Sendable {
             return out
         case let .modelLoad(model, loadMs, evicted):
             return ["model": .label(model), "load_ms": .int(loadMs), "evicted_by_keepalive": .bool(evicted)]
+        case let .llmGeneration(model, promptTokens, cachedTokens, predictedTokens, prefillMs, decodeMs):
+            return [
+                "model": .label(model),
+                "prompt_tokens": .int(promptTokens),
+                "cached_tokens": .int(cachedTokens),
+                "predicted_tokens": .int(predictedTokens),
+                "prefill_ms": .int(prefillMs),
+                "decode_ms": .int(decodeMs),
+                "cache_hit": .bool(cachedTokens > 0),
+            ]
         case let .vocabLearnedFromEdit(count):
             return ["count": .int(count)]
         case let .featureToggled(feature, enabled):

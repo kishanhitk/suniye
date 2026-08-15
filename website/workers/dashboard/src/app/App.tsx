@@ -341,9 +341,10 @@ export default function App() {
               note={
                 blocked.modelLoad
                   ? `model load ${notRecorded(blocked.modelLoad).toLowerCase()}`
-                  : stats.keepAliveEvictions > 0
-                    ? `${formatCount(stats.keepAliveEvictions)} keep-alive evictions`
-                    : undefined
+                  : [
+                      stats.llmCacheHitRatePct !== null ? `${formatPct(stats.llmCacheHitRatePct)} prompt-cache hits` : null,
+                      stats.keepAliveEvictions > 0 ? `${formatCount(stats.keepAliveEvictions)} keep-alive evictions` : null,
+                    ].filter(Boolean).join(" · ") || undefined
               }
             >
               <LatencyBars stages={stats.latency} />

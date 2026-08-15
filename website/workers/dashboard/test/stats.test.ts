@@ -45,6 +45,15 @@ describe("sql builders", () => {
     expect(sql.keepAliveEvictions("ds", 0)).toContain("double14 = 0"); // evictions carry load_ms 0
   });
 
+  test("llm prefill latency and cache-hit rate read the llm_generation stream", () => {
+    const prefill = sql.llmPrefillLatency("ds", 0);
+    expect(prefill).toContain("blob1 = 'llm_generation'");
+    expect(prefill).toContain("double14 > 0"); // prefill_ms rides the generic value_ms slot
+    const hits = sql.llmCacheHitRate("ds", 0);
+    expect(hits).toContain("blob1 = 'llm_generation'");
+    expect(hits).toContain("SUM(double17 * _sample_interval) AS hits"); // cache_hit boolean slot
+  });
+
   test("active installs uses COUNT(DISTINCT index1)", () => {
     expect(sql.activeInstallsPerDay("ds", 0)).toContain("COUNT(DISTINCT index1)");
   });
@@ -121,8 +130,9 @@ describe("whereFiltersAE (event-aware)", () => {
     // audio_backend_used: blob14 = backend, double18 = rung
     expect(whereFiltersAE({ arch: ["arm64"] }, "audio_backend_used")).toBe(" AND blob1 = ''");
     expect(whereFiltersAE({ cpu_cores: ["12"] }, "audio_backend_used")).toBe(" AND blob1 = ''");
-    // model_load: blob17 = model
+    // model_load / llm_generation: blob17 = model
     expect(whereFiltersAE({ mac_model: ["mac15-3"] }, "model_load")).toBe(" AND blob1 = ''");
+    expect(whereFiltersAE({ mac_model: ["mac15-3"] }, "llm_generation")).toBe(" AND blob1 = ''");
     // error: blob14 = type
     expect(whereFiltersAE({ arch: ["arm64"] }, "error")).toBe(" AND blob1 = ''");
   });
@@ -158,6 +168,7 @@ describe("blocked-panel detection", () => {
     expect(blockedDim({ asr_model: ["parakeet-v3"] }, "app_launch")).toBe("asr_model");
     expect(blockedDim({ arch: ["arm64"] }, "error")).toBe("arch");
     expect(blockedDim({ mac_model: ["mac15-3"] }, "model_load")).toBe("mac_model");
+    expect(blockedDim({ mac_model: ["mac15-3"] }, "llm_generation")).toBe("mac_model");
     expect(blockedDim({ chip: ["apple-m3-pro"] }, "dictation_completed")).toBeNull();
     expect(blockedDimD1({ asr_model: ["parakeet-v3"] })).toBe("asr_model");
     expect(blockedDimD1({ chip: ["apple-m3-pro"] })).toBeNull();
@@ -221,6 +232,8 @@ describe("buildStats", () => {
     if (q.includes("llm_p50")) return [{ llm_p50: 100, llm_p95: 250 }]; // separate polished-only query
     if (q.includes("asr_p50")) return [{ asr_p50: 150, asr_p95: 300 }]; // separate double6>0 query
     if (q.includes("e2e_p50")) return [{ e2e_p50: 200, e2e_p95: 500 }];
+    if (q.includes("'llm_generation'") && q.includes("AS p50")) return [{ p50: 95, p95: 1700 }]; // prefill, before the model_load matcher
+    if (q.includes("AS hits")) return [{ hits: 45, total: 50 }];
     if (q.includes("double14, _sample_interval) AS p50")) return [{ p50: 800, p95: 1900 }];
     if (q.includes("double14 = 0")) return [{ value: 3 }];
     if (q.includes("'app_launch'")) return [{ value: 20 }];
@@ -259,6 +272,8 @@ describe("buildStats", () => {
     expect(stats.latency.find((l) => l.stage === "end_to_end")?.p50).toBe(200);
     expect(stats.latency.find((l) => l.stage === "magic_format")?.p50).toBe(100);
     expect(stats.latency.find((l) => l.stage === "model_load")?.p50).toBe(800);
+    expect(stats.latency.find((l) => l.stage === "llm_prefill")?.p50).toBe(95);
+    expect(stats.llmCacheHitRatePct).toBeCloseTo(90, 5); // 45 hits / 50 generations
     expect(stats.errorsByType[0].label).toBe("transcription");
     // Magic Format fallbacks only count dictations that actually fell back —
     // empty cleanup_fallback_reason (successful/off/pre-v0.0.51) must be excluded,
@@ -317,6 +332,7 @@ describe("buildStats", () => {
     expect(stats.blocked.audio).toBe("asr_model");
     expect(stats.blocked.errors).toBe("asr_model");
     expect(stats.blocked.modelLoad).toBe("asr_model");
+    expect(stats.blocked.llmGeneration).toBe("asr_model");
     // Dictation panels themselves stay live.
     expect(stats.segmentEventCount).toBe(50);
   });
@@ -345,5 +361,6 @@ describe("buildStats", () => {
     expect(stats.totalInstalls).toBe(0);
     expect(stats.audioFallbackRatePct).toBe(0);
     expect(stats.editedSharePct).toBeNull(); // no edit sessions → "—", not "0%"
+    expect(stats.llmCacheHitRatePct).toBeNull(); // no local generations → "—", not "0%"
   });
 });
