@@ -53,35 +53,35 @@ enum MainWindowPalette {
 }
 
 enum AppTypography {
-    private static func googleSans(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        Font.custom("Google Sans", fixedSize: size).weight(weight)
+    private static func sans(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        Font.system(size: size, weight: weight)
     }
 
-    private static func fragmentMono(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        Font.custom("Fragment Mono", fixedSize: size).weight(weight)
+    private static func mono(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        Font.system(size: size, weight: weight, design: .monospaced)
     }
 
     // Sizes derived from macOS system font defaults:
     // title2 ≈ 17, headline ≈ 13 bold, body ≈ 13, subheadline ≈ 11, caption ≈ 10, callout ≈ 12
-    static let appTitle = googleSans(size: 17, weight: .semibold)
-    static let sidebarIcon = googleSans(size: 13, weight: .medium)
-    static let sidebarLabel = googleSans(size: 13)
-    static let sidebarLabelSelected = googleSans(size: 13, weight: .semibold)
-    static let pageTitle = googleSans(size: 17, weight: .semibold)
-    static let onboardingTitle = googleSans(size: 20, weight: .semibold)
-    static let sectionHeading = googleSans(size: 13, weight: .semibold)
-    static let body = googleSans(size: 13)
-    static let bodyMedium = googleSans(size: 13, weight: .medium)
-    static let subheadline = googleSans(size: 11)
-    static let subheadlineSemibold = googleSans(size: 11, weight: .semibold)
-    static let caption = googleSans(size: 10)
-    static let callout = googleSans(size: 12)
-    static let calloutMedium = googleSans(size: 12, weight: .medium)
-    static let codeCaption = fragmentMono(size: 10, weight: .medium)
-    static let codeBody = fragmentMono(size: 13)
-    static let codeBodyMedium = fragmentMono(size: 13, weight: .medium)
-    static let codeCalloutSemibold = fragmentMono(size: 12, weight: .semibold)
-    static let metricValue = fragmentMono(size: 34, weight: .medium)
+    static let appTitle = sans(size: 17, weight: .semibold)
+    static let sidebarIcon = sans(size: 13, weight: .medium)
+    static let sidebarLabel = sans(size: 13)
+    static let sidebarLabelSelected = sans(size: 13, weight: .semibold)
+    static let pageTitle = sans(size: 17, weight: .semibold)
+    static let onboardingTitle = sans(size: 20, weight: .semibold)
+    static let sectionHeading = sans(size: 13, weight: .semibold)
+    static let body = sans(size: 13)
+    static let bodyMedium = sans(size: 13, weight: .medium)
+    static let subheadline = sans(size: 11)
+    static let subheadlineSemibold = sans(size: 11, weight: .semibold)
+    static let caption = sans(size: 10)
+    static let callout = sans(size: 12)
+    static let calloutMedium = sans(size: 12, weight: .medium)
+    static let codeCaption = mono(size: 10, weight: .medium)
+    static let codeBody = mono(size: 13)
+    static let codeBodyMedium = mono(size: 13, weight: .medium)
+    static let codeCalloutSemibold = mono(size: 12, weight: .semibold)
+    static let metricValue = mono(size: 34, weight: .medium)
     static let emptyIcon = Font.system(size: 34, weight: .light)
 }
 
