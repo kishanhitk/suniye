@@ -98,7 +98,11 @@ struct FloatingIndicatorView: View {
             )
             .background {
                 ZStack {
-                    BehindWindowBlur(cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2)
+                    BehindWindowBlur(
+                        material: .hudWindow,
+                        state: .active,
+                        cornerRadius: FloatingIndicatorMetrics.previewBubbleSize.height / 2
+                    )
                     Color.black.opacity(0.35)
                 }
             }
@@ -449,40 +453,6 @@ private struct TwoLineHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
-    }
-}
-
-/// Behind-window blur for the preview bubble. SwiftUI materials only blur
-/// content within the same window, and this panel is transparent — real blur
-/// of whatever is behind the panel needs NSVisualEffectView with
-/// `.behindWindow` blending. The blur region is masked via `maskImage`
-/// (a plain CALayer mask does not constrain behind-window blur).
-private struct BehindWindowBlur: NSViewRepresentable {
-    let cornerRadius: CGFloat
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .hudWindow
-        view.blendingMode = .behindWindow
-        view.state = .active
-        view.maskImage = .roundedRectMask(cornerRadius: cornerRadius)
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
-}
-
-private extension NSImage {
-    static func roundedRectMask(cornerRadius: CGFloat) -> NSImage {
-        let edge = cornerRadius * 2 + 1
-        let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
-            NSColor.black.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius).fill()
-            return true
-        }
-        image.capInsets = NSEdgeInsets(top: cornerRadius, left: cornerRadius, bottom: cornerRadius, right: cornerRadius)
-        image.resizingMode = .stretch
-        return image
     }
 }
 

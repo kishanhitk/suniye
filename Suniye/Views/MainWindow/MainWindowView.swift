@@ -52,7 +52,7 @@ struct MainWindowView: View {
             Spacer(minLength: 0)
         }
         .frame(width: AppMetrics.sidebarWidth)
-        .background(MainWindowPalette.sidebarBackground)
+        .background { BehindWindowBlur(material: .sidebar).ignoresSafeArea() }
     }
 
     private var detail: some View {
