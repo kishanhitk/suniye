@@ -17,6 +17,13 @@ schemes:
       targets:
         - name: SuniyeTests
 settings:
+  configs:
+    Release:
+      # xcodebuild build (not archive) never sets this, so Release binaries shipped
+      # with their full Swift symbol table (~6.5 MB -> ~2.6 MB stripped). The dSYM
+      # is still produced alongside for symbolication.
+      DEPLOYMENT_POSTPROCESSING: YES
+      STRIP_INSTALLED_PRODUCT: YES
   base:
     MACOSX_DEPLOYMENT_TARGET: 14.0
     MARKETING_VERSION: 0.0.8

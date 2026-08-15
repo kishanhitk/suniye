@@ -161,7 +161,7 @@ mkdir -p "${DMG_STAGING}"
 /usr/bin/ditto "${APP_PATH}" "${DMG_STAGING}/Suniye.app"
 ln -s /Applications "${DMG_STAGING}/Applications"
 
-/usr/bin/hdiutil create -volname "Suniye" -srcfolder "${DMG_STAGING}" -ov -format UDZO "${DMG_PATH}" >/dev/null
+/usr/bin/hdiutil create -volname "Suniye" -srcfolder "${DMG_STAGING}" -ov -format ULMO "${DMG_PATH}" >/dev/null
 rm -rf "${DMG_STAGING}"
 
 (
