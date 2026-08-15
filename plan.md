@@ -110,7 +110,7 @@ Release fn/globe key → Samples fed to sherpa-onnx offline recognizer
 ### Phase 9: UI Polish & Main Window
 - **Design System**: Minimal, clean, monochromatic aesthetic
   - Color palette: Grayscale only (black, white, grays), no accent colors
-  - Typography: Google Sans for UI text, Fragment Mono for code/stats/monospace elements (fallback to installed system fonts if unavailable)
+  - Typography: system fonts only — SF Pro (semantic text styles, so the UI follows the user's text-size setting) for UI text, SF Mono for code/stats/monospace elements
   - Spacing: Generous padding, clean dividers, subtle shadows
   - Animations: Subtle, quick (0.2-0.3s), ease-out curves
 - `ListeningOverlay`: Subtle wave/ripple animation when fn/globe held
@@ -121,7 +121,7 @@ Release fn/globe key → Samples fed to sherpa-onnx offline recognizer
   - Total dictation time, words transcribed, sessions count
   - Recent activity timeline
   - Quick settings access
-  - Fragment Mono for metrics/numbers, Google Sans for labels
+  - SF Mono for metrics/numbers, SF Pro for labels
 - **SidebarView**: Navigation drawer
   - Clean iconography (SF Symbols, monochromatic)
   - Stats (default view)
@@ -139,7 +139,7 @@ Release fn/globe key → Samples fed to sherpa-onnx offline recognizer
 | Audio format | 16kHz mono Float32 | sherpa-onnx requirement |
 | Hotkey | fn/globe key (hold) | Native macOS dictation convention, single-hand |
 | Design Language | Minimal, clean, monochromatic | Visual clarity, no distractions |
-| Typography | Google Sans + Fragment Mono (with system fallback) | Preferred visual style with graceful local fallback |
+| Typography | SF Pro + SF Mono via semantic text styles | Native look, respects system text size, no bundled fonts |
 | Text insertion | Clipboard + CGEvent Cmd+V | Only reliable cross-app method on macOS |
 | Sandbox | Disabled | CGEvent posting blocked in sandbox |
 | Model storage | ~/Library/Application Support/ | Standard macOS pattern |

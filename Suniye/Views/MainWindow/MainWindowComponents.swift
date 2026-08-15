@@ -53,35 +53,29 @@ enum MainWindowPalette {
 }
 
 enum AppTypography {
-    private static func sans(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        Font.system(size: size, weight: weight)
-    }
-
-    private static func mono(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        Font.system(size: size, weight: weight, design: .monospaced)
-    }
-
-    // Sizes derived from macOS system font defaults:
-    // title2 ≈ 17, headline ≈ 13 bold, body ≈ 13, subheadline ≈ 11, caption ≈ 10, callout ≈ 12
-    static let appTitle = sans(size: 17, weight: .semibold)
-    static let sidebarIcon = sans(size: 13, weight: .medium)
-    static let sidebarLabel = sans(size: 13)
-    static let sidebarLabelSelected = sans(size: 13, weight: .semibold)
-    static let pageTitle = sans(size: 17, weight: .semibold)
-    static let onboardingTitle = sans(size: 20, weight: .semibold)
-    static let sectionHeading = sans(size: 13, weight: .semibold)
-    static let body = sans(size: 13)
-    static let bodyMedium = sans(size: 13, weight: .medium)
-    static let subheadline = sans(size: 11)
-    static let subheadlineSemibold = sans(size: 11, weight: .semibold)
-    static let caption = sans(size: 10)
-    static let callout = sans(size: 12)
-    static let calloutMedium = sans(size: 12, weight: .medium)
-    static let codeCaption = mono(size: 10, weight: .medium)
-    static let codeBody = mono(size: 13)
-    static let codeBodyMedium = mono(size: 13, weight: .medium)
-    static let codeCalloutSemibold = mono(size: 12, weight: .semibold)
-    static let metricValue = mono(size: 34, weight: .medium)
+    // Semantic text styles so the UI follows the user's system text size; at the
+    // default size these match the previous fixed points exactly (title2 17,
+    // headline 13 semibold, body 13, callout 12, subheadline 11, caption 10).
+    static let appTitle = Font.title2.weight(.semibold)
+    static let sidebarIcon = Font.body.weight(.medium)
+    static let sidebarLabel = Font.body
+    static let sidebarLabelSelected = Font.body.weight(.semibold)
+    static let pageTitle = Font.title2.weight(.semibold)
+    static let sectionHeading = Font.headline
+    static let body = Font.body
+    static let bodyMedium = Font.body.weight(.medium)
+    static let subheadline = Font.subheadline
+    static let subheadlineSemibold = Font.subheadline.weight(.semibold)
+    static let caption = Font.caption
+    static let callout = Font.callout
+    static let calloutMedium = Font.callout.weight(.medium)
+    static let codeCaption = Font.system(.caption, design: .monospaced, weight: .medium)
+    static let codeBody = Font.system(.body, design: .monospaced)
+    static let codeBodyMedium = Font.system(.body, design: .monospaced, weight: .medium)
+    static let codeCalloutSemibold = Font.system(.callout, design: .monospaced, weight: .semibold)
+    // Display sizes with no semantic equivalent (title3 is 15, title is 22) stay fixed.
+    static let onboardingTitle = Font.system(size: 20, weight: .semibold)
+    static let metricValue = Font.system(size: 34, weight: .medium, design: .monospaced)
     static let emptyIcon = Font.system(size: 34, weight: .light)
 }
 
