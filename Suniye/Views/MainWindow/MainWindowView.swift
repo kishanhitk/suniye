@@ -12,8 +12,8 @@ struct MainWindowView: View {
                 .fill(MainWindowPalette.divider)
                 .frame(width: 1)
             detail
+                .background { BehindWindowBlur(material: .underWindowBackground).ignoresSafeArea() }
         }
-        .background(MainWindowPalette.windowBackground)
         .onAppear {
             logRenderedSection()
         }
