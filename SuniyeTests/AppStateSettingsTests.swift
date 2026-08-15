@@ -6,7 +6,7 @@ import XCTest
 
 @MainActor
 final class AppStateSettingsTests: XCTestCase {
-    func testHistoryLoadRecomputesStats() {
+    func testHistoryLoadSeedsDurableStats() {
         let historyStore = TestHistoryStore()
         historyStore.value = [
             RecentResult(id: UUID(), text: "hello world", createdAt: .now, durationSeconds: 1.5, wasLLMPolished: false),
@@ -15,12 +15,14 @@ final class AppStateSettingsTests: XCTestCase {
 
         let appState = makeTestAppState(historyStore: historyStore)
 
-        XCTAssertEqual(appState.sessionCount, 2)
-        XCTAssertEqual(appState.wordsTranscribed, 5)
-        XCTAssertEqual(appState.totalDictationSeconds, 4.0, accuracy: 0.001)
+        XCTAssertEqual(appState.dictationStats.lifetimeSessions, 2)
+        XCTAssertEqual(appState.dictationStats.lifetimeWords, 5)
+        XCTAssertEqual(appState.dictationStats.lifetimeSeconds, 4.0, accuracy: 0.001)
     }
 
-    func testDeleteRecentResultUpdatesHistoryAndStats() {
+    /// Stats are a durable record, not a view over history: removing a transcript
+    /// (a privacy action) must not rewrite what the user already did.
+    func testDeleteRecentResultLeavesDurableStatsIntact() {
         let first = RecentResult(id: UUID(), text: "hello world", createdAt: .now, durationSeconds: 1.5, wasLLMPolished: false)
         let second = RecentResult(id: UUID(), text: "second test clip", createdAt: .now.addingTimeInterval(-60), durationSeconds: 2.5, wasLLMPolished: true)
         let historyStore = TestHistoryStore()
@@ -30,8 +32,8 @@ final class AppStateSettingsTests: XCTestCase {
         appState.deleteRecentResult(first)
 
         XCTAssertEqual(appState.recentResults.count, 1)
-        XCTAssertEqual(appState.sessionCount, 1)
-        XCTAssertEqual(appState.wordsTranscribed, 3)
+        XCTAssertEqual(appState.dictationStats.lifetimeSessions, 2)
+        XCTAssertEqual(appState.dictationStats.lifetimeWords, 5)
         XCTAssertEqual(historyStore.value.map(\.id), [second.id])
     }
 

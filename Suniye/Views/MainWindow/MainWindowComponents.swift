@@ -420,6 +420,8 @@ struct DashboardMetricsPanel: View {
         let tint: Color
         let value: String
         let label: String
+        /// Shown under the value. Used to state an assumption the number rests on.
+        var caption: String?
 
         var id: String { label }
     }
@@ -462,6 +464,14 @@ struct DashboardMetricsPanel: View {
                 .font(AppTypography.metricValue)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+
+            if let caption = metric.caption {
+                Text(caption)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.tertiaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
@@ -713,16 +723,21 @@ extension TimeInterval {
         return String(format: "%.1fs", self)
     }
 
+    /// Compact h/m/s. Without the hours branch a lifetime total rendered as
+    /// "347m"; past an hour the seconds stop being interesting, so they are dropped.
     var compactDurationString: String {
-        let minutes = Int(self) / 60
-        let seconds = Int(self) % 60
+        let total = Int(self)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let seconds = total % 60
+
+        if hours > 0 {
+            return minutes == 0 ? "\(hours)h" : "\(hours)h \(minutes)m"
+        }
         if minutes == 0 {
             return "\(seconds)s"
         }
-        if seconds == 0 {
-            return "\(minutes)m"
-        }
-        return "\(minutes)m \(seconds)s"
+        return seconds == 0 ? "\(minutes)m" : "\(minutes)m \(seconds)s"
     }
 }
 
@@ -775,15 +790,10 @@ struct FlowLayout: Layout {
 }
 
 extension Int {
+    /// Compact count in the user's locale. The hand-rolled version fell through
+    /// to `ByteCountFormatter` past 9,999, so a 10,000-word total rendered as
+    /// "10 KB" and a million words as "1 MB".
     var abbreviatedString: String {
-        switch self {
-        case 0..<1000:
-            return "\(self)"
-        case 1000..<10_000:
-            return String(format: "%.1fk", Double(self) / 1000).replacingOccurrences(of: ".0", with: "")
-        default:
-            return ByteCountFormatter.string(fromByteCount: Int64(self), countStyle: .decimal)
-                .replacingOccurrences(of: " bytes", with: "")
-        }
+        formatted(.number.notation(.compactName))
     }
 }

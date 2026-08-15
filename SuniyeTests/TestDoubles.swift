@@ -126,6 +126,28 @@ final class TestHistoryStore: HistoryStoreProtocol {
     }
 }
 
+/// In-memory stats store. Tests must never touch the real
+/// ~/Library/Application Support/Suniye/stats.json.
+final class TestDictationStatsStore: DictationStatsStoring {
+    private(set) var stats = DictationStats.empty
+    private(set) var recordedSeeds = 0
+
+    func record(words: Int, seconds: TimeInterval, at date: Date) {
+        stats.record(words: words, seconds: seconds, on: date)
+    }
+
+    func seedFromHistoryIfNeeded(_ results: [RecentResult]) {
+        guard !stats.didSeedFromHistory else {
+            return
+        }
+        recordedSeeds += 1
+        for result in results.sorted(by: { $0.createdAt < $1.createdAt }) {
+            stats.record(words: result.wordCount, seconds: result.durationSeconds, on: result.createdAt)
+        }
+        stats.didSeedFromHistory = true
+    }
+}
+
 final class TestKeychainService: KeychainServiceProtocol {
     private var stored: String?
 
@@ -780,6 +802,7 @@ func makeTestAppState(
     ),
     generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
     historyStore: HistoryStoreProtocol = TestHistoryStore(),
+    statsStore: DictationStatsStoring = TestDictationStatsStore(),
     keychainService: KeychainServiceProtocol = TestKeychainService(value: nil),
     appUpdateController: AppUpdateControllerProtocol? = nil,
     launchAtLoginService: LaunchAtLoginServiceProtocol = StubLaunchAtLoginService(),
@@ -820,6 +843,7 @@ func makeTestAppState(
         magicFormatPromptFileStore: magicFormatPromptFileStore,
         generalSettingsStore: generalSettingsStore,
         historyStore: historyStore,
+        statsStore: statsStore,
         keychainService: keychainService,
         appUpdateController: appUpdateController ?? StubAppUpdateController(),
         launchAtLoginService: launchAtLoginService,

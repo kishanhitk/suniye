@@ -33,11 +33,36 @@ struct DashboardPage: View {
             }
 
             DashboardMetricsPanel(metrics: [
-                .init(icon: "waveform", tint: .blue, value: "\(appState.sessionCount)", label: "Sessions"),
-                .init(icon: "calendar", tint: .orange, value: "\(appState.todaySessionCount)", label: "Today"),
-                .init(icon: "quote.opening", tint: .purple, value: appState.wordsTranscribed.abbreviatedString, label: "Words"),
-                .init(icon: "clock", tint: .green, value: appState.totalDictationSeconds.compactDurationString, label: "Time")
+                .init(
+                    icon: "clock.badge.checkmark",
+                    tint: .green,
+                    value: appState.timeSavedSeconds.compactDurationString,
+                    label: "Time saved",
+                    caption: "vs typing at \(Int(DictationStats.assumedTypingWordsPerMinute)) wpm"
+                ),
+                .init(
+                    icon: "quote.opening",
+                    tint: .purple,
+                    value: appState.dictationStats.lifetimeWords.abbreviatedString,
+                    label: "Words"
+                ),
+                .init(
+                    icon: "gauge.with.dots.needle.50percent",
+                    tint: .blue,
+                    value: "\(appState.averageWordsPerMinute)",
+                    label: "Words / min"
+                ),
+                .init(
+                    icon: "flame",
+                    tint: .orange,
+                    value: "\(appState.currentStreakDays)",
+                    label: "Day streak"
+                )
             ])
+
+            if appState.dictationStats.lifetimeSessions > 0 {
+                DashboardActivityChart(days: appState.dailyWordCounts(days: 14))
+            }
 
             VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
                 SectionHeading(title: "Recent")
