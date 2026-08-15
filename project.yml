@@ -43,7 +43,6 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDisplayName: $(SUNIYE_DISPLAY_NAME)
-        ATSApplicationFontsPath: "."
         LSUIElement: true
         NSMicrophoneUsageDescription: Suniye needs microphone access to capture dictation.
         NSSpeechRecognitionUsageDescription: Suniye uses on-device speech recognition to transcribe your dictation.
