@@ -59,7 +59,6 @@ export interface BlockedPanels {
   edits?: FilterDim;
   crash?: FilterDim;
   modelLoad?: FilterDim;
-  llmGeneration?: FilterDim;
   /** D1 install registry (installs tile, new-installs, fleet breakdowns). */
   installs?: FilterDim;
 }

@@ -168,7 +168,6 @@ describe("blocked-panel detection", () => {
     expect(blockedDim({ asr_model: ["parakeet-v3"] }, "app_launch")).toBe("asr_model");
     expect(blockedDim({ arch: ["arm64"] }, "error")).toBe("arch");
     expect(blockedDim({ mac_model: ["mac15-3"] }, "model_load")).toBe("mac_model");
-    expect(blockedDim({ mac_model: ["mac15-3"] }, "llm_generation")).toBe("mac_model");
     expect(blockedDim({ chip: ["apple-m3-pro"] }, "dictation_completed")).toBeNull();
     expect(blockedDimD1({ asr_model: ["parakeet-v3"] })).toBe("asr_model");
     expect(blockedDimD1({ chip: ["apple-m3-pro"] })).toBeNull();
@@ -332,7 +331,6 @@ describe("buildStats", () => {
     expect(stats.blocked.audio).toBe("asr_model");
     expect(stats.blocked.errors).toBe("asr_model");
     expect(stats.blocked.modelLoad).toBe("asr_model");
-    expect(stats.blocked.llmGeneration).toBe("asr_model");
     // Dictation panels themselves stay live.
     expect(stats.segmentEventCount).toBe(50);
   });

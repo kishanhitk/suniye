@@ -298,7 +298,7 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
-    ) async throws -> LocalGemmaGeneration {
+    ) async throws -> ChatCompletionResult {
         self.instructions.append(instructions)
         prompts.append(prompt)
         self.maxTokens.append(maxTokens)
@@ -317,6 +317,6 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         guard index < outputs.count else {
             throw LLMPostProcessorError.emptyOutput
         }
-        return LocalGemmaGeneration(text: outputs[index], timings: timings)
+        return ChatCompletionResult(text: outputs[index], timings: timings)
     }
 }

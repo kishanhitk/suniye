@@ -466,7 +466,6 @@ export async function buildStats(
   block("edits", blockedDim(filters, "dictation_edited"));
   block("crash", blockedDim(filters, "app_launch") ?? blockedDim(filters, "session_end"));
   block("modelLoad", blockedDim(filters, "model_load"));
-  block("llmGeneration", blockedDim(filters, "llm_generation"));
   block("installs", blockedDimD1(filters));
 
   return {

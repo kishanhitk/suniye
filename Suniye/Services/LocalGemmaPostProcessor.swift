@@ -32,12 +32,6 @@ enum LocalGemmaDefaults {
     }
 }
 
-struct LocalGemmaGeneration: Equatable {
-    let text: String
-    /// llama-server per-request counters; nil when the server omitted them.
-    let timings: ChatCompletionTimings?
-}
-
 protocol LocalGemmaClient {
     var availability: LocalGemmaAvailability { get }
     func isRuntimeWarm() async -> Bool
@@ -48,7 +42,7 @@ protocol LocalGemmaClient {
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
-    ) async throws -> LocalGemmaGeneration
+    ) async throws -> ChatCompletionResult
     func stopRuntime() async
 }
 

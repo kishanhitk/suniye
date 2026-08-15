@@ -87,8 +87,8 @@ struct ChatCompletionTimings: Decodable, Equatable {
         self.decodeMs = decodeMs
     }
 
-    // llama-server emits counts as integers and durations as floats; decode every
-    // field as Double so a representation change can't fail the whole response.
+    // llama-server sends prompt_ms/predicted_ms as floats; decode every field as
+    // Double and round so a float duration doesn't throw and drop the whole block.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         func int(_ key: CodingKeys) throws -> Int {

@@ -26,7 +26,7 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
             session: .shared
         )
 
-        let output: LocalGemmaGeneration
+        let output: ChatCompletionResult
         do {
             output = try await client.generate(
                 instructions: "Reply with OK.",

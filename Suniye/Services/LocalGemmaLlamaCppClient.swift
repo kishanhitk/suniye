@@ -45,7 +45,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
-    ) async throws -> LocalGemmaGeneration {
+    ) async throws -> ChatCompletionResult {
         let runtime: LocalGemmaRuntime
         switch locator.resolve() {
         case let .success(resolved):
@@ -94,7 +94,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
                 "local gemma generation prompt_tokens=\(t.promptTokens) cached_tokens=\(t.cachedTokens) predicted_tokens=\(t.predictedTokens) prefill_ms=\(t.prefillMs) decode_ms=\(t.decodeMs)"
             )
         }
-        return LocalGemmaGeneration(text: result.text, timings: result.timings)
+        return result
     }
 
     func stopRuntime() async {
