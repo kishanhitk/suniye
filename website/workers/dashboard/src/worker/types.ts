@@ -79,8 +79,14 @@ export interface StatsResponse {
   /** null when there are no dictations in the window (render "—", not "0%"). */
   magicFormatAdoptionPct: number | null;
   fallbackReasons: Breakdown[];
-  /** Per-stage p50/p95 incl. model_load (cold model start). */
+  /** Per-stage p50/p95 incl. model_load (cold model start) and llm_prefill (local LLM prompt processing). */
   latency: LatencySummary[];
+  /**
+   * Share of local-LLM generations (llm_generation) whose prompt prefix was
+   * served from llama-server's KV cache (%) — i.e. the prewarm probe primed it.
+   * null (→ "—") when the window has no local generations.
+   */
+  llmCacheHitRatePct: number | null;
   errorsByType: Breakdown[];
   /**
    * Clean-session proxy (session_ends / launches), as crash-FREE %. null when

@@ -25,7 +25,7 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
                     maxTokens: request.maxTokens
                 ),
                 timeoutSeconds: config.timeoutSeconds
-            )
+            ).text
         }
     }
 
@@ -41,7 +41,7 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
                 maxTokens: LLMDefaults.editModeMaxTokens
             ),
             timeoutSeconds: config.timeoutSeconds
-        )
+        ).text
         let sanitized = sanitizeOutput(output)
         guard !sanitized.isEmpty else {
             throw LLMPostProcessorError.emptyOutput
@@ -56,7 +56,7 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
             apiKey: config.apiKey,
             payload: makeSetupPayload(config: config),
             timeoutSeconds: config.timeoutSeconds
-        )
+        ).text
         let sanitized = sanitizeOutput(output)
         guard !sanitized.isEmpty else {
             throw LLMPostProcessorError.emptyOutput

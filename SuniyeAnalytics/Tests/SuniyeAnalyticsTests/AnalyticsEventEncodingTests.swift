@@ -31,6 +31,31 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         XCTAssertEqual(evict.props["evicted_by_keepalive"], .bool(true))
     }
 
+    func testLLMGenerationEvent() {
+        let hit = AnalyticsEvent.llmGeneration(
+            model: SafeLabel("gemma-4-e2b"), promptTokens: 38, cachedTokens: 2439, predictedTokens: 31, prefillMs: 94, decodeMs: 489
+        )
+        XCTAssertEqual(hit.name, "llm_generation")
+        XCTAssertEqual(hit.props["model"], .label("gemma-4-e2b"))
+        XCTAssertEqual(hit.props["prompt_tokens"], .int(38))
+        XCTAssertEqual(hit.props["cached_tokens"], .int(2439))
+        XCTAssertEqual(hit.props["predicted_tokens"], .int(31))
+        XCTAssertEqual(hit.props["prefill_ms"], .int(94))
+        XCTAssertEqual(hit.props["decode_ms"], .int(489))
+        XCTAssertEqual(hit.props["cache_hit"], .bool(true))
+
+        let miss = AnalyticsEvent.llmGeneration(
+            model: SafeLabel("gemma-4-e2b"), promptTokens: 2476, cachedTokens: 0, predictedTokens: 31, prefillMs: 1696, decodeMs: 504
+        )
+        XCTAssertEqual(miss.props["cache_hit"], .bool(false))
+
+        // Only the chat-template tokens shared with an unrelated previous request: not a hit.
+        let templateOnly = AnalyticsEvent.llmGeneration(
+            model: SafeLabel("gemma-4-e2b"), promptTokens: 2473, cachedTokens: 3, predictedTokens: 31, prefillMs: 1690, decodeMs: 500
+        )
+        XCTAssertEqual(templateOnly.props["cache_hit"], .bool(false))
+    }
+
     func testDictationEditedEvent() {
         let event = AnalyticsEvent.dictationEdited(editRateBucket: 30)
         XCTAssertEqual(event.name, "dictation_edited")

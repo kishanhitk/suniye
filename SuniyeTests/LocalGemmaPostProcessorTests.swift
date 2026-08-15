@@ -101,7 +101,41 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         try await processor.testSetup(config: makeConfig())
 
         XCTAssertEqual(client.callCount, 1)
-        XCTAssertEqual(client.prompts.first, "Connection test.")
+        XCTAssertEqual(client.prompts.first, "<transcript>\n\(LocalGemmaDefaults.probeText)\n</transcript>")
+    }
+
+    /// The probe exists to fill llama-server's prompt cache; that only works if it
+    /// sends the same instructions a real polish sends. For matched (single-line,
+    /// no-keyword) inputs the two must be byte-identical, which is the strongest
+    /// form of the shared-prefix guarantee.
+    func testProbeBuildsIdenticalInstructionsToPolish() async throws {
+        let client = FakeLocalGemmaClient(outputs: ["OK", "polished text"])
+        let processor = LocalGemmaPostProcessor(client: client)
+        let config = makeConfig()
+
+        await processor.prewarm(config: config)
+        _ = try await processor.polish(text: "raw text", config: config)
+
+        XCTAssertEqual(client.callCount, 2)
+        XCTAssertEqual(client.instructions[0], client.instructions[1])
+        XCTAssertTrue(client.instructions[0].hasPrefix(LLMDefaults.defaultGemmaMagicFormatPrompt))
+    }
+
+    func testGenerationTimingsReportedForPolishAndRewriteButNotProbe() async throws {
+        let timings = ChatCompletionTimings(promptTokens: 38, cachedTokens: 2439, predictedTokens: 31, prefillMs: 94, decodeMs: 489)
+        let client = FakeLocalGemmaClient(outputs: ["OK", "polished text", "rewritten"], timings: timings)
+        var reported: [ChatCompletionTimings] = []
+        let processor = LocalGemmaPostProcessor(client: client) { reported.append($0) }
+        let config = makeConfig()
+
+        await processor.prewarm(config: config)
+        XCTAssertTrue(reported.isEmpty, "the warm-up probe must not report as a user-facing generation")
+
+        _ = try await processor.polish(text: "raw text", config: config)
+        _ = try await processor.generate(instructions: "make it formal", userText: "hey", config: config)
+
+        XCTAssertEqual(client.callCount, 3)
+        XCTAssertEqual(reported, [timings, timings])
     }
 
     func testServerArgumentsDisableReasoning() {
@@ -160,13 +194,15 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
         XCTAssertEqual(client.idleTimeouts.first, 900)
     }
 
-    func testPrewarmSkipsWhenRuntimeAlreadyWarm() async {
+    /// A warm process is not a primed cache: an Edit Mode rewrite in between leaves
+    /// the single slot holding a different prompt, so the probe must run regardless.
+    func testPrewarmProbesEvenWhenRuntimeAlreadyWarm() async {
         let client = FakeLocalGemmaClient(runtimeWarm: true, outputs: ["OK"])
         let processor = LocalGemmaPostProcessor(client: client)
 
         await processor.prewarm(config: makeConfig())
 
-        XCTAssertEqual(client.callCount, 0)
+        XCTAssertEqual(client.callCount, 1)
     }
 
     func testPrewarmSkipsWhenUnavailable() async {
@@ -223,6 +259,7 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
     var runtimeWarm: Bool
     private let blocksUntilCanceled: Bool
     private let outputs: [String]
+    private let timings: ChatCompletionTimings?
     private(set) var callCount = 0
     private(set) var instructions: [String] = []
     private(set) var prompts: [String] = []
@@ -234,12 +271,14 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         availability: LocalGemmaAvailability = .available,
         runtimeWarm: Bool = false,
         blocksUntilCanceled: Bool = false,
-        outputs: [String]
+        outputs: [String],
+        timings: ChatCompletionTimings? = nil
     ) {
         self.availability = availability
         self.runtimeWarm = runtimeWarm
         self.blocksUntilCanceled = blocksUntilCanceled
         self.outputs = outputs
+        self.timings = timings
     }
 
     func isRuntimeWarm() async -> Bool {
@@ -261,7 +300,7 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
-    ) async throws -> String {
+    ) async throws -> ChatCompletionResult {
         self.instructions.append(instructions)
         prompts.append(prompt)
         self.maxTokens.append(maxTokens)
@@ -280,6 +319,6 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         guard index < outputs.count else {
             throw LLMPostProcessorError.emptyOutput
         }
-        return outputs[index]
+        return ChatCompletionResult(text: outputs[index], timings: timings)
     }
 }

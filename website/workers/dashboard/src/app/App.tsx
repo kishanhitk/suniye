@@ -340,10 +340,13 @@ export default function App() {
               eyebrow="Pipeline latency"
               note={
                 blocked.modelLoad
-                  ? `model load ${notRecorded(blocked.modelLoad).toLowerCase()}`
-                  : stats.keepAliveEvictions > 0
-                    ? `${formatCount(stats.keepAliveEvictions)} keep-alive evictions`
-                    : undefined
+                  // model_load and llm_generation share blob17 = model, so every dim that
+                  // blocks one blocks the other — one flag, name both streams.
+                  ? `model load & llm prefill ${notRecorded(blocked.modelLoad).toLowerCase()}`
+                  : [
+                      stats.llmCacheHitRatePct !== null ? `${formatPct(stats.llmCacheHitRatePct)} prompt-cache hits` : null,
+                      stats.keepAliveEvictions > 0 ? `${formatCount(stats.keepAliveEvictions)} keep-alive evictions` : null,
+                    ].filter(Boolean).join(" · ") || undefined
               }
             >
               <LatencyBars stages={stats.latency} />

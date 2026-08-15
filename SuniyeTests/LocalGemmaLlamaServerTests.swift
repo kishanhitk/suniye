@@ -26,7 +26,7 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
             session: .shared
         )
 
-        let output: String
+        let output: ChatCompletionResult
         do {
             output = try await client.generate(
                 instructions: "Reply with OK.",
@@ -42,7 +42,7 @@ final class LocalGemmaLlamaServerTests: XCTestCase {
             return
         }
 
-        XCTAssertEqual(output, "OK")
+        XCTAssertEqual(output.text, "OK")
         await server.stop()
     }
 

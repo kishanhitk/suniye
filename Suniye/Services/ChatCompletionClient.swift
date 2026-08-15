@@ -60,6 +60,59 @@ enum ChatCompletionRequestFactory {
     }
 }
 
+/// Per-generation counters llama-server attaches to its OpenAI-compatible response
+/// (`timings`). Absent from other providers, so always optional on the result.
+/// `cachedTokens` is the prompt-prefix reused from the slot's KV cache — the direct
+/// measure of whether the prewarm probe primed the cache for this request.
+struct ChatCompletionTimings: Decodable, Equatable {
+    let promptTokens: Int
+    let cachedTokens: Int
+    let predictedTokens: Int
+    let prefillMs: Int
+    let decodeMs: Int
+
+    enum CodingKeys: String, CodingKey {
+        case promptTokens = "prompt_n"
+        case cachedTokens = "cache_n"
+        case predictedTokens = "predicted_n"
+        case prefillMs = "prompt_ms"
+        case decodeMs = "predicted_ms"
+    }
+
+    init(promptTokens: Int, cachedTokens: Int, predictedTokens: Int, prefillMs: Int, decodeMs: Int) {
+        self.promptTokens = promptTokens
+        self.cachedTokens = cachedTokens
+        self.predictedTokens = predictedTokens
+        self.prefillMs = prefillMs
+        self.decodeMs = decodeMs
+    }
+
+    // llama-server sends prompt_ms/predicted_ms as floats; decode every field as
+    // Double and round so a float duration doesn't throw and drop the whole block.
+    // Int(Double) traps on non-finite / out-of-range input and `try?` can't catch a
+    // trap, so range-check before converting.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        func int(_ key: CodingKeys) throws -> Int {
+            let value = try container.decodeIfPresent(Double.self, forKey: key) ?? 0
+            guard value.isFinite, let int = Int(exactly: value.rounded()) else {
+                throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "timing out of Int range")
+            }
+            return int
+        }
+        promptTokens = try int(.promptTokens)
+        cachedTokens = try int(.cachedTokens)
+        predictedTokens = try int(.predictedTokens)
+        prefillMs = try int(.prefillMs)
+        decodeMs = try int(.decodeMs)
+    }
+}
+
+struct ChatCompletionResult: Equatable {
+    let text: String
+    let timings: ChatCompletionTimings?
+}
+
 final class ChatCompletionClient {
     private let session: URLSession
 
@@ -72,7 +125,7 @@ final class ChatCompletionClient {
         apiKey: String,
         payload: ChatCompletionPayload,
         timeoutSeconds: Double
-    ) async throws -> String {
+    ) async throws -> ChatCompletionResult {
         let request = try ChatCompletionRequestFactory.makeRequest(
             endpointURL: endpointURL,
             apiKey: apiKey,
@@ -98,7 +151,7 @@ final class ChatCompletionClient {
                 throw LLMPostProcessorError.provider("http_\(http.statusCode)")
             }
 
-            return try ChatCompletionResponse.extractText(from: data)
+            return try ChatCompletionResponse.extractResult(from: data)
         } catch let error as LLMPostProcessorError {
             throw error
         } catch {
@@ -177,8 +230,21 @@ private struct ChatCompletionResponse: Decodable {
     }
 
     let choices: [Choice]
+    /// Diagnostics only — a malformed `timings` block must not fail the response.
+    let timings: ChatCompletionTimings?
 
-    static func extractText(from data: Data) throws -> String {
+    enum CodingKeys: String, CodingKey {
+        case choices
+        case timings
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        choices = try container.decode([Choice].self, forKey: .choices)
+        timings = try? container.decodeIfPresent(ChatCompletionTimings.self, forKey: .timings)
+    }
+
+    static func extractResult(from data: Data) throws -> ChatCompletionResult {
         let response: Self
         do {
             response = try JSONDecoder().decode(Self.self, from: data)
@@ -189,10 +255,10 @@ private struct ChatCompletionResponse: Decodable {
             throw LLMPostProcessorError.malformedResponse
         }
         if let messageText = first.message?.content.text, !messageText.isEmpty {
-            return messageText
+            return ChatCompletionResult(text: messageText, timings: response.timings)
         }
         if let text = first.text, !text.isEmpty {
-            return text
+            return ChatCompletionResult(text: text, timings: response.timings)
         }
         throw LLMPostProcessorError.malformedResponse
     }

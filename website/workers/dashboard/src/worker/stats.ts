@@ -81,7 +81,7 @@ const DIM_SPECS: Record<FilterDim, {
   chip:      { ae: "blob16", d1: "chip",
                unavailableOn: ["permission_transition", "model_changed", "model_download", "feature_toggled", "update_action"] },
   os:        { ae: "blob18", d1: "os_version", unavailableOn: ["update_action"] },
-  mac_model: { ae: "blob17", d1: "mac_model", unavailableOn: ["model_load", "model_changed", "model_download"] },
+  mac_model: { ae: "blob17", d1: "mac_model", unavailableOn: ["model_load", "model_changed", "model_download", "llm_generation"] },
   arch:      { ae: "blob14", // not in D1 (installs has no arch column)
                unavailableOn: ["error", "audio_backend_used", "dictation_blocked", "dictation_cancelled", "onboarding_step", "audio_capture_interrupted"] },
   cpu_cores: { ae: "double18", numeric: true, d1: "cpu_cores", unavailableOn: ["audio_backend_used"] },
@@ -296,6 +296,18 @@ export const sql = {
   keepAliveEvictions: (ds: string, cutoffMs: number, where = "") =>
     `SELECT SUM(_sample_interval) AS value FROM ${ds} ` +
     `WHERE blob1 = 'model_load' AND double14 = 0 AND double1 >= ${cutoffMs}${where}`,
+
+  // Local-LLM prompt processing per user-facing generation (double14 = prefill_ms
+  // on llm_generation) and the share served from the KV cache (double17 =
+  // cache_hit). A prefill of ~2.4k tokens on the critical path vs ~40 is exactly
+  // what the prewarm probe is meant to move off it.
+  llmPrefillLatency: (ds: string, cutoffMs: number, where = "") =>
+    `SELECT quantileWeighted(0.5, double14, _sample_interval) AS p50, quantileWeighted(0.95, double14, _sample_interval) AS p95 ` +
+    `FROM ${ds} WHERE blob1 = 'llm_generation' AND double14 > 0 AND double1 >= ${cutoffMs}${where}`,
+
+  llmCacheHitRate: (ds: string, cutoffMs: number, where = "") =>
+    `SELECT SUM(double17 * _sample_interval) AS hits, SUM(_sample_interval) AS total ` +
+    `FROM ${ds} WHERE blob1 = 'llm_generation' AND double1 >= ${cutoffMs}${where}`,
 };
 
 // ---- helpers ----
@@ -382,6 +394,8 @@ export async function buildStats(
       editRate: safeAe(sql.editRate(ds, cutoffMs, w("dictation_edited"))),
       modelLoad: safeAe(sql.modelLoadLatency(ds, cutoffMs, w("model_load"))),
       evictions: safeAe(sql.keepAliveEvictions(ds, cutoffMs, w("model_load"))),
+      llmPrefill: safeAe(sql.llmPrefillLatency(ds, cutoffMs, w("llm_generation"))),
+      llmCache: safeAe(sql.llmCacheHitRate(ds, cutoffMs, w("llm_generation"))),
       dictCount: safeAe(sql.eventCount(ds, "dictation_completed", cutoffMs, w("dictation_completed"))),
       editFinalized: safeAe(sql.eventCount(ds, "dictation_edited", cutoffMs, w("dictation_edited"))),
       editChanged: safeAe(sql.editedCount(ds, cutoffMs, w("dictation_edited"))),
@@ -406,12 +420,16 @@ export async function buildStats(
   const asrLat = aeRows.asrLat[0] ?? {};
   const llmLat = aeRows.llmLat[0] ?? {};
   const modelLoad = aeRows.modelLoad[0] ?? {};
+  const llmPrefill = aeRows.llmPrefill[0] ?? {};
   const latency: LatencySummary[] = [
     { stage: "end_to_end", p50: num(lat.e2e_p50), p95: num(lat.e2e_p95) },
     { stage: "asr", p50: num(asrLat.asr_p50), p95: num(asrLat.asr_p95) },
     { stage: "magic_format", p50: num(llmLat.llm_p50), p95: num(llmLat.llm_p95) },
+    { stage: "llm_prefill", p50: num(llmPrefill.p50), p95: num(llmPrefill.p95) },
     { stage: "model_load", p50: num(modelLoad.p50), p95: num(modelLoad.p95) },
   ];
+  const llmCache = aeRows.llmCache[0] ?? {};
+  const llmCacheHitRatePct = ratio(num(llmCache.hits), num(llmCache.total));
 
   // Crash-free is a proxy: clean session_ends / launches. Needs BOTH streams —
   // null (→ "—") when either is absent, so an empty window can't read as a fake
@@ -472,6 +490,7 @@ export async function buildStats(
     editRateMedianPct: num(aeRows.editRate[0]?.median),
     editedSharePct: ratio(editChanged, editFinalized),
     keepAliveEvictions: num(aeRows.evictions[0]?.value),
+    llmCacheHitRatePct,
     segmentEventCount: dictCount,
     filterOptions,
   };

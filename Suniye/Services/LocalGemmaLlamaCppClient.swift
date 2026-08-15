@@ -45,7 +45,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
-    ) async throws -> String {
+    ) async throws -> ChatCompletionResult {
         let runtime: LocalGemmaRuntime
         switch locator.resolve() {
         case let .success(resolved):
@@ -74,7 +74,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         // task and completes for the real caller regardless.
         try Task.checkCancellation()
 
-        return try await completionClient.complete(
+        let result = try await completionClient.complete(
             endpointURL: endpoint.baseURL.appendingPathComponent("v1/chat/completions"),
             apiKey: endpoint.apiKey,
             payload: LocalGemmaCompletionRequestFactory.makePayload(
@@ -85,6 +85,16 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
             ),
             timeoutSeconds: timeoutSeconds
         )
+        // One line per generation (probe included): cached_tokens ≈ prompt_tokens of a
+        // preceding probe proves the prewarm primed the KV cache; 0 means a full
+        // prefill landed on the critical path.
+        if let t = result.timings {
+            AppLogger.shared.log(
+                .info,
+                "local gemma generation prompt_tokens=\(t.promptTokens) cached_tokens=\(t.cachedTokens) predicted_tokens=\(t.predictedTokens) prefill_ms=\(t.prefillMs) decode_ms=\(t.decodeMs)"
+            )
+        }
+        return result
     }
 
     func stopRuntime() async {

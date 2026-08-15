@@ -88,13 +88,16 @@ const DOUBLE_FIELDS: NumPick[] = [
   num("lat_stop_to_asr_start"),                   // double11
   num("lat_asr_to_llm"),                          // double12
   num("lat_insert"),                              // double13
-  firstNum("load_ms", "duration_ms"),             // double14 - generic value_ms
-  firstNum("count", "event_count", "queue_depth", "upload_failures", "evicted_by_ttl", "attempt"), // double15 (+ onboarding_practice_result attempt)
+  // llm_generation appends prefill_ms (double14) and cached_tokens (double15): the
+  // two numbers the dashboard reads for the prompt-cache panel. prompt/predicted
+  // tokens and decode_ms ride the blob20 props backstop only.
+  firstNum("load_ms", "duration_ms", "prefill_ms"),             // double14 - generic value_ms (+ llm_generation prefill_ms)
+  firstNum("count", "event_count", "queue_depth", "upload_failures", "evicted_by_ttl", "attempt", "cached_tokens"), // double15 (+ onboarding_practice_result attempt, llm_generation cached_tokens)
   boolNum("was_llm_polished"),                    // double16
   // `resumed` (onboarding_step) and `practiced` (onboarding_outcome) are appended:
   // neither event carries an earlier alias of this slot, so they surface here;
   // the JSON backstop keeps them recoverable everywhere else.
-  boolNum("granted", "enabled", "clean_exit", "fallback_occurred", "first_launch", "resumed", "practiced"),     // double17
+  boolNum("granted", "enabled", "clean_exit", "fallback_occurred", "first_launch", "resumed", "practiced", "cache_hit"),     // double17 (+ llm_generation cache_hit)
   firstNum("rung", "cpu_cores"),                  // double18 (+ device cpu_cores)
   num("ram_gb"),                                  // double19 (device ram_gb, now on every event)
   num("edit_rate_bucket"),                        // double20 - post-insertion edit rate (dictation_edited)

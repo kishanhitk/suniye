@@ -5,6 +5,7 @@ const STAGE_LABELS: Record<string, string> = {
   end_to_end: "end→end",
   asr: "speech→text",
   magic_format: "magic format",
+  llm_prefill: "llm prefill",
   model_load: "model load",
 };
 
