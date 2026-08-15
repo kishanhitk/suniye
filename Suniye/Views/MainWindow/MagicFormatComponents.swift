@@ -153,8 +153,12 @@ struct StylePageVocabularyTag: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(MainWindowPalette.secondaryText)
+                    // The glyph stays small; the hit area does not.
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableButtonStyle(pressedScale: 0.85))
+            .accessibilityLabel("Remove \(term)")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)

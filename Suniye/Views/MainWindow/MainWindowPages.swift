@@ -184,6 +184,14 @@ struct ModelPage: View {
     @Bindable var appState: AppState
     @State private var isHoveringCurrentModelActions = false
     @State private var hoveredLibraryModelID: ASRModelID?
+    @State private var pendingDeleteModelID: ASRModelID?
+    @FocusState private var focusedModelAction: ModelRowAction?
+
+    /// Keyed by model so focusing one row's action does not reveal every row's.
+    fileprivate enum ModelRowAction: Hashable {
+        case openFolder(ASRModelID)
+        case delete(ASRModelID)
+    }
     private let currentModelColumns = [
         GridItem(.flexible(minimum: 150), spacing: 18, alignment: .leading),
         GridItem(.flexible(minimum: 150), spacing: 18, alignment: .leading)
@@ -196,7 +204,7 @@ struct ModelPage: View {
     var body: some View {
         DetailScrollContainer {
             VStack(alignment: .leading, spacing: 4) {
-                DetailPageTitle(title: "ASR Model")
+                DetailPageTitle(title: "Speech Model")
                 Text("Choose the offline recognizer \(AppIdentity.current.displayName) keeps on your Mac.")
                     .font(AppTypography.body)
                     .foregroundStyle(MainWindowPalette.secondaryText)
@@ -225,6 +233,28 @@ struct ModelPage: View {
                 }
             }
         }
+        // Deleting is a multi-gigabyte re-download, which is exactly the kind of
+        // slip a confirmation is for.
+        .confirmationDialog(
+            "Delete this model?",
+            isPresented: Binding(
+                get: { pendingDeleteModelID != nil },
+                set: { if !$0 { pendingDeleteModelID = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let pendingDeleteModelID {
+                    appState.deleteASRModel(pendingDeleteModelID)
+                }
+                pendingDeleteModelID = nil
+            }
+            Button("Cancel", role: .cancel) {
+                pendingDeleteModelID = nil
+            }
+        } message: {
+            Text("You will have to download it again to use it.")
+        }
     }
 
     private var currentModelCard: some View {
@@ -236,7 +266,7 @@ struct ModelPage: View {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 10) {
                             Text(entry.displayName)
-                                .font(AppTypography.pageTitle)
+                                .font(AppTypography.cardTitle)
 
                             StatusPill(
                                 title: appState.modelStatusValue,
@@ -385,7 +415,12 @@ struct ModelPage: View {
     }
 
     private func hoverRevealActions(for modelID: ASRModelID, isVisible: Bool) -> some View {
-        HStack(spacing: 6) {
+        // Keyboard focus reveals the actions too — otherwise they are an
+        // invisible focusable trap for anyone not using a mouse.
+        let isFocused = focusedModelAction == .openFolder(modelID) || focusedModelAction == .delete(modelID)
+        let isRevealed = isVisible || isFocused
+
+        return HStack(spacing: 6) {
             ActionIconButton(
                 systemName: "folder",
                 accessibilityLabel: "Open model folder",
@@ -393,20 +428,22 @@ struct ModelPage: View {
                 appState.openModelFolder(for: modelID)
                 }
             )
+            .focused($focusedModelAction, equals: .openFolder(modelID))
 
             ActionIconButton(
                 systemName: "trash",
                 accessibilityLabel: "Delete model",
                 tint: MainWindowPalette.destructive,
                 action: {
-                appState.deleteASRModel(modelID)
+                pendingDeleteModelID = modelID
                 }
             )
+            .focused($focusedModelAction, equals: .delete(modelID))
         }
         .frame(height: AppMetrics.iconButtonSize)
-        .opacity(isVisible ? 1 : 0.001)
-        .offset(y: isVisible ? 0 : -2)
-        .animation(.easeOut(duration: 0.16), value: isVisible)
+        .opacity(isRevealed ? 1 : 0.001)
+        .offset(y: isRevealed ? 0 : -2)
+        .animation(.easeOut(duration: 0.16), value: isRevealed)
     }
 
     private func rowMeta(title: String, value: String) -> some View {
@@ -842,17 +879,15 @@ private struct HotkeyRecorderButton: View {
                         .font(AppTypography.codeBodyMedium)
                 }
                 .padding(.horizontal, 12)
-                .frame(height: 34)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(MainWindowPalette.cardSurface)
-                )
+                // Minimum, not fixed: a hard height clips at larger text sizes.
+                .frame(minHeight: 34)
+                .background(recorderSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(isCapturing ? Color.accentColor.opacity(0.5) : MainWindowPalette.cardStroke, lineWidth: 1)
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableButtonStyle(pressedScale: 0.98))
 
             if allowsClear && configuration != nil && !isCapturing {
                 Button {
@@ -861,12 +896,26 @@ private struct HotkeyRecorderButton: View {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(MainWindowPalette.secondaryText)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle(pressedScale: 0.9))
                 .help(clearHelp)
             }
         }
         .onDisappear {
             stopCapturing()
+        }
+    }
+
+    /// The recorder sits on a card, so it needs a surface of its own to read as
+    /// pressable. On macOS 26 that is interactive glass; below it, the elevated
+    /// input fill, matching the app's other editable fields.
+    @ViewBuilder
+    private var recorderSurface: some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        if #available(macOS 26, *) {
+            shape.fill(.clear)
+                .glassEffect(isCapturing ? .regular.interactive() : .regular, in: shape)
+        } else {
+            shape.fill(MainWindowPalette.editorBackground)
         }
     }
 

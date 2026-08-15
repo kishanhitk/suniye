@@ -14,7 +14,7 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
         case .history:
             return "History"
         case .model:
-            return "Model"
+            return "Speech Model"
         case .style:
             return "Magic Format"
         case .general:

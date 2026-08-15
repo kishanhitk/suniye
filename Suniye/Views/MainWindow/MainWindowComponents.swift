@@ -3,7 +3,23 @@ import SwiftUI
 
 private extension NSAppearance {
     var usesDarkMainWindowPalette: Bool {
-        bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        bestMatch(from: [
+            .darkAqua,
+            .aqua,
+            .accessibilityHighContrastDarkAqua,
+            .accessibilityHighContrastAqua
+        ]).map { $0 == .darkAqua || $0 == .accessibilityHighContrastDarkAqua } ?? false
+    }
+
+    /// True when the user has asked for increased contrast. Hairlines tuned for
+    /// the default appearance disappear entirely at that setting.
+    var usesIncreasedContrast: Bool {
+        switch bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua]) {
+        case .some(.accessibilityHighContrastAqua), .some(.accessibilityHighContrastDarkAqua):
+            return true
+        default:
+            return false
+        }
     }
 }
 
@@ -19,15 +35,17 @@ private enum MainWindowNSPalette {
     })
 
     static let divider = NSColor(name: nil, dynamicProvider: { appearance in
-        appearance.usesDarkMainWindowPalette
-            ? NSColor.white.withAlphaComponent(0.08)
-            : NSColor.black.withAlphaComponent(0.06)
+        let alpha = appearance.usesIncreasedContrast ? 0.34 : 0.08
+        return appearance.usesDarkMainWindowPalette
+            ? NSColor.white.withAlphaComponent(alpha)
+            : NSColor.black.withAlphaComponent(appearance.usesIncreasedContrast ? 0.32 : 0.06)
     })
 
     static let stroke = NSColor(name: nil, dynamicProvider: { appearance in
-        appearance.usesDarkMainWindowPalette
-            ? NSColor.white.withAlphaComponent(0.1)
-            : NSColor.black.withAlphaComponent(0.07)
+        let alpha = appearance.usesIncreasedContrast ? 0.38 : 0.1
+        return appearance.usesDarkMainWindowPalette
+            ? NSColor.white.withAlphaComponent(alpha)
+            : NSColor.black.withAlphaComponent(appearance.usesIncreasedContrast ? 0.36 : 0.07)
     })
 
     static let selection = NSColor(name: nil, dynamicProvider: { appearance in
@@ -42,11 +60,10 @@ enum MainWindowPalette {
     static let windowBackground = Color(nsColor: MainWindowNSPalette.baseSurface)
     static let sidebarTitle = Color.primary.opacity(0.85)
     static let divider = Color(nsColor: MainWindowNSPalette.divider)
-    /// Card surface inside the main window. A material, not a solid colour: the
-    /// window is vibrant now, so an opaque fill reads as a hole punched in the
-    /// glass. Text fields keep `editorBackground` — an input needs a solid field.
-    static let cardSurface: Material = .regularMaterial
-    /// Solid card fill, for the windows that are not vibrant (issue report).
+    /// Card surface. Solid, deliberately: the window's panes are already
+    /// behind-window vibrancy, and stacking a translucent card on translucent
+    /// chrome collapses legibility ("never stack a light translucent surface on
+    /// another"). The pane is the glass; the card is the one opaque tier above it.
     static let cardBackground = Color(nsColor: MainWindowNSPalette.elevatedSurface)
     static let editorBackground = Color(nsColor: MainWindowNSPalette.elevatedSurface)
     static let cardStroke = Color(nsColor: MainWindowNSPalette.stroke)
@@ -65,6 +82,9 @@ enum AppTypography {
     static let sidebarLabel = Font.body
     static let sidebarLabelSelected = Font.body.weight(.semibold)
     static let pageTitle = Font.title2.weight(.semibold)
+    /// One rung below `pageTitle`, so a card heading cannot be mistaken for the
+    /// page heading when both are on screen.
+    static let cardTitle = Font.title3.weight(.semibold)
     static let sectionHeading = Font.headline
     static let body = Font.body
     static let bodyMedium = Font.body.weight(.medium)
@@ -77,8 +97,8 @@ enum AppTypography {
     static let codeBody = Font.system(.body, design: .monospaced)
     static let codeBodyMedium = Font.system(.body, design: .monospaced, weight: .medium)
     static let codeCalloutSemibold = Font.system(.callout, design: .monospaced, weight: .semibold)
-    // Display sizes with no semantic equivalent (title3 is 15, title is 22) stay fixed.
-    static let onboardingTitle = Font.system(size: 20, weight: .semibold)
+    // Semantic, so the first screen a user meets still honours their text size.
+    static let onboardingTitle = Font.title.weight(.semibold)
     static let metricValue = Font.system(.title, design: .rounded, weight: .semibold).monospacedDigit()
     static let emptyIcon = Font.system(size: 34, weight: .light)
 }
@@ -132,7 +152,8 @@ struct SidebarNavigationRow: View {
             }
             .foregroundStyle(isSelected ? Color.primary : MainWindowPalette.secondaryText)
             .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
-            .frame(height: AppMetrics.sidebarRowHeight)
+            .padding(.vertical, 8)
+            .frame(minHeight: AppMetrics.sidebarRowHeight)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
@@ -140,7 +161,20 @@ struct SidebarNavigationRow: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle(pressedScale: 0.985))
+    }
+}
+
+/// Press feedback for the window's custom buttons. `.plain` gives none at all,
+/// so a click reads as dead until its side effect lands.
+struct PressableButtonStyle: ButtonStyle {
+    var pressedScale: CGFloat = 0.97
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .opacity(configuration.isPressed ? 0.82 : 1)
+            .animation(.snappy(duration: 0.1), value: configuration.isPressed)
     }
 }
 
@@ -268,7 +302,7 @@ struct SurfaceCard<Content: View>: View {
         .padding(padding)
         .background(
             RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardSurface)
+                .fill(MainWindowPalette.cardBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
@@ -322,17 +356,35 @@ struct ActionIconButton: View {
                 .font(AppTypography.bodyMedium)
                 .frame(width: AppMetrics.iconButtonSize, height: AppMetrics.iconButtonSize)
                 .foregroundStyle(tint)
-                .background(
-                    Circle()
-                        .fill(isHovered ? MainWindowPalette.selectedFill : .clear)
-                )
+                .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IconButtonStyle(isHovered: isHovered))
         .contentShape(Circle())
         .accessibilityLabel(Text(accessibilityLabel))
         .onHover { hovering in
             isHovered = hovering
         }
+    }
+}
+
+/// Hover is the resting state; press stacks a deeper fill and a dip on top of it.
+private struct IconButtonStyle: ButtonStyle {
+    let isHovered: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                Circle().fill(fill(isPressed: configuration.isPressed))
+            )
+            .scaleEffect(configuration.isPressed ? 0.9 : 1)
+            .animation(.snappy(duration: 0.1), value: configuration.isPressed)
+    }
+
+    private func fill(isPressed: Bool) -> Color {
+        if isPressed {
+            return MainWindowPalette.selectedFill.opacity(0.9)
+        }
+        return isHovered ? MainWindowPalette.selectedFill : .clear
     }
 }
 
@@ -401,7 +453,7 @@ struct InlineStatusBanner: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardSurface)
+                .fill(MainWindowPalette.cardBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
@@ -445,7 +497,7 @@ struct DashboardMetricsPanel: View {
                 }
             }
         }
-        .background(shape.fill(MainWindowPalette.cardSurface))
+        .background(shape.fill(MainWindowPalette.cardBackground))
         .overlay(shape.strokeBorder(MainWindowPalette.cardStroke, lineWidth: 1))
     }
 
@@ -519,7 +571,7 @@ struct AttentionTile: View {
         .padding(AppMetrics.attentionPadding)
         .background(
             RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardSurface)
+                .fill(MainWindowPalette.cardBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
@@ -533,6 +585,7 @@ struct TranscriptHistoryRow: View {
     let onCopy: () -> Void
     let onDelete: () -> Void
     @State private var isHovered = false
+    @State private var didCopy = false
     @FocusState private var focusedAction: TranscriptAction?
 
     private enum TranscriptAction: Hashable {
@@ -557,8 +610,22 @@ struct TranscriptHistoryRow: View {
                     .foregroundStyle(MainWindowPalette.secondaryText)
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {
-                    ActionIconButton(systemName: "doc.on.doc", accessibilityLabel: "Copy result", action: onCopy)
-                        .focused($focusedAction, equals: .copy)
+                    // A copy that looks identical before and after leaves the
+                    // user guessing whether it worked.
+                    ActionIconButton(
+                        systemName: didCopy ? "checkmark" : "doc.on.doc",
+                        accessibilityLabel: "Copy result",
+                        tint: didCopy ? .green : MainWindowPalette.secondaryText
+                    ) {
+                        onCopy()
+                        didCopy = true
+                        AccessibilityNotification.Announcement("Copied").post()
+                        Task {
+                            try? await Task.sleep(for: .seconds(1))
+                            didCopy = false
+                        }
+                    }
+                    .focused($focusedAction, equals: .copy)
                     ActionIconButton(systemName: "trash", accessibilityLabel: "Delete result", tint: MainWindowPalette.destructive, action: onDelete)
                         .focused($focusedAction, equals: .delete)
                 }

@@ -18,6 +18,7 @@ struct FloatingIndicatorView: View {
     let onAction: () -> Void
     let onDragChanged: () -> Void
     let onDragEnded: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var state: FloatingIndicatorState { model.state }
 
@@ -39,7 +40,7 @@ struct FloatingIndicatorView: View {
                             strokeWidth: capsuleBorderWidth,
                             interactive: false
                         )
-                        .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)))
                 }
 
                 if let previewText {
@@ -55,11 +56,11 @@ struct FloatingIndicatorView: View {
         .onHover(perform: onHoverChanged)
         // Non-overshooting so the growing pill/bubble never pokes past the
         // (instantly-sized) window bounds mid-animation.
-        .animation(.smooth(duration: 0.3), value: state.layoutAnimationKey)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: state.layoutAnimationKey)
         // Animate the live-preview bubble's appearance/disappearance. Keyed on
         // presence only (not the text), so it fires once when the bubble shows
         // or hides — per-tick text changes crossfade inside LivePreviewText.
-        .animation(.smooth(duration: 0.28), value: previewText != nil)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: previewText != nil)
         // The indicator is dark chrome in both appearances: force the dark
         // color scheme so the pill's Liquid Glass renders its dark material in
         // Light Mode too, keeping its white content legible.
@@ -110,13 +111,17 @@ struct FloatingIndicatorView: View {
             .clipShape(Self.previewBubbleShape)
             .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
             .allowsHitTesting(false)
-            .transition(.asymmetric(
-                insertion: .opacity
-                    .combined(with: .scale(scale: 0.96, anchor: .bottom))
-                    .combined(with: .offset(y: 6))
-                    .animation(.easeOut(duration: 0.25)),
-                removal: .opacity.animation(.easeOut(duration: 0.15))
-            ))
+            .transition(
+                reduceMotion
+                    ? .opacity.animation(.easeOut(duration: 0.18))
+                    : .asymmetric(
+                        insertion: .opacity
+                            .combined(with: .scale(scale: 0.96, anchor: .bottom))
+                            .combined(with: .offset(y: 6))
+                            .animation(.easeOut(duration: 0.25)),
+                        removal: .opacity.animation(.easeOut(duration: 0.15))
+                    )
+            )
     }
 
     private var previewText: String? {
