@@ -42,6 +42,11 @@ enum MainWindowPalette {
     static let windowBackground = Color(nsColor: MainWindowNSPalette.baseSurface)
     static let sidebarTitle = Color.primary.opacity(0.85)
     static let divider = Color(nsColor: MainWindowNSPalette.divider)
+    /// Card surface inside the main window. A material, not a solid colour: the
+    /// window is vibrant now, so an opaque fill reads as a hole punched in the
+    /// glass. Text fields keep `editorBackground` — an input needs a solid field.
+    static let cardSurface: Material = .regularMaterial
+    /// Solid card fill, for the windows that are not vibrant (issue report).
     static let cardBackground = Color(nsColor: MainWindowNSPalette.elevatedSurface)
     static let editorBackground = Color(nsColor: MainWindowNSPalette.elevatedSurface)
     static let cardStroke = Color(nsColor: MainWindowNSPalette.stroke)
@@ -74,7 +79,7 @@ enum AppTypography {
     static let codeCalloutSemibold = Font.system(.callout, design: .monospaced, weight: .semibold)
     // Display sizes with no semantic equivalent (title3 is 15, title is 22) stay fixed.
     static let onboardingTitle = Font.system(size: 20, weight: .semibold)
-    static let metricValue = Font.system(size: 34, weight: .medium, design: .monospaced)
+    static let metricValue = Font.system(.title, design: .rounded, weight: .semibold).monospacedDigit()
     static let emptyIcon = Font.system(size: 34, weight: .light)
 }
 
@@ -95,10 +100,7 @@ enum AppMetrics {
     static let detailPaddingBottom: CGFloat = 24
     static let cardPadding: CGFloat = 12
     static let cardCornerRadius: CGFloat = 10
-    static let metricCardPadding: CGFloat = 18
-    static let metricCardSpacing: CGFloat = 18
-    static let metricValueSpacing: CGFloat = 6
-    static let metricCardMinHeight: CGFloat = 128
+    static let metricPanelCornerRadius: CGFloat = 12
     static let cardSectionSpacing: CGFloat = 12
     static let listRowVerticalPadding: CGFloat = 10
     static let attentionPadding: CGFloat = 12
@@ -266,7 +268,7 @@ struct SurfaceCard<Content: View>: View {
         .padding(padding)
         .background(
             RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardBackground)
+                .fill(MainWindowPalette.cardSurface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
@@ -399,7 +401,7 @@ struct InlineStatusBanner: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardBackground)
+                .fill(MainWindowPalette.cardSurface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
@@ -408,29 +410,63 @@ struct InlineStatusBanner: View {
     }
 }
 
-struct DashboardMetricCard: View {
-    let icon: String
-    let iconTint: Color
-    let value: String
-    let label: String
+/// Dashboard stats. One translucent panel of equal columns rather than four
+/// opaque cards: the window is vibrant now, so a solid fill reads as a hole
+/// punched in the glass. `.regularMaterial` keeps the numbers legible over any
+/// wallpaper, which a low-alpha tint would not.
+struct DashboardMetricsPanel: View {
+    struct Metric: Identifiable {
+        let icon: String
+        let tint: Color
+        let value: String
+        let label: String
+
+        var id: String { label }
+    }
+
+    let metrics: [Metric]
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: AppMetrics.metricPanelCornerRadius, style: .continuous)
+    }
 
     var body: some View {
-        SurfaceCard(padding: AppMetrics.metricCardPadding) {
-            VStack(alignment: .leading, spacing: AppMetrics.metricCardSpacing) {
-                Image(systemName: icon)
-                    .font(.title3.weight(.medium))
-                    .foregroundStyle(iconTint)
+        HStack(spacing: 0) {
+            ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
+                cell(metric)
 
-                VStack(alignment: .leading, spacing: AppMetrics.metricValueSpacing) {
-                    Text(value)
-                        .font(AppTypography.metricValue)
-                    Text(label)
-                        .font(AppTypography.body)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
+                if index < metrics.count - 1 {
+                    Rectangle()
+                        .fill(MainWindowPalette.divider)
+                        .frame(width: 1)
+                        .padding(.vertical, 10)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: AppMetrics.metricCardMinHeight, alignment: .leading)
         }
+        .background(shape.fill(MainWindowPalette.cardSurface))
+        .overlay(shape.strokeBorder(MainWindowPalette.cardStroke, lineWidth: 1))
+    }
+
+    private func cell(_ metric: Metric) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: metric.icon)
+                    .font(AppTypography.subheadlineSemibold)
+                    .foregroundStyle(metric.tint)
+                Text(metric.label)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+            }
+
+            Text(metric.value)
+                .font(AppTypography.metricValue)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -473,7 +509,7 @@ struct AttentionTile: View {
         .padding(AppMetrics.attentionPadding)
         .background(
             RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardBackground)
+                .fill(MainWindowPalette.cardSurface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)

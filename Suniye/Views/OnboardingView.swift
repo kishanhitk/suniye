@@ -325,7 +325,7 @@ struct OnboardingView: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(MainWindowPalette.cardBackground)
+                .fill(MainWindowPalette.cardSurface)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
