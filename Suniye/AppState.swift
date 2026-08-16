@@ -830,10 +830,13 @@ final class AppState {
         else {
             return nil
         }
-        let tail = String(key.suffix(4))
-        guard key.count > 12 else {
-            return "\u{2022}\u{2022}\u{2022}\u{2022} \(tail)"
+        // A four-character key would otherwise be printed verbatim, and a
+        // five-character one all but one. Only reveal a tail when there is
+        // enough key left for the reveal to be a hint rather than the secret.
+        guard key.count >= 12 else {
+            return "\u{2022}\u{2022}\u{2022}\u{2022} \u{2022}\u{2022}\u{2022}\u{2022}"
         }
+        let tail = String(key.suffix(4))
         return "\(key.prefix(7)) \u{2022}\u{2022}\u{2022}\u{2022} \u{2022}\u{2022}\u{2022}\u{2022} \(tail)"
     }
 
@@ -1236,26 +1239,28 @@ final class AppState {
     }
 
     var asrModelBanner: ASRModelBannerState? {
-        if let activeASRModelOperationID {
-            let entry = ASRModelCatalog.entry(for: activeASRModelOperationID)
-            switch phase {
-            case .downloadingModel:
-                return ASRModelBannerState(
-                    title: "Downloading Model",
-                    detail: "Installing \(entry.displayName) locally. Keep \(AppIdentity.current.displayName) open until the files finish validating.",
-                    tone: .info,
-                    progress: downloadProgress
-                )
-            case .loading:
-                return ASRModelBannerState(
-                    title: "Loading Model",
-                    detail: "Loading \(entry.displayName) into memory. The first load can take a moment.",
-                    tone: .info,
-                    progress: nil
-                )
-            default:
-                break
-            }
+        // Keyed on the operation slots rather than the global phase. Switching
+        // to an installed model mid-download returns the phase to .ready, which
+        // used to take the download's banner — and the only Cancel button —
+        // off screen while the download was still running.
+        if let downloadID = activeASRModelDownloadID {
+            let entry = ASRModelCatalog.entry(for: downloadID)
+            return ASRModelBannerState(
+                title: "Downloading Model",
+                detail: "Installing \(entry.displayName) locally. Keep \(AppIdentity.current.displayName) open until the files finish validating.",
+                tone: .info,
+                progress: downloadProgress
+            )
+        }
+
+        if let loadID = activeASRModelLoadID {
+            let entry = ASRModelCatalog.entry(for: loadID)
+            return ASRModelBannerState(
+                title: "Loading Model",
+                detail: "Loading \(entry.displayName) into memory. The first load can take a moment.",
+                tone: .info,
+                progress: nil
+            )
         }
 
         if let lastFailedASRModelID, let lastFailedASRModelError, !lastFailedASRModelError.isEmpty {
@@ -3100,7 +3105,7 @@ final class AppState {
                     }
                 }
 
-                setPhaseUnlessCapturing(.loading, statusText: "Validating model...")
+                setPhaseUnlessCapturing(.loading, statusText: "Validating model...", owner: modelID)
 
                 guard modelManager.isInstalled(modelID) else {
                     throw AppStateError.modelValidationFailed
@@ -3115,7 +3120,7 @@ final class AppState {
                         defer { activeASRModelLoadID = nil }
                         try await loadRecognizer(for: modelID)
                         selectedASRModelID = modelID
-                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
+                        setPhaseUnlessCapturing(.ready, statusText: "Ready", owner: modelID)
                         lastError = nil
                         lastFailedASRModelID = nil
                         lastFailedASRModelError = nil
@@ -3129,9 +3134,9 @@ final class AppState {
                     }
                 } else {
                     if hadLoadedModel {
-                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
+                        setPhaseUnlessCapturing(.ready, statusText: "Ready", owner: modelID)
                     } else {
-                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required")
+                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required", owner: modelID)
                     }
                     lastFailedASRModelID = nil
                     lastFailedASRModelError = nil
@@ -3141,9 +3146,9 @@ final class AppState {
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .canceled, startedAt: modelDownloadStartedAt)
                     downloadProgress = 0
                     if hadLoadedModel {
-                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
+                        setPhaseUnlessCapturing(.ready, statusText: "Ready", owner: modelID)
                     } else {
-                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required")
+                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required", owner: modelID)
                     }
                     lastError = nil
                     AppLogger.shared.log(.info, "model download canceled id=\(modelID.rawValue)")
@@ -3809,8 +3814,18 @@ final class AppState {
         phase == .recording || phase == .transcribing
     }
 
-    private func setPhaseUnlessCapturing(_ newPhase: Phase, statusText newStatusText: String) {
+    /// `owner` is the model whose operation is reporting. A load owns the phase
+    /// while it runs, so a *different* operation — typically a background
+    /// download finishing — must not announce over it.
+    private func setPhaseUnlessCapturing(
+        _ newPhase: Phase,
+        statusText newStatusText: String,
+        owner: ASRModelID? = nil
+    ) {
         guard !isCapturing else {
+            return
+        }
+        if let activeASRModelLoadID, activeASRModelLoadID != owner {
             return
         }
         phase = newPhase
@@ -3819,17 +3834,21 @@ final class AppState {
 
     private func handleASRModelOperationFailure(for modelID: ASRModelID, error: Error, fallbackToReadyState: Bool) {
         let message = Self.friendlyModelDownloadMessage(for: error) ?? error.localizedDescription
-        downloadProgress = 0
+        // Shared state: a failure deleting or loading one model must not wipe a
+        // different model's download progress out from under it.
+        if activeASRModelDownloadID == nil || activeASRModelDownloadID == modelID {
+            downloadProgress = 0
+        }
         lastFailedASRModelID = modelID
         lastFailedASRModelError = message
 
         if fallbackToReadyState, loadedASRModelID != nil {
-            setPhaseUnlessCapturing(.ready, statusText: "Ready")
+            setPhaseUnlessCapturing(.ready, statusText: "Ready", owner: modelID)
             lastError = nil
             return
         }
 
-        setPhaseUnlessCapturing(.error, statusText: "Download failed")
+        setPhaseUnlessCapturing(.error, statusText: "Download failed", owner: modelID)
         lastError = message
     }
 
@@ -4135,13 +4154,17 @@ final class AppState {
         var didFailInsertion = false
         var didInsertFinalText = finalText.isEmpty
 
+        // Attribution is applied after insertion succeeds, not here: the record
+        // is stored before insertion is attempted so a failure is still
+        // recoverable, and a clipboard-only or failed session never reached the
+        // app the ranking would otherwise credit.
         let result = RecentResult(
             id: UUID(),
             text: finalText,
             createdAt: Date(),
             durationSeconds: duration,
             wasLLMPolished: wasLLMPolished,
-            appBundleID: frontmostAppBundleID
+            appBundleID: nil
         )
 
         // A completed system transcript must be recoverable even if insertion
@@ -4164,6 +4187,7 @@ final class AppState {
                 do {
                     try await textInsertionService.insertText(insertionText)
                     didInsertFinalText = true
+                    attributeStoredResult(result.id, to: frontmostAppBundleID)
                     dictationTiming.inserted = .now()
                     beginEditLearningTracking(insertedText: insertionText)
                     AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
@@ -4196,8 +4220,13 @@ final class AppState {
                 try textInsertionService.submitActiveInput()
                 AppLogger.shared.log(.info, "submit command executed")
             } catch {
+                // Not rethrown: the transcript was produced and inserted, so
+                // letting this reach the transcription catch reported
+                // "Transcription failed" for a dictation that in fact
+                // succeeded — only the Enter key did not land.
                 submitFailure = error
                 AppLogger.shared.log(.error, "submit command failed error=\(error.localizedDescription)")
+                analytics.track(.error(type: .insertion, code: .unknown))
             }
         }
 
@@ -4232,8 +4261,8 @@ final class AppState {
             isShowingInsertionRecoveryWarning = false
         }
 
-        if let submitFailure {
-            throw submitFailure
+        if submitFailure != nil {
+            showInsertionRecoveryWarning()
         }
     }
 
@@ -4539,6 +4568,15 @@ final class AppState {
 
     /// Mirrors the store into the observable properties the dashboard reads, so
     /// no SwiftUI body evaluation ever sums buckets.
+    /// Records which app a stored transcript actually landed in, once the
+    /// insertion has succeeded.
+    private func attributeStoredResult(_ id: UUID, to bundleID: String?) {
+        guard let bundleID, let index = recentResults.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        recentResults[index].appBundleID = bundleID
+    }
+
     /// Called on termination: see `DictationStatsStore.flush()`.
     func flushDictationStats() {
         statsStore.flush()

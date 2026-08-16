@@ -518,7 +518,7 @@ struct APIEndpointSheet: View {
                 TextField("https://api.openai.com/v1/chat/completions", text: $appState.llmEndpointURLString)
                     .textFieldStyle(.roundedBorder)
                     .font(AppTypography.codeBodyMedium)
-                if let error = appState.llmEndpointValidationError {
+                if let error = appState.apiEndpointDraftValidationError {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .font(AppTypography.caption)
                         .foregroundStyle(.red)
@@ -633,7 +633,7 @@ struct APIEndpointSheet: View {
                     TextField("gpt-4.1-mini or provider/model-id", text: $appState.llmCustomModelId)
                         .textFieldStyle(.roundedBorder)
                         .font(AppTypography.codeBodyMedium)
-                    if let error = appState.llmModelValidationError {
+                    if let error = appState.apiModelDraftValidationError {
                         Label(error, systemImage: "exclamationmark.triangle.fill")
                             .font(AppTypography.caption)
                             .foregroundStyle(.red)

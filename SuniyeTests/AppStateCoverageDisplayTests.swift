@@ -254,24 +254,30 @@ final class AppStateCoverageDisplayTests: XCTestCase {
 
         XCTAssertNil(appState.asrModelBanner)
 
+        // The banner reads the operation slots, not the phase: switching models
+        // mid-download returns the phase to .ready, and keying on that used to
+        // hide a live download along with its Cancel button.
         appState.activeASRModelDownloadID = .parakeetV3
-        appState.phase = .downloadingModel
         appState.downloadProgress = 0.25
         let downloading = appState.asrModelBanner
         XCTAssertEqual(downloading?.title, "Downloading Model")
         XCTAssertEqual(downloading?.tone, .info)
         XCTAssertEqual(downloading?.progress, 0.25)
 
-        appState.phase = .loading
+        // A download outranks a concurrent load: it is the long-running one and
+        // the only one the user can cancel.
+        appState.activeASRModelLoadID = .moonshineBase
+        XCTAssertEqual(appState.asrModelBanner?.title, "Downloading Model")
+
+        appState.activeASRModelDownloadID = nil
         let loading = appState.asrModelBanner
         XCTAssertEqual(loading?.title, "Loading Model")
         XCTAssertNil(loading?.progress)
 
-        // Active operation in a non-download phase falls through to no banner.
+        appState.activeASRModelLoadID = nil
         appState.phase = .ready
         XCTAssertNil(appState.asrModelBanner)
 
-        appState.activeASRModelLoadID = nil
         appState.lastFailedASRModelID = .parakeetV3
         appState.lastFailedASRModelError = "download exploded"
         let failed = appState.asrModelBanner

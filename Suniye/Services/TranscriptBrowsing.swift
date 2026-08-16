@@ -20,7 +20,12 @@ enum TranscriptBrowser {
         guard !query.isEmpty else {
             return results
         }
-        return results.filter { $0.text.localizedCaseInsensitiveContains(query) }
+        // Diacritic-insensitive to match `highlightingMatches(of:)`: otherwise
+        // "cafe" hides a transcript that, once shown, would have highlighted
+        // "café".
+        return results.filter {
+            $0.text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
     }
 
     /// Groups into calendar days, newest day first. Input is assumed newest-first
