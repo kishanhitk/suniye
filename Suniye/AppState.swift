@@ -3077,11 +3077,19 @@ final class AppState {
                 if modelDownloadStartedAt != nil {
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .failed, startedAt: modelDownloadStartedAt)
                 }
-                handleASRModelOperationFailure(
-                    for: modelID,
-                    error: error,
-                    fallbackToReadyState: hadLoadedModel
-                )
+                // The handoff yields with a cancellation when another switch
+                // owns the load slot or a capture is running. That is a
+                // deliberate deferral, not a failure, and reporting it would
+                // put "Download failed" on screen after a successful download.
+                if !Self.isCancellation(error) {
+                    handleASRModelOperationFailure(
+                        for: modelID,
+                        error: error,
+                        fallbackToReadyState: hadLoadedModel
+                    )
+                } else {
+                    AppLogger.shared.log(.info, "system-managed load deferred id=\(modelID.rawValue)")
+                }
             }
 
             // Only if this task still owns them: the handoff above yields when
@@ -3349,8 +3357,7 @@ final class AppState {
                 }
                 AppLogger.shared.log(.info, "model deleted id=\(modelID.rawValue)")
             } catch {
-                phase = .error
-                statusText = "Model delete failed"
+                setPhaseUnlessCapturing(.error, statusText: "Model delete failed", owner: modelID)
                 lastError = error.localizedDescription
                 lastFailedASRModelID = modelID
                 lastFailedASRModelError = error.localizedDescription
