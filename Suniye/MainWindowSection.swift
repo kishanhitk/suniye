@@ -25,7 +25,7 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
     var icon: String {
         switch self {
         case .dashboard:
-            return "text.quote"
+            return "text.alignleft"
         case .model:
             return "cpu"
         case .style:

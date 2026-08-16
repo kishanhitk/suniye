@@ -65,11 +65,11 @@ struct MainWindowView: View {
             Rectangle()
                 .fill(MainWindowPalette.divider)
                 .frame(height: 1)
-                .padding(.bottom, 6)
+                .padding(.bottom, AppMetrics.sidebarFooterPadding)
 
             SidebarInputDeviceRow(appState: appState)
                 .padding(.horizontal, AppMetrics.sidebarPaddingHorizontal)
-                .padding(.bottom, 10)
+                .padding(.bottom, AppMetrics.sidebarFooterPadding)
         }
         .frame(width: AppMetrics.sidebarWidth)
         .background { BehindWindowBlur(material: .sidebar).ignoresSafeArea() }

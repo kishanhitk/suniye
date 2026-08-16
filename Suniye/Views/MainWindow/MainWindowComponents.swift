@@ -143,6 +143,10 @@ enum AppMetrics {
     static let sidebarRowHorizontalPadding: CGFloat = 12
     static let sidebarRowHeight: CGFloat = 32
     static let sidebarRowCornerRadius: CGFloat = 8
+    /// The footer sits in its own block rather than reading as one more
+    /// navigation row, so it is given more room than the rows above it.
+    static let sidebarFooterRowHeight: CGFloat = 36
+    static let sidebarFooterPadding: CGFloat = 18
     static let detailSpacing: CGFloat = 20
     static let detailPaddingHorizontal: CGFloat = 28
     static let detailPaddingTop: CGFloat = 24
@@ -835,8 +839,8 @@ struct SidebarInputDeviceRow: View {
 
             }
             .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
-            .padding(.vertical, 6)
-            .frame(minHeight: AppMetrics.sidebarRowHeight)
+            .padding(.vertical, 7)
+            .frame(minHeight: AppMetrics.sidebarFooterRowHeight)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)

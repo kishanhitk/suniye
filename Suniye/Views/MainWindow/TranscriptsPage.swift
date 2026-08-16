@@ -353,7 +353,7 @@ struct TranscriptsHeaderView: View {
     }
 }
 
-/// Search, right-aligned.
+/// Search, left-aligned with the list it filters.
 ///
 /// The three time windows that used to sit beside it are gone: the list is
 /// already newest-first and grouped by day, so "Today" only truncated a list
@@ -365,8 +365,6 @@ struct TranscriptSearchBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Spacer(minLength: 12)
-
             HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass")
                     .font(AppTypography.subheadline)
@@ -396,6 +394,8 @@ struct TranscriptSearchBar: View {
                 fill: MainWindowPalette.editorBackground,
                 stroke: isSearchFocused ? Color.accentColor.opacity(0.55) : MainWindowPalette.cardStroke
             )
+
+            Spacer(minLength: 12)
         }
         .animation(.easeOut(duration: 0.12), value: isSearchFocused)
     }
