@@ -824,10 +824,13 @@ struct SidebarInputDeviceRow: View {
                 .disabled(!device.isAvailable)
             }
         } label: {
-            HStack(spacing: 12) {
+            HStack(alignment: .center, spacing: 14) {
+                // A smaller glyph than the navigation rows use, but kept in a
+                // box of the same width so the label still starts on their
+                // column instead of drifting left.
                 Image(systemName: hasProblem ? "exclamationmark.triangle.fill" : "mic")
-                    .font(AppTypography.subheadline)
-                    .frame(width: 20)
+                    .font(AppTypography.caption)
+                    .frame(width: 20, height: 14)
                     .foregroundStyle(hasProblem ? Color.orange : MainWindowPalette.secondaryText)
 
                 // The device name gives up space first: a long name must not
@@ -842,19 +845,22 @@ struct SidebarInputDeviceRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
             }
-            .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
-            .padding(.vertical, 7)
-            .frame(minHeight: AppMetrics.sidebarFooterRowHeight)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
-                    .fill(isHovered ? MainWindowPalette.selectedFill : .clear)
-            )
             .contentShape(Rectangle())
         }
         // AppKit draws the popup indicator itself; a hand-rolled chevron got
         // squeezed off the edge by long device names.
         .menuStyle(.borderlessButton)
+        // Padding sits OUTSIDE the menu, not inside its label: a borderless
+        // Menu insets its own label, so padding applied within it left the row
+        // ~10pt to the left of the navigation column above.
+        .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
+        .padding(.vertical, 7)
+        .frame(minHeight: AppMetrics.sidebarFooterRowHeight)
+        .background(
+            RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
+                .fill(isHovered ? MainWindowPalette.selectedFill : .clear)
+        )
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .help(appState.effectiveInputDeviceStatusText)
