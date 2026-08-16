@@ -129,6 +129,7 @@ final class TestHistoryStore: HistoryStoreProtocol {
 /// In-memory stats store. Tests must never touch the real
 /// ~/Library/Application Support/Suniye/stats.json.
 final class TestDictationStatsStore: DictationStatsStoring {
+    private(set) var flushCount = 0
     private(set) var stats = DictationStats.empty
     private(set) var recordedSeeds = 0
 
@@ -145,6 +146,10 @@ final class TestDictationStatsStore: DictationStatsStoring {
             stats.record(words: result.wordCount, seconds: result.durationSeconds, on: result.createdAt)
         }
         stats.didSeedFromHistory = true
+    }
+
+    func flush() {
+        flushCount += 1
     }
 }
 

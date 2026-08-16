@@ -43,7 +43,7 @@ Suniye/Views/MainWindow/MainWindowComponents.swift    # SwiftUI render only
 Suniye/Views/MainWindow/TranscriptsSparkline.swift     # SwiftUI render only
 Suniye/Views/MainWindow/TranscriptsPage.swift          # SwiftUI render only
 Suniye/Views/MainWindow/SpeechModelPage.swift          # SwiftUI render only
-Suniye/Views/MainWindow/TranscriptRows.swift           # SwiftUI render only
+Suniye/Views/MainWindow/TranscriptRows.swift           # SwiftUI render only (highlighting moved to TranscriptBrowsing.swift, covered)
 Suniye/Views/MainWindow/MainWindowPages.swift         # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowView.swift          # SwiftUI render only
 Suniye/Views/MainWindow/MagicFormatProviderPresentation.swift  # SwiftUI render only

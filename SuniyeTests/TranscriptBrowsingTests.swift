@@ -128,4 +128,29 @@ final class RecentResultSourceAppTests: XCTestCase {
         XCTAssertTrue(result.metaLine.contains("2 words"))
         XCTAssertTrue(result.metaLine.contains("3.0s"))
     }
+    // MARK: - Highlighting
+
+    private func highlightedRanges(_ text: String, query: String) -> Int {
+        let attributed = text.highlightingMatches(of: query)
+        return attributed.runs.filter { $0.backgroundColor != nil }.count
+    }
+
+    func testHighlightingMarksEveryOccurrence() {
+        XCTAssertEqual(highlightedRanges("report the report", query: "report"), 2)
+    }
+
+    func testHighlightingIgnoresCaseDiacriticsAndSurroundingWhitespace() {
+        XCTAssertEqual(highlightedRanges("Cafe and CAFÉ", query: "  café "), 2)
+    }
+
+    func testHighlightingLeavesTextAloneWithoutAQuery() {
+        XCTAssertEqual(highlightedRanges("nothing to mark", query: "   "), 0)
+        XCTAssertEqual(highlightedRanges("nothing to mark", query: ""), 0)
+    }
+
+    func testHighlightingPreservesTheOriginalText() {
+        let text = "Ship it Friday"
+        XCTAssertEqual(String(text.highlightingMatches(of: "friday").characters), text)
+    }
+
 }

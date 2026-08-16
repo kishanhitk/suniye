@@ -135,6 +135,10 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         // may exit first; the atomic on-disk queue means the event (and any
         // unsent events) ship on the next launch.
         sharedAppState.recordAnalyticsSessionEnd()
+        // Stats are different: their write is asynchronous with no on-disk
+        // queue behind it, so quitting right after a dictation would drop the
+        // session the dashboard has already counted.
+        sharedAppState.flushDictationStats()
     }
 
     private func observeWorkspaceLifecycle() {

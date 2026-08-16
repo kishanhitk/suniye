@@ -178,6 +178,8 @@ protocol DictationStatsStoring: AnyObject {
     var stats: DictationStats { get }
     func record(words: Int, seconds: TimeInterval, at date: Date)
     func seedFromHistoryIfNeeded(_ results: [RecentResult])
+    /// Blocks until pending writes have landed. Called on termination.
+    func flush()
 }
 
 /// Durable, bounded, and cheap to update: the in-memory snapshot is authoritative
@@ -193,19 +195,55 @@ final class DictationStatsStore: DictationStatsStoring {
         snapshot
     }
 
-    init(fileURL: URL = DictationStatsStore.defaultFileURL(), calendar: Calendar = .autoupdatingCurrent) {
+    /// `legacyFileURL` is read only when this store has no file of its own, so
+    /// splitting Preview onto its own path does not read as a reset. It stays
+    /// nil unless the caller asks for it — an injected `fileURL` must never
+    /// silently inherit the shared file.
+    init(
+        fileURL: URL = DictationStatsStore.defaultFileURL(),
+        legacyFileURL: URL? = nil,
+        calendar: Calendar = .autoupdatingCurrent
+    ) {
         self.fileURL = fileURL
         self.calendar = calendar
-        self.snapshot = Self.read(from: fileURL)
+        let own = Self.read(from: fileURL)
+        if own == .empty, let legacyFileURL, legacyFileURL != fileURL {
+            self.snapshot = Self.read(from: legacyFileURL)
+        } else {
+            self.snapshot = own
+        }
     }
 
-    static func defaultFileURL() -> URL {
+    /// The store the app itself runs on. Preview inherits the previously shared
+    /// file on first launch; Stable already owns that path.
+    static func makeDefault(identity: AppIdentity = .current) -> DictationStatsStore {
+        DictationStatsStore(
+            fileURL: defaultFileURL(identity: identity),
+            legacyFileURL: identity.isPreview ? legacySharedFileURL() : nil
+        )
+    }
+
+    /// Scoped per variant. Stable and Preview are supported side by side and
+    /// both resolved to one `stats.json`, each holding its own in-memory
+    /// snapshot — so whichever wrote last silently erased the other's sessions.
+    /// The shared file is still read once, so upgrading keeps existing numbers.
+    static func defaultFileURL(identity: AppIdentity = .current) -> URL {
+        let directory = statsDirectory()
+        guard identity.isPreview else {
+            return directory.appendingPathComponent("stats.json")
+        }
+        return directory.appendingPathComponent("stats-preview.json")
+    }
+
+    static func legacySharedFileURL() -> URL {
+        statsDirectory().appendingPathComponent("stats.json")
+    }
+
+    private static func statsDirectory() -> URL {
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first ?? FileManager.default.temporaryDirectory
-        return base
-            .appendingPathComponent("Suniye", isDirectory: true)
-            .appendingPathComponent("stats.json")
+        return base.appendingPathComponent("Suniye", isDirectory: true)
     }
 
     func record(words: Int, seconds: TimeInterval, at date: Date = Date()) {
@@ -229,6 +267,13 @@ final class DictationStatsStore: DictationStatsStoring {
         }
         snapshot.didSeedFromHistory = true
         persist()
+    }
+
+    /// Drains the write queue. Persistence is asynchronous, so quitting shortly
+    /// after a dictation could otherwise exit before the snapshot reached disk
+    /// while the dashboard had already advanced.
+    func flush() {
+        queue.sync {}
     }
 
     private func persist() {

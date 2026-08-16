@@ -1,32 +1,6 @@
 import AppKit
 import SwiftUI
 
-extension String {
-    /// The transcript with every case- and diacritic-insensitive occurrence of
-    /// `query` tinted, so a search result shows *why* it matched.
-    func highlightingMatches(of query: String) -> AttributedString {
-        var attributed = AttributedString(self)
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else {
-            return attributed
-        }
-
-        var searchStart = attributed.startIndex
-        while searchStart < attributed.endIndex,
-              let match = attributed[searchStart...].range(
-                  of: needle,
-                  options: [.caseInsensitive, .diacriticInsensitive]
-              ) {
-            attributed[match].backgroundColor = Color.accentColor.opacity(0.28)
-            // Step past this match; a zero-width result would otherwise spin.
-            guard match.upperBound > searchStart else {
-                break
-            }
-            searchStart = match.upperBound
-        }
-        return attributed
-    }
-}
 
 /// Icon of the app a dictation was inserted into. Falls back to a neutral swatch
 /// for history written before the source app was recorded.
@@ -72,7 +46,7 @@ struct CompactTranscriptRow: View {
     let result: RecentResult
     var isSelected = false
     var searchQuery = ""
-    let onCopy: () -> Void
+    let onCopy: () -> Bool
     let onDelete: () -> Void
 
     @State private var isHovered = false
@@ -80,6 +54,7 @@ struct CompactTranscriptRow: View {
     @FocusState private var focusedAction: RowAction?
 
     private enum RowAction: Hashable {
+        case copy
         case delete
     }
 
@@ -120,6 +95,9 @@ struct CompactTranscriptRow: View {
             HStack(spacing: 4) {
                 // Clicking the row copies; the icon is still a button so it
                 // responds to the pointer like the delete next to it.
+                // Focus is tracked here too, not just on delete: keyboard
+                // users could otherwise land on a control the row keeps at
+                // opacity zero.
                 ActionIconButton(
                     systemName: didCopy ? "checkmark" : "doc.on.doc",
                     accessibilityLabel: "Copy transcript",
@@ -127,6 +105,7 @@ struct CompactTranscriptRow: View {
                     hoverTint: Color.primary,
                     action: copy
                 )
+                .focused($focusedAction, equals: .copy)
 
                 ActionIconButton(
                     systemName: "trash",
@@ -155,7 +134,12 @@ struct CompactTranscriptRow: View {
     }
 
     private func copy() {
-        onCopy()
+        // No checkmark and no announcement unless the pasteboard took it:
+        // clearContents has already run, so a failed write leaves an empty
+        // clipboard and a confirmation would be a lie.
+        guard onCopy() else {
+            return
+        }
         didCopy = true
         AccessibilityNotification.Announcement("Copied").post()
         Task {

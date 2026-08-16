@@ -223,11 +223,18 @@ extension View {
 struct PressableButtonStyle: ButtonStyle {
     var pressedScale: CGFloat = 0.97
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
+        // Reduced motion keeps the feedback and drops the geometry: the press
+        // still dims, it just does not move. This is the shared style behind
+        // the sidebar, the hotkey recorder and every icon button, so leaving
+        // the scale in meant those users got motion everywhere else had
+        // removed it.
         configuration.label
-            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? pressedScale : 1)
             .opacity(configuration.isPressed ? 0.82 : 1)
-            .animation(.snappy(duration: 0.1), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.1), value: configuration.isPressed)
     }
 }
 

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// One day's transcripts, newest first.
 struct TranscriptDayGroup: Identifiable, Equatable {
@@ -74,5 +75,33 @@ enum TranscriptBrowser {
             return date.formatted(.dateTime.weekday(.abbreviated).day().month(.wide))
         }
         return date.formatted(.dateTime.day().month(.wide).year())
+    }
+}
+
+
+extension String {
+    /// The transcript with every case- and diacritic-insensitive occurrence of
+    /// `query` tinted, so a search result shows *why* it matched.
+    func highlightingMatches(of query: String) -> AttributedString {
+        var attributed = AttributedString(self)
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else {
+            return attributed
+        }
+
+        var searchStart = attributed.startIndex
+        while searchStart < attributed.endIndex,
+              let match = attributed[searchStart...].range(
+                  of: needle,
+                  options: [.caseInsensitive, .diacriticInsensitive]
+              ) {
+            attributed[match].backgroundColor = Color.accentColor.opacity(0.28)
+            // Step past this match; a zero-width result would otherwise spin.
+            guard match.upperBound > searchStart else {
+                break
+            }
+            searchStart = match.upperBound
+        }
+        return attributed
     }
 }

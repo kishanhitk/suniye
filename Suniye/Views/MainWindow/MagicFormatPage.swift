@@ -27,7 +27,13 @@ struct StylePage: View {
             } else {
                 MagicFormatOffState(appState: appState) {
                     appState.llmEnabled = true
-                    if case .notInstalled = appState.localGemmaInstallState, appState.canStartLocalGemmaDownload {
+                    // Only when the engine being switched on is actually the
+                    // local one: an API or Apple Intelligence user would
+                    // otherwise silently start a multi-gigabyte download they
+                    // will never use.
+                    if providerPresenter.displayedProviderSelection == .localGemma,
+                       case .notInstalled = appState.localGemmaInstallState,
+                       appState.canStartLocalGemmaDownload {
                         appState.startLocalGemmaDownload()
                     }
                 }

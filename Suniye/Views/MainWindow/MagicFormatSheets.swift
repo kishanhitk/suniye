@@ -532,7 +532,7 @@ struct APIEndpointSheet: View {
                     Spacer(minLength: 12)
                     // Only "Connected" earns a pill — it means a test actually
                     // succeeded. "Saved" would just repeat the masked key below.
-                    if appState.isMagicFormatSetupVerified {
+                    if appState.isAPIMagicFormatSetupVerified {
                         StylePageStatusPill(text: "Connected", isPositive: true)
                     }
                 }

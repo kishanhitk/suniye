@@ -197,8 +197,26 @@ struct SpeechModelSheet: View {
                 pendingDeleteModelID = nil
             }
         } message: {
-            Text("You will have to download it again to use it.")
+            Text(deleteMessage)
         }
+    }
+
+    /// Deleting the model in use unloads it and falls back to whatever else is
+    /// installed, so that case says so rather than reusing the generic warning.
+    private var deleteMessage: String {
+        guard let pendingDeleteModelID else {
+            return "You will have to download it again to use it."
+        }
+        guard pendingDeleteModelID == appState.currentASRModelEntry.id else {
+            return "You will have to download it again to use it."
+        }
+        let fallback = appState.availableASRModelEntries.first {
+            $0.id != pendingDeleteModelID && appState.isASRModelDownloaded($0.id)
+        }
+        if let fallback {
+            return "This is the model in use. \(AppIdentity.current.displayName) will switch to \(fallback.displayName), and you will have to download this one again to use it."
+        }
+        return "This is the model in use and no other model is downloaded, so dictation will stop working until you download one."
     }
 
     private func modelRow(_ entry: ASRModelCatalogEntry) -> some View {
@@ -244,11 +262,10 @@ struct SpeechModelSheet: View {
 
             Spacer(minLength: 12)
 
-            // Never on the model in use: deleting it silently falls back to
-            // whatever else is installed, which is not what a chooser should do
-            // on one click.
-            if entry.id != appState.currentASRModelEntry.id,
-               appState.asrModelSecondaryActionsEnabled(for: entry.id) {
+            // Including the model in use: otherwise its disk space can only be
+            // reclaimed by first downloading and switching to another one. The
+            // confirmation names the consequence instead of hiding the action.
+            if appState.asrModelSecondaryActionsEnabled(for: entry.id) {
                 Button("Delete") {
                     pendingDeleteModelID = entry.id
                 }
