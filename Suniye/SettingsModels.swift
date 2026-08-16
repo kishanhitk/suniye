@@ -556,3 +556,22 @@ struct FloatingIndicatorPlacement: Codable, Equatable {
     var centerXRatio: Double
     var bottomYRatio: Double
 }
+
+
+/// One app's share of dictation history, for the Transcripts header.
+struct DictationAppUsage: Identifiable, Equatable {
+    let bundleID: String
+    let count: Int
+
+    var id: String { bundleID }
+
+    /// Nil when the app is no longer installed, in which case there is no
+    /// honest name to show and the entry is dropped.
+    var name: String? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        return FileManager.default.displayName(atPath: url.path)
+            .replacingOccurrences(of: ".app", with: "")
+    }
+}

@@ -26,7 +26,13 @@ struct SpeechModelPage: View {
                     tint: banner.tone.color,
                     title: banner.title,
                     detail: banner.detail,
-                    progress: banner.progress
+                    progress: banner.progress,
+                    // A multi-gigabyte download was only stoppable from
+                    // onboarding; from this page the sole escape was quitting.
+                    actionTitle: appState.canCancelASRModelDownload ? "Cancel" : nil,
+                    action: appState.canCancelASRModelDownload
+                        ? { appState.cancelASRModelDownload() }
+                        : nil
                 )
                 .transition(SettingsMotion.banner(reduceMotion: reduceMotion))
             }

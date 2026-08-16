@@ -110,10 +110,6 @@ enum AppTypography {
     /// 26pt reads too loose at the system's default tracking; large text wants
     /// negative tracking the same way the small caps below want positive.
     static let transcriptsHeadlineTracking: CGFloat = -0.5
-    /// The newest transcript. Body size, same as the rows: the card already reads
-    /// as featured through its surface and its untruncated text, so oversized
-    /// type only made it shout.
-    static let featuredTranscript = Font.body
     static let sectionHeading = Font.headline
     static let body = Font.body
     static let bodyMedium = Font.body.weight(.medium)
@@ -160,9 +156,6 @@ enum AppMetrics {
     static let metricPanelCornerRadius: CGFloat = 12
     static let cardSectionSpacing: CGFloat = 12
     static let listRowVerticalPadding: CGFloat = 10
-    static let attentionPadding: CGFloat = 12
-    static let attentionCornerRadius: CGFloat = 10
-    static let attentionIconTopPadding: CGFloat = 1
     static let emptyStateSpacing: CGFloat = 14
     static let emptyStateMinHeight: CGFloat = 280
     static let emptyStateMaxWidth: CGFloat = 420
@@ -498,18 +491,58 @@ struct InlineStatusBanner: View {
     let tint: Color
     let title: String
     let detail: String
-    let progress: Double?
+    var progress: Double?
+    /// Trailing button, for banners that can be acted on where they stand.
+    var actionTitle: String?
+    var action: (() -> Void)?
+    /// Makes the whole banner a target, for banners that lead somewhere.
+    var onTap: (() -> Void)?
 
     var body: some View {
+        content
+            .padding(14)
+            // A soft wash of the severity colour instead of a bordered card.
+            // The old tinted stroke plus a coloured title was two signals for
+            // one fact, and it read as a leftover card on pages that are now
+            // flat rows.
+            .background(
+                RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
+                    .fill(tint.opacity(0.09))
+            )
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let onTap {
+            Button(action: onTap) {
+                banner
+            }
+            .buttonStyle(PressableButtonStyle(pressedScale: 0.995))
+        } else {
+            banner
+        }
+    }
+
+    private var banner: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 Image(systemName: icon)
                     .font(AppTypography.bodyMedium)
                     .foregroundStyle(tint)
 
+                // Only the icon carries the colour: a coloured headline on a
+                // tinted ground is louder than the message needs to be.
                 Text(title)
                     .font(AppTypography.bodyMedium)
-                    .foregroundStyle(tint)
+                    .foregroundStyle(Color.primary)
+
+                Spacer(minLength: 12)
+
+                if let actionTitle, let action {
+                    Button(actionTitle, action: action)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
             }
 
             Text(detail)
@@ -522,62 +555,30 @@ struct InlineStatusBanner: View {
                     .progressViewStyle(.linear)
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .stroke(tint.opacity(0.25), lineWidth: 1)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }
 
+/// A permission or setup problem, rendered as the same banner the rest of the
+/// window uses. It previously carried its own card, its own corner radius and a
+/// type scale two steps smaller than everything around it.
 struct AttentionTile: View {
     let item: AttentionItem
     let action: () -> Void
     let onFixAction: (AttentionItemFixAction) -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Button(action: action) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: item.severity == .error ? "exclamationmark.triangle.fill" : "exclamationmark.circle")
-                        .font(AppTypography.body)
-                        .foregroundStyle(item.severity == .error ? Color.red : Color.orange)
-                        .padding(.top, AppMetrics.attentionIconTopPadding)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.title)
-                            .font(AppTypography.subheadlineSemibold)
-                            .foregroundStyle(Color.primary)
-                        Text(item.detail)
-                            .font(AppTypography.caption)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 0)
-                }
-            }
-            .buttonStyle(.plain)
-
-            if let fixAction = item.fixAction {
-                Button(fixAction.title) {
-                    onFixAction(fixAction)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            }
-        }
-        .padding(AppMetrics.attentionPadding)
-        .background(
-            RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
-                .stroke(item.severity == .error ? Color.red.opacity(0.16) : Color.orange.opacity(0.16), lineWidth: 1)
+        InlineStatusBanner(
+            icon: item.severity == .error ? "exclamationmark.triangle.fill" : "exclamationmark.circle",
+            tint: item.severity == .error ? .red : .orange,
+            title: item.title,
+            detail: item.detail,
+            actionTitle: item.fixAction?.title,
+            action: item.fixAction.map { fixAction in
+                { onFixAction(fixAction) }
+            },
+            onTap: action
         )
     }
 }

@@ -300,6 +300,9 @@ final class AppState {
     /// Durable dictation totals. Mirrored from `statsStore` so the dashboard
     /// never sums buckets during a SwiftUI body evaluation.
     var dictationStats = DictationStats.empty
+    /// Where dictation lands most, recomputed when history changes rather than
+    /// scanned per body evaluation.
+    private(set) var topDictationApps: [DictationAppUsage] = []
     var recentResults: [RecentResult] = [] {
         didSet {
             guard !isHydratingHistory else {
@@ -4434,11 +4437,34 @@ final class AppState {
         // new sessions are attributed exactly.
         statsStore.seedFromHistoryIfNeeded(recentResults)
         refreshDictationStats()
+        refreshTopDictationApps()
     }
 
     private func persistHistory() {
         historyStore.save(recentResults)
+        refreshTopDictationApps()
         onStateChange?()
+    }
+
+    /// Counts are a floor, not a share: the source app was only recorded from a
+    /// certain version on, and older transcripts carry no bundle ID at all. So
+    /// this reports "how many landed here", never a percentage of everything.
+    private func refreshTopDictationApps() {
+        var counts: [String: Int] = [:]
+        for result in recentResults {
+            guard let bundleID = result.appBundleID else {
+                continue
+            }
+            counts[bundleID, default: 0] += 1
+        }
+
+        topDictationApps = counts
+            .map { DictationAppUsage(bundleID: $0.key, count: $0.value) }
+            // Count first, then bundle ID, so equal counts do not reshuffle on
+            // every refresh.
+            .sorted { ($0.count, $1.bundleID) > ($1.count, $0.bundleID) }
+            .prefix(3)
+            .map { $0 }
     }
 
     /// Mirrors the store into the observable properties the dashboard reads, so

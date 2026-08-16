@@ -31,7 +31,8 @@ struct TranscriptsPage: View {
                 timeSaved: appState.timeSavedSeconds,
                 wordsPerMinute: appState.averageWordsPerMinute,
                 streakDays: appState.currentStreakDays,
-                days: appState.dailyWordCounts(days: 14)
+                days: appState.dailyWordCounts(days: 14),
+                topApps: appState.topDictationApps
             )
 
             TranscriptSearchBar(
@@ -157,40 +158,22 @@ struct TranscriptsPage: View {
         }
     }
 
-    @ViewBuilder
     private func row(for result: RecentResult) -> some View {
-        // The newest transcript is the one most likely to be reused, so it is
-        // shown in full rather than truncated to a line.
-        if result.id == visibleResults.first?.id {
-            FeaturedTranscriptCard(
-                result: result,
-                isSelected: selectedID == result.id,
-                searchQuery: searchText,
-                onCopy: {
-                    select(result)
-                    appState.copyRecentResult(result)
-                },
-                onDelete: { deleteAndAdvance(result) }
-            )
-            .padding(.bottom, 6)
-        } else {
-            CompactTranscriptRow(
-                result: result,
-                isSelected: selectedID == result.id,
-                searchQuery: searchText,
-                onCopy: {
-                    select(result)
-                    appState.copyRecentResult(result)
-                },
-                onDelete: { deleteAndAdvance(result) }
-            )
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(MainWindowPalette.divider)
-                    .frame(height: 1)
-                    .padding(.horizontal, 8)
-            }
-        }
+        CompactTranscriptRow(
+            result: result,
+            isSelected: selectedID == result.id,
+            searchQuery: searchText,
+            onCopy: {
+                select(result)
+                appState.copyRecentResult(result)
+            },
+            onDelete: { deleteAndAdvance(result) }
+        )
+        .id(result.id)
+    }
+
+    private var cardTransition: AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97))
     }
 
     private func dayHeader(for group: TranscriptDayGroup) -> some View {
@@ -202,12 +185,6 @@ struct TranscriptsPage: View {
             .padding(.top, group.id == groups.first?.id ? 0 : 18)
             .padding(.bottom, 8)
     }
-
-    private var cardTransition: AnyTransition {
-        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97))
-    }
-
-    // MARK: - Selection and keyboard
 
     private var selectedResult: RecentResult? {
         guard let selectedID else {
@@ -308,8 +285,18 @@ struct TranscriptsHeaderView: View {
     let wordsPerMinute: Int
     let streakDays: Int
     let days: [DailyWordCount]
+    let topApps: [DictationAppUsage]
+
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            headerRow
+            topAppsLine
+        }
+        .padding(.bottom, 4)
+    }
+
+    private var headerRow: some View {
         // Bottom-aligned so the sparkline's caption sits on the same line as the
         // words/wpm/streak summary rather than floating above it.
         HStack(alignment: .bottom, spacing: 20) {
@@ -326,7 +313,6 @@ struct TranscriptsHeaderView: View {
                 TranscriptsSparkline(days: days)
             }
         }
-        .padding(.bottom, 4)
     }
 
     /// Two deliberate lines rather than one wrapping sentence: left to wrap on
@@ -349,6 +335,26 @@ struct TranscriptsHeaderView: View {
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(stats.lifetimeSessions) dictations, \(timeSaved.compactDurationString) saved versus typing")
+    }
+
+    /// Three states, because the data arrives gradually: nothing at all for
+    /// history written before the source app was recorded, one named app until
+    /// there is a spread worth ranking, then the ranking itself. A single bar
+    /// is not a chart, so the one-app case stays a sentence.
+    @ViewBuilder
+    private var topAppsLine: some View {
+        let named = topApps.filter { $0.name != nil }
+
+        if named.count >= 3 {
+            TopAppsChart(apps: named)
+        } else if let top = named.first {
+            HStack(spacing: 6) {
+                TranscriptAppIcon(bundleID: top.bundleID, size: 13)
+                Text("\(top.name ?? top.bundleID) is your top app")
+            }
+            .font(AppTypography.subheadline)
+            .foregroundStyle(MainWindowPalette.tertiaryText)
+        }
     }
 
     private var subline: String {
@@ -374,39 +380,99 @@ struct TranscriptSearchBar: View {
     @FocusState.Binding var isSearchFocused: Bool
 
     var body: some View {
-        HStack(spacing: 0) {
-            HStack(spacing: 7) {
-                Image(systemName: "magnifyingglass")
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(MainWindowPalette.tertiaryText)
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(AppTypography.body)
+                .foregroundStyle(isSearchFocused ? Color.accentColor : MainWindowPalette.tertiaryText)
 
-                TextField("Search transcripts", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(AppTypography.body)
-                    .focused($isSearchFocused)
+            TextField("Search transcripts", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(AppTypography.body)
+                .focused($isSearchFocused)
 
-                if !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(MainWindowPalette.tertiaryText)
-                    }
-                    .buttonStyle(PressableButtonStyle(pressedScale: 0.9))
-                    .accessibilityLabel("Clear search")
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(MainWindowPalette.tertiaryText)
                 }
+                .buttonStyle(PressableButtonStyle(pressedScale: 0.9))
+                .accessibilityLabel("Clear search")
             }
-            .padding(.horizontal, 10)
-            .frame(width: 260)
-            .frame(minHeight: 30)
-            .flatSurface(
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous),
-                fill: MainWindowPalette.editorBackground,
-                stroke: isSearchFocused ? Color.accentColor.opacity(0.55) : MainWindowPalette.cardStroke
-            )
-
-            Spacer(minLength: 12)
+        }
+        .padding(.vertical, 8)
+        // No box. It was the only filled, bordered control left on a page of
+        // flat rows and chrome-free bars, so it read as a leftover. It sits on
+        // the same hairline the rows use, which is also what it filters.
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(isSearchFocused ? Color.accentColor.opacity(0.55) : MainWindowPalette.divider)
+                .frame(height: isSearchFocused ? 1.5 : 1)
         }
         .animation(.easeOut(duration: 0.12), value: isSearchFocused)
+    }
+}
+
+
+/// Where dictation lands, as a ranked bar. Bars are proportional to the leader
+/// rather than to a total: the source app was only recorded from a certain
+/// version on, so a percentage of "everything" would be a number we cannot
+/// honestly claim.
+struct TopAppsChart: View {
+    let apps: [DictationAppUsage]
+
+    private var leader: Int {
+        max(apps.first?.count ?? 1, 1)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            // Title case, so it drops the tracking the all-caps day headers
+            // use: positive tracking is there to open up capitals.
+            Text("Your Top Apps")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(MainWindowPalette.tertiaryText)
+
+            VStack(alignment: .leading, spacing: 9) {
+                ForEach(apps) { app in
+                    row(for: app)
+                }
+            }
+        }
+    }
+
+    private func row(for app: DictationAppUsage) -> some View {
+        HStack(spacing: 10) {
+            TranscriptAppIcon(bundleID: app.bundleID, size: 18)
+
+            Text(app.name ?? app.bundleID)
+                .font(AppTypography.body)
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(width: 134, alignment: .leading)
+
+            // No track behind the bar: an empty rail drawn to full width makes
+            // every app look like it has a value. The fill alone carries it.
+            GeometryReader { geometry in
+                let fraction = Double(app.count) / Double(leader)
+                Capsule(style: .continuous)
+                    .fill(Color.accentColor)
+                    // A one-dictation app still gets a visible mark rather than
+                    // a sliver that reads as a rendering fault.
+                    .frame(width: max(6, geometry.size.width * fraction))
+                    .frame(maxHeight: .infinity, alignment: .center)
+            }
+            .frame(height: 8)
+
+            Text(app.count.formatted())
+                .font(AppTypography.codeCaption)
+                .monospacedDigit()
+                .foregroundStyle(MainWindowPalette.secondaryText)
+                .frame(width: 28, alignment: .trailing)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(app.name ?? app.bundleID), \(app.count) dictations")
     }
 }
