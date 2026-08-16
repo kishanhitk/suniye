@@ -209,6 +209,12 @@ final class DictationStatsStore: DictationStatsStoring {
         let own = Self.read(from: fileURL)
         if own == .empty, let legacyFileURL, legacyFileURL != fileURL {
             self.snapshot = Self.read(from: legacyFileURL)
+            // Written straight through, so this is a one-time snapshot rather
+            // than a permanent read of the other variant's live file: without
+            // it every launch re-read whatever Stable currently held.
+            if snapshot != .empty {
+                persist()
+            }
         } else {
             self.snapshot = own
         }

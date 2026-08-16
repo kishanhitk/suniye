@@ -3052,11 +3052,12 @@ final class AppState {
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
                     modelDownloadStartedAt = nil
                     activeASRModelDownloadID = nil
-                    // Only reclaim the load slot if it is still free: the user
-                    // can start switching to another installed model while the
-                    // OS asset downloads, and stealing it would let that switch
-                    // publish .ready while this load is still pending.
-                    guard activeASRModelLoadID == nil else {
+                    // Only reclaim the load slot if it is still free, and never
+                    // mid-capture: an intervening switch can return the phase to
+                    // .ready and let dictation start while the asset is still
+                    // downloading, and swapping the recogniser under a live
+                    // capture is worse than deferring the switch.
+                    guard activeASRModelLoadID == nil, !isCapturing else {
                         throw CancellationError()
                     }
                     activeASRModelLoadID = modelID
@@ -4450,6 +4451,11 @@ final class AppState {
             )
 
             try await requireAccessibilityForInsertion()
+            // Resolved here rather than from the session context: the rewrite is
+            // asynchronous and insertText targets whatever is focused when it
+            // runs, so the session's app can be stale by now.
+            let destinationApp = frontmostAppBundleIDProvider()
+                ?? activeDictationSession?.context.frontmostAppBundleID
             try await textInsertionService.insertText(rewritten)
             recentResults.insert(
                 RecentResult(
@@ -4458,7 +4464,7 @@ final class AppState {
                     createdAt: Date(),
                     durationSeconds: duration,
                     wasLLMPolished: true,
-                    appBundleID: activeDictationSession?.context.frontmostAppBundleID
+                    appBundleID: destinationApp
                 ),
                 at: 0
             )
