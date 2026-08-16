@@ -98,14 +98,18 @@ enum AppTypography {
     /// One rung below `pageTitle`, so a card heading cannot be mistaken for the
     /// page heading when both are on screen.
     static let cardTitle = Font.title3.weight(.semibold)
-    /// Settings rows in the flattened pages: one step up from body, because with
-    /// the cards gone the type carries the hierarchy.
-    static let rowTitle = Font.callout
+    /// Settings rows in the flattened pages. Body, not callout: callout is 12pt
+    /// against body's 13pt on macOS, which put the pages' own content a step
+    /// below the sidebar's navigation labels.
+    static let rowTitle = Font.body
     /// Group heading — sentence case at body weight, not an uppercase mono label.
     static let groupHeading = Font.body.weight(.semibold)
     /// The Transcripts headline reads as a sentence, so it stays regular weight
     /// and leans on size alone.
     static let transcriptsHeadline = Font.system(.largeTitle, design: .default, weight: .regular)
+    /// 26pt reads too loose at the system's default tracking; large text wants
+    /// negative tracking the same way the small caps below want positive.
+    static let transcriptsHeadlineTracking: CGFloat = -0.5
     /// The newest transcript. Body size, same as the rows: the card already reads
     /// as featured through its surface and its untruncated text, so oversized
     /// type only made it shout.

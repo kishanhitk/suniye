@@ -381,6 +381,10 @@ struct PerAppInstructionsSheet: View {
         .frame(width: 560)
         .subtleScrollers()
         .background(MainWindowPalette.windowBackground)
+        // Every edit here writes straight through, so Done only dismisses and
+        // Escape means the same thing. Without this the sheet ignored Escape
+        // and the only way out was the mouse.
+        .onExitCommand { dismiss() }
     }
 
     private func bindingRow(_ binding: AppPromptBinding) -> some View {
@@ -671,5 +675,9 @@ struct APIEndpointSheet: View {
         .frame(width: 560)
         .subtleScrollers()
         .background(MainWindowPalette.windowBackground)
+        // Every edit here writes straight through, so Done only dismisses and
+        // Escape means the same thing. Without this the sheet ignored Escape
+        // and the only way out was the mouse.
+        .onExitCommand { dismiss() }
     }
 }

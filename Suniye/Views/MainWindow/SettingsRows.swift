@@ -195,3 +195,24 @@ struct SettingsGroup<Content: View>: View {
         }
     }
 }
+
+
+/// Motion for content that inserts into or leaves a settings list: banners,
+/// warnings, rows that only exist in one state. These push everything below
+/// them, so the reflow is what actually needs bridging — the transition is
+/// deliberately just opacity, letting the container animate the layout.
+enum SettingsMotion {
+    static func curve(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .easeOut(duration: 0.22)
+    }
+
+    /// Opacity only, so it needs no reduced-motion variant: a cross-fade is
+    /// already the gentle form.
+    static let notice: AnyTransition = .opacity
+
+    /// The page-level banner sits above everything and shoves the whole page
+    /// down, so it also comes from the edge it pushes from.
+    static func banner(reduceMotion: Bool) -> AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top))
+    }
+}

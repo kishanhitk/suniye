@@ -7,6 +7,7 @@ import SwiftUI
 struct SpeechModelPage: View {
     @Bindable var appState: AppState
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsModelChooser = false
 
     private var entry: ASRModelCatalogEntry {
@@ -27,10 +28,15 @@ struct SpeechModelPage: View {
                     detail: banner.detail,
                     progress: banner.progress
                 )
+                .transition(SettingsMotion.banner(reduceMotion: reduceMotion))
             }
 
             settings
         }
+        // A download appearing or finishing rearranges the page; without this
+        // the rows below jump.
+        .animation(SettingsMotion.curve(reduceMotion: reduceMotion), value: appState.asrModelBanner?.title)
+        .animation(SettingsMotion.curve(reduceMotion: reduceMotion), value: appState.modelPrimaryActionTitle)
         .sheet(isPresented: $showsModelChooser) {
             SpeechModelSheet(appState: appState)
         }
@@ -80,6 +86,7 @@ struct SpeechModelPage: View {
                         .disabled(!appState.asrModelCanPerformPrimaryAction(for: entry.id))
                     }
                 }
+                .transition(SettingsMotion.notice)
             }
 
             if appState.asrModelSecondaryActionsEnabled(for: entry.id) {

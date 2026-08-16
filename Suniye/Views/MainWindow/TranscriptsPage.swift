@@ -92,19 +92,28 @@ struct TranscriptsPage: View {
         }
     }
 
-    @ViewBuilder
     private var transcripts: some View {
+        emptyStateAwareContent
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.22),
+                value: appState.recentResults.isEmpty
+            )
+    }
+
+    @ViewBuilder
+    private var emptyStateAwareContent: some View {
         if appState.recentResults.isEmpty {
             EmptyStateCard(
                 icon: "quote.opening",
                 title: "No Transcripts Yet",
                 detail: "Hold \(appState.hotkeyConfiguration.displayString) in any app to dictate — everything you say shows up here."
             )
+            .transition(SettingsMotion.notice)
         } else if visibleResults.isEmpty {
             EmptyStateCard(
                 icon: "magnifyingglass",
                 title: "No Matches",
-                detail: "No transcripts match this search or time range."
+                detail: "No transcripts match this search."
             )
         } else {
             ScrollViewReader { proxy in
@@ -333,6 +342,7 @@ struct TranscriptsHeaderView: View {
             )
         }
         .font(AppTypography.transcriptsHeadline)
+        .tracking(AppTypography.transcriptsHeadlineTracking)
         .foregroundStyle(Color.primary)
         .lineLimit(1)
         .minimumScaleFactor(0.7)

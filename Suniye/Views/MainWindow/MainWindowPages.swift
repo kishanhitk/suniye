@@ -52,12 +52,15 @@ struct MagicFormatNudgeCard: View {
 struct GeneralPage: View {
     @Bindable var appState: AppState
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         DetailScrollContainer {
             DetailPageTitle(title: "General")
 
             if !appState.hasMicPermission || !appState.hasAccessibilityPermission {
                 permissions
+                    .transition(SettingsMotion.banner(reduceMotion: reduceMotion))
             }
 
             microphone
@@ -68,6 +71,18 @@ struct GeneralPage: View {
             privacy
             about
         }
+        // Granting a permission deletes a whole group and pulls the rest of the
+        // page up. It is also the moment the app starts working, so the change
+        // is worth showing rather than snapping.
+        .animation(motion, value: appState.hasMicPermission)
+        .animation(motion, value: appState.hasAccessibilityPermission)
+        .animation(motion, value: inputWarning)
+        .animation(motion, value: appState.hotkeyValidationMessage)
+        .animation(motion, value: appState.launchAtLoginError ?? appState.launchAtLoginWarningText)
+    }
+
+    private var motion: Animation? {
+        SettingsMotion.curve(reduceMotion: reduceMotion)
     }
 
     // MARK: - Permissions
@@ -182,6 +197,7 @@ struct GeneralPage: View {
         }
         .padding(.bottom, 12)
         .padding(.horizontal, 4)
+        .transition(SettingsMotion.notice)
     }
 
     // MARK: - Shortcuts
@@ -242,6 +258,7 @@ struct GeneralPage: View {
                     .padding(.horizontal, 4)
                     .padding(.bottom, 4)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(SettingsMotion.notice)
             }
         }
     }
@@ -315,6 +332,7 @@ struct GeneralPage: View {
                     .padding(.horizontal, 4)
                     .padding(.bottom, 4)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(SettingsMotion.notice)
             }
         }
     }
