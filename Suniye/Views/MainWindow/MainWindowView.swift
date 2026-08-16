@@ -71,6 +71,11 @@ struct MainWindowView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // Deliberately below the perception threshold: switching sections is a
+        // frequent act, and anything you can consciously see here is a tax. A
+        // cross-fade (not a slide) is also the Reduce Motion-friendly form.
+        .transition(.opacity)
+        .animation(.easeOut(duration: 0.12), value: selection)
     }
 
     private func logRenderedSection() {

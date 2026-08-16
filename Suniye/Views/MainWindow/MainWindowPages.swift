@@ -5,6 +5,7 @@ import SwiftUI
 struct DashboardPage: View {
     @Bindable var appState: AppState
     let onNavigate: (MainWindowSection) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         DetailScrollContainer {
@@ -18,6 +19,7 @@ struct DashboardPage: View {
                         } onFixAction: { action in
                             appState.handleAttentionFixAction(action)
                         }
+                        .transition(cardTransition)
                     }
                 }
             }
@@ -27,6 +29,7 @@ struct DashboardPage: View {
                     onSetUp: { onNavigate(appState.openMagicFormatSetupFromNudge()) },
                     onDismiss: { appState.dismissMagicFormatNudge() }
                 )
+                .transition(cardTransition)
                 .onAppear {
                     appState.magicFormatNudgeDidShow()
                 }
@@ -96,6 +99,14 @@ struct DashboardPage: View {
                 }
             }
         }
+        // Cards that vanish under the cursor when dismissed, or appear the moment
+        // a permission drops, read as a glitch without a bridge.
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: appState.attentionItems.count)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: appState.shouldShowMagicFormatNudge)
+    }
+
+    private var cardTransition: AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97))
     }
 }
 

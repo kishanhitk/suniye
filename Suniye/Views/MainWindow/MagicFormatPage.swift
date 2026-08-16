@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct StylePage: View {
     @Bindable var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var vocabularyDraft = ""
     @State private var apiKeyDraft = ""
     @State private var isApplePromptExpanded = false
@@ -20,11 +21,21 @@ struct StylePage: View {
             }
 
             if appState.llmEnabled {
-                formatterSection
-                perAppPromptsSection
-                vocabularySection
+                VStack(alignment: .leading, spacing: AppMetrics.detailSpacing) {
+                    formatterSection
+                    perAppPromptsSection
+                    vocabularySection
+                }
+                // Three whole sections appearing at once is the largest jump in
+                // the window; bridge it instead of teleporting.
+                .transition(
+                    reduceMotion
+                        ? .opacity
+                        : .opacity.combined(with: .move(edge: .top))
+                )
             }
         }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: appState.llmEnabled)
     }
 
     // MARK: - Feature Toggle
@@ -119,8 +130,12 @@ struct StylePage: View {
                     .padding(.leading, 56)
                     .padding(.trailing, 10)
                     .padding(.vertical, 10)
+                    // Opacity only: these blocks contain TextEditors, and
+                    // animating height fights their intrinsic sizing.
+                    .transition(.opacity)
             }
         }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isSelected)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(isSelected ? MainWindowPalette.selectedFill.opacity(0.8) : Color.clear)

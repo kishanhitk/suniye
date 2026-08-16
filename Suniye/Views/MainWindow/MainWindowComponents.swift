@@ -139,6 +139,7 @@ struct SidebarNavigationRow: View {
     let section: MainWindowSection
     let isSelected: Bool
     let action: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
@@ -157,11 +158,14 @@ struct SidebarNavigationRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
-                    .fill(isSelected ? MainWindowPalette.selectedFill : .clear)
+                    .fill(rowFill)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle(pressedScale: 0.985))
+        // Every system sidebar highlights under the pointer; this one did not.
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
     }
 }
 
@@ -175,6 +179,15 @@ struct PressableButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? pressedScale : 1)
             .opacity(configuration.isPressed ? 0.82 : 1)
             .animation(.snappy(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+private extension SidebarNavigationRow {
+    var rowFill: Color {
+        if isSelected {
+            return MainWindowPalette.selectedFill
+        }
+        return isHovered ? MainWindowPalette.selectedFill.opacity(0.5) : .clear
     }
 }
 
@@ -378,6 +391,8 @@ private struct IconButtonStyle: ButtonStyle {
             )
             .scaleEffect(configuration.isPressed ? 0.9 : 1)
             .animation(.snappy(duration: 0.1), value: configuration.isPressed)
+            // Press was animated but hover was not, so the fill popped in hard.
+            .animation(.easeOut(duration: 0.12), value: isHovered)
     }
 
     private func fill(isPressed: Bool) -> Color {
