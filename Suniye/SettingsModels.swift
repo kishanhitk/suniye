@@ -558,16 +558,18 @@ struct FloatingIndicatorPlacement: Codable, Equatable {
 }
 
 
-/// One app's share of dictation history, for the Transcripts header.
+/// One app's share of dictation history, for the Transcripts header. The name is
+/// resolved once when the ranking is built, not per read: an uninstalled app has
+/// no honest name to show and has to be dropped *before* the ranking is cut to
+/// three, or an installed app ranked fourth is lost with it.
 struct DictationAppUsage: Identifiable, Equatable {
     let bundleID: String
     let count: Int
+    let name: String
 
     var id: String { bundleID }
 
-    /// Nil when the app is no longer installed, in which case there is no
-    /// honest name to show and the entry is dropped.
-    var name: String? {
+    static func resolvedName(for bundleID: String) -> String? {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
             return nil
         }

@@ -306,9 +306,16 @@ struct TranscriptsHeaderView: View {
         HStack(alignment: .bottom, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
                 headline
-                Text(subline)
-                    .font(AppTypography.body)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(subline)
+                        .font(AppTypography.body)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                    if stats.lifetimeWords > 0 {
+                        Text("Time saved is measured against typing at \(Int(DictationStats.assumedTypingWordsPerMinute)) wpm.")
+                            .font(AppTypography.caption)
+                            .foregroundStyle(MainWindowPalette.tertiaryText)
+                    }
+                }
             }
 
             Spacer(minLength: 12)
@@ -347,14 +354,12 @@ struct TranscriptsHeaderView: View {
     /// is not a chart, so the one-app case stays a sentence.
     @ViewBuilder
     private var topAppsLine: some View {
-        let named = topApps.filter { $0.name != nil }
-
-        if named.count >= 3 {
-            TopAppsChart(apps: named)
-        } else if let top = named.first {
+        if topApps.count >= 3 {
+            TopAppsChart(apps: topApps)
+        } else if let top = topApps.first {
             HStack(spacing: 6) {
                 TranscriptAppIcon(bundleID: top.bundleID, size: 13)
-                Text("\(top.name ?? top.bundleID) is your top app")
+                Text("\(top.name) is your top app")
             }
             .font(AppTypography.subheadline)
             .foregroundStyle(MainWindowPalette.tertiaryText)
@@ -450,7 +455,7 @@ struct TopAppsChart: View {
         HStack(spacing: 10) {
             TranscriptAppIcon(bundleID: app.bundleID, size: 18)
 
-            Text(app.name ?? app.bundleID)
+            Text(app.name)
                 .font(AppTypography.body)
                 .foregroundStyle(Color.primary)
                 .lineLimit(1)
@@ -477,6 +482,6 @@ struct TopAppsChart: View {
                 .frame(width: 28, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(app.name ?? app.bundleID), \(app.count) dictations")
+        .accessibilityLabel("\(app.name), \(app.count) dictations")
     }
 }

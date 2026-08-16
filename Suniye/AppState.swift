@@ -4521,7 +4521,15 @@ final class AppState {
         }
 
         topDictationApps = counts
-            .map { DictationAppUsage(bundleID: $0.key, count: $0.value) }
+            // Drop apps that are no longer installed before cutting to three,
+            // otherwise an uninstalled leader takes an installed fourth place
+            // down with it and the header shows fewer apps than it has.
+            .compactMap { bundleID, count -> DictationAppUsage? in
+                guard let name = DictationAppUsage.resolvedName(for: bundleID) else {
+                    return nil
+                }
+                return DictationAppUsage(bundleID: bundleID, count: count, name: name)
+            }
             // Count first, then bundle ID, so equal counts do not reshuffle on
             // every refresh.
             .sorted { ($0.count, $1.bundleID) > ($1.count, $0.bundleID) }
