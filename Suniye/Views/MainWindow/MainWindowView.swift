@@ -59,11 +59,9 @@ struct MainWindowView: View {
         Group {
             switch selection {
             case .dashboard:
-                DashboardPage(appState: appState) { selection = $0 }
-            case .history:
-                HistoryPage(appState: appState)
+                TranscriptsPage(appState: appState) { selection = $0 }
             case .model:
-                ModelPage(appState: appState)
+                SpeechModelPage(appState: appState)
             case .style:
                 StylePage(appState: appState)
             case .general:

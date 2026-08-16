@@ -22,9 +22,29 @@ struct RecentResult: Identifiable, Equatable, Codable {
     let createdAt: Date
     let durationSeconds: TimeInterval
     let wasLLMPolished: Bool
+    /// Where the dictation was inserted. Optional because history written before
+    /// this existed has no source app — those rows decode with nil rather than
+    /// failing, and simply show no app.
+    var appBundleID: String?
 
     var wordCount: Int {
         text.dictationWordCount
+    }
+
+    init(
+        id: UUID,
+        text: String,
+        createdAt: Date,
+        durationSeconds: TimeInterval,
+        wasLLMPolished: Bool,
+        appBundleID: String? = nil
+    ) {
+        self.id = id
+        self.text = text
+        self.createdAt = createdAt
+        self.durationSeconds = durationSeconds
+        self.wasLLMPolished = wasLLMPolished
+        self.appBundleID = appBundleID
     }
 }
 

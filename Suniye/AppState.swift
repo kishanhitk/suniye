@@ -1063,6 +1063,13 @@ final class AppState {
         }
     }
 
+    /// The active-model card already names the model as the one in use, so a pill
+    /// repeating "Current" is noise. It earns its space only when the state is
+    /// something else: downloading, loading, missing, failed.
+    var asrModelStatusNeedsAttention: Bool {
+        modelStatusValue != "Current"
+    }
+
     var modelStatusColor: Color {
         switch phase {
         case .ready, .recording, .transcribing:
@@ -3901,7 +3908,8 @@ final class AppState {
             text: finalText,
             createdAt: Date(),
             durationSeconds: duration,
-            wasLLMPolished: wasLLMPolished
+            wasLLMPolished: wasLLMPolished,
+            appBundleID: frontmostAppBundleID
         )
 
         // A completed system transcript must be recoverable even if insertion
@@ -4142,7 +4150,8 @@ final class AppState {
                     text: rewritten,
                     createdAt: Date(),
                     durationSeconds: duration,
-                    wasLLMPolished: true
+                    wasLLMPolished: true,
+                    appBundleID: activeDictationSession?.context.frontmostAppBundleID
                 ),
                 at: 0
             )

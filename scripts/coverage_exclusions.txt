@@ -40,7 +40,10 @@ Suniye/Views/WelcomeView.swift                        # SwiftUI render only
 Suniye/Views/MainWindow/MagicFormatComponents.swift   # SwiftUI render only
 Suniye/Views/MainWindow/MagicFormatPage.swift         # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowComponents.swift    # SwiftUI render only
-Suniye/Views/MainWindow/DashboardActivityChart.swift  # SwiftUI render only
+Suniye/Views/MainWindow/TranscriptsSparkline.swift     # SwiftUI render only
+Suniye/Views/MainWindow/TranscriptsPage.swift          # SwiftUI render only
+Suniye/Views/MainWindow/SpeechModelPage.swift          # SwiftUI render only
+Suniye/Views/MainWindow/TranscriptRows.swift           # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowPages.swift         # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowView.swift          # SwiftUI render only
 Suniye/Views/MainWindow/MagicFormatProviderPresentation.swift  # SwiftUI render only

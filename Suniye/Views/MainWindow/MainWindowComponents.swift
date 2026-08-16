@@ -30,8 +30,23 @@ private enum MainWindowNSPalette {
             : NSColor(calibratedWhite: 0.978, alpha: 1)
     })
 
+    /// Cards sit on a vibrant pane, so a fully opaque fill reads as a slab
+    /// punched into the glass — pure white in light, near-black in dark. A
+    /// high-alpha tint keeps the card a distinct, legible surface while letting
+    /// a little of the pane through.
     static let elevatedSurface = NSColor(name: nil, dynamicProvider: { appearance in
-        appearance.usesDarkMainWindowPalette ? .controlBackgroundColor : .white
+        appearance.usesDarkMainWindowPalette
+            ? NSColor.white.withAlphaComponent(0.10)
+            : NSColor.white.withAlphaComponent(0.68)
+    })
+
+    /// Fields and editors. Also translucent — a solid white or near-black field
+    /// reads as heavily on the glass as a solid card did — but weaker than
+    /// `elevatedSurface`, so an input looks recessed where a card looks lifted.
+    static let inputSurface = NSColor(name: nil, dynamicProvider: { appearance in
+        appearance.usesDarkMainWindowPalette
+            ? NSColor.white.withAlphaComponent(0.06)
+            : NSColor.white.withAlphaComponent(0.52)
     })
 
     static let divider = NSColor(name: nil, dynamicProvider: { appearance in
@@ -65,7 +80,7 @@ enum MainWindowPalette {
     /// chrome collapses legibility ("never stack a light translucent surface on
     /// another"). The pane is the glass; the card is the one opaque tier above it.
     static let cardBackground = Color(nsColor: MainWindowNSPalette.elevatedSurface)
-    static let editorBackground = Color(nsColor: MainWindowNSPalette.elevatedSurface)
+    static let editorBackground = Color(nsColor: MainWindowNSPalette.inputSurface)
     static let cardStroke = Color(nsColor: MainWindowNSPalette.stroke)
     static let selectedFill = Color(nsColor: MainWindowNSPalette.selection)
     static let secondaryText = Color.secondary
@@ -85,6 +100,13 @@ enum AppTypography {
     /// One rung below `pageTitle`, so a card heading cannot be mistaken for the
     /// page heading when both are on screen.
     static let cardTitle = Font.title3.weight(.semibold)
+    /// The Transcripts headline reads as a sentence, so it stays regular weight
+    /// and leans on size alone.
+    static let transcriptsHeadline = Font.system(.largeTitle, design: .default, weight: .regular)
+    /// The newest transcript. Body size, same as the rows: the card already reads
+    /// as featured through its surface and its untruncated text, so oversized
+    /// type only made it shout.
+    static let featuredTranscript = Font.body
     static let sectionHeading = Font.headline
     static let body = Font.body
     static let bodyMedium = Font.body.weight(.medium)
@@ -166,6 +188,53 @@ struct SidebarNavigationRow: View {
         // Every system sidebar highlights under the pointer; this one did not.
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+}
+
+extension View {
+    /// Liquid Glass on macOS 26, with the translucent fill + hairline as the
+    /// macOS 14/15 fallback. Glass draws its own edge, so the surfaces using this
+    /// do not add a border of their own.
+    @ViewBuilder
+    func liquidGlassSurface(
+        in shape: some InsettableShape,
+        fill: Color = MainWindowPalette.cardBackground,
+        stroke: Color = MainWindowPalette.cardStroke,
+        tint: Color? = nil,
+        interactive: Bool = false
+    ) -> some View {
+        if #available(macOS 26, *) {
+            glassEffect(Self.glass(tint: tint, interactive: interactive), in: shape)
+        } else {
+            background(shape.fill(fill))
+                .overlay(shape.strokeBorder(stroke, lineWidth: 1))
+        }
+    }
+
+    @available(macOS 26, *)
+    private static func glass(tint: Color?, interactive: Bool) -> Glass {
+        var glass = Glass.regular
+        if let tint {
+            glass = glass.tint(tint)
+        }
+        return interactive ? glass.interactive() : glass
+    }
+}
+
+/// Groups co-located glass so the surfaces sample and blend as one, per Apple's
+/// guidance. A no-op below macOS 26.
+struct GlassCluster<Content: View>: View {
+    var spacing: CGFloat = 12
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        if #available(macOS 26, *) {
+            GlassEffectContainer(spacing: spacing) {
+                content
+            }
+        } else {
+            content
+        }
     }
 }
 
@@ -313,13 +382,8 @@ struct SurfaceCard<Content: View>: View {
             content
         }
         .padding(padding)
-        .background(
-            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
+        .liquidGlassSurface(
+            in: RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
         )
     }
 }
@@ -360,6 +424,10 @@ struct ActionIconButton: View {
     let systemName: String
     let accessibilityLabel: String
     var tint: Color = MainWindowPalette.secondaryText
+    /// Colour once the pointer is on this specific icon. Lets a row reveal its
+    /// actions quietly and only commit to emphasis (red for a delete) when the
+    /// pointer is actually on the thing that would fire.
+    var hoverTint: Color?
     let action: () -> Void
     @State private var isHovered = false
 
@@ -368,8 +436,9 @@ struct ActionIconButton: View {
             Image(systemName: systemName)
                 .font(AppTypography.bodyMedium)
                 .frame(width: AppMetrics.iconButtonSize, height: AppMetrics.iconButtonSize)
-                .foregroundStyle(tint)
+                .foregroundStyle(isHovered ? (hoverTint ?? tint) : tint)
                 .contentTransition(.symbolEffect(.replace))
+                .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(IconButtonStyle(isHovered: isHovered))
         .contentShape(Circle())
@@ -477,76 +546,6 @@ struct InlineStatusBanner: View {
     }
 }
 
-/// Dashboard stats. One translucent panel of equal columns rather than four
-/// opaque cards: the window is vibrant now, so a solid fill reads as a hole
-/// punched in the glass. `.regularMaterial` keeps the numbers legible over any
-/// wallpaper, which a low-alpha tint would not.
-struct DashboardMetricsPanel: View {
-    struct Metric: Identifiable {
-        let icon: String
-        let tint: Color
-        let value: String
-        let label: String
-        /// Shown under the value. Used to state an assumption the number rests on.
-        var caption: String?
-
-        var id: String { label }
-    }
-
-    let metrics: [Metric]
-
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: AppMetrics.metricPanelCornerRadius, style: .continuous)
-    }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
-                cell(metric)
-
-                if index < metrics.count - 1 {
-                    Rectangle()
-                        .fill(MainWindowPalette.divider)
-                        .frame(width: 1)
-                        .padding(.vertical, 10)
-                }
-            }
-        }
-        .background(shape.fill(MainWindowPalette.cardBackground))
-        .overlay(shape.strokeBorder(MainWindowPalette.cardStroke, lineWidth: 1))
-    }
-
-    private func cell(_ metric: Metric) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 5) {
-                Image(systemName: metric.icon)
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(metric.tint)
-                Text(metric.label)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-            }
-
-            Text(metric.value)
-                .font(AppTypography.metricValue)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-
-            if let caption = metric.caption {
-                Text(caption)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(MainWindowPalette.tertiaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .accessibilityElement(children: .combine)
-    }
-}
-
 struct AttentionTile: View {
     let item: AttentionItem
     let action: () -> Void
@@ -592,79 +591,6 @@ struct AttentionTile: View {
             RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
                 .stroke(item.severity == .error ? Color.red.opacity(0.16) : Color.orange.opacity(0.16), lineWidth: 1)
         )
-    }
-}
-
-struct TranscriptHistoryRow: View {
-    let result: RecentResult
-    let onCopy: () -> Void
-    let onDelete: () -> Void
-    @State private var isHovered = false
-    @State private var didCopy = false
-    @FocusState private var focusedAction: TranscriptAction?
-
-    private enum TranscriptAction: Hashable {
-        case copy
-        case delete
-    }
-
-    private var areActionsVisible: Bool {
-        isHovered || focusedAction != nil
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text(result.createdAt.relativeTimestamp)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-                Text("•")
-                    .foregroundStyle(MainWindowPalette.tertiaryText)
-                Text(result.durationSeconds.shortSecondsString)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-                Spacer(minLength: 0)
-                HStack(spacing: 6) {
-                    // A copy that looks identical before and after leaves the
-                    // user guessing whether it worked.
-                    ActionIconButton(
-                        systemName: didCopy ? "checkmark" : "doc.on.doc",
-                        accessibilityLabel: "Copy result",
-                        tint: didCopy ? .green : MainWindowPalette.secondaryText
-                    ) {
-                        onCopy()
-                        didCopy = true
-                        AccessibilityNotification.Announcement("Copied").post()
-                        Task {
-                            try? await Task.sleep(for: .seconds(1))
-                            didCopy = false
-                        }
-                    }
-                    .focused($focusedAction, equals: .copy)
-                    ActionIconButton(systemName: "trash", accessibilityLabel: "Delete result", tint: MainWindowPalette.destructive, action: onDelete)
-                        .focused($focusedAction, equals: .delete)
-                }
-                .frame(height: AppMetrics.iconButtonSize)
-                .opacity(areActionsVisible ? 1 : 0)
-                .animation(.easeOut(duration: 0.16), value: areActionsVisible)
-            }
-
-            Text(result.text)
-                .font(AppTypography.callout)
-                .foregroundStyle(Color.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.vertical, AppMetrics.listRowVerticalPadding)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(MainWindowPalette.divider)
-                .frame(height: 1)
-        }
-        .contentShape(Rectangle())
-        .onHover { hovering in
-            isHovered = hovering
-        }
     }
 }
 
