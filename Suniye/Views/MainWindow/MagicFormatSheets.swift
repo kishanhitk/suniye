@@ -652,7 +652,8 @@ struct APIEndpointSheet: View {
                     ProgressView().controlSize(.small)
                 }
 
-                if let result = appState.magicFormatSetupTestResult {
+                if let result = appState.magicFormatSetupTestResult,
+                   appState.magicFormatLastTestedProvider == .openAICompatible {
                     HStack(spacing: 6) {
                         Circle()
                             .fill(result.severity.color)

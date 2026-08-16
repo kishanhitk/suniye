@@ -830,14 +830,15 @@ final class AppState {
         else {
             return nil
         }
-        // A four-character key would otherwise be printed verbatim, and a
-        // five-character one all but one. Only reveal a tail when there is
-        // enough key left for the reveal to be a hint rather than the secret.
-        guard key.count >= 12 else {
-            return "\u{2022}\u{2022}\u{2022}\u{2022} \u{2022}\u{2022}\u{2022}\u{2022}"
+        // The hint must stay a hint. A prefix plus a tail recovers most of a
+        // short key — 11 of 12 characters at the old threshold — so anything
+        // that short is masked outright, and above it at least two thirds of
+        // the key stays hidden.
+        let dots = "\u{2022}\u{2022}\u{2022}\u{2022}"
+        guard key.count >= 24 else {
+            return "\(dots) \(dots)"
         }
-        let tail = String(key.suffix(4))
-        return "\(key.prefix(7)) \u{2022}\u{2022}\u{2022}\u{2022} \u{2022}\u{2022}\u{2022}\u{2022} \(tail)"
+        return "\(key.prefix(4)) \(dots) \(dots) \(key.suffix(4))"
     }
 
     /// The API key's own state. `llmKeyStatusText` answers "is the active engine
@@ -3030,6 +3031,11 @@ final class AppState {
             do {
                 let assetInstalled = await modelManager.isSystemManagedAssetInstalled(modelID)
                 if !assetInstalled {
+                    // The banner recognises downloads through this slot; left
+                    // in the load slot, a multi-hundred-megabyte OS asset fetch
+                    // showed as an indeterminate "Loading".
+                    activeASRModelDownloadID = modelID
+                    activeASRModelLoadID = nil
                     phase = .downloadingModel
                     statusText = "Downloading model..."
                     downloadProgress = 0
@@ -3045,6 +3051,8 @@ final class AppState {
                     }
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
                     modelDownloadStartedAt = nil
+                    activeASRModelDownloadID = nil
+                    activeASRModelLoadID = modelID
                     phase = .loading
                     statusText = "Loading model..."
                 }
@@ -3069,6 +3077,7 @@ final class AppState {
             }
 
             activeASRModelLoadID = nil
+            activeASRModelDownloadID = nil
             modelDownloadStartedAt = nil
         }
     }
