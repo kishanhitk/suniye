@@ -3052,6 +3052,13 @@ final class AppState {
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
                     modelDownloadStartedAt = nil
                     activeASRModelDownloadID = nil
+                    // Only reclaim the load slot if it is still free: the user
+                    // can start switching to another installed model while the
+                    // OS asset downloads, and stealing it would let that switch
+                    // publish .ready while this load is still pending.
+                    guard activeASRModelLoadID == nil else {
+                        throw CancellationError()
+                    }
                     activeASRModelLoadID = modelID
                     phase = .loading
                     statusText = "Loading model..."
@@ -4194,9 +4201,13 @@ final class AppState {
                     insertionContext: textInsertionService.captureInsertionContext()
                 )
                 do {
+                    let destinationApp = frontmostAppBundleIDProvider()
                     try await textInsertionService.insertText(insertionText)
                     didInsertFinalText = true
-                    attributeStoredResult(result.id, to: frontmostAppBundleID)
+                    // Resolved here, not at record start: transcription and
+                    // Magic Format take long enough for the user to change
+                    // apps, and the text lands wherever focus is now.
+                    attributeStoredResult(result.id, to: destinationApp ?? frontmostAppBundleID)
                     dictationTiming.inserted = .now()
                     beginEditLearningTracking(insertedText: insertionText)
                     AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
