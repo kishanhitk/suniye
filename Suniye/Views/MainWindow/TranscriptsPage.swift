@@ -306,16 +306,9 @@ struct TranscriptsHeaderView: View {
         HStack(alignment: .bottom, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
                 headline
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(subline)
-                        .font(AppTypography.body)
-                        .foregroundStyle(MainWindowPalette.secondaryText)
-                    if stats.lifetimeWords > 0 {
-                        Text("Time saved is measured against typing at \(Int(DictationStats.assumedTypingWordsPerMinute)) wpm.")
-                            .font(AppTypography.caption)
-                            .foregroundStyle(MainWindowPalette.tertiaryText)
-                    }
-                }
+                Text(subline)
+                    .font(AppTypography.body)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
             }
 
             Spacer(minLength: 12)
