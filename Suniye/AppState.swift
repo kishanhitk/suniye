@@ -3083,8 +3083,15 @@ final class AppState {
                 )
             }
 
-            activeASRModelLoadID = nil
-            activeASRModelDownloadID = nil
+            // Only if this task still owns them: the handoff above yields when
+            // another switch has taken the load slot, and clearing it here
+            // would hand that switch's ownership to nobody.
+            if activeASRModelLoadID == modelID {
+                activeASRModelLoadID = nil
+            }
+            if activeASRModelDownloadID == modelID {
+                activeASRModelDownloadID = nil
+            }
             modelDownloadStartedAt = nil
         }
     }
@@ -3327,8 +3334,13 @@ final class AppState {
                     statusText = "Model required"
                 }
 
-                downloadProgress = 0
-                modelDownloadStartedAt = nil
+                // A download running for a different model keeps its progress
+                // and its start time: zeroing them here reset a live bar and
+                // cost the completion analytics their duration.
+                if activeASRModelDownloadID == nil {
+                    downloadProgress = 0
+                    modelDownloadStartedAt = nil
+                }
                 lastFailedASRModelID = nil
                 lastFailedASRModelError = nil
                 if !isCurrentModel {

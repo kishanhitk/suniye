@@ -210,8 +210,14 @@ struct SpeechModelSheet: View {
         guard pendingDeleteModelID == appState.currentASRModelEntry.id else {
             return "You will have to download it again to use it."
         }
+        // Mirrors deleteASRModel's own candidate list: it falls back through
+        // installedModels(), which excludes system-managed entries, so
+        // isASRModelDownloaded alone would promise a switch to Apple Speech
+        // that never happens.
         let fallback = appState.availableASRModelEntries.first {
-            $0.id != pendingDeleteModelID && appState.isASRModelDownloaded($0.id)
+            $0.id != pendingDeleteModelID
+                && !$0.isSystemManaged
+                && appState.isASRModelDownloaded($0.id)
         }
         if let fallback {
             return "This is the model in use. \(AppIdentity.current.displayName) will switch to \(fallback.displayName), and you will have to download this one again to use it."
