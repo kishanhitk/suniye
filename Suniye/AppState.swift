@@ -134,6 +134,21 @@ struct MagicFormatSetupTestResult: Equatable {
 
     let message: String
     let severity: Severity
+    /// Round trip for the test request. Already measured for the log line; a
+    /// successful test that also reports how long it took answers "is this fast
+    /// enough to sit in my dictation path?" at the moment the user asks it.
+    var latencyMs: Int?
+
+    /// "Latency 840 ms" / "Latency 1.2 s".
+    var latencyText: String? {
+        guard let latencyMs, severity == .success else {
+            return nil
+        }
+        if latencyMs < 1000 {
+            return "Latency \(latencyMs) ms"
+        }
+        return "Latency \(String(format: "%.1f", Double(latencyMs) / 1000)) s"
+    }
 }
 
 struct ASRModelBannerState: Equatable {
@@ -235,13 +250,32 @@ final class AppState {
         }
     }
     var modelDownloadStartedAt: Date?
-    var activeASRModelOperationID: ASRModelID? {
+    /// A download writes one model's files to disk; a load hands a different
+    /// model's files to the recogniser. They contend for nothing, so each gets a
+    /// slot — sharing one was why choosing an already-installed model stayed
+    /// blocked for the length of an unrelated download.
+    var activeASRModelDownloadID: ASRModelID? {
         didSet {
-            if oldValue != activeASRModelOperationID {
+            if oldValue != activeASRModelDownloadID {
                 onStateChange?()
             }
         }
     }
+
+    var activeASRModelLoadID: ASRModelID? {
+        didSet {
+            if oldValue != activeASRModelLoadID {
+                onStateChange?()
+            }
+        }
+    }
+
+    /// The operation worth reporting in one line of UI. A foreground load
+    /// outranks a background download.
+    var activeASRModelOperationID: ASRModelID? {
+        activeASRModelLoadID ?? activeASRModelDownloadID
+    }
+
     var loadedASRModelID: ASRModelID? {
         didSet {
             if oldValue != loadedASRModelID {
@@ -737,6 +771,10 @@ final class AppState {
     }
     var llmKeyOperationError: String?
     var isMagicFormatSetupTestInProgress = false
+    /// Which engine the running test belongs to. The engine chooser lets you test
+    /// a row before switching to it, so "a test is running" is not enough — the
+    /// UI needs to know whose.
+    var magicFormatTestingProvider: MagicFormatProvider?
     var magicFormatSetupTestResult: MagicFormatSetupTestResult?
     private var magicFormatSetupTestRequestID = 0
     var localGemmaInstallState: LocalLLMInstallState = .notInstalled {
@@ -770,6 +808,33 @@ final class AppState {
         modelManager.isInstalled(selectedASRModelID)
     }
 
+    /// Masked stand-in for a stored key: enough to recognise which key is saved,
+    /// never enough to use it. Without it the field reads "Paste API key" while
+    /// the status says Connected, which looks like nothing is stored.
+    var llmAPIKeyHint: String? {
+        guard hasLLMAPIKey,
+              let key = try? keychainService.getLLMKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !key.isEmpty
+        else {
+            return nil
+        }
+        let tail = String(key.suffix(4))
+        guard key.count > 12 else {
+            return "\u{2022}\u{2022}\u{2022}\u{2022} \(tail)"
+        }
+        return "\(key.prefix(7)) \u{2022}\u{2022}\u{2022}\u{2022} \u{2022}\u{2022}\u{2022}\u{2022} \(tail)"
+    }
+
+    /// The API key's own state. `llmKeyStatusText` answers "is the active engine
+    /// ready", which in the endpoint sheet reported the local model's health next
+    /// to the key field.
+    var llmAPIKeyStatusText: String {
+        if hasLLMAPIKey && isMagicFormatSetupVerified {
+            return "Connected"
+        }
+        return hasLLMAPIKey ? "Saved" : "No key"
+    }
+
     var llmKeyStatusText: String {
         if usesLocalMagicFormatSettings {
             if usesAppleMagicFormatSettings {
@@ -787,8 +852,11 @@ final class AppState {
         magicFormatSetupTestResult?.severity == .success
     }
 
+    /// Deliberately does not require the API engine to be the one in use: the
+    /// set-up sheet exists so an endpoint can be configured and tested *before*
+    /// switching to it.
     func canTestMagicFormatSetup(apiKeyDraft: String) -> Bool {
-        guard llmEnabled, needsAPIConfigurationForMagicFormat, !isMagicFormatSetupTestInProgress else {
+        guard llmEnabled, !isMagicFormatSetupTestInProgress else {
             return false
         }
         guard llmEndpointValidationError == nil, llmModelValidationError == nil else {
@@ -1011,7 +1079,7 @@ final class AppState {
     }
 
     var modelDownloadProgressLabel: String {
-        guard phase == .downloadingModel else {
+        guard activeASRModelDownloadID != nil else {
             return ""
         }
 
@@ -1177,15 +1245,12 @@ final class AppState {
     }
 
     func asrModelStatusText(for modelID: ASRModelID) -> String {
-        if activeASRModelOperationID == modelID {
-            switch phase {
-            case .downloadingModel:
-                return "Downloading"
-            case .loading:
-                return "Loading"
-            default:
-                break
-            }
+        if activeASRModelDownloadID == modelID {
+            return "Downloading"
+        }
+
+        if activeASRModelLoadID == modelID {
+            return "Loading"
         }
 
         if loadedASRModelID == modelID && selectedASRModelID == modelID {
@@ -1224,8 +1289,12 @@ final class AppState {
     }
 
     func asrModelPrimaryActionTitle(for modelID: ASRModelID) -> String {
-        if activeASRModelOperationID == modelID {
-            return phase == .loading ? "Loading…" : "Downloading…"
+        if activeASRModelLoadID == modelID {
+            return "Loading…"
+        }
+
+        if activeASRModelDownloadID == modelID {
+            return "Downloading…"
         }
 
         if loadedASRModelID == modelID && selectedASRModelID == modelID {
@@ -1236,15 +1305,33 @@ final class AppState {
     }
 
     func asrModelCanPerformPrimaryAction(for modelID: ASRModelID) -> Bool {
-        guard activeASRModelOperationID == nil else {
-            return false
-        }
-
         guard phase != .recording && phase != .transcribing else {
             return false
         }
 
+        // One load at a time: the recogniser is a single slot.
+        guard activeASRModelLoadID == nil else {
+            return false
+        }
+
+        // The model being fetched is not usable until it lands.
+        guard activeASRModelDownloadID != modelID else {
+            return false
+        }
+
+        // A model already on disk can be switched to while something else
+        // downloads. Starting a second download cannot — downloads stay serial.
+        if !modelManager.isInstalled(modelID), activeASRModelDownloadID != nil {
+            return false
+        }
+
         return !(loadedASRModelID == modelID && selectedASRModelID == modelID)
+    }
+
+    /// Whether the model's files are on disk. System-managed models answer
+    /// `false` here because their asset is owned by macOS, not by us.
+    func isASRModelDownloaded(_ modelID: ASRModelID) -> Bool {
+        modelManager.isInstalled(modelID)
     }
 
     func asrModelSecondaryActionsEnabled(for modelID: ASRModelID) -> Bool {
@@ -1253,22 +1340,23 @@ final class AppState {
         guard !ASRModelCatalog.entry(for: modelID).isSystemManaged else {
             return false
         }
-        return modelManager.isInstalled(modelID) && activeASRModelOperationID == nil && phase != .recording && phase != .transcribing
+        return modelManager.isInstalled(modelID)
+            && activeASRModelLoadID == nil
+            && activeASRModelDownloadID != modelID
+            && phase != .recording
+            && phase != .transcribing
     }
 
     func asrModelProgressLabel(for modelID: ASRModelID) -> String? {
-        guard activeASRModelOperationID == modelID else {
-            return nil
+        if activeASRModelDownloadID == modelID {
+            return modelDownloadProgressLabel
         }
 
-        switch phase {
-        case .downloadingModel:
-            return modelDownloadProgressLabel
-        case .loading:
+        if activeASRModelLoadID == modelID {
             return "Preparing the local recognizer."
-        default:
-            return nil
         }
+
+        return nil
     }
 
     func asrModelInstalledSizeText(for modelID: ASRModelID) -> String {
@@ -1291,6 +1379,17 @@ final class AppState {
 
     var launchAtLoginDetailText: String {
         launchAtLoginStatus.detailText
+    }
+
+    /// On and off need no explanation \u{2014} the switch says which it is. Only the
+    /// states where the switch does not tell the whole truth are worth surfacing.
+    var launchAtLoginWarningText: String? {
+        switch launchAtLoginStatus {
+        case .requiresApproval, .unsupported:
+            return launchAtLoginStatus.detailText
+        case .enabled, .disabled:
+            return nil
+        }
     }
 
     var launchAtLoginEnabledForUI: Bool {
@@ -1911,7 +2010,7 @@ final class AppState {
                 lastError = "Model load failed: \(error.localizedDescription)"
                 statusText = "Load failed"
             }
-            activeASRModelOperationID = nil
+            activeASRModelLoadID = nil
         } else {
             phase = .needsModel
             statusText = "Model required"
@@ -2346,6 +2445,7 @@ final class AppState {
     func clearMagicFormatSetupTestResult() {
         magicFormatSetupTestRequestID += 1
         isMagicFormatSetupTestInProgress = false
+        magicFormatTestingProvider = nil
         magicFormatSetupTestResult = nil
     }
 
@@ -2353,9 +2453,6 @@ final class AppState {
         clearMagicFormatSetupTestResult()
 
         guard llmEnabled else {
-            return
-        }
-        guard needsAPIConfigurationForMagicFormat else {
             return
         }
         guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
@@ -2370,6 +2467,7 @@ final class AppState {
 
         let requestID = magicFormatSetupTestRequestID
         isMagicFormatSetupTestInProgress = true
+        magicFormatTestingProvider = .openAICompatible
         let config = MagicFormatCoordinator.makeAPIConfig(
             settings: currentLLMSettings(),
             apiKey: apiKey,
@@ -2381,6 +2479,7 @@ final class AppState {
         defer {
             if requestID == magicFormatSetupTestRequestID {
                 isMagicFormatSetupTestInProgress = false
+                magicFormatTestingProvider = nil
             }
         }
 
@@ -2390,11 +2489,12 @@ final class AppState {
                 AppLogger.shared.log(.info, "ignored stale magic format setup test success")
                 return
             }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
             magicFormatSetupTestResult = MagicFormatSetupTestResult(
                 message: "Connection works.",
-                severity: .success
+                severity: .success,
+                latencyMs: latencyMs
             )
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
             AppLogger.shared.log(.info, "magic format setup test success model=\(config.modelId) latency_ms=\(latencyMs)")
         } catch let error as LLMPostProcessorError {
             guard requestID == magicFormatSetupTestRequestID else {
@@ -2677,10 +2777,68 @@ final class AppState {
         }
     }
 
+    /// Same shape as the local model test: run the engine once and report how
+    /// long it took, so "is this fast enough to sit in my dictation path?" is
+    /// answerable before committing to it.
+    func testAppleMagicFormatSetup() async {
+        clearMagicFormatSetupTestResult()
+
+        guard llmEnabled else {
+            return
+        }
+
+        guard appleMagicFormatAvailability.isAvailable else {
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: appleMagicFormatAvailability.statusText,
+                severity: .error
+            )
+            return
+        }
+
+        let requestID = magicFormatSetupTestRequestID
+        isMagicFormatSetupTestInProgress = true
+        magicFormatTestingProvider = .appleFoundationModels
+        let startTime = Date()
+        let config = MagicFormatCoordinator.makeAppleConfig(settings: currentLLMSettings())
+
+        defer {
+            if requestID == magicFormatSetupTestRequestID {
+                isMagicFormatSetupTestInProgress = false
+                magicFormatTestingProvider = nil
+            }
+        }
+
+        do {
+            try await appleMagicFormatPostProcessor.testSetup(config: config)
+            guard requestID == magicFormatSetupTestRequestID else {
+                AppLogger.shared.log(.info, "ignored stale apple setup test success")
+                return
+            }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: "Apple Intelligence works.",
+                severity: .success,
+                latencyMs: latencyMs
+            )
+            AppLogger.shared.log(.info, "apple setup test success latency_ms=\(latencyMs)")
+        } catch {
+            guard requestID == magicFormatSetupTestRequestID else {
+                AppLogger.shared.log(.info, "ignored stale apple setup test failure")
+                return
+            }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: error.localizedDescription,
+                severity: .error
+            )
+            AppLogger.shared.log(.warning, "apple setup test failed latency_ms=\(latencyMs)")
+        }
+    }
+
     func testLocalGemmaSetup() async {
         clearMagicFormatSetupTestResult()
 
-        guard llmEnabled, usesLocalGemmaMagicFormatSettings else {
+        guard llmEnabled else {
             return
         }
 
@@ -2694,12 +2852,14 @@ final class AppState {
 
         let requestID = magicFormatSetupTestRequestID
         isMagicFormatSetupTestInProgress = true
+        magicFormatTestingProvider = .localGemma
         let startTime = Date()
         let config = MagicFormatCoordinator.makeLocalGemmaConfig(settings: currentLLMSettings())
 
         defer {
             if requestID == magicFormatSetupTestRequestID {
                 isMagicFormatSetupTestInProgress = false
+                magicFormatTestingProvider = nil
             }
         }
 
@@ -2709,11 +2869,12 @@ final class AppState {
                 AppLogger.shared.log(.info, "ignored stale local gemma setup test success")
                 return
             }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
             magicFormatSetupTestResult = MagicFormatSetupTestResult(
                 message: "Local model works.",
-                severity: .success
+                severity: .success,
+                latencyMs: latencyMs
             )
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
             AppLogger.shared.log(.info, "local gemma setup test success latency_ms=\(latencyMs)")
         } catch {
             guard requestID == magicFormatSetupTestRequestID else {
@@ -2802,12 +2963,15 @@ final class AppState {
     /// yet, download it with a real progress bar; otherwise load it straight away. Then
     /// selects it. Avoids the silent, hung-looking first-run download inside `loadModel`.
     private func prepareSystemManagedModel(_ modelID: ASRModelID) {
-        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+        guard phase != .recording && phase != .transcribing else {
+            return
+        }
+        guard activeASRModelLoadID == nil && activeASRModelDownloadID == nil else {
             return
         }
 
         let hadLoadedModel = loadedASRModelID != nil
-        activeASRModelOperationID = modelID
+        activeASRModelLoadID = modelID
         phase = .loading
         statusText = "Loading model..."
         lastError = nil
@@ -2856,18 +3020,25 @@ final class AppState {
                 )
             }
 
-            activeASRModelOperationID = nil
+            activeASRModelLoadID = nil
             modelDownloadStartedAt = nil
         }
     }
 
     func downloadASRModel(_ modelID: ASRModelID, autoSelect: Bool) {
-        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+        guard phase != .recording && phase != .transcribing else {
+            return
+        }
+        guard activeASRModelDownloadID == nil && activeASRModelLoadID == nil else {
             return
         }
 
         let hadLoadedModel = loadedASRModelID != nil
-        activeASRModelOperationID = modelID
+        // What the user was on when the download started. If they switch to
+        // something else while it runs, this download must not yank the
+        // selection back when it lands.
+        let selectionAtStart = selectedASRModelID
+        activeASRModelDownloadID = modelID
         phase = .downloadingModel
         statusText = "Downloading model..."
         lastError = nil
@@ -2896,8 +3067,10 @@ final class AppState {
                 trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
                 modelDownloadStartedAt = nil
 
-                if autoSelect {
+                if autoSelect && selectedASRModelID == selectionAtStart && activeASRModelLoadID == nil {
                     do {
+                        activeASRModelLoadID = modelID
+                        defer { activeASRModelLoadID = nil }
                         try await loadRecognizer(for: modelID)
                         selectedASRModelID = modelID
                         phase = .ready
@@ -2948,14 +3121,14 @@ final class AppState {
                 }
             }
 
-            activeASRModelOperationID = nil
+            activeASRModelDownloadID = nil
             modelDownloadStartedAt = nil
             asrDownloadTask = nil
         }
     }
 
     var canCancelASRModelDownload: Bool {
-        phase == .downloadingModel && asrDownloadTask != nil
+        activeASRModelDownloadID != nil && asrDownloadTask != nil
     }
 
     /// Cancels an in-flight ASR model download (previously impossible: the
@@ -3004,7 +3177,12 @@ final class AppState {
     }
 
     func selectASRModel(_ modelID: ASRModelID) {
-        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+        guard phase != .recording && phase != .transcribing else {
+            return
+        }
+        // Deliberately not blocked on a download: switching to a model already
+        // on disk touches the recogniser, not the downloader.
+        guard activeASRModelLoadID == nil else {
             return
         }
         guard loadedASRModelID != modelID else {
@@ -3017,7 +3195,7 @@ final class AppState {
         }
 
         let hadLoadedModel = loadedASRModelID != nil
-        activeASRModelOperationID = modelID
+        activeASRModelLoadID = modelID
         analytics.track(.modelChanged(kind: .asr, model: SafeLabel(modelID.rawValue)))
         phase = .loading
         statusText = "Loading model..."
@@ -3042,17 +3220,20 @@ final class AppState {
                     fallbackToReadyState: hadLoadedModel
                 )
             }
-            activeASRModelOperationID = nil
+            activeASRModelLoadID = nil
         }
     }
 
     func deleteASRModel(_ modelID: ASRModelID) {
-        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+        guard phase != .recording && phase != .transcribing else {
+            return
+        }
+        guard activeASRModelLoadID == nil, activeASRModelDownloadID != modelID else {
             return
         }
 
         let isCurrentModel = selectedASRModelID == modelID || loadedASRModelID == modelID
-        activeASRModelOperationID = modelID
+        activeASRModelLoadID = modelID
 
         Task {
             do {
@@ -3077,7 +3258,7 @@ final class AppState {
                         statusText = "Load failed"
                         lastError = "Model load failed: \(error.localizedDescription)"
                     }
-                    activeASRModelOperationID = nil
+                    activeASRModelLoadID = nil
                     if phase == .ready {
                         lastFailedASRModelID = nil
                         lastFailedASRModelError = nil
@@ -3104,7 +3285,7 @@ final class AppState {
                 lastFailedASRModelError = error.localizedDescription
                 AppLogger.shared.log(.error, "model delete failed id=\(modelID.rawValue) error=\(error.localizedDescription)")
             }
-            activeASRModelOperationID = nil
+            activeASRModelLoadID = nil
         }
     }
 
@@ -3567,7 +3748,7 @@ final class AppState {
         var lastError: Error?
 
         for modelID in candidateModelIDs {
-            activeASRModelOperationID = modelID
+            activeASRModelLoadID = modelID
             do {
                 try await loadRecognizer(for: modelID)
                 return modelID

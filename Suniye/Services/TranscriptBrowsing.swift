@@ -1,41 +1,5 @@
 import Foundation
 
-/// Time window shown on the Transcripts page.
-enum TranscriptFilter: String, CaseIterable, Identifiable, Hashable {
-    case all
-    case today
-    case lastSevenDays
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .all:
-            return "All"
-        case .today:
-            return "Today"
-        case .lastSevenDays:
-            return "Last 7 days"
-        }
-    }
-
-    func includes(_ date: Date, now: Date = Date(), calendar: Calendar = .autoupdatingCurrent) -> Bool {
-        switch self {
-        case .all:
-            return true
-        case .today:
-            return calendar.isDate(date, inSameDayAs: now)
-        case .lastSevenDays:
-            // Seven calendar days including today, not a rolling 168 hours — a
-            // dictation from 8 days ago at 23:00 should not still be "last 7 days".
-            guard let cutoff = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now)) else {
-                return true
-            }
-            return date >= cutoff
-        }
-    }
-}
-
 /// One day's transcripts, newest first.
 struct TranscriptDayGroup: Identifiable, Equatable {
     let id: String
@@ -49,22 +13,13 @@ enum TranscriptBrowser {
     /// (time, app, duration) is chrome, not content the user is looking for.
     static func filter(
         _ results: [RecentResult],
-        filter: TranscriptFilter,
-        searchText: String,
-        now: Date = Date(),
-        calendar: Calendar = .autoupdatingCurrent
+        searchText: String
     ) -> [RecentResult] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return results.filter { result in
-            guard filter.includes(result.createdAt, now: now, calendar: calendar) else {
-                return false
-            }
-            guard !query.isEmpty else {
-                return true
-            }
-            return result.text.localizedCaseInsensitiveContains(query)
+        guard !query.isEmpty else {
+            return results
         }
+        return results.filter { $0.text.localizedCaseInsensitiveContains(query) }
     }
 
     /// Groups into calendar days, newest day first. Input is assumed newest-first

@@ -288,10 +288,10 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         appState.phase = .ready
 
         // Blocked while another operation is active.
-        appState.activeASRModelOperationID = .parakeetV3
+        appState.activeASRModelLoadID = .parakeetV3
         appState.performPrimaryASRAction(for: .moonshineBase)
         XCTAssertNil(modelManager.lastDownloadedModelID)
-        appState.activeASRModelOperationID = nil
+        appState.activeASRModelLoadID = nil
 
         // Missing model downloads.
         appState.performPrimaryASRAction(for: .moonshineBase)

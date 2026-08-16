@@ -6,18 +6,29 @@ import SwiftUI
 struct TranscriptsSparkline: View {
     let days: [DailyWordCount]
 
+    @State private var hoveredDayKey: String?
+
     private var peak: Int {
         days.map(\.words).max() ?? 0
+    }
+
+    private var hoveredDay: DailyWordCount? {
+        hoveredDayKey.flatMap { key in days.first { $0.dayKey == key } }
     }
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
             chart
-                .frame(width: 180, height: 40)
+                // Tall enough that the block matches the headline stack beside
+                // it, so the two bottom edges line up.
+                .frame(width: 180, height: 64)
 
+            // The caption doubles as the readout. A floating tooltip over a
+            // 64pt chart would overflow into the headline beside it; this reuses
+            // space the layout has already committed to, so nothing shifts.
             Text(caption)
                 .font(AppTypography.codeCaption)
-                .foregroundStyle(MainWindowPalette.tertiaryText)
+                .foregroundStyle(hoveredDay == nil ? MainWindowPalette.tertiaryText : Color.primary)
                 .tracking(0.6)
         }
         .accessibilityElement(children: .ignore)
@@ -25,8 +36,18 @@ struct TranscriptsSparkline: View {
     }
 
     private var caption: String {
-        "WORDS / DAY · \(days.count)D · PEAK \(peak)"
+        guard let hoveredDay else {
+            return "WORDS / DAY · \(days.count)D · PEAK \(peak)"
+        }
+        let label = hoveredDay.date.map { Self.dayFormatter.string(from: $0).uppercased() } ?? hoveredDay.dayKey
+        return "\(label) · \(hoveredDay.words) WORDS"
     }
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("EEEdMMM")
+        return formatter
+    }()
 
     private var chart: some View {
         Chart {
@@ -63,10 +84,47 @@ struct TranscriptsSparkline: View {
                 .foregroundStyle(Color.accentColor)
                 .symbolSize(24)
             }
+
+            if let hoveredDay {
+                RuleMark(x: .value("Day", hoveredDay.dayKey))
+                    .foregroundStyle(MainWindowPalette.tertiaryText.opacity(0.55))
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+
+                PointMark(
+                    x: .value("Day", hoveredDay.dayKey),
+                    y: .value("Words", hoveredDay.words)
+                )
+                .foregroundStyle(Color.accentColor)
+                .symbolSize(44)
+            }
         }
         .chartYScale(domain: 0...max(peak, 1))
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
         .chartLegend(.hidden)
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(.clear)
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case let .active(location):
+                            hoveredDayKey = dayKey(at: location, proxy: proxy, geometry: geometry)
+                        case .ended:
+                            hoveredDayKey = nil
+                        }
+                    }
+            }
+        }
+    }
+
+    /// The x scale is categorical, one band per day, so the hit test asks the
+    /// chart which band the pointer is over rather than doing the maths here.
+    private func dayKey(at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) -> String? {
+        guard let plotFrame = proxy.plotFrame else {
+            return nil
+        }
+        return proxy.value(atX: location.x - geometry[plotFrame].origin.x, as: String.self)
     }
 }

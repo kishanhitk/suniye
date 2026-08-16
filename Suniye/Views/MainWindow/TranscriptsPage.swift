@@ -10,13 +10,12 @@ struct TranscriptsPage: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var searchText = ""
-    @State private var filter: TranscriptFilter = .all
     @State private var selectedID: UUID?
     @FocusState private var isSearchFocused: Bool
     @FocusState private var isListFocused: Bool
 
     private var visibleResults: [RecentResult] {
-        TranscriptBrowser.filter(appState.recentResults, filter: filter, searchText: searchText)
+        TranscriptBrowser.filter(appState.recentResults, searchText: searchText)
     }
 
     private var groups: [TranscriptDayGroup] {
@@ -35,9 +34,8 @@ struct TranscriptsPage: View {
                 days: appState.dailyWordCounts(days: 14)
             )
 
-            TranscriptFilterBar(
+            TranscriptSearchBar(
                 searchText: $searchText,
-                filter: $filter,
                 isSearchFocused: $isSearchFocused
             )
 
@@ -63,7 +61,6 @@ struct TranscriptsPage: View {
             return .handled
         }
         .onChange(of: searchText) { _, _ in selectedID = nil }
-        .onChange(of: filter) { _, _ in selectedID = nil }
     }
 
     // MARK: - Sections
@@ -304,7 +301,9 @@ struct TranscriptsHeaderView: View {
     let days: [DailyWordCount]
 
     var body: some View {
-        HStack(alignment: .top, spacing: 20) {
+        // Bottom-aligned so the sparkline's caption sits on the same line as the
+        // words/wpm/streak summary rather than floating above it.
+        HStack(alignment: .bottom, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
                 headline
                 Text(subline)
@@ -354,21 +353,20 @@ struct TranscriptsHeaderView: View {
     }
 }
 
-/// Search plus the three time windows. Kept on one line: it is a filter bar, not
-/// a section of the page.
-struct TranscriptFilterBar: View {
+/// Search, right-aligned.
+///
+/// The three time windows that used to sit beside it are gone: the list is
+/// already newest-first and grouped by day, so "Today" only truncated a list
+/// whose top was already today. Search is the one axis that reaches something
+/// scrolling cannot.
+struct TranscriptSearchBar: View {
     @Binding var searchText: String
-    @Binding var filter: TranscriptFilter
     @FocusState.Binding var isSearchFocused: Bool
 
     var body: some View {
-        GlassCluster(spacing: 10) {
-            filterRow
-        }
-    }
+        HStack(spacing: 0) {
+            Spacer(minLength: 12)
 
-    private var filterRow: some View {
-        HStack(spacing: 10) {
             HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass")
                     .font(AppTypography.subheadline)
@@ -391,42 +389,14 @@ struct TranscriptFilterBar: View {
                 }
             }
             .padding(.horizontal, 10)
+            .frame(width: 260)
             .frame(minHeight: 30)
-            .liquidGlassSurface(
+            .flatSurface(
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous),
                 fill: MainWindowPalette.editorBackground,
-                tint: isSearchFocused ? Color.accentColor.opacity(0.16) : nil,
-                interactive: true
+                stroke: isSearchFocused ? Color.accentColor.opacity(0.55) : MainWindowPalette.cardStroke
             )
-
-            ForEach(TranscriptFilter.allCases) { option in
-                filterPill(option)
-            }
         }
         .animation(.easeOut(duration: 0.12), value: isSearchFocused)
-    }
-
-    private func filterPill(_ option: TranscriptFilter) -> some View {
-        let isActive = filter == option
-
-        return Button {
-            filter = option
-        } label: {
-            Text(option.title)
-                .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(isActive ? Color.white : Color.primary)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 30)
-                .liquidGlassSurface(
-                    in: Capsule(style: .continuous),
-                    fill: isActive ? Color.accentColor : MainWindowPalette.cardBackground,
-                    stroke: isActive ? .clear : MainWindowPalette.cardStroke,
-                    tint: isActive ? Color.accentColor : nil,
-                    interactive: true
-                )
-                .contentShape(Capsule())
-        }
-        .buttonStyle(PressableButtonStyle(pressedScale: 0.97))
-        .accessibilityAddTraits(isActive ? [.isSelected] : [])
     }
 }

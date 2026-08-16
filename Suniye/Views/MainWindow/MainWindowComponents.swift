@@ -30,23 +30,21 @@ private enum MainWindowNSPalette {
             : NSColor(calibratedWhite: 0.978, alpha: 1)
     })
 
-    /// Cards sit on a vibrant pane, so a fully opaque fill reads as a slab
-    /// punched into the glass — pure white in light, near-black in dark. A
-    /// high-alpha tint keeps the card a distinct, legible surface while letting
-    /// a little of the pane through.
+    /// Cards sit on a near-opaque pane, so they are opaque too: the old
+    /// high-alpha fill was tuned to let vibrancy through, and against a solid
+    /// pane it composited to within a hair of the background and vanished.
     static let elevatedSurface = NSColor(name: nil, dynamicProvider: { appearance in
         appearance.usesDarkMainWindowPalette
-            ? NSColor.white.withAlphaComponent(0.10)
-            : NSColor.white.withAlphaComponent(0.68)
+            ? NSColor(calibratedWhite: 0.20, alpha: 1)
+            : NSColor.white
     })
 
-    /// Fields and editors. Also translucent — a solid white or near-black field
-    /// reads as heavily on the glass as a solid card did — but weaker than
-    /// `elevatedSurface`, so an input looks recessed where a card looks lifted.
+    /// Fields and editors. Darker than the pane where a card is lighter, so an
+    /// input reads as recessed and a card as lifted.
     static let inputSurface = NSColor(name: nil, dynamicProvider: { appearance in
         appearance.usesDarkMainWindowPalette
-            ? NSColor.white.withAlphaComponent(0.06)
-            : NSColor.white.withAlphaComponent(0.52)
+            ? NSColor(calibratedWhite: 0.11, alpha: 1)
+            : NSColor(calibratedWhite: 0.945, alpha: 1)
     })
 
     static let divider = NSColor(name: nil, dynamicProvider: { appearance in
@@ -93,13 +91,18 @@ enum AppTypography {
     // default size these match the previous fixed points exactly (title2 17,
     // headline 13 semibold, body 13, callout 12, subheadline 11, caption 10).
     static let appTitle = Font.title2.weight(.semibold)
-    static let sidebarIcon = Font.body.weight(.medium)
+    static let sidebarIcon = Font.body
     static let sidebarLabel = Font.body
-    static let sidebarLabelSelected = Font.body.weight(.semibold)
+    static let sidebarLabelSelected = Font.body.weight(.medium)
     static let pageTitle = Font.title2.weight(.semibold)
     /// One rung below `pageTitle`, so a card heading cannot be mistaken for the
     /// page heading when both are on screen.
     static let cardTitle = Font.title3.weight(.semibold)
+    /// Settings rows in the flattened pages: one step up from body, because with
+    /// the cards gone the type carries the hierarchy.
+    static let rowTitle = Font.callout
+    /// Group heading — sentence case at body weight, not an uppercase mono label.
+    static let groupHeading = Font.body.weight(.semibold)
     /// The Transcripts headline reads as a sentence, so it stays regular weight
     /// and leans on size alone.
     static let transcriptsHeadline = Font.system(.largeTitle, design: .default, weight: .regular)
@@ -126,15 +129,19 @@ enum AppTypography {
 }
 
 enum AppMetrics {
+    /// How opaque the detail pane's scrim is. 1 would kill the material
+    /// entirely; this leaves just enough for the pane to still read as glass.
+    static let detailPaneOpacity: Double = 0.9
+
     static let onboardingBrandIconSize: CGFloat = 64
     static let sidebarWidth: CGFloat = 208
     static let sidebarBrandTop: CGFloat = 24
     static let sidebarBrandHorizontal: CGFloat = 24
     static let sidebarBrandBottom: CGFloat = 24
     static let sidebarPaddingHorizontal: CGFloat = 14
-    static let sidebarRowSpacing: CGFloat = 4
+    static let sidebarRowSpacing: CGFloat = 2
     static let sidebarRowHorizontalPadding: CGFloat = 12
-    static let sidebarRowHeight: CGFloat = 36
+    static let sidebarRowHeight: CGFloat = 32
     static let sidebarRowCornerRadius: CGFloat = 8
     static let detailSpacing: CGFloat = 20
     static let detailPaddingHorizontal: CGFloat = 28
@@ -168,14 +175,15 @@ struct SidebarNavigationRow: View {
             HStack(spacing: 12) {
                 Image(systemName: section.icon)
                     .font(AppTypography.sidebarIcon)
-                    .frame(width: 18)
+                    .frame(width: 20)
+                    .foregroundStyle(isSelected ? Color.primary : MainWindowPalette.secondaryText)
                 Text(section.title)
                     .font(isSelected ? AppTypography.sidebarLabelSelected : AppTypography.sidebarLabel)
+                    .foregroundStyle(Color.primary)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(isSelected ? Color.primary : MainWindowPalette.secondaryText)
             .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
             .frame(minHeight: AppMetrics.sidebarRowHeight)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -192,49 +200,20 @@ struct SidebarNavigationRow: View {
 }
 
 extension View {
-    /// Liquid Glass on macOS 26, with the translucent fill + hairline as the
-    /// macOS 14/15 fallback. Glass draws its own edge, so the surfaces using this
-    /// do not add a border of their own.
-    @ViewBuilder
-    func liquidGlassSurface(
+    /// A flat card surface: fill, an optional state tint over it, and a hairline.
+    /// `tint` composites on top of `fill` rather than replacing it, so hover,
+    /// selection and copy states read as a wash over the card's own colour.
+    func flatSurface(
         in shape: some InsettableShape,
         fill: Color = MainWindowPalette.cardBackground,
         stroke: Color = MainWindowPalette.cardStroke,
-        tint: Color? = nil,
-        interactive: Bool = false
+        tint: Color? = nil
     ) -> some View {
-        if #available(macOS 26, *) {
-            glassEffect(Self.glass(tint: tint, interactive: interactive), in: shape)
-        } else {
-            background(shape.fill(fill))
-                .overlay(shape.strokeBorder(stroke, lineWidth: 1))
+        background {
+            shape.fill(fill)
+                .overlay(shape.fill(tint ?? .clear))
         }
-    }
-
-    @available(macOS 26, *)
-    private static func glass(tint: Color?, interactive: Bool) -> Glass {
-        var glass = Glass.regular
-        if let tint {
-            glass = glass.tint(tint)
-        }
-        return interactive ? glass.interactive() : glass
-    }
-}
-
-/// Groups co-located glass so the surfaces sample and blend as one, per Apple's
-/// guidance. A no-op below macOS 26.
-struct GlassCluster<Content: View>: View {
-    var spacing: CGFloat = 12
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        if #available(macOS 26, *) {
-            GlassEffectContainer(spacing: spacing) {
-                content
-            }
-        } else {
-            content
-        }
+        .overlay(shape.strokeBorder(stroke, lineWidth: 1))
     }
 }
 
@@ -276,6 +255,7 @@ struct DetailScrollContainer<Content: View>: View {
             .padding(.top, AppMetrics.detailPaddingTop)
             .padding(.bottom, AppMetrics.detailPaddingBottom)
             .frame(maxWidth: .infinity, alignment: .topLeading)
+            .subtleEnclosingScroller()
         }
     }
 }
@@ -382,7 +362,7 @@ struct SurfaceCard<Content: View>: View {
             content
         }
         .padding(padding)
-        .liquidGlassSurface(
+        .flatSurface(
             in: RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
         )
     }
@@ -803,5 +783,76 @@ extension Int {
     /// "10 KB" and a million words as "1 MB".
     var abbreviatedString: String {
         formatted(.number.notation(.compactName))
+    }
+}
+
+
+/// Microphone picker in the sidebar's footer. The input device is the one
+/// setting that decides whether dictation works at all, so it earns a permanent
+/// place rather than living three clicks deep in General.
+struct SidebarInputDeviceRow: View {
+    @Bindable var appState: AppState
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Menu {
+            Button {
+                appState.selectedInputDeviceID = nil
+            } label: {
+                Label("System Default", systemImage: appState.selectedInputDeviceID == nil ? "checkmark" : "")
+            }
+
+            if !appState.availableInputDevices.isEmpty {
+                Divider()
+            }
+
+            ForEach(appState.availableInputDevices) { device in
+                Button {
+                    appState.selectedInputDeviceID = device.id
+                } label: {
+                    Text(device.isAvailable ? device.name : "\(device.name) — Unavailable")
+                }
+                .disabled(!device.isAvailable)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: hasProblem ? "exclamationmark.triangle.fill" : "mic")
+                    .font(AppTypography.subheadline)
+                    .frame(width: 20)
+                    .foregroundStyle(hasProblem ? Color.orange : MainWindowPalette.secondaryText)
+
+                // The device name gives up space first: a long name must not
+                // push the chevron off the edge and hide that this is a picker.
+                // A footer control, not a destination: it sits a step below the
+                // navigation rows above it.
+                Text(appState.selectedInputDeviceName)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+            }
+            .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
+            .padding(.vertical, 6)
+            .frame(minHeight: AppMetrics.sidebarRowHeight)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
+                    .fill(isHovered ? MainWindowPalette.selectedFill : .clear)
+            )
+            .contentShape(Rectangle())
+        }
+        // AppKit draws the popup indicator itself; a hand-rolled chevron got
+        // squeezed off the edge by long device names.
+        .menuStyle(.borderlessButton)
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .help(appState.effectiveInputDeviceStatusText)
+    }
+
+    private var hasProblem: Bool {
+        appState.audioRouteSnapshot == nil
     }
 }

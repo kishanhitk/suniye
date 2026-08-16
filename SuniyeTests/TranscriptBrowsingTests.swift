@@ -28,40 +28,7 @@ final class TranscriptBrowsingTests: XCTestCase {
         )
     }
 
-    // MARK: - Filtering
-
-    func testTodayFilterKeepsOnlyTodaysTranscripts() {
-        let now = date("2026-08-16 12:00")
-        let results = [
-            result("today one", "2026-08-16 09:00"),
-            result("yesterday", "2026-08-15 23:59"),
-            result("today two", "2026-08-16 00:01")
-        ]
-
-        let filtered = TranscriptBrowser.filter(results, filter: .today, searchText: "", now: now, calendar: calendar)
-
-        XCTAssertEqual(filtered.map(\.text), ["today one", "today two"])
-    }
-
-    /// Seven calendar days including today — not a rolling 168 hours, or a
-    /// dictation from eight days ago at 23:00 would still count.
-    func testLastSevenDaysUsesCalendarDaysNotAnHourWindow() {
-        let now = date("2026-08-16 12:00")
-        let results = [
-            result("in range", "2026-08-10 00:05"),
-            result("out of range", "2026-08-09 23:55")
-        ]
-
-        let filtered = TranscriptBrowser.filter(
-            results,
-            filter: .lastSevenDays,
-            searchText: "",
-            now: now,
-            calendar: calendar
-        )
-
-        XCTAssertEqual(filtered.map(\.text), ["in range"])
-    }
+    // MARK: - Search
 
     func testSearchIsCaseAndDiacriticFriendlyAndTrimsWhitespace() {
         let results = [
@@ -69,26 +36,20 @@ final class TranscriptBrowsingTests: XCTestCase {
             result("unrelated", "2026-08-16 08:00")
         ]
 
-        XCTAssertEqual(
-            TranscriptBrowser.filter(results, filter: .all, searchText: "  FRIDAY ", now: date("2026-08-16 12:00"), calendar: calendar).count,
-            1
-        )
-        XCTAssertEqual(
-            TranscriptBrowser.filter(results, filter: .all, searchText: "", now: date("2026-08-16 12:00"), calendar: calendar).count,
-            2
-        )
+        XCTAssertEqual(TranscriptBrowser.filter(results, searchText: "  FRIDAY ").count, 1)
+        XCTAssertEqual(TranscriptBrowser.filter(results, searchText: "").count, 2)
     }
 
-    func testSearchAndFilterCombine() {
-        let now = date("2026-08-16 12:00")
+    func testSearchMatchesTranscriptTextOnly() {
         let results = [
             result("report today", "2026-08-16 09:00"),
-            result("report last week", "2026-08-01 09:00")
+            result("unrelated", "2026-08-01 09:00", app: "com.example.report")
         ]
 
-        let filtered = TranscriptBrowser.filter(results, filter: .today, searchText: "report", now: now, calendar: calendar)
-
-        XCTAssertEqual(filtered.map(\.text), ["report today"])
+        XCTAssertEqual(
+            TranscriptBrowser.filter(results, searchText: "report").map(\.text),
+            ["report today"]
+        )
     }
 
     // MARK: - Grouping

@@ -65,39 +65,6 @@ struct TranscriptAppIcon: View {
     }
 }
 
-/// Icon button on glass, for the featured card. Same behaviour as
-/// `ActionIconButton` — hover tint, press dip — but it wears the card's material
-/// instead of a plain fill.
-struct GlassIconButton: View {
-    let systemName: String
-    let accessibilityLabel: String
-    var tint: Color = MainWindowPalette.tertiaryText
-    var hoverTint: Color?
-    let action: () -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(AppTypography.bodyMedium)
-                .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(isHovered ? (hoverTint ?? tint) : tint)
-                .frame(width: 26, height: 26)
-                .liquidGlassSurface(
-                    in: Circle(),
-                    fill: MainWindowPalette.selectedFill,
-                    interactive: true
-                )
-                .contentShape(Circle())
-        }
-        .buttonStyle(PressableButtonStyle(pressedScale: 0.92))
-        .onHover { isHovered = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovered)
-        .animation(.easeOut(duration: 0.12), value: tint)
-        .accessibilityLabel(Text(accessibilityLabel))
-    }
-}
 
 /// The newest transcript, shown in full. It is the one the user is most likely
 /// to want to reuse, so its text is not truncated and Copy is always visible.
@@ -147,11 +114,11 @@ struct FeaturedTranscriptCard: View {
                 Spacer(minLength: 12)
 
                 // Clicking the card copies; the icon is still a button so it
-                // answers the pointer, on the same glass the card is made of.
-                // Same resting weight as the delete beside it: full-strength
+                // answers the pointer. Same resting weight as the delete beside
+                // it: full-strength
                 // primary made copy read as the louder of the two. Still
                 // monochrome, so it follows the system theme.
-                GlassIconButton(
+                ActionIconButton(
                     systemName: didCopy ? "checkmark" : "doc.on.doc",
                     accessibilityLabel: "Copy transcript",
                     tint: didCopy ? .green : MainWindowPalette.tertiaryText,
@@ -162,7 +129,7 @@ struct FeaturedTranscriptCard: View {
                 // Visible, not hidden behind hover: it was reserving space while
                 // invisible, which reads as a dead gap and hides a real action.
                 // Quiet grey until the pointer is on it, then red.
-                GlassIconButton(
+                ActionIconButton(
                     systemName: "trash",
                     accessibilityLabel: "Delete transcript",
                     tint: MainWindowPalette.tertiaryText,
@@ -173,13 +140,12 @@ struct FeaturedTranscriptCard: View {
             }
         }
         .padding(16)
-        .liquidGlassSurface(
+        .flatSurface(
             in: RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous),
-            tint: cardTint,
-            interactive: true
+            tint: cardTint
         )
         .overlay {
-            // Selection needs to read at a glance; glass alone is too quiet.
+            // Selection needs to read at a glance; the tint alone is too quiet.
             if isSelected {
                 RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
                     .strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 1.5)

@@ -87,11 +87,11 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         let appState = makeTestAppState(modelManager: modelManager)
 
         appState.phase = .downloadingModel
-        appState.activeASRModelOperationID = appState.selectedASRModelID
+        appState.activeASRModelDownloadID = appState.selectedASRModelID
         appState.downloadProgress = 0.5
         XCTAssertEqual(appState.modelStatusValue, "Downloading 50%")
 
-        appState.activeASRModelOperationID = .moonshineBase
+        appState.activeASRModelLoadID = .moonshineBase
         appState.loadedASRModelID = appState.selectedASRModelID
         XCTAssertEqual(appState.modelStatusValue, "Current")
         appState.loadedASRModelID = nil
@@ -101,18 +101,18 @@ final class AppStateCoverageDisplayTests: XCTestCase {
 
         modelManager.installedModelIDs = [.parakeetV3]
         appState.phase = .loading
-        appState.activeASRModelOperationID = appState.selectedASRModelID
+        appState.activeASRModelLoadID = appState.selectedASRModelID
         XCTAssertEqual(appState.modelStatusValue, "Loading")
         modelManager.installedModelIDs = []
         XCTAssertEqual(appState.modelStatusValue, "Validating")
-        appState.activeASRModelOperationID = .moonshineBase
+        appState.activeASRModelLoadID = .moonshineBase
         appState.loadedASRModelID = appState.selectedASRModelID
         XCTAssertEqual(appState.modelStatusValue, "Current")
         appState.loadedASRModelID = nil
         XCTAssertEqual(appState.modelStatusValue, "Missing")
 
         modelManager.installedModelIDs = [.parakeetV3]
-        appState.activeASRModelOperationID = nil
+        appState.activeASRModelLoadID = nil
         appState.phase = .ready
         appState.loadedASRModelID = appState.selectedASRModelID
         XCTAssertEqual(appState.modelStatusValue, "Current")
@@ -140,9 +140,9 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         XCTAssertEqual(appState.modelStatusColor, .orange)
 
         appState.phase = .downloadingModel
-        appState.activeASRModelOperationID = appState.selectedASRModelID
+        appState.activeASRModelDownloadID = appState.selectedASRModelID
         XCTAssertEqual(appState.modelStatusColor, .accentColor)
-        appState.activeASRModelOperationID = .moonshineBase
+        appState.activeASRModelDownloadID = .moonshineBase
         appState.loadedASRModelID = appState.selectedASRModelID
         XCTAssertEqual(appState.modelStatusColor, .green)
         appState.loadedASRModelID = nil
@@ -171,9 +171,9 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         XCTAssertEqual(appState.modelStatusIcon, "exclamationmark.triangle.fill")
 
         appState.phase = .loading
-        appState.activeASRModelOperationID = appState.selectedASRModelID
+        appState.activeASRModelLoadID = appState.selectedASRModelID
         XCTAssertEqual(appState.modelStatusIcon, "arrow.down.circle.fill")
-        appState.activeASRModelOperationID = .moonshineBase
+        appState.activeASRModelLoadID = .moonshineBase
         appState.loadedASRModelID = appState.selectedASRModelID
         XCTAssertEqual(appState.modelStatusIcon, "checkmark.circle.fill")
         appState.loadedASRModelID = nil
@@ -195,13 +195,13 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
 
-        appState.activeASRModelOperationID = appState.selectedASRModelID
+        appState.activeASRModelDownloadID = appState.selectedASRModelID
         appState.phase = .loading
         XCTAssertEqual(appState.modelPrimaryActionTitle, "Loading…")
         appState.phase = .downloadingModel
         XCTAssertEqual(appState.modelPrimaryActionTitle, "Downloading…")
 
-        appState.activeASRModelOperationID = nil
+        appState.activeASRModelDownloadID = nil
         appState.phase = .ready
         appState.loadedASRModelID = appState.selectedASRModelID
         XCTAssertEqual(appState.modelPrimaryActionTitle, "Current")
@@ -221,10 +221,10 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         XCTAssertTrue(appState.modelPrimaryActionDetail.contains("Stored locally"))
 
         appState.loadedASRModelID = nil
-        appState.activeASRModelOperationID = appState.selectedASRModelID
+        appState.activeASRModelLoadID = appState.selectedASRModelID
         XCTAssertTrue(appState.modelPrimaryActionDetail.contains("Keep Suniye open"))
 
-        appState.activeASRModelOperationID = nil
+        appState.activeASRModelLoadID = nil
         appState.lastFailedASRModelID = appState.selectedASRModelID
         appState.lastFailedASRModelError = "boom"
         XCTAssertTrue(appState.modelPrimaryActionDetail.contains("Last attempt failed"))
@@ -254,7 +254,7 @@ final class AppStateCoverageDisplayTests: XCTestCase {
 
         XCTAssertNil(appState.asrModelBanner)
 
-        appState.activeASRModelOperationID = .parakeetV3
+        appState.activeASRModelDownloadID = .parakeetV3
         appState.phase = .downloadingModel
         appState.downloadProgress = 0.25
         let downloading = appState.asrModelBanner
@@ -271,7 +271,7 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         appState.phase = .ready
         XCTAssertNil(appState.asrModelBanner)
 
-        appState.activeASRModelOperationID = nil
+        appState.activeASRModelLoadID = nil
         appState.lastFailedASRModelID = .parakeetV3
         appState.lastFailedASRModelError = "download exploded"
         let failed = appState.asrModelBanner
@@ -294,16 +294,20 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
 
-        appState.activeASRModelOperationID = .parakeetV3
-        appState.phase = .downloadingModel
+        // Per-model status reads the operation slots, not the global phase:
+        // with a download and a load in flight at once, phase only describes
+        // the foreground one.
+        appState.activeASRModelDownloadID = .parakeetV3
         XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Downloading")
-        appState.phase = .loading
+
+        appState.activeASRModelDownloadID = nil
+        appState.activeASRModelLoadID = .parakeetV3
         XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Loading")
-        appState.phase = .ready
-        // Active operation in another phase falls through to the regular ladder.
+
+        appState.activeASRModelLoadID = nil
+        // No operation on this model falls through to the regular ladder.
         XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Installed")
 
-        appState.activeASRModelOperationID = nil
         appState.loadedASRModelID = .parakeetV3
         XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Current")
 
@@ -320,10 +324,10 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
 
-        appState.activeASRModelOperationID = .parakeetV3
+        appState.activeASRModelLoadID = .parakeetV3
         XCTAssertEqual(appState.asrModelStatusColor(for: .parakeetV3), .accentColor)
 
-        appState.activeASRModelOperationID = nil
+        appState.activeASRModelLoadID = nil
         appState.loadedASRModelID = .parakeetV3
         XCTAssertEqual(appState.asrModelStatusColor(for: .parakeetV3), .green)
 
@@ -340,18 +344,24 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
 
-        appState.activeASRModelOperationID = .parakeetV3
-        appState.phase = .loading
+        appState.activeASRModelLoadID = .parakeetV3
         XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .parakeetV3), "Loading…")
-        appState.phase = .downloadingModel
+
+        appState.activeASRModelLoadID = nil
+        appState.activeASRModelDownloadID = .parakeetV3
         XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .parakeetV3), "Downloading…")
+        // Neither usable nor deletable while it is still being fetched.
         XCTAssertFalse(appState.asrModelCanPerformPrimaryAction(for: .parakeetV3))
         XCTAssertFalse(appState.asrModelSecondaryActionsEnabled(for: .parakeetV3))
 
-        appState.activeASRModelOperationID = nil
+        // A download blocks starting a second download, but not switching to a
+        // model already on disk.
+        XCTAssertFalse(appState.asrModelCanPerformPrimaryAction(for: .moonshineBase))
+
         appState.phase = .recording
         XCTAssertFalse(appState.asrModelCanPerformPrimaryAction(for: .moonshineBase))
 
+        appState.activeASRModelDownloadID = nil
         appState.phase = .ready
         appState.loadedASRModelID = .parakeetV3
         XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .parakeetV3), "Current")
@@ -370,15 +380,15 @@ final class AppStateCoverageDisplayTests: XCTestCase {
 
         XCTAssertNil(appState.asrModelProgressLabel(for: .parakeetV3))
 
-        appState.activeASRModelOperationID = .parakeetV3
-        appState.phase = .downloadingModel
+        appState.activeASRModelDownloadID = .parakeetV3
         appState.downloadProgress = 0.5
         XCTAssertEqual(appState.asrModelProgressLabel(for: .parakeetV3), appState.modelDownloadProgressLabel)
 
-        appState.phase = .loading
+        appState.activeASRModelDownloadID = nil
+        appState.activeASRModelLoadID = .parakeetV3
         XCTAssertEqual(appState.asrModelProgressLabel(for: .parakeetV3), "Preparing the local recognizer.")
 
-        appState.phase = .ready
+        appState.activeASRModelLoadID = nil
         XCTAssertNil(appState.asrModelProgressLabel(for: .parakeetV3))
     }
 
@@ -396,7 +406,7 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         XCTAssertEqual(appState.modelOperationStatusText, "")
         XCTAssertFalse(appState.isModelOperationInProgress)
 
-        appState.activeASRModelOperationID = .parakeetV3
+        appState.activeASRModelDownloadID = .parakeetV3
         appState.phase = .downloadingModel
         XCTAssertTrue(appState.modelOperationStatusText.hasPrefix("Downloading"))
         XCTAssertTrue(appState.isModelOperationInProgress)
@@ -420,7 +430,7 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         XCTAssertEqual(appState.modelDownloadETAStatusText, "Estimating time remaining")
 
         appState.phase = .downloadingModel
-        appState.activeASRModelOperationID = appState.selectedASRModelID
+        appState.activeASRModelDownloadID = appState.selectedASRModelID
         appState.downloadProgress = 0.5
 
         // Elapsed under a second: still estimating.

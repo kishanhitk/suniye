@@ -12,7 +12,15 @@ struct MainWindowView: View {
                 .fill(MainWindowPalette.divider)
                 .frame(width: 1)
             detail
-                .background { BehindWindowBlur(material: .underWindowBackground).ignoresSafeArea() }
+                .background {
+                    // The sidebar stays fully vibrant. Content needs to be read,
+                    // so the detail pane keeps the blur only as a hint: a
+                    // high-alpha scrim over it lets a little of the desktop
+                    // through without the text competing with a wallpaper.
+                    BehindWindowBlur(material: .underWindowBackground)
+                        .overlay(MainWindowPalette.windowBackground.opacity(AppMetrics.detailPaneOpacity))
+                        .ignoresSafeArea()
+                }
         }
         .onAppear {
             logRenderedSection()
@@ -20,6 +28,7 @@ struct MainWindowView: View {
         .onChange(of: selection) { _, _ in
             logRenderedSection()
         }
+        .subtleScrollers()
     }
 
     private var sidebar: some View {
@@ -50,6 +59,17 @@ struct MainWindowView: View {
             .padding(.horizontal, AppMetrics.sidebarPaddingHorizontal)
 
             Spacer(minLength: 0)
+
+            // Full bleed: it separates the footer from the pane, so it runs the
+            // sidebar's whole width rather than lining up with the rows.
+            Rectangle()
+                .fill(MainWindowPalette.divider)
+                .frame(height: 1)
+                .padding(.bottom, 6)
+
+            SidebarInputDeviceRow(appState: appState)
+                .padding(.horizontal, AppMetrics.sidebarPaddingHorizontal)
+                .padding(.bottom, 10)
         }
         .frame(width: AppMetrics.sidebarWidth)
         .background { BehindWindowBlur(material: .sidebar).ignoresSafeArea() }
