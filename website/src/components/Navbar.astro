@@ -98,20 +98,27 @@ const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/downlo
 </style>
 
 <script>
-  // Swap the bar's skin when the hero leaves the top of the viewport. A sentinel
-  // beats a scroll listener: no per-frame work, and the threshold is declarative.
+  // Swap the bar's skin when the hero leaves the top of the viewport.
+  //
+  // This observes the hero itself, shrunk from the top by the bar's height. The
+  // previous version watched a zero-height sentinel sitting exactly on the
+  // hero's bottom edge, which puts the decision on a boundary where browsers
+  // disagree: Chrome counted the empty rect as intersecting, iOS Safari did
+  // not, so iPhones rendered the docked bar over the painting. A target with
+  // real area, overlapping the band the bar occupies, has no such ambiguity.
   const nav = document.getElementById("site-nav");
   if (nav?.hasAttribute("data-over-art")) {
-    const sentinel = document.getElementById("nav-sentinel");
-    if (sentinel && "IntersectionObserver" in window) {
+    const hero = document.getElementById("hero");
+    if (hero && "IntersectionObserver" in window) {
+      const bar = nav.getBoundingClientRect().height || 72;
       new IntersectionObserver(
         ([entry]) => {
           const docked = !entry.isIntersecting;
           nav.classList.toggle("is-docked", docked);
           nav.classList.toggle("is-over-art", !docked);
         },
-        { threshold: 0 }
-      ).observe(sentinel);
+        { rootMargin: `-${Math.round(bar)}px 0px 0px 0px`, threshold: 0 }
+      ).observe(hero);
     }
   }
 </script>

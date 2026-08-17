@@ -157,7 +157,7 @@ const faqs = [
     <!-- The painting is the page's whole first impression, so it is a real <img>
          (decoding early, preloaded) rather than a CSS background: the browser
          can then prioritise it as the LCP element. -->
-    <section class="hero-ground relative flex min-h-[100svh] flex-col overflow-hidden bg-[#2b6cc4]">
+    <section id="hero" class="hero-ground relative flex min-h-[100svh] flex-col overflow-hidden bg-[#2b6cc4]">
       <!-- An 853-byte blurred copy of the painting is inlined as the section's own
            background, so the first paint already has the right colour and shape
            under the headline. The real image fades over it once decoded — the
@@ -224,9 +224,6 @@ const faqs = [
         </p>
       </div>
     </section>
-
-    <!-- Nav skin swaps when this passes the top of the viewport. -->
-    <div id="nav-sentinel" aria-hidden="true"></div>
 
     <!-- ── The argument ─────────────────────── -->
     <!-- The page's thesis, and the only place set at lead size. The two paths are
