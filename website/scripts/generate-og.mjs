@@ -15,7 +15,11 @@ import { execFileSync } from "child_process";
 
 // Satori can't parse woff2, so TTF copies live here as build-time assets.
 // Georgia stands in for the site's Iowan Old Style, which ships only as a .ttc.
-const georgia = readFileSync("scripts/fonts/Georgia.ttf");
+// The site's display face. macOS ships Iowan Old Style only inside a .ttc
+// collection, which satori cannot read, so a single face was extracted with:
+//   fonttools ttx -y 0 -o /tmp/iowan.ttx "/System/Library/Fonts/Supplemental/Iowan Old Style.ttc"
+//   fonttools ttx -o scripts/fonts/IowanOldStyle.ttf /tmp/iowan.ttx
+const display = readFileSync("scripts/fonts/IowanOldStyle.ttf");
 // The site's body face. Google Sans ships as a variable font with three axes
 // (opsz, wght, GRAD) and satori's parser cannot read an fvar table, so this
 // is a static instance with every axis pinned:
@@ -88,7 +92,7 @@ const svg = await satori(
                 props: {
                   style: {
                     fontSize: "122px",
-                    fontFamily: "Georgia",
+                    fontFamily: "Iowan Old Style",
                     color: "#ffffff",
                     lineHeight: 1.02,
                     letterSpacing: "-0.02em",
@@ -197,7 +201,7 @@ const svg = await satori(
     width: 1200,
     height: 630,
     fonts: [
-      { name: "Georgia", data: georgia, weight: 400 },
+      { name: "Iowan Old Style", data: display, weight: 400 },
       { name: "Google Sans", data: googleSans, weight: 400 },
       { name: "Fragment Mono", data: fragmentMono, weight: 400 },
     ],
