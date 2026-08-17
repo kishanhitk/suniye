@@ -22,10 +22,8 @@ const georgia = readFileSync("scripts/fonts/Georgia.ttf");
 const fragmentMono = readFileSync("scripts/fonts/FragmentMono-Regular.ttf");
 
 // The painting, pre-cropped to the card's aspect. Inlined because resvg
-// resolves no network requests.
-execFileSync("sips", ["-Z", "120", "scripts/og-bg.jpg", "--out", "/tmp/og-small.jpg"]);
-execFileSync("sips", ["-z", "630", "1200", "/tmp/og-small.jpg", "--out", "/tmp/og-blur.jpg"]);
-const background = `data:image/jpeg;base64,${readFileSync("/tmp/og-blur.jpg").toString("base64")}`;
+// resolves no network requests. It is blurred after render — see below.
+const background = `data:image/jpeg;base64,${readFileSync("scripts/og-bg.jpg").toString("base64")}`;
 const icon = `data:image/png;base64,${readFileSync("public/suniye-icon.png").toString("base64")}`;
 
 const svg = await satori(
@@ -173,7 +171,8 @@ const svg = await satori(
                   style: {
                     display: "flex",
                     alignItems: "center",
-                    fontSize: "24px",
+                    fontSize: "21px",
+                    fontFamily: "Fragment Mono",
                     color: "#12233d",
                     backgroundColor: "#ffffff",
                     padding: "16px 30px",
@@ -198,7 +197,20 @@ const svg = await satori(
   }
 );
 
-const resvg = new Resvg(svg, {
+// satori supports no CSS filter, so the blur is applied to the SVG it emits:
+// resvg understands feGaussianBlur, and the background is the first <image> in
+// the document. Shrinking and re-enlarging the source would pixelate it; this
+// is an actual Gaussian.
+const BLUR = 16;
+const withBlur = svg
+  .replace(
+    /<svg([^>]*)>/,
+    `<svg$1><defs><filter id="bg-blur" x="-10%" y="-10%" width="120%" height="120%">` +
+      `<feGaussianBlur in="SourceGraphic" stdDeviation="${BLUR}"/></filter></defs>`
+  )
+  .replace(/<image /, '<image filter="url(#bg-blur)" ');
+
+const resvg = new Resvg(withBlur, {
   fitTo: { mode: "width", value: 1200 },
 });
 const png = resvg.render().asPng();
