@@ -55,6 +55,37 @@ const models = [
   { name: "Whisper Tiny (English)", langs: "English", size: "~118 MB", tag: null },
 ];
 
+// Straight from the Magic Format eval suite (evals/magic_format_cases.json and
+// magic_format_advanced_cases.json) — the cases the shipped prompt is scored
+// against, so the page can't claim behaviour the model doesn't have.
+const cleanups = [
+  {
+    label: "It follows the correction, not the words",
+    said: "get flowers on monday buy roses no no wait actually get lilies",
+    wrote: "Get lilies on Monday.",
+  },
+  {
+    label: "Spoken numbers become written ones",
+    said: "the workshop is from eight forty five to eleven thirty and the budget is fifteen thousand dollars",
+    wrote: "The workshop is from 8:45 to 11:30 and the budget is $15,000.",
+  },
+  {
+    label: "Say it as a list and it arrives as one",
+    said: "do these in order first check the logs second restart the app third send me the result",
+    wrote: "Do these in order:\n1. Check the logs\n2. Restart the app\n3. Send me the result",
+  },
+];
+
+// The point of per-app prompts: one sentence, three destinations, three registers.
+// These are illustrative of a prompt you would write, not measured output.
+const tones = [
+  { app: "Slack", prompt: "Terse. No greeting, no sign-off.", out: "Deploy is blocked on the cert renewal — ETA tomorrow." },
+  { app: "Mail", prompt: "Full sentences, polite, sign off.", out: "Hi,\n\nThe deploy is blocked on the certificate renewal. I expect it to clear tomorrow.\n\nThanks!" },
+  { app: "Notes", prompt: "Keep it raw. Just fix punctuation.", out: "deploy blocked — cert renewal, should clear tomorrow" },
+];
+
+const surfaces = ["Mail", "Slack", "Notes", "Messages", "Xcode", "VS Code", "Safari", "Chrome", "Notion", "Obsidian", "Terminal", "Figma"];
+
 const faqs = [
   {
     q: "Is my dictation really private?",
@@ -298,21 +329,104 @@ const faqs = [
       </div>
     </section>
 
-    <!-- ── What you get ─────────────────────── -->
+    <!-- ── Cleanup, shown ───────────────────── -->
+    <!-- Every competitor leads with a before/after because it is the only way to
+         make "polished text" mean anything. Ours uses the eval suite so the
+         right-hand column is behaviour we actually test for. -->
     <section class="relative overflow-hidden border-t border-border/50 py-20 md:py-28">
-      <div class="bloom right-[-10rem] top-[4rem] h-[24rem] w-[34rem]" aria-hidden="true"></div>
+      <div class="bloom left-[-8rem] top-[2rem] h-[24rem] w-[34rem]" aria-hidden="true"></div>
       <div class="relative z-10 mx-auto max-w-6xl px-6">
-        <div class="grid gap-5 md:grid-cols-2">
-          {pillars.map((p, i) => (
+        <div class="reveal mx-auto max-w-2xl text-center">
+          <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
+            Speak like a person. Paste like an editor.
+          </h2>
+          <p class="mt-4 leading-relaxed text-muted">
+            Magic Format cleans the transcript before it lands — on your Mac, using
+            Apple Intelligence or a local model. It is optional, and off until you
+            turn it on.
+          </p>
+        </div>
+
+        <div class="mt-12 space-y-4">
+          {cleanups.map((c, i) => (
             <div
-              class="reveal glass-panel border border-white/60 p-7 shadow-[0_18px_44px_-28px_rgba(18,35,61,0.4)] md:p-8"
+              class="reveal glass-panel grid items-stretch gap-px overflow-hidden border border-white/60 shadow-[0_18px_44px_-28px_rgba(18,35,61,0.4)] md:grid-cols-2"
               style={`transition-delay: ${i * 0.06}s`}
             >
-              <h3 class="font-display text-xl tracking-tight">{p.title}</h3>
-              <p class="mt-3 leading-relaxed text-muted">{p.desc}</p>
+              <div class="p-6 md:p-7">
+                <p class="font-mono text-[10px] uppercase tracking-widest text-muted/60">
+                  What you said
+                </p>
+                <p class="mt-3 font-mono text-[13px] leading-relaxed text-muted">{c.said}</p>
+              </div>
+              <div class="border-t border-white/70 bg-white/45 p-6 md:border-l md:border-t-0 md:p-7">
+                <p class="font-mono text-[10px] uppercase tracking-widest text-accent">
+                  What lands
+                </p>
+                <p class="mt-3 whitespace-pre-line text-[15px] leading-relaxed text-ink">{c.wrote}</p>
+                <p class="mt-4 text-xs text-muted/70">{c.label}</p>
+              </div>
             </div>
           ))}
         </div>
+      </div>
+    </section>
+
+    <!-- ── Anywhere, in the right register ──── -->
+    <section class="relative overflow-hidden border-t border-border/50 py-20 md:py-28">
+      <div class="bloom right-[-8rem] top-[6rem] h-[22rem] w-[32rem]" aria-hidden="true"></div>
+      <div class="relative z-10 mx-auto max-w-6xl px-6">
+        <div class="reveal mx-auto max-w-2xl text-center">
+          <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
+            One key, every text field.
+          </h2>
+          <p class="mt-4 leading-relaxed text-muted">
+            No plugin, no per-app setup. The text lands at your cursor and your
+            clipboard is left exactly as you had it.
+          </p>
+        </div>
+
+        <div class="reveal mt-10 flex flex-wrap items-center justify-center gap-2.5" style="transition-delay: 0.08s">
+          <kbd class="rounded-lg border border-white/70 bg-white/70 px-3 py-1.5 font-mono text-xs text-ink shadow-[0_1px_2px_rgba(18,35,61,0.06)] backdrop-blur-sm">
+            fn
+          </kbd>
+          <span class="font-mono text-xs text-muted/60">hold &rarr;</span>
+          {surfaces.map((app) => (
+            <span class="rounded-full border border-white/60 bg-white/50 px-3.5 py-1.5 text-[13px] text-muted backdrop-blur-sm">
+              {app}
+            </span>
+          ))}
+          <span class="text-[13px] text-muted/60">&hellip; and anywhere else you type</span>
+        </div>
+
+        <div class="reveal mt-16 mx-auto max-w-2xl text-center" style="transition-delay: 0.12s">
+          <h3 class="font-display text-2xl tracking-tight md:text-3xl">
+            The same thought, in the right register.
+          </h3>
+          <p class="mt-3 leading-relaxed text-muted">
+            Give an app its own Magic Format prompt and Suniye uses it whenever you
+            dictate there. Terse in chat, composed in mail, untouched in notes.
+          </p>
+        </div>
+
+        <div class="mt-10 grid gap-5 md:grid-cols-3">
+          {tones.map((t, i) => (
+            <div
+              class="reveal glass-panel flex flex-col border border-white/60 p-6 shadow-[0_18px_44px_-28px_rgba(18,35,61,0.4)]"
+              style={`transition-delay: ${0.14 + i * 0.06}s`}
+            >
+              <p class="font-mono text-[10px] uppercase tracking-widest text-accent">{t.app}</p>
+              <p class="mt-3 text-sm text-muted/80">{t.prompt}</p>
+              <p class="mt-5 whitespace-pre-line border-t border-border/60 pt-5 text-[15px] leading-relaxed text-ink">
+                {t.out}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <p class="reveal mt-6 text-center text-xs text-muted/60">
+          Prompts are yours to write — these are examples, not fixed presets.
+        </p>
       </div>
     </section>
 
@@ -352,6 +466,35 @@ const faqs = [
             ))}
           </ul>
         </details>
+      </div>
+    </section>
+
+    <!-- ── Proof ────────────────────────────── -->
+    <!-- Deliberately not stars or download counts: at this stage those numbers
+         argue against the app. Shipping cadence is the honest signal that an
+         alpha is alive, and it is checkable on the releases page. -->
+    <section class="border-t border-border/50 py-10">
+      <div class="mx-auto max-w-6xl px-6">
+        <ul class="reveal flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-center font-mono text-[11px] uppercase tracking-widest text-muted/70">
+          <li>MIT licensed</li>
+          <li aria-hidden="true" class="text-muted/25">&middot;</li>
+          <li>
+            <a
+              href={`${githubUrl}/releases`}
+              target="_blank"
+              rel="noopener"
+              class="transition-colors hover:text-ink"
+            >
+              62 releases since February
+            </a>
+          </li>
+          <li aria-hidden="true" class="text-muted/25">&middot;</li>
+          <li>No account</li>
+          <li aria-hidden="true" class="text-muted/25">&middot;</li>
+          <li>Apple Silicon &amp; Intel</li>
+          <li aria-hidden="true" class="text-muted/25">&middot;</li>
+          <li>Free, forever</li>
+        </ul>
       </div>
     </section>
 
