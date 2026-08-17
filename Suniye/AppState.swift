@@ -769,10 +769,13 @@ final class AppState {
     /// Which engine produced the standing result. A success from one engine must
     /// not be read as certifying another.
     private(set) var magicFormatLastTestedProvider: MagicFormatProvider?
+    /// Which credential the standing API result was produced with.
+    private(set) var magicFormatLastTestedKeyFingerprint: Int?
     var magicFormatSetupTestResult: MagicFormatSetupTestResult? {
         didSet {
             if magicFormatSetupTestResult == nil {
                 magicFormatLastTestedProvider = nil
+                magicFormatLastTestedKeyFingerprint = nil
             }
         }
     }
@@ -858,10 +861,27 @@ final class AppState {
 
     /// Whether the *API endpoint* specifically has been verified. Testing Local
     /// Gemma or Apple Intelligence sets the shared result too, and that must not
-    /// certify an endpoint the user has never tested.
+    /// certify an endpoint the user has never tested — nor may a success against
+    /// an unsaved draft key certify whatever key is actually stored.
     var isAPIMagicFormatSetupVerified: Bool {
-        magicFormatSetupTestResult?.severity == .success
-            && magicFormatLastTestedProvider == .openAICompatible
+        guard magicFormatSetupTestResult?.severity == .success,
+              magicFormatLastTestedProvider == .openAICompatible,
+              let testedFingerprint = magicFormatLastTestedKeyFingerprint
+        else {
+            return false
+        }
+        return testedFingerprint == currentLLMAPIKeyFingerprint
+    }
+
+    /// Identifies the stored key without holding it. In-memory only, so a
+    /// per-launch hash is enough to answer "is this the key that was tested".
+    private var currentLLMAPIKeyFingerprint: Int? {
+        guard let key = try? keychainService.getLLMKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !key.isEmpty
+        else {
+            return nil
+        }
+        return key.hashValue
     }
 
     /// Deliberately does not require the API engine to be the one in use: the
@@ -2490,6 +2510,9 @@ final class AppState {
         isMagicFormatSetupTestInProgress = true
         magicFormatTestingProvider = .openAICompatible
         magicFormatLastTestedProvider = .openAICompatible
+        // The key this run actually used, so a success against an unsaved draft
+        // cannot certify a different key that happens to be stored.
+        magicFormatLastTestedKeyFingerprint = apiKey.hashValue
         let config = MagicFormatCoordinator.makeAPIConfig(
             settings: currentLLMSettings(),
             apiKey: apiKey,
@@ -4193,11 +4216,11 @@ final class AppState {
             }
         }
 
-        // A failed Enter must not also cost the user the session: the text is
+        // A failed Enter must not cost the user the session: the text is
         // already inserted and already in history, so throwing straight out of
         // here skipped the accounting below and the numbers silently drifted.
-        // The error still propagates — just after the dictation is counted.
-        var submitFailure: Error?
+        // It is logged and tracked, but not surfaced as an insertion problem —
+        // the insertion succeeded.
         if usesSystemInsertion && shouldSubmit && didInsertFinalText {
             if !finalText.isEmpty {
                 try? await Task.sleep(nanoseconds: 120_000_000)
@@ -4211,7 +4234,6 @@ final class AppState {
                 // letting this reach the transcription catch reported
                 // "Transcription failed" for a dictation that in fact
                 // succeeded — only the Enter key did not land.
-                submitFailure = error
                 AppLogger.shared.log(.error, "submit command failed error=\(error.localizedDescription)")
                 analytics.track(.error(type: .insertion, code: .unknown))
             }
@@ -4248,9 +4270,6 @@ final class AppState {
             isShowingInsertionRecoveryWarning = false
         }
 
-        if submitFailure != nil {
-            showInsertionRecoveryWarning()
-        }
     }
 
     /// Records which audio-capture backend a session resolved to, whether it
