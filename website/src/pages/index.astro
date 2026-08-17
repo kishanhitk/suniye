@@ -108,6 +108,10 @@ const faqs = [
     a: "Only the direct .dmg download is affected. Suniye is not signed with a paid Apple Developer certificate, so macOS quarantines it on first launch. Run the xattr command shown above once to clear it — or install with Homebrew, which does it for you.",
   },
   {
+    q: "How fast is it, really?",
+    a: "Median speech to text is 177 ms with Apple's built-in engine — fast enough that the text is usually there before you have finished letting go of the key. Downloaded models trade a little speed for accuracy, and the first dictation after launch waits for the model to load. Turning on Magic Format adds about a second, since a second model then rewrites the transcript.",
+  },
+  {
     q: "Is it free?",
     a: "Completely. Free and open source under the MIT license. No subscription, no account, no third-party tracking.",
   },
@@ -247,9 +251,18 @@ const faqs = [
                 </li>
               ))}
             </ol>
-            <p class="mt-6 border-t border-accent/20 pt-4 text-sm text-muted">
-              Works on a plane. Nothing to upload, so there is nothing to keep.
-            </p>
+            <div class="mt-6 border-t border-accent/20 pt-5">
+              <p class="font-display text-3xl tracking-tight text-ink">
+                177<span class="text-xl text-muted"> ms</span>
+              </p>
+              <p class="mt-1 text-sm text-muted">
+                Median speech&ndash;to&ndash;text with Apple's built-in engine. A
+                network round trip alone often costs more than that.
+              </p>
+              <p class="mt-3 text-sm text-muted">
+                Works on a plane. Nothing to upload, so there is nothing to keep.
+              </p>
+            </div>
           </div>
         </div>
       </div>
