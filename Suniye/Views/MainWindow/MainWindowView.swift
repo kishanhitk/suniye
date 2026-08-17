@@ -12,8 +12,8 @@ struct MainWindowView: View {
                 .fill(MainWindowPalette.divider)
                 .frame(width: 1)
             detail
+                .background { BehindWindowBlur(material: .underWindowBackground).ignoresSafeArea() }
         }
-        .background(MainWindowPalette.windowBackground)
         .onAppear {
             logRenderedSection()
         }
@@ -52,7 +52,7 @@ struct MainWindowView: View {
             Spacer(minLength: 0)
         }
         .frame(width: AppMetrics.sidebarWidth)
-        .background(MainWindowPalette.sidebarBackground)
+        .background { BehindWindowBlur(material: .sidebar).ignoresSafeArea() }
     }
 
     private var detail: some View {

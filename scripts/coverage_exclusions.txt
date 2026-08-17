@@ -31,6 +31,7 @@ Suniye/MainWindowController.swift                     # NSWindow/app-lifecycle s
 Suniye/StatusItemController.swift                     # NSStatusBar item shell
 
 # --- SwiftUI view bodies (render-only; business logic must stay out per AGENTS.md) ---
+Suniye/Views/BehindWindowBlur.swift                   # NSVisualEffectView wrapper; window-server bound
 Suniye/Views/FloatingIndicatorView.swift              # SwiftUI render only
 Suniye/Views/IssueReportView.swift                    # SwiftUI render only
 Suniye/Views/ListeningOverlay.swift                   # SwiftUI render only
