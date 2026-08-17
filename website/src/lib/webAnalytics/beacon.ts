@@ -80,6 +80,19 @@ export function initBeacon(): void {
   };
   window.addEventListener("scroll", onScroll, { passive: true });
 
+  // Disclosure opens (<details data-track-open="value">). The toggle event fires
+  // on close too, so only the opening edge is reported — otherwise every reader
+  // who tidies up after themselves counts twice.
+  document.querySelectorAll("details[data-track-open]").forEach((d) =>
+    d.addEventListener("toggle", () => {
+      if (!(d as HTMLDetailsElement).open) return;
+      core.track({
+        name: "cta_click",
+        props: { cta: `open:${(d as HTMLElement).dataset.trackOpen ?? ""}`, path: location.pathname },
+      });
+    }),
+  );
+
   // Demo video plays (any <video data-track-video>).
   document.querySelectorAll("video[data-track-video]").forEach((v) =>
     v.addEventListener("play", () => core.track({ name: "video_play", props: { path: location.pathname } }), { once: true }),

@@ -1,13 +1,39 @@
 /**
  * Generates a 1200x630 OG image for social sharing.
  * Run: bun scripts/generate-og.mjs
+ *
+ * The card is the hero, cropped: same painting, same serif headline, same
+ * promise, and the same two faces. A share preview that matches the page it
+ * links to is the whole point
+ * — a separate "designed" card just means the visitor arrives somewhere they
+ * have not seen before.
  */
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, statSync } from "fs";
+import { execFileSync } from "child_process";
 
-// Satori can't parse woff2, so a TTF copy lives here as a build-time asset.
+// Satori can't parse woff2, so TTF copies live here as build-time assets.
+// Georgia stands in for the site's Iowan Old Style, which ships only as a .ttc.
+// The site's display face. macOS ships Iowan Old Style only inside a .ttc
+// collection, which satori cannot read, so a single face was extracted with:
+//   fonttools ttx -y 0 -o /tmp/iowan.ttx "/System/Library/Fonts/Supplemental/Iowan Old Style.ttc"
+//   fonttools ttx -o scripts/fonts/IowanOldStyle.ttf /tmp/iowan.ttx
+const display = readFileSync("scripts/fonts/IowanOldStyle.ttf");
+// The site's body face. Google Sans ships as a variable font with three axes
+// (opsz, wght, GRAD) and satori's parser cannot read an fvar table, so this
+// is a static instance with every axis pinned:
+//   fonttools varLib.instancer public/fonts/GoogleSans-Variable.woff2 \
+//     wght=400 opsz=16 GRAD=0 -o /tmp/gs.woff2
+//   fonttools ttLib.woff2 decompress /tmp/gs.woff2 -o scripts/fonts/GoogleSans.ttf
+// Pinning only wght leaves it variable and satori still throws.
+const googleSans = readFileSync("scripts/fonts/GoogleSans.ttf");
 const fragmentMono = readFileSync("scripts/fonts/FragmentMono-Regular.ttf");
+
+// The painting, pre-cropped to the card's aspect. Inlined because resvg
+// resolves no network requests. It is blurred after render — see below.
+const background = `data:image/jpeg;base64,${readFileSync("scripts/og-bg.jpg").toString("base64")}`;
+const icon = `data:image/png;base64,${readFileSync("public/suniye-icon.png").toString("base64")}`;
 
 const svg = await satori(
   {
@@ -19,13 +45,24 @@ const svg = await satori(
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
-        padding: "72px 80px",
-        backgroundColor: "#faf8f5",
-        fontFamily: "Fragment Mono",
+        alignItems: "center",
+        padding: "0 100px",
+        backgroundColor: "#2b6cc4",
         position: "relative",
       },
       children: [
-        // Accent bar top
+        {
+          type: "img",
+          props: {
+            src: background,
+            width: 1200,
+            height: 630,
+            style: { position: "absolute", top: 0, left: 0 },
+          },
+        },
+        // The sky is bright enough that white type needs its own ground. A soft
+        // dark wash across the upper half keeps the headline legible without
+        // dimming the painting into mud.
         {
           type: "div",
           props: {
@@ -33,99 +70,134 @@ const svg = await satori(
               position: "absolute",
               top: 0,
               left: 0,
-              right: 0,
-              height: "6px",
-              backgroundColor: "#c4441a",
+              width: "1200px",
+              height: "560px",
+              backgroundImage:
+                "linear-gradient(180deg, rgba(10,28,50,0.42) 0%, rgba(10,28,50,0.28) 55%, rgba(10,28,50,0) 100%)",
             },
           },
         },
-        // Waveform SVG
         {
-          type: "svg",
+          type: "div",
           props: {
-            viewBox: "0 0 160 80",
-            width: 100,
-            height: 50,
-            style: { marginBottom: "24px" },
+            style: {
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              marginTop: "-150px",
+            },
             children: [
               {
-                type: "path",
+                type: "div",
                 props: {
-                  d: "M 8 50 Q 14 50 20 42 L 40 10 L 62 70 L 84 10 L 106 70 L 124 36 Q 130 26 140 26",
-                  stroke: "#c4441a",
-                  strokeWidth: "7",
-                  strokeLinecap: "round",
-                  strokeLinejoin: "round",
-                  fill: "none",
+                  style: {
+                    fontSize: "132px",
+                    fontFamily: "Iowan Old Style",
+                    color: "#ffffff",
+                    lineHeight: 1.02,
+                    letterSpacing: "-0.02em",
+                  },
+                  children: "Speak freely.",
+                },
+              },
+              // Two explicit lines so the break falls at the comma. Left to wrap
+              // on its own the measure split "built for / privacy", which reads
+              // as a mistake rather than a phrase.
+              {
+                type: "div",
+                props: {
+                  style: {
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    marginTop: "26px",
+                    fontSize: "34px",
+                    fontFamily: "Google Sans",
+                    color: "#ffffff",
+                    lineHeight: 1.34,
+                  },
+                  children: [
+                    { type: "div", props: { children: "Dictation for macOS," } },
+                    { type: "div", props: { children: "built for privacy and speed." } },
+                  ],
                 },
               },
             ],
           },
         },
-        // Title
-        {
-          type: "div",
-          props: {
-            style: {
-              fontSize: "64px",
-              fontFamily: "Fragment Mono",
-              color: "#1a1a1a",
-              lineHeight: 1.15,
-              letterSpacing: "-0.02em",
-            },
-            children: "Your voice. Your machine. Your text.",
-          },
-        },
-        // Subtitle
-        {
-          type: "div",
-          props: {
-            style: {
-              fontSize: "24px",
-              color: "#6b635a",
-              marginTop: "20px",
-              lineHeight: 1.5,
-            },
-            children:
-              "Open-source, local-first dictation for macOS. No audio leaves your machine.",
-          },
-        },
-        // Footer
+        // The wordmark sits on lit meadow, the brightest part of the frame, so it
+        // gets a short wash of its own rather than relying on a text shadow.
         {
           type: "div",
           props: {
             style: {
               position: "absolute",
-              bottom: "44px",
-              left: "80px",
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              fontSize: "20px",
-              fontFamily: "Fragment Mono",
-              color: "#6b635a",
+              bottom: "0px",
+              left: "0px",
+              width: "1200px",
+              height: "170px",
+              backgroundImage:
+                "linear-gradient(180deg, rgba(10,28,50,0) 0%, rgba(10,28,50,0.18) 60%, rgba(10,28,50,0.30) 100%)",
             },
-            children: "suniye.app",
           },
         },
-        // Call-to-action
+        // Identity left, offer right. A share preview is often the only thing
+        // seen before the click, so the card has to say what it costs — "free"
+        // is the strongest word available against subscription competitors.
         {
           type: "div",
           props: {
             style: {
               position: "absolute",
-              bottom: "36px",
-              right: "80px",
+              bottom: "40px",
+              left: "60px",
+              width: "1080px",
               display: "flex",
               alignItems: "center",
-              fontSize: "22px",
-              fontFamily: "Fragment Mono",
-              color: "#faf8f5",
-              backgroundColor: "#c4441a",
-              padding: "14px 28px",
-              borderRadius: "10px",
+              justifyContent: "space-between",
             },
-            children: "Download free for macOS",
+            children: [
+              {
+                type: "div",
+                props: {
+                  style: { display: "flex", alignItems: "center", gap: "14px" },
+                  children: [
+                    {
+                      type: "img",
+                      props: { src: icon, width: 40, height: 40, style: { borderRadius: "9px" } },
+                    },
+                    {
+                      type: "div",
+                      props: {
+                        style: {
+                          fontSize: "23px",
+                          fontFamily: "Fragment Mono",
+                          letterSpacing: "0.14em",
+                          color: "#ffffff",
+                        },
+                        children: "SUNIYE.APP",
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                type: "div",
+                props: {
+                  style: {
+                    display: "flex",
+                    alignItems: "center",
+                    fontSize: "21px",
+                    fontFamily: "Fragment Mono",
+                    color: "#12233d",
+                    backgroundColor: "#ffffff",
+                    padding: "16px 30px",
+                    borderRadius: "999px",
+                  },
+                  children: "Download free for macOS",
+                },
+              },
+            ],
           },
         },
       ],
@@ -135,15 +207,39 @@ const svg = await satori(
     width: 1200,
     height: 630,
     fonts: [
+      { name: "Iowan Old Style", data: display, weight: 400 },
+      { name: "Google Sans", data: googleSans, weight: 400 },
       { name: "Fragment Mono", data: fragmentMono, weight: 400 },
     ],
   }
 );
 
-const resvg = new Resvg(svg, {
+// satori supports no CSS filter, so the blur is applied to the SVG it emits:
+// resvg understands feGaussianBlur, and the background is the first <image> in
+// the document. Shrinking and re-enlarging the source would pixelate it; this
+// is an actual Gaussian.
+const BLUR = 16;
+const withBlur = svg
+  .replace(
+    /<svg([^>]*)>/,
+    `<svg$1><defs><filter id="bg-blur" x="-10%" y="-10%" width="120%" height="120%">` +
+      `<feGaussianBlur in="SourceGraphic" stdDeviation="${BLUR}"/></filter></defs>`
+  )
+  .replace(/<image /, '<image filter="url(#bg-blur)" ');
+
+const resvg = new Resvg(withBlur, {
   fitTo: { mode: "width", value: 1200 },
 });
 const png = resvg.render().asPng();
 
-writeFileSync("public/og-image.png", png);
-console.log(`Generated public/og-image.png (${(png.length / 1024).toFixed(0)} KB)`);
+// Shipped as JPEG: this card is a photograph, and the PNG of it is ~1 MB for
+// no visible gain. resvg only emits PNG, so hand off to sips for the encode.
+writeFileSync("/tmp/og-image.png", png);
+execFileSync("sips", [
+  "-s", "format", "jpeg",
+  "-s", "formatOptions", "86",
+  "/tmp/og-image.png",
+  "--out", "public/og-image.jpg",
+]);
+const bytes = statSync("public/og-image.jpg").size;
+console.log(`Generated public/og-image.jpg (${(bytes / 1024).toFixed(0)} KB)`);

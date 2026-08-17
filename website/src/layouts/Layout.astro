@@ -11,7 +11,7 @@ interface Props {
 
 const {
   title = "Suniye — Private Dictation for macOS",
-  description = "Open-source, local-first dictation for macOS. Hold a key, speak, and your words appear at your cursor. No audio leaves your machine.",
+  description = "Dictation for macOS, built for privacy and speed. The models run on your Mac, so nothing is uploaded and the words land as fast as you say them. Free and open source.",
   canonicalPath = "/",
 } = Astro.props;
 
@@ -25,7 +25,7 @@ const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#faf8f5" />
+    <meta name="theme-color" content="#2b6cc4" />
     <link rel="icon" type="image/png" href="/suniye-icon.png" />
     <link rel="canonical" href={canonicalUrl} />
     <meta property="og:title" content={title} />
@@ -33,14 +33,15 @@ const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Suniye" />
     <meta property="og:url" content={canonicalUrl} />
-    <meta property="og:image" content="https://suniye.app/og-image.png" />
+    <meta property="og:image" content="https://suniye.app/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Suniye — private, on-device dictation for macOS" />
+    <meta property="og:image:alt" content="Suniye — Speak freely. Dictation for macOS, built for privacy and speed." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content="https://suniye.app/og-image.png" />
+    <meta name="twitter:image" content="https://suniye.app/og-image.jpg" />
     <link
       rel="preload"
       href="/fonts/GoogleSans-Variable.woff2"
@@ -49,8 +50,27 @@ const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
       crossorigin
     />
     <slot name="head" />
+    <!-- Runs before first paint: only a document that reached this line can
+         hide content, so a failed or blocked bundle leaves the page readable. -->
+    <script is:inline>
+      document.documentElement.classList.add("js-reveal");
+    </script>
   </head>
   <body class="min-w-[320px] bg-bg font-body text-ink antialiased">
+    <!-- Lens for .glass. R displaces horizontally, G vertically; mid-grey (#808080)
+         is "no shift", so the ramps live only in the outer bands and the backdrop
+         bends at the rim while staying true through the middle. Chrome-only —
+         Safari ignores url() in backdrop-filter and falls back to plain frost. -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <filter id="liquid-lens" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+        <feImage
+          href="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='56' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='x' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='%23000000'/%3E%3Cstop offset='0.16' stop-color='%23800000'/%3E%3Cstop offset='0.84' stop-color='%23800000'/%3E%3Cstop offset='1' stop-color='%23ff0000'/%3E%3C/linearGradient%3E%3ClinearGradient id='y' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23000000'/%3E%3Cstop offset='0.34' stop-color='%23008000'/%3E%3Cstop offset='0.66' stop-color='%23008000'/%3E%3Cstop offset='1' stop-color='%2300ff00'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='240' height='56' rx='28' fill='url(%23x)'/%3E%3Crect width='240' height='56' rx='28' fill='url(%23y)' style='mix-blend-mode:screen'/%3E%3C/svg%3E"
+          result="map"
+          preserveAspectRatio="none"
+        />
+        <feDisplacementMap in="SourceGraphic" in2="map" scale="22" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </svg>
     <slot />
     <Beacon />
   </body>

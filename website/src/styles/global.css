@@ -30,22 +30,43 @@
 /* Change --color-accent to retheme the entire site */
 
 @theme {
-  --color-bg: #faf8f5;
-  --color-ink: #1a1a1a;
-  --color-muted: #6b635a;
-  --color-accent: #c4441a;
-  --color-accent-hover: #a33612;
-  --color-surface: #f0ede8;
-  --color-border: #e2ddd5;
+  --color-bg: #f4f8fc;
+  --color-ink: #102844;
+  --color-muted: #5a708c;
+  --color-accent: #2b6cc4;
+  --color-accent-hover: #22589f;
+  --color-surface: #ffffff;
+  --color-border: #d7e4f1;
 
-  --font-display: "Fragment Mono", ui-monospace, SFMono-Regular, monospace;
+  /* The dawn light on the painting's left horizon. Used for emphasis only —
+     one warm mark per section at most, so it stays an event. */
+  --color-sun: #d9913f;
+  /* The valley floor. Reserved for the local/on-device signal. */
+  --color-meadow: #4a7c3f;
+
+  /* Display is a system serif — it ships on every Mac, costs no download, and
+     carries the calm the hero painting sets up. Mono is kept for commands only. */
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --font-body: "Google Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
 /* ── Base ───────────────────────────────────── */
 
 html {
   background-color: var(--color-bg);
+}
+
+/* The page below the hero is not flat paper — it keeps a trace of the painting's
+   sky. A fixed wash means the tint stays put while content scrolls over it, so
+   long sections never read as an empty white field. */
+body {
+  background-color: var(--color-bg);
+  background-image:
+    radial-gradient(90% 55% at 50% 0%, rgba(43, 108, 196, 0.20), transparent 62%),
+    radial-gradient(70% 40% at 88% 78%, rgba(43, 108, 196, 0.12), transparent 65%),
+    linear-gradient(180deg, #e4eef9 0%, #eef4fb 34%, #e9f2fb 72%, #e2ecf8 100%);
+  background-attachment: fixed;
 }
 
 ::selection {
@@ -62,8 +83,8 @@ html {
   --curve-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* subtle overshoot — earned delight only */
 
   /* Soft, warm-tinted elevation — ink at low alpha, not neutral black. */
-  --shadow-card-hover: 0 2px 4px rgba(26, 26, 26, 0.05), 0 18px 40px -16px rgba(26, 26, 26, 0.16);
-  --shadow-float: 0 40px 90px -28px rgba(26, 26, 26, 0.32);
+  --shadow-card-hover: 0 2px 4px rgba(18, 35, 61, 0.04), 0 18px 40px -16px rgba(18, 35, 61, 0.14);
+  --shadow-float: 0 40px 90px -28px rgba(18, 35, 61, 0.28);
 }
 
 /* ── Pressable feedback ────────────────────── */
@@ -94,7 +115,7 @@ html {
   align-items: center;
   border-radius: 9999px;
   padding: 0.15rem 0.6rem;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.5;
   letter-spacing: 0.06em;
@@ -144,75 +165,27 @@ html {
   }
 }
 
-/* ── Decorative hero glow ──────────────────── */
-/* A barely-there warm halo behind the headline. closest-side keeps the box
-   edges transparent, so the hero's overflow-hidden clips nothing visible. */
-
-.hero-glow {
-  position: absolute;
-  z-index: 0;
-  pointer-events: none;
-  border-radius: 9999px;
-  filter: blur(70px);
-  opacity: 0.45;
-  background: radial-gradient(
-    closest-side,
-    color-mix(in oklab, var(--color-accent) 20%, transparent),
-    transparent
-  );
-}
-
-/* ── Hero word-reveal animation ────────────── */
-
-@keyframes word-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-    filter: blur(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
-  }
-}
-
-.hero-word {
-  opacity: 0;
-  display: inline-block;
-  margin-right: 0.275em;
-  animation: word-reveal 0.6s var(--curve-out) forwards;
-}
-
-/* ── Waveform draw animation ───────────────── */
-
-@keyframes draw-wave {
-  from {
-    stroke-dashoffset: 500;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-.waveform-path {
-  stroke-dasharray: 500;
-  stroke-dashoffset: 500;
-  animation: draw-wave 1.8s var(--curve-out) 0.5s forwards;
-}
-
 /* ── Scroll-triggered reveal ───────────────── */
 
+/* Opacity only, and short. A 24px rise on every block meant the whole page was
+   in motion as you scrolled, which reads as busy on a layout this calm — and
+   the movement carried no meaning, since nothing was arriving from anywhere.
+
+   Content is visible by default and only hidden once the inline script has
+   proven JS is running. Hiding first and revealing later makes every section
+   below the hero depend on a script and an observer both succeeding — and when
+   either fails the page is simply blank, which is a far worse outcome than
+   losing a fade. */
 .reveal {
-  opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.6s var(--curve-out),
-              transform 0.6s var(--curve-out);
+  transition: opacity 0.35s var(--curve-out);
 }
 
-.reveal.visible {
+.js-reveal .reveal {
+  opacity: 0;
+}
+
+.js-reveal .reveal.visible {
   opacity: 1;
-  transform: translateY(0);
 }
 
 /* ── Subtle fade-in for lighter elements ───── */
@@ -330,27 +303,14 @@ html {
 /* ── Respect reduced-motion across the site ── */
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-word,
-  .waveform-path,
   .fade-in {
     animation: none;
-  }
-
-  .hero-word,
-  .fade-in {
     opacity: 1;
     transform: none;
-  }
-
-  /* The waveform "draws" by animating stroke-dashoffset 500 → 0; with animation
-     off it must be reset to 0, else the whole stroke stays dashed away (invisible). */
-  .waveform-path {
-    stroke-dashoffset: 0;
   }
 
   .reveal {
     opacity: 1;
-    transform: none;
     transition: none;
   }
 
@@ -381,4 +341,318 @@ html {
   .card-hover:hover {
     transform: none;
   }
+}
+
+/* ── Liquid glass ──────────────────────────── */
+/* The site's signature material. Two layers do the work: the backdrop is bent
+   at the rim by an SVG displacement map (see #liquid-lens in Layout), and a
+   specular edge plus an inner bloom sell it as a solid piece of glass rather
+   than a translucent rectangle.
+   The fill sits at .52 — light enough to read as glass, opaque enough that the
+   dark label holds its contrast over any part of the painting. */
+
+.glass {
+  position: relative;
+  isolation: isolate;
+  color: var(--color-ink);
+  background: rgba(255, 255, 255, 0.52);
+  border: 0;
+  border-radius: 9999px;
+  backdrop-filter: url(#liquid-lens) blur(1px) saturate(170%) brightness(1.06);
+  /* Safari has no url() support in backdrop-filter — it gets plain frost. */
+  -webkit-backdrop-filter: blur(8px) saturate(170%) brightness(1.06);
+  box-shadow:
+    0 10px 30px -12px rgba(15, 40, 95, 0.55),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition:
+    background 160ms var(--curve-out),
+    box-shadow 200ms var(--curve-out),
+    transform 160ms var(--curve-out);
+}
+
+/* Light catches the top-left edge and falls away — a ring, not a wash, so the
+   fill underneath stays clear. */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 1.2px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.06) 42%, transparent 62%),
+    linear-gradient(315deg, rgba(255, 255, 255, 0.28), transparent 38%);
+  mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+}
+
+/* Light pooling inside the body of the glass. */
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(120% 160% at 30% 0%, rgba(255, 255, 255, 0.22), transparent 60%);
+}
+
+.glass:hover {
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow:
+    0 14px 34px -12px rgba(15, 40, 95, 0.6),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.glass:active {
+  transform: scale(0.97);
+}
+
+/* Squared-off glass for panels rather than pills. */
+.glass-panel {
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+/* Transparency off: a near-solid surface, no blur, same ink. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    text-shadow: none;
+  }
+  .glass::before,
+  .glass::after {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass {
+    transition: background 160ms ease, box-shadow 160ms ease;
+  }
+  .glass:active {
+    transform: none;
+  }
+}
+
+/* ── Hero ──────────────────────────────────── */
+
+/* The blurred placeholder sits on the section itself, so it is painted with the
+   first frame of HTML rather than waiting on any network request. */
+.hero-ground {
+  background-image: url("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAGKADAAQAAAABAAAADQAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgADQAYAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMACQkJCQkJEAkJEBYQEBAWHhYWFhYeJh4eHh4eJi4mJiYmJiYuLi4uLi4uLjc3Nzc3N0BAQEBASEhISEhISEhISP/bAEMBCwwMEhESHxERH0szKjNLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS//dAAQAAv/aAAwDAQACEQMRAD8A6e50SQHpWTLpuw4YgfjXIReINTmjHmys2eME8VLJdu6GYjp2ruWYuGkzzpYeL+E6EWCH+IfnS/2cnqP++hXDTXYZS5Q/TdVH7Z/sfqa1WZX6Gf1Zdz//2Q==");
+  background-size: cover;
+  background-position: center bottom;
+}
+
+.hero-art {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  object-fit: cover;
+  opacity: 1;
+  transition: opacity 500ms var(--curve-out);
+  /* Anchor low: the sky is the text's ground, so any crop must eat sky from the
+     top and keep the mountains and meadow in frame. */
+  object-position: center bottom;
+  width: 100%;
+  height: 100%;
+}
+
+.hero-art.is-loading {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-art {
+    transition: opacity 200ms ease;
+  }
+}
+
+/* On the painting, ink is white and needs the same soft lift the prototype used
+   so it stays legible where the sky brightens. */
+.on-art {
+  color: #fff;
+  text-shadow:
+    0 2px 24px rgba(20, 50, 110, 0.35),
+    0 1px 2px rgba(20, 50, 110, 0.25);
+}
+
+.on-art-muted {
+  color: rgba(255, 255, 255, 0.88);
+  text-shadow: 0 1px 12px rgba(20, 50, 110, 0.3);
+}
+
+
+/* ── Section atmosphere ────────────────────── */
+/* A wide, soft bloom sitting behind a section's heading — the light from the
+   hero painting bleeding down the page. Purely decorative and clipped by the
+   section's own overflow. */
+
+.bloom {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 9999px;
+  filter: blur(90px);
+  opacity: 0.62;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--color-accent) 34%, transparent),
+    transparent
+  );
+}
+
+.card {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 40, 68, 0.04);
+}
+
+
+/* ── The transcript rail ───────────────────── */
+/* Every section below the hero hangs off one left rail, the way a transcript
+   hangs off its speaker column. It is the page's structure, so it is the same
+   grid everywhere — the content column changes, the rail never does. */
+
+.band {
+  border-top: 1px solid color-mix(in oklab, var(--color-border) 70%, transparent);
+  padding-block: clamp(3.25rem, 5.5vw, 5.5rem);
+}
+
+.band-inner {
+  margin-inline: auto;
+  max-width: 72rem;
+  padding-inline: 1.5rem;
+  display: grid;
+  gap: 2rem;
+}
+
+@media (min-width: 900px) {
+  .band-inner {
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+    gap: 3.5rem;
+  }
+}
+
+/* The rail label. Small, monospaced, and hung outside the reading column so the
+   prose keeps one clean left edge. */
+.rail {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-muted) 70%, transparent);
+  padding-top: 0.55rem;
+}
+
+@media (min-width: 900px) {
+  .rail {
+    position: sticky;
+    top: 6.5rem;
+    align-self: start;
+    text-align: right;
+    border-right: 1px solid var(--color-border);
+    padding-right: 1.25rem;
+    padding-top: 0.75rem;
+  }
+}
+
+/* ── Type scale ────────────────────────────── */
+/* One size is decisively the largest on the page. Everything under the hero was
+   set at the same 3xl/4xl, which is why nothing read as the main idea. */
+
+.t-lead {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(2rem, 4.4vw, 3.25rem);
+  line-height: 1.08;
+  letter-spacing: -0.022em;
+  max-width: 18ch;
+}
+
+.t-head {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(1.5rem, 2.4vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+}
+
+.t-sub {
+  margin-top: 1.1rem;
+  max-width: 46ch;
+  color: var(--color-muted);
+  line-height: 1.65;
+}
+
+/* A single warm mark. The painting's dawn light, used once per section at most. */
+.mark {
+  color: var(--color-sun);
+}
+
+
+/* ── Hero install line ─────────────────────── */
+/* The command doubles as its own button. The trailing word is the only chrome,
+   and it only appears on hover — so at rest the hero shows a command, not a
+   control competing with the CTA. */
+.brew-line {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+  text-shadow: 0 1px 10px rgba(20, 50, 110, 0.45);
+}
+
+/* Parked outside the line so the command itself stays optically centred under
+   the CTA — in flow, even an invisible word pushes the text off-axis. It is a
+   hover affordance, so it is hidden entirely on touch widths, where it would
+   otherwise hang past the right edge of a 390px viewport. */
+.brew-line .brew-state {
+  display: none;
+  position: absolute;
+  left: 100%;
+  margin-left: 0.6rem;
+  white-space: nowrap;
+  opacity: 0;
+  color: rgba(255, 255, 255, 0.55);
+  transition: opacity 150ms var(--curve-out);
+}
+
+@media (min-width: 640px) {
+  .brew-line .brew-state {
+    display: block;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brew-line:hover .brew-state {
+    opacity: 1;
+  }
+}
+
+.brew-line:focus-visible .brew-state {
+  opacity: 1;
+}
+
+.brew-line.copied {
+  color: #fff;
+}
+
+.brew-line.copied .brew-state {
+  opacity: 1;
+  color: #fff;
+}
+
+/* The word is swapped whole — appending a suffix to "copy" spells "copyed". */
+.brew-line .brew-state::before {
+  content: "copy";
+}
+
+.brew-line.copied .brew-state::before {
+  content: "copied";
 }
