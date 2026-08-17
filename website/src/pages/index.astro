@@ -366,9 +366,6 @@ const faqs = [
             </div>
           </div>
 
-          <figcaption class="mt-4 font-mono text-[10px] uppercase tracking-[0.16em] text-muted/50">
-            A real, unedited take
-          </figcaption>
         </figure>
         </div>
       </div>
@@ -466,9 +463,6 @@ const faqs = [
           ))}
         </div>
 
-        <p class="reveal mt-5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted/45">
-          Examples, not fixed presets &mdash; the prompts are yours to write
-        </p>
         </div>
       </div>
     </section>
@@ -530,9 +524,11 @@ const faqs = [
          alpha is alive, and it is checkable on the releases page. -->
     <section class="border-y border-border bg-white/50 py-7">
       <div class="mx-auto max-w-6xl px-6">
-        <ul class="reveal flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-muted/70">
+        <!-- One column on phones: the dot separators only make sense while the
+             items share a line, and wrapping strands them at the ends of rows. -->
+        <ul class="reveal flex flex-col items-center gap-y-2.5 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-muted/70 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-8 sm:gap-y-3">
           <li>MIT licensed</li>
-          <li aria-hidden="true" class="text-muted/25">&middot;</li>
+          <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
           <li>
             <a
               href={`${githubUrl}/releases`}
@@ -543,11 +539,11 @@ const faqs = [
               62 releases since February
             </a>
           </li>
-          <li aria-hidden="true" class="text-muted/25">&middot;</li>
+          <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
           <li>No account</li>
-          <li aria-hidden="true" class="text-muted/25">&middot;</li>
+          <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
           <li>Apple Silicon &amp; Intel</li>
-          <li aria-hidden="true" class="text-muted/25">&middot;</li>
+          <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
           <li>Free, forever</li>
         </ul>
       </div>
