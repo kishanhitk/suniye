@@ -3,7 +3,11 @@
  * Run: bun scripts/generate-og.mjs
  *
  * The card is the hero, cropped: same painting, same serif headline, same
- * promise. A share preview that matches the page it links to is the whole point
+ * promise. The subtitle is serif here where the page sets it in Google Sans:
+ * that face ships only as a variable font, and satori's parser cannot read
+ * an fvar table. Instancing it to a static weight (fonttools) is the fix.
+ *
+ * A share preview that matches the page it links to is the whole point
  * — a separate "designed" card just means the visitor arrives somewhere they
  * have not seen before.
  */
@@ -77,7 +81,7 @@ const svg = await satori(
                 type: "div",
                 props: {
                   style: {
-                    fontSize: "104px",
+                    fontSize: "122px",
                     fontFamily: "Georgia",
                     color: "#ffffff",
                     lineHeight: 1.02,
@@ -91,13 +95,13 @@ const svg = await satori(
                 type: "div",
                 props: {
                   style: {
-                    fontSize: "26px",
+                    fontSize: "32px",
                     color: "#ffffff",
                     marginTop: "22px",
                     textShadow: "0 1px 12px rgba(8,24,44,0.6)",
                     lineHeight: 1.45,
                     textAlign: "center",
-                    maxWidth: "760px",
+                    maxWidth: "830px",
                   },
                   children:
                     "Dictation for macOS, built for privacy and speed. The models run on your Mac.",
@@ -132,7 +136,7 @@ const svg = await satori(
               width: "1200px",
               display: "flex",
               justifyContent: "center",
-              fontSize: "21px",
+              fontSize: "23px",
               fontFamily: "Fragment Mono",
               letterSpacing: "0.14em",
               color: "rgba(255,255,255,0.95)",
