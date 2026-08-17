@@ -104,13 +104,13 @@ const svg = await satori(
                 type: "div",
                 props: {
                   style: {
-                    fontSize: "30px",
+                    fontSize: "36px",
                     fontFamily: "Google Sans",
                     color: "#ffffff",
-                    marginTop: "22px",
+                    marginTop: "26px",
                     lineHeight: 1.45,
                     textAlign: "center",
-                    maxWidth: "830px",
+                    maxWidth: "920px",
                   },
                   children:
                     "Dictation for macOS, built for privacy and speed.",
