@@ -358,7 +358,11 @@ final class FloatingIndicatorController {
     private func positionPanel(targetFrame: NSRect, animated: Bool) {
         guard let panel else { return }
         guard targetFrame != .zero else { return }
-        if animated {
+        // A full-width jump across displays is exactly the vestibular motion
+        // Reduce Motion exists to stop, and this path is AppKit's, so it does
+        // not inherit the SwiftUI environment the rest of the indicator reads.
+        let shouldAnimate = animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if shouldAnimate {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = crossScreenMoveDuration
                 // Decelerating rather than ease-in-ease-out: AppKit's window

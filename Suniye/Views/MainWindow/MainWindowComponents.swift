@@ -30,8 +30,21 @@ private enum MainWindowNSPalette {
             : NSColor(calibratedWhite: 0.978, alpha: 1)
     })
 
+    /// Cards sit on a near-opaque pane, so they are opaque too: the old
+    /// high-alpha fill was tuned to let vibrancy through, and against a solid
+    /// pane it composited to within a hair of the background and vanished.
     static let elevatedSurface = NSColor(name: nil, dynamicProvider: { appearance in
-        appearance.usesDarkMainWindowPalette ? .controlBackgroundColor : .white
+        appearance.usesDarkMainWindowPalette
+            ? NSColor(calibratedWhite: 0.20, alpha: 1)
+            : NSColor.white
+    })
+
+    /// Fields and editors. Darker than the pane where a card is lighter, so an
+    /// input reads as recessed and a card as lifted.
+    static let inputSurface = NSColor(name: nil, dynamicProvider: { appearance in
+        appearance.usesDarkMainWindowPalette
+            ? NSColor(calibratedWhite: 0.11, alpha: 1)
+            : NSColor(calibratedWhite: 0.945, alpha: 1)
     })
 
     static let divider = NSColor(name: nil, dynamicProvider: { appearance in
@@ -65,7 +78,7 @@ enum MainWindowPalette {
     /// chrome collapses legibility ("never stack a light translucent surface on
     /// another"). The pane is the glass; the card is the one opaque tier above it.
     static let cardBackground = Color(nsColor: MainWindowNSPalette.elevatedSurface)
-    static let editorBackground = Color(nsColor: MainWindowNSPalette.elevatedSurface)
+    static let editorBackground = Color(nsColor: MainWindowNSPalette.inputSurface)
     static let cardStroke = Color(nsColor: MainWindowNSPalette.stroke)
     static let selectedFill = Color(nsColor: MainWindowNSPalette.selection)
     static let secondaryText = Color.secondary
@@ -78,13 +91,25 @@ enum AppTypography {
     // default size these match the previous fixed points exactly (title2 17,
     // headline 13 semibold, body 13, callout 12, subheadline 11, caption 10).
     static let appTitle = Font.title2.weight(.semibold)
-    static let sidebarIcon = Font.body.weight(.medium)
+    static let sidebarIcon = Font.body
     static let sidebarLabel = Font.body
-    static let sidebarLabelSelected = Font.body.weight(.semibold)
+    static let sidebarLabelSelected = Font.body.weight(.medium)
     static let pageTitle = Font.title2.weight(.semibold)
     /// One rung below `pageTitle`, so a card heading cannot be mistaken for the
     /// page heading when both are on screen.
     static let cardTitle = Font.title3.weight(.semibold)
+    /// Settings rows in the flattened pages. Body, not callout: callout is 12pt
+    /// against body's 13pt on macOS, which put the pages' own content a step
+    /// below the sidebar's navigation labels.
+    static let rowTitle = Font.body
+    /// Group heading — sentence case at body weight, not an uppercase mono label.
+    static let groupHeading = Font.body.weight(.semibold)
+    /// The Transcripts headline reads as a sentence, so it stays regular weight
+    /// and leans on size alone.
+    static let transcriptsHeadline = Font.system(.largeTitle, design: .default, weight: .regular)
+    /// 26pt reads too loose at the system's default tracking; large text wants
+    /// negative tracking the same way the small caps below want positive.
+    static let transcriptsHeadlineTracking: CGFloat = -0.5
     static let sectionHeading = Font.headline
     static let body = Font.body
     static let bodyMedium = Font.body.weight(.medium)
@@ -104,16 +129,24 @@ enum AppTypography {
 }
 
 enum AppMetrics {
+    /// How opaque the detail pane's scrim is. 1 would kill the material
+    /// entirely; this leaves just enough for the pane to still read as glass.
+    static let detailPaneOpacity: Double = 0.9
+
     static let onboardingBrandIconSize: CGFloat = 64
     static let sidebarWidth: CGFloat = 208
     static let sidebarBrandTop: CGFloat = 24
     static let sidebarBrandHorizontal: CGFloat = 24
     static let sidebarBrandBottom: CGFloat = 24
     static let sidebarPaddingHorizontal: CGFloat = 14
-    static let sidebarRowSpacing: CGFloat = 4
+    static let sidebarRowSpacing: CGFloat = 2
     static let sidebarRowHorizontalPadding: CGFloat = 12
-    static let sidebarRowHeight: CGFloat = 36
+    static let sidebarRowHeight: CGFloat = 32
     static let sidebarRowCornerRadius: CGFloat = 8
+    /// The footer sits in its own block rather than reading as one more
+    /// navigation row, so it is given more room than the rows above it.
+    static let sidebarFooterRowHeight: CGFloat = 36
+    static let sidebarFooterPadding: CGFloat = 18
     static let detailSpacing: CGFloat = 20
     static let detailPaddingHorizontal: CGFloat = 28
     static let detailPaddingTop: CGFloat = 24
@@ -123,9 +156,6 @@ enum AppMetrics {
     static let metricPanelCornerRadius: CGFloat = 12
     static let cardSectionSpacing: CGFloat = 12
     static let listRowVerticalPadding: CGFloat = 10
-    static let attentionPadding: CGFloat = 12
-    static let attentionCornerRadius: CGFloat = 10
-    static let attentionIconTopPadding: CGFloat = 1
     static let emptyStateSpacing: CGFloat = 14
     static let emptyStateMinHeight: CGFloat = 280
     static let emptyStateMaxWidth: CGFloat = 420
@@ -146,14 +176,15 @@ struct SidebarNavigationRow: View {
             HStack(spacing: 12) {
                 Image(systemName: section.icon)
                     .font(AppTypography.sidebarIcon)
-                    .frame(width: 18)
+                    .frame(width: 20)
+                    .foregroundStyle(isSelected ? Color.primary : MainWindowPalette.secondaryText)
                 Text(section.title)
                     .font(isSelected ? AppTypography.sidebarLabelSelected : AppTypography.sidebarLabel)
+                    .foregroundStyle(Color.primary)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(isSelected ? Color.primary : MainWindowPalette.secondaryText)
             .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
             .frame(minHeight: AppMetrics.sidebarRowHeight)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -169,16 +200,41 @@ struct SidebarNavigationRow: View {
     }
 }
 
+extension View {
+    /// A flat card surface: fill, an optional state tint over it, and a hairline.
+    /// `tint` composites on top of `fill` rather than replacing it, so hover,
+    /// selection and copy states read as a wash over the card's own colour.
+    func flatSurface(
+        in shape: some InsettableShape,
+        fill: Color = MainWindowPalette.cardBackground,
+        stroke: Color = MainWindowPalette.cardStroke,
+        tint: Color? = nil
+    ) -> some View {
+        background {
+            shape.fill(fill)
+                .overlay(shape.fill(tint ?? .clear))
+        }
+        .overlay(shape.strokeBorder(stroke, lineWidth: 1))
+    }
+}
+
 /// Press feedback for the window's custom buttons. `.plain` gives none at all,
 /// so a click reads as dead until its side effect lands.
 struct PressableButtonStyle: ButtonStyle {
     var pressedScale: CGFloat = 0.97
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
+        // Reduced motion keeps the feedback and drops the geometry: the press
+        // still dims, it just does not move. This is the shared style behind
+        // the sidebar, the hotkey recorder and every icon button, so leaving
+        // the scale in meant those users got motion everywhere else had
+        // removed it.
         configuration.label
-            .scaleEffect(configuration.isPressed ? pressedScale : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? pressedScale : 1)
             .opacity(configuration.isPressed ? 0.82 : 1)
-            .animation(.snappy(duration: 0.1), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.1), value: configuration.isPressed)
     }
 }
 
@@ -207,6 +263,7 @@ struct DetailScrollContainer<Content: View>: View {
             .padding(.top, AppMetrics.detailPaddingTop)
             .padding(.bottom, AppMetrics.detailPaddingBottom)
             .frame(maxWidth: .infinity, alignment: .topLeading)
+            .subtleEnclosingScroller()
         }
     }
 }
@@ -313,13 +370,8 @@ struct SurfaceCard<Content: View>: View {
             content
         }
         .padding(padding)
-        .background(
-            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
+        .flatSurface(
+            in: RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
         )
     }
 }
@@ -360,6 +412,10 @@ struct ActionIconButton: View {
     let systemName: String
     let accessibilityLabel: String
     var tint: Color = MainWindowPalette.secondaryText
+    /// Colour once the pointer is on this specific icon. Lets a row reveal its
+    /// actions quietly and only commit to emphasis (red for a delete) when the
+    /// pointer is actually on the thing that would fire.
+    var hoverTint: Color?
     let action: () -> Void
     @State private var isHovered = false
 
@@ -368,8 +424,9 @@ struct ActionIconButton: View {
             Image(systemName: systemName)
                 .font(AppTypography.bodyMedium)
                 .frame(width: AppMetrics.iconButtonSize, height: AppMetrics.iconButtonSize)
-                .foregroundStyle(tint)
+                .foregroundStyle(isHovered ? (hoverTint ?? tint) : tint)
                 .contentTransition(.symbolEffect(.replace))
+                .animation(.easeOut(duration: 0.12), value: isHovered)
         }
         .buttonStyle(IconButtonStyle(isHovered: isHovered))
         .contentShape(Circle())
@@ -441,18 +498,58 @@ struct InlineStatusBanner: View {
     let tint: Color
     let title: String
     let detail: String
-    let progress: Double?
+    var progress: Double?
+    /// Trailing button, for banners that can be acted on where they stand.
+    var actionTitle: String?
+    var action: (() -> Void)?
+    /// Makes the whole banner a target, for banners that lead somewhere.
+    var onTap: (() -> Void)?
 
     var body: some View {
+        content
+            .padding(14)
+            // A soft wash of the severity colour instead of a bordered card.
+            // The old tinted stroke plus a coloured title was two signals for
+            // one fact, and it read as a leftover card on pages that are now
+            // flat rows.
+            .background(
+                RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
+                    .fill(tint.opacity(0.09))
+            )
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let onTap {
+            Button(action: onTap) {
+                banner
+            }
+            .buttonStyle(PressableButtonStyle(pressedScale: 0.995))
+        } else {
+            banner
+        }
+    }
+
+    private var banner: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 Image(systemName: icon)
                     .font(AppTypography.bodyMedium)
                     .foregroundStyle(tint)
 
+                // Only the icon carries the colour: a coloured headline on a
+                // tinted ground is louder than the message needs to be.
                 Text(title)
                     .font(AppTypography.bodyMedium)
-                    .foregroundStyle(tint)
+                    .foregroundStyle(Color.primary)
+
+                Spacer(minLength: 12)
+
+                if let actionTitle, let action {
+                    Button(actionTitle, action: action)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
             }
 
             Text(detail)
@@ -465,206 +562,31 @@ struct InlineStatusBanner: View {
                     .progressViewStyle(.linear)
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .stroke(tint.opacity(0.25), lineWidth: 1)
-        )
-    }
-}
-
-/// Dashboard stats. One translucent panel of equal columns rather than four
-/// opaque cards: the window is vibrant now, so a solid fill reads as a hole
-/// punched in the glass. `.regularMaterial` keeps the numbers legible over any
-/// wallpaper, which a low-alpha tint would not.
-struct DashboardMetricsPanel: View {
-    struct Metric: Identifiable {
-        let icon: String
-        let tint: Color
-        let value: String
-        let label: String
-        /// Shown under the value. Used to state an assumption the number rests on.
-        var caption: String?
-
-        var id: String { label }
-    }
-
-    let metrics: [Metric]
-
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: AppMetrics.metricPanelCornerRadius, style: .continuous)
-    }
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
-                cell(metric)
-
-                if index < metrics.count - 1 {
-                    Rectangle()
-                        .fill(MainWindowPalette.divider)
-                        .frame(width: 1)
-                        .padding(.vertical, 10)
-                }
-            }
-        }
-        .background(shape.fill(MainWindowPalette.cardBackground))
-        .overlay(shape.strokeBorder(MainWindowPalette.cardStroke, lineWidth: 1))
-    }
-
-    private func cell(_ metric: Metric) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 5) {
-                Image(systemName: metric.icon)
-                    .font(AppTypography.subheadlineSemibold)
-                    .foregroundStyle(metric.tint)
-                Text(metric.label)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-            }
-
-            Text(metric.value)
-                .font(AppTypography.metricValue)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-
-            if let caption = metric.caption {
-                Text(caption)
-                    .font(AppTypography.caption)
-                    .foregroundStyle(MainWindowPalette.tertiaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-        }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .accessibilityElement(children: .combine)
+        .contentShape(Rectangle())
     }
 }
 
+/// A permission or setup problem, rendered as the same banner the rest of the
+/// window uses. It previously carried its own card, its own corner radius and a
+/// type scale two steps smaller than everything around it.
 struct AttentionTile: View {
     let item: AttentionItem
     let action: () -> Void
     let onFixAction: (AttentionItemFixAction) -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Button(action: action) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: item.severity == .error ? "exclamationmark.triangle.fill" : "exclamationmark.circle")
-                        .font(AppTypography.body)
-                        .foregroundStyle(item.severity == .error ? Color.red : Color.orange)
-                        .padding(.top, AppMetrics.attentionIconTopPadding)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.title)
-                            .font(AppTypography.subheadlineSemibold)
-                            .foregroundStyle(Color.primary)
-                        Text(item.detail)
-                            .font(AppTypography.caption)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 0)
-                }
-            }
-            .buttonStyle(.plain)
-
-            if let fixAction = item.fixAction {
-                Button(fixAction.title) {
-                    onFixAction(fixAction)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            }
-        }
-        .padding(AppMetrics.attentionPadding)
-        .background(
-            RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardBackground)
+        InlineStatusBanner(
+            icon: item.severity == .error ? "exclamationmark.triangle.fill" : "exclamationmark.circle",
+            tint: item.severity == .error ? .red : .orange,
+            title: item.title,
+            detail: item.detail,
+            actionTitle: item.fixAction?.title,
+            action: item.fixAction.map { fixAction in
+                { onFixAction(fixAction) }
+            },
+            onTap: action
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: AppMetrics.attentionCornerRadius, style: .continuous)
-                .stroke(item.severity == .error ? Color.red.opacity(0.16) : Color.orange.opacity(0.16), lineWidth: 1)
-        )
-    }
-}
-
-struct TranscriptHistoryRow: View {
-    let result: RecentResult
-    let onCopy: () -> Void
-    let onDelete: () -> Void
-    @State private var isHovered = false
-    @State private var didCopy = false
-    @FocusState private var focusedAction: TranscriptAction?
-
-    private enum TranscriptAction: Hashable {
-        case copy
-        case delete
-    }
-
-    private var areActionsVisible: Bool {
-        isHovered || focusedAction != nil
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text(result.createdAt.relativeTimestamp)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-                Text("•")
-                    .foregroundStyle(MainWindowPalette.tertiaryText)
-                Text(result.durationSeconds.shortSecondsString)
-                    .font(AppTypography.subheadline)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-                Spacer(minLength: 0)
-                HStack(spacing: 6) {
-                    // A copy that looks identical before and after leaves the
-                    // user guessing whether it worked.
-                    ActionIconButton(
-                        systemName: didCopy ? "checkmark" : "doc.on.doc",
-                        accessibilityLabel: "Copy result",
-                        tint: didCopy ? .green : MainWindowPalette.secondaryText
-                    ) {
-                        onCopy()
-                        didCopy = true
-                        AccessibilityNotification.Announcement("Copied").post()
-                        Task {
-                            try? await Task.sleep(for: .seconds(1))
-                            didCopy = false
-                        }
-                    }
-                    .focused($focusedAction, equals: .copy)
-                    ActionIconButton(systemName: "trash", accessibilityLabel: "Delete result", tint: MainWindowPalette.destructive, action: onDelete)
-                        .focused($focusedAction, equals: .delete)
-                }
-                .frame(height: AppMetrics.iconButtonSize)
-                .opacity(areActionsVisible ? 1 : 0)
-                .animation(.easeOut(duration: 0.16), value: areActionsVisible)
-            }
-
-            Text(result.text)
-                .font(AppTypography.callout)
-                .foregroundStyle(Color.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.vertical, AppMetrics.listRowVerticalPadding)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(MainWindowPalette.divider)
-                .frame(height: 1)
-        }
-        .contentShape(Rectangle())
-        .onHover { hovering in
-            isHovered = hovering
-        }
     }
 }
 
@@ -877,5 +799,82 @@ extension Int {
     /// "10 KB" and a million words as "1 MB".
     var abbreviatedString: String {
         formatted(.number.notation(.compactName))
+    }
+}
+
+
+/// Microphone picker in the sidebar's footer. The input device is the one
+/// setting that decides whether dictation works at all, so it earns a permanent
+/// place rather than living three clicks deep in General.
+struct SidebarInputDeviceRow: View {
+    @Bindable var appState: AppState
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Menu {
+            Button {
+                appState.selectedInputDeviceID = nil
+            } label: {
+                Label("System Default", systemImage: appState.selectedInputDeviceID == nil ? "checkmark" : "")
+            }
+
+            if !appState.availableInputDevices.isEmpty {
+                Divider()
+            }
+
+            ForEach(appState.availableInputDevices) { device in
+                Button {
+                    appState.selectedInputDeviceID = device.id
+                } label: {
+                    Text(device.isAvailable ? device.name : "\(device.name) — Unavailable")
+                }
+                .disabled(!device.isAvailable)
+            }
+        } label: {
+            HStack(alignment: .center, spacing: 14) {
+                // A smaller glyph than the navigation rows use, but kept in a
+                // box of the same width so the label still starts on their
+                // column instead of drifting left.
+                Image(systemName: hasProblem ? "exclamationmark.triangle.fill" : "mic")
+                    .font(AppTypography.caption)
+                    .frame(width: 20, height: 14)
+                    .foregroundStyle(hasProblem ? Color.orange : MainWindowPalette.secondaryText)
+
+                // The device name gives up space first: a long name must not
+                // push the chevron off the edge and hide that this is a picker.
+                // A footer control, not a destination: it sits a step below the
+                // navigation rows above it.
+                Text(appState.selectedInputDeviceName)
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(Color.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        // AppKit draws the popup indicator itself; a hand-rolled chevron got
+        // squeezed off the edge by long device names.
+        .menuStyle(.borderlessButton)
+        // Padding sits OUTSIDE the menu, not inside its label: a borderless
+        // Menu insets its own label, so padding applied within it left the row
+        // ~10pt to the left of the navigation column above.
+        .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
+        .padding(.vertical, 7)
+        .frame(minHeight: AppMetrics.sidebarFooterRowHeight)
+        .background(
+            RoundedRectangle(cornerRadius: AppMetrics.sidebarRowCornerRadius, style: .continuous)
+                .fill(isHovered ? MainWindowPalette.selectedFill : .clear)
+        )
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+        .help(appState.effectiveInputDeviceStatusText)
+    }
+
+    private var hasProblem: Bool {
+        appState.audioRouteSnapshot == nil
     }
 }

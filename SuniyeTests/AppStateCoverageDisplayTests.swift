@@ -267,11 +267,12 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         XCTAssertEqual(loading?.title, "Loading Model")
         XCTAssertNil(loading?.progress)
 
-        // Active operation in a non-download phase falls through to no banner.
+        // An active operation in any other phase falls through to no banner.
         appState.phase = .ready
         XCTAssertNil(appState.asrModelBanner)
 
         appState.activeASRModelOperationID = nil
+
         appState.lastFailedASRModelID = .parakeetV3
         appState.lastFailedASRModelError = "download exploded"
         let failed = appState.asrModelBanner
@@ -297,13 +298,16 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         appState.activeASRModelOperationID = .parakeetV3
         appState.phase = .downloadingModel
         XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Downloading")
+
         appState.phase = .loading
         XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Loading")
+
+        // An active operation in any other phase falls through to the ladder.
         appState.phase = .ready
-        // Active operation in another phase falls through to the regular ladder.
         XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Installed")
 
         appState.activeASRModelOperationID = nil
+
         appState.loadedASRModelID = .parakeetV3
         XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Current")
 
@@ -343,10 +347,13 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         appState.activeASRModelOperationID = .parakeetV3
         appState.phase = .loading
         XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .parakeetV3), "Loading…")
+
         appState.phase = .downloadingModel
         XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .parakeetV3), "Downloading…")
+        // Operations are serialised: nothing else can start while one runs.
         XCTAssertFalse(appState.asrModelCanPerformPrimaryAction(for: .parakeetV3))
         XCTAssertFalse(appState.asrModelSecondaryActionsEnabled(for: .parakeetV3))
+        XCTAssertFalse(appState.asrModelCanPerformPrimaryAction(for: .moonshineBase))
 
         appState.activeASRModelOperationID = nil
         appState.phase = .recording

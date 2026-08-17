@@ -79,8 +79,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed st
 
 | | |
 |---|---|
-| **Dashboard** | Sessions, words dictated, total time, and recent activity — at a glance |
-| **History** | Searchable log of past transcriptions; copy or delete any entry |
+| **Transcripts** | Sessions, words dictated, time saved and where you dictate most, above a searchable log of every past transcription — copy or delete any entry |
 | **Magic Format** | Optional AI cleanup for punctuation, capitalization, and formatting |
 | **Per-app prompts** | Give each app its own Magic Format style — terse in chat, prose in notes |
 | **Edit Mode** | Select text anywhere, hold a second shortcut, and speak an instruction (“make this formal”) to rewrite it in place |

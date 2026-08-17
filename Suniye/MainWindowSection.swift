@@ -1,8 +1,10 @@
 import Foundation
 
 enum MainWindowSection: String, CaseIterable, Hashable, Codable {
+    /// Transcripts, formerly split across a Dashboard and a History page. The raw
+    /// value stays `dashboard` so stored selections and `--open-dashboard` keep
+    /// working.
     case dashboard
-    case history
     case model
     case style
     case general
@@ -10,9 +12,7 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
     var title: String {
         switch self {
         case .dashboard:
-            return "Dashboard"
-        case .history:
-            return "History"
+            return "Transcripts"
         case .model:
             return "Speech Model"
         case .style:
@@ -25,9 +25,7 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
     var icon: String {
         switch self {
         case .dashboard:
-            return "square.grid.2x2"
-        case .history:
-            return "clock"
+            return "text.alignleft"
         case .model:
             return "cpu"
         case .style:
@@ -48,6 +46,11 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
     static func initialSelection(arguments: [String]) -> MainWindowSection {
         for section in MainWindowSection.allCases where arguments.contains(section.launchArgument) {
             return section
+        }
+
+        // History merged into Transcripts; the old argument still has to work.
+        if arguments.contains("--open-history") {
+            return .dashboard
         }
 
         if arguments.contains("--open-settings") {

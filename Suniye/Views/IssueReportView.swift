@@ -14,6 +14,7 @@ struct IssueReportView: View {
             }
         }
         .background(MainWindowPalette.windowBackground)
+        .subtleScrollers()
     }
 
     private var formView: some View {

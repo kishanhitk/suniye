@@ -546,7 +546,8 @@ final class AppStateLLMTests: XCTestCase {
         await appState.testLocalGemmaSetup()
 
         XCTAssertNotNil(fakeGemma.lastConfig)
-        XCTAssertEqual(appState.magicFormatSetupTestResult, MagicFormatSetupTestResult(message: "Local model works.", severity: .success))
+        XCTAssertEqual(appState.magicFormatSetupTestResult?.message, "Local model works.")
+        XCTAssertEqual(appState.magicFormatSetupTestResult?.severity, .success)
     }
 
     func testExplicitAPIProviderStillRequiresAPIKey() async {
@@ -799,10 +800,10 @@ final class AppStateLLMTests: XCTestCase {
         await appState.testMagicFormatSetup(apiKeyDraft: "draft-key")
 
         XCTAssertEqual(appState.llmKeyStatusText, "Not connected")
-        XCTAssertEqual(
-            appState.magicFormatSetupTestResult,
-            MagicFormatSetupTestResult(message: "Connection works.", severity: .success)
-        )
+        // Assert the meaningful fields, not the whole struct: the result also
+        // carries a measured latency, which is not deterministic in a test.
+        XCTAssertEqual(appState.magicFormatSetupTestResult?.message, "Connection works.")
+        XCTAssertEqual(appState.magicFormatSetupTestResult?.severity, .success)
     }
 
     func testTestMagicFormatSetupUsesSavedKeyWhenDraftIsEmpty() async {
@@ -901,10 +902,10 @@ final class AppStateLLMTests: XCTestCase {
         await task.value
 
         XCTAssertFalse(appState.isMagicFormatSetupTestInProgress)
-        XCTAssertEqual(
-            appState.magicFormatSetupTestResult,
-            MagicFormatSetupTestResult(message: "Connection works.", severity: .success)
-        )
+        // Assert the meaningful fields, not the whole struct: the result also
+        // carries a measured latency, which is not deterministic in a test.
+        XCTAssertEqual(appState.magicFormatSetupTestResult?.message, "Connection works.")
+        XCTAssertEqual(appState.magicFormatSetupTestResult?.severity, .success)
         XCTAssertEqual(appState.llmKeyStatusText, "Connected")
     }
 

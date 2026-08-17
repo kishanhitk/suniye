@@ -2,117 +2,8 @@ import Carbon
 import AppKit
 import SwiftUI
 
-struct DashboardPage: View {
-    @Bindable var appState: AppState
-    let onNavigate: (MainWindowSection) -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        DetailScrollContainer {
-            DetailPageTitle(title: "Dashboard")
-
-            if !appState.attentionItems.isEmpty {
-                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                    ForEach(appState.attentionItems) { item in
-                        AttentionTile(item: item) {
-                            onNavigate(item.recommendedSection)
-                        } onFixAction: { action in
-                            appState.handleAttentionFixAction(action)
-                        }
-                        .transition(cardTransition)
-                    }
-                }
-            }
-
-            if appState.shouldShowMagicFormatNudge {
-                MagicFormatNudgeCard(
-                    onSetUp: { onNavigate(appState.openMagicFormatSetupFromNudge()) },
-                    onDismiss: { appState.dismissMagicFormatNudge() }
-                )
-                .transition(cardTransition)
-                .onAppear {
-                    appState.magicFormatNudgeDidShow()
-                }
-            }
-
-            DashboardMetricsPanel(metrics: [
-                .init(
-                    icon: "clock.badge.checkmark",
-                    tint: .green,
-                    value: appState.timeSavedSeconds.compactDurationString,
-                    label: "Time saved",
-                    caption: "vs typing at \(Int(DictationStats.assumedTypingWordsPerMinute)) wpm"
-                ),
-                .init(
-                    icon: "quote.opening",
-                    tint: .purple,
-                    value: appState.dictationStats.lifetimeWords.abbreviatedString,
-                    label: "Words"
-                ),
-                .init(
-                    icon: "gauge.with.dots.needle.50percent",
-                    tint: .blue,
-                    value: "\(appState.averageWordsPerMinute)",
-                    label: "Words / min"
-                ),
-                .init(
-                    icon: "flame",
-                    tint: .orange,
-                    value: "\(appState.currentStreakDays)",
-                    label: "Day streak"
-                )
-            ])
-
-            if appState.dictationStats.lifetimeSessions > 0 {
-                DashboardActivityChart(days: appState.dailyWordCounts(days: 14))
-            }
-
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Recent")
-
-                if appState.recentResultsPreview.isEmpty {
-                    // The only post-onboarding surface that teaches the app's
-                    // single interaction — never a dead "nothing here yet".
-                    SurfaceCard {
-                        HStack(spacing: 10) {
-                            Image(systemName: "waveform")
-                                .font(AppTypography.bodyMedium)
-                                .foregroundStyle(Color.accentColor)
-                            (Text("Hold ")
-                                + Text(appState.hotkeyConfiguration.displayString)
-                                    .font(AppTypography.codeBodyMedium)
-                                + Text(" in any app to dictate — sessions show up here."))
-                                .font(AppTypography.body)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                        }
-                    }
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(appState.recentResultsPreview) { result in
-                            TranscriptHistoryRow(
-                                result: result,
-                                onCopy: { appState.copyRecentResult(result) },
-                                onDelete: { appState.deleteRecentResult(result) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        // Cards that vanish under the cursor when dismissed, or appear the moment
-        // a permission drops, read as a glitch without a bridge.
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: appState.attentionItems.count)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: appState.shouldShowMagicFormatNudge)
-    }
-
-    private var cardTransition: AnyTransition {
-        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97))
-    }
-}
-
 /// Post-onboarding Magic Format pitch, shown once the user has real dictations
-/// to judge it against (replaces the old forced wizard step). The before/after
-/// snippet makes the 3.43 GB value proposition concrete.
+/// to judge it against. The before/after snippet makes the value concrete.
 struct MagicFormatNudgeCard: View {
     let onSetUp: () -> Void
     let onDismiss: () -> Void
@@ -158,686 +49,371 @@ struct MagicFormatNudgeCard: View {
     }
 }
 
-struct HistoryPage: View {
-    @Bindable var appState: AppState
-
-    var body: some View {
-        DetailScrollContainer {
-            DetailPageTitle(title: "History")
-
-            if appState.recentResults.isEmpty {
-                EmptyStateCard(
-                    icon: "clock.arrow.circlepath",
-                    title: "No History Yet",
-                    detail: "Completed dictation sessions will appear here with relative time, duration, copy, and delete actions."
-                )
-            } else {
-                // Must stay lazy: history is unbounded and these rows are
-                // variable height, so an eager stack builds and lays out every
-                // stored transcript on every update — tens of seconds of first
-                // paint at tens of thousands of sessions. Measurements in the
-                // commit that introduced this.
-                LazyVStack(spacing: 0) {
-                    ForEach(appState.recentResults) { result in
-                        TranscriptHistoryRow(
-                            result: result,
-                            onCopy: { appState.copyRecentResult(result) },
-                            onDelete: { appState.deleteRecentResult(result) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct ModelPage: View {
-    @Bindable var appState: AppState
-    @State private var isHoveringCurrentModelActions = false
-    @State private var hoveredLibraryModelID: ASRModelID?
-    @State private var pendingDeleteModelID: ASRModelID?
-    @FocusState private var focusedModelAction: ModelRowAction?
-
-    /// Keyed by model so focusing one row's action does not reveal every row's.
-    fileprivate enum ModelRowAction: Hashable {
-        case openFolder(ASRModelID)
-        case delete(ASRModelID)
-    }
-    private let currentModelColumns = [
-        GridItem(.flexible(minimum: 150), spacing: 18, alignment: .leading),
-        GridItem(.flexible(minimum: 150), spacing: 18, alignment: .leading)
-    ]
-    private let libraryModelColumns = [
-        GridItem(.flexible(minimum: 120), spacing: 18, alignment: .leading),
-        GridItem(.flexible(minimum: 120), spacing: 18, alignment: .leading)
-    ]
-
-    var body: some View {
-        DetailScrollContainer {
-            VStack(alignment: .leading, spacing: 4) {
-                DetailPageTitle(title: "Speech Model")
-                Text("Choose the offline recognizer \(AppIdentity.current.displayName) keeps on your Mac.")
-                    .font(AppTypography.body)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-            }
-
-            if let banner = appState.asrModelBanner {
-                InlineStatusBanner(
-                    icon: banner.tone.icon,
-                    tint: banner.tone.color,
-                    title: banner.title,
-                    detail: banner.detail,
-                    progress: banner.progress
-                )
-            }
-
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Current Model")
-                currentModelCard
-            }
-
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Available Models")
-
-                ForEach(appState.availableASRModelEntries) { entry in
-                    modelLibraryRow(for: entry)
-                }
-            }
-        }
-        // Deleting is a multi-gigabyte re-download, which is exactly the kind of
-        // slip a confirmation is for.
-        .confirmationDialog(
-            "Delete this model?",
-            isPresented: Binding(
-                get: { pendingDeleteModelID != nil },
-                set: { if !$0 { pendingDeleteModelID = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let pendingDeleteModelID {
-                    appState.deleteASRModel(pendingDeleteModelID)
-                }
-                pendingDeleteModelID = nil
-            }
-            Button("Cancel", role: .cancel) {
-                pendingDeleteModelID = nil
-            }
-        } message: {
-            Text("You will have to download it again to use it.")
-        }
-    }
-
-    private var currentModelCard: some View {
-        let entry = appState.currentASRModelEntry
-
-        return SurfaceCard(padding: 18) {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top, spacing: 22) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            Text(entry.displayName)
-                                .font(AppTypography.cardTitle)
-
-                            StatusPill(
-                                title: appState.modelStatusValue,
-                                tint: appState.modelStatusColor
-                            )
-                        }
-
-                        Text(entry.description)
-                            .font(AppTypography.body)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        FlowLayout(spacing: 6) {
-                            ForEach(entry.badges, id: \.self) { badge in
-                                ModelTagBadge(title: badge.rawValue)
-                            }
-                        }
-                    }
-
-                    Spacer(minLength: 24)
-
-                    VStack(alignment: .trailing, spacing: 12) {
-                        if appState.modelPrimaryActionTitle != "Current" {
-                            Button(appState.modelPrimaryActionTitle) {
-                                appState.performPrimaryASRAction(for: entry.id)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(!appState.asrModelCanPerformPrimaryAction(for: entry.id))
-                        }
-
-                        if appState.asrModelSecondaryActionsEnabled(for: entry.id) {
-                            hoverRevealActions(
-                                for: entry.id,
-                                isVisible: isHoveringCurrentModelActions
-                            )
-                        }
-                    }
-                }
-
-                CardDivider()
-                    .padding(.vertical, 2)
-
-                LazyVGrid(columns: currentModelColumns, alignment: .leading, spacing: 14) {
-                    rowMeta(title: "Speed", value: entry.speedLabel)
-                    rowMeta(title: "Quality", value: entry.qualityLabel)
-                    rowMeta(title: "Languages", value: entry.languageSummary)
-                    rowMeta(title: "Size", value: entry.sizeDisplayText)
-                    rowMeta(title: "On disk", value: appState.asrModelInstalledSizeText(for: entry.id))
-                }
-
-            }
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .stroke(appState.modelStatusColor.opacity(0.28), lineWidth: 1)
-        )
-        .onHover { hovering in
-            isHoveringCurrentModelActions = hovering
-        }
-    }
-
-    private func modelLibraryRow(for entry: ASRModelCatalogEntry) -> some View {
-        SurfaceCard(padding: 16) {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            Text(entry.displayName)
-                                .font(AppTypography.bodyMedium)
-
-                            StatusPill(
-                                title: appState.asrModelStatusText(for: entry.id),
-                                tint: appState.asrModelStatusColor(for: entry.id)
-                            )
-                        }
-
-                        Text(entry.description)
-                            .font(AppTypography.body)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        FlowLayout(spacing: 6) {
-                            ForEach(entry.badges, id: \.self) { badge in
-                                ModelTagBadge(title: badge.rawValue)
-                            }
-                        }
-                    }
-
-                    Spacer(minLength: 20)
-
-                    VStack(alignment: .trailing, spacing: 12) {
-                        Button(appState.asrModelPrimaryActionTitle(for: entry.id)) {
-                            appState.performPrimaryASRAction(for: entry.id)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!appState.asrModelCanPerformPrimaryAction(for: entry.id))
-
-                        if appState.asrModelSecondaryActionsEnabled(for: entry.id) {
-                            hoverRevealActions(
-                                for: entry.id,
-                                isVisible: hoveredLibraryModelID == entry.id
-                            )
-                        }
-                    }
-                }
-
-                LazyVGrid(columns: libraryModelColumns, alignment: .leading, spacing: 12) {
-                    rowMeta(title: "Size", value: entry.sizeDisplayText)
-                    rowMeta(title: "Speed", value: entry.speedLabel)
-                    rowMeta(title: "Quality", value: entry.qualityLabel)
-                    rowMeta(title: "Languages", value: entry.languageSummary)
-                }
-
-                if let progressLabel = appState.asrModelProgressLabel(for: entry.id) {
-                    CardDivider()
-                        .padding(.vertical, 2)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        if appState.activeASRModelOperationID == entry.id, appState.phase == .downloadingModel {
-                            ProgressView(value: appState.downloadProgress)
-                                .progressViewStyle(.linear)
-                        } else if appState.activeASRModelOperationID == entry.id, appState.phase == .loading {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-
-                        Text(progressLabel)
-                            .font(AppTypography.caption)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                .stroke(appState.asrModelStatusColor(for: entry.id).opacity(appState.activeASRModelOperationID == entry.id ? 0.4 : 0), lineWidth: 1)
-        )
-        .onHover { hovering in
-            if hovering {
-                hoveredLibraryModelID = entry.id
-            } else if hoveredLibraryModelID == entry.id {
-                hoveredLibraryModelID = nil
-            }
-        }
-    }
-
-    private func hoverRevealActions(for modelID: ASRModelID, isVisible: Bool) -> some View {
-        // Keyboard focus reveals the actions too — otherwise they are an
-        // invisible focusable trap for anyone not using a mouse.
-        let isFocused = focusedModelAction == .openFolder(modelID) || focusedModelAction == .delete(modelID)
-        let isRevealed = isVisible || isFocused
-
-        return HStack(spacing: 6) {
-            ActionIconButton(
-                systemName: "folder",
-                accessibilityLabel: "Open model folder",
-                action: {
-                appState.openModelFolder(for: modelID)
-                }
-            )
-            .focused($focusedModelAction, equals: .openFolder(modelID))
-
-            ActionIconButton(
-                systemName: "trash",
-                accessibilityLabel: "Delete model",
-                tint: MainWindowPalette.destructive,
-                action: {
-                pendingDeleteModelID = modelID
-                }
-            )
-            .focused($focusedModelAction, equals: .delete(modelID))
-        }
-        .frame(height: AppMetrics.iconButtonSize)
-        .opacity(isRevealed ? 1 : 0.001)
-        .offset(y: isRevealed ? 0 : -2)
-        .animation(.easeOut(duration: 0.16), value: isRevealed)
-    }
-
-    private func rowMeta(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(AppTypography.caption)
-                .foregroundStyle(MainWindowPalette.tertiaryText)
-            Text(value)
-                .font(AppTypography.subheadlineSemibold)
-                .foregroundStyle(Color.primary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
 struct GeneralPage: View {
     @Bindable var appState: AppState
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         DetailScrollContainer {
+            DetailPageTitle(title: "General")
+
             if !appState.hasMicPermission || !appState.hasAccessibilityPermission {
-                VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                    SectionHeading(title: "Permissions")
-
-                    SurfaceCard {
-                        VStack(spacing: 0) {
-                            if !appState.hasMicPermission {
-                                PermissionActionRow(
-                                    title: "Microphone",
-                                    detail: "Required to capture dictation audio.",
-                                    isGranted: false,
-                                    primaryTitle: "Request Access",
-                                    primaryAction: {
-                                        appState.requestMicrophonePermission()
-                                    },
-                                    secondaryTitle: "Open Settings",
-                                    secondaryAction: {
-                                        appState.openMicrophonePrivacySettings()
-                                    }
-                                )
-                            }
-
-                            if !appState.hasMicPermission && !appState.hasAccessibilityPermission {
-                                CardDivider()
-                                    .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
-                            }
-
-                            if !appState.hasAccessibilityPermission {
-                                PermissionActionRow(
-                                    title: "Accessibility",
-                                    detail: "Required to paste transcribed text into other apps.",
-                                    isGranted: false,
-                                    primaryTitle: "Request Access",
-                                    primaryAction: {
-                                        appState.beginAccessibilityOnboarding()
-                                    },
-                                    secondaryTitle: "Open Settings",
-                                    secondaryAction: {
-                                        appState.openAccessibilityPrivacySettings()
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
+                permissions
+                    .transition(SettingsMotion.banner(reduceMotion: reduceMotion))
             }
 
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Microphone")
+            microphone
+            shortcuts
+            indicator
+            dictation
+            startup
+            privacy
+            about
+        }
+        // Granting a permission deletes a whole group and pulls the rest of the
+        // page up. It is also the moment the app starts working, so the change
+        // is worth showing rather than snapping.
+        .animation(motion, value: appState.hasMicPermission)
+        .animation(motion, value: appState.hasAccessibilityPermission)
+        .animation(motion, value: inputWarning)
+        .animation(motion, value: appState.hotkeyValidationMessage)
+        .animation(motion, value: appState.launchAtLoginError ?? appState.launchAtLoginWarningText)
+    }
 
-                SurfaceCard {
-                    VStack(spacing: 0) {
-                        HStack(spacing: 12) {
-                            Text("Input Device")
-                                .font(AppTypography.body)
-                            Spacer(minLength: 12)
-                            NativePopupPicker(
-                                items: inputDeviceChoices,
-                                selection: inputDeviceSelection,
-                                title: \.title
-                            )
-                            .frame(maxWidth: 300)
-                        }
+    private var motion: Animation? {
+        SettingsMotion.curve(reduceMotion: reduceMotion)
+    }
 
-                        CardDivider()
-                            .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
+    // MARK: - Permissions
 
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label(
-                                appState.effectiveInputDeviceStatusText,
-                                systemImage: appState.audioRouteSnapshot == nil
-                                    ? "exclamationmark.triangle.fill"
-                                    : "mic.fill"
-                            )
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(
-                                appState.audioRouteSnapshot == nil
-                                    ? Color.orange
-                                    : MainWindowPalette.secondaryText
-                            )
-
-                            if let warning = appState.audioRouteWarningText {
-                                Text(warning)
-                                    .font(AppTypography.subheadline)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
-                            }
-
-                            if (appState.audioRouteSnapshot?.inputTransport.isBluetooth == true
-                                || appState.audioRouteSnapshot == nil),
-                               let recommended = appState.recommendedInputDevice {
-                                Button("Use \(recommended.name)") {
-                                    appState.useRecommendedInputDevice()
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        CardDivider()
-                            .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
-
-                        SettingsToggleRow(
-                            title: "Echo Cancellation",
-                            detail: "Uses Apple's Voice Processing when the current input and output route supports it. It is bypassed for Bluetooth routes.",
-                            isOn: $appState.echoCancellationEnabled
-                        )
-
-                        CardDivider()
-                            .padding(.vertical, AppMetrics.toggleDetailVerticalPadding)
-
-                        SettingsToggleRow(
-                            title: "Sound Feedback",
-                            detail: "Play short local sounds when dictation succeeds or fails.",
-                            isOn: $appState.soundFeedbackEnabled
-                        )
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Hotkeys")
-
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                        HStack(spacing: 12) {
-                            Text("Hold to Dictate")
-                                .font(AppTypography.body)
-                            Spacer(minLength: 12)
-                            HotkeyRecorderButton(
-                                configuration: Binding(
-                                    get: { appState.hotkeyConfiguration },
-                                    set: { newValue in
-                                        if let newValue {
-                                            appState.updateDictationHotkey(newValue)
-                                        }
-                                    }
-                                )
-                            )
-                        }
-                        CardDivider()
-                        Text("Works from any app. Hold the shortcut to record, release to transcribe.")
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                        CardDivider()
-                        HStack(spacing: 12) {
-                            Text("Paste Last Transcript")
-                                .font(AppTypography.body)
-                            Spacer(minLength: 12)
-                            HotkeyRecorderButton(
-                                configuration: Binding(
-                                    get: { appState.pasteLastTranscriptHotkeyConfiguration },
-                                    set: { newValue in
-                                        if let newValue {
-                                            appState.updatePasteLastTranscriptHotkey(newValue)
-                                        }
-                                    }
-                                ),
-                                idleIcon: "text.insert"
-                            )
-                        }
-                        CardDivider()
-                        Text("Focus a text field and press this shortcut to insert your latest completed dictation without submitting it again.")
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                        if let message = appState.hotkeyValidationMessage {
-                            CardDivider()
-                            Text(message)
-                                .font(AppTypography.subheadline)
-                                .foregroundStyle(.red)
-                        }
-                        CardDivider()
-                        HStack(spacing: 12) {
-                            Text("Hold to Edit Selection")
-                                .font(AppTypography.body)
-                            Spacer(minLength: 12)
-                            HotkeyRecorderButton(
-                                configuration: $appState.editModeHotkeyConfiguration,
-                                idleIcon: "pencil.line",
-                                allowsClear: true,
-                                clearHelp: "Remove the Edit Mode shortcut"
-                            )
-                        }
-                        CardDivider()
-                        Text("Select text in any app, hold the shortcut, and speak an instruction like \"make this formal\". With nothing selected, the spoken instruction generates text at the cursor. Requires Magic Format.")
-                            .font(AppTypography.subheadline)
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Indicator")
-
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                        SettingsToggleRow(
-                            title: "Live Transcription Preview",
-                            detail: "Show the transcript in the floating indicator while you dictate. Decoding stays fully local.",
-                            isOn: $appState.liveTranscriptionPreviewEnabled
-                        )
-
-                        CardDivider()
-
-                        SettingsToggleRow(
-                            title: "Hide While Idle",
-                            detail: "Hide the floating indicator when \(AppIdentity.current.displayName) is ready but not actively dictating. When hidden, floating click-to-start is unavailable until the indicator appears again for recording, processing, or errors.",
-                            isOn: $appState.hideFloatingIndicatorWhenIdle
-                        )
-
-                        CardDivider()
-
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Indicator Position")
-                                    .font(AppTypography.body)
-                                Text("Drag the floating pill to place it somewhere that stays out of the way.")
-                                    .font(AppTypography.subheadline)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
-                            }
-
-                            Spacer(minLength: 12)
-
-                            Button("Reset Position") {
-                                appState.resetFloatingIndicatorPlacement()
-                            }
+    /// Only rendered while something is missing, so it never becomes a row of
+    /// green ticks reporting that nothing is wrong.
+    private var permissions: some View {
+        SettingsGroup(
+            heading: "Permissions",
+            note: "\(AppIdentity.current.displayName) cannot dictate until these are granted."
+        ) {
+            if !appState.hasMicPermission {
+                ControlSettingRow(
+                    title: "Microphone",
+                    info: "Required to capture dictation audio."
+                ) {
+                    HStack(spacing: 8) {
+                        Button("Grant") { appState.requestMicrophonePermission() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        Button("Open Settings") { appState.openMicrophonePrivacySettings() }
                             .buttonStyle(.bordered)
-                            .disabled(appState.floatingIndicatorPlacement == nil)
-                        }
+                            .controlSize(.small)
                     }
                 }
             }
 
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "After Paste")
+            if !appState.hasMicPermission && !appState.hasAccessibilityPermission {
+                RowSeparator()
+            }
 
-                SurfaceCard {
-                    SettingsToggleRow(
-                        title: "Auto-press Enter after paste",
-                        detail: "Automatically press Enter/Return after pasting transcribed text. You can also still say \"send\" or \"enter\" at the end of a dictation to trigger this per-message.",
-                        isOn: $appState.autoSubmitEnabled
+            if !appState.hasAccessibilityPermission {
+                ControlSettingRow(
+                    title: "Accessibility",
+                    info: "Required to paste transcribed text into other apps."
+                ) {
+                    HStack(spacing: 8) {
+                        Button("Grant") { appState.beginAccessibilityOnboarding() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        Button("Open Settings") { appState.openAccessibilityPrivacySettings() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Microphone
+
+    private var microphone: some View {
+        SettingsGroup(heading: "Microphone") {
+            ControlSettingRow(
+                title: "Input device",
+                // Only while the picker says "System Default" and therefore hides
+                // which device that actually is.
+                info: appState.selectedInputDeviceID == nil ? appState.effectiveInputDeviceStatusText : nil
+            ) {
+                NativePopupPicker(
+                    items: inputDeviceChoices,
+                    selection: inputDeviceSelection,
+                    title: \.title
+                )
+                .frame(maxWidth: 260)
+            }
+
+            if let warning = inputWarning {
+                inputWarningRow(warning)
+            }
+
+            RowSeparator()
+            ToggleSettingRow(
+                title: "Echo cancellation",
+                info: "Uses Apple's Voice Processing when the current input and output route supports it. It is bypassed for Bluetooth routes.",
+                isOn: $appState.echoCancellationEnabled
+            )
+
+            RowSeparator()
+            ToggleSettingRow(
+                title: "Sound feedback",
+                isOn: $appState.soundFeedbackEnabled
+            )
+        }
+    }
+
+    /// A microphone problem is worth interrupting the list for; a working
+    /// microphone is not.
+    private var inputWarning: String? {
+        if appState.audioRouteSnapshot == nil {
+            return appState.audioRouteWarningText ?? appState.effectiveInputDeviceStatusText
+        }
+        return appState.audioRouteWarningText
+    }
+
+    private func inputWarningRow(_ warning: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Label(warning, systemImage: "exclamationmark.triangle.fill")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 12)
+
+            if let recommended = appState.recommendedInputDevice {
+                Button("Use \(recommended.name)") {
+                    appState.useRecommendedInputDevice()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(.bottom, 12)
+        .padding(.horizontal, 4)
+        .transition(SettingsMotion.notice)
+    }
+
+    // MARK: - Shortcuts
+
+    private var shortcuts: some View {
+        SettingsGroup(heading: "Shortcuts") {
+            ControlSettingRow(
+                title: "Hold to dictate"
+            ) {
+                HotkeyRecorderButton(
+                    configuration: Binding(
+                        get: { appState.hotkeyConfiguration },
+                        set: { newValue in
+                            if let newValue {
+                                appState.updateDictationHotkey(newValue)
+                            }
+                        }
                     )
+                )
+            }
+
+            RowSeparator()
+            ControlSettingRow(
+                title: "Paste last transcript",
+                info: "Focus a text field and press this shortcut to insert your latest completed dictation without submitting it again."
+            ) {
+                HotkeyRecorderButton(
+                    configuration: Binding(
+                        get: { appState.pasteLastTranscriptHotkeyConfiguration },
+                        set: { newValue in
+                            if let newValue {
+                                appState.updatePasteLastTranscriptHotkey(newValue)
+                            }
+                        }
+                    ),
+                    idleIcon: "text.insert"
+                )
+            }
+
+            RowSeparator()
+            ControlSettingRow(
+                title: "Hold to edit selection",
+                info: "Select text in any app, hold the shortcut, and speak an instruction like \"make this formal\". With nothing selected, the spoken instruction generates text at the cursor. Requires Magic Format."
+            ) {
+                HotkeyRecorderButton(
+                    configuration: $appState.editModeHotkeyConfiguration,
+                    idleIcon: "pencil.line",
+                    allowsClear: true,
+                    clearHelp: "Remove the Edit Mode shortcut"
+                )
+            }
+
+            if let message = appState.hotkeyValidationMessage {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(SettingsMotion.notice)
+            }
+        }
+    }
+
+    // MARK: - Indicator
+
+    private var indicator: some View {
+        SettingsGroup(heading: "Indicator") {
+            ToggleSettingRow(
+                title: "Live transcription preview",
+                isOn: $appState.liveTranscriptionPreviewEnabled
+            )
+
+            RowSeparator()
+            ToggleSettingRow(
+                title: "Hide while idle",
+                info: "Hide the floating indicator when \(AppIdentity.current.displayName) is ready but not actively dictating. When hidden, floating click-to-start is unavailable until the indicator appears again for recording, processing, or errors.",
+                isOn: $appState.hideFloatingIndicatorWhenIdle
+            )
+
+            RowSeparator()
+            ControlSettingRow(
+                title: "Position",
+                info: "Drag the floating pill to place it somewhere that stays out of the way."
+            ) {
+                HStack(spacing: 12) {
+                    Text(appState.floatingIndicatorPlacement == nil ? "Default" : "Moved")
+                        .font(AppTypography.rowTitle)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+
+                    Button("Reset") {
+                        appState.resetFloatingIndicatorPlacement()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(appState.floatingIndicatorPlacement == nil)
+                }
+            }
+        }
+    }
+
+    // MARK: - Dictation
+
+    private var dictation: some View {
+        SettingsGroup(heading: "Dictation") {
+            ToggleSettingRow(
+                title: "Press Enter after pasting",
+                info: "You can also say \"send\" or \"enter\" at the end of a dictation to trigger this once, without turning it on here.",
+                isOn: $appState.autoSubmitEnabled
+            )
+        }
+    }
+
+    // MARK: - Startup
+
+    private var startup: some View {
+        SettingsGroup(heading: "Startup") {
+            ToggleSettingRow(
+                title: "Launch at login",
+                isOn: Binding(
+                    get: { appState.launchAtLoginEnabledForUI },
+                    set: { appState.setLaunchAtLoginEnabled($0) }
+                )
+            )
+
+            if let notice = appState.launchAtLoginError ?? appState.launchAtLoginWarningText {
+                Label(notice, systemImage: "exclamationmark.triangle.fill")
+                    .font(AppTypography.subheadline)
+                    .foregroundStyle(appState.launchAtLoginError == nil ? Color.orange : Color.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(SettingsMotion.notice)
+            }
+        }
+    }
+
+    // MARK: - Privacy
+
+    private var privacy: some View {
+        SettingsGroup(heading: "Privacy") {
+            ToggleSettingRow(
+                title: "Share anonymous analytics",
+                isOn: Binding(
+                    get: { appState.shareAnalyticsEnabled },
+                    set: { appState.shareAnalyticsEnabled = $0 }
+                )
+            )
+
+            RowSeparator()
+            DisclosureSettingRow(title: "What we collect", value: "") {
+                appState.openAnalyticsPrivacyInfo()
+            }
+        }
+    }
+
+    // MARK: - About
+
+    private var about: some View {
+        SettingsGroup(heading: "About") {
+            ControlSettingRow(title: "Version") {
+                HStack(spacing: 12) {
+                    Text(appState.appVersionText)
+                        .font(AppTypography.codeBody)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+
+                    ActionIconButton(
+                        systemName: "arrow.triangle.2.circlepath",
+                        accessibilityLabel: "Check for updates",
+                        tint: MainWindowPalette.tertiaryText,
+                        hoverTint: Color.primary
+                    ) {
+                        appState.checkForUpdates()
+                    }
+                    .help("Check for updates")
+                    .disabled(!appState.canCheckForUpdates)
+                    .opacity(appState.canCheckForUpdates ? 1 : 0.4)
                 }
             }
 
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Startup")
-
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                        SettingsToggleRow(
-                            title: "Launch at Login",
-                            detail: appState.launchAtLoginDetailText,
-                            isOn: Binding(
-                                get: { appState.launchAtLoginEnabledForUI },
-                                set: { appState.setLaunchAtLoginEnabled($0) }
-                            )
-                        )
-
-                        if let error = appState.launchAtLoginError {
-                            Text(error)
-                                .font(AppTypography.caption)
-                                .foregroundStyle(.red)
-                        }
+            RowSeparator()
+            ControlSettingRow(
+                title: "Update channel",
+                info: appState.updateChannel.detail
+            ) {
+                Picker(
+                    "Update channel",
+                    selection: Binding(
+                        get: { appState.updateChannel },
+                        set: { appState.setUpdateChannel($0) }
+                    )
+                ) {
+                    ForEach(UpdateChannel.allCases) { channel in
+                        Text(channel.title)
+                            .tag(channel)
                     }
                 }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
             }
 
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "Privacy")
+            RowSeparator()
+            ToggleSettingRow(
+                title: "Check automatically",
+                isOn: Binding(
+                    get: { appState.automaticallyChecksForUpdates },
+                    set: { appState.setAutomaticallyChecksForUpdates($0) }
+                )
+            )
 
-                SurfaceCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        SettingsToggleRow(
-                            title: "Share Anonymous Analytics",
-                            detail: "Helps improve Suniye with anonymous usage stats — word counts, timings, hardware, and feature usage. Never your audio or transcripts. Turn off anytime.",
-                            isOn: Binding(
-                                get: { appState.shareAnalyticsEnabled },
-                                set: { appState.shareAnalyticsEnabled = $0 }
-                            )
-                        )
-                        Button("Learn what we collect") {
-                            appState.openAnalyticsPrivacyInfo()
-                        }
-                        .buttonStyle(.link)
-                        .font(AppTypography.subheadline)
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: AppMetrics.cardSectionSpacing) {
-                SectionHeading(title: "About")
-
-                SurfaceCard {
-                    VStack(spacing: 12) {
-                        HStack(spacing: 12) {
-                            Text(AppIdentity.current.displayName)
-                                .font(AppTypography.bodyMedium)
-                            Spacer(minLength: 0)
-                            Text(appState.appVersionText)
-                                .font(AppTypography.codeBodyMedium)
-                                .foregroundStyle(MainWindowPalette.secondaryText)
-                        }
-
-                        CardDivider()
-
-                        HStack(alignment: .center, spacing: 12) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Update Channel")
-                                    .font(AppTypography.body)
-                                Text(appState.updateChannel.detail)
-                                    .font(AppTypography.subheadline)
-                                    .foregroundStyle(MainWindowPalette.secondaryText)
-                            }
-
-                            Spacer(minLength: 12)
-
-                            Picker(
-                                "Update Channel",
-                                selection: Binding(
-                                    get: { appState.updateChannel },
-                                    set: { appState.setUpdateChannel($0) }
-                                )
-                            ) {
-                                ForEach(UpdateChannel.allCases) { channel in
-                                    Text(channel.title)
-                                        .tag(channel)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.segmented)
-                            .frame(width: 160)
-                        }
-
-                        CardDivider()
-
-                        SettingsToggleRow(
-                            title: "Automatically Check for Updates",
-                            detail: "\(AppIdentity.current.displayName) checks in the background and asks before installing.",
-                            isOn: Binding(
-                                get: { appState.automaticallyChecksForUpdates },
-                                set: { appState.setAutomaticallyChecksForUpdates($0) }
-                            )
-                        )
-
-                        CardDivider()
-
-                        HStack(spacing: 8) {
-                            Button("Report a Problem") {
-                                appState.openIssueReportWindow()
-                            }
-                            .buttonStyle(.bordered)
-
-                            Spacer(minLength: 12)
-
-                            Button("Check for Updates") {
-                                appState.checkForUpdates()
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(!appState.canCheckForUpdates)
-                        }
-                    }
-                }
+            RowSeparator()
+            DisclosureSettingRow(title: "Report a problem", value: "") {
+                appState.openIssueReportWindow()
             }
         }
     }
@@ -916,18 +492,18 @@ private struct HotkeyRecorderButton: View {
         }
     }
 
-    /// The recorder sits on a card, so it needs a surface of its own to read as
-    /// pressable. On macOS 26 that is interactive glass; below it, the elevated
-    /// input fill, matching the app's other editable fields.
-    @ViewBuilder
+    /// The recorder needs a surface of its own to read as pressable. Flat, like
+    /// the app's other editable fields, with an accent edge while capturing
+    /// standing in for what the glass highlight used to say.
     private var recorderSurface: some View {
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        if #available(macOS 26, *) {
-            shape.fill(.clear)
-                .glassEffect(isCapturing ? .regular.interactive() : .regular, in: shape)
-        } else {
-            shape.fill(MainWindowPalette.editorBackground)
-        }
+        return shape.fill(MainWindowPalette.editorBackground)
+            .overlay(
+                shape.strokeBorder(
+                    isCapturing ? Color.accentColor.opacity(0.7) : MainWindowPalette.cardStroke,
+                    lineWidth: isCapturing ? 1.5 : 1
+                )
+            )
     }
 
     private func toggleCapture() {

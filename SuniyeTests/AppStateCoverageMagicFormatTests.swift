@@ -18,7 +18,10 @@ final class AppStateCoverageMagicFormatTests: XCTestCase {
         XCTAssertFalse(appState.isMagicFormatSetupTestInProgress)
     }
 
-    func testSetupTestReturnsEarlyWhenLocalProviderSelected() async {
+    /// The endpoint set-up sheet exists so an endpoint can be configured and
+    /// tested *before* switching to it, so the API test no longer requires the
+    /// API engine to be the selected one. It used to return early here.
+    func testSetupTestRunsEvenWhenAnotherProviderIsSelected() async {
         let appState = makeTestAppState(
             appleMagicFormatPostProcessor: NoopAppleMagicFormatPostProcessor(availability: .available),
             keychainService: TestKeychainService(value: "key")
@@ -29,7 +32,9 @@ final class AppStateCoverageMagicFormatTests: XCTestCase {
 
         await appState.testMagicFormatSetup(apiKeyDraft: "draft")
 
-        XCTAssertNil(appState.magicFormatSetupTestResult)
+        XCTAssertEqual(appState.magicFormatSetupTestResult?.severity, .success)
+        XCTAssertFalse(appState.isMagicFormatSetupTestInProgress)
+        XCTAssertNil(appState.magicFormatTestingProvider)
     }
 
     func testSetupTestReturnsEarlyForInvalidEndpoint() async {

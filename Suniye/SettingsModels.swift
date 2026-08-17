@@ -22,9 +22,29 @@ struct RecentResult: Identifiable, Equatable, Codable {
     let createdAt: Date
     let durationSeconds: TimeInterval
     let wasLLMPolished: Bool
+    /// Where the dictation was inserted. Optional because history written before
+    /// this existed has no source app — those rows decode with nil rather than
+    /// failing, and simply show no app.
+    var appBundleID: String?
 
     var wordCount: Int {
         text.dictationWordCount
+    }
+
+    init(
+        id: UUID,
+        text: String,
+        createdAt: Date,
+        durationSeconds: TimeInterval,
+        wasLLMPolished: Bool,
+        appBundleID: String? = nil
+    ) {
+        self.id = id
+        self.text = text
+        self.createdAt = createdAt
+        self.durationSeconds = durationSeconds
+        self.wasLLMPolished = wasLLMPolished
+        self.appBundleID = appBundleID
     }
 }
 
@@ -535,4 +555,25 @@ struct GeneralSettings: Codable, Equatable {
 struct FloatingIndicatorPlacement: Codable, Equatable {
     var centerXRatio: Double
     var bottomYRatio: Double
+}
+
+
+/// One app's share of dictation history, for the Transcripts header. The name is
+/// resolved once when the ranking is built, not per read: an uninstalled app has
+/// no honest name to show and has to be dropped *before* the ranking is cut to
+/// three, or an installed app ranked fourth is lost with it.
+struct DictationAppUsage: Identifiable, Equatable {
+    let bundleID: String
+    let count: Int
+    let name: String
+
+    var id: String { bundleID }
+
+    static func resolvedName(for bundleID: String) -> String? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        return FileManager.default.displayName(atPath: url.path)
+            .replacingOccurrences(of: ".app", with: "")
+    }
 }

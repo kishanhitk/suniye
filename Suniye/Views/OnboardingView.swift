@@ -244,6 +244,7 @@ struct OnboardingView: View {
                 ProgressView(value: appState.downloadProgress)
                     .progressViewStyle(.linear)
                     .frame(width: 76)
+                    .subtleScrollers()
 
                 Text("Downloading speech model")
 

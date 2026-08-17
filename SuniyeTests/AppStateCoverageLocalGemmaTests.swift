@@ -277,10 +277,10 @@ final class AppStateCoverageLocalGemmaTests: XCTestCase {
 
         await appState.testLocalGemmaSetup()
 
-        XCTAssertEqual(
-            appState.magicFormatSetupTestResult,
-            MagicFormatSetupTestResult(message: "Local model works.", severity: .success)
-        )
+        // Assert the meaningful fields, not the whole struct: the result also
+        // carries a measured latency, which is not deterministic in a test.
+        XCTAssertEqual(appState.magicFormatSetupTestResult?.message, "Local model works.")
+        XCTAssertEqual(appState.magicFormatSetupTestResult?.severity, .success)
     }
 
     // MARK: - Provider detail text and key status

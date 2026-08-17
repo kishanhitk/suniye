@@ -134,6 +134,21 @@ struct MagicFormatSetupTestResult: Equatable {
 
     let message: String
     let severity: Severity
+    /// Round trip for the test request. Already measured for the log line; a
+    /// successful test that also reports how long it took answers "is this fast
+    /// enough to sit in my dictation path?" at the moment the user asks it.
+    var latencyMs: Int?
+
+    /// "Latency 840 ms" / "Latency 1.2 s".
+    var latencyText: String? {
+        guard let latencyMs, severity == .success else {
+            return nil
+        }
+        if latencyMs < 1000 {
+            return "Latency \(latencyMs) ms"
+        }
+        return "Latency \(String(format: "%.1f", Double(latencyMs) / 1000)) s"
+    }
 }
 
 struct ASRModelBannerState: Equatable {
@@ -235,6 +250,12 @@ final class AppState {
         }
     }
     var modelDownloadStartedAt: Date?
+    /// One model operation at a time. Downloads and loads were split into
+    /// separate slots so an installed model could be selected mid-download; the
+    /// resulting concurrent phase/progress state proved to be a source of races
+    /// (stranded captures, progress reset by unrelated operations, deferrals
+    /// reported as failures), so operations are serialised again. Reintroducing
+    /// concurrency needs a real per-operation model, not a second slot.
     var activeASRModelOperationID: ASRModelID? {
         didSet {
             if oldValue != activeASRModelOperationID {
@@ -242,6 +263,7 @@ final class AppState {
             }
         }
     }
+
     var loadedASRModelID: ASRModelID? {
         didSet {
             if oldValue != loadedASRModelID {
@@ -266,6 +288,9 @@ final class AppState {
     /// Durable dictation totals. Mirrored from `statsStore` so the dashboard
     /// never sums buckets during a SwiftUI body evaluation.
     var dictationStats = DictationStats.empty
+    /// Where dictation lands most, recomputed when history changes rather than
+    /// scanned per body evaluation.
+    private(set) var topDictationApps: [DictationAppUsage] = []
     var recentResults: [RecentResult] = [] {
         didSet {
             guard !isHydratingHistory else {
@@ -737,7 +762,25 @@ final class AppState {
     }
     var llmKeyOperationError: String?
     var isMagicFormatSetupTestInProgress = false
-    var magicFormatSetupTestResult: MagicFormatSetupTestResult?
+    /// Which engine the running test belongs to. The engine chooser lets you test
+    /// a row before switching to it, so "a test is running" is not enough — the
+    /// UI needs to know whose.
+    var magicFormatTestingProvider: MagicFormatProvider?
+    /// Which engine produced the standing result. A success from one engine must
+    /// not be read as certifying another.
+    private(set) var magicFormatLastTestedProvider: MagicFormatProvider?
+    /// The configuration the standing API result was produced with: key,
+    /// endpoint and model together. Editing any of them after a success means
+    /// the success no longer describes what would run.
+    private(set) var magicFormatLastTestedAPIFingerprint: Int?
+    var magicFormatSetupTestResult: MagicFormatSetupTestResult? {
+        didSet {
+            if magicFormatSetupTestResult == nil {
+                magicFormatLastTestedProvider = nil
+                magicFormatLastTestedAPIFingerprint = nil
+            }
+        }
+    }
     private var magicFormatSetupTestRequestID = 0
     var localGemmaInstallState: LocalLLMInstallState = .notInstalled {
         didSet {
@@ -770,6 +813,22 @@ final class AppState {
         modelManager.isInstalled(selectedASRModelID)
     }
 
+    /// Masked stand-in for a stored key: enough to recognise which key is saved,
+    /// never enough to use it. Without it the field reads "Paste API key" while
+    /// the status says Connected, which looks like nothing is stored.
+    private(set) var llmAPIKeyHint: String?
+    private(set) var currentLLMAPIKeyFingerprint: Int?
+
+    /// The API key's own state. `llmKeyStatusText` answers "is the active engine
+    /// ready", which in the endpoint sheet reported the local model's health next
+    /// to the key field.
+    var llmAPIKeyStatusText: String {
+        if hasLLMAPIKey && isAPIMagicFormatSetupVerified {
+            return "Connected"
+        }
+        return hasLLMAPIKey ? "Saved" : "No key"
+    }
+
     var llmKeyStatusText: String {
         if usesLocalMagicFormatSettings {
             if usesAppleMagicFormatSettings {
@@ -777,21 +836,50 @@ final class AppState {
             }
             return localGemmaMagicFormatAvailability.isAvailable ? "Ready" : "Unavailable"
         }
-        if hasLLMAPIKey && isMagicFormatSetupVerified {
+        if hasLLMAPIKey && isAPIMagicFormatSetupVerified {
             return "Connected"
         }
         return hasLLMAPIKey ? "Saved" : "Not connected"
     }
 
-    var isMagicFormatSetupVerified: Bool {
-        magicFormatSetupTestResult?.severity == .success
-    }
-
-    func canTestMagicFormatSetup(apiKeyDraft: String) -> Bool {
-        guard llmEnabled, needsAPIConfigurationForMagicFormat, !isMagicFormatSetupTestInProgress else {
+    /// Whether the *API endpoint* specifically has been verified. Testing Local
+    /// Gemma or Apple Intelligence sets the shared result too, and that must not
+    /// certify an endpoint the user has never tested — nor may a success against
+    /// an unsaved draft key certify whatever key is actually stored.
+    var isAPIMagicFormatSetupVerified: Bool {
+        guard magicFormatSetupTestResult?.severity == .success,
+              magicFormatLastTestedProvider == .openAICompatible,
+              let testedFingerprint = magicFormatLastTestedAPIFingerprint,
+              let keyFingerprint = currentLLMAPIKeyFingerprint
+        else {
             return false
         }
-        guard llmEndpointValidationError == nil, llmModelValidationError == nil else {
+        return testedFingerprint == Self.apiConfigurationFingerprint(
+            keyFingerprint: keyFingerprint,
+            settings: currentLLMSettings()
+        )
+    }
+
+    /// One value for "the API configuration that would run right now", so a
+    /// test result can be tied to it and invalidated by any edit.
+    private static func apiConfigurationFingerprint(keyFingerprint: Int, settings: LLMSettings) -> Int {
+        var hasher = Hasher()
+        hasher.combine(keyFingerprint)
+        hasher.combine(settings.endpointURLString)
+        hasher.combine(settings.validatedModelId ?? "")
+        return hasher.finalize()
+    }
+
+
+
+    /// Deliberately does not require the API engine to be the one in use: the
+    /// set-up sheet exists so an endpoint can be configured and tested *before*
+    /// switching to it.
+    func canTestMagicFormatSetup(apiKeyDraft: String) -> Bool {
+        guard llmEnabled, !isMagicFormatSetupTestInProgress else {
+            return false
+        }
+        guard apiEndpointDraftValidationError == nil, apiModelDraftValidationError == nil else {
             return false
         }
         return effectiveMagicFormatTestAPIKey(apiKeyDraft: apiKeyDraft) != nil
@@ -821,6 +909,18 @@ final class AppState {
             return nil
         }
         return currentLLMSettings().endpointValidationError
+    }
+
+    /// Validity of the API settings themselves, whatever engine is active. The
+    /// scoped properties above answer "should the page complain right now";
+    /// these answer "is this endpoint usable", which is what the set-up sheet
+    /// and its Test button need before the API engine is ever selected.
+    var apiEndpointDraftValidationError: String? {
+        currentLLMSettings().endpointValidationError
+    }
+
+    var apiModelDraftValidationError: String? {
+        currentLLMSettings().modelValidationError
     }
 
     var llmModelValidationError: String? {
@@ -1063,6 +1163,13 @@ final class AppState {
         }
     }
 
+    /// The active-model card already names the model as the one in use, so a pill
+    /// repeating "Current" is noise. It earns its space only when the state is
+    /// something else: downloading, loading, missing, failed.
+    var asrModelStatusNeedsAttention: Bool {
+        modelStatusValue != "Current"
+    }
+
     var modelStatusColor: Color {
         switch phase {
         case .ready, .recording, .transcribing:
@@ -1240,13 +1347,30 @@ final class AppState {
         return !(loadedASRModelID == modelID && selectedASRModelID == modelID)
     }
 
+    /// Whether the model's files are on disk. System-managed models answer
+    /// `false` here because their asset is owned by macOS, not by us.
+    func isASRModelDownloaded(_ modelID: ASRModelID) -> Bool {
+        modelManager.isInstalled(modelID)
+    }
+
+    /// Whether a system-managed model's OS asset is actually cached. Only
+    /// answerable asynchronously, which is why callers cannot simply treat
+    /// "system-managed" as "installed" — an uncached asset means a large
+    /// OS-managed download.
+    func isSystemManagedASRAssetInstalled(_ modelID: ASRModelID) async -> Bool {
+        await modelManager.isSystemManagedAssetInstalled(modelID)
+    }
+
     func asrModelSecondaryActionsEnabled(for modelID: ASRModelID) -> Bool {
         // System-managed models (Apple Speech) have no on-disk folder to open and can't
         // be deleted by us, so hide the folder/trash actions for them.
         guard !ASRModelCatalog.entry(for: modelID).isSystemManaged else {
             return false
         }
-        return modelManager.isInstalled(modelID) && activeASRModelOperationID == nil && phase != .recording && phase != .transcribing
+        return modelManager.isInstalled(modelID)
+            && activeASRModelOperationID == nil
+            && phase != .recording
+            && phase != .transcribing
     }
 
     func asrModelProgressLabel(for modelID: ASRModelID) -> String? {
@@ -1284,6 +1408,17 @@ final class AppState {
 
     var launchAtLoginDetailText: String {
         launchAtLoginStatus.detailText
+    }
+
+    /// On and off need no explanation \u{2014} the switch says which it is. Only the
+    /// states where the switch does not tell the whole truth are worth surfacing.
+    var launchAtLoginWarningText: String? {
+        switch launchAtLoginStatus {
+        case .requiresApproval, .unsupported:
+            return launchAtLoginStatus.detailText
+        case .enabled, .disabled:
+            return nil
+        }
     }
 
     var launchAtLoginEnabledForUI: Bool {
@@ -1661,7 +1796,7 @@ final class AppState {
         magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol = MagicFormatPromptFileStore(),
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
         historyStore: HistoryStoreProtocol = HistoryStore(),
-        statsStore: DictationStatsStoring = DictationStatsStore(),
+        statsStore: DictationStatsStoring = DictationStatsStore.makeDefault(),
         keychainService: KeychainServiceProtocol = KeychainService(),
         appUpdateController: AppUpdateControllerProtocol? = nil,
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
@@ -2299,6 +2434,27 @@ final class AppState {
 
     func refreshLLMKeyStatus() {
         hasLLMAPIKey = keychainService.hasLLMKey()
+        refreshLLMKeyDerivedState()
+    }
+
+    /// The masked hint and the fingerprint are read once per key change rather
+    /// than per SwiftUI body evaluation: both derive from the keychain, and a
+    /// synchronous credential read does not belong on the render path.
+    private func refreshLLMKeyDerivedState() {
+        guard let key = try? keychainService.getLLMKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !key.isEmpty
+        else {
+            llmAPIKeyHint = nil
+            currentLLMAPIKeyFingerprint = nil
+            return
+        }
+        currentLLMAPIKeyFingerprint = key.hashValue
+        let dots = "\u{2022}\u{2022}\u{2022}\u{2022}"
+        // The hint must stay a hint: a prefix plus a tail recovers most of a
+        // short key, so anything that short is masked outright.
+        llmAPIKeyHint = key.count >= 24
+            ? "\(key.prefix(4)) \(dots) \(dots) \(key.suffix(4))"
+            : "\(dots) \(dots)"
     }
 
     func saveLLMAPIKey(_ key: String) {
@@ -2339,6 +2495,7 @@ final class AppState {
     func clearMagicFormatSetupTestResult() {
         magicFormatSetupTestRequestID += 1
         isMagicFormatSetupTestInProgress = false
+        magicFormatTestingProvider = nil
         magicFormatSetupTestResult = nil
     }
 
@@ -2346,9 +2503,6 @@ final class AppState {
         clearMagicFormatSetupTestResult()
 
         guard llmEnabled else {
-            return
-        }
-        guard needsAPIConfigurationForMagicFormat else {
             return
         }
         guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
@@ -2363,6 +2517,15 @@ final class AppState {
 
         let requestID = magicFormatSetupTestRequestID
         isMagicFormatSetupTestInProgress = true
+        magicFormatTestingProvider = .openAICompatible
+        magicFormatLastTestedProvider = .openAICompatible
+        // The configuration this run actually used, so a success against an
+        // unsaved draft key, or against an endpoint or model that is then
+        // edited, cannot certify what is stored now.
+        magicFormatLastTestedAPIFingerprint = Self.apiConfigurationFingerprint(
+            keyFingerprint: apiKey.hashValue,
+            settings: currentLLMSettings()
+        )
         let config = MagicFormatCoordinator.makeAPIConfig(
             settings: currentLLMSettings(),
             apiKey: apiKey,
@@ -2374,6 +2537,7 @@ final class AppState {
         defer {
             if requestID == magicFormatSetupTestRequestID {
                 isMagicFormatSetupTestInProgress = false
+                magicFormatTestingProvider = nil
             }
         }
 
@@ -2383,11 +2547,12 @@ final class AppState {
                 AppLogger.shared.log(.info, "ignored stale magic format setup test success")
                 return
             }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
             magicFormatSetupTestResult = MagicFormatSetupTestResult(
                 message: "Connection works.",
-                severity: .success
+                severity: .success,
+                latencyMs: latencyMs
             )
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
             AppLogger.shared.log(.info, "magic format setup test success model=\(config.modelId) latency_ms=\(latencyMs)")
         } catch let error as LLMPostProcessorError {
             guard requestID == magicFormatSetupTestRequestID else {
@@ -2670,10 +2835,69 @@ final class AppState {
         }
     }
 
+    /// Same shape as the local model test: run the engine once and report how
+    /// long it took, so "is this fast enough to sit in my dictation path?" is
+    /// answerable before committing to it.
+    func testAppleMagicFormatSetup() async {
+        clearMagicFormatSetupTestResult()
+
+        guard llmEnabled else {
+            return
+        }
+
+        guard appleMagicFormatAvailability.isAvailable else {
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: appleMagicFormatAvailability.statusText,
+                severity: .error
+            )
+            return
+        }
+
+        let requestID = magicFormatSetupTestRequestID
+        isMagicFormatSetupTestInProgress = true
+        magicFormatTestingProvider = .appleFoundationModels
+        magicFormatLastTestedProvider = .appleFoundationModels
+        let startTime = Date()
+        let config = MagicFormatCoordinator.makeAppleConfig(settings: currentLLMSettings())
+
+        defer {
+            if requestID == magicFormatSetupTestRequestID {
+                isMagicFormatSetupTestInProgress = false
+                magicFormatTestingProvider = nil
+            }
+        }
+
+        do {
+            try await appleMagicFormatPostProcessor.testSetup(config: config)
+            guard requestID == magicFormatSetupTestRequestID else {
+                AppLogger.shared.log(.info, "ignored stale apple setup test success")
+                return
+            }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: "Apple Intelligence works.",
+                severity: .success,
+                latencyMs: latencyMs
+            )
+            AppLogger.shared.log(.info, "apple setup test success latency_ms=\(latencyMs)")
+        } catch {
+            guard requestID == magicFormatSetupTestRequestID else {
+                AppLogger.shared.log(.info, "ignored stale apple setup test failure")
+                return
+            }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(
+                message: error.localizedDescription,
+                severity: .error
+            )
+            AppLogger.shared.log(.warning, "apple setup test failed latency_ms=\(latencyMs)")
+        }
+    }
+
     func testLocalGemmaSetup() async {
         clearMagicFormatSetupTestResult()
 
-        guard llmEnabled, usesLocalGemmaMagicFormatSettings else {
+        guard llmEnabled else {
             return
         }
 
@@ -2687,12 +2911,15 @@ final class AppState {
 
         let requestID = magicFormatSetupTestRequestID
         isMagicFormatSetupTestInProgress = true
+        magicFormatTestingProvider = .localGemma
+        magicFormatLastTestedProvider = .localGemma
         let startTime = Date()
         let config = MagicFormatCoordinator.makeLocalGemmaConfig(settings: currentLLMSettings())
 
         defer {
             if requestID == magicFormatSetupTestRequestID {
                 isMagicFormatSetupTestInProgress = false
+                magicFormatTestingProvider = nil
             }
         }
 
@@ -2702,11 +2929,12 @@ final class AppState {
                 AppLogger.shared.log(.info, "ignored stale local gemma setup test success")
                 return
             }
+            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
             magicFormatSetupTestResult = MagicFormatSetupTestResult(
                 message: "Local model works.",
-                severity: .success
+                severity: .success,
+                latencyMs: latencyMs
             )
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
             AppLogger.shared.log(.info, "local gemma setup test success latency_ms=\(latencyMs)")
         } catch {
             guard requestID == magicFormatSetupTestRequestID else {
@@ -2722,10 +2950,15 @@ final class AppState {
         }
     }
 
-    func copyRecentResult(_ result: RecentResult) {
+    /// Reports whether the pasteboard actually took the text. `clearContents`
+    /// has already run by the time `setString` can fail, so a caller that
+    /// confirms unconditionally would promise a copy that left the clipboard
+    /// empty.
+    @discardableResult
+    func copyRecentResult(_ result: RecentResult) -> Bool {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(result.text, forType: .string)
+        return pasteboard.setString(result.text, forType: .string)
     }
 
     @discardableResult
@@ -2795,7 +3028,10 @@ final class AppState {
     /// yet, download it with a real progress bar; otherwise load it straight away. Then
     /// selects it. Avoids the silent, hung-looking first-run download inside `loadModel`.
     private func prepareSystemManagedModel(_ modelID: ASRModelID) {
-        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+        guard phase != .recording && phase != .transcribing else {
+            return
+        }
+        guard activeASRModelOperationID == nil else {
             return
         }
 
@@ -2807,7 +3043,10 @@ final class AppState {
         lastFailedASRModelID = nil
         lastFailedASRModelError = nil
 
-        Task {
+        // Held in the same handle the file-based downloads use, so an OS asset
+        // fetch is cancellable too — it was running in an unassigned Task, which
+        // left the Cancel action hidden for a download of the same size.
+        asrDownloadTask = Task {
             do {
                 let assetInstalled = await modelManager.isSystemManagedAssetInstalled(modelID)
                 if !assetInstalled {
@@ -2839,23 +3078,41 @@ final class AppState {
                 lastFailedASRModelError = nil
                 AppLogger.shared.log(.info, "system-managed model ready id=\(modelID.rawValue)")
             } catch {
-                if modelDownloadStartedAt != nil {
-                    trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .failed, startedAt: modelDownloadStartedAt)
+                if Self.isCancellation(error) {
+                    if modelDownloadStartedAt != nil {
+                        trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .canceled, startedAt: modelDownloadStartedAt)
+                    }
+                    downloadProgress = 0
+                    if hadLoadedModel {
+                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
+                    } else {
+                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required")
+                    }
+                    lastError = nil
+                    AppLogger.shared.log(.info, "system-managed asset download canceled id=\(modelID.rawValue)")
+                } else {
+                    if modelDownloadStartedAt != nil {
+                        trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .failed, startedAt: modelDownloadStartedAt)
+                    }
+                    handleASRModelOperationFailure(
+                        for: modelID,
+                        error: error,
+                        fallbackToReadyState: hadLoadedModel
+                    )
                 }
-                handleASRModelOperationFailure(
-                    for: modelID,
-                    error: error,
-                    fallbackToReadyState: hadLoadedModel
-                )
             }
 
             activeASRModelOperationID = nil
             modelDownloadStartedAt = nil
+            asrDownloadTask = nil
         }
     }
 
     func downloadASRModel(_ modelID: ASRModelID, autoSelect: Bool) {
-        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+        guard phase != .recording && phase != .transcribing else {
+            return
+        }
+        guard activeASRModelOperationID == nil else {
             return
         }
 
@@ -2879,8 +3136,7 @@ final class AppState {
                     }
                 }
 
-                phase = .loading
-                statusText = "Validating model..."
+                setPhaseUnlessCapturing(.loading, statusText: "Validating model...")
 
                 guard modelManager.isInstalled(modelID) else {
                     throw AppStateError.modelValidationFailed
@@ -2893,8 +3149,7 @@ final class AppState {
                     do {
                         try await loadRecognizer(for: modelID)
                         selectedASRModelID = modelID
-                        phase = .ready
-                        statusText = "Ready"
+                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
                         lastError = nil
                         lastFailedASRModelID = nil
                         lastFailedASRModelError = nil
@@ -2908,11 +3163,9 @@ final class AppState {
                     }
                 } else {
                     if hadLoadedModel {
-                        phase = .ready
-                        statusText = "Ready"
+                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
                     } else {
-                        phase = .needsModel
-                        statusText = "Model required"
+                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required")
                     }
                     lastFailedASRModelID = nil
                     lastFailedASRModelError = nil
@@ -2922,11 +3175,9 @@ final class AppState {
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .canceled, startedAt: modelDownloadStartedAt)
                     downloadProgress = 0
                     if hadLoadedModel {
-                        phase = .ready
-                        statusText = "Ready"
+                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
                     } else {
-                        phase = .needsModel
-                        statusText = "Model required"
+                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required")
                     }
                     lastError = nil
                     AppLogger.shared.log(.info, "model download canceled id=\(modelID.rawValue)")
@@ -2997,7 +3248,10 @@ final class AppState {
     }
 
     func selectASRModel(_ modelID: ASRModelID) {
-        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+        guard phase != .recording && phase != .transcribing else {
+            return
+        }
+        guard activeASRModelOperationID == nil else {
             return
         }
         guard loadedASRModelID != modelID else {
@@ -3040,7 +3294,10 @@ final class AppState {
     }
 
     func deleteASRModel(_ modelID: ASRModelID) {
-        guard phase != .recording && phase != .transcribing && activeASRModelOperationID == nil else {
+        guard phase != .recording && phase != .transcribing else {
+            return
+        }
+        guard activeASRModelOperationID == nil else {
             return
         }
 
@@ -3090,8 +3347,7 @@ final class AppState {
                 }
                 AppLogger.shared.log(.info, "model deleted id=\(modelID.rawValue)")
             } catch {
-                phase = .error
-                statusText = "Model delete failed"
+                setPhaseUnlessCapturing(.error, statusText: "Model delete failed")
                 lastError = error.localizedDescription
                 lastFailedASRModelID = modelID
                 lastFailedASRModelError = error.localizedDescription
@@ -3534,6 +3790,13 @@ final class AppState {
         )
     }
 
+    /// The model that would take over if `modelID` were deleted — the same
+    /// candidate list `deleteASRModel` falls back through, so the confirmation
+    /// cannot name a different model than the one that actually loads.
+    func asrModelFallbackAfterDeleting(_ modelID: ASRModelID) -> ASRModelCatalogEntry? {
+        orderedInstalledASRModelIDs(excluding: [modelID]).first.map { ASRModelCatalog.entry(for: $0) }
+    }
+
     private func orderedInstalledASRModelIDs(excluding excludedModelIDs: Set<ASRModelID> = []) -> [ASRModelID] {
         let installedModelIDs = Set(modelManager.installedModels())
         var orderedModelIDs: [ASRModelID] = []
@@ -3576,6 +3839,22 @@ final class AppState {
         throw lastError ?? AppStateError.modelValidationFailed
     }
 
+    /// Phase belongs to the dictation pipeline. A background download must never
+    /// move it out from under an active capture: `stopRecording` guards on
+    /// `phase == .recording`, so clobbering it mid-dictation strands the capture
+    /// and the hotkey release silently does nothing.
+    private var isCapturing: Bool {
+        phase == .recording || phase == .transcribing
+    }
+
+    private func setPhaseUnlessCapturing(_ newPhase: Phase, statusText newStatusText: String) {
+        guard !isCapturing else {
+            return
+        }
+        phase = newPhase
+        statusText = newStatusText
+    }
+
     private func handleASRModelOperationFailure(for modelID: ASRModelID, error: Error, fallbackToReadyState: Bool) {
         let message = Self.friendlyModelDownloadMessage(for: error) ?? error.localizedDescription
         downloadProgress = 0
@@ -3583,15 +3862,13 @@ final class AppState {
         lastFailedASRModelError = message
 
         if fallbackToReadyState, loadedASRModelID != nil {
-            phase = .ready
-            statusText = "Ready"
+            setPhaseUnlessCapturing(.ready, statusText: "Ready")
             lastError = nil
             return
         }
 
-        phase = .error
+        setPhaseUnlessCapturing(.error, statusText: "Download failed")
         lastError = message
-        statusText = "Download failed"
     }
 
     private func loadRecognizer(for modelID: ASRModelID) async throws {
@@ -3894,14 +4171,20 @@ final class AppState {
         let wasLLMPolished = llmOutcome?.ran ?? false
         var didCompleteDictation = false
         var didFailInsertion = false
+        var submitKeyFailed = false
         var didInsertFinalText = finalText.isEmpty
 
+        // Attribution is applied after insertion succeeds, not here: the record
+        // is stored before insertion is attempted so a failure is still
+        // recoverable, and a clipboard-only or failed session never reached the
+        // app the ranking would otherwise credit.
         let result = RecentResult(
             id: UUID(),
             text: finalText,
             createdAt: Date(),
             durationSeconds: duration,
-            wasLLMPolished: wasLLMPolished
+            wasLLMPolished: wasLLMPolished,
+            appBundleID: nil
         )
 
         // A completed system transcript must be recoverable even if insertion
@@ -3924,6 +4207,11 @@ final class AppState {
                 do {
                     try await textInsertionService.insertText(insertionText)
                     didInsertFinalText = true
+                    // Read after the insertion returns, not before it: the
+                    // service retries for around a second while a focused
+                    // element hydrates, so anything captured earlier can name
+                    // the app the user has since left.
+                    attributeStoredResult(result.id, to: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
                     dictationTiming.inserted = .now()
                     beginEditLearningTracking(insertedText: insertionText)
                     AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
@@ -3942,13 +4230,29 @@ final class AppState {
             }
         }
 
+        // A failed Enter must not cost the user the session: the text is
+        // already inserted and already in history, so throwing straight out of
+        // here skipped the accounting below and the numbers silently drifted.
+        // It is logged and tracked, but not surfaced as an insertion problem —
+        // the insertion succeeded.
         if usesSystemInsertion && shouldSubmit && didInsertFinalText {
             if !finalText.isEmpty {
                 try? await Task.sleep(nanoseconds: 120_000_000)
             }
-            try textInsertionService.submitActiveInput()
-            AppLogger.shared.log(.info, "submit command executed")
             didCompleteDictation = true
+            do {
+                try textInsertionService.submitActiveInput()
+                AppLogger.shared.log(.info, "submit command executed")
+            } catch {
+                // Not rethrown: the transcript was produced and inserted, so
+                // letting this reach the transcription catch reported
+                // "Transcription failed" for a dictation that in fact
+                // succeeded — only the Enter key did not land. The user is
+                // told exactly that, not that the text is missing.
+                AppLogger.shared.log(.error, "submit command failed error=\(error.localizedDescription)")
+                analytics.track(.error(type: .insertion, code: .unknown))
+                submitKeyFailed = true
+            }
         }
 
         if finalText.isEmpty && !shouldSubmit {
@@ -3980,6 +4284,9 @@ final class AppState {
             showInsertionRecoveryWarning()
         } else {
             isShowingInsertionRecoveryWarning = false
+            if submitKeyFailed {
+                showSubmitKeyFailureNotice()
+            }
         }
     }
 
@@ -4136,13 +4443,19 @@ final class AppState {
 
             try await requireAccessibilityForInsertion()
             try await textInsertionService.insertText(rewritten)
+            // Read after the insertion returns: the rewrite is asynchronous and
+            // the service retries while a focused element hydrates, so the
+            // session's app — or anything read before the call — can be stale.
+            let destinationApp = frontmostAppBundleIDProvider()
+                ?? activeDictationSession?.context.frontmostAppBundleID
             recentResults.insert(
                 RecentResult(
                     id: UUID(),
                     text: rewritten,
                     createdAt: Date(),
                     durationSeconds: duration,
-                    wasLLMPolished: true
+                    wasLLMPolished: true,
+                    appBundleID: destinationApp
                 ),
                 at: 0
             )
@@ -4244,15 +4557,60 @@ final class AppState {
         // new sessions are attributed exactly.
         statsStore.seedFromHistoryIfNeeded(recentResults)
         refreshDictationStats()
+        refreshTopDictationApps()
     }
 
     private func persistHistory() {
         historyStore.save(recentResults)
+        refreshTopDictationApps()
         onStateChange?()
+    }
+
+    /// Counts are a floor, not a share: the source app was only recorded from a
+    /// certain version on, and older transcripts carry no bundle ID at all. So
+    /// this reports "how many landed here", never a percentage of everything.
+    private func refreshTopDictationApps() {
+        var counts: [String: Int] = [:]
+        for result in recentResults {
+            guard let bundleID = result.appBundleID else {
+                continue
+            }
+            counts[bundleID, default: 0] += 1
+        }
+
+        topDictationApps = counts
+            // Drop apps that are no longer installed before cutting to three,
+            // otherwise an uninstalled leader takes an installed fourth place
+            // down with it and the header shows fewer apps than it has.
+            .compactMap { bundleID, count -> DictationAppUsage? in
+                guard let name = DictationAppUsage.resolvedName(for: bundleID) else {
+                    return nil
+                }
+                return DictationAppUsage(bundleID: bundleID, count: count, name: name)
+            }
+            // Count first, then bundle ID, so equal counts do not reshuffle on
+            // every refresh.
+            .sorted { ($0.count, $1.bundleID) > ($1.count, $0.bundleID) }
+            .prefix(3)
+            .map { $0 }
     }
 
     /// Mirrors the store into the observable properties the dashboard reads, so
     /// no SwiftUI body evaluation ever sums buckets.
+    /// Records which app a stored transcript actually landed in, once the
+    /// insertion has succeeded.
+    private func attributeStoredResult(_ id: UUID, to bundleID: String?) {
+        guard let bundleID, let index = recentResults.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        recentResults[index].appBundleID = bundleID
+    }
+
+    /// Called on termination: see `DictationStatsStore.flush()`.
+    func flushDictationStats() {
+        statsStore.flush()
+    }
+
     private func refreshDictationStats() {
         dictationStats = statsStore.stats
     }
@@ -4648,6 +5006,15 @@ final class AppState {
 
     private var insertionRecoveryMessage: String {
         "Couldn't insert text. Focus a text field, then press \(pasteLastTranscriptHotkeyConfiguration.compactDisplayString)."
+    }
+
+    /// The text is in; only the Enter after it did not post. Says so, rather
+    /// than the recovery warning's "couldn't insert" — which would send the
+    /// user to re-paste text that is already there.
+    private func showSubmitKeyFailureNotice() {
+        let message = "Text inserted, but Enter couldn't be sent. Press it yourself."
+        lastError = message
+        showTransientIndicatorError(message, restoreState: blockedStartRestoreIndicatorState(), duration: 3.0)
     }
 
     private func showInsertionRecoveryWarning() {
