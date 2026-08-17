@@ -1331,7 +1331,7 @@ final class AppStateSettingsTests: XCTestCase {
             nowProvider: { now }
         )
         appState.phase = .downloadingModel
-        appState.activeASRModelDownloadID = .parakeetV3
+        appState.activeASRModelOperationID = .parakeetV3
         appState.downloadProgress = 0.25
         appState.modelDownloadStartedAt = Date(timeIntervalSince1970: 540)
 
@@ -1348,7 +1348,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.selectedASRModelID = .senseVoice
         appState.loadedASRModelID = .senseVoice
         appState.phase = .downloadingModel
-        appState.activeASRModelDownloadID = .moonshineBase
+        appState.activeASRModelOperationID = .moonshineBase
         appState.downloadProgress = 0.2
 
         XCTAssertEqual(appState.modelStatusValue, "Current")
@@ -1361,7 +1361,7 @@ final class AppStateSettingsTests: XCTestCase {
         modelManager.installedModelIDs = []
         let appState = makeTestAppState(modelManager: modelManager)
         appState.phase = .downloadingModel
-        appState.activeASRModelDownloadID = .parakeetV3
+        appState.activeASRModelOperationID = .parakeetV3
         appState.downloadProgress = 0
 
         XCTAssertEqual(appState.modelDownloadProgressLabel, "0% downloaded • Zero KB of ~680 MB\nEstimating time remaining")
@@ -1388,7 +1388,7 @@ final class AppStateSettingsTests: XCTestCase {
         modelManager.installedModelIDs = []
         let appState = makeTestAppState(modelManager: modelManager)
         appState.phase = .loading
-        appState.activeASRModelLoadID = .parakeetV3
+        appState.activeASRModelOperationID = .parakeetV3
 
         XCTAssertTrue(appState.isModelOperationInProgress)
         XCTAssertEqual(appState.modelOperationStatusText, "Extracting and validating Parakeet TDT 0.6B v3…")

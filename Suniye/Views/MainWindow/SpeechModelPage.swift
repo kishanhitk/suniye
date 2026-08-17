@@ -246,13 +246,10 @@ struct SpeechModelSheet: View {
 
                 if let progressLabel = appState.asrModelProgressLabel(for: entry.id) {
                     VStack(alignment: .leading, spacing: 5) {
-                        // Keyed on the slot, not the global phase: switching
-                        // to another model mid-download moves phase to .loading
-                        // and would otherwise blank this bar.
-                        if appState.activeASRModelDownloadID == entry.id {
+                        if appState.phase == .downloadingModel {
                             ProgressView(value: appState.downloadProgress)
                                 .progressViewStyle(.linear)
-                        } else if appState.activeASRModelLoadID == entry.id {
+                        } else if appState.phase == .loading {
                             ProgressView()
                                 .controlSize(.small)
                         }

@@ -250,30 +250,18 @@ final class AppState {
         }
     }
     var modelDownloadStartedAt: Date?
-    /// A download writes one model's files to disk; a load hands a different
-    /// model's files to the recogniser. They contend for nothing, so each gets a
-    /// slot — sharing one was why choosing an already-installed model stayed
-    /// blocked for the length of an unrelated download.
-    var activeASRModelDownloadID: ASRModelID? {
-        didSet {
-            if oldValue != activeASRModelDownloadID {
-                onStateChange?()
-            }
-        }
-    }
-
-    var activeASRModelLoadID: ASRModelID? {
-        didSet {
-            if oldValue != activeASRModelLoadID {
-                onStateChange?()
-            }
-        }
-    }
-
-    /// The operation worth reporting in one line of UI. A foreground load
-    /// outranks a background download.
+    /// One model operation at a time. Downloads and loads were split into
+    /// separate slots so an installed model could be selected mid-download; the
+    /// resulting concurrent phase/progress state proved to be a source of races
+    /// (stranded captures, progress reset by unrelated operations, deferrals
+    /// reported as failures), so operations are serialised again. Reintroducing
+    /// concurrency needs a real per-operation model, not a second slot.
     var activeASRModelOperationID: ASRModelID? {
-        activeASRModelLoadID ?? activeASRModelDownloadID
+        didSet {
+            if oldValue != activeASRModelOperationID {
+                onStateChange?()
+            }
+        }
     }
 
     var loadedASRModelID: ASRModelID? {
@@ -1103,10 +1091,7 @@ final class AppState {
     }
 
     var modelExpectedByteCount: Int64 {
-        // The download slot specifically: with a load also in flight the union
-        // resolves to the model being loaded, and the progress label would size
-        // one model's download against another model's total.
-        modelManager.expectedDownloadSizeBytes(for: activeASRModelDownloadID ?? selectedASRModelID)
+        modelManager.expectedDownloadSizeBytes(for: activeASRModelOperationID ?? selectedASRModelID)
     }
 
     var modelExpectedSizeText: String {
@@ -1118,7 +1103,7 @@ final class AppState {
     }
 
     var modelDownloadProgressLabel: String {
-        guard activeASRModelDownloadID != nil else {
+        guard phase == .downloadingModel else {
             return ""
         }
 
@@ -1240,28 +1225,26 @@ final class AppState {
     }
 
     var asrModelBanner: ASRModelBannerState? {
-        // Keyed on the operation slots rather than the global phase. Switching
-        // to an installed model mid-download returns the phase to .ready, which
-        // used to take the download's banner — and the only Cancel button —
-        // off screen while the download was still running.
-        if let downloadID = activeASRModelDownloadID {
-            let entry = ASRModelCatalog.entry(for: downloadID)
-            return ASRModelBannerState(
-                title: "Downloading Model",
-                detail: "Installing \(entry.displayName) locally. Keep \(AppIdentity.current.displayName) open until the files finish validating.",
-                tone: .info,
-                progress: downloadProgress
-            )
-        }
-
-        if let loadID = activeASRModelLoadID {
-            let entry = ASRModelCatalog.entry(for: loadID)
-            return ASRModelBannerState(
-                title: "Loading Model",
-                detail: "Loading \(entry.displayName) into memory. The first load can take a moment.",
-                tone: .info,
-                progress: nil
-            )
+        if let activeASRModelOperationID {
+            let entry = ASRModelCatalog.entry(for: activeASRModelOperationID)
+            switch phase {
+            case .downloadingModel:
+                return ASRModelBannerState(
+                    title: "Downloading Model",
+                    detail: "Installing \(entry.displayName) locally. Keep \(AppIdentity.current.displayName) open until the files finish validating.",
+                    tone: .info,
+                    progress: downloadProgress
+                )
+            case .loading:
+                return ASRModelBannerState(
+                    title: "Loading Model",
+                    detail: "Loading \(entry.displayName) into memory. The first load can take a moment.",
+                    tone: .info,
+                    progress: nil
+                )
+            default:
+                break
+            }
         }
 
         if let lastFailedASRModelID, let lastFailedASRModelError, !lastFailedASRModelError.isEmpty {
@@ -1286,12 +1269,15 @@ final class AppState {
     }
 
     func asrModelStatusText(for modelID: ASRModelID) -> String {
-        if activeASRModelDownloadID == modelID {
-            return "Downloading"
-        }
-
-        if activeASRModelLoadID == modelID {
-            return "Loading"
+        if activeASRModelOperationID == modelID {
+            switch phase {
+            case .downloadingModel:
+                return "Downloading"
+            case .loading:
+                return "Loading"
+            default:
+                break
+            }
         }
 
         if loadedASRModelID == modelID && selectedASRModelID == modelID {
@@ -1330,12 +1316,8 @@ final class AppState {
     }
 
     func asrModelPrimaryActionTitle(for modelID: ASRModelID) -> String {
-        if activeASRModelLoadID == modelID {
-            return "Loading…"
-        }
-
-        if activeASRModelDownloadID == modelID {
-            return "Downloading…"
+        if activeASRModelOperationID == modelID {
+            return phase == .loading ? "Loading…" : "Downloading…"
         }
 
         if loadedASRModelID == modelID && selectedASRModelID == modelID {
@@ -1346,23 +1328,11 @@ final class AppState {
     }
 
     func asrModelCanPerformPrimaryAction(for modelID: ASRModelID) -> Bool {
+        guard activeASRModelOperationID == nil else {
+            return false
+        }
+
         guard phase != .recording && phase != .transcribing else {
-            return false
-        }
-
-        // One load at a time: the recogniser is a single slot.
-        guard activeASRModelLoadID == nil else {
-            return false
-        }
-
-        // The model being fetched is not usable until it lands.
-        guard activeASRModelDownloadID != modelID else {
-            return false
-        }
-
-        // A model already on disk can be switched to while something else
-        // downloads. Starting a second download cannot — downloads stay serial.
-        if !modelManager.isInstalled(modelID), activeASRModelDownloadID != nil {
             return false
         }
 
@@ -1382,22 +1352,24 @@ final class AppState {
             return false
         }
         return modelManager.isInstalled(modelID)
-            && activeASRModelLoadID == nil
-            && activeASRModelDownloadID != modelID
+            && activeASRModelOperationID == nil
             && phase != .recording
             && phase != .transcribing
     }
 
     func asrModelProgressLabel(for modelID: ASRModelID) -> String? {
-        if activeASRModelDownloadID == modelID {
+        guard activeASRModelOperationID == modelID else {
+            return nil
+        }
+
+        switch phase {
+        case .downloadingModel:
             return modelDownloadProgressLabel
-        }
-
-        if activeASRModelLoadID == modelID {
+        case .loading:
             return "Preparing the local recognizer."
+        default:
+            return nil
         }
-
-        return nil
     }
 
     func asrModelInstalledSizeText(for modelID: ASRModelID) -> String {
@@ -2051,7 +2023,7 @@ final class AppState {
                 lastError = "Model load failed: \(error.localizedDescription)"
                 statusText = "Load failed"
             }
-            activeASRModelLoadID = nil
+            activeASRModelOperationID = nil
         } else {
             phase = .needsModel
             statusText = "Model required"
@@ -3015,12 +2987,12 @@ final class AppState {
         guard phase != .recording && phase != .transcribing else {
             return
         }
-        guard activeASRModelLoadID == nil && activeASRModelDownloadID == nil else {
+        guard activeASRModelOperationID == nil else {
             return
         }
 
         let hadLoadedModel = loadedASRModelID != nil
-        activeASRModelLoadID = modelID
+        activeASRModelOperationID = modelID
         phase = .loading
         statusText = "Loading model..."
         lastError = nil
@@ -3031,11 +3003,6 @@ final class AppState {
             do {
                 let assetInstalled = await modelManager.isSystemManagedAssetInstalled(modelID)
                 if !assetInstalled {
-                    // The banner recognises downloads through this slot; left
-                    // in the load slot, a multi-hundred-megabyte OS asset fetch
-                    // showed as an indeterminate "Loading".
-                    activeASRModelDownloadID = modelID
-                    activeASRModelLoadID = nil
                     phase = .downloadingModel
                     statusText = "Downloading model..."
                     downloadProgress = 0
@@ -3051,16 +3018,6 @@ final class AppState {
                     }
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
                     modelDownloadStartedAt = nil
-                    activeASRModelDownloadID = nil
-                    // Only reclaim the load slot if it is still free, and never
-                    // mid-capture: an intervening switch can return the phase to
-                    // .ready and let dictation start while the asset is still
-                    // downloading, and swapping the recogniser under a live
-                    // capture is worse than deferring the switch.
-                    guard activeASRModelLoadID == nil, !isCapturing else {
-                        throw CancellationError()
-                    }
-                    activeASRModelLoadID = modelID
                     phase = .loading
                     statusText = "Loading model..."
                 }
@@ -3077,30 +3034,14 @@ final class AppState {
                 if modelDownloadStartedAt != nil {
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .failed, startedAt: modelDownloadStartedAt)
                 }
-                // The handoff yields with a cancellation when another switch
-                // owns the load slot or a capture is running. That is a
-                // deliberate deferral, not a failure, and reporting it would
-                // put "Download failed" on screen after a successful download.
-                if !Self.isCancellation(error) {
-                    handleASRModelOperationFailure(
-                        for: modelID,
-                        error: error,
-                        fallbackToReadyState: hadLoadedModel
-                    )
-                } else {
-                    AppLogger.shared.log(.info, "system-managed load deferred id=\(modelID.rawValue)")
-                }
+                handleASRModelOperationFailure(
+                    for: modelID,
+                    error: error,
+                    fallbackToReadyState: hadLoadedModel
+                )
             }
 
-            // Only if this task still owns them: the handoff above yields when
-            // another switch has taken the load slot, and clearing it here
-            // would hand that switch's ownership to nobody.
-            if activeASRModelLoadID == modelID {
-                activeASRModelLoadID = nil
-            }
-            if activeASRModelDownloadID == modelID {
-                activeASRModelDownloadID = nil
-            }
+            activeASRModelOperationID = nil
             modelDownloadStartedAt = nil
         }
     }
@@ -3109,16 +3050,12 @@ final class AppState {
         guard phase != .recording && phase != .transcribing else {
             return
         }
-        guard activeASRModelDownloadID == nil && activeASRModelLoadID == nil else {
+        guard activeASRModelOperationID == nil else {
             return
         }
 
         let hadLoadedModel = loadedASRModelID != nil
-        // What the user was on when the download started. If they switch to
-        // something else while it runs, this download must not yank the
-        // selection back when it lands.
-        let selectionAtStart = selectedASRModelID
-        activeASRModelDownloadID = modelID
+        activeASRModelOperationID = modelID
         phase = .downloadingModel
         statusText = "Downloading model..."
         lastError = nil
@@ -3137,7 +3074,7 @@ final class AppState {
                     }
                 }
 
-                setPhaseUnlessCapturing(.loading, statusText: "Validating model...", owner: modelID)
+                setPhaseUnlessCapturing(.loading, statusText: "Validating model...")
 
                 guard modelManager.isInstalled(modelID) else {
                     throw AppStateError.modelValidationFailed
@@ -3146,13 +3083,11 @@ final class AppState {
                 trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
                 modelDownloadStartedAt = nil
 
-                if autoSelect && selectedASRModelID == selectionAtStart && activeASRModelLoadID == nil && !isCapturing {
+                if autoSelect {
                     do {
-                        activeASRModelLoadID = modelID
-                        defer { activeASRModelLoadID = nil }
                         try await loadRecognizer(for: modelID)
                         selectedASRModelID = modelID
-                        setPhaseUnlessCapturing(.ready, statusText: "Ready", owner: modelID)
+                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
                         lastError = nil
                         lastFailedASRModelID = nil
                         lastFailedASRModelError = nil
@@ -3166,9 +3101,9 @@ final class AppState {
                     }
                 } else {
                     if hadLoadedModel {
-                        setPhaseUnlessCapturing(.ready, statusText: "Ready", owner: modelID)
+                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
                     } else {
-                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required", owner: modelID)
+                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required")
                     }
                     lastFailedASRModelID = nil
                     lastFailedASRModelError = nil
@@ -3178,9 +3113,9 @@ final class AppState {
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .canceled, startedAt: modelDownloadStartedAt)
                     downloadProgress = 0
                     if hadLoadedModel {
-                        setPhaseUnlessCapturing(.ready, statusText: "Ready", owner: modelID)
+                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
                     } else {
-                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required", owner: modelID)
+                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required")
                     }
                     lastError = nil
                     AppLogger.shared.log(.info, "model download canceled id=\(modelID.rawValue)")
@@ -3195,14 +3130,14 @@ final class AppState {
                 }
             }
 
-            activeASRModelDownloadID = nil
+            activeASRModelOperationID = nil
             modelDownloadStartedAt = nil
             asrDownloadTask = nil
         }
     }
 
     var canCancelASRModelDownload: Bool {
-        activeASRModelDownloadID != nil && asrDownloadTask != nil
+        phase == .downloadingModel && asrDownloadTask != nil
     }
 
     /// Cancels an in-flight ASR model download (previously impossible: the
@@ -3254,9 +3189,7 @@ final class AppState {
         guard phase != .recording && phase != .transcribing else {
             return
         }
-        // Deliberately not blocked on a download: switching to a model already
-        // on disk touches the recogniser, not the downloader.
-        guard activeASRModelLoadID == nil else {
+        guard activeASRModelOperationID == nil else {
             return
         }
         guard loadedASRModelID != modelID else {
@@ -3269,7 +3202,7 @@ final class AppState {
         }
 
         let hadLoadedModel = loadedASRModelID != nil
-        activeASRModelLoadID = modelID
+        activeASRModelOperationID = modelID
         analytics.track(.modelChanged(kind: .asr, model: SafeLabel(modelID.rawValue)))
         phase = .loading
         statusText = "Loading model..."
@@ -3294,7 +3227,7 @@ final class AppState {
                     fallbackToReadyState: hadLoadedModel
                 )
             }
-            activeASRModelLoadID = nil
+            activeASRModelOperationID = nil
         }
     }
 
@@ -3302,12 +3235,12 @@ final class AppState {
         guard phase != .recording && phase != .transcribing else {
             return
         }
-        guard activeASRModelLoadID == nil, activeASRModelDownloadID != modelID else {
+        guard activeASRModelOperationID == nil else {
             return
         }
 
         let isCurrentModel = selectedASRModelID == modelID || loadedASRModelID == modelID
-        activeASRModelLoadID = modelID
+        activeASRModelOperationID = modelID
 
         Task {
             do {
@@ -3332,7 +3265,7 @@ final class AppState {
                         statusText = "Load failed"
                         lastError = "Model load failed: \(error.localizedDescription)"
                     }
-                    activeASRModelLoadID = nil
+                    activeASRModelOperationID = nil
                     if phase == .ready {
                         lastFailedASRModelID = nil
                         lastFailedASRModelError = nil
@@ -3343,13 +3276,8 @@ final class AppState {
                     statusText = "Model required"
                 }
 
-                // A download running for a different model keeps its progress
-                // and its start time: zeroing them here reset a live bar and
-                // cost the completion analytics their duration.
-                if activeASRModelDownloadID == nil {
-                    downloadProgress = 0
-                    modelDownloadStartedAt = nil
-                }
+                downloadProgress = 0
+                modelDownloadStartedAt = nil
                 lastFailedASRModelID = nil
                 lastFailedASRModelError = nil
                 if !isCurrentModel {
@@ -3357,13 +3285,13 @@ final class AppState {
                 }
                 AppLogger.shared.log(.info, "model deleted id=\(modelID.rawValue)")
             } catch {
-                setPhaseUnlessCapturing(.error, statusText: "Model delete failed", owner: modelID)
+                setPhaseUnlessCapturing(.error, statusText: "Model delete failed")
                 lastError = error.localizedDescription
                 lastFailedASRModelID = modelID
                 lastFailedASRModelError = error.localizedDescription
                 AppLogger.shared.log(.error, "model delete failed id=\(modelID.rawValue) error=\(error.localizedDescription)")
             }
-            activeASRModelLoadID = nil
+            activeASRModelOperationID = nil
         }
     }
 
@@ -3826,7 +3754,7 @@ final class AppState {
         var lastError: Error?
 
         for modelID in candidateModelIDs {
-            activeASRModelLoadID = modelID
+            activeASRModelOperationID = modelID
             do {
                 try await loadRecognizer(for: modelID)
                 return modelID
@@ -3850,18 +3778,8 @@ final class AppState {
         phase == .recording || phase == .transcribing
     }
 
-    /// `owner` is the model whose operation is reporting. A load owns the phase
-    /// while it runs, so a *different* operation — typically a background
-    /// download finishing — must not announce over it.
-    private func setPhaseUnlessCapturing(
-        _ newPhase: Phase,
-        statusText newStatusText: String,
-        owner: ASRModelID? = nil
-    ) {
+    private func setPhaseUnlessCapturing(_ newPhase: Phase, statusText newStatusText: String) {
         guard !isCapturing else {
-            return
-        }
-        if let activeASRModelLoadID, activeASRModelLoadID != owner {
             return
         }
         phase = newPhase
@@ -3870,21 +3788,17 @@ final class AppState {
 
     private func handleASRModelOperationFailure(for modelID: ASRModelID, error: Error, fallbackToReadyState: Bool) {
         let message = Self.friendlyModelDownloadMessage(for: error) ?? error.localizedDescription
-        // Shared state: a failure deleting or loading one model must not wipe a
-        // different model's download progress out from under it.
-        if activeASRModelDownloadID == nil || activeASRModelDownloadID == modelID {
-            downloadProgress = 0
-        }
+        downloadProgress = 0
         lastFailedASRModelID = modelID
         lastFailedASRModelError = message
 
         if fallbackToReadyState, loadedASRModelID != nil {
-            setPhaseUnlessCapturing(.ready, statusText: "Ready", owner: modelID)
+            setPhaseUnlessCapturing(.ready, statusText: "Ready")
             lastError = nil
             return
         }
 
-        setPhaseUnlessCapturing(.error, statusText: "Download failed", owner: modelID)
+        setPhaseUnlessCapturing(.error, statusText: "Download failed")
         lastError = message
     }
 
