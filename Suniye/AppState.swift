@@ -3728,6 +3728,13 @@ final class AppState {
         )
     }
 
+    /// The model that would take over if `modelID` were deleted — the same
+    /// candidate list `deleteASRModel` falls back through, so the confirmation
+    /// cannot name a different model than the one that actually loads.
+    func asrModelFallbackAfterDeleting(_ modelID: ASRModelID) -> ASRModelCatalogEntry? {
+        orderedInstalledASRModelIDs(excluding: [modelID]).first.map { ASRModelCatalog.entry(for: $0) }
+    }
+
     private func orderedInstalledASRModelIDs(excluding excludedModelIDs: Set<ASRModelID> = []) -> [ASRModelID] {
         let installedModelIDs = Set(modelManager.installedModels())
         var orderedModelIDs: [ASRModelID] = []

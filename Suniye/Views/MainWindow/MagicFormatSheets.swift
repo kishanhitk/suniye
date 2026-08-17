@@ -40,7 +40,11 @@ struct EngineSheet: View {
             }
 
             HStack(spacing: 10) {
-                if let result = appState.magicFormatSetupTestResult {
+                // Only the row the user is actually looking at: testing one
+                // engine and then selecting another left the first engine's
+                // result sitting beside the second one's commit button.
+                if let result = appState.magicFormatSetupTestResult,
+                   appState.magicFormatLastTestedProvider == pending {
                     HStack(spacing: 6) {
                         Circle()
                             .fill(result.severity.color)
