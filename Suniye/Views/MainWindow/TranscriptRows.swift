@@ -10,7 +10,7 @@ struct TranscriptAppIcon: View {
 
     var body: some View {
         Group {
-            if let icon {
+            if let icon = bundleID.flatMap(AppIconCache.shared.icon(for:)) {
                 Image(nsImage: icon)
                     .resizable()
                     .interpolation(.high)
@@ -28,16 +28,8 @@ struct TranscriptAppIcon: View {
         .accessibilityHidden(true)
     }
 
-    private var icon: NSImage? {
-        guard
-            let bundleID,
-            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
-        else {
-            return nil
-        }
-        return NSWorkspace.shared.icon(forFile: url.path)
-    }
 }
+
 
 
 /// The newest transcript, shown in full. It is the one the user is most likely
@@ -50,6 +42,15 @@ struct CompactTranscriptRow: View {
     let onDelete: () -> Void
 
     @State private var isHovered = false
+
+    /// Plain Text when there is nothing to highlight: building an
+    /// AttributedString for every row on every evaluation is wasted work in
+    /// the common case of no search.
+    private var highlightedText: Text {
+        searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? Text(result.text)
+            : Text(result.text.highlightingMatches(of: searchQuery))
+    }
     @State private var didCopy = false
     @FocusState private var focusedAction: RowAction?
 
@@ -88,7 +89,7 @@ struct CompactTranscriptRow: View {
 
             TranscriptAppIcon(bundleID: result.appBundleID)
 
-            Text(result.text.highlightingMatches(of: searchQuery))
+            highlightedText
                 .font(AppTypography.body)
                 .foregroundStyle(Color.primary)
                 .lineLimit(1)

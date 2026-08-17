@@ -14,12 +14,18 @@ struct TranscriptsPage: View {
     @FocusState private var isSearchFocused: Bool
     @FocusState private var isListFocused: Bool
 
-    private var visibleResults: [RecentResult] {
-        TranscriptBrowser.filter(appState.recentResults, searchText: searchText)
-    }
+    /// Filtered and grouped once per change of their inputs, not per body
+    /// evaluation. As computed properties these re-filtered and re-grouped the
+    /// whole history every time the LazyVStack re-evaluated the body during a
+    /// scroll — O(history) per frame, and the "lags when going down in big
+    /// history" report (KIS-203): 5–7% CPU at ~200 entries, 25% at ~5,000.
+    @State private var visibleResults: [RecentResult] = []
+    @State private var groups: [TranscriptDayGroup] = []
 
-    private var groups: [TranscriptDayGroup] {
-        TranscriptBrowser.group(visibleResults)
+    private func rebuildVisibleResults() {
+        let filtered = TranscriptBrowser.filter(appState.recentResults, searchText: searchText)
+        visibleResults = filtered
+        groups = TranscriptBrowser.group(filtered)
     }
 
     var body: some View {
@@ -61,7 +67,12 @@ struct TranscriptsPage: View {
             clearSelection()
             return .handled
         }
-        .onChange(of: searchText) { _, _ in selectedID = nil }
+        .onChange(of: searchText) { _, _ in
+            selectedID = nil
+            rebuildVisibleResults()
+        }
+        .onChange(of: appState.recentResults) { _, _ in rebuildVisibleResults() }
+        .onAppear(perform: rebuildVisibleResults)
     }
 
     // MARK: - Sections
@@ -468,11 +479,14 @@ struct TopAppsChart: View {
             }
             .frame(height: 8)
 
+            // Wide enough for a four-digit, comma-grouped count: at 28pt a
+            // "1,056" wrapped onto two lines.
             Text(app.count.formatted())
                 .font(AppTypography.codeCaption)
                 .monospacedDigit()
+                .lineLimit(1)
                 .foregroundStyle(MainWindowPalette.secondaryText)
-                .frame(width: 28, alignment: .trailing)
+                .frame(width: 44, alignment: .trailing)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(app.name), \(app.count) dictations")
