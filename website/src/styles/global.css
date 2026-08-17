@@ -247,61 +247,47 @@ body {
 
 /* ── Quarantine dialog (post-download) ──────── */
 
+/* Closed is the `hidden` attribute (display:none from the UA sheet + preflight),
+   never a hidden-but-rendered state. WebKit resolves style for the whole tree
+   before an external stylesheet has arrived — with UA defaults, so opacity:1 —
+   and once the sheet lands it runs whatever transitions the new style declares,
+   starting from that pre-stylesheet state. A closed state built from
+   opacity/visibility plus a transition therefore fades in from fully visible on
+   first paint whenever the CSS isn't already cached. An element that was never
+   rendered has no before-change style, so nothing can animate: enter and exit
+   are driven by @starting-style and a discrete display transition instead. */
 .dmg-modal {
+  transition: opacity 0.25s ease, display 0.25s allow-discrete;
+}
+
+.dmg-modal[hidden] {
   opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.25s ease, visibility 0s linear 0.25s;
-}
-
-.dmg-modal.is-open {
-  opacity: 1;
-  visibility: visible;
-  transition: opacity 0.25s ease;
-}
-
-@starting-style {
-  .dmg-modal.is-open {
-    opacity: 0;
-  }
-}
-
-/* The scrim's blur and the card's entrance transform are both applied only
-   once the dialog is open, never as a value declared on the closed resting
-   state. backdrop-filter and transform each force their own GPU compositing
-   layer the moment they're declared, not just when they change — so a
-   permanent closed-state value (e.g. transform: translateY(10px) scale(0.98)
-   sitting on .dmg-card at rest) gives Safari a layer to flash on first paint
-   even while an ancestor's visibility:hidden is supposed to suppress it
-   entirely. @starting-style supplies the "from" value only at the instant
-   the transition actually begins, so nothing is ever composited while closed. */
-.dmg-modal.is-open .dmg-scrim {
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
 }
 
 .dmg-card {
   transition: transform 0.28s var(--curve-out);
 }
 
-.dmg-modal.is-open .dmg-card {
-  transform: none;
+.dmg-modal[hidden] .dmg-card {
+  transform: translateY(10px) scale(0.98);
 }
 
 @starting-style {
-  .dmg-modal.is-open .dmg-card {
+  .dmg-modal {
+    opacity: 0;
+  }
+  .dmg-card {
     transform: translateY(10px) scale(0.98);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .dmg-modal {
-    transition: opacity 0.15s ease, visibility 0s linear 0.15s;
-  }
-  .dmg-modal.is-open {
-    transition: opacity 0.15s ease;
+    transition: opacity 0.15s ease, display 0.15s allow-discrete;
   }
   .dmg-card,
-  .dmg-modal.is-open .dmg-card {
+  .dmg-modal[hidden] .dmg-card {
+    transform: none;
     transition: none;
   }
 }

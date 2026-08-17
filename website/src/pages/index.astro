@@ -663,8 +663,9 @@ const faqs = [
       role="dialog"
       aria-modal="true"
       aria-labelledby="dmg-title"
+      hidden
     >
-      <div class="dmg-scrim absolute inset-0 bg-ink/55" data-dmg-close></div>
+      <div class="dmg-scrim absolute inset-0 bg-ink/55 backdrop-blur-md" data-dmg-close></div>
 
       <div class="dmg-card relative w-full max-w-2xl overflow-hidden rounded-2xl border border-white/70 bg-bg shadow-[0_50px_120px_-24px_rgba(16,40,68,0.55)]">
         <div class="p-7 md:p-8">
@@ -869,12 +870,12 @@ const faqs = [
       let lastFocused = null;
       const openDmg = () => {
         lastFocused = document.activeElement;
-        dmgBanner.classList.add("is-open");
+        dmgBanner.hidden = false;
         document.body.style.overflow = "hidden";
         closeEl?.focus();
       };
       const closeDmg = () => {
-        dmgBanner.classList.remove("is-open");
+        dmgBanner.hidden = true;
         document.body.style.overflow = "";
         lastFocused?.focus?.();
       };
@@ -885,7 +886,7 @@ const faqs = [
         .querySelectorAll("[data-dmg-close], #dmg-banner-close")
         .forEach((el) => el.addEventListener("click", closeDmg));
       document.addEventListener("keydown", (e) => {
-        if (!dmgBanner.classList.contains("is-open")) return;
+        if (dmgBanner.hidden) return;
         if (e.key === "Escape") {
           closeDmg();
         } else if (e.key === "Tab" && card) {
