@@ -4150,13 +4150,13 @@ final class AppState {
                     insertionContext: textInsertionService.captureInsertionContext()
                 )
                 do {
-                    let destinationApp = frontmostAppBundleIDProvider()
                     try await textInsertionService.insertText(insertionText)
                     didInsertFinalText = true
-                    // Resolved here, not at record start: transcription and
-                    // Magic Format take long enough for the user to change
-                    // apps, and the text lands wherever focus is now.
-                    attributeStoredResult(result.id, to: destinationApp ?? frontmostAppBundleID)
+                    // Read after the insertion returns, not before it: the
+                    // service retries for around a second while a focused
+                    // element hydrates, so anything captured earlier can name
+                    // the app the user has since left.
+                    attributeStoredResult(result.id, to: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
                     dictationTiming.inserted = .now()
                     beginEditLearningTracking(insertedText: insertionText)
                     AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
@@ -4387,12 +4387,12 @@ final class AppState {
             )
 
             try await requireAccessibilityForInsertion()
-            // Resolved here rather than from the session context: the rewrite is
-            // asynchronous and insertText targets whatever is focused when it
-            // runs, so the session's app can be stale by now.
+            try await textInsertionService.insertText(rewritten)
+            // Read after the insertion returns: the rewrite is asynchronous and
+            // the service retries while a focused element hydrates, so the
+            // session's app — or anything read before the call — can be stale.
             let destinationApp = frontmostAppBundleIDProvider()
                 ?? activeDictationSession?.context.frontmostAppBundleID
-            try await textInsertionService.insertText(rewritten)
             recentResults.insert(
                 RecentResult(
                     id: UUID(),
