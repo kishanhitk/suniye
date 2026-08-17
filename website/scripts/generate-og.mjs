@@ -91,7 +91,7 @@ const svg = await satori(
                 type: "div",
                 props: {
                   style: {
-                    fontSize: "122px",
+                    fontSize: "132px",
                     fontFamily: "Iowan Old Style",
                     color: "#ffffff",
                     lineHeight: 1.02,
@@ -100,20 +100,26 @@ const svg = await satori(
                   children: "Speak freely.",
                 },
               },
+              // Two explicit lines so the break falls at the comma. Left to wrap
+              // on its own the measure split "built for / privacy", which reads
+              // as a mistake rather than a phrase.
               {
                 type: "div",
                 props: {
                   style: {
-                    fontSize: "36px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    marginTop: "26px",
+                    fontSize: "34px",
                     fontFamily: "Google Sans",
                     color: "#ffffff",
-                    marginTop: "26px",
-                    lineHeight: 1.45,
-                    textAlign: "center",
-                    maxWidth: "920px",
+                    lineHeight: 1.34,
                   },
-                  children:
-                    "Dictation for macOS, built for privacy and speed.",
+                  children: [
+                    { type: "div", props: { children: "Dictation for macOS," } },
+                    { type: "div", props: { children: "built for privacy and speed." } },
+                  ],
                 },
               },
             ],
