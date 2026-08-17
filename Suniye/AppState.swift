@@ -814,23 +814,8 @@ final class AppState {
     /// Masked stand-in for a stored key: enough to recognise which key is saved,
     /// never enough to use it. Without it the field reads "Paste API key" while
     /// the status says Connected, which looks like nothing is stored.
-    var llmAPIKeyHint: String? {
-        guard hasLLMAPIKey,
-              let key = try? keychainService.getLLMKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !key.isEmpty
-        else {
-            return nil
-        }
-        // The hint must stay a hint. A prefix plus a tail recovers most of a
-        // short key — 11 of 12 characters at the old threshold — so anything
-        // that short is masked outright, and above it at least two thirds of
-        // the key stays hidden.
-        let dots = "\u{2022}\u{2022}\u{2022}\u{2022}"
-        guard key.count >= 24 else {
-            return "\(dots) \(dots)"
-        }
-        return "\(key.prefix(4)) \(dots) \(dots) \(key.suffix(4))"
-    }
+    private(set) var llmAPIKeyHint: String?
+    private(set) var currentLLMAPIKeyFingerprint: Int?
 
     /// The API key's own state. `llmKeyStatusText` answers "is the active engine
     /// ready", which in the endpoint sheet reported the local model's health next
@@ -873,16 +858,7 @@ final class AppState {
         return testedFingerprint == currentLLMAPIKeyFingerprint
     }
 
-    /// Identifies the stored key without holding it. In-memory only, so a
-    /// per-launch hash is enough to answer "is this the key that was tested".
-    private var currentLLMAPIKeyFingerprint: Int? {
-        guard let key = try? keychainService.getLLMKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !key.isEmpty
-        else {
-            return nil
-        }
-        return key.hashValue
-    }
+
 
     /// Deliberately does not require the API engine to be the one in use: the
     /// set-up sheet exists so an endpoint can be configured and tested *before*
@@ -2446,6 +2422,27 @@ final class AppState {
 
     func refreshLLMKeyStatus() {
         hasLLMAPIKey = keychainService.hasLLMKey()
+        refreshLLMKeyDerivedState()
+    }
+
+    /// The masked hint and the fingerprint are read once per key change rather
+    /// than per SwiftUI body evaluation: both derive from the keychain, and a
+    /// synchronous credential read does not belong on the render path.
+    private func refreshLLMKeyDerivedState() {
+        guard let key = try? keychainService.getLLMKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !key.isEmpty
+        else {
+            llmAPIKeyHint = nil
+            currentLLMAPIKeyFingerprint = nil
+            return
+        }
+        currentLLMAPIKeyFingerprint = key.hashValue
+        let dots = "\u{2022}\u{2022}\u{2022}\u{2022}"
+        // The hint must stay a hint: a prefix plus a tail recovers most of a
+        // short key, so anything that short is masked outright.
+        llmAPIKeyHint = key.count >= 24
+            ? "\(key.prefix(4)) \(dots) \(dots) \(key.suffix(4))"
+            : "\(dots) \(dots)"
     }
 
     func saveLLMAPIKey(_ key: String) {
