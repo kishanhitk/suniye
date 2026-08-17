@@ -158,7 +158,7 @@ const releases = githubReleases
           <div class="fade-in mt-8 flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:items-center">
             <a
               href={downloadUrl}
-              class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 font-display text-sm text-white transition-colors hover:bg-accent-hover"
+              class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm text-white transition-colors hover:bg-accent-hover"
             >
               Download Latest Release
             </a>
@@ -166,7 +166,7 @@ const releases = githubReleases
               href={`${githubUrl}/releases`}
               target="_blank"
               rel="noopener"
-              class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 font-display text-sm text-ink transition-colors hover:bg-surface"
+              class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-sm text-ink transition-colors hover:bg-surface"
             >
               GitHub Releases
             </a>
@@ -196,7 +196,7 @@ const releases = githubReleases
     <section class="border-t border-border/60 py-16 md:py-24">
       <div class="mx-auto max-w-6xl px-6">
         <div class="reveal mb-8">
-          <h2 class="font-display text-sm uppercase tracking-widest text-muted">
+          <h2 class="font-mono text-sm uppercase tracking-widest text-muted">
             Recent releases
           </h2>
         </div>
@@ -212,7 +212,7 @@ const releases = githubReleases
                   <h3 class="font-display text-2xl tracking-tight text-ink md:text-3xl">
                     {release.version}
                   </h3>
-                  <p class="font-display text-xs uppercase tracking-widest text-muted md:mt-3">
+                  <p class="font-mono text-xs uppercase tracking-widest text-muted md:mt-3">
                     {release.date}
                   </p>
                 </div>
@@ -221,7 +221,7 @@ const releases = githubReleases
                     href={release.href}
                     target="_blank"
                     rel="noopener"
-                    class="mt-4 inline-flex rounded-full border border-accent/20 bg-accent/5 px-3 py-1 font-display text-xs text-accent transition-colors hover:border-accent/40 hover:bg-accent/10"
+                    class="mt-4 inline-flex rounded-full border border-accent/20 bg-accent/5 px-3 py-1 font-mono text-xs text-accent transition-colors hover:border-accent/40 hover:bg-accent/10"
                   >
                     {release.status}
                   </a>
@@ -229,7 +229,7 @@ const releases = githubReleases
               </div>
 
               <div>
-                <h4 class="font-display text-sm uppercase tracking-widest text-muted">
+                <h4 class="font-mono text-sm uppercase tracking-widest text-muted">
                   What's Changed
                 </h4>
 
@@ -254,7 +254,7 @@ const releases = githubReleases
                     href={release.fullChangelogUrl}
                     target="_blank"
                     rel="noopener"
-                    class="mt-8 inline-flex font-display text-sm text-accent transition-colors hover:text-accent-hover"
+                    class="mt-8 inline-flex text-sm text-accent transition-colors hover:text-accent-hover"
                   >
                     Full Changelog
                   </a>
@@ -275,11 +275,11 @@ const releases = githubReleases
     <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 md:flex-row">
       <div class="flex items-center gap-2.5">
         <img src="/suniye-icon.png" alt="" class="h-5 w-5 rounded-[3px]" />
-        <span class="font-display text-sm text-muted">
+        <span class="text-sm text-muted">
           Suniye &middot; MIT License
         </span>
       </div>
-      <div class="flex items-center gap-6 font-display text-sm text-muted">
+      <div class="flex items-center gap-6 text-sm text-muted">
         <a href="/" class="transition-colors hover:text-ink">
           Home
         </a>

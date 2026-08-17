@@ -11,7 +11,7 @@ interface Props {
 
 const {
   title = "Suniye — Private Dictation for macOS",
-  description = "Open-source, local-first dictation for macOS. Hold a key, speak, and your words appear at your cursor. No audio leaves your machine.",
+  description = "Dictation for macOS, built for privacy and speed. The models run on your Mac, so nothing is uploaded and the words land as fast as you say them. Free and open source.",
   canonicalPath = "/",
 } = Astro.props;
 
@@ -33,14 +33,15 @@ const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Suniye" />
     <meta property="og:url" content={canonicalUrl} />
-    <meta property="og:image" content="https://suniye.app/og-image.png" />
+    <meta property="og:image" content="https://suniye.app/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Suniye — private, on-device dictation for macOS" />
+    <meta property="og:image:alt" content="Suniye — Speak freely. Dictation for macOS, built for privacy and speed." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content="https://suniye.app/og-image.png" />
+    <meta name="twitter:image" content="https://suniye.app/og-image.jpg" />
     <link
       rel="preload"
       href="/fonts/GoogleSans-Variable.woff2"

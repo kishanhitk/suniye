@@ -105,7 +105,7 @@ const faqs = [
   },
   {
     q: "Why does macOS say the app is damaged?",
-    a: "Only the direct .dmg download is affected. Suniye is not signed with a paid Apple Developer certificate, so macOS quarantines it on first launch. Run the xattr command shown above once to clear it — or install with Homebrew, which does it for you.",
+    a: "Only the direct .dmg download is affected. Suniye is not signed with a paid Apple Developer certificate, so macOS quarantines it on first launch. Run xattr -rd com.apple.quarantine /Applications/Suniye.app once to clear it — Suniye also offers the command right after you download the .dmg. Installing with Homebrew avoids it entirely, since brew clears the quarantine for you.",
   },
   {
     q: "How fast is it, really?",
@@ -189,16 +189,15 @@ const faqs = [
         </h1>
 
         <p class="on-art-muted fade-in mx-auto mt-5 max-w-[34em] text-[17px] leading-relaxed">
-          The cloud has to hear you before it can type. Suniye doesn't — the model
-          runs on your Mac, so the words land as fast as you say them, and your
-          voice never leaves the machine.
+          Suniye is dictation built for privacy and speed: the models run on your
+          Mac, so nothing is uploaded and the words land as fast as you say them.
         </p>
 
         <div class="fade-in mt-7 flex justify-center">
           <a
             href={downloadUrl}
             data-dmg
-            data-track="download_click:dmg"
+            data-track="download_click:dmg_hero"
             class="glass inline-flex items-center gap-2 px-6 py-3 text-[15px] font-medium"
           >
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -208,7 +207,19 @@ const faqs = [
           </a>
         </div>
 
-        <p class="on-art-muted fade-in mt-3 text-[11px]">
+        <button
+          type="button"
+          class="brew-line copy-btn fade-in mx-auto mt-5 flex items-center gap-2 rounded-md px-2 py-1 font-mono text-[12px] text-white/70 transition-colors hover:text-white/95"
+          data-copy={brewInstall}
+          data-track="download_click:homebrew_hero"
+          aria-label="Copy the Homebrew install command"
+        >
+          <span aria-hidden="true">$</span>
+          {brewInstall}
+          <span class="brew-state" aria-hidden="true">copy</span>
+        </button>
+
+        <p class="on-art-muted fade-in mt-4 text-[11px]">
           Apple Silicon &middot; macOS 14+ &middot; Open source
         </p>
       </div>
@@ -385,7 +396,7 @@ const faqs = [
 
           <div class="mt-12 divide-y divide-border">
             {cleanups.map((c, i) => (
-              <div class="reveal py-8 first:pt-0" style={`transition-delay: ${i * 0.06}s`}>
+              <div class="reveal py-8 first:pt-0">
                 <p class="font-mono text-[13px] leading-relaxed text-muted/70">
                   {c.said}
                 </p>
@@ -444,7 +455,7 @@ const faqs = [
           {tones.map((t, i) => (
             <div
               class="reveal grid gap-x-8 gap-y-3 py-7 md:grid-cols-[7rem_1fr]"
-              style={`transition-delay: ${0.14 + i * 0.06}s`}
+             
             >
               <div>
                 <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">{t.app}</p>
@@ -489,7 +500,7 @@ const faqs = [
             ))}
           </ul>
 
-        <details class="reveal group mt-8" style="transition-delay: 0.1s">
+        <details class="reveal group mt-8" style="transition-delay: 0.1s" data-track-open="models_list">
           <summary class="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full border border-border bg-white px-5 py-2.5 font-mono text-[11px] tracking-wide text-muted transition-colors [&::-webkit-details-marker]:hidden hover:text-ink">
             <span class="group-open:hidden">And eight more</span>
             <span class="hidden group-open:inline">Hide the list</span>
@@ -572,7 +583,7 @@ const faqs = [
             <a
               href={downloadUrl}
               data-dmg
-              data-track="download_click:dmg"
+              data-track="download_click:dmg_install"
               class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 text-sm text-ink hover:bg-surface"
             >
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -609,7 +620,7 @@ const faqs = [
         <div>
           <div class="reveal divide-y divide-border border-y border-border" style="transition-delay: 0.1s">
             {faqs.map((item) => (
-              <details class="faq-item group">
+              <details class="faq-item group" data-track-open={`faq_${item.q.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40)}`}>
                 <summary class="flex items-center justify-between gap-4 py-5">
                   <span class="text-base tracking-tight text-ink">{item.q}</span>
                   <span class="faq-sign shrink-0 text-xl leading-none text-accent">+</span>
@@ -642,6 +653,9 @@ const faqs = [
             data-track="download_click:dmg_footer"
             class="glass inline-flex items-center gap-2 px-6 py-3 text-[15px] font-medium"
           >
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M16.365 1.43c0 1.14-.47 2.2-1.22 2.98-.79.83-2.05 1.47-3.11 1.38-.13-1.1.42-2.25 1.15-3.02.8-.84 2.16-1.45 3.18-1.34zM20.7 17.02c-.55 1.26-.81 1.82-1.52 2.94-.99 1.55-2.39 3.48-4.12 3.5-1.54.01-1.93-1-4.02-.99-2.09.01-2.52 1.01-4.06.99-1.73-.02-3.06-1.76-4.05-3.31C.16 15.8-.13 10.7 1.55 8.03c1.18-1.9 3.05-3.01 4.8-3.01 1.79 0 2.91 1 4.39 1 1.43 0 2.3-1 4.37-1 1.57 0 3.23.85 4.42 2.32-3.88 2.13-3.25 7.68 1.17 9.68z" />
+            </svg>
             Download for macOS
           </a>
         </div>

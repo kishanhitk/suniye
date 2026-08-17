@@ -1,13 +1,25 @@
 /**
  * Generates a 1200x630 OG image for social sharing.
  * Run: bun scripts/generate-og.mjs
+ *
+ * The card is the hero, cropped: same painting, same serif headline, same
+ * promise. A share preview that matches the page it links to is the whole point
+ * — a separate "designed" card just means the visitor arrives somewhere they
+ * have not seen before.
  */
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, statSync } from "fs";
+import { execFileSync } from "child_process";
 
-// Satori can't parse woff2, so a TTF copy lives here as a build-time asset.
+// Satori can't parse woff2, so TTF copies live here as build-time assets.
+// Georgia stands in for the site's Iowan Old Style, which ships only as a .ttc.
+const georgia = readFileSync("scripts/fonts/Georgia.ttf");
 const fragmentMono = readFileSync("scripts/fonts/FragmentMono-Regular.ttf");
+
+// The painting, pre-cropped to the card's aspect. Inlined because resvg
+// resolves no network requests.
+const background = `data:image/jpeg;base64,${readFileSync("scripts/og-bg.jpg").toString("base64")}`;
 
 const svg = await satori(
   {
@@ -19,13 +31,24 @@ const svg = await satori(
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
-        padding: "72px 80px",
-        backgroundColor: "#faf8f5",
-        fontFamily: "Fragment Mono",
+        alignItems: "center",
+        padding: "0 100px",
+        backgroundColor: "#2b6cc4",
         position: "relative",
       },
       children: [
-        // Accent bar top
+        {
+          type: "img",
+          props: {
+            src: background,
+            width: 1200,
+            height: 630,
+            style: { position: "absolute", top: 0, left: 0 },
+          },
+        },
+        // The sky is bright enough that white type needs its own ground. A soft
+        // dark wash across the upper half keeps the headline legible without
+        // dimming the painting into mud.
         {
           type: "div",
           props: {
@@ -33,99 +56,70 @@ const svg = await satori(
               position: "absolute",
               top: 0,
               left: 0,
-              right: 0,
-              height: "6px",
-              backgroundColor: "#c4441a",
+              width: "1200px",
+              height: "470px",
+              backgroundImage:
+                "linear-gradient(180deg, rgba(16,40,68,0.52) 0%, rgba(16,40,68,0.34) 55%, rgba(16,40,68,0) 100%)",
             },
           },
         },
-        // Waveform SVG
         {
-          type: "svg",
+          type: "div",
           props: {
-            viewBox: "0 0 160 80",
-            width: 100,
-            height: 50,
-            style: { marginBottom: "24px" },
+            style: {
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              marginTop: "-150px",
+            },
             children: [
               {
-                type: "path",
+                type: "div",
                 props: {
-                  d: "M 8 50 Q 14 50 20 42 L 40 10 L 62 70 L 84 10 L 106 70 L 124 36 Q 130 26 140 26",
-                  stroke: "#c4441a",
-                  strokeWidth: "7",
-                  strokeLinecap: "round",
-                  strokeLinejoin: "round",
-                  fill: "none",
+                  style: {
+                    fontSize: "104px",
+                    fontFamily: "Georgia",
+                    color: "#ffffff",
+                    lineHeight: 1.02,
+                    letterSpacing: "-0.02em",
+                  },
+                  children: "Speak freely.",
+                },
+              },
+              {
+                type: "div",
+                props: {
+                  style: {
+                    fontSize: "26px",
+                    color: "rgba(255,255,255,0.92)",
+                    marginTop: "22px",
+                    lineHeight: 1.45,
+                    textAlign: "center",
+                    maxWidth: "760px",
+                  },
+                  children:
+                    "Dictation for macOS, built for privacy and speed. The models run on your Mac.",
                 },
               },
             ],
           },
         },
-        // Title
-        {
-          type: "div",
-          props: {
-            style: {
-              fontSize: "64px",
-              fontFamily: "Fragment Mono",
-              color: "#1a1a1a",
-              lineHeight: 1.15,
-              letterSpacing: "-0.02em",
-            },
-            children: "Your voice. Your machine. Your text.",
-          },
-        },
-        // Subtitle
-        {
-          type: "div",
-          props: {
-            style: {
-              fontSize: "24px",
-              color: "#6b635a",
-              marginTop: "20px",
-              lineHeight: 1.5,
-            },
-            children:
-              "Open-source, local-first dictation for macOS. No audio leaves your machine.",
-          },
-        },
-        // Footer
         {
           type: "div",
           props: {
             style: {
               position: "absolute",
               bottom: "44px",
-              left: "80px",
+              left: "0px",
+              width: "1200px",
               display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              fontSize: "20px",
+              justifyContent: "center",
+              fontSize: "21px",
               fontFamily: "Fragment Mono",
-              color: "#6b635a",
+              letterSpacing: "0.14em",
+              color: "rgba(255,255,255,0.85)",
             },
-            children: "suniye.app",
-          },
-        },
-        // Call-to-action
-        {
-          type: "div",
-          props: {
-            style: {
-              position: "absolute",
-              bottom: "36px",
-              right: "80px",
-              display: "flex",
-              alignItems: "center",
-              fontSize: "22px",
-              fontFamily: "Fragment Mono",
-              color: "#faf8f5",
-              backgroundColor: "#c4441a",
-              padding: "14px 28px",
-              borderRadius: "10px",
-            },
-            children: "Download free for macOS",
+            children: "SUNIYE.APP",
           },
         },
       ],
@@ -135,6 +129,7 @@ const svg = await satori(
     width: 1200,
     height: 630,
     fonts: [
+      { name: "Georgia", data: georgia, weight: 400 },
       { name: "Fragment Mono", data: fragmentMono, weight: 400 },
     ],
   }
@@ -145,5 +140,14 @@ const resvg = new Resvg(svg, {
 });
 const png = resvg.render().asPng();
 
-writeFileSync("public/og-image.png", png);
-console.log(`Generated public/og-image.png (${(png.length / 1024).toFixed(0)} KB)`);
+// Shipped as JPEG: this card is a photograph, and the PNG of it is ~1 MB for
+// no visible gain. resvg only emits PNG, so hand off to sips for the encode.
+writeFileSync("/tmp/og-image.png", png);
+execFileSync("sips", [
+  "-s", "format", "jpeg",
+  "-s", "formatOptions", "86",
+  "/tmp/og-image.png",
+  "--out", "public/og-image.jpg",
+]);
+const bytes = statSync("public/og-image.jpg").size;
+console.log(`Generated public/og-image.jpg (${(bytes / 1024).toFixed(0)} KB)`);

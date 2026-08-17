@@ -115,7 +115,7 @@ body {
   align-items: center;
   border-radius: 9999px;
   padding: 0.15rem 0.6rem;
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.5;
   letter-spacing: 0.06em;
@@ -167,16 +167,16 @@ body {
 
 /* ── Scroll-triggered reveal ───────────────── */
 
+/* Opacity only, and short. A 24px rise on every block meant the whole page was
+   in motion as you scrolled, which reads as busy on a layout this calm — and
+   the movement carried no meaning, since nothing was arriving from anywhere. */
 .reveal {
   opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.6s var(--curve-out),
-              transform 0.6s var(--curve-out);
+  transition: opacity 0.35s var(--curve-out);
 }
 
 .reveal.visible {
   opacity: 1;
-  transform: translateY(0);
 }
 
 /* ── Subtle fade-in for lighter elements ───── */
@@ -302,7 +302,6 @@ body {
 
   .reveal {
     opacity: 1;
-    transform: none;
     transition: none;
   }
 
@@ -586,4 +585,42 @@ body {
 /* A single warm mark. The painting's dawn light, used once per section at most. */
 .mark {
   color: var(--color-sun);
+}
+
+
+/* ── Hero install line ─────────────────────── */
+/* The command doubles as its own button. The trailing word is the only chrome,
+   and it only appears on hover — so at rest the hero shows a command, not a
+   control competing with the CTA. */
+.brew-line {
+  text-shadow: 0 1px 10px rgba(20, 50, 110, 0.45);
+}
+
+.brew-line .brew-state {
+  opacity: 0;
+  color: rgba(255, 255, 255, 0.55);
+  transition: opacity 150ms var(--curve-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brew-line:hover .brew-state {
+    opacity: 1;
+  }
+}
+
+.brew-line:focus-visible .brew-state {
+  opacity: 1;
+}
+
+.brew-line.copied {
+  color: #fff;
+}
+
+.brew-line.copied .brew-state {
+  opacity: 1;
+  color: #fff;
+}
+
+.brew-line.copied .brew-state::after {
+  content: "ed";
 }
