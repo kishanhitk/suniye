@@ -263,16 +263,15 @@ final class AppState {
             }
         }
     }
-    var wordsTranscribed = 0
-    var sessionCount = 0
-    var totalDictationSeconds: TimeInterval = 0
+    /// Durable dictation totals. Mirrored from `statsStore` so the dashboard
+    /// never sums buckets during a SwiftUI body evaluation.
+    var dictationStats = DictationStats.empty
     var recentResults: [RecentResult] = [] {
         didSet {
             guard !isHydratingHistory else {
                 return
             }
             persistHistory()
-            recomputeHistoryStats()
         }
     }
 
@@ -967,13 +966,32 @@ final class AppState {
         Array(recentResults.prefix(12))
     }
 
-    var lastTranscriptText: String? {
-        recentResults.first?.text
+    /// Seconds saved versus typing the same words by hand. The assumption is
+    /// shown to the user next to the number, never hidden.
+    var timeSavedSeconds: TimeInterval {
+        dictationStats.timeSavedSeconds()
     }
 
-    var todaySessionCount: Int {
-        let calendar = Calendar.current
-        return recentResults.filter { calendar.isDateInToday($0.createdAt) }.count
+    var averageWordsPerMinute: Int {
+        dictationStats.averageWordsPerMinute
+    }
+
+    /// Recomputed from the live clock on read, so it does not go stale in a
+    /// window left open across midnight.
+    var currentStreakDays: Int {
+        dictationStats.currentStreakDays()
+    }
+
+    /// Words per day for the activity chart, oldest first, gaps filled with zero.
+    func dailyWordCounts(days: Int) -> [DailyWordCount] {
+        let keys = DictationStats.recentDayKeys(count: days)
+        return keys.map { key in
+            DailyWordCount(dayKey: key, words: dictationStats.days[key]?.words ?? 0)
+        }
+    }
+
+    var lastTranscriptText: String? {
+        recentResults.first?.text
     }
 
     var modelInstalledSizeText: String {
@@ -1523,6 +1541,7 @@ final class AppState {
     private let magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol
     private let generalSettingsStore: GeneralSettingsStoreProtocol
     private let historyStore: HistoryStoreProtocol
+    private let statsStore: DictationStatsStoring
     private let keychainService: KeychainServiceProtocol
     private let appUpdateController: AppUpdateControllerProtocol
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
@@ -1642,6 +1661,7 @@ final class AppState {
         magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol = MagicFormatPromptFileStore(),
         generalSettingsStore: GeneralSettingsStoreProtocol = GeneralSettingsStore(),
         historyStore: HistoryStoreProtocol = HistoryStore(),
+        statsStore: DictationStatsStoring = DictationStatsStore(),
         keychainService: KeychainServiceProtocol = KeychainService(),
         appUpdateController: AppUpdateControllerProtocol? = nil,
         launchAtLoginService: LaunchAtLoginServiceProtocol = LaunchAtLoginService(),
@@ -1717,6 +1737,7 @@ final class AppState {
         self.magicFormatPromptFileStore = magicFormatPromptFileStore
         self.generalSettingsStore = generalSettingsStore
         self.historyStore = historyStore
+        self.statsStore = statsStore
         self.keychainService = keychainService
         self.appUpdateController = appUpdateController ?? AppUpdateControllerFactory.makeDefault()
         self.launchAtLoginService = launchAtLoginService
@@ -3867,7 +3888,7 @@ final class AppState {
             shouldSubmit = true
         }
 
-        let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+        let wordCount = finalText.dictationWordCount
         // "Polished" = a provider actually ran (not "the text changed") — the
         // honest Magic Format adoption signal.
         let wasLLMPolished = llmOutcome?.ran ?? false
@@ -3937,6 +3958,12 @@ final class AppState {
         }
 
         if didCompleteDictation {
+            // Audio length, not hold time: the seconds the user actually spoke
+            // is the honest denominator for pace and time saved.
+            let audioSeconds = sampleRate > 0 ? Double(sampleCount) / Double(sampleRate) : duration
+            statsStore.record(words: wordCount, seconds: audioSeconds, at: Date())
+            refreshDictationStats()
+
             emitDictationCompleted(
                 finalText: finalText,
                 wordCount: wordCount,
@@ -4056,7 +4083,7 @@ final class AppState {
                 message: "That's it — this works in any app.",
                 severity: .success
             )
-            let wordCount = finalText.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
+            let wordCount = finalText.dictationWordCount
             recordOnboardingPracticeAttempt(outcome: .success)
             // The user's first-ever dictation now shows up in the funnel: same
             // dense metrics event as real dictations, with the practice
@@ -4211,7 +4238,12 @@ final class AppState {
         isHydratingHistory = true
         recentResults = historyStore.load()
         isHydratingHistory = false
-        recomputeHistoryStats()
+        // Fold pre-existing history into the counters once, so upgrading does not
+        // reset anyone's numbers. Edit-mode rewrites cannot be told apart in old
+        // history (RecentResult has no kind), so seeded totals include them; only
+        // new sessions are attributed exactly.
+        statsStore.seedFromHistoryIfNeeded(recentResults)
+        refreshDictationStats()
     }
 
     private func persistHistory() {
@@ -4219,10 +4251,10 @@ final class AppState {
         onStateChange?()
     }
 
-    private func recomputeHistoryStats() {
-        sessionCount = recentResults.count
-        wordsTranscribed = recentResults.reduce(0) { $0 + $1.wordCount }
-        totalDictationSeconds = recentResults.reduce(0) { $0 + $1.durationSeconds }
+    /// Mirrors the store into the observable properties the dashboard reads, so
+    /// no SwiftUI body evaluation ever sums buckets.
+    private func refreshDictationStats() {
+        dictationStats = statsStore.stats
     }
 
     private static func normalizedPasteLastTranscriptHotkey(
