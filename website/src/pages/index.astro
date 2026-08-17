@@ -131,7 +131,17 @@ const faqs = [
     type="application/ld+json"
     set:html={jsonLdString(faqPageSchema(faqs))}
   />
-  <link slot="head" rel="preload" as="image" href="/hero.webp" type="image/webp" />
+  <!-- Preload the same candidate set the <picture> will resolve, so the
+       preloader fetches the tier this viewport actually needs rather than a
+       fixed file it may then discard. -->
+  <link
+    slot="head"
+    rel="preload"
+    as="image"
+    imagesrcset="/hero-700.webp 700w, /hero-1100.webp 1100w, /hero-1672.webp 1672w"
+    imagesizes="100vw"
+    type="image/webp"
+  />
 
   <Navbar variant="over-art" />
 
@@ -151,15 +161,14 @@ const faqs = [
       <!-- An 853-byte blurred copy of the painting is inlined as the section's own
            background, so the first paint already has the right colour and shape
            under the headline. The real image fades over it once decoded — the
-           browser picks the width, so a laptop never pays for the 3344px file. -->
+           browser picks the width. The ladder stops at 1672 because that is the
+           painting's native size — anything wider is resampled, not sharper. -->
       <picture>
         <source
           srcset="
             /hero-700.webp   700w,
             /hero-1100.webp 1100w,
-            /hero-1672.webp 1672w,
-            /hero-2200.webp 2200w,
-            /hero-3344.webp 3344w
+            /hero-1672.webp 1672w
           "
           sizes="100vw"
           type="image/webp"
