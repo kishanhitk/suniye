@@ -50,6 +50,11 @@ const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
       crossorigin
     />
     <slot name="head" />
+    <!-- Runs before first paint: only a document that reached this line can
+         hide content, so a failed or blocked bundle leaves the page readable. -->
+    <script is:inline>
+      document.documentElement.classList.add("js-reveal");
+    </script>
   </head>
   <body class="min-w-[320px] bg-bg font-body text-ink antialiased">
     <!-- Lens for .glass. R displaces horizontally, G vertically; mid-grey (#808080)

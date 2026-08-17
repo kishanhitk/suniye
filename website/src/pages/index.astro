@@ -148,7 +148,7 @@ const faqs = [
   <!-- With JS off, reveal-on-scroll never fires — show everything up front. -->
   <noscript>
     <style>
-      .reveal, .fade-in { opacity: 1 !important; transform: none !important; animation: none !important; }
+      .reveal, .js-reveal .reveal, .fade-in { opacity: 1 !important; transform: none !important; animation: none !important; }
     </style>
   </noscript>
 
@@ -209,7 +209,7 @@ const faqs = [
 
         <button
           type="button"
-          class="brew-line copy-btn fade-in mx-auto mt-5 flex items-center gap-2 rounded-md px-2 py-1 font-mono text-[12px] text-white/70 transition-colors hover:text-white/95"
+          class="brew-line copy-btn fade-in mx-auto mt-5 flex max-w-full items-center gap-2 rounded-md px-2 py-1 font-mono text-[10.5px] text-white/70 transition-colors hover:text-white/95 sm:text-[12px]"
           data-copy={brewInstall}
           data-track="download_click:homebrew_hero"
           aria-label="Copy the Homebrew install command"
@@ -815,6 +815,15 @@ const faqs = [
         { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
       );
       revealEls.forEach((el) => observer.observe(el));
+
+      // Backstop: if the observer has reported nothing after a second and a
+      // half, show everything. A missing fade is invisible; missing content
+      // is the whole page.
+      setTimeout(() => {
+        if (!document.querySelector(".reveal.visible")) {
+          revealEls.forEach((el) => el.classList.add("visible"));
+        }
+      }, 1500);
     }
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

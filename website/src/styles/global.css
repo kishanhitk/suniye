@@ -169,13 +169,22 @@ body {
 
 /* Opacity only, and short. A 24px rise on every block meant the whole page was
    in motion as you scrolled, which reads as busy on a layout this calm — and
-   the movement carried no meaning, since nothing was arriving from anywhere. */
+   the movement carried no meaning, since nothing was arriving from anywhere.
+
+   Content is visible by default and only hidden once the inline script has
+   proven JS is running. Hiding first and revealing later makes every section
+   below the hero depend on a script and an observer both succeeding — and when
+   either fails the page is simply blank, which is a far worse outcome than
+   losing a fade. */
 .reveal {
-  opacity: 0;
   transition: opacity 0.35s var(--curve-out);
 }
 
-.reveal.visible {
+.js-reveal .reveal {
+  opacity: 0;
+}
+
+.js-reveal .reveal.visible {
   opacity: 1;
 }
 
@@ -594,6 +603,8 @@ body {
    control competing with the CTA. */
 .brew-line {
   position: relative;
+  min-width: 0;
+  max-width: 100%;
   text-shadow: 0 1px 10px rgba(20, 50, 110, 0.45);
 }
 
