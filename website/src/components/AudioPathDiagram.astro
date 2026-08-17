@@ -1,0 +1,83 @@
+---
+// The one diagram worth drawing: cloud dictation's round trip versus local
+// processing's short path. It's the actual argument several posts make in
+// prose — this just lets a reader see it in the two seconds before they read
+// the paragraph that explains it. Geometric line icons, no photography or
+// third-party marks, so there's nothing here that needs anyone's permission.
+interface Props {
+  cloudLabel?: string;
+  localLabel?: string;
+}
+const { cloudLabel = "Cloud dictation", localLabel = "Suniye" } = Astro.props;
+---
+
+<svg
+  viewBox="0 0 720 190"
+  class="not-prose my-10 h-auto w-full"
+  role="img"
+  aria-label={`Diagram: ${cloudLabel} sends audio on a round trip to a server before returning text; ${localLabel} processes it on your Mac and returns text directly.`}
+>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L8,4 L0,8 Z" fill="var(--color-muted)" />
+    </marker>
+    <marker id="arrow-accent" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L8,4 L0,8 Z" fill="var(--color-accent)" />
+    </marker>
+  </defs>
+
+  <!-- Row 1: cloud path — mic, up to a server, back down, then text. The
+       round trip is drawn as a real detour so the extra distance is visible,
+       not just implied by an icon choice. -->
+  <text x="0" y="20" font-family="var(--font-mono)" font-size="11" letter-spacing="0.08em" fill="var(--color-muted)">{cloudLabel.toUpperCase()}</text>
+
+  <circle cx="30" cy="60" r="18" fill="none" stroke="var(--color-muted)" stroke-width="2" />
+  <rect x="24" y="48" width="12" height="18" rx="6" fill="var(--color-muted)" />
+  <line x1="30" y1="66" x2="30" y2="72" stroke="var(--color-muted)" stroke-width="2" />
+  <line x1="24" y1="72" x2="36" y2="72" stroke="var(--color-muted)" stroke-width="2" />
+
+  <path d="M60,60 L110,25" stroke="var(--color-muted)" stroke-width="1.5" marker-end="url(#arrow)" />
+
+  <path
+    d="M150,25 h10 a14,14 0 0 1 0,28 h-4 a10,10 0 0 1 -2,-19.8 a12,12 0 0 1 22,-4.2 a11,11 0 0 1 10,15.6 a10,10 0 0 1 -8,8.4 h-2"
+    fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+  />
+
+  <path d="M200,45 L260,45" stroke="var(--color-muted)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)" />
+  <text x="205" y="38" font-family="var(--font-mono)" font-size="9" fill="var(--color-muted)">transcribes</text>
+
+  <path d="M260,60 L200,80" stroke="var(--color-muted)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)" />
+  <text x="195" y="95" font-family="var(--font-mono)" font-size="9" fill="var(--color-muted)">sends text back</text>
+
+  <rect x="290" y="42" width="34" height="26" rx="3" fill="none" stroke="var(--color-muted)" stroke-width="2" />
+  <line x1="296" y1="50" x2="316" y2="50" stroke="var(--color-muted)" stroke-width="1.5" />
+  <line x1="296" y1="56" x2="316" y2="56" stroke="var(--color-muted)" stroke-width="1.5" />
+  <line x1="296" y1="62" x2="308" y2="62" stroke="var(--color-muted)" stroke-width="1.5" />
+
+  <!-- Row 2: local path — mic straight to a chip, straight to text. Same
+       three stops as the cloud row's endpoints, drawn as a direct line so the
+       shorter path reads at a glance, before the copy underneath spells it out. -->
+  <text x="0" y="130" font-family="var(--font-mono)" font-size="11" letter-spacing="0.08em" fill="var(--color-accent)">{localLabel.toUpperCase()}</text>
+
+  <circle cx="30" cy="165" r="18" fill="none" stroke="var(--color-ink)" stroke-width="2" />
+  <rect x="24" y="153" width="12" height="18" rx="6" fill="var(--color-ink)" />
+  <line x1="30" y1="171" x2="30" y2="177" stroke="var(--color-ink)" stroke-width="2" />
+  <line x1="24" y1="177" x2="36" y2="177" stroke="var(--color-ink)" stroke-width="2" />
+
+  <path d="M60,165 L160,165" stroke="var(--color-accent)" stroke-width="1.5" marker-end="url(#arrow-accent)" />
+  <text x="72" y="158" font-family="var(--font-mono)" font-size="9" fill="var(--color-accent)">on your Mac</text>
+
+  <rect x="180" y="150" width="30" height="30" rx="4" fill="none" stroke="var(--color-ink)" stroke-width="2" />
+  <rect x="188" y="158" width="14" height="14" rx="2" fill="none" stroke="var(--color-ink)" stroke-width="1.5" />
+  <line x1="186" y1="150" x2="186" y2="144" stroke="var(--color-ink)" stroke-width="1.5" />
+  <line x1="204" y1="150" x2="204" y2="144" stroke="var(--color-ink)" stroke-width="1.5" />
+  <line x1="186" y1="180" x2="186" y2="186" stroke="var(--color-ink)" stroke-width="1.5" />
+  <line x1="204" y1="180" x2="204" y2="186" stroke="var(--color-ink)" stroke-width="1.5" />
+
+  <path d="M220,165 L280,165" stroke="var(--color-accent)" stroke-width="1.5" marker-end="url(#arrow-accent)" />
+
+  <rect x="290" y="152" width="34" height="26" rx="3" fill="none" stroke="var(--color-ink)" stroke-width="2" />
+  <line x1="296" y1="160" x2="316" y2="160" stroke="var(--color-ink)" stroke-width="1.5" />
+  <line x1="296" y1="166" x2="316" y2="166" stroke="var(--color-ink)" stroke-width="1.5" />
+  <line x1="296" y1="172" x2="308" y2="172" stroke="var(--color-ink)" stroke-width="1.5" />
+</svg>

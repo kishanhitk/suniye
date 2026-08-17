@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Navbar from "../components/Navbar.astro";
+import Footer from "../components/Footer.astro";
 
 const collected = [
   ["How much you dictate", "Word and character counts per dictation — never the words themselves."],
@@ -98,4 +99,6 @@ const neverCollected = [
       </p>
     </section>
   </main>
+
+  <Footer current="/privacy" />
 </Layout>

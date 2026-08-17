@@ -1,0 +1,37 @@
+---
+// Was duplicated per-page with a slightly different link set on each. Extracted
+// once a fourth page (privacy) needed one and a fifth (blog) was about to.
+interface Props {
+  current?: "/" | "/changelog" | "/privacy" | "/blogs";
+}
+const { current } = Astro.props;
+
+const githubUrl = "https://github.com/kishanhitk/suniye";
+
+const links = [
+  { href: "/", label: "Home" },
+  { href: "/blogs", label: "Blog" },
+  { href: "/changelog", label: "Changelog" },
+  { href: "/privacy", label: "Privacy" },
+].filter((l) => l.href !== current);
+---
+
+<footer class="border-t border-border/60 py-10">
+  <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 md:flex-row">
+    <div class="flex items-center gap-2.5">
+      <img src="/suniye-icon.png" alt="" class="h-5 w-5 rounded-[3px]" />
+      <span class="text-sm text-muted">Suniye &middot; MIT License</span>
+    </div>
+    <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-muted">
+      {links.map((l) => (
+        <a href={l.href} class="transition-colors hover:text-ink">{l.label}</a>
+      ))}
+      <a href={githubUrl} target="_blank" rel="noopener" data-track="outbound_click:github" class="transition-colors hover:text-ink">
+        GitHub
+      </a>
+      <a href={`${githubUrl}/issues`} target="_blank" rel="noopener" class="transition-colors hover:text-ink">
+        Issues
+      </a>
+    </div>
+  </div>
+</footer>

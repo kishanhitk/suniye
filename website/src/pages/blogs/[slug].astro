@@ -1,0 +1,89 @@
+---
+import { getCollection, render } from "astro:content";
+import Layout from "../../layouts/Layout.astro";
+import Navbar from "../../components/Navbar.astro";
+import Footer from "../../components/Footer.astro";
+import AudioPathDiagram from "../../components/AudioPathDiagram.astro";
+import { blogPostingSchema, breadcrumbSchema, jsonLdString } from "../../lib/seo";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("blog", ({ data }) => !data.draft);
+  return posts.map((post) => ({ params: { slug: post.id }, props: { post } }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+
+// See index.astro's fmt for why UTC is pinned explicitly.
+const fmt = (d: Date) =>
+  d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
+---
+
+<Layout
+  title={`${post.data.seoTitle ?? post.data.title} — Suniye`}
+  description={post.data.description}
+  canonicalPath={`/blogs/${post.id}`}
+>
+  <script
+    slot="head"
+    is:inline
+    type="application/ld+json"
+    set:html={jsonLdString(
+      blogPostingSchema({
+        title: post.data.title,
+        description: post.data.description,
+        publishDate: post.data.publishDate,
+        updatedDate: post.data.updatedDate,
+        slug: post.id,
+      }),
+    )}
+  />
+  <script
+    slot="head"
+    is:inline
+    type="application/ld+json"
+    set:html={jsonLdString(
+      breadcrumbSchema([
+        { name: "Home", path: "/" },
+        { name: "Blog", path: "/blogs" },
+        { name: post.data.title, path: `/blogs/${post.id}` },
+      ]),
+    )}
+  />
+
+  <Navbar variant="subpage" />
+
+  <main class="relative mx-auto max-w-3xl overflow-hidden px-6 pb-24 pt-28">
+    <div class="bloom right-[-14rem] top-[-6rem] h-[22rem] w-[30rem]" aria-hidden="true"></div>
+    <nav aria-label="Breadcrumb" class="flex items-center gap-1.5 font-mono text-[11px] text-muted/60">
+      <a href="/" class="transition-colors hover:text-ink">Home</a>
+      <span aria-hidden="true">/</span>
+      <a href="/blogs" class="transition-colors hover:text-ink">Blog</a>
+    </nav>
+    <div class="mt-4 flex items-center gap-3 font-mono text-[11px] uppercase tracking-widest text-muted/70">
+      <time datetime={post.data.publishDate.toISOString()}>{fmt(post.data.publishDate)}</time>
+      {post.data.updatedDate && (
+        <>
+          <span aria-hidden="true">&middot;</span>
+          <span>Updated {fmt(post.data.updatedDate)}</span>
+        </>
+      )}
+    </div>
+    <h1 class="mt-3 font-display text-3xl leading-tight tracking-tight sm:text-4xl">{post.data.title}</h1>
+    <p class="mt-4 text-lg leading-relaxed text-muted">{post.data.description}</p>
+
+    {post.data.audioPathDiagram && (
+      <AudioPathDiagram cloudLabel={post.data.competitor ?? "Cloud dictation"} />
+    )}
+
+    <div class="article-prose prose mt-12">
+      <Content />
+    </div>
+
+    <div class="mt-16 border-t border-border pt-8">
+      <a href="/blogs" class="text-sm text-accent transition-colors hover:text-accent-hover">&larr; All posts</a>
+    </div>
+  </main>
+
+  <Footer current="/blogs" />
+</Layout>
