@@ -769,13 +769,15 @@ final class AppState {
     /// Which engine produced the standing result. A success from one engine must
     /// not be read as certifying another.
     private(set) var magicFormatLastTestedProvider: MagicFormatProvider?
-    /// Which credential the standing API result was produced with.
-    private(set) var magicFormatLastTestedKeyFingerprint: Int?
+    /// The configuration the standing API result was produced with: key,
+    /// endpoint and model together. Editing any of them after a success means
+    /// the success no longer describes what would run.
+    private(set) var magicFormatLastTestedAPIFingerprint: Int?
     var magicFormatSetupTestResult: MagicFormatSetupTestResult? {
         didSet {
             if magicFormatSetupTestResult == nil {
                 magicFormatLastTestedProvider = nil
-                magicFormatLastTestedKeyFingerprint = nil
+                magicFormatLastTestedAPIFingerprint = nil
             }
         }
     }
@@ -821,7 +823,7 @@ final class AppState {
     /// ready", which in the endpoint sheet reported the local model's health next
     /// to the key field.
     var llmAPIKeyStatusText: String {
-        if hasLLMAPIKey && isMagicFormatSetupVerified {
+        if hasLLMAPIKey && isAPIMagicFormatSetupVerified {
             return "Connected"
         }
         return hasLLMAPIKey ? "Saved" : "No key"
@@ -834,14 +836,10 @@ final class AppState {
             }
             return localGemmaMagicFormatAvailability.isAvailable ? "Ready" : "Unavailable"
         }
-        if hasLLMAPIKey && isMagicFormatSetupVerified {
+        if hasLLMAPIKey && isAPIMagicFormatSetupVerified {
             return "Connected"
         }
         return hasLLMAPIKey ? "Saved" : "Not connected"
-    }
-
-    var isMagicFormatSetupVerified: Bool {
-        magicFormatSetupTestResult?.severity == .success
     }
 
     /// Whether the *API endpoint* specifically has been verified. Testing Local
@@ -851,11 +849,25 @@ final class AppState {
     var isAPIMagicFormatSetupVerified: Bool {
         guard magicFormatSetupTestResult?.severity == .success,
               magicFormatLastTestedProvider == .openAICompatible,
-              let testedFingerprint = magicFormatLastTestedKeyFingerprint
+              let testedFingerprint = magicFormatLastTestedAPIFingerprint,
+              let keyFingerprint = currentLLMAPIKeyFingerprint
         else {
             return false
         }
-        return testedFingerprint == currentLLMAPIKeyFingerprint
+        return testedFingerprint == Self.apiConfigurationFingerprint(
+            keyFingerprint: keyFingerprint,
+            settings: currentLLMSettings()
+        )
+    }
+
+    /// One value for "the API configuration that would run right now", so a
+    /// test result can be tied to it and invalidated by any edit.
+    private static func apiConfigurationFingerprint(keyFingerprint: Int, settings: LLMSettings) -> Int {
+        var hasher = Hasher()
+        hasher.combine(keyFingerprint)
+        hasher.combine(settings.endpointURLString)
+        hasher.combine(settings.validatedModelId ?? "")
+        return hasher.finalize()
     }
 
 
@@ -2507,9 +2519,13 @@ final class AppState {
         isMagicFormatSetupTestInProgress = true
         magicFormatTestingProvider = .openAICompatible
         magicFormatLastTestedProvider = .openAICompatible
-        // The key this run actually used, so a success against an unsaved draft
-        // cannot certify a different key that happens to be stored.
-        magicFormatLastTestedKeyFingerprint = apiKey.hashValue
+        // The configuration this run actually used, so a success against an
+        // unsaved draft key, or against an endpoint or model that is then
+        // edited, cannot certify what is stored now.
+        magicFormatLastTestedAPIFingerprint = Self.apiConfigurationFingerprint(
+            keyFingerprint: apiKey.hashValue,
+            settings: currentLLMSettings()
+        )
         let config = MagicFormatCoordinator.makeAPIConfig(
             settings: currentLLMSettings(),
             apiKey: apiKey,

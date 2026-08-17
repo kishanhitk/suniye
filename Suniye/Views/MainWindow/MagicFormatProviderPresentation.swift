@@ -47,7 +47,7 @@ struct MagicFormatProviderPresenter {
             if appState.usesLocalMagicFormatSettings {
                 return .green
             }
-            return appState.isMagicFormatSetupVerified ? .green : .blue
+            return appState.isAPIMagicFormatSetupVerified ? .green : .blue
         }
     }
 
@@ -62,7 +62,7 @@ struct MagicFormatProviderPresenter {
                 ? "Local model ready"
                 : appState.localGemmaInstallStatusText
         }
-        if appState.isMagicFormatSetupVerified {
+        if appState.isAPIMagicFormatSetupVerified {
             return "Connected and ready"
         }
         switch appState.magicFormatSetupState {
@@ -193,7 +193,7 @@ struct MagicFormatProviderPresenter {
             if appState.llmEndpointValidationError != nil || appState.llmModelValidationError != nil {
                 return MagicFormatProviderStatus(text: "Invalid", color: .red)
             }
-            if appState.isMagicFormatSetupVerified {
+            if appState.isAPIMagicFormatSetupVerified {
                 return MagicFormatProviderStatus(text: "Connected", color: .green)
             }
             return appState.hasLLMAPIKey
