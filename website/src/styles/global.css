@@ -258,6 +258,17 @@ body {
   transition: opacity 0.25s ease;
 }
 
+/* The scrim's blur is applied only once the dialog is actually open, not as a
+   static class on the element. backdrop-filter forces its own GPU compositing
+   layer; declaring it unconditionally means that layer exists — and can flash
+   for a frame during layer setup on some engines — even while an ancestor's
+   visibility:hidden is supposed to suppress paint entirely. With no
+   backdrop-filter to composite while closed, there is no layer to flash. */
+.dmg-modal.is-open .dmg-scrim {
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
 .dmg-modal .dmg-card {
   transform: translateY(10px) scale(0.98);
   transition: transform 0.28s var(--curve-out);
