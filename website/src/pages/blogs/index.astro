@@ -8,7 +8,11 @@ const posts = (await getCollection("blog", ({ data }) => !data.draft)).sort(
   (a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf(),
 );
 
-const fmt = (d: Date) => d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+// publishDate/updatedDate are date-only values (midnight UTC once Zod coerces
+// them), so formatting has to pin UTC too — otherwise a build running in a
+// negative UTC offset renders the day before whatever's in the frontmatter.
+const fmt = (d: Date) =>
+  d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
 ---
 
 <Layout
