@@ -593,10 +593,17 @@ body {
    and it only appears on hover — so at rest the hero shows a command, not a
    control competing with the CTA. */
 .brew-line {
+  position: relative;
   text-shadow: 0 1px 10px rgba(20, 50, 110, 0.45);
 }
 
+/* Parked outside the line so the command itself stays optically centred under
+   the CTA — in flow, even an invisible word pushes the text off-axis. */
 .brew-line .brew-state {
+  position: absolute;
+  left: 100%;
+  margin-left: 0.6rem;
+  white-space: nowrap;
   opacity: 0;
   color: rgba(255, 255, 255, 0.55);
   transition: opacity 150ms var(--curve-out);
@@ -621,6 +628,11 @@ body {
   color: #fff;
 }
 
-.brew-line.copied .brew-state::after {
-  content: "ed";
+/* The word is swapped whole — appending a suffix to "copy" spells "copyed". */
+.brew-line .brew-state::before {
+  content: "copy";
+}
+
+.brew-line.copied .brew-state::before {
+  content: "copied";
 }

@@ -216,7 +216,7 @@ const faqs = [
         >
           <span aria-hidden="true">$</span>
           {brewInstall}
-          <span class="brew-state" aria-hidden="true">copy</span>
+          <span class="brew-state" aria-hidden="true"></span>
         </button>
 
         <p class="on-art-muted fade-in mt-4 text-[11px]">
@@ -670,40 +670,102 @@ const faqs = [
       aria-modal="true"
       aria-labelledby="dmg-title"
     >
-      <div class="dmg-scrim absolute inset-0 bg-ink/45 backdrop-blur-sm" data-dmg-close></div>
+      <div class="dmg-scrim absolute inset-0 bg-ink/55 backdrop-blur-md" data-dmg-close></div>
 
-      <div class="dmg-card relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-bg p-6 shadow-[0_50px_120px_-24px_rgba(18,35,61,0.55)]">
-        <div class="flex items-start gap-3">
-          <p id="dmg-title" class="flex-1 font-display text-lg leading-snug tracking-tight text-ink">
-            Clear quarantine if macOS blocks it
+      <div class="dmg-card relative w-full max-w-lg overflow-hidden rounded-2xl border border-white/70 bg-bg shadow-[0_50px_120px_-24px_rgba(16,40,68,0.55)]">
+        <div class="p-7 md:p-8">
+          <div class="flex items-start gap-4">
+            <div class="flex-1">
+              <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted/60">
+                One-time step
+              </p>
+              <p id="dmg-title" class="mt-2 font-display text-2xl leading-tight tracking-tight text-ink">
+                If macOS says the app is damaged
+              </p>
+            </div>
+            <button
+              id="dmg-banner-close"
+              type="button"
+              class="btn-press -mr-1.5 -mt-1.5 flex-none rounded-lg p-2 text-muted/50 hover:bg-surface hover:text-ink"
+              aria-label="Dismiss"
+            >
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </div>
+
+          <p class="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-muted">
+            It isn't. Suniye isn't signed with a paid Apple Developer certificate,
+            so macOS quarantines the download. This clears it:
           </p>
-          <button
-            id="dmg-banner-close"
-            type="button"
-            class="btn-press -mt-0.5 flex-none rounded-md p-1 text-muted/50 hover:bg-surface hover:text-ink"
-            aria-label="Dismiss"
-          >
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
+
+          <!-- The command reads as a terminal line, not a form field: dark ground,
+               mono, and the only thing in the dialog with any weight. -->
+          <div class="mt-5 flex items-center gap-3 rounded-xl bg-ink px-4 py-3.5">
+            <code class="flex-1 break-all font-mono text-[12.5px] leading-relaxed text-white/90">
+              {quarantineCmd}
+            </code>
+            <button
+              class="copy-btn btn-press relative flex-none rounded-md p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
+              data-copy={quarantineCmd}
+              aria-label="Copy the command"
+            >
+              <svg class="copy-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+              <svg class="check-icon h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
+          </div>
+
+          <p class="mt-3 text-[13px] leading-relaxed text-muted/75">
+            Paste it into Terminal after dragging Suniye to Applications, then open
+            the app as usual.
+          </p>
         </div>
 
-        <p class="mt-2 text-sm leading-relaxed text-muted">
-          Suniye isn't signed with a paid Apple Developer certificate, so macOS
-          quarantines the .dmg. Run this once to remove it.
-        </p>
+        <!-- Homebrew avoids the whole thing, so it belongs here rather than buried
+             further down the page. Deliberately quieter than the xattr block
+             above: light ground, muted ink, no terminal styling — an alternative
+             for next time, not a second instruction competing with the fix. -->
+        <div class="border-t border-border bg-surface/70 px-7 py-5 md:px-8">
+          <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+            <div class="min-w-0 flex-1">
+              <p class="text-[13px] leading-relaxed text-muted">
+                Or install with Homebrew, which clears this for you.
+              </p>
+              <button
+                class="copy-btn btn-press relative mt-2 flex w-full items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 text-left"
+                data-copy={brewInstall}
+                data-track="download_click:homebrew_modal"
+                aria-label="Copy the Homebrew install command"
+              >
+                <code class="min-w-0 flex-1 break-all font-mono text-[12px] text-muted">
+                  {brewInstall}
+                </code>
+                <span class="relative h-3.5 w-3.5 flex-none text-muted/50">
+                  <svg class="copy-icon h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                  </svg>
+                  <svg class="check-icon h-3.5 w-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </span>
+              </button>
+            </div>
 
-        <CopyField value={quarantineCmd} label="Copy command" class="mt-4" />
-
-        <div class="mt-5 flex justify-end">
-          <button
-            type="button"
-            data-dmg-close
-            class="btn-press rounded-lg bg-ink px-5 py-2.5 text-sm text-bg hover:bg-ink/85"
-          >
-            Got it
-          </button>
+            <button
+              type="button"
+              data-dmg-close
+              class="btn-press rounded-lg bg-ink px-5 py-2.5 text-sm text-bg hover:bg-ink/85"
+            >
+              Got it
+            </button>
+          </div>
         </div>
       </div>
     </div>
