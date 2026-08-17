@@ -165,8 +165,9 @@ const faqs = [
     <div id="nav-sentinel" aria-hidden="true"></div>
 
     <!-- ── The argument ─────────────────────── -->
-    <section class="py-24 md:py-32">
-      <div class="mx-auto max-w-6xl px-6">
+    <section class="relative overflow-hidden py-20 md:py-28">
+      <div class="bloom left-1/2 top-[-6rem] h-[26rem] w-[46rem] -translate-x-1/2" aria-hidden="true"></div>
+      <div class="relative z-10 mx-auto max-w-6xl px-6">
         <div class="reveal mx-auto max-w-2xl text-center">
           <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
             Every other dictation app sends your voice away.
@@ -180,7 +181,7 @@ const faqs = [
 
         <div class="reveal mt-14 grid gap-6 md:grid-cols-2" style="transition-delay: 0.1s">
           <!-- Cloud path — deliberately the longer, greyer column. -->
-          <div class="card border-border/70 bg-surface/60 p-7">
+          <div class="card border-border/70 bg-white/45 p-7 md:p-8">
             <p class="font-mono text-[11px] uppercase tracking-widest text-muted/70">
               Cloud dictation
             </p>
@@ -201,7 +202,7 @@ const faqs = [
           </div>
 
           <!-- Local path — shorter by one step, and the only coloured surface here. -->
-          <div class="card border-accent/30 bg-accent/[0.04] p-7">
+          <div class="card border-accent/25 bg-[linear-gradient(180deg,rgba(43,108,196,0.10),rgba(255,255,255,0.72))] p-7 shadow-[0_18px_44px_-24px_rgba(18,35,61,0.35)] md:p-8">
             <p class="font-mono text-[11px] uppercase tracking-widest text-accent">
               Suniye
             </p>
@@ -226,7 +227,7 @@ const faqs = [
     <!-- ── Demo ─────────────────────────────── -->
     <!-- Click-to-play with sound: the narration is the point, and browsers block
          autoplay-with-audio, so we lead with a poster and a play affordance. -->
-    <section class="border-t border-border/60 py-24 md:py-32">
+    <section class="border-t border-border/50 py-20 md:py-28">
       <div class="mx-auto max-w-6xl px-6">
         <div class="reveal mx-auto max-w-2xl text-center">
           <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
@@ -298,11 +299,15 @@ const faqs = [
     </section>
 
     <!-- ── What you get ─────────────────────── -->
-    <section class="border-t border-border/60 py-24 md:py-32">
-      <div class="mx-auto max-w-6xl px-6">
-        <div class="grid gap-x-12 gap-y-10 md:grid-cols-2">
+    <section class="relative overflow-hidden border-t border-border/50 py-20 md:py-28">
+      <div class="bloom right-[-10rem] top-[4rem] h-[24rem] w-[34rem]" aria-hidden="true"></div>
+      <div class="relative z-10 mx-auto max-w-6xl px-6">
+        <div class="grid gap-5 md:grid-cols-2">
           {pillars.map((p, i) => (
-            <div class="reveal" style={`transition-delay: ${i * 0.06}s`}>
+            <div
+              class="reveal glass-panel border border-white/60 p-7 shadow-[0_18px_44px_-28px_rgba(18,35,61,0.4)] md:p-8"
+              style={`transition-delay: ${i * 0.06}s`}
+            >
               <h3 class="font-display text-xl tracking-tight">{p.title}</h3>
               <p class="mt-3 leading-relaxed text-muted">{p.desc}</p>
             </div>
@@ -314,7 +319,7 @@ const faqs = [
     <!-- ── Models ───────────────────────────── -->
     <!-- The choice is the selling point; the catalogue is reference, so it stays
          folded until someone actually wants to compare sizes. -->
-    <section id="models" class="scroll-mt-20 border-t border-border/60 bg-surface/60 py-24 md:py-32">
+    <section id="models" class="relative scroll-mt-20 overflow-hidden border-t border-border/50 bg-[linear-gradient(180deg,rgba(43,108,196,0.07),transparent)] py-20 md:py-28">
       <div class="mx-auto max-w-6xl px-6">
         <div class="reveal mx-auto max-w-2xl text-center">
           <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
@@ -328,7 +333,7 @@ const faqs = [
         </div>
 
         <details class="reveal group mx-auto mt-10 max-w-3xl" style="transition-delay: 0.1s">
-          <summary class="mx-auto flex w-fit cursor-pointer list-none items-center gap-2 rounded-full border border-border bg-bg px-5 py-2.5 font-mono text-xs tracking-wide text-muted transition-colors [&::-webkit-details-marker]:hidden hover:text-ink">
+          <summary class="mx-auto flex w-fit cursor-pointer list-none items-center gap-2 rounded-full border border-white/70 bg-white/70 px-5 py-2.5 font-mono shadow-[0_1px_2px_rgba(18,35,61,0.05)] backdrop-blur-sm text-xs tracking-wide text-muted transition-colors [&::-webkit-details-marker]:hidden hover:text-ink">
             <span class="group-open:hidden">See every model</span>
             <span class="hidden group-open:inline">Hide the list</span>
             <svg class="h-3.5 w-3.5 transition-transform duration-200 [transition-timing-function:var(--curve-out)] group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -336,7 +341,7 @@ const faqs = [
             </svg>
           </summary>
 
-          <ul class="mt-8 divide-y divide-border/70 border-y border-border/70">
+          <ul class="glass-panel mt-8 divide-y divide-border/60 border border-white/60 px-6 shadow-[0_18px_44px_-28px_rgba(18,35,61,0.4)]">
             {models.map((m) => (
               <li class="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-3.5">
                 <span class="text-[15px] tracking-tight text-ink">{m.name}</span>
@@ -351,7 +356,7 @@ const faqs = [
     </section>
 
     <!-- ── Install ──────────────────────────── -->
-    <section id="install" class="scroll-mt-20 border-t border-border/60 py-24 md:py-32">
+    <section id="install" class="scroll-mt-20 border-t border-border/50 py-20 md:py-28">
       <div class="mx-auto max-w-6xl px-6">
         <div class="reveal mx-auto max-w-xl">
           <h2 class="text-center font-display text-3xl tracking-tight md:text-4xl">
@@ -412,7 +417,7 @@ const faqs = [
     </section>
 
     <!-- ── FAQ ──────────────────────────────── -->
-    <section id="faq" class="scroll-mt-20 border-t border-border/60 bg-surface/60 py-24 md:py-32">
+    <section id="faq" class="scroll-mt-20 border-t border-border/50 bg-[linear-gradient(180deg,transparent,rgba(43,108,196,0.07))] py-20 md:py-28">
       <div class="mx-auto max-w-6xl px-6">
         <div class="grid gap-12 lg:grid-cols-[0.8fr_1.6fr] lg:gap-16">
           <h2 class="reveal font-mono text-sm uppercase tracking-widest text-muted lg:sticky lg:top-28 lg:self-start">
