@@ -259,24 +259,38 @@ body {
   transition: opacity 0.25s ease;
 }
 
-/* The scrim's blur is applied only once the dialog is actually open, not as a
-   static class on the element. backdrop-filter forces its own GPU compositing
-   layer; declaring it unconditionally means that layer exists — and can flash
-   for a frame during layer setup on some engines — even while an ancestor's
-   visibility:hidden is supposed to suppress paint entirely. With no
-   backdrop-filter to composite while closed, there is no layer to flash. */
+@starting-style {
+  .dmg-modal.is-open {
+    opacity: 0;
+  }
+}
+
+/* The scrim's blur and the card's entrance transform are both applied only
+   once the dialog is open, never as a value declared on the closed resting
+   state. backdrop-filter and transform each force their own GPU compositing
+   layer the moment they're declared, not just when they change — so a
+   permanent closed-state value (e.g. transform: translateY(10px) scale(0.98)
+   sitting on .dmg-card at rest) gives Safari a layer to flash on first paint
+   even while an ancestor's visibility:hidden is supposed to suppress it
+   entirely. @starting-style supplies the "from" value only at the instant
+   the transition actually begins, so nothing is ever composited while closed. */
 .dmg-modal.is-open .dmg-scrim {
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
 
-.dmg-modal .dmg-card {
-  transform: translateY(10px) scale(0.98);
+.dmg-card {
   transition: transform 0.28s var(--curve-out);
 }
 
 .dmg-modal.is-open .dmg-card {
   transform: none;
+}
+
+@starting-style {
+  .dmg-modal.is-open .dmg-card {
+    transform: translateY(10px) scale(0.98);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -286,9 +300,8 @@ body {
   .dmg-modal.is-open {
     transition: opacity 0.15s ease;
   }
-  .dmg-modal .dmg-card,
+  .dmg-card,
   .dmg-modal.is-open .dmg-card {
-    transform: none;
     transition: none;
   }
 }
