@@ -598,8 +598,11 @@ body {
 }
 
 /* Parked outside the line so the command itself stays optically centred under
-   the CTA — in flow, even an invisible word pushes the text off-axis. */
+   the CTA — in flow, even an invisible word pushes the text off-axis. It is a
+   hover affordance, so it is hidden entirely on touch widths, where it would
+   otherwise hang past the right edge of a 390px viewport. */
 .brew-line .brew-state {
+  display: none;
   position: absolute;
   left: 100%;
   margin-left: 0.6rem;
@@ -607,6 +610,12 @@ body {
   opacity: 0;
   color: rgba(255, 255, 255, 0.55);
   transition: opacity 150ms var(--curve-out);
+}
+
+@media (min-width: 640px) {
+  .brew-line .brew-state {
+    display: block;
+  }
 }
 
 @media (hover: hover) and (pointer: fine) {
