@@ -3007,7 +3007,10 @@ final class AppState {
         lastFailedASRModelID = nil
         lastFailedASRModelError = nil
 
-        Task {
+        // Held in the same handle the file-based downloads use, so an OS asset
+        // fetch is cancellable too — it was running in an unassigned Task, which
+        // left the Cancel action hidden for a download of the same size.
+        asrDownloadTask = Task {
             do {
                 let assetInstalled = await modelManager.isSystemManagedAssetInstalled(modelID)
                 if !assetInstalled {
@@ -3039,18 +3042,33 @@ final class AppState {
                 lastFailedASRModelError = nil
                 AppLogger.shared.log(.info, "system-managed model ready id=\(modelID.rawValue)")
             } catch {
-                if modelDownloadStartedAt != nil {
-                    trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .failed, startedAt: modelDownloadStartedAt)
+                if Self.isCancellation(error) {
+                    if modelDownloadStartedAt != nil {
+                        trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .canceled, startedAt: modelDownloadStartedAt)
+                    }
+                    downloadProgress = 0
+                    if hadLoadedModel {
+                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
+                    } else {
+                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required")
+                    }
+                    lastError = nil
+                    AppLogger.shared.log(.info, "system-managed asset download canceled id=\(modelID.rawValue)")
+                } else {
+                    if modelDownloadStartedAt != nil {
+                        trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .failed, startedAt: modelDownloadStartedAt)
+                    }
+                    handleASRModelOperationFailure(
+                        for: modelID,
+                        error: error,
+                        fallbackToReadyState: hadLoadedModel
+                    )
                 }
-                handleASRModelOperationFailure(
-                    for: modelID,
-                    error: error,
-                    fallbackToReadyState: hadLoadedModel
-                )
             }
 
             activeASRModelOperationID = nil
             modelDownloadStartedAt = nil
+            asrDownloadTask = nil
         }
     }
 
