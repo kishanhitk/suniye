@@ -63,15 +63,19 @@ struct CompactTranscriptRow: View {
     }
 
     var body: some View {
-        Button(action: copy) {
-            row
-        }
-        // No scale on a list row — a jiggling row reads as a glitch; the opacity
-        // dip and the fill are enough.
-        .buttonStyle(PressableButtonStyle(pressedScale: 1))
-        .accessibilityLabel(result.text)
-        .accessibilityHint("Copies this transcript")
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        // A tap gesture, not a Button: the row contains its own Copy and Delete
+        // buttons, and a Button wrapping other Buttons swallows their clicks —
+        // pressing the trash copied the transcript and never deleted it. The
+        // gesture only fires for clicks that no child control handled, and
+        // the visuals (fill, hover) are unchanged.
+        row
+            .contentShape(Rectangle())
+            .onTapGesture(perform: copy)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(result.text)
+            .accessibilityHint("Copies this transcript")
+            .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+            .accessibilityAction(named: "Copy", copy)
     }
 
     private var row: some View {

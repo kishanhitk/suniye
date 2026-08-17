@@ -656,10 +656,13 @@ struct APIEndpointSheet: View {
                     ProgressView().controlSize(.small)
                 }
 
-                // Gated on the same predicate as the badge, so a result from a
-                // draft key that was tested and then discarded does not linger
-                // beside a stored key it never certified.
+                // Provider-scoped first — a Local or Apple result, success or
+                // failure, never belongs beside this button — and a success is
+                // further gated on the badge's predicate so a discarded draft
+                // key's success does not linger beside a stored key it never
+                // certified.
                 if let result = appState.magicFormatSetupTestResult,
+                   appState.magicFormatLastTestedProvider == .openAICompatible,
                    appState.isAPIMagicFormatSetupVerified || result.severity != .success {
                     HStack(spacing: 6) {
                         Circle()
