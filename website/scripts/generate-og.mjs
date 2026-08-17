@@ -57,9 +57,9 @@ const svg = await satori(
               top: 0,
               left: 0,
               width: "1200px",
-              height: "470px",
+              height: "560px",
               backgroundImage:
-                "linear-gradient(180deg, rgba(16,40,68,0.52) 0%, rgba(16,40,68,0.34) 55%, rgba(16,40,68,0) 100%)",
+                "linear-gradient(180deg, rgba(10,28,50,0.72) 0%, rgba(10,28,50,0.52) 45%, rgba(10,28,50,0.20) 78%, rgba(10,28,50,0) 100%)",
             },
           },
         },
@@ -82,6 +82,7 @@ const svg = await satori(
                     color: "#ffffff",
                     lineHeight: 1.02,
                     letterSpacing: "-0.02em",
+                    textShadow: "0 2px 18px rgba(8,24,44,0.55)",
                   },
                   children: "Speak freely.",
                 },
@@ -91,8 +92,9 @@ const svg = await satori(
                 props: {
                   style: {
                     fontSize: "26px",
-                    color: "rgba(255,255,255,0.92)",
+                    color: "#ffffff",
                     marginTop: "22px",
+                    textShadow: "0 1px 12px rgba(8,24,44,0.6)",
                     lineHeight: 1.45,
                     textAlign: "center",
                     maxWidth: "760px",
@@ -102,6 +104,22 @@ const svg = await satori(
                 },
               },
             ],
+          },
+        },
+        // The wordmark sits on lit meadow, the brightest part of the frame, so it
+        // gets a short wash of its own rather than relying on a text shadow.
+        {
+          type: "div",
+          props: {
+            style: {
+              position: "absolute",
+              bottom: "0px",
+              left: "0px",
+              width: "1200px",
+              height: "170px",
+              backgroundImage:
+                "linear-gradient(180deg, rgba(10,28,50,0) 0%, rgba(10,28,50,0.30) 60%, rgba(10,28,50,0.48) 100%)",
+            },
           },
         },
         {
@@ -117,7 +135,8 @@ const svg = await satori(
               fontSize: "21px",
               fontFamily: "Fragment Mono",
               letterSpacing: "0.14em",
-              color: "rgba(255,255,255,0.85)",
+              color: "rgba(255,255,255,0.95)",
+              textShadow: "0 1px 10px rgba(8,24,44,0.6)",
             },
             children: "SUNIYE.APP",
           },
