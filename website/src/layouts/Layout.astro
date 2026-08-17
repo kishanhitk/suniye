@@ -7,19 +7,23 @@ interface Props {
   title?: string;
   description?: string;
   canonicalPath?: string;
+  /** What the browser paints its own chrome and over-scroll with — iOS Safari
+      derives it from the document background colour. Defaults to the page. */
+  canvasColor?: string;
 }
 
 const {
   title = "Suniye — Private Dictation for macOS",
   description = "Dictation for macOS, built for privacy and speed. The models run on your Mac, so nothing is uploaded and the words land as fast as you say them. Free and open source.",
   canonicalPath = "/",
+  canvasColor,
 } = Astro.props;
 
 const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
 ---
 
 <!doctype html>
-<html lang="en" class="scroll-smooth">
+<html lang="en" class="scroll-smooth" style={canvasColor && `--canvas-color: ${canvasColor}`}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -57,7 +61,7 @@ const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
       document.documentElement.classList.add("js-reveal");
     </script>
   </head>
-  <body class="min-w-[320px] bg-bg font-body text-ink antialiased">
+  <body class="min-w-[320px] font-body text-ink antialiased">
     <!-- Lens for .glass. R displaces horizontally, G vertically; mid-grey (#808080)
          is "no shift", so the ramps live only in the outer bands and the backdrop
          bends at the rim while staying true through the middle. Chrome-only —

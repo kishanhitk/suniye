@@ -119,7 +119,10 @@ const faqs = [
 ];
 ---
 
-<Layout>
+{/* iOS Safari paints the status-bar band above the page with the document's
+    background colour, so over the painting it has to be the painting's own sky —
+    sampled from the artwork at build time (astro.config.mjs), never pinned. */}
+<Layout canvasColor={__HERO_SKY__}>
   <script
     slot="head"
     is:inline
@@ -778,6 +781,24 @@ const faqs = [
       const settle = () => heroArt.classList.remove("is-loading");
       if (heroArt.complete) settle();
       else heroArt.addEventListener("load", settle, { once: true });
+    }
+
+    // The sky only belongs in the browser's chrome while the painting sits
+    // under it: once the page below the hero scrolls into view, hand the canvas
+    // back to the page colour, and take the sky again at the top. Observing the
+    // first section with a small guard keeps the decision off the exact viewport
+    // edge, where browsers disagree about zero-overlap intersections.
+    const root = document.documentElement;
+    const sky = root.style.getPropertyValue("--canvas-color").trim();
+    const afterHero = document.getElementById("hero")?.nextElementSibling;
+    if (sky && afterHero && "IntersectionObserver" in window) {
+      new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) root.style.removeProperty("--canvas-color");
+          else root.style.setProperty("--canvas-color", sky);
+        },
+        { rootMargin: "0px 0px -8px 0px", threshold: 0 }
+      ).observe(afterHero);
     }
 
     const revealEls = document.querySelectorAll(".reveal");

@@ -60,9 +60,14 @@ html {
 
 /* The page below the hero is not flat paper — it keeps a trace of the painting's
    sky. A fixed wash means the tint stays put while content scrolls over it, so
-   long sections never read as an empty white field. */
+   long sections never read as an empty white field.
+
+   The colour underneath is never seen — the wash's bottom layer is opaque — but
+   iOS Safari paints its status-bar band and over-scroll with the document's
+   background *colour* (images excluded), so a page can hand it a different one
+   through --canvas-color without changing a pixel of the page itself. */
 body {
-  background-color: var(--color-bg);
+  background-color: var(--canvas-color, var(--color-bg));
   background-image:
     radial-gradient(90% 55% at 50% 0%, rgba(43, 108, 196, 0.20), transparent 62%),
     radial-gradient(70% 40% at 88% 78%, rgba(43, 108, 196, 0.12), transparent 65%),
