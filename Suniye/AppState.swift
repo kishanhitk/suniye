@@ -4155,6 +4155,7 @@ final class AppState {
         let wasLLMPolished = llmOutcome?.ran ?? false
         var didCompleteDictation = false
         var didFailInsertion = false
+        var submitKeyFailed = false
         var didInsertFinalText = finalText.isEmpty
 
         // Attribution is applied after insertion succeeds, not here: the record
@@ -4230,9 +4231,11 @@ final class AppState {
                 // Not rethrown: the transcript was produced and inserted, so
                 // letting this reach the transcription catch reported
                 // "Transcription failed" for a dictation that in fact
-                // succeeded — only the Enter key did not land.
+                // succeeded — only the Enter key did not land. The user is
+                // told exactly that, not that the text is missing.
                 AppLogger.shared.log(.error, "submit command failed error=\(error.localizedDescription)")
                 analytics.track(.error(type: .insertion, code: .unknown))
+                submitKeyFailed = true
             }
         }
 
@@ -4265,8 +4268,10 @@ final class AppState {
             showInsertionRecoveryWarning()
         } else {
             isShowingInsertionRecoveryWarning = false
+            if submitKeyFailed {
+                showSubmitKeyFailureNotice()
+            }
         }
-
     }
 
     /// Records which audio-capture backend a session resolved to, whether it
@@ -4985,6 +4990,15 @@ final class AppState {
 
     private var insertionRecoveryMessage: String {
         "Couldn't insert text. Focus a text field, then press \(pasteLastTranscriptHotkeyConfiguration.compactDisplayString)."
+    }
+
+    /// The text is in; only the Enter after it did not post. Says so, rather
+    /// than the recovery warning's "couldn't insert" — which would send the
+    /// user to re-paste text that is already there.
+    private func showSubmitKeyFailureNotice() {
+        let message = "Text inserted, but Enter couldn't be sent. Press it yourself."
+        lastError = message
+        showTransientIndicatorError(message, restoreState: blockedStartRestoreIndicatorState(), duration: 3.0)
     }
 
     private func showInsertionRecoveryWarning() {
