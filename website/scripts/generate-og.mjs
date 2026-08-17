@@ -3,11 +3,8 @@
  * Run: bun scripts/generate-og.mjs
  *
  * The card is the hero, cropped: same painting, same serif headline, same
- * promise. The subtitle is serif here where the page sets it in Google Sans:
- * that face ships only as a variable font, and satori's parser cannot read
- * an fvar table. Instancing it to a static weight (fonttools) is the fix.
- *
- * A share preview that matches the page it links to is the whole point
+ * promise, and the same two faces. A share preview that matches the page it
+ * links to is the whole point
  * — a separate "designed" card just means the visitor arrives somewhere they
  * have not seen before.
  */
@@ -19,6 +16,14 @@ import { execFileSync } from "child_process";
 // Satori can't parse woff2, so TTF copies live here as build-time assets.
 // Georgia stands in for the site's Iowan Old Style, which ships only as a .ttc.
 const georgia = readFileSync("scripts/fonts/Georgia.ttf");
+// The site's body face. Google Sans ships as a variable font with three axes
+// (opsz, wght, GRAD) and satori's parser cannot read an fvar table, so this
+// is a static instance with every axis pinned:
+//   fonttools varLib.instancer public/fonts/GoogleSans-Variable.woff2 \
+//     wght=400 opsz=16 GRAD=0 -o /tmp/gs.woff2
+//   fonttools ttLib.woff2 decompress /tmp/gs.woff2 -o scripts/fonts/GoogleSans.ttf
+// Pinning only wght leaves it variable and satori still throws.
+const googleSans = readFileSync("scripts/fonts/GoogleSans.ttf");
 const fragmentMono = readFileSync("scripts/fonts/FragmentMono-Regular.ttf");
 
 // The painting, pre-cropped to the card's aspect. Inlined because resvg
@@ -95,7 +100,8 @@ const svg = await satori(
                 type: "div",
                 props: {
                   style: {
-                    fontSize: "32px",
+                    fontSize: "30px",
+                    fontFamily: "Google Sans",
                     color: "#ffffff",
                     marginTop: "22px",
                     lineHeight: 1.45,
@@ -192,6 +198,7 @@ const svg = await satori(
     height: 630,
     fonts: [
       { name: "Georgia", data: georgia, weight: 400 },
+      { name: "Google Sans", data: googleSans, weight: 400 },
       { name: "Fragment Mono", data: fragmentMono, weight: 400 },
     ],
   }
