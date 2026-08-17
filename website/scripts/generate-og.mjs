@@ -23,7 +23,10 @@ const fragmentMono = readFileSync("scripts/fonts/FragmentMono-Regular.ttf");
 
 // The painting, pre-cropped to the card's aspect. Inlined because resvg
 // resolves no network requests.
-const background = `data:image/jpeg;base64,${readFileSync("scripts/og-bg.jpg").toString("base64")}`;
+execFileSync("sips", ["-Z", "120", "scripts/og-bg.jpg", "--out", "/tmp/og-small.jpg"]);
+execFileSync("sips", ["-z", "630", "1200", "/tmp/og-small.jpg", "--out", "/tmp/og-blur.jpg"]);
+const background = `data:image/jpeg;base64,${readFileSync("/tmp/og-blur.jpg").toString("base64")}`;
+const icon = `data:image/png;base64,${readFileSync("public/suniye-icon.png").toString("base64")}`;
 
 const svg = await satori(
   {
@@ -63,7 +66,7 @@ const svg = await satori(
               width: "1200px",
               height: "560px",
               backgroundImage:
-                "linear-gradient(180deg, rgba(10,28,50,0.72) 0%, rgba(10,28,50,0.52) 45%, rgba(10,28,50,0.20) 78%, rgba(10,28,50,0) 100%)",
+                "linear-gradient(180deg, rgba(10,28,50,0.42) 0%, rgba(10,28,50,0.28) 55%, rgba(10,28,50,0) 100%)",
             },
           },
         },
@@ -86,7 +89,6 @@ const svg = await satori(
                     color: "#ffffff",
                     lineHeight: 1.02,
                     letterSpacing: "-0.02em",
-                    textShadow: "0 2px 18px rgba(8,24,44,0.55)",
                   },
                   children: "Speak freely.",
                 },
@@ -98,13 +100,12 @@ const svg = await satori(
                     fontSize: "32px",
                     color: "#ffffff",
                     marginTop: "22px",
-                    textShadow: "0 1px 12px rgba(8,24,44,0.6)",
                     lineHeight: 1.45,
                     textAlign: "center",
                     maxWidth: "830px",
                   },
                   children:
-                    "Dictation for macOS, built for privacy and speed. The models run on your Mac.",
+                    "Dictation for macOS, built for privacy and speed.",
                 },
               },
             ],
@@ -122,27 +123,66 @@ const svg = await satori(
               width: "1200px",
               height: "170px",
               backgroundImage:
-                "linear-gradient(180deg, rgba(10,28,50,0) 0%, rgba(10,28,50,0.30) 60%, rgba(10,28,50,0.48) 100%)",
+                "linear-gradient(180deg, rgba(10,28,50,0) 0%, rgba(10,28,50,0.18) 60%, rgba(10,28,50,0.30) 100%)",
             },
           },
         },
+        // Identity left, offer right. A share preview is often the only thing
+        // seen before the click, so the card has to say what it costs — "free"
+        // is the strongest word available against subscription competitors.
         {
           type: "div",
           props: {
             style: {
               position: "absolute",
-              bottom: "44px",
-              left: "0px",
-              width: "1200px",
+              bottom: "40px",
+              left: "60px",
+              width: "1080px",
               display: "flex",
-              justifyContent: "center",
-              fontSize: "23px",
-              fontFamily: "Fragment Mono",
-              letterSpacing: "0.14em",
-              color: "rgba(255,255,255,0.95)",
-              textShadow: "0 1px 10px rgba(8,24,44,0.6)",
+              alignItems: "center",
+              justifyContent: "space-between",
             },
-            children: "SUNIYE.APP",
+            children: [
+              {
+                type: "div",
+                props: {
+                  style: { display: "flex", alignItems: "center", gap: "14px" },
+                  children: [
+                    {
+                      type: "img",
+                      props: { src: icon, width: 40, height: 40, style: { borderRadius: "9px" } },
+                    },
+                    {
+                      type: "div",
+                      props: {
+                        style: {
+                          fontSize: "23px",
+                          fontFamily: "Fragment Mono",
+                          letterSpacing: "0.14em",
+                          color: "#ffffff",
+                        },
+                        children: "SUNIYE.APP",
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                type: "div",
+                props: {
+                  style: {
+                    display: "flex",
+                    alignItems: "center",
+                    fontSize: "24px",
+                    color: "#12233d",
+                    backgroundColor: "#ffffff",
+                    padding: "16px 30px",
+                    borderRadius: "999px",
+                  },
+                  children: "Download free for macOS",
+                },
+              },
+            ],
           },
         },
       ],
