@@ -147,21 +147,30 @@ const faqs = [
     <!-- The painting is the page's whole first impression, so it is a real <img>
          (decoding early, preloaded) rather than a CSS background: the browser
          can then prioritise it as the LCP element. -->
-    <section class="relative flex min-h-[100svh] flex-col overflow-hidden bg-[#2b6cc4]">
+    <section class="hero-ground relative flex min-h-[100svh] flex-col overflow-hidden bg-[#2b6cc4]">
+      <!-- An 853-byte blurred copy of the painting is inlined as the section's own
+           background, so the first paint already has the right colour and shape
+           under the headline. The real image fades over it once decoded — the
+           browser picks the width, so a laptop never pays for the 3344px file. -->
       <picture>
         <source
-          srcset="/hero-sm.webp 1100w, /hero.webp 2000w"
+          srcset="
+            /hero-700.webp   700w,
+            /hero-1100.webp 1100w,
+            /hero-1672.webp 1672w,
+            /hero-2200.webp 2200w,
+            /hero-3344.webp 3344w
+          "
           sizes="100vw"
           type="image/webp"
         />
         <img
           src="/hero.jpg"
-          srcset="/hero-sm.jpg 1100w, /hero.jpg 2000w"
-          sizes="100vw"
           alt=""
           fetchpriority="high"
           decoding="async"
-          class="hero-art"
+          class="hero-art is-loading"
+          data-hero-art
         />
       </picture>
 
@@ -699,6 +708,15 @@ const faqs = [
 
   <!-- ── Behaviour ──────────────────────────── -->
   <script>
+    // Cross-fade the hero painting over its blurred placeholder once decoded.
+    // complete === true covers the cached case, where load never fires.
+    const heroArt = document.querySelector("[data-hero-art]");
+    if (heroArt) {
+      const settle = () => heroArt.classList.remove("is-loading");
+      if (heroArt.complete) settle();
+      else heroArt.addEventListener("load", settle, { once: true });
+    }
+
     const revealEls = document.querySelectorAll(".reveal");
     if (!("IntersectionObserver" in window)) {
       // No observer support — reveal everything rather than leave it hidden.

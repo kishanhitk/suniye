@@ -435,16 +435,36 @@ body {
 
 /* ── Hero ──────────────────────────────────── */
 
+/* The blurred placeholder sits on the section itself, so it is painted with the
+   first frame of HTML rather than waiting on any network request. */
+.hero-ground {
+  background-image: url("data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAGKADAAQAAAABAAAADQAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgADQAYAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMACQkJCQkJEAkJEBYQEBAWHhYWFhYeJh4eHh4eJi4mJiYmJiYuLi4uLi4uLjc3Nzc3N0BAQEBASEhISEhISEhISP/bAEMBCwwMEhESHxERH0szKjNLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS//dAAQAAv/aAAwDAQACEQMRAD8A6e50SQHpWTLpuw4YgfjXIReINTmjHmys2eME8VLJdu6GYjp2ruWYuGkzzpYeL+E6EWCH+IfnS/2cnqP++hXDTXYZS5Q/TdVH7Z/sfqa1WZX6Gf1Zdz//2Q==");
+  background-size: cover;
+  background-position: center bottom;
+}
+
 .hero-art {
   position: absolute;
   inset: 0;
   z-index: 0;
   object-fit: cover;
+  opacity: 1;
+  transition: opacity 500ms var(--curve-out);
   /* Anchor low: the sky is the text's ground, so any crop must eat sky from the
      top and keep the mountains and meadow in frame. */
   object-position: center bottom;
   width: 100%;
   height: 100%;
+}
+
+.hero-art.is-loading {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-art {
+    transition: opacity 200ms ease;
+  }
 }
 
 /* On the painting, ink is white and needs the same soft lift the prototype used
