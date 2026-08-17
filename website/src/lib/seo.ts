@@ -1,9 +1,16 @@
+import { getCollection } from "astro:content";
+
 export const SITE_URL = "https://suniye.app";
 
-export const SITE_PAGES = ["/", "/changelog", "/privacy"] as const;
+export const SITE_PAGES = ["/", "/changelog", "/privacy", "/blogs"] as const;
 
-export function buildSitemapXml(): string {
-  const urls = SITE_PAGES.map(
+export async function buildSitemapXml(): Promise<string> {
+  const posts = await getCollection("blog", ({ data }) => !data.draft);
+  const paths: string[] = [
+    ...SITE_PAGES,
+    ...posts.map((p) => `/blogs/${p.id}`),
+  ];
+  const urls = paths.map(
     (path) => `  <url>\n    <loc>${new URL(path, SITE_URL).toString()}</loc>\n  </url>`,
   ).join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
@@ -44,5 +51,25 @@ export function faqPageSchema(faqs: readonly FaqItem[]) {
       name: item.q,
       acceptedAnswer: { "@type": "Answer", text: item.a },
     })),
+  };
+}
+
+export function blogPostingSchema(post: {
+  title: string;
+  description: string;
+  publishDate: Date;
+  updatedDate?: Date;
+  slug: string;
+}) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.description,
+    datePublished: post.publishDate.toISOString(),
+    dateModified: (post.updatedDate ?? post.publishDate).toISOString(),
+    author: { "@type": "Organization", name: "Suniye", url: SITE_URL },
+    publisher: { "@type": "Organization", name: "Suniye", url: SITE_URL },
+    mainEntityOfPage: new URL(`/blogs/${post.slug}`, SITE_URL).toString(),
   };
 }

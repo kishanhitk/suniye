@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import CopyField from "../components/CopyField.astro";
 import Navbar from "../components/Navbar.astro";
+import Footer from "../components/Footer.astro";
 import { softwareApplicationSchema, faqPageSchema, jsonLdString } from "../lib/seo";
 
 const githubUrl = "https://github.com/kishanhitk/suniye";
@@ -765,24 +766,7 @@ const faqs = [
   </main>
 
   <!-- ── Footer ─────────────────────────────── -->
-  <footer class="border-t border-border/60 py-10">
-    <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 md:flex-row">
-      <div class="flex items-center gap-2.5">
-        <img src="/suniye-icon.png" alt="" class="h-5 w-5 rounded-[3px]" />
-        <span class="text-sm text-muted">Suniye &middot; MIT License</span>
-      </div>
-      <div class="flex items-center gap-6 text-sm text-muted">
-        <a href={githubUrl} target="_blank" rel="noopener" data-track="outbound_click:github" class="transition-colors hover:text-ink">
-          GitHub
-        </a>
-        <a href={`${githubUrl}/issues`} target="_blank" rel="noopener" class="transition-colors hover:text-ink">
-          Issues
-        </a>
-        <a href="/changelog" class="transition-colors hover:text-ink">Changelog</a>
-        <a href="/privacy" class="transition-colors hover:text-ink">Privacy</a>
-      </div>
-    </div>
-  </footer>
+  <Footer current="/" />
 
   <!-- ── Behaviour ──────────────────────────── -->
   <script>
