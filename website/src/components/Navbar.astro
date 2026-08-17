@@ -1,60 +1,117 @@
 ---
-// The site's top navigation bar. Shared across the homepage and subpages so the
-// bar stays identical everywhere. The only per-page difference is the secondary
-// link and how Download behaves:
-//   - "home":    links to /changelog; Download carries `data-dmg` so the
-//                homepage's inline script intercepts the click and shows the
-//                quarantine modal instead of navigating.
-//   - "subpage": links back to /; Download goes straight to the DMG (no modal
-//                script exists off the homepage).
+// The site's top navigation bar. Shared across the homepage and subpages.
+//   - "over-art": starts bar-less and white over the hero painting, then swaps
+//                 to a frosted light bar once the hero scrolls past. Download
+//                 carries `data-dmg` so the homepage script shows the
+//                 quarantine dialog instead of navigating.
+//   - "subpage":  always the frosted light bar; Download goes straight to the
+//                 DMG (no modal script exists off the homepage).
 interface Props {
-  variant?: "home" | "subpage";
+  variant?: "over-art" | "subpage";
 }
 const { variant = "subpage" } = Astro.props;
+const overArt = variant === "over-art";
 
 const githubUrl = "https://github.com/kishanhitk/suniye";
 const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/download/Suniye.dmg";
 ---
 
-<nav class="fixed top-0 z-50 w-full border-b border-border/60 bg-bg/90 backdrop-blur-md">
+<nav
+  id="site-nav"
+  data-over-art={overArt ? "" : undefined}
+  class:list={[
+    "fixed top-0 z-50 w-full transition-colors duration-300 [transition-timing-function:var(--curve-out)]",
+    overArt
+      ? "is-over-art border-b border-transparent"
+      : "border-b border-border/60 bg-bg/90 backdrop-blur-md",
+  ]}
+>
   <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
     <a href="/" class="flex items-center gap-2.5">
       <img src="/suniye-icon.png" alt="Suniye" class="h-7 w-7 rounded-[5px]" />
-      <span class="font-display text-base tracking-tight">Suniye</span>
+      <span class="nav-brand font-display text-base tracking-tight">Suniye</span>
     </a>
     <div class="flex items-center gap-5">
-      {variant === "home" ? (
-        <a
-          href="/changelog"
-          class="hidden font-display text-sm text-muted transition-colors hover:text-ink sm:inline"
-        >
-          Changelog
-        </a>
+      {overArt ? (
+        <a href="/changelog" class="nav-link hidden text-sm sm:inline">Changelog</a>
       ) : (
-        <a
-          href="/"
-          class="hidden font-display text-sm text-muted transition-colors hover:text-ink sm:inline"
-        >
-          Home
-        </a>
+        <a href="/" class="nav-link hidden text-sm sm:inline">Home</a>
       )}
       <a
         href={githubUrl}
         target="_blank"
         rel="noopener"
         data-track="outbound_click:github"
-        class="font-display text-sm text-muted transition-colors hover:text-ink"
+        class="nav-link text-sm"
       >
         GitHub
       </a>
       <a
         href={downloadUrl}
-        data-dmg={variant === "home" ? "" : undefined}
+        data-dmg={overArt ? "" : undefined}
         data-track="cta_click:nav_download"
-        class="btn-press rounded-lg bg-ink px-4 py-2 font-display text-sm text-bg hover:bg-ink/85"
+        class="nav-cta btn-press rounded-lg bg-ink px-4 py-2 text-sm text-bg hover:bg-ink/85"
       >
         Download
       </a>
     </div>
   </div>
 </nav>
+
+<style>
+  .nav-link {
+    color: var(--color-muted);
+    transition: color 160ms var(--curve-out);
+  }
+  .nav-link:hover {
+    color: var(--color-ink);
+  }
+
+  /* Over the painting the bar itself disappears; only the marks stay, lifted
+     off the sky by the same soft shadow the hero type uses. */
+  .is-over-art .nav-brand,
+  .is-over-art .nav-link {
+    color: #fff;
+    text-shadow: 0 1px 10px rgba(20, 50, 110, 0.45);
+  }
+  .is-over-art .nav-link {
+    color: rgba(255, 255, 255, 0.82);
+  }
+  .is-over-art .nav-link:hover {
+    color: #fff;
+  }
+  .is-over-art .nav-cta {
+    background: #fff;
+    color: var(--color-ink);
+    text-shadow: none;
+  }
+  .is-over-art .nav-cta:hover {
+    background: rgba(255, 255, 255, 0.88);
+  }
+
+  /* Past the hero it becomes an ordinary frosted bar. */
+  #site-nav.is-docked {
+    border-bottom-color: color-mix(in oklab, var(--color-border) 60%, transparent);
+    background: color-mix(in oklab, var(--color-bg) 90%, transparent);
+    backdrop-filter: blur(12px);
+  }
+</style>
+
+<script>
+  // Swap the bar's skin when the hero leaves the top of the viewport. A sentinel
+  // beats a scroll listener: no per-frame work, and the threshold is declarative.
+  const nav = document.getElementById("site-nav");
+  if (nav?.hasAttribute("data-over-art")) {
+    const sentinel = document.getElementById("nav-sentinel");
+    if (sentinel && "IntersectionObserver" in window) {
+      new IntersectionObserver(
+        ([entry]) => {
+          const docked = !entry.isIntersecting;
+          nav.classList.toggle("is-docked", docked);
+          nav.classList.toggle("is-over-art", !docked);
+        },
+        { threshold: 0 }
+      ).observe(sentinel);
+    }
+  }
+</script>

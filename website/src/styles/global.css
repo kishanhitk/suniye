@@ -30,21 +30,30 @@
 /* Change --color-accent to retheme the entire site */
 
 @theme {
-  --color-bg: #faf8f5;
-  --color-ink: #1a1a1a;
-  --color-muted: #6b635a;
-  --color-accent: #c4441a;
-  --color-accent-hover: #a33612;
-  --color-surface: #f0ede8;
-  --color-border: #e2ddd5;
+  --color-bg: #f6f9fc;
+  --color-ink: #12233d;
+  --color-muted: #5b6b82;
+  --color-accent: #2b6cc4;
+  --color-accent-hover: #22589f;
+  --color-surface: #ffffff;
+  --color-border: #dde7f2;
 
-  --font-display: "Fragment Mono", ui-monospace, SFMono-Regular, monospace;
+  /* Display is a system serif — it ships on every Mac, costs no download, and
+     carries the calm the hero painting sets up. Mono is kept for commands only. */
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --font-body: "Google Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "Fragment Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
 /* ── Base ───────────────────────────────────── */
 
 html {
+  background-color: var(--color-bg);
+}
+
+/* The hero is a full-bleed painting; the page must never sit on a white gutter
+   next to it on short-wide viewports. */
+body {
   background-color: var(--color-bg);
 }
 
@@ -62,8 +71,8 @@ html {
   --curve-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* subtle overshoot — earned delight only */
 
   /* Soft, warm-tinted elevation — ink at low alpha, not neutral black. */
-  --shadow-card-hover: 0 2px 4px rgba(26, 26, 26, 0.05), 0 18px 40px -16px rgba(26, 26, 26, 0.16);
-  --shadow-float: 0 40px 90px -28px rgba(26, 26, 26, 0.32);
+  --shadow-card-hover: 0 2px 4px rgba(18, 35, 61, 0.04), 0 18px 40px -16px rgba(18, 35, 61, 0.14);
+  --shadow-float: 0 40px 90px -28px rgba(18, 35, 61, 0.28);
 }
 
 /* ── Pressable feedback ────────────────────── */
@@ -142,63 +151,6 @@ html {
     box-shadow: var(--shadow-card-hover);
     border-color: color-mix(in oklab, var(--color-accent) 32%, var(--color-border));
   }
-}
-
-/* ── Decorative hero glow ──────────────────── */
-/* A barely-there warm halo behind the headline. closest-side keeps the box
-   edges transparent, so the hero's overflow-hidden clips nothing visible. */
-
-.hero-glow {
-  position: absolute;
-  z-index: 0;
-  pointer-events: none;
-  border-radius: 9999px;
-  filter: blur(70px);
-  opacity: 0.45;
-  background: radial-gradient(
-    closest-side,
-    color-mix(in oklab, var(--color-accent) 20%, transparent),
-    transparent
-  );
-}
-
-/* ── Hero word-reveal animation ────────────── */
-
-@keyframes word-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-    filter: blur(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
-  }
-}
-
-.hero-word {
-  opacity: 0;
-  display: inline-block;
-  margin-right: 0.275em;
-  animation: word-reveal 0.6s var(--curve-out) forwards;
-}
-
-/* ── Waveform draw animation ───────────────── */
-
-@keyframes draw-wave {
-  from {
-    stroke-dashoffset: 500;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-.waveform-path {
-  stroke-dasharray: 500;
-  stroke-dashoffset: 500;
-  animation: draw-wave 1.8s var(--curve-out) 0.5s forwards;
 }
 
 /* ── Scroll-triggered reveal ───────────────── */
@@ -330,22 +282,10 @@ html {
 /* ── Respect reduced-motion across the site ── */
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-word,
-  .waveform-path,
   .fade-in {
     animation: none;
-  }
-
-  .hero-word,
-  .fade-in {
     opacity: 1;
     transform: none;
-  }
-
-  /* The waveform "draws" by animating stroke-dashoffset 500 → 0; with animation
-     off it must be reset to 0, else the whole stroke stays dashed away (invisible). */
-  .waveform-path {
-    stroke-dashoffset: 0;
   }
 
   .reveal {
@@ -381,4 +321,130 @@ html {
   .card-hover:hover {
     transform: none;
   }
+}
+
+/* ── Liquid glass ──────────────────────────── */
+/* The site's signature material. Two layers do the work: the backdrop is bent
+   at the rim by an SVG displacement map (see #liquid-lens in Layout), and a
+   specular edge plus an inner bloom sell it as a solid piece of glass rather
+   than a translucent rectangle.
+   The fill sits at .52 — light enough to read as glass, opaque enough that the
+   dark label holds its contrast over any part of the painting. */
+
+.glass {
+  position: relative;
+  isolation: isolate;
+  color: var(--color-ink);
+  background: rgba(255, 255, 255, 0.52);
+  border: 0;
+  border-radius: 9999px;
+  backdrop-filter: url(#liquid-lens) blur(1px) saturate(170%) brightness(1.06);
+  /* Safari has no url() support in backdrop-filter — it gets plain frost. */
+  -webkit-backdrop-filter: blur(8px) saturate(170%) brightness(1.06);
+  box-shadow:
+    0 10px 30px -12px rgba(15, 40, 95, 0.55),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition:
+    background 160ms var(--curve-out),
+    box-shadow 200ms var(--curve-out),
+    transform 160ms var(--curve-out);
+}
+
+/* Light catches the top-left edge and falls away — a ring, not a wash, so the
+   fill underneath stays clear. */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 1.2px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.06) 42%, transparent 62%),
+    linear-gradient(315deg, rgba(255, 255, 255, 0.28), transparent 38%);
+  mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+}
+
+/* Light pooling inside the body of the glass. */
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(120% 160% at 30% 0%, rgba(255, 255, 255, 0.22), transparent 60%);
+}
+
+.glass:hover {
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow:
+    0 14px 34px -12px rgba(15, 40, 95, 0.6),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.glass:active {
+  transform: scale(0.97);
+}
+
+/* Squared-off glass for panels rather than pills. */
+.glass-panel {
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+/* Transparency off: a near-solid surface, no blur, same ink. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    text-shadow: none;
+  }
+  .glass::before,
+  .glass::after {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass {
+    transition: background 160ms ease, box-shadow 160ms ease;
+  }
+  .glass:active {
+    transform: none;
+  }
+}
+
+/* ── Hero ──────────────────────────────────── */
+
+.hero-art {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  object-fit: cover;
+  /* Anchor low: the sky is the text's ground, so any crop must eat sky from the
+     top and keep the mountains and meadow in frame. */
+  object-position: center bottom;
+  width: 100%;
+  height: 100%;
+}
+
+/* On the painting, ink is white and needs the same soft lift the prototype used
+   so it stays legible where the sky brightens. */
+.on-art {
+  color: #fff;
+  text-shadow:
+    0 2px 24px rgba(20, 50, 110, 0.35),
+    0 1px 2px rgba(20, 50, 110, 0.25);
+}
+
+.on-art-muted {
+  color: rgba(255, 255, 255, 0.88);
+  text-shadow: 0 1px 12px rgba(20, 50, 110, 0.3);
 }

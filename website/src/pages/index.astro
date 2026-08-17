@@ -4,191 +4,81 @@ import CopyField from "../components/CopyField.astro";
 import Navbar from "../components/Navbar.astro";
 import { softwareApplicationSchema, faqPageSchema, jsonLdString } from "../lib/seo";
 
-const heroWords = "Your voice. Your machine. Your text.".split(" ");
 const githubUrl = "https://github.com/kishanhitk/suniye";
 const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/download/Suniye.dmg";
 const brewInstall = "brew install --cask kishanhitk/tap/suniye";
 const quarantineCmd = "xattr -rd com.apple.quarantine /Applications/Suniye.app";
 
+// The whole argument in two paths. Deliberately structural rather than
+// benchmarked: "no round trip" is true by construction, a millisecond figure
+// would need a measurement this page can't show.
+const cloudPath = [
+  "You speak",
+  "Your audio is uploaded",
+  "A server transcribes it",
+  "The text travels back",
+];
+const localPath = ["You speak", "Your Mac transcribes it", "The text is at your cursor"];
 
-
-
-const steps = [
+const pillars = [
   {
-    num: "01",
-    title: "Hold your hotkey",
-    desc: "Press and hold Fn/Globe — or any shortcut you choose. A small indicator pops up.",
+    title: "Works where you type",
+    desc: "Mail, Slack, Notes, your editor, your browser. The text lands at the cursor and your clipboard is left exactly as you had it.",
   },
   {
-    num: "02",
-    title: "Speak naturally",
-    desc: "Talk at your normal pace. Your voice is captured through your mic and stays on your Mac.",
+    title: "Choose how it listens",
+    desc: "Swap the speech model to suit your Mac — small and quick, or large and exacting. Apple's built-in engine needs no download at all.",
   },
   {
-    num: "03",
-    title: "Text appears",
-    desc: "Release the key. Your words turn into text on your Mac and appear at your cursor.",
+    title: "Cleanup that stays home",
+    desc: "Optional Magic Format tidies grammar and punctuation using Apple Intelligence or a model on your Mac. Off until you turn it on.",
+  },
+  {
+    title: "Free, and readable",
+    desc: "MIT licensed, no account, no subscription, no third-party tracking. Every line is on GitHub if you want to check the claims yourself.",
   },
 ];
 
-const features = [
-  {
-    title: "Runs on your Mac",
-    desc: "Speech recognition happens entirely on your Mac. Choose from a built-in library of models — no internet needed to turn your voice into text. No server. No cloud.",
-  },
-  {
-    title: "Instant results",
-    desc: "No trip to the cloud. Your voice becomes text in an instant — the model is always loaded and ready to go.",
-  },
-  {
-    title: "Works in any app",
-    desc: "Your words appear right at your cursor — Mail, Slack, Notes, your browser, your editor. Everywhere you type.",
-  },
-  {
-    title: "AI cleanup, on your Mac",
-    desc: "Optional cleanup tidies grammar and punctuation using Apple's built-in AI or a model on your Mac — no cloud needed. Or connect your own provider. Off by default.",
-  },
-  {
-    title: "One simple shortcut",
-    desc: "Default is Fn/Globe. Change it to any key combo you like. Hold to talk, release to get your text. No menus, no buttons.",
-  },
-  {
-    title: "Open source, MIT licensed",
-    desc: "Full source on GitHub. Read every line. No third-party tracking, no surprises. Build it yourself if you want.",
-  },
-];
-
-// Speech models — mirrors the in-app catalog (ASRModelCatalog.swift). Apple's
-// built-in engine leads; Parakeet v3 stays the recommended download.
+// Mirrors the in-app catalog (ASRModelCatalog.swift). Kept behind a disclosure:
+// the fact that you get a choice is the point, the eleven rows are reference.
 const models = [
-  { name: "Apple Speech", langs: "Follows your system language", speed: "Fast", quality: "Good", size: "Built in", tag: "macOS 26+" },
-  { name: "Parakeet TDT 0.6B v3", langs: "25 European languages", speed: "Balanced", quality: "Best", size: "~680 MB", tag: "Recommended" },
-  { name: "Parakeet TDT 0.6B v2", langs: "English", speed: "Balanced", quality: "Better", size: "~482 MB", tag: null },
-  { name: "SenseVoice", langs: "Chinese · English · Japanese · Korean · Cantonese", speed: "Balanced", quality: "Better", size: "~240 MB", tag: "Multilingual" },
-  { name: "Moonshine Base", langs: "English", speed: "Fast", quality: "Good", size: "~285 MB", tag: null },
-  { name: "Whisper Large v3 Turbo", langs: "Multilingual", speed: "Fast", quality: "Best", size: "~564 MB", tag: null },
-  { name: "Whisper Distil Large v3", langs: "Multilingual", speed: "Balanced", quality: "Best", size: "~529 MB", tag: null },
-  { name: "Whisper Large v3", langs: "Multilingual", speed: "Slower", quality: "Best", size: "~1.7 GB", tag: null },
-  { name: "Whisper Small (English)", langs: "English", speed: "Balanced", quality: "Better", size: "~636 MB", tag: null },
-  { name: "Whisper Base (English)", langs: "English", speed: "Fast", quality: "Good", size: "~209 MB", tag: null },
-  { name: "Whisper Tiny (English)", langs: "English", speed: "Fast", quality: "Basic", size: "~118 MB", tag: null },
-];
-
-// Magic Format providers — mirrors MagicFormatProvider in LLMSettings.swift.
-// Automatic mode cascades top-to-bottom, staying on-device whenever it can.
-const cleanupTiers = [
-  {
-    step: "01",
-    name: "Apple Intelligence",
-    onDevice: true,
-    tagline: "On your Mac · no setup",
-    desc: "Uses Apple's built-in AI on supported Macs. Nothing leaves your machine, nothing to set up, no cost.",
-  },
-  {
-    step: "02",
-    name: "A model on your Mac",
-    onDevice: true,
-    tagline: "On your Mac · works offline",
-    desc: "Runs a small AI model right on your Mac (about 3.4 GB). Download it once, then clean up text even with no internet.",
-  },
-  {
-    step: "03",
-    name: "Your own provider",
-    onDevice: false,
-    tagline: "Optional · uses the internet",
-    desc: "Connect your own AI provider — like Gemini or GPT — with your own key. Only text is sent, and only if you pick this option.",
-  },
-];
-
-const moreFeatures = [
-  {
-    title: "Floating indicator",
-    desc: "A draggable capsule shows live audio levels while you talk. Park it in any corner — or hide it when idle.",
-  },
-  {
-    title: "History & dashboard",
-    desc: "Every dictation is saved on your Mac with word counts and timing. Copy or delete from a simple dashboard.",
-  },
-  {
-    title: "Any microphone",
-    desc: "Built-in, USB, or Bluetooth — switch freely. Suniye tunes itself to each device automatically.",
-  },
-  {
-    title: "Automatic updates",
-    desc: "New versions arrive on their own. Stay on stable releases, or opt in to early builds to try new features first.",
-  },
-  {
-    title: "Launch at login",
-    desc: "Start Suniye quietly in the background so it's ready the moment you press your key.",
-  },
-  {
-    title: "Safe insertion",
-    desc: "Your text lands at the cursor and your clipboard is kept intact. Optionally press Return to send automatically.",
-  },
-  {
-    title: "Per-app prompts",
-    desc: "Give each app its own Magic Format style — terse in chat, prose in notes. Add a prompt per app, or none at all.",
-  },
-  {
-    title: "Learns from your edits",
-    desc: "Correct a misheard name right after dictating and Suniye quietly adds it to your vocabulary — undoable, marked with a ✨, and easy to switch off.",
-  },
-];
-
-// Capability matrix. Columns are categories, not named products, so every
-// claim stays defensible as competitors change.
-const compareCols = ["Suniye", "Cloud dictation", "Built-in dictation"];
-const compareRows = [
-  { label: "Audio stays on your Mac", values: ["yes", "no", "some"] },
-  { label: "Choice of speech models", values: ["yes", "no", "no"] },
-  { label: "Works in many languages", values: ["yes", "yes", "yes"] },
-  { label: "AI cleanup that can run on your Mac", values: ["yes", "cloud", "no"] },
-  { label: "Inserts into any app", values: ["yes", "some", "yes"] },
-  { label: "Open source", values: ["yes", "no", "no"] },
-  { label: "No third-party tracking", values: ["yes", "varies", "varies"] },
-  { label: "Price", values: ["Free", "Subscription", "Free"] },
+  { name: "Apple Speech", langs: "Follows your system language", size: "Built in", tag: "macOS 26+" },
+  { name: "Parakeet TDT 0.6B v3", langs: "25 European languages", size: "~680 MB", tag: "Recommended" },
+  { name: "Parakeet TDT 0.6B v2", langs: "English", size: "~482 MB", tag: null },
+  { name: "SenseVoice", langs: "Chinese · English · Japanese · Korean · Cantonese", size: "~240 MB", tag: null },
+  { name: "Moonshine Base", langs: "English", size: "~285 MB", tag: null },
+  { name: "Whisper Large v3 Turbo", langs: "Multilingual", size: "~564 MB", tag: null },
+  { name: "Whisper Distil Large v3", langs: "Multilingual", size: "~529 MB", tag: null },
+  { name: "Whisper Large v3", langs: "Multilingual", size: "~1.7 GB", tag: null },
+  { name: "Whisper Small (English)", langs: "English", size: "~636 MB", tag: null },
+  { name: "Whisper Base (English)", langs: "English", size: "~209 MB", tag: null },
+  { name: "Whisper Tiny (English)", langs: "English", size: "~118 MB", tag: null },
 ];
 
 const faqs = [
   {
     q: "Is my dictation really private?",
-    a: "Yes. Your voice is captured and turned into text entirely on your Mac — it never touches the internet. To improve the app, Suniye does send a small amount of pseudonymous usage data (counts and timings — never your words), which you can turn off in Settings → Privacy; the privacy page lists exactly what's collected. Otherwise it only goes online to check for updates and download a model the first time.",
+    a: "Your voice is captured and turned into text entirely on your Mac — the audio never touches the internet. Suniye does send a small amount of pseudonymous usage data (counts and timings, never your words), which you can switch off in Settings → Privacy; the privacy page lists exactly what is collected. Otherwise it goes online only to check for updates and to download a model the first time.",
   },
   {
     q: "Does the optional AI cleanup see my audio?",
-    a: "Never. Cleanup only works on the text, never the audio. By default it runs right on your Mac, using Apple's built-in AI or a local model. Only if you turn on the online option does your text get sent to the provider you choose — and it's off by default.",
-  },
-  {
-    q: "What languages can it understand?",
-    a: "It depends on the model you pick. Some cover 25 European languages, others handle Chinese, Japanese, Korean, English, and Cantonese, and the largest understand a broad mix. Several English-only models are smaller and faster.",
+    a: "Never. Cleanup only ever works on the text. By default it runs on your Mac, using Apple Intelligence or a local model. Only if you deliberately turn on the online option does your text reach a provider you chose — and it is off by default.",
   },
   {
     q: "Does it work offline?",
-    a: "Yes — once you've downloaded a model, dictation itself needs no internet at all. Suniye does phone home for a few non-dictation things: pseudonymous usage stats (opt-out in Settings) and update checks, plus the optional online cleanup provider if you turn it on.",
+    a: "Yes. Once a model is downloaded, dictation needs no connection at all — including on a plane. The only things that use the network are update checks, the opt-out usage stats, and the online cleanup provider if you enable it.",
   },
   {
-    q: "Apple Silicon or Intel?",
-    a: "Both work for dictation. The on-Mac cleanup model needs an Apple Silicon Mac (M1 or later), and Apple's built-in AI needs a Mac that supports it. The online cleanup option works on any Mac.",
-  },
-  {
-    q: "How much space does it need?",
-    a: "A speech model is anywhere from about 118 MB to 1.7 GB, so you can pick one that fits. The optional on-Mac cleanup model adds about 3.4 GB.",
-  },
-  {
-    q: "Can I install with Homebrew?",
-    a: "Yes — it's the easiest way. Run brew install --cask kishanhitk/tap/suniye. Homebrew downloads the latest release, moves Suniye into your Applications folder, and clears the macOS quarantine for you, so there's nothing extra to do on first launch. Updates still arrive automatically inside the app.",
-  },
-  {
-    q: "Homebrew asks me to trust the tap — is that expected?",
-    a: "Yes. Homebrew 6 asks you to approve any third-party tap before it runs, because a tap can run code on your Mac. Running the full command — brew install --cask kishanhitk/tap/suniye — trusts just this one cask. If you'd like to read it first, run brew cat kishanhitk/tap/suniye.",
+    q: "What languages can it understand?",
+    a: "It depends on the model you pick. Some cover 25 European languages, others handle Chinese, Japanese, Korean, English and Cantonese, and the largest understand a broad mix. Several English-only models are smaller and faster.",
   },
   {
     q: "Why does macOS say the app is damaged?",
-    a: "This only affects the direct .dmg download. Suniye isn't signed with a paid Apple developer certificate, so macOS quarantines it the first time. Run the command shown above to allow it — or install with Homebrew, which clears the quarantine for you. You can also build it yourself from the source on GitHub.",
+    a: "Only the direct .dmg download is affected. Suniye is not signed with a paid Apple Developer certificate, so macOS quarantines it on first launch. Run the xattr command shown above once to clear it — or install with Homebrew, which does it for you.",
   },
   {
     q: "Is it free?",
-    a: "Completely. Free and open-source under the MIT license. No subscription, no account, no third-party tracking.",
+    a: "Completely. Free and open source under the MIT license. No subscription, no account, no third-party tracking.",
   },
 ];
 ---
@@ -206,94 +96,155 @@ const faqs = [
     type="application/ld+json"
     set:html={jsonLdString(faqPageSchema(faqs))}
   />
+  <link slot="head" rel="preload" as="image" href="/hero.webp" type="image/webp" />
 
-  <!-- ── Nav ──────────────────────────────── -->
-  <Navbar variant="home" />
+  <Navbar variant="over-art" />
 
   <!-- With JS off, reveal-on-scroll never fires — show everything up front. -->
   <noscript>
     <style>
-      .reveal, .hero-word, .fade-in { opacity: 1 !important; transform: none !important; animation: none !important; }
-      .waveform-path { stroke-dashoffset: 0 !important; }
+      .reveal, .fade-in { opacity: 1 !important; transform: none !important; animation: none !important; }
     </style>
   </noscript>
 
   <main>
     <!-- ── Hero ─────────────────────────────── -->
-    <section class="relative overflow-hidden pt-36 pb-24 md:pt-44 md:pb-32">
-      <div class="hero-glow left-[-6rem] top-[1.5rem] h-[24rem] w-[32rem]" aria-hidden="true"></div>
-      <div class="relative z-10 mx-auto max-w-6xl px-6">
-        <div class="max-w-3xl">
-          <!-- Waveform SVG — decorative -->
-          <svg
-            class="mb-8 h-10 w-auto text-accent md:h-14"
-            viewBox="0 0 160 80"
-            fill="none"
-            aria-hidden="true"
+    <!-- The painting is the page's whole first impression, so it is a real <img>
+         (decoding early, preloaded) rather than a CSS background: the browser
+         can then prioritise it as the LCP element. -->
+    <section class="relative flex min-h-[100svh] flex-col overflow-hidden bg-[#2b6cc4]">
+      <picture>
+        <source
+          srcset="/hero-sm.webp 1100w, /hero.webp 2000w"
+          sizes="100vw"
+          type="image/webp"
+        />
+        <img
+          src="/hero.jpg"
+          srcset="/hero-sm.jpg 1100w, /hero.jpg 2000w"
+          sizes="100vw"
+          alt=""
+          fetchpriority="high"
+          decoding="async"
+          class="hero-art"
+        />
+      </picture>
+
+      <div class="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 pt-28 pb-[38vh] text-center">
+        <h1 class="on-art font-display text-[clamp(2.75rem,6.6vw,5rem)] font-medium leading-[1.02] tracking-[-0.02em]">
+          Speak freely.
+        </h1>
+
+        <p class="on-art-muted fade-in mx-auto mt-5 max-w-[34em] text-[17px] leading-relaxed">
+          The cloud has to hear you before it can type. Suniye doesn't — the model
+          runs on your Mac, so the words land as fast as you say them, and your
+          voice never leaves the machine.
+        </p>
+
+        <div class="fade-in mt-7 flex justify-center">
+          <a
+            href={downloadUrl}
+            data-dmg
+            data-track="download_click:dmg"
+            class="glass inline-flex items-center gap-2 px-6 py-3 text-[15px] font-medium"
           >
-            <path
-              class="waveform-path"
-              d="M 8 50 Q 14 50 20 42 L 40 10 L 62 70 L 84 10 L 106 70 L 124 36 Q 130 26 140 26"
-              stroke="currentColor"
-              stroke-width="7"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-
-          <h1 class="font-display text-4xl leading-tight tracking-tight md:text-6xl md:leading-[1.1]">
-            {heroWords.map((word, i) => (
-              <span
-                class="hero-word"
-                style={`animation-delay: ${0.08 + i * 0.06}s`}
-              >
-                {word}{" "}
-              </span>
-            ))}
-          </h1>
-
-          <p class="fade-in mt-6 max-w-xl text-lg leading-relaxed text-muted md:text-xl">
-            Suniye is open-source dictation for macOS. Speech recognition runs
-            locally — nothing leaves your machine. Hold one key, speak, release.
-          </p>
-
-          <!-- Recommended install: Homebrew -->
-          <div class="fade-in mt-10 max-w-lg">
-            <div class="mb-2 flex items-center gap-2">
-              <span class="font-display text-xs uppercase tracking-widest text-muted">Install with Homebrew</span>
-              <span class="pill pill-accent">Recommended</span>
-            </div>
-            <CopyField value={brewInstall} label="Copy install command" dataTrack="download_click:homebrew" />
-          </div>
-
-          <p class="fade-in mt-3 font-display text-sm text-muted">
-            or
-            <a
-              href={downloadUrl}
-              data-dmg
-              data-track="download_click:dmg"
-              class="text-ink underline decoration-border underline-offset-4 transition-colors hover:decoration-ink"
-            >
-              download the app directly
-            </a>
-          </p>
-
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M16.365 1.43c0 1.14-.47 2.2-1.22 2.98-.79.83-2.05 1.47-3.11 1.38-.13-1.1.42-2.25 1.15-3.02.8-.84 2.16-1.45 3.18-1.34zM20.7 17.02c-.55 1.26-.81 1.82-1.52 2.94-.99 1.55-2.39 3.48-4.12 3.5-1.54.01-1.93-1-4.02-.99-2.09.01-2.52 1.01-4.06.99-1.73-.02-3.06-1.76-4.05-3.31C.16 15.8-.13 10.7 1.55 8.03c1.18-1.9 3.05-3.01 4.8-3.01 1.79 0 2.91 1 4.39 1 1.43 0 2.3-1 4.37-1 1.57 0 3.23.85 4.42 2.32-3.88 2.13-3.25 7.68 1.17 9.68z" />
+            </svg>
+            Download for macOS
+          </a>
         </div>
 
-        <!-- ── Demo video — the hero's signature element ─ -->
-        <!-- Framed as the Suniye app window so it reads as the real thing. -->
-        <!-- Click-to-play with sound: the narration is the point, and browsers -->
-        <!-- block autoplay-with-audio, so we lead with a poster + play affordance. -->
-        <figure class="reveal mt-16 md:mt-24">
-          <div
-            class="mx-auto max-w-5xl overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-float)]"
-          >
-            <!-- Titlebar, echoing the macOS app chrome used elsewhere on the page -->
+        <p class="on-art-muted fade-in mt-3 text-[11px]">
+          Apple Silicon &middot; macOS 14+ &middot; Open source
+        </p>
+      </div>
+    </section>
+
+    <!-- Nav skin swaps when this passes the top of the viewport. -->
+    <div id="nav-sentinel" aria-hidden="true"></div>
+
+    <!-- ── The argument ─────────────────────── -->
+    <section class="py-24 md:py-32">
+      <div class="mx-auto max-w-6xl px-6">
+        <div class="reveal mx-auto max-w-2xl text-center">
+          <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
+            Every other dictation app sends your voice away.
+          </h2>
+          <p class="mt-4 leading-relaxed text-muted">
+            They are built on someone else's API, so your audio has to travel there
+            and back before a single word appears. That round trip is the wait — and
+            the privacy question.
+          </p>
+        </div>
+
+        <div class="reveal mt-14 grid gap-6 md:grid-cols-2" style="transition-delay: 0.1s">
+          <!-- Cloud path — deliberately the longer, greyer column. -->
+          <div class="card border-border/70 bg-surface/60 p-7">
+            <p class="font-mono text-[11px] uppercase tracking-widest text-muted/70">
+              Cloud dictation
+            </p>
+            <ol class="mt-5 space-y-3">
+              {cloudPath.map((step, i) => (
+                <li class="flex items-start gap-3 text-[15px] text-muted">
+                  <span class="mt-[3px] font-mono text-[11px] tabular-nums text-muted/50">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  {step}
+                </li>
+              ))}
+            </ol>
+            <p class="mt-6 border-t border-border/70 pt-4 text-sm text-muted/80">
+              Needs a connection. Your voice sits, however briefly, on a disk you
+              don't own.
+            </p>
+          </div>
+
+          <!-- Local path — shorter by one step, and the only coloured surface here. -->
+          <div class="card border-accent/30 bg-accent/[0.04] p-7">
+            <p class="font-mono text-[11px] uppercase tracking-widest text-accent">
+              Suniye
+            </p>
+            <ol class="mt-5 space-y-3">
+              {localPath.map((step, i) => (
+                <li class="flex items-start gap-3 text-[15px] text-ink">
+                  <span class="mt-[3px] font-mono text-[11px] tabular-nums text-accent/60">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  {step}
+                </li>
+              ))}
+            </ol>
+            <p class="mt-6 border-t border-accent/20 pt-4 text-sm text-muted">
+              Works on a plane. Nothing to upload, so there is nothing to keep.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Demo ─────────────────────────────── -->
+    <!-- Click-to-play with sound: the narration is the point, and browsers block
+         autoplay-with-audio, so we lead with a poster and a play affordance. -->
+    <section class="border-t border-border/60 py-24 md:py-32">
+      <div class="mx-auto max-w-6xl px-6">
+        <div class="reveal mx-auto max-w-2xl text-center">
+          <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
+            Hold a key. Talk. Let go.
+          </h2>
+          <p class="mt-4 leading-relaxed text-muted">
+            That is the entire interface. Default is Fn/Globe; make it any shortcut
+            you like.
+          </p>
+        </div>
+
+        <figure class="reveal mt-12" style="transition-delay: 0.1s">
+          <div class="mx-auto max-w-5xl overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-float)]">
             <div class="flex items-center gap-1.5 border-b border-border/70 bg-surface/70 px-4 py-3">
               <span class="h-2.5 w-2.5 rounded-full bg-border"></span>
               <span class="h-2.5 w-2.5 rounded-full bg-border"></span>
               <span class="h-2.5 w-2.5 rounded-full bg-border"></span>
-              <span class="ml-2.5 flex items-center gap-1.5 font-display text-[11px] tracking-tight text-muted/70">
+              <span class="ml-2.5 flex items-center gap-1.5 font-mono text-[11px] tracking-tight text-muted/70">
                 <img src="/suniye-icon.png" alt="" class="h-3.5 w-3.5 rounded-[3px]" />
                 Suniye
               </span>
@@ -313,16 +264,15 @@ const faqs = [
                 <a href="/demo.mp4" class="underline">Download the demo</a> instead.
               </video>
 
-              <!-- Live stopwatch, synced to the real playback time -->
+              <!-- Live stopwatch, synced to the real playback clock -->
               <div
                 id="demo-timer"
-                class="pointer-events-none absolute right-3 top-3 z-20 rounded-md bg-ink/70 px-2.5 py-1 font-display text-xs tabular-nums tracking-tight text-white backdrop-blur-sm"
+                class="pointer-events-none absolute right-3 top-3 z-20 rounded-md bg-ink/70 px-2.5 py-1 font-mono text-xs tabular-nums tracking-tight text-white backdrop-blur-sm"
                 aria-hidden="true"
               >
                 00:00.000
               </div>
 
-              <!-- Play affordance — clicking starts playback with sound + controls -->
               <button
                 id="demo-play"
                 type="button"
@@ -340,360 +290,99 @@ const faqs = [
             </div>
           </div>
 
-          <figcaption class="mt-4 text-center font-display text-xs tracking-wide text-muted/60">
+          <figcaption class="mt-4 text-center font-mono text-xs tracking-wide text-muted/60">
             A real, unedited take.
           </figcaption>
         </figure>
       </div>
     </section>
 
-    <!-- ── How it works ─────────────────────── -->
+    <!-- ── What you get ─────────────────────── -->
     <section class="border-t border-border/60 py-24 md:py-32">
       <div class="mx-auto max-w-6xl px-6">
-        <h2 class="reveal font-display text-sm uppercase tracking-widest text-muted">
-          How it works
-        </h2>
-
-        <div class="mt-14 grid gap-12 md:grid-cols-3 md:gap-8">
-          {steps.map((step, i) => (
+        <div class="grid gap-x-12 gap-y-10 md:grid-cols-2">
+          {pillars.map((p, i) => (
             <div class="reveal" style={`transition-delay: ${i * 0.06}s`}>
-              <span class="font-display text-5xl tracking-tighter text-accent/25">
-                {step.num}
-              </span>
-              <h3 class="mt-3 font-display text-lg tracking-tight">
-                {step.title}
-              </h3>
-              <p class="mt-2 leading-relaxed text-muted">
-                {step.desc}
-              </p>
+              <h3 class="font-display text-xl tracking-tight">{p.title}</h3>
+              <p class="mt-3 leading-relaxed text-muted">{p.desc}</p>
             </div>
           ))}
         </div>
       </div>
     </section>
 
-    <!-- ── Features ─────────────────────────── -->
-    <section class="border-t border-border/60 bg-surface/50 py-24 md:py-32">
+    <!-- ── Models ───────────────────────────── -->
+    <!-- The choice is the selling point; the catalogue is reference, so it stays
+         folded until someone actually wants to compare sizes. -->
+    <section id="models" class="scroll-mt-20 border-t border-border/60 bg-surface/60 py-24 md:py-32">
       <div class="mx-auto max-w-6xl px-6">
-        <h2 class="reveal font-display text-sm uppercase tracking-widest text-muted">
-          Built for real work
-        </h2>
-
-        <div class="mt-14 grid gap-x-12 gap-y-14 md:grid-cols-2 lg:grid-cols-3">
-          {features.map((f, i) => (
-            <div
-              class="reveal border-l-2 border-accent/20 pl-5"
-              style={`transition-delay: ${i * 0.06}s`}
-            >
-              <h3 class="font-display text-base tracking-tight">{f.title}</h3>
-              <p class="mt-2 text-[15px] leading-relaxed text-muted">
-                {f.desc}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Speech models ────────────────────── -->
-    <section id="models" class="scroll-mt-20 border-t border-border/60 py-24 md:py-32">
-      <div class="mx-auto max-w-6xl px-6">
-        <div class="reveal max-w-2xl">
-          <h2 class="font-display text-sm uppercase tracking-widest text-muted">
-            Choose your model
+        <div class="reveal mx-auto max-w-2xl text-center">
+          <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
+            Eleven ways to listen.
           </h2>
-          <p class="mt-5 text-2xl leading-snug tracking-tight md:text-3xl">
-            Eleven speech models. Pick the trade-off you want —
-            <span class="text-accent">speed, accuracy, or languages.</span>
-          </p>
           <p class="mt-4 leading-relaxed text-muted">
-            Every model runs entirely on your Mac. Download more than one and switch
-            instantly from the app — no restart, nothing sent to a server.
+            From a 118 MB model that keeps up on any Mac to a 1.7 GB one that
+            catches everything — plus Apple's built-in engine, which downloads
+            nothing at all. Switch whenever you like; they all run locally.
           </p>
         </div>
 
-        <!-- Desktop table -->
-        <div class="reveal mt-12 hidden md:block" style="transition-delay: 0.1s">
-          <table class="w-full border-collapse text-left">
-            <thead>
-              <tr class="border-b border-border font-display text-xs uppercase tracking-wider text-muted">
-                <th class="py-3 pr-4 font-normal">Model</th>
-                <th class="py-3 pr-4 font-normal">Languages</th>
-                <th class="py-3 pr-4 font-normal">Speed</th>
-                <th class="py-3 pr-4 font-normal">Quality</th>
-                <th class="py-3 pr-4 text-right font-normal">Size</th>
-              </tr>
-            </thead>
-            <tbody>
-              {models.map((m) => (
-                <tr
-                  class:list={[
-                    "border-b border-border/50 align-middle transition-colors",
-                    m.tag === "Recommended"
-                      ? "bg-accent/[0.04] hover:bg-accent/[0.07]"
-                      : "hover:bg-surface/60",
-                  ]}
-                >
-                  <td class="py-4 pr-4">
-                    <span class="font-display text-[15px] tracking-tight text-ink">{m.name}</span>
-                    {m.tag && <span class="pill pill-accent ml-2">{m.tag}</span>}
-                  </td>
-                  <td class="py-4 pr-4 text-sm text-muted">{m.langs}</td>
-                  <td class="py-4 pr-4 text-sm text-muted">{m.speed}</td>
-                  <td class="py-4 pr-4 text-sm text-muted">{m.quality}</td>
-                  <td class="py-4 pr-4 text-right font-display text-sm tabular-nums text-muted">{m.size}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <details class="reveal group mx-auto mt-10 max-w-3xl" style="transition-delay: 0.1s">
+          <summary class="mx-auto flex w-fit cursor-pointer list-none items-center gap-2 rounded-full border border-border bg-bg px-5 py-2.5 font-mono text-xs tracking-wide text-muted transition-colors [&::-webkit-details-marker]:hidden hover:text-ink">
+            <span class="group-open:hidden">See every model</span>
+            <span class="hidden group-open:inline">Hide the list</span>
+            <svg class="h-3.5 w-3.5 transition-transform duration-200 [transition-timing-function:var(--curve-out)] group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </summary>
 
-        <!-- Mobile cards -->
-        <div class="reveal mt-10 grid gap-3 md:hidden">
-          {models.map((m) => (
-            <div
-              class:list={[
-                "card card-hover p-4",
-                m.tag === "Recommended" ? "card-accent" : "bg-surface/40",
-              ]}
-            >
-              <div class="flex items-start justify-between gap-3">
-                <span class="font-display text-[15px] tracking-tight text-ink">{m.name}</span>
-                {m.tag && <span class="pill pill-accent shrink-0">{m.tag}</span>}
-              </div>
-              <p class="mt-1.5 text-sm text-muted">{m.langs}</p>
-              <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1 font-display text-xs text-muted/80">
-                <span>{m.speed}</span>
-                <span>{m.quality}</span>
-                <span class="tabular-nums">{m.size}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Magic Format / AI cleanup ────────── -->
-    <section id="cleanup" class="scroll-mt-20 border-t border-border/60 bg-surface/50 py-24 md:py-32">
-      <div class="mx-auto max-w-6xl px-6">
-        <div class="reveal max-w-2xl">
-          <h2 class="font-display text-sm uppercase tracking-widest text-muted">
-            Magic Format
-          </h2>
-          <p class="mt-5 text-2xl leading-snug tracking-tight md:text-3xl">
-            Cleanup that can stay
-            <span class="text-accent">entirely on your Mac.</span>
-          </p>
-          <p class="mt-4 leading-relaxed text-muted">
-            Optionally tidy up punctuation, capitalization, and formatting after each
-            dictation. It stays off until you turn it on.
-          </p>
-        </div>
-
-        <div class="mt-12 grid gap-5 md:grid-cols-3">
-          {cleanupTiers.map((t, i) => (
-            <div
-              class:list={[
-                "reveal card card-hover flex flex-col p-6",
-                t.onDevice ? "card-accent" : "bg-bg",
-              ]}
-              style={`transition-delay: ${i * 0.06}s`}
-            >
-              <div class="flex items-center justify-between">
-                <span class="font-display text-3xl tracking-tighter text-accent/25">{t.step}</span>
-                <span class:list={["pill", t.onDevice ? "pill-accent" : "pill-muted"]}>
-                  {t.onDevice ? "On your Mac" : "Optional"}
-                </span>
-              </div>
-              <h3 class="mt-4 font-display text-lg tracking-tight">{t.name}</h3>
-              <p class="mt-1 font-display text-xs text-muted/70">{t.tagline}</p>
-              <p class="mt-3 text-[15px] leading-relaxed text-muted">{t.desc}</p>
-            </div>
-          ))}
-        </div>
-
-        <p class="reveal mt-6 font-display text-xs leading-relaxed text-muted/70">
-          Your audio is never sent anywhere. Magic Format only ever works on the
-          text you dictated, and only the last option uses the internet.
-        </p>
-      </div>
-    </section>
-
-    <!-- ── Privacy ──────────────────────────── -->
-    <section class="border-t border-border/60 py-24 md:py-32">
-      <div class="mx-auto max-w-6xl px-6">
-        <div class="reveal max-w-3xl">
-          <h2 class="font-display text-3xl leading-snug tracking-tight md:text-5xl md:leading-tight">
-            Every word you dictate could be
-            <span class="text-accent">training data.</span>
-          </h2>
-          <p class="mt-2 font-display text-3xl leading-snug tracking-tight text-muted md:text-5xl md:leading-tight">
-            Unless it never leaves your machine.
-          </p>
-        </div>
-
-        <div class="reveal mt-12 grid max-w-4xl gap-8 md:grid-cols-2" style="transition-delay: 0.15s">
-          <div>
-            <h3 class="font-display text-sm uppercase tracking-widest text-muted">
-              The problem
-            </h3>
-            <p class="mt-4 leading-relaxed text-muted">
-              Cloud dictation services process your voice on remote servers.
-              Your private notes, medical records, business plans — all passing
-              through infrastructure you don't control. That audio can be stored,
-              analyzed, and used to train models without your explicit consent.
-            </p>
-          </div>
-          <div>
-            <h3 class="font-display text-sm uppercase tracking-widest text-muted">
-              Suniye's approach
-            </h3>
-            <p class="mt-4 leading-relaxed text-muted">
-              Speech models run directly on your Mac — pick one from the built-in
-              library. Voice is processed in memory, transcribed locally, and never
-              touches a network.
-            </p>
-            <p class="mt-4 text-sm leading-relaxed text-muted/70">
-              Even the optional cleanup can stay on your Mac, using Apple's built-in AI
-              or a local model. Only if you pick the online option does your text
-              (never your audio) leave the Mac — and it's off by default.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── More features ────────────────────── -->
-    <section class="border-t border-border/60 bg-surface/50 py-24 md:py-32">
-      <div class="mx-auto max-w-6xl px-6">
-        <h2 class="reveal font-display text-sm uppercase tracking-widest text-muted">
-          More in the box
-        </h2>
-
-        <div class="mt-14 grid gap-x-12 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
-          {moreFeatures.map((f, i) => (
-            <div class="reveal" style={`transition-delay: ${i * 0.06}s`}>
-              <h3 class="font-display text-base tracking-tight">{f.title}</h3>
-              <p class="mt-2 text-[15px] leading-relaxed text-muted">{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Comparison ───────────────────────── -->
-    <section class="border-t border-border/60 py-24 md:py-32">
-      <div class="mx-auto max-w-6xl px-6">
-        <div class="reveal max-w-2xl">
-          <h2 class="font-display text-sm uppercase tracking-widest text-muted">
-            How it compares
-          </h2>
-          <p class="mt-5 text-2xl leading-snug tracking-tight md:text-3xl">
-            Local-first, by design.
-          </p>
-        </div>
-
-        <div class="reveal mt-12 overflow-x-auto" style="transition-delay: 0.1s">
-          <table class="w-full min-w-[560px] border-collapse text-left">
-            <thead>
-              <tr class="border-b border-border">
-                <th class="py-4 pr-4"></th>
-                {compareCols.map((col, i) => (
-                  <th
-                    class:list={[
-                      "py-4 px-4 text-center font-display text-sm tracking-tight",
-                      i === 0 ? "bg-accent/[0.06] text-accent" : "text-muted",
-                    ]}
-                  >
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {compareRows.map((row) => (
-                <tr class="border-b border-border/50">
-                  <td class="py-4 pr-4 text-sm text-muted">{row.label}</td>
-                  {row.values.map((v, i) => (
-                    <td
-                      class:list={[
-                        "py-4 px-4 text-center",
-                        i === 0 ? "bg-accent/[0.05]" : "",
-                      ]}
-                    >
-                      {v === "yes" ? (
-                        <svg class="mx-auto h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-label="Yes">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : v === "no" ? (
-                        <span class="text-muted/30" aria-label="No">—</span>
-                      ) : (
-                        <span class="font-display text-xs capitalize text-muted/80">{v}</span>
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p class="reveal mt-4 font-display text-xs text-muted/60">
-          "Cloud dictation" and "built-in dictation" describe common categories — capabilities vary by product.
-        </p>
-      </div>
-    </section>
-
-    <!-- ── FAQ ──────────────────────────────── -->
-    <section id="faq" class="scroll-mt-20 border-t border-border/60 bg-surface/50 py-24 md:py-32">
-      <div class="mx-auto max-w-6xl px-6">
-        <div class="grid gap-12 lg:grid-cols-[0.8fr_1.6fr] lg:gap-16">
-          <h2 class="reveal font-display text-sm uppercase tracking-widest text-muted lg:sticky lg:top-28 lg:self-start">
-            Questions
-          </h2>
-
-          <div class="reveal divide-y divide-border/70 border-y border-border/70" style="transition-delay: 0.1s">
-            {faqs.map((item) => (
-              <details class="faq-item group">
-                <summary class="flex items-center justify-between gap-4 py-5">
-                  <span class="font-display text-base tracking-tight text-ink">{item.q}</span>
-                  <span class="faq-sign shrink-0 text-xl leading-none text-accent">+</span>
-                </summary>
-                <p class="pb-5 text-[15px] leading-relaxed text-muted">{item.a}</p>
-              </details>
+          <ul class="mt-8 divide-y divide-border/70 border-y border-border/70">
+            {models.map((m) => (
+              <li class="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-3.5">
+                <span class="text-[15px] tracking-tight text-ink">{m.name}</span>
+                {m.tag && <span class="pill pill-accent">{m.tag}</span>}
+                <span class="ml-auto font-mono text-xs text-muted/70">{m.size}</span>
+                <span class="w-full text-sm text-muted/80">{m.langs}</span>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </details>
       </div>
     </section>
 
-    <!-- ── Download CTA ─────────────────────── -->
-    <section class="border-t border-border/60 py-24 md:py-32">
-      <div class="mx-auto max-w-6xl px-6 text-center">
+    <!-- ── Install ──────────────────────────── -->
+    <section id="install" class="scroll-mt-20 border-t border-border/60 py-24 md:py-32">
+      <div class="mx-auto max-w-6xl px-6">
         <div class="reveal mx-auto max-w-xl">
-          <h2 class="font-display text-3xl tracking-tight md:text-4xl">
-            Try Suniye
+          <h2 class="text-center font-display text-3xl tracking-tight md:text-4xl">
+            Install it
           </h2>
-          <p class="mt-4 leading-relaxed text-muted">
-            Install with Homebrew, download the latest release, or build from
-            source. Requires macOS 14 (Sonoma) or later. Pick a speech model from
-            the built-in library on first launch.
-          </p>
 
-          <!-- Recommended install: Homebrew -->
-          <div class="mt-8 mx-auto max-w-md">
+          <div class="mt-8">
             <div class="mb-2 flex items-center justify-center gap-2">
-              <span class="font-display text-xs uppercase tracking-widest text-muted">Install with Homebrew</span>
+              <span class="font-mono text-xs uppercase tracking-widest text-muted">
+                Homebrew
+              </span>
               <span class="pill pill-accent">Recommended</span>
             </div>
-            <CopyField value={brewInstall} label="Copy install command" class="text-left" dataTrack="download_click:homebrew" />
+            <CopyField
+              value={brewInstall}
+              label="Copy install command"
+              dataTrack="download_click:homebrew"
+            />
+            <p class="mt-3 text-center text-sm text-muted/80">
+              Homebrew clears the macOS quarantine for you. It will ask you to trust
+              the tap first — that is Homebrew 6 asking about any third-party tap,
+              not something specific to Suniye.
+            </p>
           </div>
 
-          <div class="mt-4 flex flex-wrap items-center justify-center gap-4">
+          <div class="mt-10 flex flex-wrap items-center justify-center gap-4">
             <a
               href={downloadUrl}
               data-dmg
               data-track="download_click:dmg"
-              class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 font-display text-sm text-ink hover:bg-surface"
+              class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 text-sm text-ink hover:bg-surface"
             >
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
@@ -704,21 +393,74 @@ const faqs = [
               href={`${githubUrl}#build-from-source`}
               target="_blank"
               rel="noopener"
-              class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 font-display text-sm text-ink hover:bg-surface"
+              class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 text-sm text-ink hover:bg-surface"
             >
-              Build from Source
+              Build from source
             </a>
           </div>
 
-          <p class="mt-8 inline-block rounded-full border border-accent/20 bg-accent/5 px-4 py-1.5 font-display text-xs tracking-wide text-accent">
-            Alpha — expect rough edges
+          <p class="mt-8 text-center text-sm text-muted/80">
+            macOS 14 (Sonoma) or later. Dictation works on Intel and Apple Silicon;
+            the on-device cleanup model needs Apple Silicon.
+          </p>
+
+          <p class="mt-6 text-center">
+            <span class="pill pill-accent">Alpha — expect rough edges</span>
           </p>
         </div>
       </div>
     </section>
 
+    <!-- ── FAQ ──────────────────────────────── -->
+    <section id="faq" class="scroll-mt-20 border-t border-border/60 bg-surface/60 py-24 md:py-32">
+      <div class="mx-auto max-w-6xl px-6">
+        <div class="grid gap-12 lg:grid-cols-[0.8fr_1.6fr] lg:gap-16">
+          <h2 class="reveal font-mono text-sm uppercase tracking-widest text-muted lg:sticky lg:top-28 lg:self-start">
+            Questions
+          </h2>
+
+          <div class="reveal divide-y divide-border/70 border-y border-border/70" style="transition-delay: 0.1s">
+            {faqs.map((item) => (
+              <details class="faq-item group">
+                <summary class="flex items-center justify-between gap-4 py-5">
+                  <span class="text-base tracking-tight text-ink">{item.q}</span>
+                  <span class="faq-sign shrink-0 text-xl leading-none text-accent">+</span>
+                </summary>
+                <p class="pb-5 text-[15px] leading-relaxed text-muted">{item.a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Closing ──────────────────────────── -->
+    <!-- Book-ends the hero with the quieter dawn painting, so the page opens and
+         closes on the same idea instead of trailing off into chrome. -->
+    <section class="relative overflow-hidden bg-[#dfe9f4]">
+      <picture>
+        <source srcset="/band-dawn.webp" type="image/webp" />
+        <img src="/band-dawn.jpg" alt="" loading="lazy" decoding="async" class="hero-art" />
+      </picture>
+
+      <div class="relative z-10 mx-auto max-w-6xl px-6 py-28 text-center md:py-36">
+        <h2 class="on-art font-display text-3xl leading-snug tracking-tight md:text-5xl">
+          Your voice, your machine.
+        </h2>
+        <div class="mt-8 flex justify-center">
+          <a
+            href={downloadUrl}
+            data-dmg
+            data-track="download_click:dmg_footer"
+            class="glass inline-flex items-center gap-2 px-6 py-3 text-[15px] font-medium"
+          >
+            Download for macOS
+          </a>
+        </div>
+      </div>
+    </section>
+
     <!-- ── Quarantine notice — surfaced after a .dmg download ─ -->
-    <!-- A centered dialog so it lands front-and-centre the moment you download. -->
     <div
       id="dmg-banner"
       class="dmg-modal fixed inset-0 z-[70] flex items-center justify-center px-4"
@@ -728,9 +470,9 @@ const faqs = [
     >
       <div class="dmg-scrim absolute inset-0 bg-ink/45 backdrop-blur-sm" data-dmg-close></div>
 
-      <div class="dmg-card relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-bg p-6 shadow-[0_50px_120px_-24px_rgba(26,26,26,0.55)]">
+      <div class="dmg-card relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-bg p-6 shadow-[0_50px_120px_-24px_rgba(18,35,61,0.55)]">
         <div class="flex items-start gap-3">
-          <p id="dmg-title" class="flex-1 font-display text-base leading-snug tracking-tight text-ink">
+          <p id="dmg-title" class="flex-1 font-display text-lg leading-snug tracking-tight text-ink">
             Clear quarantine if macOS blocks it
           </p>
           <button
@@ -746,7 +488,7 @@ const faqs = [
         </div>
 
         <p class="mt-2 text-sm leading-relaxed text-muted">
-          Suniye isn't signed with a paid Apple Developer Certificate, so macOS
+          Suniye isn't signed with a paid Apple Developer certificate, so macOS
           quarantines the .dmg. Run this once to remove it.
         </p>
 
@@ -756,7 +498,7 @@ const faqs = [
           <button
             type="button"
             data-dmg-close
-            class="btn-press rounded-lg bg-ink px-5 py-2.5 font-display text-sm text-bg hover:bg-ink/85"
+            class="btn-press rounded-lg bg-ink px-5 py-2.5 text-sm text-bg hover:bg-ink/85"
           >
             Got it
           </button>
@@ -770,28 +512,22 @@ const faqs = [
     <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 md:flex-row">
       <div class="flex items-center gap-2.5">
         <img src="/suniye-icon.png" alt="" class="h-5 w-5 rounded-[3px]" />
-        <span class="font-display text-sm text-muted">
-          Suniye &middot; MIT License
-        </span>
+        <span class="text-sm text-muted">Suniye &middot; MIT License</span>
       </div>
-      <div class="flex items-center gap-6 font-display text-sm text-muted">
+      <div class="flex items-center gap-6 text-sm text-muted">
         <a href={githubUrl} target="_blank" rel="noopener" data-track="outbound_click:github" class="transition-colors hover:text-ink">
           GitHub
-        </a>
-        <a href={`${githubUrl}/blob/main/CONTRIBUTING.md`} target="_blank" rel="noopener" class="transition-colors hover:text-ink">
-          Contributing
         </a>
         <a href={`${githubUrl}/issues`} target="_blank" rel="noopener" class="transition-colors hover:text-ink">
           Issues
         </a>
-        <a href="/changelog" class="transition-colors hover:text-ink">
-          Changelog
-        </a>
+        <a href="/changelog" class="transition-colors hover:text-ink">Changelog</a>
+        <a href="/privacy" class="transition-colors hover:text-ink">Privacy</a>
       </div>
     </div>
   </footer>
 
-  <!-- ── Scroll reveal observer ─────────────── -->
+  <!-- ── Behaviour ──────────────────────────── -->
   <script>
     const revealEls = document.querySelectorAll(".reveal");
     if (!("IntersectionObserver" in window)) {
@@ -814,7 +550,7 @@ const faqs = [
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    // Demo video: click the poster overlay to play with sound + native controls,
+    // Demo video: click the poster overlay to play with sound and native controls,
     // and run a stopwatch read from the real playback clock. Under reduced motion
     // we drop the 60fps millisecond repaint and tick on the video's own updates.
     const demoVideo = document.getElementById("demo-video");
@@ -886,7 +622,6 @@ const faqs = [
       document.querySelectorAll("[data-dmg]").forEach((el) => {
         el.addEventListener("click", openDmg);
       });
-      // Close via the ×, the "Got it" button, or the backdrop.
       dmgBanner
         .querySelectorAll("[data-dmg-close], #dmg-banner-close")
         .forEach((el) => el.addEventListener("click", closeDmg));
@@ -913,7 +648,6 @@ const faqs = [
     }
 
     // Copy the command associated with each copy button to the clipboard.
-    // Prefer the button's data-copy; fall back to the adjacent <code> text.
     document.querySelectorAll(".copy-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const text =
