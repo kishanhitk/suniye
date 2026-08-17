@@ -119,6 +119,7 @@ struct SpeechModelSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selection: ASRModelID?
     @State private var pendingDeleteModelID: ASRModelID?
+    @State private var systemAssetInstalled: [ASRModelID: Bool] = [:]
 
     /// The model in use leads the list, so the selected radio is on screen the
     /// moment the sheet opens rather than somewhere down a scroll.
@@ -131,9 +132,16 @@ struct SpeechModelSheet: View {
         selection ?? appState.currentASRModelEntry.id
     }
 
+    /// System ownership is not installation: Apple Speech's asset may still
+    /// need a large OS-managed fetch, and that is only answerable
+    /// asynchronously. Until the answer arrives the button promises the
+    /// download rather than hiding it.
     private var isPendingDownloaded: Bool {
         let entry = ASRModelCatalog.entry(for: pending)
-        return entry.isSystemManaged || appState.isASRModelDownloaded(pending)
+        guard entry.isSystemManaged else {
+            return appState.isASRModelDownloaded(pending)
+        }
+        return systemAssetInstalled[pending] ?? false
     }
 
     var body: some View {
@@ -177,6 +185,11 @@ struct SpeechModelSheet: View {
         }
         .padding(20)
         .frame(width: 600)
+        .task {
+            for entry in models where entry.isSystemManaged {
+                systemAssetInstalled[entry.id] = await appState.isSystemManagedASRAssetInstalled(entry.id)
+            }
+        }
         .subtleScrollers()
         .background(MainWindowPalette.windowBackground)
         .confirmationDialog(
@@ -284,7 +297,7 @@ struct SpeechModelSheet: View {
         var parts = [entry.languageSummary, entry.speedLabel, entry.qualityLabel]
 
         if entry.isSystemManaged {
-            parts.append("Built into macOS")
+            parts.append(systemAssetInstalled[entry.id] == false ? "Built into macOS, not yet downloaded" : "Built into macOS")
         } else if appState.isASRModelDownloaded(entry.id) {
             parts.append("\(appState.asrModelInstalledSizeText(for: entry.id)) on disk")
         } else {

@@ -1345,6 +1345,14 @@ final class AppState {
         modelManager.isInstalled(modelID)
     }
 
+    /// Whether a system-managed model's OS asset is actually cached. Only
+    /// answerable asynchronously, which is why callers cannot simply treat
+    /// "system-managed" as "installed" — an uncached asset means a large
+    /// OS-managed download.
+    func isSystemManagedASRAssetInstalled(_ modelID: ASRModelID) async -> Bool {
+        await modelManager.isSystemManagedAssetInstalled(modelID)
+    }
+
     func asrModelSecondaryActionsEnabled(for modelID: ASRModelID) -> Bool {
         // System-managed models (Apple Speech) have no on-disk folder to open and can't
         // be deleted by us, so hide the folder/trash actions for them.
