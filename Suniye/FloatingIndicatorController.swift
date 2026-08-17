@@ -77,7 +77,9 @@ final class FloatingIndicatorController {
     private var settleTask: Task<Void, Never>?
     private var resizeGeneration = 0
     private let bottomMargin: CGFloat = 28
-    private let animationDuration: TimeInterval = 0.11
+    /// Only the cross-screen follow animates the window frame. Apple's "move"
+    /// response is 0.4s; the old 0.11 read as a teleport.
+    private let crossScreenMoveDuration: TimeInterval = 0.4
     /// Slightly longer than the view's layout spring so the window trims to its
     /// exact size only after the SwiftUI content has finished animating.
     private let panelSettleDelay: UInt64 = 400_000_000
@@ -358,8 +360,11 @@ final class FloatingIndicatorController {
         guard targetFrame != .zero else { return }
         if animated {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = animationDuration
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.duration = crossScreenMoveDuration
+                // Decelerating rather than ease-in-ease-out: AppKit's window
+                // animator cannot host a real spring, so this approximates the
+                // critically damped move the HIG asks for.
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0, 0, 1)
                 panel.animator().setFrame(targetFrame, display: true)
             }
         } else {

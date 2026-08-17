@@ -7,6 +7,7 @@ import SwiftUI
 /// 3. Type Anywhere — the Accessibility ask, made after value is demonstrated
 struct OnboardingView: View {
     @Bindable var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let appIdentity = AppIdentity.current
 
     private var step: OnboardingStep {
@@ -26,10 +27,14 @@ struct OnboardingView: View {
                 .frame(maxWidth: 420)
                 .padding(.top, 20)
                 .id(step)
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .leading).combined(with: .opacity)
-                ))
+                .transition(
+                    reduceMotion
+                        ? .opacity
+                        : .asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        )
+                )
 
             Spacer(minLength: 24)
 
@@ -40,7 +45,7 @@ struct OnboardingView: View {
         .padding(.horizontal, 40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MainWindowPalette.windowBackground)
-        .animation(.easeInOut(duration: 0.3), value: step)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: step)
         .onAppear {
             appState.refreshPermissionStatus()
         }
@@ -83,7 +88,7 @@ struct OnboardingView: View {
                 .foregroundStyle(MainWindowPalette.secondaryText)
         }
         .accessibilityHidden(true)
-        .animation(.easeInOut(duration: 0.3), value: step)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: step)
     }
 
     // MARK: - Step Content
@@ -325,7 +330,7 @@ struct OnboardingView: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(MainWindowPalette.cardSurface)
+                .fill(MainWindowPalette.cardBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)

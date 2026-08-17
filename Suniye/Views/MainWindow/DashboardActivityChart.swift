@@ -55,7 +55,7 @@ struct DashboardActivityChart: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: AppMetrics.metricPanelCornerRadius, style: .continuous)
-                .fill(MainWindowPalette.cardSurface)
+                .fill(MainWindowPalette.cardBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: AppMetrics.metricPanelCornerRadius, style: .continuous)
