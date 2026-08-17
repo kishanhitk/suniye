@@ -30,13 +30,19 @@
 /* Change --color-accent to retheme the entire site */
 
 @theme {
-  --color-bg: #f6f9fc;
-  --color-ink: #12233d;
-  --color-muted: #5b6b82;
+  --color-bg: #f4f8fc;
+  --color-ink: #102844;
+  --color-muted: #5a708c;
   --color-accent: #2b6cc4;
   --color-accent-hover: #22589f;
   --color-surface: #ffffff;
-  --color-border: #dde7f2;
+  --color-border: #d7e4f1;
+
+  /* The dawn light on the painting's left horizon. Used for emphasis only —
+     one warm mark per section at most, so it stays an event. */
+  --color-sun: #d9913f;
+  /* The valley floor. Reserved for the local/on-device signal. */
+  --color-meadow: #4a7c3f;
 
   /* Display is a system serif — it ships on every Mac, costs no download, and
      carries the calm the hero painting sets up. Mono is kept for commands only. */
@@ -475,19 +481,89 @@ body {
   );
 }
 
-/* Card surfaces sit on the tinted ground, so they need their own light to read
-   as raised rather than as holes in the wash. */
 .card {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  box-shadow: 0 1px 2px rgba(18, 35, 61, 0.04);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 40, 68, 0.04);
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .card {
-    background: #fff;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+
+/* ── The transcript rail ───────────────────── */
+/* Every section below the hero hangs off one left rail, the way a transcript
+   hangs off its speaker column. It is the page's structure, so it is the same
+   grid everywhere — the content column changes, the rail never does. */
+
+.band {
+  border-top: 1px solid color-mix(in oklab, var(--color-border) 70%, transparent);
+  padding-block: clamp(3.25rem, 5.5vw, 5.5rem);
+}
+
+.band-inner {
+  margin-inline: auto;
+  max-width: 72rem;
+  padding-inline: 1.5rem;
+  display: grid;
+  gap: 2rem;
+}
+
+@media (min-width: 900px) {
+  .band-inner {
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+    gap: 3.5rem;
   }
+}
+
+/* The rail label. Small, monospaced, and hung outside the reading column so the
+   prose keeps one clean left edge. */
+.rail {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--color-muted) 70%, transparent);
+  padding-top: 0.55rem;
+}
+
+@media (min-width: 900px) {
+  .rail {
+    position: sticky;
+    top: 6.5rem;
+    align-self: start;
+    text-align: right;
+    border-right: 1px solid var(--color-border);
+    padding-right: 1.25rem;
+    padding-top: 0.75rem;
+  }
+}
+
+/* ── Type scale ────────────────────────────── */
+/* One size is decisively the largest on the page. Everything under the hero was
+   set at the same 3xl/4xl, which is why nothing read as the main idea. */
+
+.t-lead {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(2rem, 4.4vw, 3.25rem);
+  line-height: 1.08;
+  letter-spacing: -0.022em;
+  max-width: 18ch;
+}
+
+.t-head {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(1.5rem, 2.4vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+}
+
+.t-sub {
+  margin-top: 1.1rem;
+  max-width: 46ch;
+  color: var(--color-muted);
+  line-height: 1.65;
+}
+
+/* A single warm mark. The painting's dawn light, used once per section at most. */
+.mark {
+  color: var(--color-sun);
 }

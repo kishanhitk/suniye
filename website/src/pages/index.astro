@@ -200,68 +200,72 @@ const faqs = [
     <div id="nav-sentinel" aria-hidden="true"></div>
 
     <!-- ── The argument ─────────────────────── -->
-    <section class="relative overflow-hidden py-20 md:py-28">
-      <div class="bloom left-1/2 top-[-6rem] h-[26rem] w-[46rem] -translate-x-1/2" aria-hidden="true"></div>
-      <div class="relative z-10 mx-auto max-w-6xl px-6">
-        <div class="reveal mx-auto max-w-2xl text-center">
-          <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
-            Every other dictation app sends your voice away.
-          </h2>
-          <p class="mt-4 leading-relaxed text-muted">
+    <!-- The page's thesis, and the only place set at lead size. The two paths are
+         a real sequence, so they are numbered; the cloud column is deliberately
+         the longer one, and the layout lets it read longer rather than squaring
+         both columns into a symmetric pair. -->
+    <section class="band relative overflow-hidden">
+      <div class="bloom left-[6rem] top-[-8rem] h-[26rem] w-[42rem]" aria-hidden="true"></div>
+      <div class="band-inner relative z-10">
+        <p class="rail reveal">The argument</p>
+        <div>
+          <h2 class="t-lead reveal">Every other dictation app sends your voice away.</h2>
+          <p class="t-sub reveal">
             They are built on someone else's API, so your audio has to travel there
-            and back before a single word appears. That round trip is the wait — and
-            the privacy question.
+            and back before a single word appears. That round trip is the wait &mdash;
+            and the privacy question.
           </p>
-        </div>
 
-        <div class="reveal mt-14 grid gap-6 md:grid-cols-2" style="transition-delay: 0.1s">
-          <!-- Cloud path — deliberately the longer, greyer column. -->
-          <div class="card border-border/70 bg-white/45 p-7 md:p-8">
-            <p class="font-mono text-[11px] uppercase tracking-widest text-muted/70">
-              Cloud dictation
-            </p>
-            <ol class="mt-5 space-y-3">
-              {cloudPath.map((step, i) => (
-                <li class="flex items-start gap-3 text-[15px] text-muted">
-                  <span class="mt-[3px] font-mono text-[11px] tabular-nums text-muted/50">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  {step}
-                </li>
-              ))}
-            </ol>
-            <p class="mt-6 border-t border-border/70 pt-4 text-sm text-muted/80">
-              Needs a connection. Your voice sits, however briefly, on a disk you
-              don't own.
-            </p>
-          </div>
+          <div class="mt-14 grid gap-x-10 gap-y-10 md:grid-cols-[0.85fr_1fr]">
+            <div class="reveal">
+              <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted/60">
+                Cloud dictation
+              </p>
+              <ol class="mt-5 space-y-3.5">
+                {cloudPath.map((step, i) => (
+                  <li class="flex items-baseline gap-3 text-[15px] text-muted">
+                    <span class="font-mono text-[10px] tabular-nums text-muted/40">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+              <p class="mt-6 max-w-[34ch] text-sm leading-relaxed text-muted/75">
+                Needs a connection. Your voice sits, however briefly, on a disk you
+                don't own.
+              </p>
+            </div>
 
-          <!-- Local path — shorter by one step, and the only coloured surface here. -->
-          <div class="card border-accent/25 bg-[linear-gradient(180deg,rgba(43,108,196,0.10),rgba(255,255,255,0.72))] p-7 shadow-[0_18px_44px_-24px_rgba(18,35,61,0.35)] md:p-8">
-            <p class="font-mono text-[11px] uppercase tracking-widest text-accent">
-              Suniye
-            </p>
-            <ol class="mt-5 space-y-3">
-              {localPath.map((step, i) => (
-                <li class="flex items-start gap-3 text-[15px] text-ink">
-                  <span class="mt-[3px] font-mono text-[11px] tabular-nums text-accent/60">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  {step}
-                </li>
-              ))}
-            </ol>
-            <div class="mt-6 border-t border-accent/20 pt-5">
-              <p class="font-display text-3xl tracking-tight text-ink">
-                177<span class="text-xl text-muted"> ms</span>
+            <div class="reveal" style="transition-delay: 0.08s">
+              <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
+                Suniye
               </p>
-              <p class="mt-1 text-sm text-muted">
-                Median speech&ndash;to&ndash;text with Apple's built-in engine. A
-                network round trip alone often costs more than that.
-              </p>
-              <p class="mt-3 text-sm text-muted">
+              <ol class="mt-5 space-y-3.5">
+                {localPath.map((step, i) => (
+                  <li class="flex items-baseline gap-3 text-[15px] text-ink">
+                    <span class="font-mono text-[10px] tabular-nums text-accent/50">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+              <p class="mt-3 max-w-[34ch] text-sm leading-relaxed text-muted">
                 Works on a plane. Nothing to upload, so there is nothing to keep.
               </p>
+
+              <!-- The page's one warm mark: the measured number, lit like the dawn
+                   edge of the painting above it. -->
+              <div class="mt-8 border-t border-border pt-6">
+                <p class="mark font-display text-[3.25rem] leading-none tracking-tight">
+                  177<span class="ml-1 text-2xl text-muted">ms</span>
+                </p>
+                <p class="mt-3 max-w-[36ch] text-sm leading-relaxed text-muted">
+                  Median speech&ndash;to&ndash;text with Apple's built-in engine. A
+                  network round trip alone often costs more than that.
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -271,20 +275,18 @@ const faqs = [
     <!-- ── Demo ─────────────────────────────── -->
     <!-- Click-to-play with sound: the narration is the point, and browsers block
          autoplay-with-audio, so we lead with a poster and a play affordance. -->
-    <section class="border-t border-border/50 py-20 md:py-28">
-      <div class="mx-auto max-w-6xl px-6">
-        <div class="reveal mx-auto max-w-2xl text-center">
-          <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
-            Hold a key. Talk. Let go.
-          </h2>
-          <p class="mt-4 leading-relaxed text-muted">
-            That is the entire interface. Default is Fn/Globe; make it any shortcut
-            you like.
+    <section class="band">
+      <div class="band-inner">
+        <p class="rail reveal">The whole interface</p>
+        <div>
+          <h2 class="t-head reveal">Hold a key. Talk. Let go.</h2>
+          <p class="t-sub reveal">
+            Default is Fn/Globe; make it any shortcut you like. There is nothing
+            else to learn.
           </p>
-        </div>
 
-        <figure class="reveal mt-12" style="transition-delay: 0.1s">
-          <div class="mx-auto max-w-5xl overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-float)]">
+        <figure class="reveal mt-10" style="transition-delay: 0.1s">
+          <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-float)]">
             <div class="flex items-center gap-1.5 border-b border-border/70 bg-surface/70 px-4 py-3">
               <span class="h-2.5 w-2.5 rounded-full bg-border"></span>
               <span class="h-2.5 w-2.5 rounded-full bg-border"></span>
@@ -335,10 +337,11 @@ const faqs = [
             </div>
           </div>
 
-          <figcaption class="mt-4 text-center font-mono text-xs tracking-wide text-muted/60">
-            A real, unedited take.
+          <figcaption class="mt-4 font-mono text-[10px] uppercase tracking-[0.16em] text-muted/50">
+            A real, unedited take
           </figcaption>
         </figure>
+        </div>
       </div>
     </section>
 
@@ -346,60 +349,59 @@ const faqs = [
     <!-- Every competitor leads with a before/after because it is the only way to
          make "polished text" mean anything. Ours uses the eval suite so the
          right-hand column is behaviour we actually test for. -->
-    <section class="relative overflow-hidden border-t border-border/50 py-20 md:py-28">
-      <div class="bloom left-[-8rem] top-[2rem] h-[24rem] w-[34rem]" aria-hidden="true"></div>
-      <div class="relative z-10 mx-auto max-w-6xl px-6">
-        <div class="reveal mx-auto max-w-2xl text-center">
-          <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
-            Speak like a person. Paste like an editor.
-          </h2>
-          <p class="mt-4 leading-relaxed text-muted">
-            Magic Format cleans the transcript before it lands — on your Mac, using
-            Apple Intelligence or a local model. It is optional, and off until you
+    <!-- Set as an actual transcript: the spoken line in mono at transcript grey,
+         the written line directly beneath it in reading type. Stacking them
+         vertically shows the transformation as one motion down the page; two
+         side-by-side boxes made it a comparison of two separate things. -->
+    <section class="band relative overflow-hidden">
+      <div class="bloom left-[-10rem] top-[4rem] h-[24rem] w-[34rem]" aria-hidden="true"></div>
+      <div class="band-inner relative z-10">
+        <p class="rail reveal">Magic Format</p>
+        <div>
+          <h2 class="t-head reveal">Speak like a person. Paste like an editor.</h2>
+          <p class="t-sub reveal">
+            Magic Format cleans the transcript before it lands &mdash; on your Mac,
+            using Apple Intelligence or a local model. Optional, and off until you
             turn it on.
           </p>
-        </div>
 
-        <div class="mt-12 space-y-4">
-          {cleanups.map((c, i) => (
-            <div
-              class="reveal glass-panel grid items-stretch gap-px overflow-hidden border border-white/60 shadow-[0_18px_44px_-28px_rgba(18,35,61,0.4)] md:grid-cols-2"
-              style={`transition-delay: ${i * 0.06}s`}
-            >
-              <div class="p-6 md:p-7">
-                <p class="font-mono text-[10px] uppercase tracking-widest text-muted/60">
-                  What you said
+          <div class="mt-12 divide-y divide-border">
+            {cleanups.map((c, i) => (
+              <div class="reveal py-8 first:pt-0" style={`transition-delay: ${i * 0.06}s`}>
+                <p class="font-mono text-[13px] leading-relaxed text-muted/70">
+                  {c.said}
                 </p>
-                <p class="mt-3 font-mono text-[13px] leading-relaxed text-muted">{c.said}</p>
+                <div class="mt-4 flex gap-4">
+                  <span class="mt-2 h-px w-8 shrink-0 bg-accent/40" aria-hidden="true"></span>
+                  <div>
+                    <p class="whitespace-pre-line text-[17px] leading-relaxed text-ink">
+                      {c.wrote}
+                    </p>
+                    <p class="mt-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted/50">
+                      {c.label}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div class="border-t border-white/70 bg-white/45 p-6 md:border-l md:border-t-0 md:p-7">
-                <p class="font-mono text-[10px] uppercase tracking-widest text-accent">
-                  What lands
-                </p>
-                <p class="mt-3 whitespace-pre-line text-[15px] leading-relaxed text-ink">{c.wrote}</p>
-                <p class="mt-4 text-xs text-muted/70">{c.label}</p>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </section>
 
     <!-- ── Anywhere, in the right register ──── -->
-    <section class="relative overflow-hidden border-t border-border/50 py-20 md:py-28">
-      <div class="bloom right-[-8rem] top-[6rem] h-[22rem] w-[32rem]" aria-hidden="true"></div>
-      <div class="relative z-10 mx-auto max-w-6xl px-6">
-        <div class="reveal mx-auto max-w-2xl text-center">
-          <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
-            One key, every text field.
-          </h2>
-          <p class="mt-4 leading-relaxed text-muted">
+    <section class="band relative overflow-hidden">
+      <div class="bloom right-[-10rem] top-[6rem] h-[22rem] w-[32rem]" aria-hidden="true"></div>
+      <div class="band-inner relative z-10">
+        <p class="rail reveal">Where it works</p>
+        <div>
+          <h2 class="t-head reveal">One key, every text field.</h2>
+          <p class="t-sub reveal">
             No plugin, no per-app setup. The text lands at your cursor and your
             clipboard is left exactly as you had it.
           </p>
-        </div>
 
-        <div class="reveal mt-10 flex flex-wrap items-center justify-center gap-2.5" style="transition-delay: 0.08s">
+        <div class="reveal mt-8 flex flex-wrap items-center gap-2.5" style="transition-delay: 0.08s">
           <kbd class="rounded-lg border border-white/70 bg-white/70 px-3 py-1.5 font-mono text-xs text-ink shadow-[0_1px_2px_rgba(18,35,61,0.06)] backdrop-blur-sm">
             fn
           </kbd>
@@ -412,64 +414,74 @@ const faqs = [
           <span class="text-[13px] text-muted/60">&hellip; and anywhere else you type</span>
         </div>
 
-        <div class="reveal mt-16 mx-auto max-w-2xl text-center" style="transition-delay: 0.12s">
-          <h3 class="font-display text-2xl tracking-tight md:text-3xl">
-            The same thought, in the right register.
-          </h3>
-          <p class="mt-3 leading-relaxed text-muted">
+        <div class="reveal mt-20" style="transition-delay: 0.12s">
+          <h3 class="t-head">The same thought, in the right register.</h3>
+          <p class="t-sub">
             Give an app its own Magic Format prompt and Suniye uses it whenever you
             dictate there. Terse in chat, composed in mail, untouched in notes.
           </p>
         </div>
 
-        <div class="mt-10 grid gap-5 md:grid-cols-3">
+        <div class="mt-10 divide-y divide-border border-t border-border">
           {tones.map((t, i) => (
             <div
-              class="reveal glass-panel flex flex-col border border-white/60 p-6 shadow-[0_18px_44px_-28px_rgba(18,35,61,0.4)]"
+              class="reveal grid gap-x-8 gap-y-3 py-7 md:grid-cols-[7rem_1fr]"
               style={`transition-delay: ${0.14 + i * 0.06}s`}
             >
-              <p class="font-mono text-[10px] uppercase tracking-widest text-accent">{t.app}</p>
-              <p class="mt-3 text-sm text-muted/80">{t.prompt}</p>
-              <p class="mt-5 whitespace-pre-line border-t border-border/60 pt-5 text-[15px] leading-relaxed text-ink">
-                {t.out}
-              </p>
+              <div>
+                <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">{t.app}</p>
+                <p class="mt-2 text-[13px] leading-relaxed text-muted/75">{t.prompt}</p>
+              </div>
+              <p class="whitespace-pre-line text-[15px] leading-relaxed text-ink">{t.out}</p>
             </div>
           ))}
         </div>
 
-        <p class="reveal mt-6 text-center text-xs text-muted/60">
-          Prompts are yours to write — these are examples, not fixed presets.
+        <p class="reveal mt-5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted/45">
+          Examples, not fixed presets &mdash; the prompts are yours to write
         </p>
+        </div>
       </div>
     </section>
 
     <!-- ── Models ───────────────────────────── -->
     <!-- The choice is the selling point; the catalogue is reference, so it stays
          folded until someone actually wants to compare sizes. -->
-    <section id="models" class="relative scroll-mt-20 overflow-hidden border-t border-border/50 bg-[linear-gradient(180deg,rgba(43,108,196,0.07),transparent)] py-20 md:py-28">
-      <div class="mx-auto max-w-6xl px-6">
-        <div class="reveal mx-auto max-w-2xl text-center">
-          <h2 class="font-display text-3xl leading-snug tracking-tight md:text-4xl">
-            Eleven ways to listen.
-          </h2>
-          <p class="mt-4 leading-relaxed text-muted">
+    <section id="models" class="band scroll-mt-20 bg-[linear-gradient(180deg,rgba(43,108,196,0.05),transparent)]">
+      <div class="band-inner">
+        <p class="rail reveal">Speech models</p>
+        <div>
+          <h2 class="t-head reveal">Eleven ways to listen.</h2>
+          <p class="t-sub reveal">
             From a 118 MB model that keeps up on any Mac to a 1.7 GB one that
-            catches everything — plus Apple's built-in engine, which downloads
+            catches everything &mdash; plus Apple's built-in engine, which downloads
             nothing at all. Switch whenever you like; they all run locally.
           </p>
-        </div>
 
-        <details class="reveal group mx-auto mt-10 max-w-3xl" style="transition-delay: 0.1s">
-          <summary class="mx-auto flex w-fit cursor-pointer list-none items-center gap-2 rounded-full border border-white/70 bg-white/70 px-5 py-2.5 font-mono shadow-[0_1px_2px_rgba(18,35,61,0.05)] backdrop-blur-sm text-xs tracking-wide text-muted transition-colors [&::-webkit-details-marker]:hidden hover:text-ink">
-            <span class="group-open:hidden">See every model</span>
+          <ul class="reveal mt-10 divide-y divide-border border-t border-border" style="transition-delay: 0.08s">
+            {[models[0], models[1], models[7]].map((m) => (
+              <li class="grid gap-x-6 gap-y-1 py-4 md:grid-cols-[13rem_1fr_5rem]">
+                <span class="flex items-center gap-2 text-[15px] tracking-tight text-ink">
+                  {m.name}
+                  {m.tag && <span class="pill pill-accent">{m.tag}</span>}
+                </span>
+                <span class="text-sm text-muted/80">{m.langs}</span>
+                <span class="font-mono text-xs text-muted/60 md:text-right">{m.size}</span>
+              </li>
+            ))}
+          </ul>
+
+        <details class="reveal group mt-8" style="transition-delay: 0.1s">
+          <summary class="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full border border-border bg-white px-5 py-2.5 font-mono text-[11px] tracking-wide text-muted transition-colors [&::-webkit-details-marker]:hidden hover:text-ink">
+            <span class="group-open:hidden">And eight more</span>
             <span class="hidden group-open:inline">Hide the list</span>
             <svg class="h-3.5 w-3.5 transition-transform duration-200 [transition-timing-function:var(--curve-out)] group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
           </summary>
 
-          <ul class="glass-panel mt-8 divide-y divide-border/60 border border-white/60 px-6 shadow-[0_18px_44px_-28px_rgba(18,35,61,0.4)]">
-            {models.map((m) => (
+          <ul class="mt-8 divide-y divide-border border-t border-border">
+            {models.filter((_, i) => ![0, 1, 7].includes(i)).map((m) => (
               <li class="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-3.5">
                 <span class="text-[15px] tracking-tight text-ink">{m.name}</span>
                 {m.tag && <span class="pill pill-accent">{m.tag}</span>}
@@ -479,6 +491,7 @@ const faqs = [
             ))}
           </ul>
         </details>
+        </div>
       </div>
     </section>
 
@@ -486,9 +499,9 @@ const faqs = [
     <!-- Deliberately not stars or download counts: at this stage those numbers
          argue against the app. Shipping cadence is the honest signal that an
          alpha is alive, and it is checkable on the releases page. -->
-    <section class="border-t border-border/50 py-10">
+    <section class="border-y border-border bg-white/50 py-7">
       <div class="mx-auto max-w-6xl px-6">
-        <ul class="reveal flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-center font-mono text-[11px] uppercase tracking-widest text-muted/70">
+        <ul class="reveal flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-muted/70">
           <li>MIT licensed</li>
           <li aria-hidden="true" class="text-muted/25">&middot;</li>
           <li>
@@ -512,15 +525,14 @@ const faqs = [
     </section>
 
     <!-- ── Install ──────────────────────────── -->
-    <section id="install" class="scroll-mt-20 border-t border-border/50 py-20 md:py-28">
-      <div class="mx-auto max-w-6xl px-6">
-        <div class="reveal mx-auto max-w-xl">
-          <h2 class="text-center font-display text-3xl tracking-tight md:text-4xl">
-            Install it
-          </h2>
+    <section id="install" class="band scroll-mt-20 border-t-0">
+      <div class="band-inner">
+        <p class="rail reveal">Install</p>
+        <div class="reveal max-w-xl">
+          <h2 class="t-head">Two ways in.</h2>
 
           <div class="mt-8">
-            <div class="mb-2 flex items-center justify-center gap-2">
+            <div class="mb-2 flex items-center gap-2">
               <span class="font-mono text-xs uppercase tracking-widest text-muted">
                 Homebrew
               </span>
@@ -531,14 +543,14 @@ const faqs = [
               label="Copy install command"
               dataTrack="download_click:homebrew"
             />
-            <p class="mt-3 text-center text-sm text-muted/80">
+            <p class="mt-3 text-sm leading-relaxed text-muted/80">
               Homebrew clears the macOS quarantine for you. It will ask you to trust
               the tap first — that is Homebrew 6 asking about any third-party tap,
               not something specific to Suniye.
             </p>
           </div>
 
-          <div class="mt-10 flex flex-wrap items-center justify-center gap-4">
+          <div class="mt-10 flex flex-wrap items-center gap-4">
             <a
               href={downloadUrl}
               data-dmg
@@ -560,34 +572,31 @@ const faqs = [
             </a>
           </div>
 
-          <p class="mt-8 text-center text-sm text-muted/80">
+          <p class="mt-8 text-sm leading-relaxed text-muted/80">
             macOS 14 (Sonoma) or later. Dictation works on Intel and Apple Silicon;
             the on-device cleanup model needs Apple Silicon.
           </p>
 
-          <p class="mt-6 text-center">
-            <span class="pill pill-accent">Alpha — expect rough edges</span>
+          <p class="mt-6">
+            <span class="pill pill-accent">Alpha &mdash; expect rough edges</span>
           </p>
         </div>
       </div>
     </section>
 
     <!-- ── FAQ ──────────────────────────────── -->
-    <section id="faq" class="scroll-mt-20 border-t border-border/50 bg-[linear-gradient(180deg,transparent,rgba(43,108,196,0.07))] py-20 md:py-28">
-      <div class="mx-auto max-w-6xl px-6">
-        <div class="grid gap-12 lg:grid-cols-[0.8fr_1.6fr] lg:gap-16">
-          <h2 class="reveal font-mono text-sm uppercase tracking-widest text-muted lg:sticky lg:top-28 lg:self-start">
-            Questions
-          </h2>
-
-          <div class="reveal divide-y divide-border/70 border-y border-border/70" style="transition-delay: 0.1s">
+    <section id="faq" class="band scroll-mt-20 bg-[linear-gradient(180deg,transparent,rgba(43,108,196,0.05))]">
+      <div class="band-inner">
+        <p class="rail reveal">Questions</p>
+        <div>
+          <div class="reveal divide-y divide-border border-y border-border" style="transition-delay: 0.1s">
             {faqs.map((item) => (
               <details class="faq-item group">
                 <summary class="flex items-center justify-between gap-4 py-5">
                   <span class="text-base tracking-tight text-ink">{item.q}</span>
                   <span class="faq-sign shrink-0 text-xl leading-none text-accent">+</span>
                 </summary>
-                <p class="pb-5 text-[15px] leading-relaxed text-muted">{item.a}</p>
+                <p class="max-w-[62ch] pb-5 text-[15px] leading-relaxed text-muted">{item.a}</p>
               </details>
             ))}
           </div>
