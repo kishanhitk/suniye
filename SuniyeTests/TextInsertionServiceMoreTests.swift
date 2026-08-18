@@ -29,14 +29,14 @@ final class TextInsertionServiceMoreTests: XCTestCase {
 
     func testCaptureInsertionContextReturnsNilWithoutFocusedElement() {
         let service = TextInsertionService()
-        service.focusedTextElementProvider = { nil }
+        service.focusedElementLookupProvider = { .notTextInput }
 
         XCTAssertNil(service.captureInsertionContext())
     }
 
     func testCaptureInsertionContextReturnsNilForOutOfBoundsSelection() {
         let service = TextInsertionService()
-        service.focusedTextElementProvider = { AXUIElementCreateSystemWide() }
+        service.focusedElementLookupProvider = { .found(AXUIElementCreateSystemWide()) }
         service.focusedTextSnapshotProvider = { _ in
             TextInsertionService.FocusedTextSnapshot(
                 value: "abc",
@@ -52,7 +52,7 @@ final class TextInsertionServiceMoreTests: XCTestCase {
 
     func testFieldValueProviderIsNilWithoutFocusedElement() {
         let service = TextInsertionService()
-        service.focusedTextElementProvider = { nil }
+        service.focusedElementLookupProvider = { .notTextInput }
 
         XCTAssertNil(service.makeFocusedFieldValueProvider())
     }
@@ -60,7 +60,7 @@ final class TextInsertionServiceMoreTests: XCTestCase {
     func testFieldValueProviderReReadsFieldAndReleasesService() throws {
         var service: TextInsertionService? = TextInsertionService()
         var fieldValue = "before edit"
-        service?.focusedTextElementProvider = { AXUIElementCreateSystemWide() }
+        service?.focusedElementLookupProvider = { .found(AXUIElementCreateSystemWide()) }
         service?.focusedTextSnapshotProvider = { _ in
             TextInsertionService.FocusedTextSnapshot(
                 value: fieldValue,

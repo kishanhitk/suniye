@@ -253,6 +253,32 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         XCTAssertEqual(appState.recentResults.first?.text, "hello there")
     }
 
+    /// KIS-205: a paste into an app that publishes no focus information still
+    /// delivers the text, but Return must not follow it — nothing knows where
+    /// it would land.
+    func testAutoSubmitWithheldWhenTheInsertionCouldNotBeVerified() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcription = StubTranscriptionService()
+        transcription.transcribeResult = .success("hello there")
+        let insertion = SpyTextInsertionService()
+        insertion.insertOutcome = .unverified
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcriptionService: transcription,
+            textInsertionService: insertion
+        )
+        appState.autoSubmitEnabled = true
+        await startRecording(appState, audioCapture: audioCapture)
+
+        appState.stopRecordingFromUI()
+        await waitUntil { appState.phase == .ready }
+
+        XCTAssertEqual(insertion.submitCallCount, 0)
+        XCTAssertTrue(insertion.insertedTexts.first?.contains("hello there") == true)
+        XCTAssertEqual(appState.recentResults.first?.text, "hello there")
+    }
+
     // MARK: - Edit mode hotkey wiring
 
     func testEditModeHotkeyCallbacksAreWiredWhenServicesStart() async {
