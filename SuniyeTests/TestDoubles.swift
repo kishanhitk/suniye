@@ -66,6 +66,7 @@ final class SpyTextInsertionService: TextInsertionServiceProtocol {
     private(set) var warmTargetAppAccessibilityCallCount = 0
     var insertionContext: TextInsertionContext?
     var insertError: Error?
+    var insertOutcome: InsertionOutcome = .intoFocusedElement
     var copyError: Error?
     var submitError: Error?
     var fieldValueProvider: (() -> String?)?
@@ -83,12 +84,14 @@ final class SpyTextInsertionService: TextInsertionServiceProtocol {
     }
 
     @MainActor
-    func insertText(_ text: String) async throws {
+    @discardableResult
+    func insertText(_ text: String) async throws -> InsertionOutcome {
         attemptedTexts.append(text)
         if let insertError {
             throw insertError
         }
         insertedTexts.append(text)
+        return insertOutcome
     }
 
     func copyTextToClipboard(_ text: String) throws {

@@ -4173,6 +4173,8 @@ final class AppState {
         var didFailInsertion = false
         var submitKeyFailed = false
         var didInsertFinalText = finalText.isEmpty
+        // Submit-only sessions have nothing to verify, so they stay eligible.
+        var insertionWasVerified = true
 
         // Attribution is applied after insertion succeeds, not here: the record
         // is stored before insertion is attempted so a failure is still
@@ -4205,8 +4207,15 @@ final class AppState {
                     insertionContext: textInsertionService.captureInsertionContext()
                 )
                 do {
-                    try await textInsertionService.insertText(insertionText)
+                    let outcome = try await textInsertionService.insertText(insertionText)
                     didInsertFinalText = true
+                    insertionWasVerified = outcome == .intoFocusedElement
+                    if !insertionWasVerified {
+                        AppLogger.shared.log(
+                            .info,
+                            "text inserted without a visible focus target app=\(frontmostAppBundleIDProvider() ?? "unknown")"
+                        )
+                    }
                     // Read after the insertion returns, not before it: the
                     // service retries for around a second while a focused
                     // element hydrates, so anything captured earlier can name
@@ -4218,7 +4227,10 @@ final class AppState {
                     didCompleteDictation = true
                 } catch {
                     didFailInsertion = true
-                    AppLogger.shared.log(.warning, "text insertion failed: \(error.localizedDescription)")
+                    AppLogger.shared.log(
+                        .warning,
+                        "text insertion failed app=\(frontmostAppBundleIDProvider() ?? "unknown") error=\(error.localizedDescription)"
+                    )
                     playSoundFeedback(.error)
                 }
             } else {
@@ -4235,7 +4247,9 @@ final class AppState {
         // here skipped the accounting below and the numbers silently drifted.
         // It is logged and tracked, but not surfaced as an insertion problem —
         // the insertion succeeded.
-        if usesSystemInsertion && shouldSubmit && didInsertFinalText {
+        // An unverified paste went out without any idea of what holds focus, so
+        // Return could land anywhere; withhold it rather than guess (KIS-205).
+        if usesSystemInsertion && shouldSubmit && didInsertFinalText && insertionWasVerified {
             if !finalText.isEmpty {
                 try? await Task.sleep(nanoseconds: 120_000_000)
             }

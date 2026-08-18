@@ -26,7 +26,7 @@ final class TextInsertionServiceTests: XCTestCase {
         let service = TextInsertionService()
         let element = AXUIElementCreateSystemWide()
 
-        service.focusedTextElementProvider = { element }
+        service.focusedElementLookupProvider = { .found(element) }
         service.focusedTextSnapshotProvider = { _ in
             TextInsertionService.FocusedTextSnapshot(
                 value: "coffeemachine",
@@ -48,7 +48,7 @@ final class TextInsertionServiceTests: XCTestCase {
         let service = TextInsertionService()
         let element = AXUIElementCreateSystemWide()
 
-        service.focusedTextElementProvider = { element }
+        service.focusedElementLookupProvider = { .found(element) }
         service.focusedTextSnapshotProvider = { _ in
             TextInsertionService.FocusedTextSnapshot(
                 value: "coffee machine",
@@ -70,7 +70,7 @@ final class TextInsertionServiceTests: XCTestCase {
         var state = TextInsertionService.FocusedTextSnapshot(value: "hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
         var insertedText: String?
 
-        service.focusedTextElementProvider = { element }
+        service.focusedElementLookupProvider = { .found(element) }
         service.focusedTextSnapshotProvider = { _ in state }
         service.selectedTextSetter = { _, text in
             insertedText = text
@@ -98,7 +98,7 @@ final class TextInsertionServiceTests: XCTestCase {
         var postedFlags: [CGEventFlags] = []
 
         service.pasteboardProvider = { pasteboard }
-        service.focusedTextElementProvider = { element }
+        service.focusedElementLookupProvider = { .found(element) }
         service.focusedTextSnapshotProvider = { _ in state }
         service.selectedTextSetter = { _, _ in true }
         service.pasteKeyCodeProvider = { 42 }
@@ -122,7 +122,7 @@ final class TextInsertionServiceTests: XCTestCase {
         var didPostPaste = false
 
         service.pasteboardProvider = { pasteboard }
-        service.focusedTextElementProvider = { element }
+        service.focusedElementLookupProvider = { .found(element) }
         service.focusedTextSnapshotProvider = { _ in
             (value: nil, selectedText: nil, selectedRange: nil)
         }
@@ -147,7 +147,7 @@ final class TextInsertionServiceTests: XCTestCase {
         var didPostPaste = false
 
         service.pasteboardProvider = { pasteboard }
-        service.focusedTextElementProvider = { element }
+        service.focusedElementLookupProvider = { .found(element) }
         service.focusedTextSnapshotProvider = { _ in unchanged }
         service.selectedTextSetter = { _, _ in false }
         service.keyPoster = { _, _ in didPostPaste = true }
@@ -165,7 +165,7 @@ final class TextInsertionServiceTests: XCTestCase {
         pasteboard.setString("previous", forType: .string)
 
         service.pasteboardProvider = { pasteboard }
-        service.focusedTextElementProvider = { nil }
+        service.focusedElementLookupProvider = { .notTextInput }
         service.focusedElementRetryIntervalNanoseconds = 0
         service.keyPoster = { _, _ in
             XCTFail("No key should be posted without a focused text input")
@@ -191,7 +191,7 @@ final class TextInsertionServiceTests: XCTestCase {
         let unchanged = TextInsertionService.FocusedTextSnapshot(value: "hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
 
         service.pasteboardProvider = { pasteboard }
-        service.focusedTextElementProvider = { element }
+        service.focusedElementLookupProvider = { .found(element) }
         service.focusedTextSnapshotProvider = { _ in unchanged }
         service.selectedTextSetter = { _, _ in true }
         service.pasteKeyCodeProvider = { 42 }
@@ -220,9 +220,10 @@ final class TextInsertionServiceTests: XCTestCase {
 
         service.pasteboardProvider = { pasteboard }
         service.focusedElementRetryIntervalNanoseconds = 0
-        service.focusedTextElementProvider = {
+        service.focusedElementLookupProvider = {
             lookups += 1
-            return lookups < 3 ? nil : element
+            // An Electron composer is invisible until its tree hydrates.
+            return lookups < 3 ? .unavailable : .found(element)
         }
         service.focusedTextSnapshotProvider = { _ in
             (value: nil, selectedText: nil, selectedRange: nil)

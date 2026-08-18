@@ -5,11 +5,22 @@ import Foundation
 
 protocol TextInsertionServiceProtocol {
     func captureInsertionContext() -> TextInsertionContext?
-    @MainActor func insertText(_ text: String) async throws
+    @MainActor @discardableResult func insertText(_ text: String) async throws -> InsertionOutcome
     func copyTextToClipboard(_ text: String) throws
     func submitActiveInput() throws
     func makeFocusedFieldValueProvider() -> (() -> String?)?
     func warmTargetAppAccessibility()
+}
+
+/// How an insertion reached the target, which decides whether the caller may
+/// follow it with Return: only a paste we watched land in a known text element
+/// is safe to submit.
+enum InsertionOutcome: Equatable {
+    /// A focused text element was visible and received the text.
+    case intoFocusedElement
+    /// The target app exposes no focused element at all, so the paste was
+    /// posted without confirming what has focus (KIS-205).
+    case unverified
 }
 
 struct TextInsertionContext: Equatable {
@@ -42,9 +53,23 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         }
     }
 
+    /// Why a focused text element was or was not found. The two failure cases
+    /// are not the same thing and must not be treated alike: one says "that is
+    /// not a text field", the other says "this app tells us nothing at all".
+    enum FocusedElementLookup: Equatable {
+        case found(AXUIElement)
+        /// A real element has focus and it is not an editable text input.
+        case notTextInput
+        /// The app reports no focused element whatsoever. Chromium browsers
+        /// keep their renderer accessibility tree switched off until a real
+        /// assistive technology enables it, and answer `kAXErrorNoValue` for
+        /// every focus query until then (KIS-205).
+        case unavailable
+    }
+
     var pasteboardProvider: () -> NSPasteboard = { .general }
     var accessibilityTrustProvider: () -> Bool = { AXIsProcessTrusted() }
-    var focusedTextElementProvider: (() -> AXUIElement?)?
+    var focusedElementLookupProvider: (() -> FocusedElementLookup)?
     var focusedTextSnapshotProvider: ((AXUIElement) -> FocusedTextSnapshot?)?
     var selectedTextSetter: ((AXUIElement, String) -> Bool)?
     var keyPoster: ((CGKeyCode, CGEventFlags) throws -> Void)?
@@ -95,12 +120,25 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     }
 
     @MainActor
-    func insertText(_ text: String) async throws {
-        // No focused text input means the paste would land on an arbitrary
-        // control — and a presumed success would let auto-submit post Return
-        // there. Fail before touching the clipboard; ⌃⌘V recovers the text.
-        guard let focusedElement = await focusedTextElementAwaitingHydration() else {
+    @discardableResult
+    func insertText(_ text: String) async throws -> InsertionOutcome {
+        let focusedElement: AXUIElement
+        switch await focusedTextElementAwaitingHydration() {
+        case .found(let element):
+            focusedElement = element
+        case .notTextInput:
+            // Something that is not a text field has focus, so the paste would
+            // land on an arbitrary control — and a presumed success would let
+            // auto-submit post Return there. Fail before touching the
+            // clipboard; ⌃⌘V recovers the text.
             throw InsertError.noFocusedTextInput
+        case .unavailable:
+            // The app publishes no focus information at all, so there is
+            // nothing to inspect and nothing to protect against — refusing
+            // here only guarantees the user gets no text. Paste blind and tell
+            // the caller it was never verified, so Return is withheld.
+            try pasteViaClipboard(text)
+            return .unverified
         }
 
         let initialState = captureFocusedTextState(for: focusedElement)
@@ -110,9 +148,22 @@ final class TextInsertionService: TextInsertionServiceProtocol {
                focusedElement: focusedElement,
                initialState: initialState
            ) {
-            return
+            return .intoFocusedElement
         }
 
+        try pasteViaClipboard(text)
+        return .intoFocusedElement
+    }
+
+    /// Puts the text on the clipboard, posts ⌘V, and restores the previous
+    /// contents.
+    ///
+    /// Fire-and-forget by design: post-paste AX observation cannot tell a
+    /// failed paste from a lazy accessibility surface (Electron composers read
+    /// as nil, terminals read stale — KIS-178), so a posted paste is reported
+    /// as success.
+    @MainActor
+    private func pasteViaClipboard(_ text: String) throws {
         let pasteboard = pasteboardProvider()
         let previousItems = Self.clipboardSnapshot(from: pasteboard.pasteboardItems ?? [])
 
@@ -121,27 +172,29 @@ final class TextInsertionService: TextInsertionServiceProtocol {
 
         scheduleClipboardRestore(previousItems, to: pasteboard)
 
-        // Fire-and-forget by design: post-paste AX observation cannot tell a
-        // failed paste from a lazy accessibility surface (Electron composers
-        // read as nil, terminals read stale — KIS-178), so a posted paste into
-        // a focused text element is reported as success.
         try postKey(pasteKeyCode(), flags: .maskCommand)
     }
 
-    /// Chromium hydrates its accessibility tree asynchronously after
+    /// Electron hydrates its accessibility tree asynchronously after
     /// warmTargetAppAccessibility; a cold Electron app needs up to ~1s before
     /// the focused composer exists (KIS-181). Covers the paste-last path,
     /// which warms and inserts back to back.
-    private func focusedTextElementAwaitingHydration() async -> AXUIElement? {
+    ///
+    /// Retries cover both misses, because a hydrating app reports `unavailable`
+    /// before its composer appears. An app that never hydrates keeps whatever
+    /// it last reported, which is how a Chromium browser ends up `unavailable`.
+    private func focusedTextElementAwaitingHydration() async -> FocusedElementLookup {
+        var lastLookup = FocusedElementLookup.unavailable
         for attempt in 0 ..< max(focusedElementRetryCount, 1) {
-            if let element = getFocusedTextElement() {
-                return element
+            lastLookup = lookUpFocusedElement()
+            if case .found = lastLookup {
+                return lastLookup
             }
             if attempt < focusedElementRetryCount - 1 {
                 try? await Task.sleep(nanoseconds: focusedElementRetryIntervalNanoseconds)
             }
         }
-        return nil
+        return lastLookup
     }
 
     /// Electron/Chromium apps leave their accessibility tree unbuilt until a
@@ -198,27 +251,46 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     }
 
     private func getFocusedTextElement() -> AXUIElement? {
-        if let focusedTextElementProvider {
-            return focusedTextElementProvider()
+        guard case .found(let element) = lookUpFocusedElement() else {
+            return nil
+        }
+        return element
+    }
+
+    /// Reads the system-wide focused element, separating "not a text field"
+    /// from "this app answered with nothing".
+    ///
+    /// Every app that participates in accessibility answers this query with
+    /// *some* element even when nothing text-like has focus — a bare desktop
+    /// reports `AXGroup`, a file list reports `AXList`. Only an app whose
+    /// accessibility tree is switched off returns no value at all, so that
+    /// error is a reliable signal that inspection is impossible rather than
+    /// that the target is unsuitable.
+    private func lookUpFocusedElement() -> FocusedElementLookup {
+        if let focusedElementLookupProvider {
+            return focusedElementLookupProvider()
         }
 
         guard accessibilityTrustProvider() else {
-            return nil
+            // Without the permission nothing can be read or posted, and the
+            // caller surfaces its own permission prompt.
+            return .notTextInput
         }
 
         let systemWide = AXUIElementCreateSystemWide()
         var focusedElement: AnyObject?
-        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement) == .success,
-              let focusedElement else {
-            return nil
+        let status = AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedElement
+        )
+
+        guard status == .success, let focusedElement else {
+            return status == .noValue ? .unavailable : .notTextInput
         }
 
         let element = focusedElement as! AXUIElement
-        guard Self.isTextInputElement(element) else {
-            return nil
-        }
-
-        return element
+        return Self.isTextInputElement(element) ? .found(element) : .notTextInput
     }
 
     static func isTextInputElement(_ element: AXUIElement) -> Bool {
