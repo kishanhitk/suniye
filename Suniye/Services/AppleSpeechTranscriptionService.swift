@@ -140,8 +140,13 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
 
     // `purpose` is ignored: this engine reports finalized results only (no
     // volatile partials), and `appleSpeech` opts out of the live preview, so it
-    // is never asked for a `.partial` decode.
-    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String {
+    // is never asked for a `.partial` decode. `onProgress` is ignored: single pass.
+    func transcribe(
+        samples: [Float],
+        sampleRate: Int,
+        purpose: TranscriptionPurpose,
+        onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
+    ) async throws -> String {
         guard let locale else {
             throw ServiceError.notLoaded
         }

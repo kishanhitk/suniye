@@ -70,20 +70,20 @@ struct TranscriptionProgress: Equatable, Sendable {
 
 protocol TranscriptionServiceProtocol {
     func loadModel(config: RecognizerConfig) async throws
-    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String
-    /// Final decode with per-chunk progress. Only engines that split long audio
-    /// (Cohere) report anything; the default runs a plain final decode.
+    /// `onProgress` is only ever driven by engines that split long audio into
+    /// chunks (Cohere); single-pass engines ignore it.
     func transcribe(
         samples: [Float],
         sampleRate: Int,
+        purpose: TranscriptionPurpose,
         onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
     ) async throws -> String
     func unloadModel() async
 }
 
 extension TranscriptionServiceProtocol {
-    func transcribe(samples: [Float], sampleRate: Int) async throws -> String {
-        try await transcribe(samples: samples, sampleRate: sampleRate, purpose: .final)
+    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose = .final) async throws -> String {
+        try await transcribe(samples: samples, sampleRate: sampleRate, purpose: purpose) { _ in }
     }
 
     func transcribe(
@@ -91,7 +91,7 @@ extension TranscriptionServiceProtocol {
         sampleRate: Int,
         onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
     ) async throws -> String {
-        try await transcribe(samples: samples, sampleRate: sampleRate, purpose: .final)
+        try await transcribe(samples: samples, sampleRate: sampleRate, purpose: .final, onProgress: onProgress)
     }
 }
 
@@ -226,7 +226,12 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         loadedConfig = config
     }
 
-    func transcribe(samples: [Float], sampleRate: Int = 16_000, purpose: TranscriptionPurpose = .final) async throws -> String {
+    func transcribe(
+        samples: [Float],
+        sampleRate: Int,
+        purpose: TranscriptionPurpose,
+        onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
+    ) async throws -> String {
         guard let recognizer else {
             throw ServiceError.recognizerNotLoaded
         }

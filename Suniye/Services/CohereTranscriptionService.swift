@@ -10,7 +10,6 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
     enum ServiceError: LocalizedError {
         case notLoaded
         case emptyAudio
-        case unsupportedSampleRate(Int)
         case invalidConfiguration
         case missingModelFile(String)
         case unexpectedTensorShape(String)
@@ -21,8 +20,6 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
                 return "Cohere Transcribe is not loaded"
             case .emptyAudio:
                 return "No audio captured"
-            case let .unsupportedSampleRate(rate):
-                return "Cohere Transcribe needs 16 kHz audio, got \(rate) Hz"
             case .invalidConfiguration:
                 return "The selected model files are incomplete"
             case let .missingModelFile(path):
@@ -78,13 +75,10 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
     }
 
     // `purpose` is always `.final`: this family opts out of the live preview.
-    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String {
-        try await transcribe(samples: samples, sampleRate: sampleRate) { _ in }
-    }
-
     func transcribe(
         samples: [Float],
         sampleRate: Int,
+        purpose: TranscriptionPurpose,
         onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
     ) async throws -> String {
         guard let encoder, let decoder, let vocabulary else {
@@ -93,16 +87,16 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         guard !samples.isEmpty else {
             throw ServiceError.emptyAudio
         }
-        guard sampleRate == CohereTranscribe.sampleRate else {
-            throw ServiceError.unsupportedSampleRate(sampleRate)
-        }
 
-        let chunks = CohereAudioChunker.split(samples)
+        // Capture runs at the device's native rate (typically 48 kHz); the encoder's
+        // baked-in frontend assumes 16 kHz.
+        let audio = try AudioResampler.resample(samples, from: max(8_000, sampleRate), to: CohereTranscribe.sampleRate)
+        let chunks = CohereAudioChunker.split(audio)
         AppLogger.shared.log(
             .info,
             String(
                 format: "cohere transcribe start duration=%.2fs chunks=%d",
-                Double(samples.count) / Double(sampleRate),
+                Double(audio.count) / Double(CohereTranscribe.sampleRate),
                 chunks.count
             )
         )
@@ -114,11 +108,11 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         var texts: [String] = []
         for (index, chunk) in chunks.enumerated() {
             onProgress(TranscriptionProgress(chunk: index + 1, totalChunks: chunks.count))
-            let audio = Array(samples[chunk])
+            let chunkAudio = Array(audio[chunk])
             let started = DispatchTime.now()
             let tokens: [Int64] = try await withCheckedThrowingContinuation { continuation in
                 Self.inferenceQueue.async {
-                    continuation.resume(with: Result { try Self.decodeChunk(audio, model: model) })
+                    continuation.resume(with: Result { try Self.decodeChunk(chunkAudio, model: model) })
                 }
             }
             texts.append(vocabulary.text(for: tokens))
@@ -126,7 +120,7 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
                 .info,
                 String(
                     format: "cohere chunk done seconds=%.2f tokens=%d in %.2fs",
-                    Double(chunk.count) / Double(sampleRate),
+                    Double(chunk.count) / Double(CohereTranscribe.sampleRate),
                     tokens.count,
                     Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1e9
                 )

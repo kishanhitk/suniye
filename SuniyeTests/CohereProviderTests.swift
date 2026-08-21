@@ -108,14 +108,16 @@ final class CohereProviderTests: XCTestCase {
         }
     }
 
-    func testProgressDefaultRunsPlainFinalDecode() async throws {
+    func testConvenienceOverloadsFillFinalPurposeAndNoOpSink() async throws {
         let plain = PlainTranscriptionService()
-        let text = try await plain.transcribe(samples: [0.1], sampleRate: 16_000) { _ in
-            XCTFail("single-pass engines report no progress")
-        }
-        XCTAssertEqual(text, "plain")
+
+        let bare = try await plain.transcribe(samples: [0.1], sampleRate: 16_000)
+        let partial = try await plain.transcribe(samples: [0.1], sampleRate: 16_000, purpose: .partial)
+        let withSink = try await plain.transcribe(samples: [0.1], sampleRate: 16_000) { _ in }
+        XCTAssertEqual([bare, partial, withSink], ["plain", "plain", "plain"])
+
         let purposes = await plain.purposes
-        XCTAssertEqual(purposes, [.final])
+        XCTAssertEqual(purposes, [.final, .partial, .final])
     }
 
     func testSherpaEngineRejectsCohereConfig() async throws {
@@ -184,10 +186,29 @@ final class CohereProviderTests: XCTestCase {
         typealias E = CohereTranscriptionService.ServiceError
         XCTAssertEqual(E.notLoaded.errorDescription, "Cohere Transcribe is not loaded")
         XCTAssertEqual(E.emptyAudio.errorDescription, "No audio captured")
-        XCTAssertEqual(E.unsupportedSampleRate(48_000).errorDescription, "Cohere Transcribe needs 16 kHz audio, got 48000 Hz")
         XCTAssertEqual(E.invalidConfiguration.errorDescription, "The selected model files are incomplete")
         XCTAssertEqual(E.missingModelFile("/x").errorDescription, "Required model file is missing: /x")
         XCTAssertEqual(E.unexpectedTensorShape("logits [1]").errorDescription, "Cohere Transcribe returned an unexpected tensor: logits [1]")
+    }
+
+    // MARK: - Resampling
+
+    func testResamplerPassesThroughSameRateAndEmptyInput() throws {
+        XCTAssertEqual(try AudioResampler.resample([0.1, 0.2], from: 16_000, to: 16_000), [0.1, 0.2])
+        XCTAssertEqual(try AudioResampler.resample([], from: 48_000, to: 16_000), [])
+    }
+
+    func testResamplerPreservesDurationAndPitch() throws {
+        // 1 s of a 440 Hz tone at 48 kHz → 16 kHz: same length in seconds, same
+        // number of zero crossings (±1 for the filter's edge handling).
+        let source = (0 ..< 48_000).map { sin(Float($0) * 2 * .pi * 440 / 48_000) }
+
+        let output = try AudioResampler.resample(source, from: 48_000, to: 16_000)
+
+        XCTAssertEqual(output.count, 16_000, accuracy: 16)
+        let crossings = zip(output, output.dropFirst()).filter { ($0 < 0) != ($1 < 0) }.count
+        XCTAssertEqual(crossings, 880, accuracy: 2)
+        XCTAssertGreaterThan(output[4_000 ..< 12_000].map(abs).max() ?? 0, 0.9, "no gain change")
     }
 
     // MARK: - Download verification
@@ -246,7 +267,6 @@ final class CohereProviderTests: XCTestCase {
             await Task.yield()
         }
         XCTAssertEqual(appState.phase, .ready)
-        XCTAssertEqual(transcription.progressAwareTranscribeCallCount, 1)
     }
 
     func testSingleChunkProgressLeavesThePillAlone() async {
@@ -285,13 +305,18 @@ final class CohereProviderTests: XCTestCase {
     }
 }
 
-/// Minimal conformer that relies on the protocol's default progress overload.
+/// Minimal single-pass conformer: implements the one requirement, ignores the sink.
 private actor PlainTranscriptionService: TranscriptionServiceProtocol {
     private(set) var purposes: [TranscriptionPurpose] = []
 
     func loadModel(config: RecognizerConfig) async throws {}
 
-    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String {
+    func transcribe(
+        samples: [Float],
+        sampleRate: Int,
+        purpose: TranscriptionPurpose,
+        onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
+    ) async throws -> String {
         purposes.append(purpose)
         return "plain"
     }

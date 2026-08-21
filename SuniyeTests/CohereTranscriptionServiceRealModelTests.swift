@@ -101,13 +101,19 @@ final class CohereTranscriptionServiceRealModelTests: XCTestCase {
         XCTAssertTrue(lowered.contains("rather than one"), text)
     }
 
-    func testRejectsNon16kAudio() async throws {
+    /// Real capture runs at the device's native rate (48 kHz on current Macs),
+    /// so the engine must resample before the 16 kHz encoder sees the audio.
+    func testTranscribesNativeRateCapture() async throws {
         let service = try await Self.loadService()
-        do {
-            _ = try await service.transcribe(samples: [Float](repeating: 0, count: 48_000), sampleRate: 48_000)
-            XCTFail("Expected unsupportedSampleRate")
-        } catch CohereTranscriptionService.ServiceError.unsupportedSampleRate(48_000) {
-            // Expected.
-        }
+        let samples = await SpeechTestAudio.synthesizeSpeech(Self.shortText, sampleRate: 48_000)
+        try XCTSkipUnless(samples.count > 48_000, "Speech synthesis unavailable")
+
+        let text = try await service.transcribe(samples: samples, sampleRate: 48_000)
+        print("cohere 48k: → \(text)")
+
+        let lowered = text.lowercased()
+        XCTAssertTrue(lowered.contains("dentist"), text)
+        XCTAssertTrue(lowered.contains("tuesday"), text)
+        XCTAssertTrue(lowered.contains("milk"), text)
     }
 }
