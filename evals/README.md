@@ -227,3 +227,31 @@ v14 then closed every remaining model gap:
 
 Result: **39/39, 24/24 referential probe, 4/4 advanced, injection 2/2 — five consecutive all-green
 rounds** (the previously flappy cases included). Run artifacts: `evals/runs/v14_*.json`.
+
+## ASR model comparison (`evals/asr-compare`)
+
+Record your own voice, run every installed speech model over the clips, and judge
+the transcripts side by side (latency, RTF, WER against a typed reference, 1–5
+rating + note per model). Clips and reviews stay in `evals/asr-compare/clips/`
+(gitignored).
+
+```bash
+python3 evals/asr-compare/server.py     # http://127.0.0.1:8765
+```
+
+1. **Record** — captures at the mic's native rate (48 kHz on current Macs), i.e.
+   exactly what the app's capture path hands the engines. Allow the mic once.
+2. **Run** — drives `SuniyeTests/ASRModelComparisonTests` (~10 s with a built
+   test host, 1–3 min the first time) and writes `clips/results.json`. Each model
+   gets one discarded warm-up decode, so numbers are steady-state.
+3. **Review** — type what you said for WER; ratings/notes autosave to
+   `clips/reviews.json`; Export bundles results + reviews.
+
+Run the comparison without the page:
+
+```bash
+TEST_RUNNER_SUNIYE_ASR_COMPARE_DIR=$PWD/evals/asr-compare/clips \
+xcodebuild test -project Suniye.xcodeproj -scheme Suniye \
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath .derivedData \
+  -only-testing:SuniyeTests/ASRModelComparisonTests ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
+```

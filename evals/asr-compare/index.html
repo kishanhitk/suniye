@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ASR compare</title>
+<style>
+  :root { color-scheme: light dark; font: 14px/1.45 -apple-system, system-ui, sans-serif; }
+  body { margin: 0; padding: 24px; max-width: 1200px; }
+  h1 { font-size: 20px; margin: 0 0 16px; }
+  h2 { font-size: 15px; margin: 28px 0 8px; }
+  button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid #8884; background: #8881; cursor: pointer; }
+  button.primary { background: #2b6cff; color: #fff; border-color: #2b6cff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+  .muted { opacity: .65; }
+  .clip { border: 1px solid #8884; border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
+  .clip header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .clip header strong { font-size: 15px; }
+  textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid #8886; background: transparent; resize: vertical; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 8px; border-top: 1px solid #8883; }
+  th { font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.text { white-space: pre-wrap; }
+  .best { color: #1a9c4a; font-weight: 600; }
+  .err { color: #d33; }
+  .rate { display: flex; gap: 3px; }
+  .rate button { padding: 2px 7px; }
+  .rate button.on { background: #2b6cff; color: #fff; border-color: #2b6cff; }
+  pre { background: #8881; padding: 10px; border-radius: 6px; max-height: 260px; overflow: auto; font-size: 12px; }
+  .summary td, .summary th { padding: 6px 8px; }
+</style>
+</head>
+<body>
+<h1>ASR compare</h1>
+<div class="muted">Record clips at the mic's native rate (exactly what the app captures), run every installed model over them, then judge the transcripts. Type what you actually said in the reference box to get WER.</div>
+
+<h2>1. Record</h2>
+<div class="row">
+  <button id="rec" class="primary">● Record</button>
+  <button id="stop" disabled>■ Stop</button>
+  <span id="recStatus" class="muted">idle</span>
+</div>
+<div id="clipList" class="row muted"></div>
+
+<h2>2. Run</h2>
+<div class="row">
+  <button id="run" class="primary">Run all installed models</button>
+  <span id="runStatus" class="muted">builds the test host and loads every model; expect 1–3 minutes</span>
+</div>
+<pre id="runLog" hidden></pre>
+
+<h2>3. Review</h2>
+<div id="meta" class="muted"></div>
+<table class="summary" id="summary" hidden></table>
+<div id="results"></div>
+<div class="row">
+  <button id="export">Export reviews JSON</button>
+  <span id="saveStatus" class="muted"></span>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let results = null;
+let reviews = {}; // { [clip]: { reference, models: { [modelId]: { rating, note } } } }
+
+// ---------- recording: raw PCM → 16-bit WAV at the context's native rate ----------
+let audioContext, source, processor, chunks = [], recording = false;
+
+$('rec').onclick = async () => {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  audioContext = new AudioContext();
+  source = audioContext.createMediaStreamSource(stream);
+  processor = audioContext.createScriptProcessor(4096, 1, 1);
+  chunks = [];
+  processor.onaudioprocess = (e) => { if (recording) chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+  source.connect(processor);
+  processor.connect(audioContext.destination);
+  recording = true;
+  $('rec').disabled = true; $('stop').disabled = false;
+  $('recStatus').textContent = `recording at ${audioContext.sampleRate} Hz…`;
+};
+
+$('stop').onclick = async () => {
+  recording = false;
+  processor.disconnect(); source.disconnect();
+  source.mediaStream.getTracks().forEach((t) => t.stop());
+  const rate = audioContext.sampleRate;
+  await audioContext.close();
+  const length = chunks.reduce((n, c) => n + c.length, 0);
+  const pcm = new Float32Array(length);
+  let offset = 0;
+  for (const c of chunks) { pcm.set(c, offset); offset += c.length; }
+  const name = `clip-${new Date().toISOString().replace(/[:.]/g, '-')}.wav`;
+  await fetch(`/clips/${name}`, { method: 'POST', body: encodeWav(pcm, rate) });
+  $('rec').disabled = false; $('stop').disabled = true;
+  $('recStatus').textContent = `saved ${name} (${(length / rate).toFixed(1)} s @ ${rate} Hz)`;
+  loadClips();
+};
+
+function encodeWav(samples, rate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const v = new DataView(buffer);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + samples.length * 2, true); str(8, 'WAVE');
+  str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return buffer;
+}
+
+async function loadClips() {
+  const clips = await (await fetch('/clips')).json();
+  $('clipList').innerHTML = clips.length ? '' : 'no clips yet';
+  for (const c of clips) {
+    const el = document.createElement('span');
+    el.innerHTML = `${c} <button data-del="${c}" title="delete">×</button>`;
+    $('clipList').appendChild(el);
+  }
+  $('clipList').querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+    await fetch(`/clips/${b.dataset.del}`, { method: 'DELETE' });
+    loadClips();
+  });
+}
+
+// ---------- run ----------
+$('run').onclick = async () => {
+  $('run').disabled = true;
+  $('runStatus').textContent = 'running…';
+  $('runLog').hidden = true;
+  const r = await (await fetch('/run', { method: 'POST' })).json();
+  $('runLog').textContent = r.log;
+  $('runLog').hidden = false;
+  $('runStatus').textContent = r.exitCode === 0 ? 'done' : `failed (exit ${r.exitCode})`;
+  $('run').disabled = false;
+  loadResults();
+};
+
+// ---------- review ----------
+function normalize(text) {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}\s']/gu, ' ').split(/\s+/).filter(Boolean);
+}
+
+function wer(reference, hypothesis) {
+  const r = normalize(reference), h = normalize(hypothesis);
+  if (!r.length) return null;
+  let prev = Array.from({ length: h.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= r.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= h.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (r[i - 1] === h[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[h.length] / r.length;
+}
+
+function review(clip) {
+  return reviews[clip] ??= { reference: '', models: {} };
+}
+
+let saveTimer;
+function persist() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    await fetch('/reviews', { method: 'POST', body: JSON.stringify(reviews, null, 2) });
+    $('saveStatus').textContent = `saved ${new Date().toLocaleTimeString()}`;
+  }, 400);
+}
+
+async function loadResults() {
+  results = await (await fetch('/results')).json();
+  reviews = (await (await fetch('/reviews')).json()) || {};
+  render();
+}
+
+function render() {
+  const container = $('results');
+  container.innerHTML = '';
+  if (!results) { $('meta').textContent = 'no results yet — record a clip and run'; $('summary').hidden = true; return; }
+  $('meta').textContent = `${results.models.length} models · ${results.clips.length} clips · ${results.machine} · ${new Date(results.generatedAt).toLocaleString()}`;
+  renderSummary();
+
+  for (const clip of results.clips) {
+    const rv = review(clip.file);
+    const card = document.createElement('section');
+    card.className = 'clip';
+    card.innerHTML = `
+      <header><strong>${clip.file}</strong><span class="muted">${clip.seconds.toFixed(1)} s</span><audio controls src="/clips/${clip.file}" preload="none"></audio></header>
+      <div class="row"><textarea rows="2" placeholder="Reference: what you actually said (for WER)">${escapeHtml(rv.reference)}</textarea></div>
+      <table><thead><tr><th>model</th><th>latency</th><th>RTF</th><th>WER</th><th>transcript</th><th>rating</th><th>note</th></tr></thead><tbody></tbody></table>`;
+    const textarea = card.querySelector('textarea');
+    textarea.oninput = () => { rv.reference = textarea.value; persist(); renderRows(card, clip); renderSummary(); };
+    container.appendChild(card);
+    renderRows(card, clip);
+  }
+}
+
+function renderRows(card, clip) {
+  const rv = review(clip.file);
+  const rows = results.models.map((m) => ({ model: m, decode: m.results.find((d) => d.file === clip.file) })).filter((r) => r.decode);
+  const fastest = Math.min(...rows.filter((r) => !r.decode.error).map((r) => r.decode.ms));
+  const wers = rows.map((r) => r.decode.error ? null : wer(rv.reference, r.decode.text));
+  const bestWer = Math.min(...wers.filter((w) => w !== null));
+  const tbody = card.querySelector('tbody');
+  tbody.innerHTML = '';
+  rows.forEach((r, i) => {
+    const mr = rv.models[r.model.id] ??= { rating: 0, note: '' };
+    const tr = document.createElement('tr');
+    const w = wers[i];
+    tr.innerHTML = `
+      <td>${r.model.name}<div class="muted" style="font-size:12px">load ${r.model.loadMs} ms</div></td>
+      <td class="num ${r.decode.ms === fastest ? 'best' : ''}">${r.decode.ms} ms</td>
+      <td class="num">${(r.decode.ms / 1000 / clip.seconds).toFixed(3)}</td>
+      <td class="num ${w !== null && w === bestWer ? 'best' : ''}">${w === null ? '—' : (w * 100).toFixed(1) + '%'}</td>
+      <td class="text ${r.decode.error ? 'err' : ''}">${escapeHtml(r.decode.error || r.decode.text)}</td>
+      <td><div class="rate">${[1, 2, 3, 4, 5].map((n) => `<button data-n="${n}" class="${mr.rating === n ? 'on' : ''}">${n}</button>`).join('')}</div></td>
+      <td><input placeholder="note" value="${escapeHtml(mr.note)}" style="width:140px;font:inherit;padding:4px 6px;border-radius:6px;border:1px solid #8886;background:transparent"></td>`;
+    tr.querySelectorAll('[data-n]').forEach((b) => b.onclick = () => { mr.rating = Number(b.dataset.n); persist(); renderRows(card, clip); renderSummary(); });
+    tr.querySelector('input').oninput = (e) => { mr.note = e.target.value; persist(); };
+    tbody.appendChild(tr);
+  });
+}
+
+function renderSummary() {
+  const table = $('summary');
+  table.hidden = false;
+  const header = '<tr><th>model</th><th>median latency</th><th>median RTF</th><th>mean WER (clips with reference)</th><th>mean rating</th></tr>';
+  const rows = results.models.map((m) => {
+    const ok = m.results.filter((d) => !d.error && d.file);
+    const ms = ok.map((d) => d.ms).sort((a, b) => a - b);
+    const rtf = ok.map((d) => d.ms / 1000 / results.clips.find((c) => c.file === d.file).seconds).sort((a, b) => a - b);
+    const wers = ok.map((d) => wer(review(d.file).reference, d.text)).filter((w) => w !== null);
+    const ratings = results.clips.map((c) => review(c.file).models[m.id]?.rating).filter((r) => r);
+    const med = (a) => a.length ? a[Math.floor(a.length / 2)] : null;
+    const mean = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+    return `<tr><td>${m.name}</td><td class="num">${med(ms) ?? '—'} ms</td><td class="num">${med(rtf)?.toFixed(3) ?? '—'}</td><td class="num">${wers.length ? (mean(wers) * 100).toFixed(1) + '% (' + wers.length + ')' : '—'}</td><td class="num">${ratings.length ? mean(ratings).toFixed(1) + ' (' + ratings.length + ')' : '—'}</td></tr>`;
+  });
+  table.innerHTML = header + rows.join('');
+}
+
+$('export').onclick = () => {
+  const blob = new Blob([JSON.stringify({ results, reviews }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'asr-compare-review.json';
+  a.click();
+};
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+loadClips();
+loadResults();
+</script>
+</body>
+</html>
