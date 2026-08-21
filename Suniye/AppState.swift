@@ -4085,7 +4085,11 @@ final class AppState {
 
         do {
             dictationTiming.asrStart = .now()
-            let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
+            let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate) { [weak self] progress in
+                Task { @MainActor in
+                    self?.showTranscriptionProgress(progress, sessionID: sessionID)
+                }
+            }
             dictationTiming.asrEnd = .now()
             let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 
@@ -5243,6 +5247,19 @@ final class AppState {
     /// Single source for the pill's transcribing state so the transcribe transition
     /// and the blocked-start restore path can never render it differently.
     private static let transcribingIndicatorState: FloatingIndicatorState = .processing(message: "Transcribing...")
+
+    /// Long dictations on a chunked engine (Cohere) take seconds per chunk, so
+    /// the pill counts chunks instead of sitting on a bare spinner.
+    private func showTranscriptionProgress(_ progress: TranscriptionProgress, sessionID: UUID) {
+        guard progress.totalChunks > 1,
+              phase == .transcribing,
+              activeDictationSession?.context.id == sessionID else {
+            return
+        }
+        let message = "Transcribing \(progress.chunk) of \(progress.totalChunks)..."
+        statusText = message
+        setFloatingIndicatorState(.processing(message: message))
+    }
 
     private func startBlockedMessage(for phase: Phase) -> String {
         switch phase {

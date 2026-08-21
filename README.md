@@ -98,7 +98,7 @@ Turn a raw transcript into polished text on your terms. It's off until you turn 
 
 ## Choose your speech model
 
-Suniye ships a curated catalog instead of a single fixed recognizer — from Apple's built-in engine to on-device Parakeet and Whisper models. Pick the trade-off you want between speed, accuracy, size, and languages; everything runs offline, and you can switch instantly from the **Model** page.
+Suniye ships a curated catalog instead of a single fixed recognizer — from Apple's built-in engine to on-device Parakeet, Whisper, and Cohere Transcribe models. Pick the trade-off you want between speed, accuracy, size, and languages; everything runs offline, and you can switch instantly from the **Model** page.
 
 | Model | Best for |
 |---|---|
@@ -109,6 +109,7 @@ Suniye ships a curated catalog instead of a single fixed recognizer — from App
 | **Moonshine Base** | Fastest lightweight English |
 | **Whisper Large v3 Turbo · Distil · v3** | Broad multilingual coverage |
 | **Whisper Tiny · Base · Small (English)** | Small, fast English downloads |
+| **Cohere Transcribe** | Highest accuracy, 14 languages — 2B parameters, ~2.9 GB download, ~4× slower than Parakeet |
 
 ## Privacy
 

@@ -9,6 +9,9 @@ enum ASRModelFamily: String, Codable {
     // sherpa-onnx model family — it is routed to a separate engine and its model
     // asset is managed by the OS rather than downloaded/extracted by us.
     case appleSpeech
+    // Cohere Transcribe (Fast-Conformer encoder + autoregressive decoder). sherpa-onnx
+    // cannot run this architecture, so it is routed to our own ONNX Runtime engine.
+    case cohereTranscribe
 
     /// Whether repeated partial decodes for the live transcription preview are
     /// affordable. Whisper decodes a fixed 30s mel window regardless of input
@@ -16,11 +19,13 @@ enum ASRModelFamily: String, Codable {
     /// delay the final decode behind an in-flight partial; the other families
     /// decode roughly proportional to the snapshot length. Apple's stack routes
     /// to a separate engine our partial scheduler doesn't drive, so it opts out.
+    /// Cohere decodes at roughly real time, so a partial would never finish
+    /// before the next tick.
     var supportsLivePreview: Bool {
         switch self {
         case .nemoTransducer, .moonshine, .senseVoice:
             return true
-        case .whisper, .appleSpeech:
+        case .whisper, .appleSpeech, .cohereTranscribe:
             return false
         }
     }
@@ -38,6 +43,7 @@ enum ASRModelID: String, Codable, CaseIterable, Identifiable {
     case whisperDistilLargeV3
     case whisperLargeV3
     case appleSpeech
+    case cohereTranscribe
 
     var id: String {
         rawValue
@@ -56,6 +62,15 @@ struct ASRModelRemoteFile: Equatable {
     let remoteURL: URL
     let destinationRelativePath: String
     let expectedSizeBytes: Int64?
+    /// Lowercase hex SHA-256 the downloaded file must match; `nil` skips the check.
+    let sha256: String?
+
+    init(remoteURL: URL, destinationRelativePath: String, expectedSizeBytes: Int64?, sha256: String? = nil) {
+        self.remoteURL = remoteURL
+        self.destinationRelativePath = destinationRelativePath
+        self.expectedSizeBytes = expectedSizeBytes
+        self.sha256 = sha256
+    }
 }
 
 enum ASRModelDownloadSource: Equatable {
@@ -75,6 +90,9 @@ struct ASRModelFileManifest: Equatable {
     let uncachedDecoder: String?
     let cachedDecoder: String?
     let model: String?
+    /// Files the graphs load themselves (ONNX external-data sidecars); never
+    /// passed to a recognizer, but an install without them is broken.
+    let sidecars: [String]
 
     init(
         tokens: String,
@@ -84,7 +102,8 @@ struct ASRModelFileManifest: Equatable {
         preprocessor: String? = nil,
         uncachedDecoder: String? = nil,
         cachedDecoder: String? = nil,
-        model: String? = nil
+        model: String? = nil,
+        sidecars: [String] = []
     ) {
         self.tokens = tokens
         self.encoder = encoder
@@ -94,11 +113,12 @@ struct ASRModelFileManifest: Equatable {
         self.uncachedDecoder = uncachedDecoder
         self.cachedDecoder = cachedDecoder
         self.model = model
+        self.sidecars = sidecars
     }
 
     var requiredRelativePaths: [String] {
         [tokens, encoder, decoder, joiner, preprocessor, uncachedDecoder, cachedDecoder, model]
-            .compactMap { $0 }
+            .compactMap { $0 } + sidecars
     }
 }
 
@@ -155,7 +175,8 @@ enum ASRModelCatalog {
         .whisperLargeV3,
         .whisperSmallEnglish,
         .whisperBaseEnglish,
-        .whisperTinyEnglish
+        .whisperTinyEnglish,
+        .cohereTranscribe
     ]
 
     /// Catalog entries usable on the current device. System-managed entries (Apple
@@ -354,6 +375,34 @@ enum ASRModelCatalog {
             archiveAssetName: "sherpa-onnx-whisper-large-v3.tar.bz2",
             directoryName: "sherpa-onnx-whisper-large-v3",
             filePrefix: "large-v3"
+        ),
+        ASRModelCatalogEntry(
+            id: .cohereTranscribe,
+            displayName: "Cohere Transcribe",
+            description: "Cohere's 2-billion-parameter model: the most accurate option here, and the heaviest — about 4× slower than Parakeet and ~4 GB of memory while loaded. Choose it when accuracy matters more than speed.",
+            family: .cohereTranscribe,
+            badges: [.bestQuality, .multilingual],
+            languageSummary: "14 languages, follows your system language",
+            speedLabel: "Slower",
+            qualityLabel: "Highest",
+            estimatedSizeBytes: 2_889_280_010,
+            downloadSource: .remoteFiles([
+                cohereFile("tokens.txt", bytes: 223_821, sha256: "5e74bb2f65da624256b9d97fef197a282ce7d14811e2f7b1b97c25c89b93dfcb"),
+                cohereFile("cohere-encoder.int8.onnx", bytes: 3_118_156, sha256: "58386cad715aa0ab30aaa118a479e43115380c114bd180178a0d110434991a54"),
+                cohereFile("cohere-decoder.int8.onnx", bytes: 153_250_705, sha256: "8372ca6c8ff4db8b916ca3592f5c757a715e691b9edec751ba19b29fc854baf9"),
+                cohereFile("cohere-encoder.int8.onnx.data", bytes: 2_732_687_328, sha256: "c115cacd07bef2c5d6bbfa800bb38e6f025ecbfbd220b81b711f0eef8cc28578")
+            ]),
+            directoryName: "cohere-transcribe-03-2026-onnx-int8",
+            recognizerModelType: "",
+            languageHint: "",
+            taskHint: "transcribe",
+            useInverseTextNormalization: false,
+            manifest: ASRModelFileManifest(
+                tokens: "tokens.txt",
+                encoder: "cohere-encoder.int8.onnx",
+                decoder: "cohere-decoder.int8.onnx",
+                sidecars: ["cohere-encoder.int8.onnx.data"]
+            )
         )
     ]
 
@@ -366,6 +415,17 @@ enum ASRModelCatalog {
 
     private static func archiveURL(_ assetName: String) -> URL {
         URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/\(assetName)")!
+    }
+
+    /// Community INT8 ONNX export of CohereLabs/cohere-transcribe-03-2026, pinned to a
+    /// commit so the files behind the hashes cannot move under us.
+    private static func cohereFile(_ name: String, bytes: Int64, sha256: String) -> ASRModelRemoteFile {
+        ASRModelRemoteFile(
+            remoteURL: URL(string: "https://huggingface.co/tristanripke/cohere-transcribe-onnx-int8/resolve/9ecc3a5e64b132ab094bada232650e49e4340ad2/\(name)")!,
+            destinationRelativePath: name,
+            expectedSizeBytes: bytes,
+            sha256: sha256
+        )
     }
 
     private static func whisperEntry(

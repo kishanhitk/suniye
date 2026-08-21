@@ -534,6 +534,34 @@ final class ModelManagerCoverageTests: XCTestCase {
         }
     }
 
+    func testDownloadRemoteFilesVerifiesPinnedSHA256() async throws {
+        let fileURL = URL(string: "https://stub.suniye.test/remote/pinned.bin")!
+        ModelManagerCoverageURLProtocol.setStub(.init(statusCode: 200, body: Data("abc".utf8)), for: fileURL)
+        let manager = makeSandboxedManager()
+        let destination = tempDirectory.appendingPathComponent("remote-model-pinned", isDirectory: true)
+
+        let matching = [
+            ASRModelRemoteFile(
+                remoteURL: fileURL,
+                destinationRelativePath: "pinned.bin",
+                expectedSizeBytes: 3,
+                sha256: "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD"
+            )
+        ]
+        try await manager.downloadRemoteFiles(matching, into: destination) { _ in }
+        XCTAssertEqual(try String(contentsOf: destination.appendingPathComponent("pinned.bin")), "abc")
+
+        let tampered = [
+            ASRModelRemoteFile(remoteURL: fileURL, destinationRelativePath: "tampered.bin", expectedSizeBytes: 3, sha256: String(repeating: "0", count: 64))
+        ]
+        do {
+            try await manager.downloadRemoteFiles(tampered, into: destination) { _ in }
+            XCTFail("Expected checksumMismatch")
+        } catch ModelManager.ModelError.checksumMismatch("tampered.bin") {
+            XCTAssertFalse(fileManager.fileExists(atPath: destination.appendingPathComponent("tampered.bin").path), "a bad file must never land in the model directory")
+        }
+    }
+
     // MARK: - Replace/rollback
 
     func testReplaceInstalledModelRestoresBackupWhenSwapFails() throws {

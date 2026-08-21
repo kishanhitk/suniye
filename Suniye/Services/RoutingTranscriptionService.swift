@@ -2,7 +2,8 @@ import Foundation
 
 /// Routes `TranscriptionServiceProtocol` calls to the appropriate engine based on the
 /// loaded model's family: sherpa-onnx for the downloaded ONNX families, Apple's
-/// `SpeechAnalyzer` for the system-managed `appleSpeech` family.
+/// `SpeechAnalyzer` for the system-managed `appleSpeech` family, and our own ONNX
+/// Runtime engine for `cohereTranscribe`.
 ///
 /// `AppState` talks to this as a single service, so OS-gating and engine selection stay
 /// localized here rather than spreading through the app. Injectable children keep the
@@ -22,18 +23,22 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
     private enum Engine: Equatable {
         case sherpa
         case apple
+        case cohere
     }
 
     private let sherpaService: TranscriptionServiceProtocol
     private let appleService: TranscriptionServiceProtocol?
+    private let cohereService: TranscriptionServiceProtocol
     private var activeEngine: Engine?
 
     init(
         sherpaService: TranscriptionServiceProtocol = TranscriptionService(),
-        appleService: TranscriptionServiceProtocol? = RoutingTranscriptionService.makeAppleServiceIfSupported()
+        appleService: TranscriptionServiceProtocol? = RoutingTranscriptionService.makeAppleServiceIfSupported(),
+        cohereService: TranscriptionServiceProtocol = CohereTranscriptionService()
     ) {
         self.sherpaService = sherpaService
         self.appleService = appleService
+        self.cohereService = cohereService
     }
 
     static func makeAppleServiceIfSupported() -> TranscriptionServiceProtocol? {
@@ -62,10 +67,22 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
     }
 
     func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String {
+        try await activeService().transcribe(samples: samples, sampleRate: sampleRate, purpose: purpose)
+    }
+
+    func transcribe(
+        samples: [Float],
+        sampleRate: Int,
+        onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
+    ) async throws -> String {
+        try await activeService().transcribe(samples: samples, sampleRate: sampleRate, onProgress: onProgress)
+    }
+
+    private func activeService() throws -> TranscriptionServiceProtocol {
         guard let activeEngine, let service = service(for: activeEngine) else {
             throw TranscriptionService.ServiceError.recognizerNotLoaded
         }
-        return try await service.transcribe(samples: samples, sampleRate: sampleRate, purpose: purpose)
+        return service
     }
 
     func unloadModel() async {
@@ -76,7 +93,14 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
     }
 
     private static func engine(for family: ASRModelFamily) -> Engine {
-        family == .appleSpeech ? .apple : .sherpa
+        switch family {
+        case .appleSpeech:
+            return .apple
+        case .cohereTranscribe:
+            return .cohere
+        case .nemoTransducer, .moonshine, .senseVoice, .whisper:
+            return .sherpa
+        }
     }
 
     private func service(for engine: Engine) -> TranscriptionServiceProtocol? {
@@ -85,6 +109,8 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
             return sherpaService
         case .apple:
             return appleService
+        case .cohere:
+            return cohereService
         }
     }
 }
