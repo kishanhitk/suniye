@@ -75,7 +75,9 @@ final class OrtTensor {
     static func float(shape: [Int64], values: [Float]) throws -> OrtTensor {
         let tensor = try allocate(shape: shape, type: ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, elementSize: 4)
         try tensor.withMutableData(as: Float.self) { buffer in
-            precondition(buffer.count == values.count, "shape \(shape) does not hold \(values.count) floats")
+            guard buffer.count == values.count else {
+                throw OnnxRuntime.RuntimeError(message: "shape \(shape) does not hold \(values.count) floats")
+            }
             _ = buffer.initialize(from: values)
         }
         return tensor
@@ -92,7 +94,9 @@ final class OrtTensor {
     static func int64(shape: [Int64], values: [Int64]) throws -> OrtTensor {
         let tensor = try allocate(shape: shape, type: ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, elementSize: 8)
         try tensor.withMutableData(as: Int64.self) { buffer in
-            precondition(buffer.count == values.count, "shape \(shape) does not hold \(values.count) int64s")
+            guard buffer.count == values.count else {
+                throw OnnxRuntime.RuntimeError(message: "shape \(shape) does not hold \(values.count) int64s")
+            }
             _ = buffer.initialize(from: values)
         }
         return tensor
@@ -206,9 +210,6 @@ final class OrtSession: @unchecked Sendable {
                 &outputValues
             )
         )
-        // Keep the input tensors alive until ORT has returned from Run.
-        withExtendedLifetime(inputs) {}
-
         return try outputValues.map { value in
             guard let value else {
                 throw OnnxRuntime.RuntimeError(message: "Run returned a nil output without an error status")

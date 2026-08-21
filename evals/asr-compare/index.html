@@ -118,11 +118,14 @@ async function loadClips() {
   $('clipList').innerHTML = clips.length ? '' : 'no clips yet';
   for (const c of clips) {
     const el = document.createElement('span');
-    el.innerHTML = `${c} <button data-del="${c}" title="delete">×</button>`;
+    el.append(c, ' ');
+    const del = document.createElement('button');
+    del.textContent = '×'; del.title = 'delete'; del.dataset.del = c;
+    el.appendChild(del);
     $('clipList').appendChild(el);
   }
   $('clipList').querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
-    await fetch(`/clips/${b.dataset.del}`, { method: 'DELETE' });
+    await fetch(`/clips/${encodeURIComponent(b.dataset.del)}`, { method: 'DELETE' });
     loadClips();
   });
 }
@@ -141,8 +144,13 @@ $('run').onclick = async () => {
 };
 
 // ---------- review ----------
+// Words for space-delimited scripts; single characters for Han/kana/hangul, so
+// ja/zh/ko transcripts get a character error rate instead of one giant token.
 function normalize(text) {
-  return text.toLowerCase().replace(/[^\p{L}\p{N}\s']/gu, ' ').split(/\s+/).filter(Boolean);
+  return text.toLowerCase()
+    .replace(/[^\p{L}\p{N}\s']/gu, ' ')
+    .replace(/([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}])/gu, ' $1 ')
+    .split(/\s+/).filter(Boolean);
 }
 
 function wer(reference, hypothesis) {
@@ -190,7 +198,7 @@ function render() {
     const card = document.createElement('section');
     card.className = 'clip';
     card.innerHTML = `
-      <header><strong>${clip.file}</strong><span class="muted">${clip.seconds.toFixed(1)} s</span><audio controls src="/clips/${clip.file}" preload="none"></audio></header>
+      <header><strong>${escapeHtml(clip.file)}</strong><span class="muted">${clip.seconds.toFixed(1)} s</span><audio controls src="/clips/${encodeURIComponent(clip.file)}" preload="none"></audio></header>
       <div class="row"><textarea rows="2" placeholder="Reference: what you actually said (for WER)">${escapeHtml(rv.reference)}</textarea></div>
       <table><thead><tr><th>model</th><th>latency</th><th>RTF</th><th>WER</th><th>transcript</th><th>rating</th><th>note</th></tr></thead><tbody></tbody></table>`;
     const textarea = card.querySelector('textarea');
@@ -236,7 +244,7 @@ function renderSummary() {
     const rtf = ok.map((d) => d.ms / 1000 / results.clips.find((c) => c.file === d.file).seconds).sort((a, b) => a - b);
     const wers = ok.map((d) => wer(review(d.file).reference, d.text)).filter((w) => w !== null);
     const ratings = results.clips.map((c) => review(c.file).models[m.id]?.rating).filter((r) => r);
-    const med = (a) => a.length ? a[Math.floor(a.length / 2)] : null;
+    const med = (a) => !a.length ? null : a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
     const mean = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
     return `<tr><td>${m.name}</td><td class="num">${med(ms) ?? '—'} ms</td><td class="num">${med(rtf)?.toFixed(3) ?? '—'}</td><td class="num">${wers.length ? (mean(wers) * 100).toFixed(1) + '% (' + wers.length + ')' : '—'}</td><td class="num">${ratings.length ? mean(ratings).toFixed(1) + ' (' + ratings.length + ')' : '—'}</td></tr>`;
   });

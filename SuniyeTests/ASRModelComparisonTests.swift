@@ -123,9 +123,13 @@ final class ASRModelComparisonTests: XCTestCase {
 
     private static func machineName() -> String {
         var size = 0
-        sysctlbyname("machdep.cpu.brand_string", nil, &size, nil, 0)
+        guard sysctlbyname("machdep.cpu.brand_string", nil, &size, nil, 0) == 0, size > 0 else {
+            return "unknown"
+        }
         var buffer = [CChar](repeating: 0, count: size)
-        sysctlbyname("machdep.cpu.brand_string", &buffer, &size, nil, 0)
+        guard sysctlbyname("machdep.cpu.brand_string", &buffer, &size, nil, 0) == 0 else {
+            return "unknown"
+        }
         return String(cString: buffer)
     }
 }

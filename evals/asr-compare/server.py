@@ -36,7 +36,19 @@ def run_comparison() -> tuple[int, str]:
     return proc.returncode, "\n".join(lines[-40:])
 
 
+ALLOWED_ORIGIN = f"http://127.0.0.1:{PORT}"
+
+
 class Handler(BaseHTTPRequestHandler):
+    def _same_origin(self) -> bool:
+        # Browsers send Origin on every cross-site POST/DELETE; a third-party page
+        # must not be able to start xcodebuild or write clips on this machine.
+        origin = self.headers.get("Origin")
+        if origin is not None and origin != ALLOWED_ORIGIN:
+            self._json(403, {"error": "cross-origin request rejected"})
+            return False
+        return True
+
     def _send(self, status: int, body: bytes, content_type: str = "application/json") -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
@@ -68,6 +80,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
+        if not self._same_origin():
+            return
         if self.path.startswith("/clips/"):
             name = os.path.basename(self.path[len("/clips/"):])
             if not name.endswith(".wav"):
@@ -84,6 +98,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"error": "not found"})
 
     def do_DELETE(self) -> None:
+        if not self._same_origin():
+            return
         if self.path.startswith("/clips/"):
             target = CLIPS / os.path.basename(self.path[len("/clips/"):])
             if target.suffix == ".wav" and target.exists():

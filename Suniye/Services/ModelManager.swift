@@ -394,11 +394,11 @@ final class ModelManager: ModelManagerProtocol {
                 throw ModelError.invalidResponse
             }
             if let expected = file.sha256 {
-                try Task.checkCancellation()
                 guard try Self.sha256Hex(of: downloadedURL) == expected.lowercased() else {
                     throw ModelError.checksumMismatch(file.destinationRelativePath)
                 }
             }
+            try Task.checkCancellation()
 
             let destinationURL = modelDirectory.appendingPathComponent(file.destinationRelativePath)
             try FileManager.default.createDirectory(
@@ -421,6 +421,7 @@ final class ModelManager: ModelManagerProtocol {
         }
         var hasher = SHA256()
         while let chunk = try handle.read(upToCount: 4 << 20), !chunk.isEmpty {
+            try Task.checkCancellation()
             hasher.update(data: chunk)
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()

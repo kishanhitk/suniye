@@ -184,7 +184,7 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
             selfV = outputs[2]
 
             let shape = try logits.shape
-            guard shape.count == 3, shape[0] == 1, shape[1] == Int64(step.count) else {
+            guard shape.count == 3, shape[0] == 1, shape[1] == Int64(step.count), shape[2] > 0 else {
                 throw ServiceError.unexpectedTensorShape("logits \(shape)")
             }
             let vocabularySize = Int(shape[2])

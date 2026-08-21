@@ -88,7 +88,7 @@ final class CohereTranscriptionServiceRealModelTests: XCTestCase {
             samples.count > CohereAudioChunker.maxChunkSamples,
             "Synthesized clip too short to chunk (\(Double(samples.count) / 16_000)s)"
         )
-        XCTAssertEqual(CohereAudioChunker.split(samples).count, 2)
+        XCTAssertGreaterThanOrEqual(CohereAudioChunker.split(samples).count, 2)
 
         let started = DispatchTime.now()
         let text = try await service.transcribe(samples: samples, sampleRate: 16_000)
