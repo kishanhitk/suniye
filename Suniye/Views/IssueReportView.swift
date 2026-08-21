@@ -174,11 +174,11 @@ struct IssueReportView: View {
         case .idle:
             EmptyView()
         case .preparing:
-            Label("Preparing diagnostics...", systemImage: "archivebox")
+            Label("Preparing diagnostics…", systemImage: "archivebox")
                 .font(AppTypography.subheadline)
                 .foregroundStyle(MainWindowPalette.secondaryText)
         case .sending:
-            Label("Sending report...", systemImage: "paperplane")
+            Label("Sending report…", systemImage: "paperplane")
                 .font(AppTypography.subheadline)
                 .foregroundStyle(MainWindowPalette.secondaryText)
         case .sent:

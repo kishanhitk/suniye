@@ -10,9 +10,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let finishSetupItem = NSMenuItem(title: "", action: #selector(openMainWindow), keyEquivalent: "")
     private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openMainWindow), keyEquivalent: "o")
     private let copyLastTranscriptItem = NSMenuItem(title: "Copy Last Transcript", action: #selector(copyLastTranscript), keyEquivalent: "")
-    private let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+    private let checkUpdatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
-    private let reportIssueItem = NSMenuItem(title: "Report a Problem...", action: #selector(reportIssue), keyEquivalent: "")
+    private let reportIssueItem = NSMenuItem(title: "Report a Problem…", action: #selector(reportIssue), keyEquivalent: "")
     private lazy var quitItem = NSMenuItem(title: "Quit \(appIdentity.displayName)", action: #selector(quitApp), keyEquivalent: "q")
 
     init(appState: AppState) {
@@ -82,12 +82,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         copyLastTranscriptItem.isEnabled = appState.lastTranscriptText != nil
 
-        checkUpdatesItem.title = "Check for Updates..."
+        checkUpdatesItem.title = "Check for Updates…"
         checkUpdatesItem.action = #selector(checkForUpdates)
         checkUpdatesItem.isEnabled = appState.canCheckForUpdates
 
-        downloadItem.isEnabled = phase == .needsModel || phase == .downloadingModel || phase == .error
-        downloadItem.isHidden = !(phase == .needsModel || phase == .downloadingModel || phase == .error)
+        // A download in flight already shows as the bold progress item above.
+        let canOfferDownload = phase == .needsModel || phase == .error
+        downloadItem.isEnabled = canOfferDownload
+        downloadItem.isHidden = !canOfferDownload
 
         if let button = statusItem.button {
             button.image = statusItemImage(for: phase)

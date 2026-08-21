@@ -306,10 +306,16 @@ final class AppStateCoverageMiscTests: XCTestCase {
         let items = appState.attentionItems
 
         XCTAssertTrue(items.map(\.id).contains("apple-magic-format-unavailable"))
-        XCTAssertEqual(AttentionItemFixAction.requestMicrophonePermission.title, "Grant Access")
+        // The tile's button comes from the shared permission presentation, so
+        // it says the same thing as the onboarding and Settings rows.
         XCTAssertEqual(
             items.first(where: { $0.id == "mic-permission-missing" })?.fixTitle,
-            "Grant Access"
+            "Allow Access"
+        )
+        appState.hasMicPermissionBeenDenied = true
+        XCTAssertEqual(
+            appState.attentionItems.first(where: { $0.id == "mic-permission-missing" })?.fixTitle,
+            "Open Settings"
         )
     }
 

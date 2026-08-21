@@ -229,6 +229,32 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         )
     }
 
+    func testInsertionOnAccessibilityScreenCompletesTheNotesDemo() async {
+        // The "Try it in Notes" row flips to done on the first real insertion
+        // while the Accessibility screen is up, and resets when onboarding ends.
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcription = StubTranscriptionService()
+        transcription.transcribeResult = .success("hello there")
+        let insertion = SpyTextInsertionService()
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcriptionService: transcription,
+            textInsertionService: insertion
+        )
+        appState.activeOnboardingStep = .typeAnywhere
+        XCTAssertFalse(appState.onboardingInsertionDemoCompleted)
+        await startRecording(appState, audioCapture: audioCapture)
+
+        appState.stopRecordingFromUI()
+        await waitUntil { !insertion.insertedTexts.isEmpty && appState.phase == .ready }
+
+        XCTAssertTrue(appState.onboardingInsertionDemoCompleted)
+
+        appState.finishOnboarding()
+        XCTAssertFalse(appState.onboardingInsertionDemoCompleted)
+    }
+
     // MARK: - Auto submit
 
     func testAutoSubmitSubmitsAfterInsertingText() async {

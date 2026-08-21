@@ -148,20 +148,6 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         XCTAssertEqual(appState.phase, .recording)
     }
 
-    func testWelcomeScreenBlocksRecording() async {
-        let audioCapture = StubAudioCaptureService()
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.activeOnboardingStep = .welcome
-
-        appState.startRecordingFromUI()
-        for _ in 0 ..< 8 { await Task.yield() }
-
-        XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
-        XCTAssertEqual(appState.phase, .ready)
-    }
-
     // MARK: - Practice telemetry
 
     private func runPracticeDictation(
@@ -489,10 +475,11 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         )
         appState.phase = .needsModel
         appState.startOnboardingIfNeeded()
+        for _ in 0 ..< 100 where appState.onboardingDiskSpaceMessage == nil {
+            await Task.yield()
+        }
 
-        await appState.beginOnboardingSetup()
-
-        XCTAssertEqual(appState.activeOnboardingStep, .welcome)
+        XCTAssertEqual(appState.activeOnboardingStep, .speak)
         XCTAssertTrue(appState.onboardingDiskSpaceMessage?.contains("free") == true)
     }
 }

@@ -414,8 +414,8 @@ struct GeneralSettings: Codable, Equatable {
     var hideFloatingIndicatorWhenIdle: Bool = false
     var liveTranscriptionPreviewEnabled: Bool = false
     var floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil
-    /// Legacy onboarding flags. Still written (derived from `onboardingProgress`)
-    /// so a downgraded build keeps working; `onboardingProgress` wins on load.
+    /// Legacy onboarding flags. Read-only: decoded so installs written by the
+    /// Bool-era builds migrate onto `onboardingProgress`; never written again.
     var hasSeenOnboardingWelcome: Bool? = nil
     var hasCompletedCoreOnboarding: Bool? = nil
     /// Single persisted onboarding position; nil only for settings written by
@@ -429,6 +429,13 @@ struct GeneralSettings: Codable, Equatable {
     /// AXIsProcessTrusted() is false, the grant went stale (app update / TCC
     /// reset) and the drag overlay would mislead — we show toggle-off/on copy.
     var lastKnownAccessibilityGranted: Bool = false
+    /// The system Accessibility prompt has been shown at least once. macOS adds
+    /// the app to the Accessibility list (switched off) the moment that prompt
+    /// appears, after which the "drag the app into the list" helper is wrong.
+    var accessibilityPromptShown: Bool = false
+    /// The user finished onboarding with "Later" on the Accessibility screen.
+    /// The dashboard explains clipboard mode instead of re-asking at once.
+    var accessibilityDeferred: Bool = false
     /// The post-onboarding Magic Format nudge card was dismissed; never re-nag.
     var magicFormatNudgeDismissed: Bool = false
     /// The user canceled the local model download. Bootstrap must not restart it
@@ -436,10 +443,6 @@ struct GeneralSettings: Codable, Equatable {
     var localGemmaDownloadCancelled: Bool = false
     var selectedASRModelID: ASRModelID = .parakeetV3
     var updateChannel: UpdateChannel = .stable
-    /// Gates the Permiso drag-to-grant overlay for Accessibility onboarding.
-    /// Kill switch: when false, the Accessibility buttons fall back to the plain
-    /// System Settings deep-link.
-    var accessibilityDragHelperEnabled: Bool = true
     /// Opt-out toggle for anonymous usage analytics. Default on; disclosed in
     /// onboarding and controllable in Settings. When false, nothing is emitted.
     var shareAnalyticsEnabled: Bool = true
@@ -461,11 +464,12 @@ struct GeneralSettings: Codable, Equatable {
         onboardingProgress: OnboardingProgress? = nil,
         firstLaunchRecorded: Bool = false,
         lastKnownAccessibilityGranted: Bool = false,
+        accessibilityPromptShown: Bool = false,
+        accessibilityDeferred: Bool = false,
         magicFormatNudgeDismissed: Bool = false,
         localGemmaDownloadCancelled: Bool = false,
         selectedASRModelID: ASRModelID = .parakeetV3,
         updateChannel: UpdateChannel = .stable,
-        accessibilityDragHelperEnabled: Bool = true,
         shareAnalyticsEnabled: Bool = true
     ) {
         self.preferredInputDeviceID = preferredInputDeviceID
@@ -484,11 +488,12 @@ struct GeneralSettings: Codable, Equatable {
         self.onboardingProgress = onboardingProgress
         self.firstLaunchRecorded = firstLaunchRecorded
         self.lastKnownAccessibilityGranted = lastKnownAccessibilityGranted
+        self.accessibilityPromptShown = accessibilityPromptShown
+        self.accessibilityDeferred = accessibilityDeferred
         self.magicFormatNudgeDismissed = magicFormatNudgeDismissed
         self.localGemmaDownloadCancelled = localGemmaDownloadCancelled
         self.selectedASRModelID = selectedASRModelID
         self.updateChannel = updateChannel
-        self.accessibilityDragHelperEnabled = accessibilityDragHelperEnabled
         self.shareAnalyticsEnabled = shareAnalyticsEnabled
     }
 
@@ -509,11 +514,12 @@ struct GeneralSettings: Codable, Equatable {
         case onboardingProgress
         case firstLaunchRecorded
         case lastKnownAccessibilityGranted
+        case accessibilityPromptShown
+        case accessibilityDeferred
         case magicFormatNudgeDismissed
         case localGemmaDownloadCancelled
         case selectedASRModelID
         case updateChannel
-        case accessibilityDragHelperEnabled
         case shareAnalyticsEnabled
     }
 
@@ -541,13 +547,14 @@ struct GeneralSettings: Codable, Equatable {
         onboardingProgress = storedOnboardingProgress.flatMap(OnboardingProgress.init(rawValue:))
         firstLaunchRecorded = try container.decodeIfPresent(Bool.self, forKey: .firstLaunchRecorded) ?? false
         lastKnownAccessibilityGranted = try container.decodeIfPresent(Bool.self, forKey: .lastKnownAccessibilityGranted) ?? false
+        accessibilityPromptShown = try container.decodeIfPresent(Bool.self, forKey: .accessibilityPromptShown) ?? false
+        accessibilityDeferred = try container.decodeIfPresent(Bool.self, forKey: .accessibilityDeferred) ?? false
         magicFormatNudgeDismissed = try container.decodeIfPresent(Bool.self, forKey: .magicFormatNudgeDismissed) ?? false
         localGemmaDownloadCancelled = try container.decodeIfPresent(Bool.self, forKey: .localGemmaDownloadCancelled) ?? false
         let storedASRModelID = try container.decodeIfPresent(String.self, forKey: .selectedASRModelID)
         selectedASRModelID = storedASRModelID.flatMap(ASRModelID.init(rawValue:)) ?? .parakeetV3
         let storedUpdateChannel = try container.decodeIfPresent(String.self, forKey: .updateChannel)
         updateChannel = storedUpdateChannel.flatMap(UpdateChannel.init(rawValue:)) ?? .stable
-        accessibilityDragHelperEnabled = try container.decodeIfPresent(Bool.self, forKey: .accessibilityDragHelperEnabled) ?? true
         shareAnalyticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .shareAnalyticsEnabled) ?? true
     }
 }

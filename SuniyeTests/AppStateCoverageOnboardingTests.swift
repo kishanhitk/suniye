@@ -2,7 +2,7 @@ import SuniyeAnalytics
 import XCTest
 @testable import Suniye
 
-/// Coverage tests for the 3-screen onboarding state machine (welcome → speak →
+/// Coverage tests for the 2-screen onboarding state machine (speak →
 /// typeAnywhere), its persisted progress, and the practice-step display state.
 @MainActor
 final class AppStateCoverageOnboardingTests: XCTestCase {
@@ -40,16 +40,16 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
         appState.startOnboardingIfNeeded()
 
         XCTAssertNil(appState.activeOnboardingStep)
-        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
+        XCTAssertTrue(appState.onboardingProgress.isFinished)
     }
 
-    func testStartOnboardingBeginsAtWelcomeForFreshInstall() {
+    func testFreshInstallShowsDictateScreenFromConstruction() {
+        // The step is derived at hydration, so the first frame is onboarding —
+        // not a dashboard that gets swapped out once bootstrap finishes.
         let appState = freshOnboardingState()
 
-        appState.startOnboardingIfNeeded()
-
-        XCTAssertEqual(appState.activeOnboardingStep, .welcome)
-        XCTAssertFalse(appState.hasSeenOnboardingWelcome)
+        XCTAssertEqual(appState.activeOnboardingStep, .speak)
+        XCTAssertEqual(appState.onboardingProgress, .notStarted)
     }
 
     func testStartOnboardingResumesPersistedStep() {
@@ -80,14 +80,14 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
         XCTAssertEqual(events.last?.resumed, true)
     }
 
-    func testFreshWelcomeStepEventIsNotResumed() {
+    func testFreshFirstStepEventIsNotResumed() {
         let spy = SpyAnalytics()
         let appState = freshOnboardingState(spy: spy)
 
         appState.startOnboardingIfNeeded()
 
         let events = onboardingStepEvents(spy)
-        XCTAssertEqual(events.last?.step, .welcome)
+        XCTAssertEqual(events.last?.step, .speak)
         XCTAssertNil(events.last?.resumed)
     }
 
@@ -99,8 +99,8 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
         appState.activeOnboardingStep = nil
         appState.startOnboardingIfNeeded()
 
-        let welcomeEvents = onboardingStepEvents(spy).filter { $0.step == .welcome }
-        XCTAssertEqual(welcomeEvents.count, 1, "re-showing a step within one run must not re-emit onboarding_step")
+        let speakEvents = onboardingStepEvents(spy).filter { $0.step == .speak }
+        XCTAssertEqual(speakEvents.count, 1, "re-showing a step within one run must not re-emit onboarding_step")
     }
 
     // MARK: - Legacy migration through settings load
@@ -112,9 +112,9 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
         appState.startOnboardingIfNeeded()
 
         XCTAssertNil(appState.activeOnboardingStep)
-        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
+        XCTAssertTrue(appState.onboardingProgress.isFinished)
         XCTAssertEqual(store.latest.onboardingProgress, .finished)
-        XCTAssertEqual(store.latest.hasCompletedCoreOnboarding, true)
+        XCTAssertNil(store.latest.hasCompletedCoreOnboarding, "legacy Bools are read for migration, never written again")
     }
 
     func testLegacyMidWizardInstallMigratesToSpeak() {
@@ -143,7 +143,7 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
 
         appState.startOnboardingIfNeeded()
 
-        XCTAssertEqual(appState.activeOnboardingStep, .welcome)
+        XCTAssertEqual(appState.activeOnboardingStep, .speak)
         XCTAssertEqual(store.latest.onboardingProgress, .notStarted)
     }
 
@@ -165,45 +165,46 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
 
     // MARK: - Transitions
 
-    func testWelcomeStartsModelDownloadBeforeLeavingWelcome() async {
+    func testStartOnboardingStartsModelDownloadOnFirstScreen() async {
         let modelManager = StubModelManager()
         let appState = freshOnboardingState(modelManager: modelManager)
 
         appState.startOnboardingIfNeeded()
         await waitForOnboardingDownloadToStart(appState)
 
-        XCTAssertEqual(appState.activeOnboardingStep, .welcome)
+        XCTAssertEqual(appState.activeOnboardingStep, .speak)
         XCTAssertEqual(appState.phase, .downloadingModel)
         XCTAssertEqual(appState.activeASRModelOperationID, .parakeetV3)
     }
 
-    func testGetStartedAdvancesToSpeakPersistsAndStartsDownload() async {
+    func testResumedStepRestartsModelDownload() async {
+        // Quit mid-download, relaunch: the Dictate screen must not sit on a
+        // stalled model with only a link to click.
         let modelManager = StubModelManager()
-        let store = TestGeneralSettingsStore()
-        let appState = freshOnboardingState(store: store, modelManager: modelManager)
+        let appState = freshOnboardingState(
+            store: TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .typeAnywhereReached)),
+            modelManager: modelManager
+        )
+
         appState.startOnboardingIfNeeded()
+        await waitForOnboardingDownloadToStart(appState)
 
-        await appState.beginOnboardingSetup()
-
-        XCTAssertEqual(appState.activeOnboardingStep, .speak)
-        XCTAssertEqual(appState.onboardingProgress, .speakReached)
-        XCTAssertEqual(store.latest.onboardingProgress, .speakReached)
-        XCTAssertEqual(appState.activeASRModelOperationID, .parakeetV3, "Get Started must auto-start the required download")
+        XCTAssertEqual(appState.activeOnboardingStep, .typeAnywhere)
+        XCTAssertEqual(appState.activeASRModelOperationID, .parakeetV3)
     }
 
-    func testGetStartedSkipsDownloadWhenModelInstalled() async {
+    func testStartOnboardingSkipsDownloadWhenModelInstalled() {
         let store = TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .notStarted))
         let appState = makeTestAppState(generalSettingsStore: store) // model installed
         appState.phase = .ready
-        appState.startOnboardingIfNeeded()
 
-        await appState.beginOnboardingSetup()
+        appState.startOnboardingIfNeeded()
 
         XCTAssertEqual(appState.activeOnboardingStep, .speak)
         XCTAssertNil(appState.activeASRModelOperationID)
     }
 
-    func testGetStartedBlocksOnInsufficientDiskSpace() async {
+    func testInsufficientDiskSpaceSurfacesMessageInsteadOfDownloading() async {
         let modelManager = StubModelManager()
         modelManager.installedModelIDs = []
         let store = TestGeneralSettingsStore()
@@ -213,26 +214,50 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
             availableDiskCapacityProvider: { 1_000 } // ~nothing free
         )
         appState.phase = .needsModel
+
         appState.startOnboardingIfNeeded()
+        for _ in 0 ..< 100 where appState.onboardingDiskSpaceMessage == nil {
+            await Task.yield()
+        }
 
-        await appState.beginOnboardingSetup()
-
-        XCTAssertEqual(appState.activeOnboardingStep, .welcome, "must stay on welcome with an explanation")
+        XCTAssertEqual(appState.activeOnboardingStep, .speak)
         XCTAssertNotNil(appState.onboardingDiskSpaceMessage)
-        XCTAssertEqual(appState.onboardingProgress, .notStarted)
         XCTAssertNil(appState.activeASRModelOperationID)
     }
 
-    func testGetStartedIgnoredOffWelcome() async {
+    func testRetryAfterDiskRefusalClearsMessageAndDownloads() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = []
+        var freeBytes: Int64 = 1_000
         let appState = makeTestAppState(
-            generalSettingsStore: TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .speakReached))
+            modelManager: modelManager,
+            generalSettingsStore: TestGeneralSettingsStore(),
+            availableDiskCapacityProvider: { freeBytes }
         )
+        appState.phase = .needsModel
         appState.startOnboardingIfNeeded()
+        for _ in 0 ..< 100 where appState.onboardingDiskSpaceMessage == nil {
+            await Task.yield()
+        }
+        XCTAssertNotNil(appState.onboardingDiskSpaceMessage)
 
-        await appState.beginOnboardingSetup()
+        freeBytes = .max
+        appState.retryOnboardingModelDownload()
+        await waitForOnboardingDownloadToStart(appState)
 
-        XCTAssertEqual(appState.activeOnboardingStep, .speak)
-        XCTAssertEqual(appState.onboardingProgress, .speakReached)
+        XCTAssertNil(appState.onboardingDiskSpaceMessage)
+        XCTAssertEqual(appState.activeASRModelOperationID, .parakeetV3)
+    }
+
+    func testRetryAfterFailedDownloadRestartsImmediately() {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = []
+        let appState = makeTestAppState(modelManager: modelManager, generalSettingsStore: TestGeneralSettingsStore())
+        appState.phase = .error
+
+        appState.retryOnboardingModelDownload()
+
+        XCTAssertEqual(appState.activeASRModelOperationID, .parakeetV3)
     }
 
     func testAdvanceFromSpeakReachesTypeAnywhere() {
@@ -247,21 +272,61 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
         XCTAssertEqual(appState.onboardingProgress, .typeAnywhereReached)
     }
 
-    func testAdvanceOnboardingWalksAllSteps() async {
+    func testTransitionsWalkBothScreens() {
         let appState = freshOnboardingState()
         appState.startOnboardingIfNeeded()
 
-        await appState.advanceOnboarding() // welcome -> speak
-        XCTAssertEqual(appState.activeOnboardingStep, .speak)
-        await appState.advanceOnboarding() // speak -> typeAnywhere
+        appState.advanceOnboardingFromSpeak()
         XCTAssertEqual(appState.activeOnboardingStep, .typeAnywhere)
-        await appState.advanceOnboarding() // typeAnywhere -> finished
+        appState.finishOnboarding()
         XCTAssertNil(appState.activeOnboardingStep)
         XCTAssertTrue(appState.onboardingProgress.isFinished)
 
-        // nil -> restart resolves via startOnboardingIfNeeded (stays finished).
-        await appState.advanceOnboarding()
+        // Restarting once finished stays finished.
+        appState.startOnboardingIfNeeded()
         XCTAssertNil(appState.activeOnboardingStep)
+    }
+
+    func testLaterDefersAccessibilityAndDashboardExplainsClipboardMode() {
+        let store = TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .typeAnywhereReached))
+        let appState = makeTestAppState(generalSettingsStore: store)
+        appState.hasAccessibilityPermission = false
+
+        appState.finishOnboarding(deferringAccessibility: true)
+
+        XCTAssertTrue(appState.onboardingProgress.isFinished)
+        XCTAssertEqual(store.latest.accessibilityDeferred, true)
+        let item = appState.attentionItems.first { $0.id == "accessibility-deferred" }
+        XCTAssertEqual(item?.severity, .info)
+        XCTAssertEqual(item?.fixAction, .requestAccessibilityPermission)
+        XCTAssertEqual(item?.fixTitle, "Allow Access")
+        XCTAssertNil(appState.attentionItems.first { $0.id == "accessibility-permission-missing" })
+    }
+
+    func testFinishWithAccessibilityGrantedDoesNotRecordDeferral() {
+        let store = TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .typeAnywhereReached))
+        let appState = makeTestAppState(generalSettingsStore: store)
+        appState.hasAccessibilityPermission = true
+
+        appState.finishOnboarding(deferringAccessibility: true)
+
+        XCTAssertEqual(store.latest.accessibilityDeferred, false)
+    }
+
+    func testGrantClearsDeferralAndTheClipboardModeTile() async {
+        let appState = makeTestAppState(
+            generalSettingsStore: TestGeneralSettingsStore(
+                value: GeneralSettings(onboardingProgress: .finished, accessibilityDeferred: true)
+            ),
+            accessibilityTrustProvider: { true }
+        )
+        appState.hasAccessibilityPermission = false
+        XCTAssertNotNil(appState.attentionItems.first { $0.id == "accessibility-deferred" })
+
+        await appState.refreshPermissions()
+
+        XCTAssertTrue(appState.hasAccessibilityPermission)
+        XCTAssertNil(appState.attentionItems.first { $0.id == "accessibility-deferred" })
     }
 
     func testFinishOnboardingEmitsCompletionAndOutcome() {
@@ -307,17 +372,6 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
     }
 
     // MARK: - Practice display state
-
-    func testOnboardingPracticeLevelsFollowIndicatorState() {
-        let appState = makeTestAppState()
-
-        let idleLevels = appState.onboardingPracticeLevels
-        XCTAssertEqual(idleLevels, Array(repeating: Float(0.08), count: idleLevels.count))
-
-        let levels = Array(repeating: Float(0.6), count: AudioLevelMeter.bandCount)
-        appState.floatingIndicatorState = .listening(levels: levels, source: .manual)
-        XCTAssertEqual(appState.onboardingPracticeLevels, levels)
-    }
 
     func testOnboardingPracticeActivityFlags() {
         let appState = makeTestAppState()

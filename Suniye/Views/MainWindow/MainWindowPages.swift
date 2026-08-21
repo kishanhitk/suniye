@@ -92,22 +92,10 @@ struct GeneralPage: View {
     private var permissions: some View {
         SettingsGroup(
             heading: "Permissions",
-            note: "\(AppIdentity.current.displayName) cannot dictate until these are granted."
+            note: "\(AppIdentity.current.displayName) cannot dictate until these are allowed."
         ) {
             if !appState.hasMicPermission {
-                ControlSettingRow(
-                    title: "Microphone",
-                    info: "Required to capture dictation audio."
-                ) {
-                    HStack(spacing: 8) {
-                        Button("Grant") { appState.requestMicrophonePermission() }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                        Button("Open Settings") { appState.openMicrophonePrivacySettings() }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                    }
-                }
+                PermissionRow(appState: appState, presentation: appState.microphonePresentation, askSurface: .settings)
             }
 
             if !appState.hasMicPermission && !appState.hasAccessibilityPermission {
@@ -115,19 +103,7 @@ struct GeneralPage: View {
             }
 
             if !appState.hasAccessibilityPermission {
-                ControlSettingRow(
-                    title: "Accessibility",
-                    info: "Required to paste transcribed text into other apps."
-                ) {
-                    HStack(spacing: 8) {
-                        Button("Grant") { appState.beginAccessibilityOnboarding() }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                        Button("Open Settings") { appState.openAccessibilityPrivacySettings() }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                    }
-                }
+                PermissionRow(appState: appState, presentation: appState.accessibilityPresentation, askSurface: .settings)
             }
         }
     }

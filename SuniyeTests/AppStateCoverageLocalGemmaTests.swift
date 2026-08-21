@@ -42,7 +42,7 @@ final class AppStateCoverageLocalGemmaTests: XCTestCase {
         XCTAssertEqual(appState.localGemmaInstallProgress, 0.5)
 
         appState.localGemmaInstallState = .verifying
-        XCTAssertEqual(appState.localGemmaInstallStatusText, "Verifying local model...")
+        XCTAssertEqual(appState.localGemmaInstallStatusText, "Verifying local model…")
         XCTAssertNil(appState.localGemmaInstallProgress)
 
         appState.localGemmaInstallState = .installed(1_000_000)

@@ -246,16 +246,15 @@ final class AppStateSettingsTests: XCTestCase {
         )
         appState.startOnboardingIfNeeded()
 
-        XCTAssertTrue(appState.hasSeenOnboardingWelcome)
-        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
+        XCTAssertTrue(appState.onboardingProgress.isFinished)
         XCTAssertNil(appState.activeOnboardingStep)
         XCTAssertEqual(generalSettingsStore.latest.onboardingProgress, .finished)
-        // Legacy Bools stay written (derived) for downgrade safety.
-        XCTAssertEqual(generalSettingsStore.latest.hasSeenOnboardingWelcome, true)
-        XCTAssertEqual(generalSettingsStore.latest.hasCompletedCoreOnboarding, true)
+        // Legacy Bools are migration input only; they are never written again.
+        XCTAssertNil(generalSettingsStore.latest.hasSeenOnboardingWelcome)
+        XCTAssertNil(generalSettingsStore.latest.hasCompletedCoreOnboarding)
     }
 
-    func testFreshInstallStartsAtWelcome() {
+    func testFreshInstallStartsAtDictate() {
         let modelManager = StubModelManager()
         modelManager.installedModelIDs = []
         let generalSettingsStore = TestGeneralSettingsStore()
@@ -266,9 +265,8 @@ final class AppStateSettingsTests: XCTestCase {
         )
         appState.startOnboardingIfNeeded()
 
-        XCTAssertFalse(appState.hasSeenOnboardingWelcome)
-        XCTAssertFalse(appState.hasCompletedCoreOnboarding)
-        XCTAssertEqual(appState.activeOnboardingStep, .welcome)
+        XCTAssertEqual(appState.onboardingProgress, .notStarted)
+        XCTAssertEqual(appState.activeOnboardingStep, .speak)
         XCTAssertEqual(generalSettingsStore.latest.onboardingProgress, .notStarted)
     }
 
@@ -922,22 +920,6 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.onboardingPracticeResult?.message, "decoder failed")
     }
 
-    func testRecordingDoesNotStartWhileWelcomeStepIsActive() async {
-        let audioCapture = StubAudioCaptureService()
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-        appState.activeOnboardingStep = .welcome
-
-        appState.startRecordingFromUI()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
-        XCTAssertEqual(appState.phase, .ready)
-        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Finish setup first"))
-    }
-
     func testRecordingStartsOnTypeAnywhereStep() async {
         // Real dictation is deliberately allowed on the Accessibility screen
         // (the "try it in Notes" demo depends on it).
@@ -969,7 +951,7 @@ final class AppStateSettingsTests: XCTestCase {
     func testBlockedIndicatorToggleDuringTranscribingRestoresProcessingState() async {
         let appState = makeTestAppState()
         appState.phase = .transcribing
-        appState.floatingIndicatorState = .processing(message: "Transcribing...")
+        appState.floatingIndicatorState = .processing(message: "Transcribing…")
 
         appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
@@ -977,22 +959,22 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Still processing previous clip"))
         try? await Task.sleep(nanoseconds: 1_300_000_000)
         // Restore path now matches the transcribe transition's labeled pill.
-        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Transcribing..."))
+        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Transcribing…"))
     }
 
     func testBlockedIndicatorToggleDuringPolishingPreservesStageLabel() async {
         let appState = makeTestAppState()
         appState.phase = .transcribing
-        // The pill has already advanced past "Transcribing..." to a polish stage.
-        appState.floatingIndicatorState = .processing(message: "Polishing...")
+        // The pill has already advanced past "Transcribing…" to a polish stage.
+        appState.floatingIndicatorState = .processing(message: "Polishing…")
 
         appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Still processing previous clip"))
         try? await Task.sleep(nanoseconds: 1_300_000_000)
-        // Restore must not regress the stage back to "Transcribing...".
-        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Polishing..."))
+        // Restore must not regress the stage back to "Transcribing…".
+        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Polishing…"))
     }
 
 
@@ -1169,7 +1151,7 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.phase, .needsModel)
         XCTAssertEqual(appState.statusText, "Model required")
         XCTAssertNil(appState.activeOnboardingStep)
-        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
+        XCTAssertTrue(appState.onboardingProgress.isFinished)
     }
 
     func testSelectingInstalledASRModelLoadsRecognizerAndPersistsSelection() async {
@@ -1295,7 +1277,7 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(appState.phase, .ready)
         XCTAssertTrue(appState.asrModelReady)
         XCTAssertEqual(appState.activeOnboardingStep, .speak)
-        XCTAssertFalse(appState.hasCompletedCoreOnboarding)
+        XCTAssertFalse(appState.onboardingProgress.isFinished)
     }
 
     func testOnboardingModelDownloadUsesSelectedASRModel() async {
