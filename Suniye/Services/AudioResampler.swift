@@ -1,7 +1,7 @@
 import AVFoundation
 
-/// Mono float resampling through `AVAudioConverter`, for engines whose model
-/// expects a fixed input rate while capture runs at the device's native one.
+/// One-shot audio conversion through `AVAudioConverter` for engines whose model
+/// wants a fixed input format while capture runs at the device's native rate.
 enum AudioResampler {
     struct ResampleError: LocalizedError {
         var errorDescription: String? {
@@ -9,26 +9,33 @@ enum AudioResampler {
         }
     }
 
-    static func resample(_ samples: [Float], from sourceRate: Int, to targetRate: Int) throws -> [Float] {
-        guard sourceRate != targetRate, !samples.isEmpty else {
-            return samples
+    /// Mono float32 PCM buffer holding `samples`; `nil` only if AVFoundation rejects the format.
+    static func monoBuffer(_ samples: [Float], sampleRate: Int) -> AVAudioPCMBuffer? {
+        guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sampleRate), channels: 1, interleaved: false),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)) else {
+            return nil
         }
-        guard let sourceFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sourceRate), channels: 1, interleaved: false),
-              let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(targetRate), channels: 1, interleaved: false),
-              let converter = AVAudioConverter(from: sourceFormat, to: targetFormat),
-              let input = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: AVAudioFrameCount(samples.count)) else {
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        samples.withUnsafeBufferPointer { source in
+            if let base = source.baseAddress {
+                buffer.floatChannelData?[0].update(from: base, count: samples.count)
+            }
+        }
+        return buffer
+    }
+
+    /// Converts a whole buffer (rate and/or layout) in a single pass.
+    static func convert(_ source: AVAudioPCMBuffer, to targetFormat: AVAudioFormat) throws -> AVAudioPCMBuffer {
+        guard let converter = AVAudioConverter(from: source.format, to: targetFormat) else {
             throw ResampleError()
-        }
-        input.frameLength = AVAudioFrameCount(samples.count)
-        samples.withUnsafeBufferPointer { buffer in
-            input.floatChannelData?[0].update(from: buffer.baseAddress!, count: samples.count)
         }
 
         // Capacity = resampled length + a ~100 ms margin covering the resampler's
         // filter delay, so the whole input converts in one pass without dropping
         // tail frames.
-        let ratio = Double(targetRate) / Double(sourceRate)
-        let capacity = AVAudioFrameCount((Double(samples.count) * ratio).rounded(.up)) + AVAudioFrameCount(targetRate / 10) + 1
+        let ratio = targetFormat.sampleRate / source.format.sampleRate
+        let capacity = AVAudioFrameCount((Double(source.frameLength) * ratio).rounded(.up))
+            + AVAudioFrameCount(targetFormat.sampleRate / 10) + 1
         guard let output = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else {
             throw ResampleError()
         }
@@ -42,9 +49,26 @@ enum AudioResampler {
             }
             providedInput = true
             inputStatus.pointee = .haveData
-            return input
+            return source
         }
-        guard status != .error, conversionError == nil, let channel = output.floatChannelData?[0] else {
+        // The margin above guarantees one pass reaches .endOfStream; only a hard
+        // converter error is a real failure.
+        guard status != .error, conversionError == nil else {
+            throw ResampleError()
+        }
+        return output
+    }
+
+    static func resample(_ samples: [Float], from sourceRate: Int, to targetRate: Int) throws -> [Float] {
+        guard sourceRate != targetRate, !samples.isEmpty else {
+            return samples
+        }
+        guard let source = monoBuffer(samples, sampleRate: sourceRate),
+              let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(targetRate), channels: 1, interleaved: false) else {
+            throw ResampleError()
+        }
+        let output = try convert(source, to: targetFormat)
+        guard let channel = output.floatChannelData?[0] else {
             throw ResampleError()
         }
         return Array(UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))

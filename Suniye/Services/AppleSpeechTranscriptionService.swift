@@ -240,65 +240,19 @@ actor AppleSpeechTranscriptionService: TranscriptionServiceProtocol {
         sampleRate: Int,
         targetFormat: AVAudioFormat
     ) throws -> AVAudioPCMBuffer {
-        guard
-            let sourceFormat = AVAudioFormat(
-                commonFormat: .pcmFormatFloat32,
-                sampleRate: Double(sampleRate),
-                channels: 1,
-                interleaved: false
-            ),
-            let sourceBuffer = AVAudioPCMBuffer(
-                pcmFormat: sourceFormat,
-                frameCapacity: AVAudioFrameCount(samples.count)
-            )
-        else {
+        guard let sourceBuffer = AudioResampler.monoBuffer(samples, sampleRate: sampleRate) else {
             throw ServiceError.bufferPreparationFailed
-        }
-
-        sourceBuffer.frameLength = AVAudioFrameCount(samples.count)
-        if let channel = sourceBuffer.floatChannelData?[0] {
-            samples.withUnsafeBufferPointer { pointer in
-                if let base = pointer.baseAddress {
-                    channel.update(from: base, count: samples.count)
-                }
-            }
         }
 
         // No conversion needed when the analyzer accepts our native format.
-        if targetFormat == sourceFormat {
+        if targetFormat == sourceBuffer.format {
             return sourceBuffer
         }
 
-        guard let converter = AVAudioConverter(from: sourceFormat, to: targetFormat) else {
+        do {
+            return try AudioResampler.convert(sourceBuffer, to: targetFormat)
+        } catch {
             throw ServiceError.bufferPreparationFailed
         }
-
-        // Capacity = resampled length + a ~100 ms margin covering the resampler's filter
-        // delay, so the whole input converts in a single pass without dropping tail frames.
-        let ratio = targetFormat.sampleRate / sourceFormat.sampleRate
-        let margin = AVAudioFrameCount(targetFormat.sampleRate / 10) + 1
-        let targetCapacity = AVAudioFrameCount((Double(samples.count) * ratio).rounded(.up)) + margin
-        guard let targetBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: targetCapacity) else {
-            throw ServiceError.bufferPreparationFailed
-        }
-
-        var providedInput = false
-        var conversionError: NSError?
-        let status = converter.convert(to: targetBuffer, error: &conversionError) { _, inputStatus in
-            if providedInput {
-                inputStatus.pointee = .endOfStream
-                return nil
-            }
-            providedInput = true
-            inputStatus.pointee = .haveData
-            return sourceBuffer
-        }
-
-        // The margin above guarantees a single pass reaches .endOfStream; only a hard
-        // converter error is a real failure.
-        if status == .error || conversionError != nil {
-            throw ServiceError.bufferPreparationFailed
-        }
-        return targetBuffer
     }
 }
