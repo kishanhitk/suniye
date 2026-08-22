@@ -107,6 +107,7 @@
 		754F27F059617786F9E079B1 /* EditModeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 653DD6CC674F7EC21C812AC6 /* EditModeService.swift */; };
 		7739558005EE588E176936C5 /* MagicFormatPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A43576952A870136E63581 /* MagicFormatPage.swift */; };
 		775525A23D0120E0D562F6DE /* IssueReportWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A40680D7D6D6D80DF33509F /* IssueReportWindowController.swift */; };
+		7BA13DAAFBDA2321F26E9138 /* OnnxRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B64604C1307F588241DE590 /* OnnxRuntimeTests.swift */; };
 		7EB9B5550B0A955CDFC3FC17 /* LLMSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2C954DD9B2466B271CC6A1D /* LLMSettingsStoreTests.swift */; };
 		7FFDBD4254F504A0E5EC9D45 /* AudioCaptureDrivers.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0D2D7052852D86CA19FCC5 /* AudioCaptureDrivers.swift */; };
 		8026BDFF0398AE05E7C479C9 /* ChatCompletionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73E0B8EFFC4C811FB6EDB2C3 /* ChatCompletionClient.swift */; };
@@ -127,6 +128,7 @@
 		8DCF3D53A2A11EACAAA73FE4 /* OverlayWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155B7CF68729D0A45C0E7DA1 /* OverlayWindowController.swift */; };
 		90185C8F369BD03785171B29 /* AppleSpeechProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EC059FBC997944234C4452A /* AppleSpeechProviderTests.swift */; };
 		90783B5C1E7D43413D251BBC /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01EE242F81867FE9A5048297 /* TextInsertionService.swift */; };
+		9113ED5FAFC7F1213990255E /* OrtSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 926EE45CED31884E592AE459 /* OrtSession.swift */; };
 		928A4D6D164E3C5432A6FBD0 /* EditLearningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A99390B0C1FFE4B2791DA2BC /* EditLearningService.swift */; };
 		9312ADE3F912A9310431564E /* LLMPostProcessorMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38E48710F9DA18C305318B2D /* LLMPostProcessorMoreTests.swift */; };
 		9374A5ECE15AF5CBAC46E067 /* MagicFormatComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7822658531989BA498E467C7 /* MagicFormatComponents.swift */; };
@@ -275,6 +277,7 @@
 		39051EB772E2A2A5F3560055 /* OnnxRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnnxRuntime.swift; sourceTree = "<group>"; };
 		3985E6550A900F3B6818F86C /* MainWindowPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowPages.swift; sourceTree = "<group>"; };
 		398B0793BE46FD770EBE1D2A /* TranscriptBrowsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptBrowsingTests.swift; sourceTree = "<group>"; };
+		3B64604C1307F588241DE590 /* OnnxRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnnxRuntimeTests.swift; sourceTree = "<group>"; };
 		3C602055B3CC305FEC183E6E /* HotkeyServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyServiceTests.swift; sourceTree = "<group>"; };
 		3DA12B4973440B4D8638C5FB /* onnxruntime_ep_c_api.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = onnxruntime_ep_c_api.h; sourceTree = "<group>"; };
 		3DFF30B89B35710FB74B0EB8 /* EditLearningServiceMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditLearningServiceMoreTests.swift; sourceTree = "<group>"; };
@@ -349,6 +352,7 @@
 		8D4C44D5D8846E9AC198372D /* AppleFoundationModelsPostProcessorMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessorMoreTests.swift; sourceTree = "<group>"; };
 		9133AE99675CA7D6F6C4869D /* TranscriptRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptRows.swift; sourceTree = "<group>"; };
 		920198666EB5634CA199A1B4 /* FloatingIndicatorStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorStateTests.swift; sourceTree = "<group>"; };
+		926EE45CED31884E592AE459 /* OrtSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrtSession.swift; sourceTree = "<group>"; };
 		96753F72AB64EA4C792D7AB5 /* AppleFoundationModelsPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessor.swift; sourceTree = "<group>"; };
 		98B58C8F7A33FE14A72479F5 /* RoutingTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTranscriptionService.swift; sourceTree = "<group>"; };
 		9C8C361F58E1152C1477A209 /* LocalGemmaPostProcessorMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaPostProcessorMoreTests.swift; sourceTree = "<group>"; };
@@ -588,6 +592,7 @@
 				F071EC20B9165DA02529D09C /* ModelManagerCoverageTests.swift */,
 				6E5CEF1B4FEEFC12719CB94A /* ModelManagerE2ETests.swift */,
 				3FA96C193EFD137CFA4EEC9B /* ModelsCoverageTests.swift */,
+				3B64604C1307F588241DE590 /* OnnxRuntimeTests.swift */,
 				C7C7E8D1051162AD963AE58F /* OpenRouterPostProcessorMoreTests.swift */,
 				386B9D8DFD2BB94A83C15741 /* OpenRouterPostProcessorTests.swift */,
 				624DF0C47847FACD2976DEAE /* PartialTranscriptionSchedulerTests.swift */,
@@ -711,6 +716,7 @@
 				865C597BBA404F5F6A049278 /* ModelManager.swift */,
 				39051EB772E2A2A5F3560055 /* OnnxRuntime.swift */,
 				B9D8487CCDF6CB1A7023E095 /* OpenRouterPostProcessor.swift */,
+				926EE45CED31884E592AE459 /* OrtSession.swift */,
 				17C618FC1DF7747D6FA464EF /* PartialTranscriptionScheduler.swift */,
 				C5EE94EB0449512CBDADFAD0 /* PartialTranscriptStabilizer.swift */,
 				98B58C8F7A33FE14A72479F5 /* RoutingTranscriptionService.swift */,
@@ -937,6 +943,7 @@
 				86AC38418D4F76638222975C /* OnboardingView.swift in Sources */,
 				F2AE211DC85934E8DF619491 /* OnnxRuntime.swift in Sources */,
 				1D86CE52AD421422DC26FA71 /* OpenRouterPostProcessor.swift in Sources */,
+				9113ED5FAFC7F1213990255E /* OrtSession.swift in Sources */,
 				8DCF3D53A2A11EACAAA73FE4 /* OverlayWindowController.swift in Sources */,
 				95A7169E27ABDAE63AAD2948 /* PartialTranscriptStabilizer.swift in Sources */,
 				8D874A1D73D710DBF4FD77EC /* PartialTranscriptionScheduler.swift in Sources */,
@@ -1055,6 +1062,7 @@
 				61086DA9674771F3966207E6 /* ModelManagerCoverageTests.swift in Sources */,
 				F75A72DF1CAEBAD284065DE4 /* ModelManagerE2ETests.swift in Sources */,
 				16B5D878BB5D0CC2C29DB9BB /* ModelsCoverageTests.swift in Sources */,
+				7BA13DAAFBDA2321F26E9138 /* OnnxRuntimeTests.swift in Sources */,
 				D3BEEF763F085BD841431430 /* OpenRouterPostProcessorMoreTests.swift in Sources */,
 				96D47C5DFE84C5C9C49BBAD6 /* OpenRouterPostProcessorTests.swift in Sources */,
 				1010ECBB713A653EFCEE90D3 /* PartialTranscriptStabilizerTests.swift in Sources */,
