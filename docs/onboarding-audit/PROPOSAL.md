@@ -1,6 +1,6 @@
 # Onboarding redesign proposal (KIS-209)
 
-**Status:** implemented on this branch (two-screen variant, §3a). What shipped vs. this text: all of §3c, §4, §5, §6 and §7, plus slices 1–4 of §8. Deviations: the Permiso overlay is vendored unmodified, so its 14 pt back control stays — Escape on the onboarding window closes the overlay instead, and the safety timeout is 60 s; the "Later" cohort sees a persistent info-tone "Clipboard mode" tile (cleared on grant) rather than a time-boxed one; `OnboardingProgress.speakReached` is kept as a stored value (resumes on screen 1); the system Accessibility modal needed no extra gating during onboarding — with the grant missing, `currentDictationDestination` already falls back to the clipboard and never reaches `AXIsProcessTrustedWithOptions`, so the persisted `accessibilityPromptShown` flag covers the remaining (edit-mode) path. The findings index in §9 and the line numbers throughout describe `main` @ 1be1c56b, the state that was audited. After-screens are in `screens-after/`.
+**Status:** proposal — nothing here is implemented. Approve, amend, or reject per section; implementation is a separate ticket.
 **Inputs:** `CODE-MAP.md`, `SCREENS.md` + `screens/`, and a 49-agent critique pass (5 lenses → 44 findings → every finding independently verified against the code; 0 refuted, 14 corrected in detail). The verified findings are indexed in §9 by id (VD-n visual drift, FLOW-n flow, PF-n permissions, COPY-n copy, D-n dead options). Everything below cites them.
 
 ---

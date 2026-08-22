@@ -1,11 +1,7 @@
 # Onboarding code map (KIS-209, captured 2026-08-21 on `main` @ 1be1c56b)
 
-Every line reference below was read on this commit — this is the audited
-baseline, kept as-is so the findings in `PROPOSAL.md` §9 stay traceable. The
-redesign on this branch replaces most of §2–§5 (two screens, `PermissionRow`,
-`PermissionPresentation`, init-time step resume); read the current code for
-line numbers. Screens are in `screens/`; `SCREENS.md` maps each file to the
-state that produced it.
+Every line reference below was read on this commit. Screens are in `screens/`;
+`SCREENS.md` maps each file to the state that produced it.
 
 ## 1. Files
 

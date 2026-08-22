@@ -242,13 +242,13 @@ final class CohereProviderTests: XCTestCase {
         transcription.onTranscribeAwait = { _ in
             // The progress hop to the main actor lands once the stub suspends here.
             let deadline = Date().addingTimeInterval(2)
-            while await MainActor.run(body: { appState.floatingIndicatorState == .processing(message: "Transcribing…") }),
+            while await MainActor.run(body: { appState.floatingIndicatorState == .processing(message: "Transcribing...") }),
                   Date() < deadline {
                 await Task.yield()
             }
             let (indicator, status) = await MainActor.run { (appState.floatingIndicatorState, appState.statusText) }
-            XCTAssertEqual(indicator, .processing(message: "Transcribing 2 of 3…"))
-            XCTAssertEqual(status, "Transcribing 2 of 3…")
+            XCTAssertEqual(indicator, .processing(message: "Transcribing 2 of 3..."))
+            XCTAssertEqual(status, "Transcribing 2 of 3...")
             observed.fulfill()
         }
 
@@ -301,7 +301,7 @@ final class CohereProviderTests: XCTestCase {
         while appState.phase != .ready, Date() < deadline {
             await Task.yield()
         }
-        XCTAssertEqual(seen.values, [.processing(message: "Transcribing…")])
+        XCTAssertEqual(seen.values, [.processing(message: "Transcribing...")])
     }
 }
 

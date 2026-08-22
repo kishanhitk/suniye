@@ -13,14 +13,14 @@ struct SuniyeApp: App {
         }
         .commands {
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates…") {
+                Button("Check for Updates...") {
                     sharedAppState.checkForUpdates()
                 }
                 .disabled(!sharedAppState.canCheckForUpdates)
             }
 
             CommandGroup(after: .help) {
-                Button("Report a Problem…") {
+                Button("Report a Problem...") {
                     sharedAppState.openIssueReportWindow()
                 }
                 .keyboardShortcut("/", modifiers: [.command, .shift])

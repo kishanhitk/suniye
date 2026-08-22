@@ -43,7 +43,6 @@ panel types) and add them to this list.
 
 `SettingsWindowLocator` finds the System Settings window via `CGWindowListCopyWindowInfo`
 matched on bundle id `com.apple.systempreferences`, and `OverlayWindowController` repositions
-on a 0.15s timer. A macOS System Settings redesign can break the overlay silently. There is
-no runtime kill switch: the wrapper's 60 s safety timeout and the overlay's own back chevron
-both end the presentation, after which every permission row offers the "Open Settings"
-deep-link as the fallback (`PermissionPresentation.accessibility`, assist-ended state).
+on a 0.15s timer. A macOS System Settings redesign can break the overlay silently. The
+`GeneralSettings.accessibilityDragHelperEnabled` flag is the kill switch; the "Open Settings"
+deep-link in onboarding/settings is the always-available fallback.

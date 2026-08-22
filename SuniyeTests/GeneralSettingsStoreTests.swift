@@ -75,37 +75,31 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertFalse(store.load().liveTranscriptionPreviewEnabled)
     }
 
-    func testAccessibilityFlagsRoundTrip() {
-        let suite = "dev.suniye.tests.general.accessibilityFlags.\(UUID().uuidString)"
+    func testAccessibilityDragHelperFlagRoundTrips() {
+        let suite = "dev.suniye.tests.general.dragHelper.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
 
-        store.save(GeneralSettings(accessibilityPromptShown: true, accessibilityDeferred: true))
+        let settings = GeneralSettings(accessibilityDragHelperEnabled: false)
+        store.save(settings)
 
-        let loaded = store.load()
-        XCTAssertTrue(loaded.accessibilityPromptShown)
-        XCTAssertTrue(loaded.accessibilityDeferred)
+        XCTAssertFalse(store.load().accessibilityDragHelperEnabled)
     }
 
-    func testAccessibilityFlagsDefaultFalseForLegacyBlob() {
-        let suite = "dev.suniye.tests.general.accessibilityFlags.legacy.\(UUID().uuidString)"
+    func testAccessibilityDragHelperDefaultsTrueForLegacyBlob() {
+        let suite = "dev.suniye.tests.general.dragHelper.legacy.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
-        // Blob saved before the keys existed (including the retired drag-helper
-        // kill switch, which must be ignored rather than fail the decode).
+        // Blob saved before the key existed must decode the flag as the default (true).
         let legacyJSON = """
         {
           "preferredInputDeviceID": "usb-mic",
-          "autoSubmitEnabled": true,
-          "accessibilityDragHelperEnabled": false
+          "autoSubmitEnabled": true
         }
         """
         defaults.set(Data(legacyJSON.utf8), forKey: "general")
 
-        let loaded = store.load()
-        XCTAssertFalse(loaded.accessibilityPromptShown)
-        XCTAssertFalse(loaded.accessibilityDeferred)
-        XCTAssertEqual(loaded.preferredInputDeviceID, "usb-mic")
+        XCTAssertTrue(store.load().accessibilityDragHelperEnabled)
     }
 
     func testOnboardingProgressAndNewFlagsRoundTrip() {

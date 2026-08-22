@@ -31,8 +31,8 @@ final class FloatingIndicatorAnimationKeyTests: XCTestCase {
             .listening(source: .editHotkey)
         )
         XCTAssertEqual(
-            FloatingIndicatorState.processing(message: "Transcribing…").layoutAnimationKey,
-            .processing(message: "Transcribing…")
+            FloatingIndicatorState.processing(message: "Transcribing...").layoutAnimationKey,
+            .processing(message: "Transcribing...")
         )
         XCTAssertEqual(
             FloatingIndicatorState.error(message: "boom").layoutAnimationKey,

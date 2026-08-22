@@ -109,8 +109,7 @@ final class AppStateUpdateTests: XCTestCase {
 
         let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "mic-permission-missing" })
         XCTAssertEqual(item.fixAction, .requestMicrophonePermission)
-        XCTAssertEqual(item.fixTitle, "Allow Access")
-        XCTAssertEqual(item.title, "Microphone access needed")
+        XCTAssertEqual(item.fixTitle, "Grant Access")
     }
 
     func testAttentionItemsExposeAccessibilityPermissionFixAction() throws {
@@ -119,8 +118,7 @@ final class AppStateUpdateTests: XCTestCase {
 
         let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "accessibility-permission-missing" })
         XCTAssertEqual(item.fixAction, .requestAccessibilityPermission)
-        XCTAssertEqual(item.fixTitle, "Allow Access")
-        XCTAssertEqual(item.title, "Accessibility access needed")
+        XCTAssertEqual(item.fixTitle, "Grant Access")
     }
 
     func testMagicFormatStatusIsReadyWhenEnabledAndConfigured() {

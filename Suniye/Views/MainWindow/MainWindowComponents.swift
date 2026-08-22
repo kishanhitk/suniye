@@ -122,6 +122,8 @@ enum AppTypography {
     static let codeBody = Font.system(.body, design: .monospaced)
     static let codeBodyMedium = Font.system(.body, design: .monospaced, weight: .medium)
     static let codeCalloutSemibold = Font.system(.callout, design: .monospaced, weight: .semibold)
+    // Semantic, so the first screen a user meets still honours their text size.
+    static let onboardingTitle = Font.title.weight(.semibold)
     static let metricValue = Font.system(.title, design: .rounded, weight: .semibold).monospacedDigit()
     static let emptyIcon = Font.system(size: 34, weight: .light)
 }
@@ -131,10 +133,7 @@ enum AppMetrics {
     /// entirely; this leaves just enough for the pane to still read as glass.
     static let detailPaneOpacity: Double = 0.9
 
-    /// The onboarding column: wider than the empty-state column so permission
-    /// rows have room for two small buttons, narrower than a full page.
-    static let onboardingColumnWidth: CGFloat = 480
-    static let onboardingIconSize: CGFloat = 32
+    static let onboardingBrandIconSize: CGFloat = 64
     static let sidebarWidth: CGFloat = 208
     static let sidebarBrandTop: CGFloat = 24
     static let sidebarBrandHorizontal: CGFloat = 24
@@ -578,40 +577,16 @@ struct AttentionTile: View {
 
     var body: some View {
         InlineStatusBanner(
-            icon: item.severity.icon,
-            tint: item.severity.tint,
+            icon: item.severity == .error ? "exclamationmark.triangle.fill" : "exclamationmark.circle",
+            tint: item.severity == .error ? .red : .orange,
             title: item.title,
             detail: item.detail,
-            actionTitle: item.fixTitle,
+            actionTitle: item.fixAction?.title,
             action: item.fixAction.map { fixAction in
                 { onFixAction(fixAction) }
             },
             onTap: action
         )
-    }
-}
-
-private extension AttentionSeverity {
-    var icon: String {
-        switch self {
-        case .error:
-            return "exclamationmark.triangle.fill"
-        case .warning:
-            return "exclamationmark.circle"
-        case .info:
-            return "doc.on.clipboard"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .error:
-            return .red
-        case .warning:
-            return .orange
-        case .info:
-            return .accentColor
-        }
     }
 }
 
@@ -662,6 +637,45 @@ struct SettingsToggleRow: View {
                     .font(AppTypography.subheadline)
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+struct PermissionActionRow: View {
+    let title: String
+    let detail: String
+    let isGranted: Bool
+    let primaryTitle: String
+    let primaryAction: () -> Void
+    let secondaryTitle: String
+    let secondaryAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(title)
+                            .font(AppTypography.body)
+                        Image(systemName: isGranted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .foregroundStyle(isGranted ? .green : .orange)
+                    }
+
+                    Text(detail)
+                        .font(AppTypography.subheadline)
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 8) {
+                    Button(primaryTitle, action: primaryAction)
+                        .buttonStyle(.bordered)
+                    Button(secondaryTitle, action: secondaryAction)
+                        .buttonStyle(.bordered)
+                }
             }
         }
     }

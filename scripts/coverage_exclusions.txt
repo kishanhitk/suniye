@@ -38,13 +38,13 @@ Suniye/Views/FloatingIndicatorView.swift              # SwiftUI render only
 Suniye/Views/IssueReportView.swift                    # SwiftUI render only
 Suniye/Views/ListeningOverlay.swift                   # SwiftUI render only
 Suniye/Views/OnboardingView.swift                     # SwiftUI render only
+Suniye/Views/WelcomeView.swift                        # SwiftUI render only
 Suniye/Views/MainWindow/MagicFormatComponents.swift   # SwiftUI render only
 Suniye/Views/MainWindow/MagicFormatPage.swift         # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowComponents.swift    # SwiftUI render only
 Suniye/Views/MainWindow/MagicFormatOffState.swift      # SwiftUI render only
 Suniye/Views/MainWindow/MagicFormatSheets.swift        # SwiftUI render only
 Suniye/Views/MainWindow/SettingsRows.swift             # SwiftUI render only
-Suniye/Views/MainWindow/PermissionRow.swift            # SwiftUI render only
 Suniye/Views/SubtleScroller.swift                      # AppKit scroller drawing
 Suniye/Views/MainWindow/TranscriptsSparkline.swift     # SwiftUI render only
 Suniye/Views/MainWindow/TranscriptsPage.swift          # SwiftUI render only

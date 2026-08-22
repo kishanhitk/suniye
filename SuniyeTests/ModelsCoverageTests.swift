@@ -28,17 +28,19 @@ final class FloatingIndicatorStateTests: XCTestCase {
 
 final class OnboardingModelsTests: XCTestCase {
     func testStepTitles() {
-        XCTAssertEqual(OnboardingStep.speak.title, "Dictate")
-        XCTAssertEqual(OnboardingStep.typeAnywhere.title, "Dictate in any app")
+        XCTAssertEqual(OnboardingStep.welcome.title, "Welcome")
+        XCTAssertEqual(OnboardingStep.speak.title, "Speak")
+        XCTAssertEqual(OnboardingStep.typeAnywhere.title, "Type Anywhere")
     }
 
     func testStepAnalyticsNames() {
+        XCTAssertEqual(OnboardingStep.welcome.analyticsName, .welcome)
         XCTAssertEqual(OnboardingStep.speak.analyticsName, .speak)
         XCTAssertEqual(OnboardingStep.typeAnywhere.analyticsName, .typeAnywhere)
     }
 
     func testProgressResumeSteps() {
-        XCTAssertEqual(OnboardingProgress.notStarted.resumeStep, .speak)
+        XCTAssertEqual(OnboardingProgress.notStarted.resumeStep, .welcome)
         XCTAssertEqual(OnboardingProgress.speakReached.resumeStep, .speak)
         XCTAssertEqual(OnboardingProgress.typeAnywhereReached.resumeStep, .typeAnywhere)
         XCTAssertNil(OnboardingProgress.finished.resumeStep)

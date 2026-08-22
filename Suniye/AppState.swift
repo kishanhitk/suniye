@@ -26,12 +26,18 @@ enum LLME2EMode {
 enum AttentionSeverity: String {
     case error
     case warning
-    case info
 }
 
 enum AttentionItemFixAction: Equatable {
     case requestMicrophonePermission
     case requestAccessibilityPermission
+
+    var title: String {
+        switch self {
+        case .requestMicrophonePermission, .requestAccessibilityPermission:
+            return "Grant Access"
+        }
+    }
 }
 
 struct AttentionItem: Identifiable, Equatable {
@@ -41,26 +47,18 @@ struct AttentionItem: Identifiable, Equatable {
     let severity: AttentionSeverity
     let recommendedSection: MainWindowSection
     let fixAction: AttentionItemFixAction?
-    /// Button label for `fixAction`; comes from the shared permission
-    /// presentation so the tile says the same thing as the row in Settings.
-    let fixTitle: String?
 
-    init(
-        id: String,
-        title: String,
-        detail: String,
-        severity: AttentionSeverity,
-        recommendedSection: MainWindowSection,
-        fixAction: AttentionItemFixAction? = nil,
-        fixTitle: String? = nil
-    ) {
+    var fixTitle: String? {
+        fixAction?.title
+    }
+
+    init(id: String, title: String, detail: String, severity: AttentionSeverity, recommendedSection: MainWindowSection, fixAction: AttentionItemFixAction? = nil) {
         self.id = id
         self.title = title
         self.detail = detail
         self.severity = severity
         self.recommendedSection = recommendedSection
         self.fixAction = fixAction
-        self.fixTitle = fixTitle
     }
 }
 
@@ -206,7 +204,7 @@ final class AppState {
             }
         }
     }
-    var statusText = "Initializing…" {
+    var statusText = "Initializing..." {
         didSet {
             if oldValue != statusText {
                 onStateChange?()
@@ -408,6 +406,20 @@ final class AppState {
             onStateChange?()
         }
     }
+    /// Kill switch for the Permiso drag-to-grant Accessibility overlay.
+    /// When false, the Accessibility buttons fall back to the System Settings deep-link.
+    var accessibilityDragHelperEnabled = true {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            guard oldValue != accessibilityDragHelperEnabled else {
+                return
+            }
+            persistGeneralSettings()
+            onStateChange?()
+        }
+    }
     var floatingIndicatorPlacement: FloatingIndicatorPlacement? {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -537,6 +549,10 @@ final class AppState {
         }
     }
 
+    /// Legacy accessors kept for read sites (diagnostics, tests).
+    var hasSeenOnboardingWelcome: Bool { onboardingProgress != .notStarted }
+    var hasCompletedCoreOnboarding: Bool { onboardingProgress.isFinished }
+
     var activeOnboardingStep: OnboardingStep? {
         didSet {
             guard oldValue != activeOnboardingStep else {
@@ -569,21 +585,15 @@ final class AppState {
     /// 1-based practice attempt counter for this onboarding run; drives the
     /// "Continue anyway" escape hatch and the practice-result analytics.
     private(set) var onboardingPracticeAttempts = 0
-    /// User-facing reason the model download preflight refused to start (disk space).
+    /// User-facing reason the Get Started preflight refused to start (disk space).
     var onboardingDiskSpaceMessage: String?
-    /// The Permiso overlay ended (backed out or timed out) with no grant — the
-    /// Accessibility row offers the Settings route instead of going quiet.
-    private(set) var accessibilityAssistEndedWithoutGrant = false
-    /// The app is already in the Accessibility list with its switch off: a
-    /// stale grant after an app update, or the system prompt was shown before.
-    /// Derived from the persisted signals so the row shows toggle-on copy from
-    /// the first frame, not only after the button routes to Settings.
-    var accessibilityListedButOff: Bool {
-        !hasAccessibilityPermission && (lastKnownAccessibilityGranted || accessibilityPromptShown)
-    }
-    /// The Accessibility screen's "Try it in Notes" landed a real insertion
-    /// into Notes during this onboarding run.
-    private(set) var onboardingInsertionDemoCompleted = false
+    /// The Permiso overlay timed out with no grant — surface a visible hint
+    /// instead of the old silent disappearance.
+    private(set) var accessibilityAssistTimedOut = false
+    /// macOS reset a previously-working Accessibility grant (app update / TCC
+    /// reset). The drag overlay would mislead ("drag Suniye in" while it is
+    /// already listed), so the UI shows toggle-off-and-on copy instead.
+    private(set) var accessibilityGrantLikelyStale = false
 
     /// Per-run dedupe of onboarding_step emissions (relaunch resume re-fires
     /// once per run with resumed=true; navigation within a run fires once per step).
@@ -593,16 +603,6 @@ final class AppState {
     @ObservationIgnored private var hasTrackedMagicFormatNudgeShown = false
     @ObservationIgnored private var firstLaunchRecorded = false
     @ObservationIgnored private var lastKnownAccessibilityGranted = false
-    private var accessibilityPromptShown = false
-    private var accessibilityDeferred = false {
-        didSet {
-            guard !isHydratingGeneralSettings, oldValue != accessibilityDeferred else {
-                return
-            }
-            persistGeneralSettings()
-            onStateChange?()
-        }
-    }
     private var magicFormatNudgeDismissed = false {
         didSet {
             guard !isHydratingGeneralSettings, oldValue != magicFormatNudgeDismissed else {
@@ -618,23 +618,6 @@ final class AppState {
     /// prompt can never re-appear, so Enable buttons must become Open Settings.
     var hasMicPermissionBeenDenied = false
     var hasAccessibilityPermission = false
-
-    var microphonePresentation: PermissionPresentation {
-        .microphone(
-            appName: AppIdentity.current.displayName,
-            granted: hasMicPermission,
-            denied: hasMicPermissionBeenDenied
-        )
-    }
-
-    var accessibilityPresentation: PermissionPresentation {
-        .accessibility(
-            appName: AppIdentity.current.displayName,
-            granted: hasAccessibilityPermission,
-            listedButOff: accessibilityListedButOff,
-            assistEndedWithoutGrant: accessibilityAssistEndedWithoutGrant
-        )
-    }
 
     var issueReportType: IssueReportType = .other
     var issueReportTitle = ""
@@ -994,7 +977,7 @@ final class AppState {
         case let .downloading(progress):
             return "\(progress.percentageText) downloaded • \(progress.downloadedSizeText) of \(progress.expectedSizeText)"
         case .verifying:
-            return "Verifying local model…"
+            return "Verifying local model..."
         case let .installed(byteCount):
             if localGemmaMagicFormatAvailability.isAvailable {
                 return "Local model ready."
@@ -1497,6 +1480,15 @@ final class AppState {
             .first
     }
 
+    var onboardingPracticeLevels: [Float] {
+        switch floatingIndicatorState {
+        case let .listening(levels, _, _):
+            return levels
+        default:
+            return Self.defaultIndicatorLevels(level: 0.08)
+        }
+    }
+
     var isOnboardingPracticeRecording: Bool {
         activeOnboardingStep == .speak && phase == .recording
     }
@@ -1568,45 +1560,29 @@ final class AppState {
             )
         }
 
-        let microphone = microphonePresentation
-        if !microphone.isGranted {
+        if !hasMicPermission {
             items.append(
                 AttentionItem(
                     id: "mic-permission-missing",
-                    title: "Microphone access needed",
-                    detail: microphone.detail ?? microphone.purpose,
+                    title: "Microphone permission missing",
+                    detail: "Grant microphone access so audio can be captured.",
                     severity: .warning,
                     recommendedSection: .general,
-                    fixAction: .requestMicrophonePermission,
-                    fixTitle: microphone.primary?.label
+                    fixAction: .requestMicrophonePermission
                 )
             )
         }
 
-        let accessibility = accessibilityPresentation
-        if !accessibility.isGranted {
-            // The "Later" cohort chose clipboard mode a moment ago; explain it
-            // instead of re-asking in the same breath.
+        if !hasAccessibilityPermission {
             items.append(
-                accessibilityDeferred
-                    ? AttentionItem(
-                        id: "accessibility-deferred",
-                        title: "Clipboard mode",
-                        detail: "Dictations are copied to the clipboard. Allow Accessibility to type them directly.",
-                        severity: .info,
-                        recommendedSection: .general,
-                        fixAction: .requestAccessibilityPermission,
-                        fixTitle: accessibility.primary?.label
-                    )
-                    : AttentionItem(
-                        id: "accessibility-permission-missing",
-                        title: "Accessibility access needed",
-                        detail: accessibility.detail ?? accessibility.purpose,
-                        severity: .warning,
-                        recommendedSection: .general,
-                        fixAction: .requestAccessibilityPermission,
-                        fixTitle: accessibility.primary?.label
-                    )
+                AttentionItem(
+                    id: "accessibility-permission-missing",
+                    title: "Accessibility permission missing",
+                    detail: "Grant accessibility access so transcribed text can be inserted.",
+                    severity: .warning,
+                    recommendedSection: .general,
+                    fixAction: .requestAccessibilityPermission
+                )
             )
         }
 
@@ -1986,11 +1962,6 @@ final class AppState {
         if startServices {
             analytics.start()
             emitAppLaunchEvent()
-        }
-        // After app_launch so the funnel's first onboarding_step never precedes
-        // it; before bootstrap so the first frame is the onboarding screen.
-        resumeOnboardingStepIfNeeded()
-        if startServices {
             wireHotkey()
             Task {
                 await bootstrap()
@@ -2047,14 +2018,14 @@ final class AppState {
         if floatingIndicatorEnabled {
             floatingIndicatorController.start()
         }
-        statusText = "Checking permissions…"
+        statusText = "Checking permissions..."
         await refreshPermissions()
 
-        statusText = "Checking model…"
+        statusText = "Checking model..."
         let bootstrapCandidates = orderedInstalledASRModelIDs()
         if !bootstrapCandidates.isEmpty {
             phase = .loading
-            statusText = "Loading model…"
+            statusText = "Loading model..."
             do {
                 let bootstrapModelID = try await loadFirstAvailableASRModel(from: bootstrapCandidates)
                 if bootstrapModelID != selectedASRModelID {
@@ -2081,19 +2052,11 @@ final class AppState {
 
     // MARK: - Onboarding state machine
 
-    /// Puts the persisted onboarding position on screen. Runs synchronously at
-    /// construction so the first frame is onboarding, not a dashboard that gets
-    /// swapped out once the model has loaded. Steps re-shown by resume carry
-    /// `resumed=true` in analytics.
-    private func resumeOnboardingStepIfNeeded() {
+    /// Resumes onboarding at the persisted position (or dismisses it once
+    /// finished). Steps re-shown by resume carry `resumed=true` in analytics.
+    func startOnboardingIfNeeded() {
         guard let step = onboardingProgress.resumeStep else {
             activeOnboardingStep = nil
-            return
-        }
-        // Init and bootstrap both call this; a second pass must not re-arm the
-        // resumed flag for a step that is already on screen, or the next
-        // navigation would be reported as a resume.
-        guard activeOnboardingStep != step else {
             return
         }
         if onboardingProgress != .notStarted {
@@ -2103,16 +2066,42 @@ final class AppState {
             onboardingStartedAt = nowProvider()
         }
         activeOnboardingStep = step
+        if step == .welcome {
+            startOnboardingModelDownloadIfNeeded()
+        }
     }
 
-    /// Resume position plus the background ASR download the flow depends on.
-    /// Called once bootstrap knows whether a model is installed; the download
-    /// restarts on every unfinished step, so quitting mid-download and
-    /// relaunching never strands the Dictate screen without a model.
-    func startOnboardingIfNeeded() {
-        resumeOnboardingStepIfNeeded()
-        if activeOnboardingStep != nil {
-            startOnboardingModelDownloadIfNeeded()
+    /// Single forward transition used by the onboarding UI.
+    func advanceOnboarding() async {
+        switch activeOnboardingStep {
+        case .welcome:
+            await beginOnboardingSetup()
+        case .speak:
+            advanceOnboardingFromSpeak()
+        case .typeAnywhere:
+            finishOnboarding()
+        case nil:
+            startOnboardingIfNeeded()
+        }
+    }
+
+    /// "Get Started": persists progress and starts the required ASR model
+    /// download if Welcome did not already start it. Download time overlaps the
+    /// mic grant and the first dictation instead of blocking on its own screen.
+    func beginOnboardingSetup() async {
+        guard activeOnboardingStep == .welcome else {
+            return
+        }
+        onboardingDiskSpaceMessage = nil
+        if !isModelInstalled, let message = await modelDownloadDiskSpaceMessage() {
+            onboardingDiskSpaceMessage = message
+            onStateChange?()
+            return
+        }
+        setOnboardingProgress(.speakReached)
+        activeOnboardingStep = .speak
+        if !isModelInstalled, activeASRModelOperationID == nil {
+            startModelDownload()
         }
     }
 
@@ -2120,7 +2109,6 @@ final class AppState {
         guard !isModelInstalled, activeASRModelOperationID == nil else {
             return
         }
-        onboardingDiskSpaceMessage = nil
         Task { @MainActor [weak self] in
             guard let self, !isModelInstalled, activeASRModelOperationID == nil else {
                 return
@@ -2134,16 +2122,6 @@ final class AppState {
         }
     }
 
-    /// Retry after a disk-space refusal or a failed download.
-    func retryOnboardingModelDownload() {
-        onboardingDiskSpaceMessage = nil
-        if phase == .error {
-            startModelDownload()
-            return
-        }
-        startOnboardingModelDownloadIfNeeded()
-    }
-
     func advanceOnboardingFromSpeak() {
         guard activeOnboardingStep == .speak else {
             return
@@ -2152,16 +2130,14 @@ final class AppState {
         activeOnboardingStep = .typeAnywhere
     }
 
-    /// Terminal transition (Finish, or "Later — use ⌘V" on the Accessibility
-    /// screen, which records the deferral so the dashboard explains clipboard
-    /// mode instead of re-asking). This is where completion is persisted and the
+    /// Terminal transition (Finish, or the "Later — I'll paste with ⌘V" skip on
+    /// the Accessibility screen). This is where completion is persisted and the
     /// `completed` + `onboarding_outcome` events fire — after the flow actually
     /// ends, not before the practice step as the old wizard did.
-    func finishOnboarding(deferringAccessibility: Bool = false) {
+    func finishOnboarding() {
         guard activeOnboardingStep != nil else {
             return
         }
-        accessibilityDeferred = deferringAccessibility && !hasAccessibilityPermission
         let durationMs = onboardingStartedAt.map { Int(nowProvider().timeIntervalSince($0) * 1000) }
         analytics.track(.onboardingStep(step: .completed, granted: nil, resumed: nil))
         analytics.track(.onboardingOutcome(
@@ -2174,7 +2150,6 @@ final class AppState {
         setOnboardingProgress(.finished)
         onboardingPracticeText = ""
         onboardingPracticeResult = nil
-        onboardingInsertionDemoCompleted = false
         onboardingStartedAt = nil
         activeOnboardingStep = nil
     }
@@ -2244,12 +2219,6 @@ final class AppState {
         if promptAccessibility {
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             hasAccessibilityPermission = AXIsProcessTrustedWithOptions(options)
-            // The prompt lists the app (switched off) even when declined; from
-            // now on the drag helper would point at a row that already exists.
-            if !hasAccessibilityPermission, !accessibilityPromptShown {
-                accessibilityPromptShown = true
-                persistGeneralSettings()
-            }
         } else {
             hasAccessibilityPermission = accessibilityTrustProvider()
         }
@@ -2283,8 +2252,8 @@ final class AppState {
     /// never-granted state — the two need different recovery UI.
     private func updateLastKnownAccessibilityGranted() {
         if hasAccessibilityPermission {
-            accessibilityAssistEndedWithoutGrant = false
-            accessibilityDeferred = false
+            accessibilityGrantLikelyStale = false
+            accessibilityAssistTimedOut = false
             if !lastKnownAccessibilityGranted {
                 lastKnownAccessibilityGranted = true
                 persistGeneralSettings()
@@ -2292,16 +2261,24 @@ final class AppState {
         }
     }
 
-    /// Entry point for every "Allow Access" button that asks for Accessibility.
-    /// Presents the Permiso drag overlay and auto-advances once the user drags
-    /// the app into the Accessibility list. When the app is already in that
-    /// list (a stale grant after an update, or the system prompt was shown
-    /// before) the drag instruction would mislead, so it deep-links with
-    /// toggle-on copy instead.
-    func beginAccessibilityOnboarding(askSurface: PermissionAskSurface) {
-        accessibilityAssistEndedWithoutGrant = false
+    /// Entry point for the Accessibility "Enable" / "Request Access" buttons.
+    /// When the drag helper is enabled, presents the Permiso overlay and auto-advances
+    /// once the user drags Suniye into the Accessibility list; otherwise falls back to the
+    /// plain System Settings deep-link.
+    func beginAccessibilityOnboarding(askSurface: PermissionAskSurface = .onboarding) {
+        accessibilityAssistTimedOut = false
 
-        if accessibilityListedButOff {
+        // Stale TCC entry (post-update): Suniye is already in the Accessibility
+        // list, just untrusted. The drag overlay's "drag Suniye into the list"
+        // instruction would mislead; deep-link with toggle-off-and-on copy instead.
+        if lastKnownAccessibilityGranted, !hasAccessibilityPermission {
+            accessibilityGrantLikelyStale = true
+            onStateChange?()
+            openAccessibilityPrivacySettings()
+            return
+        }
+
+        guard accessibilityDragHelperEnabled else {
             openAccessibilityPrivacySettings()
             return
         }
@@ -2327,11 +2304,9 @@ final class AppState {
                 case .granted:
                     self.analytics.track(.permissionRequest(kind: .accessibility, surface: askSurface, outcome: .granted))
                 case .dismissed:
-                    self.accessibilityAssistEndedWithoutGrant = true
-                    self.onStateChange?()
                     self.analytics.track(.permissionRequest(kind: .accessibility, surface: askSurface, outcome: .overlayDismissed))
                 case .timedOut:
-                    self.accessibilityAssistEndedWithoutGrant = true
+                    self.accessibilityAssistTimedOut = true
                     self.onStateChange?()
                     self.analytics.track(.permissionRequest(kind: .accessibility, surface: askSurface, outcome: .overlayTimeout))
                 }
@@ -2358,31 +2333,6 @@ final class AppState {
         case .requestAccessibilityPermission:
             beginAccessibilityOnboarding(askSurface: .dashboard)
         }
-    }
-
-    /// One dispatcher for the shared permission row, so every surface's
-    /// buttons do the same thing for the same state.
-    func performPermissionAction(
-        _ action: PermissionPresentation.Action,
-        for kind: PermissionPresentation.Kind,
-        askSurface: PermissionAskSurface
-    ) {
-        switch (kind, action) {
-        case (.microphone, .allow):
-            requestMicrophonePermission(askSurface: askSurface)
-        case (.microphone, .openSettings):
-            openMicrophonePrivacySettings()
-        case (.accessibility, .allow):
-            beginAccessibilityOnboarding(askSurface: askSurface)
-        case (.accessibility, .openSettings):
-            openAccessibilityPrivacySettings()
-        }
-    }
-
-    /// Escape on the onboarding window closes the drag overlay; its own back
-    /// control is tiny and the panel can never take keyboard focus.
-    func dismissAccessibilityAssist() {
-        accessibilityOnboarding.dismiss()
     }
 
     func refreshPermissionStatus() {
@@ -3089,7 +3039,7 @@ final class AppState {
         let hadLoadedModel = loadedASRModelID != nil
         activeASRModelOperationID = modelID
         phase = .loading
-        statusText = "Loading model…"
+        statusText = "Loading model..."
         lastError = nil
         lastFailedASRModelID = nil
         lastFailedASRModelError = nil
@@ -3102,7 +3052,7 @@ final class AppState {
                 let assetInstalled = await modelManager.isSystemManagedAssetInstalled(modelID)
                 if !assetInstalled {
                     phase = .downloadingModel
-                    statusText = "Downloading model…"
+                    statusText = "Downloading model..."
                     downloadProgress = 0
                     modelDownloadStartedAt = nowProvider()
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .started)
@@ -3117,7 +3067,7 @@ final class AppState {
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
                     modelDownloadStartedAt = nil
                     phase = .loading
-                    statusText = "Loading model…"
+                    statusText = "Loading model..."
                 }
 
                 try await loadRecognizer(for: modelID)
@@ -3170,7 +3120,7 @@ final class AppState {
         let hadLoadedModel = loadedASRModelID != nil
         activeASRModelOperationID = modelID
         phase = .downloadingModel
-        statusText = "Downloading model…"
+        statusText = "Downloading model..."
         lastError = nil
         lastFailedASRModelID = nil
         lastFailedASRModelError = nil
@@ -3190,7 +3140,7 @@ final class AppState {
                     }
                 }
 
-                setPhaseUnlessCapturing(.loading, statusText: "Validating model…")
+                setPhaseUnlessCapturing(.loading, statusText: "Validating model...")
 
                 guard modelManager.isInstalled(modelID) else {
                     throw AppStateError.modelValidationFailed
@@ -3321,7 +3271,7 @@ final class AppState {
         activeASRModelOperationID = modelID
         analytics.track(.modelChanged(kind: .asr, model: SafeLabel(modelID.rawValue)))
         phase = .loading
-        statusText = "Loading model…"
+        statusText = "Loading model..."
         lastError = nil
         lastFailedASRModelID = nil
         lastFailedASRModelError = nil
@@ -3369,7 +3319,7 @@ final class AppState {
                 let fallbackCandidates = orderedInstalledASRModelIDs(excluding: Set([modelID]))
                 if isCurrentModel, !fallbackCandidates.isEmpty {
                     phase = .loading
-                    statusText = "Loading model…"
+                    statusText = "Loading model..."
                     do {
                         let fallbackModelID = try await loadFirstAvailableASRModel(from: fallbackCandidates)
                         selectedASRModelID = fallbackModelID
@@ -3442,24 +3392,12 @@ final class AppState {
     /// real app is the product's actual value, and the old preview-only practice
     /// never demonstrated it.
     func openNotesForInsertionDemo() {
-        guard let notesURL = notesAppURL else {
+        guard let notesURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Notes") else {
             AppLogger.shared.log(.warning, "notes demo: Notes.app not found")
             return
         }
         _ = fileOpener(notesURL)
     }
-
-    /// The demo button only exists when there is a Notes.app to open.
-    var canOpenNotesForInsertionDemo: Bool {
-        notesAppURL != nil
-    }
-
-    private static let notesBundleID = "com.apple.Notes"
-
-    /// Resolved once: the LaunchServices lookup is synchronous and the view
-    /// reads this on every body evaluation.
-    @ObservationIgnored private lazy var notesAppURL: URL? =
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.notesBundleID)
 
     func openIssueReportWindow() {
         prepareIssueReportWindowPresentation()
@@ -3982,6 +3920,11 @@ final class AppState {
         if phase == .error, canRetryRecordingAfterError {
             clearRetryableRecordingError()
         }
+        if isOnboardingBlockingRecordingStart {
+            AppLogger.shared.log(.debug, "start recording ignored on the onboarding welcome screen")
+            showTransientIndicatorError("Finish setup first", restoreState: .idle, duration: 1.2)
+            return
+        }
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "start recording ignored in phase=\(phase.rawValue)")
             analytics.track(.dictationBlocked(reason: .wrongPhase))
@@ -4125,7 +4068,7 @@ final class AppState {
         stopLivePreview()
         activeDictationSession = .transcribing(context)
         phase = .transcribing
-        statusText = "Transcribing…"
+        statusText = "Transcribing..."
         setFloatingIndicatorState(Self.transcribingIndicatorState)
 
         let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
@@ -4285,11 +4228,7 @@ final class AppState {
                     // service retries for around a second while a focused
                     // element hydrates, so anything captured earlier can name
                     // the app the user has since left.
-                    let insertionTargetBundleID = frontmostAppBundleIDProvider() ?? frontmostAppBundleID
-                    attributeStoredResult(result.id, to: insertionTargetBundleID)
-                    if activeOnboardingStep == .typeAnywhere, insertionTargetBundleID == Self.notesBundleID {
-                        onboardingInsertionDemoCompleted = true
-                    }
+                    attributeStoredResult(result.id, to: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
                     dictationTiming.inserted = .now()
                     beginEditLearningTracking(insertedText: insertionText)
                     AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
@@ -4514,8 +4453,8 @@ final class AppState {
             return
         }
 
-        statusText = "Rewriting…"
-        setFloatingIndicatorState(.processing(message: "Rewriting…"))
+        statusText = "Rewriting..."
+        setFloatingIndicatorState(.processing(message: "Rewriting..."))
 
         do {
             let rewritten = try await magicFormatCoordinator.rewrite(
@@ -4747,6 +4686,7 @@ final class AppState {
         floatingIndicatorPlacement = settings.floatingIndicatorPlacement
         selectedASRModelID = settings.selectedASRModelID
         updateChannel = settings.updateChannel
+        accessibilityDragHelperEnabled = settings.accessibilityDragHelperEnabled
         shareAnalyticsEnabled = settings.shareAnalyticsEnabled
         let legacyUserHasUsage = legacyUserShowsUsage(settings: settings)
         let needsFirstLaunchMigration = settings.onboardingProgress == nil
@@ -4755,8 +4695,6 @@ final class AppState {
                 || legacyUserHasUsage)
         firstLaunchRecorded = settings.firstLaunchRecorded || needsFirstLaunchMigration
         lastKnownAccessibilityGranted = settings.lastKnownAccessibilityGranted
-        accessibilityPromptShown = settings.accessibilityPromptShown
-        accessibilityDeferred = settings.accessibilityDeferred
         magicFormatNudgeDismissed = settings.magicFormatNudgeDismissed
         localGemmaDownloadCancelled = settings.localGemmaDownloadCancelled
 
@@ -4802,15 +4740,18 @@ final class AppState {
             hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,
             liveTranscriptionPreviewEnabled: liveTranscriptionPreviewEnabled,
             floatingIndicatorPlacement: floatingIndicatorPlacement,
+            // Legacy Bools still written (derived) so a downgraded build keeps
+            // working; `onboardingProgress` wins on load in this build.
+            hasSeenOnboardingWelcome: hasSeenOnboardingWelcome,
+            hasCompletedCoreOnboarding: hasCompletedCoreOnboarding,
             onboardingProgress: onboardingProgress,
             firstLaunchRecorded: firstLaunchRecorded,
             lastKnownAccessibilityGranted: lastKnownAccessibilityGranted,
-            accessibilityPromptShown: accessibilityPromptShown,
-            accessibilityDeferred: accessibilityDeferred,
             magicFormatNudgeDismissed: magicFormatNudgeDismissed,
             localGemmaDownloadCancelled: localGemmaDownloadCancelled,
             selectedASRModelID: selectedASRModelID,
             updateChannel: updateChannel,
+            accessibilityDragHelperEnabled: accessibilityDragHelperEnabled,
             shareAnalyticsEnabled: shareAnalyticsEnabled
         )
     }
@@ -5152,7 +5093,7 @@ final class AppState {
             )
         case .transcribing:
             // Preserve whatever processing stage the pill has advanced to
-            // ("Starting local model…", "Polishing…"); the phase stays
+            // ("Starting local model...", "Polishing..."); the phase stays
             // .transcribing through the whole post-stop pipeline.
             if case .processing = floatingIndicatorState {
                 return floatingIndicatorState
@@ -5258,6 +5199,13 @@ final class AppState {
         }
     }
 
+    /// Derived rule, not an enumerated step list: only the welcome screen blocks
+    /// the hotkey. The Speak screen hosts the practice dictation and the
+    /// Accessibility screen allows real dictation (e.g. the Notes demo).
+    private var isOnboardingBlockingRecordingStart: Bool {
+        activeOnboardingStep == .welcome
+    }
+
     private var modelDownloadETAText: String? {
         guard let startedAt = modelDownloadStartedAt,
               downloadProgress > 0.01 else {
@@ -5302,7 +5250,7 @@ final class AppState {
 
     /// Single source for the pill's transcribing state so the transcribe transition
     /// and the blocked-start restore path can never render it differently.
-    private static let transcribingIndicatorState: FloatingIndicatorState = .processing(message: "Transcribing…")
+    private static let transcribingIndicatorState: FloatingIndicatorState = .processing(message: "Transcribing...")
 
     /// Long dictations on a chunked engine (Cohere) take seconds per chunk, so
     /// the pill counts chunks instead of sitting on a bare spinner.
@@ -5312,7 +5260,7 @@ final class AppState {
               activeDictationSession?.context.id == sessionID else {
             return
         }
-        let message = "Transcribing \(progress.chunk) of \(progress.totalChunks)…"
+        let message = "Transcribing \(progress.chunk) of \(progress.totalChunks)..."
         statusText = message
         setFloatingIndicatorState(.processing(message: message))
     }

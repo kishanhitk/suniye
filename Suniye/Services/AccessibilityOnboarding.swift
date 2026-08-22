@@ -32,7 +32,7 @@ protocol AccessibilityOnboardingPresenting: AnyObject {
 /// grant. This wrapper owns that missing piece: a lightweight poller on `AXIsProcessTrusted()`
 /// that auto-dismisses the overlay, refocuses the app, and fires `onGranted` the moment the
 /// user drags Suniye into the Accessibility list. A safety timeout guards against a leaked timer
-/// if the user wanders off, and is short enough that a stuck user sees the Settings route soon.
+/// if the user wanders off.
 ///
 /// The overlay's own back chevron dismisses `PermisoAssistant` directly. The wrapper
 /// observes that window close so it can stop polling and report `.dismissed` at once.
@@ -57,7 +57,7 @@ final class PermisoAccessibilityOnboarding: AccessibilityOnboardingPresenting {
     init(
         isTrusted: @escaping () -> Bool = { AXIsProcessTrusted() },
         pollInterval: TimeInterval = 0.5,
-        safetyTimeout: TimeInterval = 60,
+        safetyTimeout: TimeInterval = 300,
         nowProvider: @escaping () -> Date = Date.init,
         presentOverlay: @escaping @MainActor () -> Void = { PermisoAssistant.shared.present(panel: .accessibility) },
         dismissOverlay: @escaping @MainActor () -> Void = { PermisoAssistant.shared.dismiss() },

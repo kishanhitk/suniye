@@ -221,7 +221,7 @@ final class AppStateLLMTests: XCTestCase {
 
         _ = await appState.postProcessTextIfEnabled("raw text")
 
-        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Starting local model…"))
+        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Starting local model..."))
     }
 
     func testWarmLocalGemmaRequestShowsPolishingIndicator() async {
@@ -242,8 +242,8 @@ final class AppStateLLMTests: XCTestCase {
 
         _ = await appState.postProcessTextIfEnabled("raw text")
 
-        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Polishing…"))
-        XCTAssertEqual(appState.statusText, "Polishing…")
+        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Polishing..."))
+        XCTAssertEqual(appState.statusText, "Polishing...")
     }
 
     func testPrewarmEligibleForLocalGemmaTriggersPrewarm() async {
@@ -874,7 +874,7 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(output, "polished")
         // Fast success cancels the slow warning; the pill settles on the polishing
         // stage label (no "taking longer than usual" upgrade).
-        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Polishing…"))
+        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Polishing..."))
     }
 
     func testTestMagicFormatSetupTracksProgressAndSuccessResult() async {

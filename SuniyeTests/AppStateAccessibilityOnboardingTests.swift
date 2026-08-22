@@ -14,7 +14,7 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
         }
     }
 
-    func testNeverListedPresentsOverlayAndDoesNotDeepLink() {
+    func testDragHelperEnabledPresentsOverlayAndDoesNotDeepLink() {
         let onboarding = SpyAccessibilityOnboarding()
         var openedURLs: [URL] = []
         let appState = makeTestAppState(
@@ -24,41 +24,29 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
             },
             accessibilityOnboarding: onboarding
         )
+        appState.accessibilityDragHelperEnabled = true
 
-        appState.beginAccessibilityOnboarding(askSurface: .onboarding)
+        appState.beginAccessibilityOnboarding()
 
         XCTAssertEqual(onboarding.presentCallCount, 1)
         XCTAssertTrue(openedURLs.isEmpty, "Should not deep-link to System Settings when the overlay is used")
-        XCTAssertEqual(appState.accessibilityPresentation.primary, .allow)
-        XCTAssertNil(appState.accessibilityPresentation.secondary)
     }
 
-    func testSystemPromptShownBeforeSkipsOverlayAndDeepLinks() {
-        // The system prompt (hotkey held without access) lists the app in the
-        // Accessibility pane switched off; "drag it into the list" would then
-        // point at a row that already exists.
+    func testDragHelperDisabledFallsBackToDeepLink() {
         let onboarding = SpyAccessibilityOnboarding()
         var openedURLs: [URL] = []
         let appState = makeTestAppState(
-            generalSettingsStore: TestGeneralSettingsStore(
-                value: GeneralSettings(accessibilityPromptShown: true)
-            ),
             fileOpener: { url in
                 openedURLs.append(url)
                 return true
             },
             accessibilityOnboarding: onboarding
         )
-        appState.hasAccessibilityPermission = false
+        appState.accessibilityDragHelperEnabled = false
 
-        // Derived from the persisted signal: the row already says Open Settings
-        // before anything is clicked, so copy and route agree from frame one.
-        XCTAssertTrue(appState.accessibilityListedButOff)
-        XCTAssertEqual(appState.accessibilityPresentation.primary, .openSettings)
+        appState.beginAccessibilityOnboarding()
 
-        appState.beginAccessibilityOnboarding(askSurface: .onboarding)
-
-        XCTAssertEqual(onboarding.presentCallCount, 0, "Overlay must not be presented for an already-listed app")
+        XCTAssertEqual(onboarding.presentCallCount, 0, "Overlay must not be presented when the kill switch is off")
         XCTAssertEqual(openedURLs.count, 1)
         XCTAssertTrue(
             openedURLs.first?.absoluteString.contains("Privacy_Accessibility") == true,
@@ -71,40 +59,18 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
         // and settings buttons; it must use the drag overlay, not the native prompt.
         let onboarding = SpyAccessibilityOnboarding()
         let appState = makeTestAppState(accessibilityOnboarding: onboarding)
+        appState.accessibilityDragHelperEnabled = true
 
         appState.handleAttentionFixAction(.requestAccessibilityPermission)
 
         XCTAssertEqual(onboarding.presentCallCount, 1)
     }
 
-    func testPermissionActionDispatchesPerKind() {
-        let onboarding = SpyAccessibilityOnboarding()
-        var openedURLs: [URL] = []
-        let appState = makeTestAppState(
-            fileOpener: { url in
-                openedURLs.append(url)
-                return true
-            },
-            accessibilityOnboarding: onboarding
-        )
-
-        appState.performPermissionAction(.allow, for: .accessibility, askSurface: .settings)
-        XCTAssertEqual(onboarding.presentCallCount, 1)
-
-        appState.performPermissionAction(.openSettings, for: .accessibility, askSurface: .settings)
-        XCTAssertTrue(openedURLs.last?.absoluteString.contains("Privacy_Accessibility") == true)
-
-        appState.performPermissionAction(.openSettings, for: .microphone, askSurface: .settings)
-        XCTAssertTrue(openedURLs.last?.absoluteString.contains("Privacy_Microphone") == true)
-
-        appState.dismissAccessibilityAssist()
-        XCTAssertFalse(onboarding.isPresenting)
-    }
-
     func testGrantCallbackMarksAccessibilityGrantedAndTracksOutcome() {
         let spy = SpyAnalytics()
         let onboarding = SpyAccessibilityOnboarding()
         let appState = makeTestAppState(analytics: spy, accessibilityOnboarding: onboarding)
+        appState.accessibilityDragHelperEnabled = true
         appState.hasAccessibilityPermission = false
 
         appState.beginAccessibilityOnboarding(askSurface: .onboarding)
@@ -124,38 +90,36 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
         let spy = SpyAnalytics()
         let onboarding = SpyAccessibilityOnboarding()
         let appState = makeTestAppState(analytics: spy, accessibilityOnboarding: onboarding)
+        appState.accessibilityDragHelperEnabled = true
 
-        appState.beginAccessibilityOnboarding(askSurface: .onboarding)
+        appState.beginAccessibilityOnboarding()
         onboarding.simulateUserDismiss()
 
         XCTAssertEqual(permissionRequests(spy).last?.outcome, .overlayDismissed)
         XCTAssertFalse(onboarding.isPresenting)
-        // Backing out must change the row, not leave the drag copy in place.
-        XCTAssertTrue(appState.accessibilityAssistEndedWithoutGrant)
-        XCTAssertEqual(appState.accessibilityPresentation.secondary, .openSettings)
 
         // The old latch bug: after backing out, Enable silently no-opped for up
         // to 300s. Re-pressing must re-present immediately.
-        appState.beginAccessibilityOnboarding(askSurface: .onboarding)
+        appState.beginAccessibilityOnboarding()
         XCTAssertEqual(onboarding.presentCallCount, 2)
         XCTAssertTrue(onboarding.isPresenting)
-        XCTAssertFalse(appState.accessibilityAssistEndedWithoutGrant)
     }
 
     func testTimeoutSurfacesVisibleHintAndTracksOutcome() {
         let spy = SpyAnalytics()
         let onboarding = SpyAccessibilityOnboarding()
         let appState = makeTestAppState(analytics: spy, accessibilityOnboarding: onboarding)
+        appState.accessibilityDragHelperEnabled = true
 
-        appState.beginAccessibilityOnboarding(askSurface: .onboarding)
+        appState.beginAccessibilityOnboarding()
         onboarding.simulateTimeout()
 
-        XCTAssertTrue(appState.accessibilityAssistEndedWithoutGrant, "the silent disappearance must become a visible hint")
+        XCTAssertTrue(appState.accessibilityAssistTimedOut, "the silent 300s disappearance must become a visible hint")
         XCTAssertEqual(permissionRequests(spy).last?.outcome, .overlayTimeout)
 
         // Retrying clears the hint.
-        appState.beginAccessibilityOnboarding(askSurface: .onboarding)
-        XCTAssertFalse(appState.accessibilityAssistEndedWithoutGrant)
+        appState.beginAccessibilityOnboarding()
+        XCTAssertFalse(appState.accessibilityAssistTimedOut)
     }
 
     func testStaleTCCGrantSkipsOverlayAndDeepLinks() async {
@@ -174,12 +138,12 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
             },
             accessibilityOnboarding: onboarding
         )
-        appState.hasAccessibilityPermission = false
-        XCTAssertTrue(appState.accessibilityListedButOff)
+        appState.accessibilityDragHelperEnabled = true
 
-        appState.beginAccessibilityOnboarding(askSurface: .onboarding)
+        appState.beginAccessibilityOnboarding()
 
         XCTAssertEqual(onboarding.presentCallCount, 0, "stale grants must not present the drag overlay")
+        XCTAssertTrue(appState.accessibilityGrantLikelyStale)
         XCTAssertTrue(openedURLs.first?.absoluteString.contains("Privacy_Accessibility") == true)
     }
 
@@ -187,12 +151,12 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
         let store = TestGeneralSettingsStore()
         let onboarding = SpyAccessibilityOnboarding()
         let appState = makeTestAppState(generalSettingsStore: store, accessibilityOnboarding: onboarding)
+        appState.accessibilityDragHelperEnabled = true
 
-        appState.beginAccessibilityOnboarding(askSurface: .onboarding)
+        appState.beginAccessibilityOnboarding()
         onboarding.simulateGrant()
 
         XCTAssertEqual(store.latest.lastKnownAccessibilityGranted, true)
-        XCTAssertTrue(appState.accessibilityPresentation.isGranted)
     }
 
     func testPermisoBackDismissesWrapperImmediately() async {
