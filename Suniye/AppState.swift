@@ -5309,7 +5309,7 @@ final class AppState {
               activeDictationSession?.context.id == sessionID else {
             return
         }
-        let message = "Transcribing \(progress.chunk) of \(progress.totalChunks)..."
+        let message = "Transcribing \(progress.chunk) of \(progress.totalChunks)…"
         statusText = message
         setFloatingIndicatorState(.processing(message: message))
     }
