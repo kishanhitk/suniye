@@ -26,12 +26,14 @@ final class AppStateCoverageRecordingTests: XCTestCase {
     private func readyAppState(
         audioCapture: StubAudioCaptureService = StubAudioCaptureService(),
         transcriptionService: StubTranscriptionService = StubTranscriptionService(),
-        textInsertionService: SpyTextInsertionService = SpyTextInsertionService()
+        textInsertionService: SpyTextInsertionService = SpyTextInsertionService(),
+        frontmostAppBundleID: String? = nil
     ) -> AppState {
         let appState = makeTestAppState(
             transcriptionService: transcriptionService,
             audioCaptureService: audioCapture,
-            textInsertionService: textInsertionService
+            textInsertionService: textInsertionService,
+            frontmostAppBundleIDProvider: { frontmostAppBundleID }
         )
         appState.phase = .ready
         appState.hasMicPermission = true
@@ -229,9 +231,7 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         )
     }
 
-    func testInsertionOnAccessibilityScreenCompletesTheNotesDemo() async {
-        // The "Try it in Notes" row flips to done on the first real insertion
-        // while the Accessibility screen is up, and resets when onboarding ends.
+    private func runInsertionOnAccessibilityScreen(frontmostAppBundleID: String) async -> AppState {
         let audioCapture = StubAudioCaptureService()
         audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcription = StubTranscriptionService()
@@ -240,7 +240,8 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         let appState = readyAppState(
             audioCapture: audioCapture,
             transcriptionService: transcription,
-            textInsertionService: insertion
+            textInsertionService: insertion,
+            frontmostAppBundleID: frontmostAppBundleID
         )
         appState.activeOnboardingStep = .typeAnywhere
         XCTAssertFalse(appState.onboardingInsertionDemoCompleted)
@@ -248,10 +249,24 @@ final class AppStateCoverageRecordingTests: XCTestCase {
 
         appState.stopRecordingFromUI()
         await waitUntil { !insertion.insertedTexts.isEmpty && appState.phase == .ready }
+        return appState
+    }
+
+    func testInsertionIntoNotesOnAccessibilityScreenCompletesTheDemo() async {
+        // The "Try it in Notes" row flips to done on the first real insertion
+        // into Notes while the Accessibility screen is up, and resets when
+        // onboarding ends.
+        let appState = await runInsertionOnAccessibilityScreen(frontmostAppBundleID: "com.apple.Notes")
 
         XCTAssertTrue(appState.onboardingInsertionDemoCompleted)
 
         appState.finishOnboarding()
+        XCTAssertFalse(appState.onboardingInsertionDemoCompleted)
+    }
+
+    func testInsertionIntoAnotherAppDoesNotClaimTheNotesDemo() async {
+        let appState = await runInsertionOnAccessibilityScreen(frontmostAppBundleID: "com.apple.mail")
+
         XCTAssertFalse(appState.onboardingInsertionDemoCompleted)
     }
 

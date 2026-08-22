@@ -49,12 +49,16 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
             },
             accessibilityOnboarding: onboarding
         )
+        appState.hasAccessibilityPermission = false
+
+        // Derived from the persisted signal: the row already says Open Settings
+        // before anything is clicked, so copy and route agree from frame one.
+        XCTAssertTrue(appState.accessibilityListedButOff)
+        XCTAssertEqual(appState.accessibilityPresentation.primary, .openSettings)
 
         appState.beginAccessibilityOnboarding(askSurface: .onboarding)
 
         XCTAssertEqual(onboarding.presentCallCount, 0, "Overlay must not be presented for an already-listed app")
-        XCTAssertTrue(appState.accessibilityListedButOff)
-        XCTAssertEqual(appState.accessibilityPresentation.primary, .openSettings)
         XCTAssertEqual(openedURLs.count, 1)
         XCTAssertTrue(
             openedURLs.first?.absoluteString.contains("Privacy_Accessibility") == true,
@@ -170,11 +174,12 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
             },
             accessibilityOnboarding: onboarding
         )
+        appState.hasAccessibilityPermission = false
+        XCTAssertTrue(appState.accessibilityListedButOff)
 
         appState.beginAccessibilityOnboarding(askSurface: .onboarding)
 
         XCTAssertEqual(onboarding.presentCallCount, 0, "stale grants must not present the drag overlay")
-        XCTAssertTrue(appState.accessibilityListedButOff)
         XCTAssertTrue(openedURLs.first?.absoluteString.contains("Privacy_Accessibility") == true)
     }
 

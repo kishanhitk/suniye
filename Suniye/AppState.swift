@@ -576,10 +576,13 @@ final class AppState {
     private(set) var accessibilityAssistEndedWithoutGrant = false
     /// The app is already in the Accessibility list with its switch off: a
     /// stale grant after an app update, or the system prompt was shown before.
-    /// The drag overlay would mislead, so the UI shows toggle-on copy instead.
-    private(set) var accessibilityListedButOff = false
+    /// Derived from the persisted signals so the row shows toggle-on copy from
+    /// the first frame, not only after the button routes to Settings.
+    var accessibilityListedButOff: Bool {
+        !hasAccessibilityPermission && (lastKnownAccessibilityGranted || accessibilityPromptShown)
+    }
     /// The Accessibility screen's "Try it in Notes" landed a real insertion
-    /// during this onboarding run.
+    /// into Notes during this onboarding run.
     private(set) var onboardingInsertionDemoCompleted = false
 
     /// Per-run dedupe of onboarding_step emissions (relaunch resume re-fires
@@ -590,7 +593,7 @@ final class AppState {
     @ObservationIgnored private var hasTrackedMagicFormatNudgeShown = false
     @ObservationIgnored private var firstLaunchRecorded = false
     @ObservationIgnored private var lastKnownAccessibilityGranted = false
-    @ObservationIgnored private var accessibilityPromptShown = false
+    private var accessibilityPromptShown = false
     private var accessibilityDeferred = false {
         didSet {
             guard !isHydratingGeneralSettings, oldValue != accessibilityDeferred else {
@@ -2279,7 +2282,6 @@ final class AppState {
     /// never-granted state — the two need different recovery UI.
     private func updateLastKnownAccessibilityGranted() {
         if hasAccessibilityPermission {
-            accessibilityListedButOff = false
             accessibilityAssistEndedWithoutGrant = false
             accessibilityDeferred = false
             if !lastKnownAccessibilityGranted {
@@ -2298,9 +2300,7 @@ final class AppState {
     func beginAccessibilityOnboarding(askSurface: PermissionAskSurface) {
         accessibilityAssistEndedWithoutGrant = false
 
-        if !hasAccessibilityPermission, lastKnownAccessibilityGranted || accessibilityPromptShown {
-            accessibilityListedButOff = true
-            onStateChange?()
+        if accessibilityListedButOff {
             openAccessibilityPrivacySettings()
             return
         }
@@ -3453,8 +3453,10 @@ final class AppState {
         notesAppURL != nil
     }
 
+    private static let notesBundleID = "com.apple.Notes"
+
     private var notesAppURL: URL? {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Notes")
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.notesBundleID)
     }
 
     func openIssueReportWindow() {
@@ -4337,7 +4339,7 @@ final class AppState {
         }
 
         if didCompleteDictation {
-            if usesSystemInsertion, activeOnboardingStep == .typeAnywhere {
+            if usesSystemInsertion, activeOnboardingStep == .typeAnywhere, frontmostAppBundleID == Self.notesBundleID {
                 onboardingInsertionDemoCompleted = true
             }
             // Audio length, not hold time: the seconds the user actually spoke
