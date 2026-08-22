@@ -10,6 +10,7 @@ import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import unquote
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
@@ -61,13 +62,16 @@ class Handler(BaseHTTPRequestHandler):
     def _body(self) -> bytes:
         return self.rfile.read(int(self.headers.get("Content-Length", "0")))
 
+    def _clip_name(self) -> str:
+        return os.path.basename(unquote(self.path[len("/clips/"):]))
+
     def do_GET(self) -> None:
         if self.path == "/":
             self._send(200, (HERE / "index.html").read_bytes(), "text/html; charset=utf-8")
         elif self.path == "/clips":
             self._json(200, sorted(p.name for p in CLIPS.glob("*.wav")))
         elif self.path.startswith("/clips/"):
-            target = CLIPS / os.path.basename(self.path[len("/clips/"):])
+            target = CLIPS / self._clip_name()
             if target.suffix == ".wav" and target.exists():
                 self._send(200, target.read_bytes(), "audio/wav")
             else:
@@ -82,7 +86,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._same_origin():
             return
         if self.path.startswith("/clips/"):
-            name = os.path.basename(self.path[len("/clips/"):])
+            name = self._clip_name()
             if not name.endswith(".wav"):
                 return self._json(400, {"error": "clip name must end in .wav"})
             (CLIPS / name).write_bytes(self._body())
@@ -100,7 +104,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._same_origin():
             return
         if self.path.startswith("/clips/"):
-            target = CLIPS / os.path.basename(self.path[len("/clips/"):])
+            target = CLIPS / self._clip_name()
             if target.suffix == ".wav" and target.exists():
                 target.unlink()
             self._json(200, {"deleted": target.name})
