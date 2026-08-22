@@ -2177,8 +2177,9 @@ final class AppState {
         isModelInstalled && (phase == .ready || phase == .recording || phase == .transcribing)
     }
 
-    private func modelDownloadDiskSpaceMessage() async -> String? {
-        let neededBytes = modelManager.expectedDownloadSizeBytes(for: selectedASRModelID) * 2
+    /// Download + staged copy coexist on disk, hence twice the download size.
+    private func modelDownloadDiskSpaceMessage(for modelID: ASRModelID? = nil) async -> String? {
+        let neededBytes = modelManager.expectedDownloadSizeBytes(for: modelID ?? selectedASRModelID) * 2
         guard neededBytes > 0,
               let available = await availableDiskCapacityProvider(),
               available < neededBytes else {
@@ -3129,6 +3130,9 @@ final class AppState {
 
         asrDownloadTask = Task {
             do {
+                if let message = await modelDownloadDiskSpaceMessage(for: modelID) {
+                    throw AppStateError.insufficientDiskSpace(message)
+                }
                 AppLogger.shared.log(.info, "model download started id=\(modelID.rawValue)")
                 try await modelManager.downloadAndExtractModel(modelID) { [weak self] progress in
                     Task { @MainActor in
@@ -5327,11 +5331,14 @@ final class AppState {
 
 enum AppStateError: LocalizedError {
     case modelValidationFailed
+    case insufficientDiskSpace(String)
 
     var errorDescription: String? {
         switch self {
         case .modelValidationFailed:
             return "Model files are missing after extraction."
+        case let .insufficientDiskSpace(message):
+            return message
         }
     }
 }

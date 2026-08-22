@@ -138,9 +138,9 @@ $('run').onclick = async () => {
   const r = await (await fetch('/run', { method: 'POST' })).json();
   $('runLog').textContent = r.log;
   $('runLog').hidden = false;
-  $('runStatus').textContent = r.exitCode === 0 ? 'done' : `failed (exit ${r.exitCode})`;
+  $('runStatus').textContent = r.exitCode === 0 ? 'done' : `failed (exit ${r.exitCode}) — showing the previous run's results`;
   $('run').disabled = false;
-  loadResults();
+  if (r.exitCode === 0) loadResults();
 };
 
 // ---------- review ----------

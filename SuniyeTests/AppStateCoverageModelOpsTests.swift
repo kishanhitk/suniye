@@ -70,6 +70,25 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         XCTAssertEqual(appState.lastFailedASRModelID, .moonshineBase)
     }
 
+    func testDownloadRefusesWhenDiskSpaceIsShortOfTwiceTheDownload() async {
+        let modelManager = StubModelManager()
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            availableDiskCapacityProvider: { 1_000 }
+        )
+        appState.phase = .ready
+        appState.loadedASRModelID = .parakeetV3
+
+        appState.downloadASRModel(.cohereTranscribe, autoSelect: true)
+        await waitUntil { appState.activeASRModelOperationID == nil }
+
+        XCTAssertNil(modelManager.lastDownloadedModelID, "the download must not start")
+        XCTAssertEqual(appState.phase, .ready, "the loaded model keeps working")
+        XCTAssertEqual(appState.lastFailedASRModelID, .cohereTranscribe)
+        let needed = ByteCountFormatter.string(fromByteCount: ASRModelCatalog.entry(for: .cohereTranscribe).estimatedSizeBytes * 2, countStyle: .file)
+        XCTAssertEqual(appState.lastFailedASRModelError, "Not enough free disk space — the speech model needs about \(needed) free.")
+    }
+
     func testDownloadWithoutAutoSelectKeepsLoadedModelReady() async {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
