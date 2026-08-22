@@ -41,10 +41,9 @@ ALLOWED_ORIGIN = f"http://127.0.0.1:{PORT}"
 
 class Handler(BaseHTTPRequestHandler):
     def _same_origin(self) -> bool:
-        # Browsers send Origin on every cross-site POST/DELETE; a third-party page
-        # must not be able to start xcodebuild or write clips on this machine.
-        origin = self.headers.get("Origin")
-        if origin is not None and origin != ALLOWED_ORIGIN:
+        # Browsers send Origin on every POST/DELETE; only the page served from this
+        # server may start xcodebuild or write clips on this machine.
+        if self.headers.get("Origin") != ALLOWED_ORIGIN:
             self._json(403, {"error": "cross-origin request rejected"})
             return False
         return True
