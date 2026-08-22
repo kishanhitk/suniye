@@ -101,6 +101,24 @@ final class CohereTranscriptionServiceRealModelTests: XCTestCase {
         XCTAssertTrue(lowered.contains("rather than one"), text)
     }
 
+    /// The load-time warm-up must leave nothing for the first user decode to pay:
+    /// without it the first decode ran ~3× slower than steady state (KIS-210).
+    func testFirstDecodeAfterLoadIsWarm() async throws {
+        let service = try await Self.loadService()
+        let samples = await SpeechTestAudio.synthesizeSpeech(Self.shortText, sampleRate: 48_000)
+        try XCTSkipUnless(samples.count > 48_000, "Speech synthesis unavailable")
+
+        var millis: [Double] = []
+        for _ in 0 ..< 3 {
+            let started = DispatchTime.now()
+            _ = try await service.transcribe(samples: samples, sampleRate: 48_000)
+            millis.append(Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1e6)
+        }
+        print("cohere first/second/third decode ms: \(millis.map { Int($0) })")
+
+        XCTAssertLessThan(millis[0], millis[2] * 1.25, "first decode should be within 25% of steady state")
+    }
+
     /// Real capture runs at the device's native rate (48 kHz on current Macs),
     /// so the engine must resample before the 16 kHz encoder sees the audio.
     func testTranscribesNativeRateCapture() async throws {

@@ -57,6 +57,13 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         let started = DispatchTime.now()
         let encoder = try OrtSession(modelPath: encoderPath, intraOpThreads: config.numThreads)
         let decoder = try OrtSession(modelPath: decoderPath, intraOpThreads: config.numThreads)
+        let model = LoadedModel(encoder: encoder, decoder: decoder, vocabulary: vocabulary, promptIDs: promptIDs)
+        let sessionsReady = DispatchTime.now()
+
+        // ONNX Runtime defers ~1 s of one-time work (arena growth, first touch of the
+        // memory-mapped encoder weights) to the first Run; pay it here, behind the
+        // load spinner, instead of on the user's first sentence.
+        _ = try await Self.decode(Self.warmupAudio, model: model)
 
         self.vocabulary = vocabulary
         self.language = language
@@ -66,10 +73,11 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         AppLogger.shared.log(
             .info,
             String(
-                format: "cohere loaded language=%@ threads=%d in %.2fs",
+                format: "cohere loaded language=%@ threads=%d in %.2fs (warmup %.2fs)",
                 language,
                 config.numThreads,
-                Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1e9
+                Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1e9,
+                Double(DispatchTime.now().uptimeNanoseconds - sessionsReady.uptimeNanoseconds) / 1e9
             )
         )
     }
@@ -108,13 +116,8 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         var texts: [String] = []
         for (index, chunk) in chunks.enumerated() {
             onProgress(TranscriptionProgress(chunk: index + 1, totalChunks: chunks.count))
-            let chunkAudio = Array(audio[chunk])
             let started = DispatchTime.now()
-            let tokens: [Int64] = try await withCheckedThrowingContinuation { continuation in
-                Self.inferenceQueue.async {
-                    continuation.resume(with: Result { try Self.decodeChunk(chunkAudio, model: model) })
-                }
-            }
+            let tokens = try await Self.decode(Array(audio[chunk]), model: model)
             texts.append(vocabulary.text(for: tokens))
             AppLogger.shared.log(
                 .info,
@@ -149,6 +152,16 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
     }
 
     private static let inferenceQueue = DispatchQueue(label: "dev.suniye.cohere-inference", qos: .userInitiated)
+    private static let warmupAudio = [Float](repeating: 0, count: CohereTranscribe.sampleRate)
+
+    /// Runs one chunk on the inference queue and hands back its token ids.
+    private static func decode(_ audio: [Float], model: LoadedModel) async throws -> [Int64] {
+        try await withCheckedThrowingContinuation { continuation in
+            inferenceQueue.async {
+                continuation.resume(with: Result { try decodeChunk(audio, model: model) })
+            }
+        }
+    }
 
     private static func decodeChunk(_ audio: [Float], model: LoadedModel) throws -> [Int64] {
         let encoded = try model.encoder.run(
