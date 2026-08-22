@@ -30,6 +30,8 @@ final class ASRModelComparisonTests: XCTestCase {
         let id: String
         let name: String
         let loadMs: Int
+        /// Set when the model could not be loaded; `results` is then empty.
+        let error: String?
         let results: [Decode]
     }
 
@@ -73,9 +75,8 @@ final class ASRModelComparisonTests: XCTestCase {
             do {
                 try await router.loadModel(config: try manager.makeRecognizerConfig(for: modelID))
             } catch {
-                models.append(ModelRun(id: modelID.rawValue, name: entry.displayName, loadMs: -1, results: [
-                    Decode(file: "", ms: -1, text: "", error: "load failed: \(error.localizedDescription)")
-                ]))
+                models.append(ModelRun(id: modelID.rawValue, name: entry.displayName, loadMs: -1, error: error.localizedDescription, results: []))
+                print("asr-compare: \(entry.displayName) load failed: \(error.localizedDescription)")
                 continue
             }
             let loadMs = Self.elapsedMs(since: loadStarted)
@@ -95,7 +96,7 @@ final class ASRModelComparisonTests: XCTestCase {
                     results.append(Decode(file: clip.name, ms: Self.elapsedMs(since: started), text: "", error: error.localizedDescription))
                 }
             }
-            models.append(ModelRun(id: modelID.rawValue, name: entry.displayName, loadMs: loadMs, results: results))
+            models.append(ModelRun(id: modelID.rawValue, name: entry.displayName, loadMs: loadMs, error: nil, results: results))
             print("asr-compare: \(entry.displayName) load=\(loadMs)ms " + results.map { "\($0.file)=\($0.ms)ms" }.joined(separator: " "))
         }
         await router.unloadModel()

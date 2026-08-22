@@ -239,7 +239,10 @@ function renderSummary() {
   table.hidden = false;
   const header = '<tr><th>model</th><th>median latency</th><th>median RTF</th><th>mean WER (clips with reference)</th><th>mean rating</th></tr>';
   const rows = results.models.map((m) => {
-    const ok = m.results.filter((d) => !d.error && d.file);
+    if (m.error) {
+      return `<tr><td>${escapeHtml(m.name)}</td><td class="err" colspan="4">load failed: ${escapeHtml(m.error)}</td></tr>`;
+    }
+    const ok = m.results.filter((d) => !d.error);
     const ms = ok.map((d) => d.ms).sort((a, b) => a - b);
     const rtf = ok.map((d) => d.ms / 1000 / results.clips.find((c) => c.file === d.file).seconds).sort((a, b) => a - b);
     const wers = ok.map((d) => wer(review(d.file).reference, d.text)).filter((w) => w !== null);
