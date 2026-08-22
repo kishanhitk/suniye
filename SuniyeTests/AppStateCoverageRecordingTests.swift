@@ -27,13 +27,13 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         audioCapture: StubAudioCaptureService = StubAudioCaptureService(),
         transcriptionService: StubTranscriptionService = StubTranscriptionService(),
         textInsertionService: SpyTextInsertionService = SpyTextInsertionService(),
-        frontmostAppBundleID: String? = nil
+        frontmostAppBundleIDProvider: @escaping () -> String? = { nil }
     ) -> AppState {
         let appState = makeTestAppState(
             transcriptionService: transcriptionService,
             audioCaptureService: audioCapture,
             textInsertionService: textInsertionService,
-            frontmostAppBundleIDProvider: { frontmostAppBundleID }
+            frontmostAppBundleIDProvider: frontmostAppBundleIDProvider
         )
         appState.phase = .ready
         appState.hasMicPermission = true
@@ -231,21 +231,29 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         )
     }
 
-    private func runInsertionOnAccessibilityScreen(frontmostAppBundleID: String) async -> AppState {
+    /// Runs one system-insertion dictation on the Accessibility screen. The
+    /// frontmost app is read once at recording start and again after the text
+    /// lands, so a test can move focus between the two.
+    private func runInsertionOnAccessibilityScreen(
+        appAtStart: String,
+        appAtInsertion: String
+    ) async -> AppState {
         let audioCapture = StubAudioCaptureService()
         audioCapture.stopCaptureResult = makeValidCapturedAudio()
         let transcription = StubTranscriptionService()
         transcription.transcribeResult = .success("hello there")
         let insertion = SpyTextInsertionService()
+        var frontmostApp = appAtStart
         let appState = readyAppState(
             audioCapture: audioCapture,
             transcriptionService: transcription,
             textInsertionService: insertion,
-            frontmostAppBundleID: frontmostAppBundleID
+            frontmostAppBundleIDProvider: { frontmostApp }
         )
         appState.activeOnboardingStep = .typeAnywhere
         XCTAssertFalse(appState.onboardingInsertionDemoCompleted)
         await startRecording(appState, audioCapture: audioCapture)
+        frontmostApp = appAtInsertion
 
         appState.stopRecordingFromUI()
         await waitUntil { !insertion.insertedTexts.isEmpty && appState.phase == .ready }
@@ -256,7 +264,7 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         // The "Try it in Notes" row flips to done on the first real insertion
         // into Notes while the Accessibility screen is up, and resets when
         // onboarding ends.
-        let appState = await runInsertionOnAccessibilityScreen(frontmostAppBundleID: "com.apple.Notes")
+        let appState = await runInsertionOnAccessibilityScreen(appAtStart: "com.apple.Notes", appAtInsertion: "com.apple.Notes")
 
         XCTAssertTrue(appState.onboardingInsertionDemoCompleted)
 
@@ -265,7 +273,15 @@ final class AppStateCoverageRecordingTests: XCTestCase {
     }
 
     func testInsertionIntoAnotherAppDoesNotClaimTheNotesDemo() async {
-        let appState = await runInsertionOnAccessibilityScreen(frontmostAppBundleID: "com.apple.mail")
+        let appState = await runInsertionOnAccessibilityScreen(appAtStart: "com.apple.mail", appAtInsertion: "com.apple.mail")
+
+        XCTAssertFalse(appState.onboardingInsertionDemoCompleted)
+    }
+
+    func testFocusLeavingNotesBeforeInsertionDoesNotClaimTheNotesDemo() async {
+        // Started in Notes, focus moved while transcribing: the text landed
+        // elsewhere, so the demo is not done.
+        let appState = await runInsertionOnAccessibilityScreen(appAtStart: "com.apple.Notes", appAtInsertion: "com.apple.mail")
 
         XCTAssertFalse(appState.onboardingInsertionDemoCompleted)
     }

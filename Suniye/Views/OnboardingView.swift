@@ -262,7 +262,7 @@ struct OnboardingView: View {
             )
             .accessibilityElement(children: .contain)
             .accessibilityLabel("What you said")
-            .animation(.easeInOut(duration: 0.2), value: isListening)
+            .animation(SettingsMotion.curve(reduceMotion: reduceMotion), value: isListening)
 
             practiceStatus
         }

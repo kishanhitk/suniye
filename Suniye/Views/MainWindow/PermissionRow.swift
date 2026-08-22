@@ -27,6 +27,7 @@ struct PermissionRow: View {
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
+                            .accessibilityLabel("\(secondary.label): \(presentation.title)")
                         }
                         if let primary = presentation.primary {
                             Button(primary.label) {

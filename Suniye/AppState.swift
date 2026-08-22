@@ -2136,6 +2136,7 @@ final class AppState {
 
     /// Retry after a disk-space refusal or a failed download.
     func retryOnboardingModelDownload() {
+        onboardingDiskSpaceMessage = nil
         if phase == .error {
             startModelDownload()
             return
@@ -3455,9 +3456,10 @@ final class AppState {
 
     private static let notesBundleID = "com.apple.Notes"
 
-    private var notesAppURL: URL? {
+    /// Resolved once: the LaunchServices lookup is synchronous and the view
+    /// reads this on every body evaluation.
+    @ObservationIgnored private lazy var notesAppURL: URL? =
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.notesBundleID)
-    }
 
     func openIssueReportWindow() {
         prepareIssueReportWindowPresentation()
@@ -4283,7 +4285,11 @@ final class AppState {
                     // service retries for around a second while a focused
                     // element hydrates, so anything captured earlier can name
                     // the app the user has since left.
-                    attributeStoredResult(result.id, to: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
+                    let insertionTargetBundleID = frontmostAppBundleIDProvider() ?? frontmostAppBundleID
+                    attributeStoredResult(result.id, to: insertionTargetBundleID)
+                    if activeOnboardingStep == .typeAnywhere, insertionTargetBundleID == Self.notesBundleID {
+                        onboardingInsertionDemoCompleted = true
+                    }
                     dictationTiming.inserted = .now()
                     beginEditLearningTracking(insertedText: insertionText)
                     AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
@@ -4339,9 +4345,6 @@ final class AppState {
         }
 
         if didCompleteDictation {
-            if usesSystemInsertion, activeOnboardingStep == .typeAnywhere, frontmostAppBundleID == Self.notesBundleID {
-                onboardingInsertionDemoCompleted = true
-            }
             // Audio length, not hold time: the seconds the user actually spoke
             // is the honest denominator for pace and time saved.
             let audioSeconds = sampleRate > 0 ? Double(sampleCount) / Double(sampleRate) : duration
