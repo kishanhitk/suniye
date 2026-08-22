@@ -2177,8 +2177,9 @@ final class AppState {
         isModelInstalled && (phase == .ready || phase == .recording || phase == .transcribing)
     }
 
-    private func modelDownloadDiskSpaceMessage() async -> String? {
-        let neededBytes = modelManager.expectedDownloadSizeBytes(for: selectedASRModelID) * 2
+    /// Download + staged copy coexist on disk, hence twice the download size.
+    private func modelDownloadDiskSpaceMessage(for modelID: ASRModelID? = nil) async -> String? {
+        let neededBytes = modelManager.expectedDownloadSizeBytes(for: modelID ?? selectedASRModelID) * 2
         guard neededBytes > 0,
               let available = await availableDiskCapacityProvider(),
               available < neededBytes else {
@@ -3129,6 +3130,9 @@ final class AppState {
 
         asrDownloadTask = Task {
             do {
+                if let message = await modelDownloadDiskSpaceMessage(for: modelID) {
+                    throw AppStateError.insufficientDiskSpace(message)
+                }
                 AppLogger.shared.log(.info, "model download started id=\(modelID.rawValue)")
                 try await modelManager.downloadAndExtractModel(modelID) { [weak self] progress in
                     Task { @MainActor in
@@ -4085,7 +4089,11 @@ final class AppState {
 
         do {
             dictationTiming.asrStart = .now()
-            let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate)
+            let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate) { [weak self] progress in
+                Task { @MainActor in
+                    self?.showTranscriptionProgress(progress, sessionID: sessionID)
+                }
+            }
             dictationTiming.asrEnd = .now()
             let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 
@@ -5244,6 +5252,19 @@ final class AppState {
     /// and the blocked-start restore path can never render it differently.
     private static let transcribingIndicatorState: FloatingIndicatorState = .processing(message: "Transcribing...")
 
+    /// Long dictations on a chunked engine (Cohere) take seconds per chunk, so
+    /// the pill counts chunks instead of sitting on a bare spinner.
+    private func showTranscriptionProgress(_ progress: TranscriptionProgress, sessionID: UUID) {
+        guard progress.totalChunks > 1,
+              phase == .transcribing,
+              activeDictationSession?.context.id == sessionID else {
+            return
+        }
+        let message = "Transcribing \(progress.chunk) of \(progress.totalChunks)..."
+        statusText = message
+        setFloatingIndicatorState(.processing(message: message))
+    }
+
     private func startBlockedMessage(for phase: Phase) -> String {
         switch phase {
         case .needsModel:
@@ -5310,11 +5331,14 @@ final class AppState {
 
 enum AppStateError: LocalizedError {
     case modelValidationFailed
+    case insufficientDiskSpace(String)
 
     var errorDescription: String? {
         switch self {
         case .modelValidationFailed:
             return "Model files are missing after extraction."
+        case let .insufficientDiskSpace(message):
+            return message
         }
     }
 }

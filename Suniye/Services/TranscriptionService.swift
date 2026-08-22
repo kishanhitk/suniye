@@ -61,15 +61,37 @@ enum TranscriptionPurpose: String {
     case partial
 }
 
+/// Where a multi-chunk batch decode is: `chunk` is 1-based and is reported as
+/// each chunk starts, so the UI can say "2 of 3" while chunk 2 runs.
+struct TranscriptionProgress: Equatable, Sendable {
+    let chunk: Int
+    let totalChunks: Int
+}
+
 protocol TranscriptionServiceProtocol {
     func loadModel(config: RecognizerConfig) async throws
-    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String
+    /// `onProgress` is only ever driven by engines that split long audio into
+    /// chunks (Cohere); single-pass engines ignore it.
+    func transcribe(
+        samples: [Float],
+        sampleRate: Int,
+        purpose: TranscriptionPurpose,
+        onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
+    ) async throws -> String
     func unloadModel() async
 }
 
 extension TranscriptionServiceProtocol {
-    func transcribe(samples: [Float], sampleRate: Int) async throws -> String {
-        try await transcribe(samples: samples, sampleRate: sampleRate, purpose: .final)
+    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose = .final) async throws -> String {
+        try await transcribe(samples: samples, sampleRate: sampleRate, purpose: purpose) { _ in }
+    }
+
+    func transcribe(
+        samples: [Float],
+        sampleRate: Int,
+        onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
+    ) async throws -> String {
+        try await transcribe(samples: samples, sampleRate: sampleRate, purpose: .final, onProgress: onProgress)
     }
 }
 
@@ -204,7 +226,12 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         loadedConfig = config
     }
 
-    func transcribe(samples: [Float], sampleRate: Int = 16_000, purpose: TranscriptionPurpose = .final) async throws -> String {
+    func transcribe(
+        samples: [Float],
+        sampleRate: Int,
+        purpose: TranscriptionPurpose,
+        onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
+    ) async throws -> String {
         guard let recognizer else {
             throw ServiceError.recognizerNotLoaded
         }
@@ -368,9 +395,9 @@ actor TranscriptionService: TranscriptionServiceProtocol {
                 provider: "cpu",
                 debug: 0
             )
-        case .appleSpeech:
-            // Apple's SpeechAnalyzer is not a sherpa-onnx model; it is handled by a
-            // separate engine and must never reach this recognizer.
+        case .appleSpeech, .cohereTranscribe:
+            // Not sherpa-onnx models; each is handled by its own engine and must never
+            // reach this recognizer.
             throw ServiceError.invalidRecognizerConfiguration
         }
 
@@ -399,10 +426,10 @@ actor TranscriptionService: TranscriptionServiceProtocol {
             paths.append(contentsOf: [config.modelPath].compactMap { $0 })
         case .whisper:
             paths.append(contentsOf: [config.encoderPath, config.decoderPath].compactMap { $0 })
-        case .appleSpeech:
-            // Apple's SpeechAnalyzer has no on-disk files and must never reach this
-            // sherpa-only path; reject it the same way makeRecognizerConfig does rather
-            // than falling through to validate the (empty) tokensPath.
+        case .appleSpeech, .cohereTranscribe:
+            // Other engines' families must never reach this sherpa-only path; reject
+            // them the same way makeRecognizerConfig does rather than validating paths
+            // for a recognizer that cannot be built.
             throw ServiceError.invalidRecognizerConfiguration
         }
 

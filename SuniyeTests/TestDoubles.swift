@@ -455,6 +455,8 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     var onTranscribe: (() -> Void)?
     /// Awaited after the scripted result is claimed; receives the 1-based call number.
     var onTranscribeAwait: ((Int) async -> Void)?
+    /// Reported, in order, before each decode runs.
+    var progressToReport: [TranscriptionProgress] = []
 
     /// Nonisolated so it can serve as a default argument (evaluated outside the main actor).
     nonisolated init() {}
@@ -468,10 +470,16 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
         try loadModelResult.get()
     }
 
-    func transcribe(samples: [Float], sampleRate: Int, purpose: TranscriptionPurpose) async throws -> String {
+    func transcribe(
+        samples: [Float],
+        sampleRate: Int,
+        purpose: TranscriptionPurpose,
+        onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
+    ) async throws -> String {
         transcribeCallCount += 1
         transcribePurposes.append(purpose)
         let callNumber = transcribeCallCount
+        progressToReport.forEach(onProgress)
         onTranscribe?()
         let result = scriptedTranscribeResults.isEmpty
             ? transcribeResult

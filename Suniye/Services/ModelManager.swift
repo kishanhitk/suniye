@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 enum ModelDownloadProgressEstimator {
@@ -56,6 +57,7 @@ final class ModelManager: ModelManagerProtocol {
         case invalidResponse
         case unknownModel
         case extractFailed(String)
+        case checksumMismatch(String)
 
         var errorDescription: String? {
             switch self {
@@ -67,6 +69,8 @@ final class ModelManager: ModelManagerProtocol {
                 return "The selected model is not supported by this build"
             case let .extractFailed(reason):
                 return "Model extraction failed: \(reason)"
+            case let .checksumMismatch(file):
+                return "Downloaded model file failed verification: \(file)"
             }
         }
     }
@@ -389,6 +393,12 @@ final class ModelManager: ModelManagerProtocol {
             guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
                 throw ModelError.invalidResponse
             }
+            if let expected = file.sha256 {
+                guard try Self.sha256Hex(of: downloadedURL) == expected.lowercased() else {
+                    throw ModelError.checksumMismatch(file.destinationRelativePath)
+                }
+            }
+            try Task.checkCancellation()
 
             let destinationURL = modelDirectory.appendingPathComponent(file.destinationRelativePath)
             try FileManager.default.createDirectory(
@@ -401,6 +411,20 @@ final class ModelManager: ModelManagerProtocol {
             try FileManager.default.copyItem(at: downloadedURL, to: destinationURL)
             completedBytes += fallbackBytes
         }
+    }
+
+    /// Streams the file through SHA-256 in 4 MB reads; model files run to gigabytes.
+    static func sha256Hex(of fileURL: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: fileURL)
+        defer {
+            try? handle.close()
+        }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 4 << 20), !chunk.isEmpty {
+            try Task.checkCancellation()
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     static func validateInstall(_ entry: ASRModelCatalogEntry, at modelDirectory: URL) throws {

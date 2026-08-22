@@ -2,8 +2,9 @@ import AVFoundation
 import XCTest
 @testable import Suniye
 
-/// Opt-in latency benchmark comparing the Parakeet (sherpa-onnx, CPU) and Apple Speech
-/// (SpeechAnalyzer, Neural Engine) providers on the *same* audio.
+/// Opt-in latency benchmark comparing the Parakeet (sherpa-onnx, CPU), Apple Speech
+/// (SpeechAnalyzer, Neural Engine), and Cohere Transcribe (ONNX Runtime, CPU) providers
+/// on the *same* audio.
 ///
 /// Both engines run in batch mode (whole clip after recording stops), which is exactly how
 /// the app dictates — so the numbers are the real per-utterance transcription latency, minus
@@ -61,10 +62,17 @@ final class ASRLatencyBenchmarkTests: XCTestCase {
             lines.append("Apple Speech (ANE)         — SKIPPED: unavailable or asset not installed")
         }
 
+        if let cohere = try await Self.loadCohere() {
+            let r = await Self.benchmark(cohere, samples: samples, sampleRate: sampleRate)
+            lines.append(Self.row("Cohere Transcribe (ORT/CPU)", r, audioSeconds))
+        } else {
+            lines.append("Cohere Transcribe (ORT/CPU) — SKIPPED: model not installed")
+        }
+
         print("\n===== ASR latency benchmark =====")
         lines.forEach { print($0) }
         print("RTF = processing_time / audio_length  (lower is faster; <1 = faster than real-time)")
-        print("Note: Parakeet runs on CPU, Apple on the Neural Engine — this is the real-world contrast.\n")
+        print("Note: Parakeet and Cohere run on CPU, Apple on the Neural Engine — this is the real-world contrast.\n")
     }
 
     // MARK: - Timing
@@ -114,6 +122,15 @@ final class ASRLatencyBenchmarkTests: XCTestCase {
         return service
     }
 
+    private static func loadCohere() async throws -> TranscriptionServiceProtocol? {
+        let modelManager = ModelManager()
+        guard modelManager.isInstalled(.cohereTranscribe) else { return nil }
+        let config = try modelManager.makeRecognizerConfig(for: .cohereTranscribe)
+        let service = CohereTranscriptionService()
+        try await service.loadModel(config: config)
+        return service
+    }
+
     private static func loadApple() async -> TranscriptionServiceProtocol? {
         guard AppleSpeechSupport.isAvailable, #available(macOS 26, *) else { return nil }
         guard await AppleSpeechAssetInstaller.isInstalled() else { return nil }
@@ -132,63 +149,8 @@ final class ASRLatencyBenchmarkTests: XCTestCase {
 
     private static func loadAudio(sampleRate: Double) async throws -> [Float] {
         if let path = ProcessInfo.processInfo.environment["SUNIYE_BENCH_WAV"] {
-            return try loadWAV(path: path, sampleRate: sampleRate)
+            return try SpeechTestAudio.loadWAV(path: path, sampleRate: sampleRate)
         }
-        return await synthesizeSpeech(benchText, sampleRate: sampleRate)
-    }
-
-    private static func loadWAV(path: String, sampleRate: Double) throws -> [Float] {
-        let file = try AVAudioFile(forReading: URL(fileURLWithPath: path))
-        guard let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false),
-              let source = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)) else {
-            return []
-        }
-        try file.read(into: source)
-        return convert(source, to: target)
-    }
-
-    private static func synthesizeSpeech(_ text: String, sampleRate: Double) async -> [Float] {
-        guard let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false) else {
-            return []
-        }
-        let synthesizer = AVSpeechSynthesizer()
-        let utterance = AVSpeechUtterance(string: text)
-
-        var floats: [Float] = []
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            var resumed = false
-            synthesizer.write(utterance) { buffer in
-                guard let pcm = buffer as? AVAudioPCMBuffer else { return }
-                if pcm.frameLength == 0 {
-                    if !resumed { resumed = true; continuation.resume() }
-                    return
-                }
-                floats.append(contentsOf: convert(pcm, to: target))
-            }
-        }
-        _ = synthesizer // keep alive across the write callbacks
-        return floats
-    }
-
-    /// One-shot convert a PCM buffer to the target format and return its mono float samples.
-    private static func convert(_ input: AVAudioPCMBuffer, to target: AVAudioFormat) -> [Float] {
-        if input.format == target {
-            guard let channel = input.floatChannelData?[0] else { return [] }
-            return Array(UnsafeBufferPointer(start: channel, count: Int(input.frameLength)))
-        }
-        guard let converter = AVAudioConverter(from: input.format, to: target) else { return [] }
-        let capacity = AVAudioFrameCount((Double(input.frameLength) * target.sampleRate / input.format.sampleRate).rounded(.up)) + 4096
-        guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return [] }
-
-        var fed = false
-        var error: NSError?
-        _ = converter.convert(to: output, error: &error) { _, status in
-            if fed { status.pointee = .endOfStream; return nil }
-            fed = true
-            status.pointee = .haveData
-            return input
-        }
-        guard let channel = output.floatChannelData?[0] else { return [] }
-        return Array(UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
+        return await SpeechTestAudio.synthesizeSpeech(benchText, sampleRate: sampleRate)
     }
 }

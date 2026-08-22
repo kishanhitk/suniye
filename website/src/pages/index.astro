@@ -41,7 +41,7 @@ const pillars = [
 ];
 
 // Mirrors the in-app catalog (ASRModelCatalog.swift). Kept behind a disclosure:
-// the fact that you get a choice is the point, the eleven rows are reference.
+// the fact that you get a choice is the point, the twelve rows are reference.
 const models = [
   { name: "Apple Speech", langs: "Follows your system language", size: "Built in", tag: "macOS 26+" },
   { name: "Parakeet TDT 0.6B v3", langs: "25 European languages", size: "~680 MB", tag: "Recommended" },
@@ -54,6 +54,7 @@ const models = [
   { name: "Whisper Small (English)", langs: "English", size: "~636 MB", tag: null },
   { name: "Whisper Base (English)", langs: "English", size: "~209 MB", tag: null },
   { name: "Whisper Tiny (English)", langs: "English", size: "~118 MB", tag: null },
+  { name: "Cohere Transcribe", langs: "14 languages", size: "~2.9 GB", tag: "Highest accuracy" },
 ];
 
 // Straight from the Magic Format eval suite (evals/magic_format_cases.json and
@@ -475,7 +476,7 @@ const faqs = [
       <div class="band-inner">
         <p class="rail reveal">Speech models</p>
         <div>
-          <h2 class="t-head reveal">Eleven ways to listen.</h2>
+          <h2 class="t-head reveal">Twelve ways to listen.</h2>
           <p class="t-sub reveal">
             From a 118 MB model that keeps up on any Mac to a 1.7 GB one that
             catches everything &mdash; plus Apple's built-in engine, which downloads
@@ -497,7 +498,7 @@ const faqs = [
 
         <details class="reveal group mt-8" style="transition-delay: 0.1s" data-track-open="models_list">
           <summary class="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full border border-border bg-white px-5 py-2.5 font-mono text-[11px] tracking-wide text-muted transition-colors [&::-webkit-details-marker]:hidden hover:text-ink">
-            <span class="group-open:hidden">And eight more</span>
+            <span class="group-open:hidden">And nine more</span>
             <span class="hidden group-open:inline">Hide the list</span>
             <svg class="h-3.5 w-3.5 transition-transform duration-200 [transition-timing-function:var(--curve-out)] group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
