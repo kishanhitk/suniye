@@ -20,7 +20,7 @@ Suniye is built and maintained by one developer. There is no company behind it. 
 ## How it works, briefly
 
 - **Speech recognition** runs locally through one of several bundled model options — Apple's built-in speech engine, NVIDIA Parakeet, Whisper, SenseVoice, Moonshine, or Cohere Transcribe — so you can trade download size for accuracy and language coverage.
-- **Magic Format**, the optional cleanup step, fixes punctuation, numbers, and lists using Apple Intelligence or a small language model on your Mac. It is off by default, and it only ever sees text, never audio.
+- **Magic Format**, the optional cleanup step, fixes punctuation, numbers, and lists using Apple Intelligence or a small language model on your Mac. It is off by default, and it only ever sees text, never audio. There is also an opt-in setting to send that text to an OpenAI-compatible provider you configure yourself; nothing goes online unless you choose that.
 - **Insertion** uses macOS accessibility APIs to place text at your cursor in any app, leaving your clipboard as it was.
 
 ## What the project collects

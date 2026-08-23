@@ -27,11 +27,10 @@ function parseAccept(header: string): AcceptEntry[] {
       let q = 1;
       for (const param of params) {
         const [key, value] = param.split("=").map((p) => p.trim());
-        if (key?.toLowerCase() === "q" && value !== undefined) {
-          const parsed = Number.parseFloat(value);
-          // An unparseable q is ignored rather than read as q=0, which would
-          // turn a typo into a 406.
-          if (Number.isFinite(parsed)) q = Math.min(1, Math.max(0, parsed));
+        // RFC 9110 §12.4.2: 0–1 with up to three decimals. A malformed q is
+        // ignored rather than read as q=0, which would turn a typo into a 406.
+        if (key?.toLowerCase() === "q" && value !== undefined && /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/.test(value)) {
+          q = Number.parseFloat(value);
         }
       }
       return [{ type, subtype, q }];

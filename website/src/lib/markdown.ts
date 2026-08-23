@@ -1,15 +1,12 @@
-import type { APIContext } from "astro";
 import { getCollection, getEntry } from "astro:content";
 import { authoredMarkdown } from "./content/authored";
 import { homeMarkdown } from "./content/home";
 import { privacyMarkdown } from "./content/privacy";
-import { RELEASES_CACHE_POLICY, changelogMarkdown, fetchReleases } from "./releases";
+import { RELEASES_CACHE_POLICY, changelogMarkdown, fetchReleases, type CachePolicy } from "./releases";
 import { SITE_NAME, SITE_PAGES, SITE_URL, absoluteUrl } from "./site";
 
 // The Markdown representation of every content route, keyed by Astro route
 // pattern. The middleware consults this when a client prefers text/markdown.
-
-type CachePolicy = Parameters<APIContext["cache"]["set"]>[0];
 
 export interface MarkdownDocument {
   body: string;

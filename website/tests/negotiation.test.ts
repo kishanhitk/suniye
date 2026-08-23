@@ -51,6 +51,8 @@ describe("negotiate", () => {
 
   test("ignores malformed entries and parameters", () => {
     expect(negotiate("garbage, text/markdown;q=abc")).toBe("markdown");
+    expect(negotiate("text/markdown;q=0.2junk, text/html;q=0.5")).toBe("markdown");
+    expect(negotiate("text/markdown;q=1.5, text/html")).toBe("html");
     expect(negotiate("garbage")).toBe("html");
     expect(negotiate("text/markdown;level=1;q=1, text/html;q=0.4")).toBe("markdown");
     expect(negotiate("TEXT/MARKDOWN")).toBe("markdown");

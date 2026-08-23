@@ -1,3 +1,4 @@
+import type { APIContext } from "astro";
 import { DOWNLOAD_URL, GITHUB_RELEASES_URL, SITE_URL } from "./site";
 
 // GitHub releases → the changelog, shared by changelog.astro and its Markdown
@@ -26,8 +27,10 @@ export interface Release {
   fullChangelogUrl?: string;
 }
 
+export type CachePolicy = Parameters<APIContext["cache"]["set"]>[0];
+
 /** How long either representation of the changelog may be served from Astro's cache. */
-export const RELEASES_CACHE_POLICY = { maxAge: 300, swr: 3600, tags: ["github-releases"] } as const;
+export const RELEASES_CACHE_POLICY: CachePolicy = { maxAge: 300, swr: 3600, tags: ["github-releases"] };
 
 const GITHUB_TIMEOUT_MS = 5_000;
 
