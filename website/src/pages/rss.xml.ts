@@ -1,5 +1,5 @@
 import { getCollection } from "astro:content";
-import { SITE_URL } from "../lib/seo";
+import { SITE_URL } from "../lib/site";
 
 // Hand-rolled rather than @astrojs/rss: the site already has one XML feed
 // (sitemap.xml.ts) built this way with zero dependencies, and RSS is simple

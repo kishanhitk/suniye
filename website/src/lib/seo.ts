@@ -1,23 +1,35 @@
-import { getCollection } from "astro:content";
+import {
+  SITE_URL,
+  SITE_NAME,
+  SITE_DESCRIPTION,
+  SITE_PAGES,
+  GITHUB_URL,
+  DOWNLOAD_URL,
+  CONTACT_EMAIL,
+  MAINTAINER,
+  SOCIAL_PROFILES,
+  absoluteUrl,
+} from "./site";
 
-export const SITE_URL = "https://suniye.app";
+export interface SitemapEntry {
+  path: string;
+  lastmod?: Date;
+}
 
-export const SITE_PAGES = ["/", "/changelog", "/privacy", "/blogs"] as const;
-
-export async function buildSitemapXml(): Promise<string> {
-  const posts = await getCollection("blog", ({ data }) => !data.draft);
-  // Static pages have no real "last changed" date to report, so they carry no
-  // <lastmod> rather than a fabricated one. Posts do — publishDate, or
-  // updatedDate once one exists — which is a genuine freshness signal.
-  const entries: { path: string; lastmod?: Date }[] = [
-    ...SITE_PAGES.map((path) => ({ path })),
-    ...posts.map((p) => ({ path: `/blogs/${p.id}`, lastmod: p.data.updatedDate ?? p.data.publishDate })),
-  ];
-  const urls = entries.map(({ path, lastmod }) => {
-    const loc = `    <loc>${new URL(path, SITE_URL).toString()}</loc>`;
-    const mod = lastmod ? `\n    <lastmod>${lastmod.toISOString().slice(0, 10)}</lastmod>` : "";
-    return `  <url>\n${loc}${mod}\n  </url>`;
-  }).join("\n");
+/**
+ * Static pages have no real "last changed" date to report, so they carry no
+ * <lastmod> rather than a fabricated one. Callers add dated entries (blog
+ * posts) where a genuine freshness signal exists.
+ */
+export function buildSitemapXml(extraEntries: readonly SitemapEntry[] = []): string {
+  const entries: SitemapEntry[] = [...SITE_PAGES.map(({ path }) => ({ path })), ...extraEntries];
+  const urls = entries
+    .map(({ path, lastmod }) => {
+      const loc = `    <loc>${absoluteUrl(path)}</loc>`;
+      const mod = lastmod ? `\n    <lastmod>${lastmod.toISOString().slice(0, 10)}</lastmod>` : "";
+      return `  <url>\n${loc}${mod}\n  </url>`;
+    })
+    .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
 
@@ -25,15 +37,62 @@ export function softwareApplicationSchema() {
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "Suniye",
+    name: SITE_NAME,
     operatingSystem: "macOS",
     applicationCategory: "UtilitiesApplication",
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     url: SITE_URL,
-    downloadUrl: "https://github.com/kishanhitk/suniye/releases/latest/download/Suniye.dmg",
-    description:
-      "Open-source, local-first dictation for macOS. Hold a key, speak, and your words appear at your cursor. No audio leaves your machine.",
-    softwareHelp: "https://github.com/kishanhitk/suniye",
+    downloadUrl: DOWNLOAD_URL,
+    description: SITE_DESCRIPTION,
+    softwareHelp: GITHUB_URL,
+    license: "https://opensource.org/license/mit",
+    author: { "@type": "Person", name: MAINTAINER.name, url: MAINTAINER.github },
+  };
+}
+
+/**
+ * The project as a publisher: who stands behind the site and how to reach
+ * them. Suniye is an open-source project run by one person, not a company, so
+ * the address is the maintainer's public region and nothing more specific.
+ */
+export function organizationSchema() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": `${SITE_URL}/#organization`,
+    name: SITE_NAME,
+    url: SITE_URL,
+    logo: absoluteUrl("/suniye-icon.png"),
+    description: SITE_DESCRIPTION,
+    email: CONTACT_EMAIL,
+    founder: { "@type": "Person", name: MAINTAINER.name, url: MAINTAINER.website },
+    sameAs: [...SOCIAL_PROFILES],
+    contactPoint: [
+      {
+        "@type": "ContactPoint",
+        contactType: "customer support",
+        email: CONTACT_EMAIL,
+        url: absoluteUrl("/contact"),
+        availableLanguage: "English",
+      },
+    ],
+    address: {
+      "@type": "PostalAddress",
+      addressRegion: MAINTAINER.region,
+      addressCountry: MAINTAINER.countryCode,
+    },
+  };
+}
+
+export function webSiteSchema() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: SITE_NAME,
+    url: SITE_URL,
+    description: SITE_DESCRIPTION,
+    inLanguage: "en",
+    publisher: { "@id": `${SITE_URL}/#organization` },
   };
 }
 
@@ -73,9 +132,9 @@ export function blogPostingSchema(post: {
     description: post.description,
     datePublished: post.publishDate.toISOString(),
     dateModified: (post.updatedDate ?? post.publishDate).toISOString(),
-    author: { "@type": "Organization", name: "Suniye", url: SITE_URL },
-    publisher: { "@type": "Organization", name: "Suniye", url: SITE_URL },
-    mainEntityOfPage: new URL(`/blogs/${post.slug}`, SITE_URL).toString(),
+    author: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
+    publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
+    mainEntityOfPage: absoluteUrl(`/blogs/${post.slug}`),
   };
 }
 
@@ -88,7 +147,7 @@ export function breadcrumbSchema(crumbs: { name: string; path: string }[]) {
       "@type": "ListItem",
       position: i + 1,
       name: c.name,
-      item: new URL(c.path, SITE_URL).toString(),
+      item: absoluteUrl(c.path),
     })),
   };
 }

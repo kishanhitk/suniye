@@ -4,120 +4,29 @@ import CopyField from "../components/CopyField.astro";
 import Navbar from "../components/Navbar.astro";
 import Footer from "../components/Footer.astro";
 import { softwareApplicationSchema, faqPageSchema, jsonLdString } from "../lib/seo";
+import { BREW_INSTALL, DOWNLOAD_URL, GITHUB_URL, QUARANTINE_CMD } from "../lib/site";
+import {
+  HERO,
+  CLOUD_PATH,
+  LOCAL_PATH,
+  ARGUMENT,
+  INTERFACE,
+  MODELS,
+  MODELS_SECTION,
+  CLEANUPS,
+  MAGIC_FORMAT,
+  TONES,
+  SURFACES,
+  WHERE_IT_WORKS,
+  PROOF_POINTS,
+  INSTALL,
+  FAQS,
+  CLOSING,
+} from "../lib/content/home";
 
-const githubUrl = "https://github.com/kishanhitk/suniye";
-const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/download/Suniye.dmg";
-const brewInstall = "brew install --cask kishanhitk/tap/suniye";
-const quarantineCmd = "xattr -rd com.apple.quarantine /Applications/Suniye.app";
-
-// The whole argument in two paths. Deliberately structural rather than
-// benchmarked: "no round trip" is true by construction, a millisecond figure
-// would need a measurement this page can't show.
-const cloudPath = [
-  "You speak",
-  "Your audio is uploaded",
-  "A server transcribes it",
-  "The text travels back",
-];
-const localPath = ["You speak", "Your Mac transcribes it", "The text is at your cursor"];
-
-const pillars = [
-  {
-    title: "Works where you type",
-    desc: "Mail, Slack, Notes, your editor, your browser. The text lands at the cursor and your clipboard is left exactly as you had it.",
-  },
-  {
-    title: "Choose how it listens",
-    desc: "Swap the speech model to suit your Mac — small and quick, or large and exacting. Apple's built-in engine needs no download at all.",
-  },
-  {
-    title: "Cleanup that stays home",
-    desc: "Optional Magic Format tidies grammar and punctuation using Apple Intelligence or a model on your Mac. Off until you turn it on.",
-  },
-  {
-    title: "Free, and readable",
-    desc: "MIT licensed, no account, no subscription, no third-party tracking. Every line is on GitHub if you want to check the claims yourself.",
-  },
-];
-
-// Mirrors the in-app catalog (ASRModelCatalog.swift). Kept behind a disclosure:
-// the fact that you get a choice is the point, the twelve rows are reference.
-const models = [
-  { name: "Apple Speech", langs: "Follows your system language", size: "Built in", tag: "macOS 26+" },
-  { name: "Parakeet TDT 0.6B v3", langs: "25 European languages", size: "~680 MB", tag: "Recommended" },
-  { name: "Parakeet TDT 0.6B v2", langs: "English", size: "~482 MB", tag: null },
-  { name: "SenseVoice", langs: "Chinese · English · Japanese · Korean · Cantonese", size: "~240 MB", tag: null },
-  { name: "Moonshine Base", langs: "English", size: "~285 MB", tag: null },
-  { name: "Whisper Large v3 Turbo", langs: "Multilingual", size: "~564 MB", tag: null },
-  { name: "Whisper Distil Large v3", langs: "Multilingual", size: "~529 MB", tag: null },
-  { name: "Whisper Large v3", langs: "Multilingual", size: "~1.7 GB", tag: null },
-  { name: "Whisper Small (English)", langs: "English", size: "~636 MB", tag: null },
-  { name: "Whisper Base (English)", langs: "English", size: "~209 MB", tag: null },
-  { name: "Whisper Tiny (English)", langs: "English", size: "~118 MB", tag: null },
-  { name: "Cohere Transcribe", langs: "14 languages", size: "~2.9 GB", tag: "Highest accuracy" },
-];
-
-// Straight from the Magic Format eval suite (evals/magic_format_cases.json and
-// magic_format_advanced_cases.json) — the cases the shipped prompt is scored
-// against, so the page can't claim behaviour the model doesn't have.
-const cleanups = [
-  {
-    label: "It follows the correction, not the words",
-    said: "get flowers on monday buy roses no no wait actually get lilies",
-    wrote: "Get lilies on Monday.",
-  },
-  {
-    label: "Spoken numbers become written ones",
-    said: "the workshop is from eight forty five to eleven thirty and the budget is fifteen thousand dollars",
-    wrote: "The workshop is from 8:45 to 11:30 and the budget is $15,000.",
-  },
-  {
-    label: "Say it as a list and it arrives as one",
-    said: "do these in order first check the logs second restart the app third send me the result",
-    wrote: "Do these in order:\n1. Check the logs\n2. Restart the app\n3. Send me the result",
-  },
-];
-
-// The point of per-app prompts: one sentence, three destinations, three registers.
-// These are illustrative of a prompt you would write, not measured output.
-const tones = [
-  { app: "Slack", prompt: "Terse. No greeting, no sign-off.", out: "Deploy is blocked on the cert renewal — ETA tomorrow." },
-  { app: "Mail", prompt: "Full sentences, polite, sign off.", out: "Hi,\n\nThe deploy is blocked on the certificate renewal. I expect it to clear tomorrow.\n\nThanks!" },
-  { app: "Notes", prompt: "Keep it raw. Just fix punctuation.", out: "deploy blocked — cert renewal, should clear tomorrow" },
-];
-
-const surfaces = ["Mail", "Slack", "Notes", "Messages", "Xcode", "VS Code", "Safari", "Chrome", "Notion", "Obsidian", "Terminal", "Figma"];
-
-const faqs = [
-  {
-    q: "Is my dictation really private?",
-    a: "Your voice is captured and turned into text entirely on your Mac — the audio never touches the internet. Suniye does send a small amount of pseudonymous usage data (counts and timings, never your words), which you can switch off in Settings → Privacy; the privacy page lists exactly what is collected. Otherwise it goes online only to check for updates and to download a model the first time.",
-  },
-  {
-    q: "Does the optional AI cleanup see my audio?",
-    a: "Never. Cleanup only ever works on the text. By default it runs on your Mac, using Apple Intelligence or a local model. Only if you deliberately turn on the online option does your text reach a provider you chose — and it is off by default.",
-  },
-  {
-    q: "Does it work offline?",
-    a: "Yes. Once a model is downloaded, dictation needs no connection at all — including on a plane. The only things that use the network are update checks, the opt-out usage stats, and the online cleanup provider if you enable it.",
-  },
-  {
-    q: "What languages can it understand?",
-    a: "It depends on the model you pick. Some cover 25 European languages, others handle Chinese, Japanese, Korean, English and Cantonese, and the largest understand a broad mix. Several English-only models are smaller and faster.",
-  },
-  {
-    q: "Why does macOS say the app is damaged?",
-    a: "Only the direct .dmg download is affected. Suniye is not signed with a paid Apple Developer certificate, so macOS quarantines it on first launch. Run xattr -rd com.apple.quarantine /Applications/Suniye.app once to clear it — Suniye also offers the command right after you download the .dmg. Installing with Homebrew avoids it entirely, since brew clears the quarantine for you.",
-  },
-  {
-    q: "How fast is it, really?",
-    a: "Median speech to text is 177 ms with Apple's built-in engine — fast enough that the text is usually there before you have finished letting go of the key. Downloaded models trade a little speed for accuracy, and the first dictation after launch waits for the model to load. Turning on Magic Format adds about a second, since a second model then rewrites the transcript.",
-  },
-  {
-    q: "Is it free?",
-    a: "Completely. Free and open source under the MIT license. No subscription, no account, no third-party tracking.",
-  },
-];
+// Rendered on demand so the middleware can answer `Accept: text/markdown`
+// with the page's Markdown variant; a prerendered page never reaches it.
+export const prerender = false;
 ---
 
 {/* iOS Safari paints the status-bar band above the page with the document's
@@ -134,7 +43,7 @@ const faqs = [
     slot="head"
     is:inline
     type="application/ld+json"
-    set:html={jsonLdString(faqPageSchema(faqs))}
+    set:html={jsonLdString(faqPageSchema(FAQS))}
   />
   <!-- Preload the same candidate set the <picture> will resolve, so the
        preloader fetches the tier this viewport actually needs rather than a
@@ -190,17 +99,16 @@ const faqs = [
 
       <div class="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 pt-24 pb-[48vh] text-center sm:pt-28 sm:pb-[38vh]">
         <h1 class="on-art font-display text-[clamp(2.75rem,6.6vw,5rem)] font-medium leading-[1.02] tracking-[-0.02em]">
-          Speak freely.
+          {HERO.headline}
         </h1>
 
         <p class="on-art-muted fade-in mx-auto mt-5 max-w-[34em] text-[17px] leading-relaxed">
-          Suniye is dictation built for privacy and speed: the models run on your
-          Mac, so nothing is uploaded and the words land as fast as you say them.
+          {HERO.lead}
         </p>
 
         <div class="fade-in mt-7 flex justify-center">
           <a
-            href={downloadUrl}
+            href={DOWNLOAD_URL}
             data-dmg
             data-track="download_click:dmg_hero"
             class="glass inline-flex items-center gap-2 px-6 py-3 text-[15px] font-medium"
@@ -215,17 +123,17 @@ const faqs = [
         <button
           type="button"
           class="brew-line copy-btn fade-in mx-auto mt-5 flex max-w-full items-center gap-2 rounded-md px-2 py-1 font-mono text-[10.5px] text-white/85 transition-colors hover:text-white/95 sm:text-[12px]"
-          data-copy={brewInstall}
+          data-copy={BREW_INSTALL}
           data-track="download_click:homebrew_hero"
           aria-label="Copy the Homebrew install command"
         >
           <span aria-hidden="true">$</span>
-          {brewInstall}
+          {BREW_INSTALL}
           <span class="brew-state" aria-hidden="true"></span>
         </button>
 
         <p class="on-art-muted fade-in mt-4 text-[11px]">
-          Apple Silicon &middot; macOS 14+ &middot; Open source
+          {HERO.requirements}
         </p>
       </div>
     </section>
@@ -240,12 +148,8 @@ const faqs = [
       <div class="band-inner relative z-10">
         <p class="rail reveal">The argument</p>
         <div>
-          <h2 class="t-lead reveal">Every other dictation app sends your voice away.</h2>
-          <p class="t-sub reveal">
-            They are built on someone else's API, so your audio has to travel there
-            and back before a single word appears. That round trip is the wait &mdash;
-            and the privacy question.
-          </p>
+          <h2 class="t-lead reveal">{ARGUMENT.headline}</h2>
+          <p class="t-sub reveal">{ARGUMENT.lead}</p>
 
           <div class="mt-14 grid gap-x-10 gap-y-10 md:grid-cols-[0.85fr_1fr]">
             <div class="reveal">
@@ -253,7 +157,7 @@ const faqs = [
                 Cloud dictation
               </p>
               <ol class="mt-5 space-y-3.5">
-                {cloudPath.map((step, i) => (
+                {CLOUD_PATH.map((step, i) => (
                   <li class="flex items-baseline gap-3 text-[15px] text-muted">
                     <span class="font-mono text-[10px] tabular-nums text-muted/40">
                       {String(i + 1).padStart(2, "0")}
@@ -263,8 +167,7 @@ const faqs = [
                 ))}
               </ol>
               <p class="mt-6 max-w-[34ch] text-sm leading-relaxed text-muted/75">
-                Needs a connection. Your voice sits, however briefly, on a disk you
-                don't own.
+                {ARGUMENT.cloudNote}
               </p>
             </div>
 
@@ -273,7 +176,7 @@ const faqs = [
                 Suniye
               </p>
               <ol class="mt-5 space-y-3.5">
-                {localPath.map((step, i) => (
+                {LOCAL_PATH.map((step, i) => (
                   <li class="flex items-baseline gap-3 text-[15px] text-ink">
                     <span class="font-mono text-[10px] tabular-nums text-accent/50">
                       {String(i + 1).padStart(2, "0")}
@@ -283,7 +186,7 @@ const faqs = [
                 ))}
               </ol>
               <p class="mt-3 max-w-[34ch] text-sm leading-relaxed text-muted">
-                Works on a plane. Nothing to upload, so there is nothing to keep.
+                {ARGUMENT.localNote}
               </p>
 
               <!-- The page's one warm mark: the measured number, lit like the dawn
@@ -293,8 +196,7 @@ const faqs = [
                   177<span class="ml-1 text-2xl text-muted">ms</span>
                 </p>
                 <p class="mt-3 max-w-[36ch] text-sm leading-relaxed text-muted">
-                  Median speech&ndash;to&ndash;text with Apple's built-in engine. A
-                  network round trip alone often costs more than that.
+                  {ARGUMENT.latencyNote}
                 </p>
               </div>
             </div>
@@ -310,11 +212,8 @@ const faqs = [
       <div class="band-inner">
         <p class="rail reveal">The whole interface</p>
         <div>
-          <h2 class="t-head reveal">Hold a key. Talk. Let go.</h2>
-          <p class="t-sub reveal">
-            Default is Fn/Globe; make it any shortcut you like. There is nothing
-            else to learn.
-          </p>
+          <h2 class="t-head reveal">{INTERFACE.headline}</h2>
+          <p class="t-sub reveal">{INTERFACE.lead}</p>
 
         <figure class="reveal mt-10" style="transition-delay: 0.1s">
           <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-float)]">
@@ -386,15 +285,11 @@ const faqs = [
       <div class="band-inner relative z-10">
         <p class="rail reveal">Magic Format</p>
         <div>
-          <h2 class="t-head reveal">Speak like a person. Paste like an editor.</h2>
-          <p class="t-sub reveal">
-            Magic Format cleans the transcript before it lands &mdash; on your Mac,
-            using Apple Intelligence or a local model. Optional, and off until you
-            turn it on.
-          </p>
+          <h2 class="t-head reveal">{MAGIC_FORMAT.headline}</h2>
+          <p class="t-sub reveal">{MAGIC_FORMAT.lead}</p>
 
           <div class="mt-12 divide-y divide-border">
-            {cleanups.map((c, i) => (
+            {CLEANUPS.map((c, i) => (
               <div class="reveal py-8 first:pt-0">
                 <p class="font-mono text-[13px] leading-relaxed text-muted/70">
                   {c.said}
@@ -423,18 +318,15 @@ const faqs = [
       <div class="band-inner relative z-10">
         <p class="rail reveal">Where it works</p>
         <div>
-          <h2 class="t-head reveal">One key, every text field.</h2>
-          <p class="t-sub reveal">
-            No plugin, no per-app setup. The text lands at your cursor and your
-            clipboard is left exactly as you had it.
-          </p>
+          <h2 class="t-head reveal">{WHERE_IT_WORKS.headline}</h2>
+          <p class="t-sub reveal">{WHERE_IT_WORKS.lead}</p>
 
         <div class="reveal mt-8 flex flex-wrap items-center gap-2.5" style="transition-delay: 0.08s">
           <kbd class="rounded-lg border border-white/70 bg-white/70 px-3 py-1.5 font-mono text-xs text-ink shadow-[0_1px_2px_rgba(18,35,61,0.06)] backdrop-blur-sm">
             fn
           </kbd>
           <span class="font-mono text-xs text-muted/60">hold &rarr;</span>
-          {surfaces.map((app) => (
+          {SURFACES.map((app) => (
             <span class="rounded-full border border-white/60 bg-white/50 px-3.5 py-1.5 text-[13px] text-muted backdrop-blur-sm">
               {app}
             </span>
@@ -443,15 +335,12 @@ const faqs = [
         </div>
 
         <div class="reveal mt-20" style="transition-delay: 0.12s">
-          <h3 class="t-head">The same thought, in the right register.</h3>
-          <p class="t-sub">
-            Give an app its own Magic Format prompt and Suniye uses it whenever you
-            dictate there. Terse in chat, composed in mail, untouched in notes.
-          </p>
+          <h3 class="t-head">{WHERE_IT_WORKS.tonesHeadline}</h3>
+          <p class="t-sub">{WHERE_IT_WORKS.tonesLead}</p>
         </div>
 
         <div class="mt-10 divide-y divide-border border-t border-border">
-          {tones.map((t, i) => (
+          {TONES.map((t, i) => (
             <div
               class="reveal grid gap-x-8 gap-y-3 py-7 md:grid-cols-[7rem_1fr]"
              
@@ -476,15 +365,11 @@ const faqs = [
       <div class="band-inner">
         <p class="rail reveal">Speech models</p>
         <div>
-          <h2 class="t-head reveal">Twelve ways to listen.</h2>
-          <p class="t-sub reveal">
-            From a 118 MB model that keeps up on any Mac to a 1.7 GB one that
-            catches everything &mdash; plus Apple's built-in engine, which downloads
-            nothing at all. Switch whenever you like; they all run locally.
-          </p>
+          <h2 class="t-head reveal">{MODELS_SECTION.headline}</h2>
+          <p class="t-sub reveal">{MODELS_SECTION.lead}</p>
 
           <ul class="reveal mt-10 divide-y divide-border border-t border-border" style="transition-delay: 0.08s">
-            {[models[0], models[1], models[7]].map((m) => (
+            {[MODELS[0], MODELS[1], MODELS[7]].map((m) => (
               <li class="grid gap-x-6 gap-y-1 py-4 md:grid-cols-[13rem_1fr_5rem]">
                 <span class="flex items-center gap-2 text-[15px] tracking-tight text-ink">
                   {m.name}
@@ -506,7 +391,7 @@ const faqs = [
           </summary>
 
           <ul class="mt-8 divide-y divide-border border-t border-border">
-            {models.filter((_, i) => ![0, 1, 7].includes(i)).map((m) => (
+            {MODELS.filter((_, i) => ![0, 1, 7].includes(i)).map((m) => (
               <li class="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-3.5">
                 <span class="text-[15px] tracking-tight text-ink">{m.name}</span>
                 {m.tag && <span class="pill pill-accent">{m.tag}</span>}
@@ -529,24 +414,24 @@ const faqs = [
         <!-- One column on phones: the dot separators only make sense while the
              items share a line, and wrapping strands them at the ends of rows. -->
         <ul class="reveal flex flex-col items-center gap-y-2.5 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-muted/70 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-8 sm:gap-y-3">
-          <li>MIT licensed</li>
+          <li>{PROOF_POINTS[0]}</li>
           <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
           <li>
             <a
-              href={`${githubUrl}/releases`}
+              href={`${GITHUB_URL}/releases`}
               target="_blank"
               rel="noopener"
               class="transition-colors hover:text-ink"
             >
-              62 releases since February
+              {PROOF_POINTS[1]}
             </a>
           </li>
           <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
-          <li>No account</li>
+          <li>{PROOF_POINTS[2]}</li>
           <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
-          <li>Apple Silicon &amp; Intel</li>
+          <li>{PROOF_POINTS[3]}</li>
           <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
-          <li>Free, forever</li>
+          <li>{PROOF_POINTS[4]}</li>
         </ul>
       </div>
     </section>
@@ -556,7 +441,7 @@ const faqs = [
       <div class="band-inner">
         <p class="rail reveal">Install</p>
         <div class="reveal max-w-xl">
-          <h2 class="t-head">Two ways in.</h2>
+          <h2 class="t-head">{INSTALL.headline}</h2>
 
           <div class="mt-8">
             <div class="mb-2 flex items-center gap-2">
@@ -566,20 +451,18 @@ const faqs = [
               <span class="pill pill-accent">Recommended</span>
             </div>
             <CopyField
-              value={brewInstall}
+              value={BREW_INSTALL}
               label="Copy install command"
               dataTrack="download_click:homebrew"
             />
             <p class="mt-3 text-sm leading-relaxed text-muted/80">
-              Homebrew clears the macOS quarantine for you. It will ask you to trust
-              the tap first — that is Homebrew 6 asking about any third-party tap,
-              not something specific to Suniye.
+              {INSTALL.brewNote}
             </p>
           </div>
 
           <div class="mt-10 flex flex-wrap items-center gap-4">
             <a
-              href={downloadUrl}
+              href={DOWNLOAD_URL}
               data-dmg
               data-track="download_click:dmg_install"
               class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 text-sm text-ink hover:bg-surface"
@@ -590,7 +473,7 @@ const faqs = [
               Download .dmg
             </a>
             <a
-              href={`${githubUrl}#build-from-source`}
+              href={`${GITHUB_URL}#build-from-source`}
               target="_blank"
               rel="noopener"
               class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 text-sm text-ink hover:bg-surface"
@@ -600,12 +483,11 @@ const faqs = [
           </div>
 
           <p class="mt-8 text-sm leading-relaxed text-muted/80">
-            macOS 14 (Sonoma) or later. Dictation works on Intel and Apple Silicon;
-            the on-device cleanup model needs Apple Silicon.
+            {INSTALL.requirements}
           </p>
 
           <p class="mt-6">
-            <span class="pill pill-accent">Alpha &mdash; expect rough edges</span>
+            <span class="pill pill-accent">{INSTALL.status}</span>
           </p>
         </div>
       </div>
@@ -617,7 +499,7 @@ const faqs = [
         <p class="rail reveal">Questions</p>
         <div>
           <div class="reveal divide-y divide-border border-y border-border" style="transition-delay: 0.1s">
-            {faqs.map((item) => (
+            {FAQS.map((item) => (
               <details class="faq-item group" data-track-open={`faq_${item.q.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40)}`}>
                 <summary class="flex items-center justify-between gap-4 py-5">
                   <span class="text-base tracking-tight text-ink">{item.q}</span>
@@ -642,11 +524,11 @@ const faqs = [
 
       <div class="relative z-10 mx-auto max-w-6xl px-6 py-28 text-center md:py-36">
         <h2 class="on-art font-display text-3xl leading-snug tracking-tight md:text-5xl">
-          Your voice, your machine.
+          {CLOSING}
         </h2>
         <div class="mt-8 flex justify-center">
           <a
-            href={downloadUrl}
+            href={DOWNLOAD_URL}
             data-dmg
             data-track="download_click:dmg_footer"
             class="glass inline-flex items-center gap-2 px-6 py-3 text-[15px] font-medium"
@@ -703,11 +585,11 @@ const faqs = [
                mono, and the only thing in the dialog with any weight. -->
           <div class="mt-5 flex items-center gap-3 rounded-xl bg-ink px-4 py-3.5">
             <code class="flex-1 break-all font-mono text-[12.5px] leading-relaxed text-white/90">
-              {quarantineCmd}
+              {QUARANTINE_CMD}
             </code>
             <button
               class="copy-btn btn-press relative flex-none rounded-md p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
-              data-copy={quarantineCmd}
+              data-copy={QUARANTINE_CMD}
               aria-label="Copy the command"
             >
               <svg class="copy-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -738,12 +620,12 @@ const faqs = [
               </p>
               <button
                 class="copy-btn btn-press relative mt-2 flex w-full items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 text-left"
-                data-copy={brewInstall}
+                data-copy={BREW_INSTALL}
                 data-track="download_click:homebrew_modal"
                 aria-label="Copy the Homebrew install command"
               >
                 <code class="min-w-0 flex-1 break-all font-mono text-[12px] text-muted">
-                  {brewInstall}
+                  {BREW_INSTALL}
                 </code>
                 <span class="relative h-3.5 w-3.5 flex-none text-muted/50">
                   <svg class="copy-icon h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

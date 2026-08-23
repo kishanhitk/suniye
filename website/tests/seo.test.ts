@@ -1,30 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import {
-  SITE_URL,
-  SITE_PAGES,
-  buildSitemapXml,
-  softwareApplicationSchema,
-  faqPageSchema,
-  jsonLdString,
-} from "../src/lib/seo";
+import { buildSitemapXml, softwareApplicationSchema, faqPageSchema, jsonLdString } from "../src/lib/seo";
+import { SITE_URL, SITE_PAGES } from "../src/lib/site";
 
 describe("sitemap", () => {
   test("lists every public page as an absolute URL", () => {
     const xml = buildSitemapXml();
     expect(xml).toStartWith('<?xml version="1.0" encoding="UTF-8"?>');
     expect(xml).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
-    for (const path of SITE_PAGES) {
+    for (const { path } of SITE_PAGES) {
       expect(xml).toContain(`<loc>${new URL(path, SITE_URL).toString()}</loc>`);
     }
   });
 
-  test("covers the home, changelog, and privacy pages", () => {
-    expect(SITE_PAGES).toEqual(["/", "/changelog", "/privacy"]);
+  test("covers the home, trust, blog, changelog, and privacy pages", () => {
+    expect(SITE_PAGES.map((p) => p.path)).toEqual(["/", "/about", "/contact", "/blogs", "/changelog", "/privacy"]);
   });
 
-  test("emits one <url> entry per page", () => {
-    const xml = buildSitemapXml();
-    expect(xml.match(/<url>/g)?.length).toBe(SITE_PAGES.length);
+  test("emits one <url> entry per page plus each extra entry, dating only the extras", () => {
+    const xml = buildSitemapXml([{ path: "/blogs/post", lastmod: new Date("2026-08-17T00:00:00Z") }]);
+    expect(xml.match(/<url>/g)?.length).toBe(SITE_PAGES.length + 1);
+    expect(xml.match(/<lastmod>/g)?.length).toBe(1);
+    expect(xml).toContain("<loc>https://suniye.app/blogs/post</loc>\n    <lastmod>2026-08-17</lastmod>");
   });
 });
 

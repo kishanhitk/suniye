@@ -2,7 +2,7 @@
 // Was duplicated per-page with a slightly different link set on each. Extracted
 // once a fourth page (privacy) needed one and a fifth (blog) was about to.
 interface Props {
-  current?: "/" | "/changelog" | "/privacy" | "/blogs";
+  current?: "/" | "/about" | "/contact" | "/changelog" | "/privacy" | "/blogs";
 }
 const { current } = Astro.props;
 
@@ -10,9 +10,11 @@ const githubUrl = "https://github.com/kishanhitk/suniye";
 
 const links = [
   { href: "/", label: "Home" },
+  { href: "/about", label: "About" },
   { href: "/blogs", label: "Blog" },
   { href: "/changelog", label: "Changelog" },
   { href: "/privacy", label: "Privacy" },
+  { href: "/contact", label: "Contact" },
 ].filter((l) => l.href !== current);
 ---
 
