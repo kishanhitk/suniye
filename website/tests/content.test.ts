@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { authoredMarkdown } from "../src/lib/content/authored";
 import { FAQS, MODELS, homeMarkdown } from "../src/lib/content/home";
 import { COLLECTED, NEVER_COLLECTED, emphasisToHtml, privacyMarkdown } from "../src/lib/content/privacy";
 import { changelogMarkdown, parseFullChangelogUrl, parseReleaseItems } from "../src/lib/releases";
@@ -106,11 +107,41 @@ describe("organization JSON-LD", () => {
     });
     expect(org.address).toEqual({ "@type": "PostalAddress", addressCountry: "IN" });
     expect(org.sameAs).toEqual(["https://github.com/kishanhitk/suniye"]);
-    expect(JSON.stringify(org)).not.toMatch(/@|founder|Person/);
+    expect(JSON.stringify(org)).not.toMatch(/[\w.]+@[\w.]+|founder|Person|email|telephone/);
   });
 
   test("the WebSite node points at the Organization by @id", () => {
     expect(webSiteSchema().publisher).toEqual({ "@id": `${SITE_URL}/#organization` });
     expect(organizationSchema()["@id"]).toBe(`${SITE_URL}/#organization`);
+  });
+});
+
+describe("authoredMarkdown", () => {
+  test("turns the posts' inline HTML into Markdown links and absolutizes site paths", () => {
+    const body = [
+      "Intro with a [relative link](/privacy) and an [external](https://example.com/).",
+      "",
+      '<a href="/" class="btn-press not-prose">',
+      '  <svg viewBox="0 0 24 24"><path d="M1 1" /></svg>',
+      "  Download Suniye for macOS",
+      "</a>",
+      "",
+      '*Sources: <a href="https://superwhisper.com/" rel="nofollow noopener" target="_blank">Superwhisper pricing</a>.*',
+    ].join("\n");
+    expect(authoredMarkdown(body)).toBe(
+      [
+        "Intro with a [relative link](https://suniye.app/privacy) and an [external](https://example.com/).",
+        "",
+        "[Download Suniye for macOS](https://suniye.app/)",
+        "",
+        "*Sources: [Superwhisper pricing](https://superwhisper.com/).*",
+      ].join("\n"),
+    );
+  });
+
+  test("leaves plain Markdown alone apart from trimming", () => {
+    expect(authoredMarkdown("\n## Heading\n\nText with `code` and **bold**.\n")).toBe(
+      "## Heading\n\nText with `code` and **bold**.",
+    );
   });
 });

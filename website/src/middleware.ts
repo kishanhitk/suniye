@@ -24,16 +24,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   const preferred = negotiate(context.request.headers.get("accept"));
-  const pageUrl = absoluteUrl(context.url.pathname);
+  // The HTML canonical has no trailing slash; the Markdown self-URL matches it.
+  const pathname = context.url.pathname.replace(/(.)\/$/, "$1");
+  const pageUrl = absoluteUrl(pathname);
 
   if (isNotFound) {
     // A missing page is a 404 whatever the client accepts; 406 would hide that.
     if (preferred === "markdown") {
-      return markdownResponse(notFoundMarkdown(context.url.pathname), pageUrl, 404);
+      return markdownResponse(notFoundMarkdown(pathname), pageUrl, 404);
     }
+  } else if (preferred === null && !pattern.includes("[")) {
+    // A static route always exists, so there is nothing to build before 406.
+    return notAcceptableResponse();
   } else if (preferred !== "html") {
-    // Resolve the document first: a dynamic route with no such entry is a
-    // 404 (the page answers that), not a 406.
+    // A dynamic route with no such entry is a 404 (the page answers that),
+    // not a 406, so the document is resolved before that decision.
     const doc = await markdownFor(pattern, context.params);
     if (doc) {
       if (preferred === null) {

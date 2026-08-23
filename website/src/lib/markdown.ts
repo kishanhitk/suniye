@@ -1,5 +1,6 @@
 import type { APIContext } from "astro";
 import { getCollection, getEntry } from "astro:content";
+import { authoredMarkdown } from "./content/authored";
 import { homeMarkdown } from "./content/home";
 import { privacyMarkdown } from "./content/privacy";
 import { RELEASES_CACHE_POLICY, changelogMarkdown, fetchReleases } from "./releases";
@@ -25,11 +26,6 @@ function ok(body: string): MarkdownDocument {
 
 function dateOnly(d: Date): string {
   return d.toISOString().slice(0, 10);
-}
-
-/** Site-relative links in authored Markdown become absolute, since an agent reads the body detached from the URL it came from. */
-function absolutizeLinks(markdown: string): string {
-  return markdown.replace(/\]\((\/[^)\s]*)\)/g, (_, path: string) => `](${absoluteUrl(path)})`);
 }
 
 async function publishedPosts() {
@@ -94,7 +90,7 @@ ${post.data.description}
 
 _${dates}. Canonical: ${absoluteUrl(`/blogs/${post.id}`)}_
 
-${absolutizeLinks(post.body.trim())}
+${authoredMarkdown(post.body)}
 
 ---
 
@@ -110,7 +106,7 @@ async function pageMarkdown(id: "about" | "contact"): Promise<MarkdownDocument |
 
 ${entry.data.description}
 
-${absolutizeLinks(entry.body.trim())}
+${authoredMarkdown(entry.body)}
 
 ---
 
