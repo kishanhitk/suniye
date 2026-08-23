@@ -1,14 +1,5 @@
 # Screen index
 
-`screens/` is the audited baseline (`main` @ 1be1c56b). `screens-after/` shows
-the two-screen implementation that was built on this branch and then reverted
-pending discussion (commits `b03c2cf4`…`be90d574` in the branch history):
-`01-dictate-downloading-no-mic.png` — screen 1 on the glass with the download
-banner, the Permissions group and the always-present footer;
-`02-dictate-ready.png` — the practice state with the recessed "What you said"
-field while the hotkey is held. Dark mode because that was the machine's
-appearance at capture time.
-
 All captures: Suniye Preview (`dev.suniye.app.preview`), Debug build of `main` @ 1be1c56b, macOS 26, 780×680 window at 2×, light mode unless noted. Window captures use `screencapture -l`; the dashboard/settings captures use `-R` so the behind-window material composites (`-l` flattens it).
 
 The preview's hotkey was set to ⌃⌥D for the practice captures (synthetic Globe events do not reach the hotkey monitors), so 05–07, 13 and the dashboard empty state read "Control + Option + D" where a real install reads "Globe". The dashboard stat header in 11/15 ("192 dictations") is a test artifact: the Preview build migrates the stable app's legacy `stats.json`; a fresh install shows zeros.
