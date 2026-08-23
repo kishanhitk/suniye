@@ -3,18 +3,14 @@ import Layout from "../layouts/Layout.astro";
 import Navbar from "../components/Navbar.astro";
 import Footer from "../components/Footer.astro";
 import { DOWNLOAD_URL, GITHUB_URL } from "../lib/site";
-import { CHANGELOG_META, fetchReleases } from "../lib/releases";
+import { CHANGELOG_META, RELEASES_CACHE_POLICY, fetchReleases } from "../lib/releases";
 
 export const prerender = false;
 
 const heroWords = "Suniye Changelog".split(" ");
 
 if (Astro.cache.enabled) {
-  Astro.cache.set({
-    maxAge: 300,
-    swr: 3600,
-    tags: ["github-releases"],
-  });
+  Astro.cache.set(RELEASES_CACHE_POLICY);
 }
 
 const releases = await fetchReleases();

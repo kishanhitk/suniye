@@ -1,15 +1,20 @@
+import type { APIContext } from "astro";
 import { getCollection, getEntry } from "astro:content";
 import { homeMarkdown } from "./content/home";
 import { privacyMarkdown } from "./content/privacy";
-import { changelogMarkdown, fetchReleases } from "./releases";
+import { RELEASES_CACHE_POLICY, changelogMarkdown, fetchReleases } from "./releases";
 import { SITE_NAME, SITE_PAGES, SITE_URL, absoluteUrl } from "./site";
 
 // The Markdown representation of every content route, keyed by Astro route
 // pattern. The middleware consults this when a client prefers text/markdown.
 
+type CachePolicy = Parameters<APIContext["cache"]["set"]>[0];
+
 export interface MarkdownDocument {
   body: string;
   status: number;
+  /** Astro cache policy for this document, when the page's own route caches too. */
+  cache?: CachePolicy;
 }
 
 type Builder = (params: Record<string, string | undefined>) => Promise<MarkdownDocument | null>;
@@ -56,7 +61,7 @@ Every page above also answers \`Accept: text/markdown\` with a Markdown version 
 const builders: Record<string, Builder> = {
   "/": async () => ok(homeMarkdown()),
   "/privacy": async () => ok(privacyMarkdown()),
-  "/changelog": async () => ok(changelogMarkdown(await fetchReleases())),
+  "/changelog": async () => ({ ...ok(changelogMarkdown(await fetchReleases())), cache: RELEASES_CACHE_POLICY }),
   "/about": async () => pageMarkdown("about"),
   "/contact": async () => pageMarkdown("contact"),
   "/blogs": async () => {

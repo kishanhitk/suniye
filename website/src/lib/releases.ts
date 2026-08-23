@@ -26,6 +26,11 @@ export interface Release {
   fullChangelogUrl?: string;
 }
 
+/** How long either representation of the changelog may be served from Astro's cache. */
+export const RELEASES_CACHE_POLICY = { maxAge: 300, swr: 3600, tags: ["github-releases"] } as const;
+
+const GITHUB_TIMEOUT_MS = 5_000;
+
 const releaseDateFormatter = new Intl.DateTimeFormat("en", {
   month: "short",
   day: "numeric",
@@ -40,6 +45,7 @@ async function fetchGitHubReleases(): Promise<GitHubRelease[]> {
         Accept: "application/vnd.github+json",
         "User-Agent": "suniye-website",
       },
+      signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
     });
 
     if (!response.ok) {

@@ -31,19 +31,29 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (preferred === "markdown") {
       return markdownResponse(notFoundMarkdown(context.url.pathname), pageUrl, 404);
     }
-  } else if (preferred === null) {
-    return notAcceptableResponse();
-  } else if (preferred === "markdown") {
+  } else if (preferred !== "html") {
+    // Resolve the document first: a dynamic route with no such entry is a
+    // 404 (the page answers that), not a 406.
     const doc = await markdownFor(pattern, context.params);
     if (doc) {
+      if (preferred === null) {
+        return notAcceptableResponse();
+      }
+      if (doc.cache && context.cache.enabled) {
+        context.cache.set(doc.cache);
+      }
       return markdownResponse(doc.body, pageUrl, doc.status);
     }
-    // No document for these params (e.g. unknown blog slug): let the page
-    // itself answer, which is where the 404 comes from.
   }
 
   const rendered = await next();
-  // Rendered responses may carry immutable headers; re-wrap so Vary can be set.
+  if (!isNotFound && rendered.body === null && (rendered.status === 404 || rendered.status === 500)) {
+    // Astro re-renders a bodiless error response through the /404 or /500
+    // route, where this middleware runs again; headers set here would
+    // override that pass's (Astro merges the original response's headers on top).
+    return rendered;
+  }
+  // Rendered responses may carry immutable headers; re-wrap so they can be set.
   const response = new Response(rendered.body, rendered);
   varyOnAccept(response.headers);
   response.headers.set("Link", alternateLinkHeader(pageUrl, MARKDOWN_TYPE));
