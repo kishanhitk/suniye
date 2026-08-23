@@ -1,12 +1,12 @@
 ---
 // Was duplicated per-page with a slightly different link set on each. Extracted
 // once a fourth page (privacy) needed one and a fifth (blog) was about to.
+import { GITHUB_ISSUES_URL, GITHUB_URL } from "../lib/site";
+
 interface Props {
   current?: "/" | "/about" | "/contact" | "/changelog" | "/privacy" | "/blogs";
 }
 const { current } = Astro.props;
-
-const githubUrl = "https://github.com/kishanhitk/suniye";
 
 const links = [
   { href: "/", label: "Home" },
@@ -28,10 +28,10 @@ const links = [
       {links.map((l) => (
         <a href={l.href} class="transition-colors hover:text-ink">{l.label}</a>
       ))}
-      <a href={githubUrl} target="_blank" rel="noopener" data-track="outbound_click:github" class="transition-colors hover:text-ink">
+      <a href={GITHUB_URL} target="_blank" rel="noopener" data-track="outbound_click:github" class="transition-colors hover:text-ink">
         GitHub
       </a>
-      <a href={`${githubUrl}/issues`} target="_blank" rel="noopener" class="transition-colors hover:text-ink">
+      <a href={GITHUB_ISSUES_URL} target="_blank" rel="noopener" class="transition-colors hover:text-ink">
         Issues
       </a>
     </div>

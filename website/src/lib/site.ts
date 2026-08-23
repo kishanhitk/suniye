@@ -4,32 +4,21 @@
 
 export const SITE_URL = "https://suniye.app";
 export const SITE_NAME = "Suniye";
-export const SITE_TAGLINE = "Private, on-device dictation for macOS";
 export const SITE_DESCRIPTION =
   "Open-source, local-first dictation for macOS. Hold a key, speak, and your words appear at your cursor. No audio leaves your machine.";
 
 export const GITHUB_URL = "https://github.com/kishanhitk/suniye";
 export const GITHUB_ISSUES_URL = `${GITHUB_URL}/issues`;
-export const GITHUB_SECURITY_URL = `${GITHUB_URL}/security/advisories/new`;
 export const GITHUB_RELEASES_URL = `${GITHUB_URL}/releases`;
 export const DOWNLOAD_URL = `${GITHUB_URL}/releases/latest/download/Suniye.dmg`;
 export const BREW_INSTALL = "brew install --cask kishanhitk/tap/suniye";
 export const QUARANTINE_CMD = "xattr -rd com.apple.quarantine /Applications/Suniye.app";
 
-export const MAINTAINER = {
-  name: "Kishan Kumar",
-  github: "https://github.com/kishanhitk",
-  website: "https://kishans.in/",
-  x: "https://x.com/jst_kishan",
-  // The maintainer's public GitHub location. Kept deliberately coarse — there
-  // is no company and no office, so no street address is claimed anywhere.
-  region: "Bihar",
-  countryCode: "IN",
-} as const;
-
-export const CONTACT_EMAIL = "kishansharma1231@gmail.com";
-
-export const SOCIAL_PROFILES = [GITHUB_URL, MAINTAINER.github, MAINTAINER.x] as const;
+// The project is one person with no company and no office. The site names
+// no person and publishes no personal contact details; the only location
+// claim is the country, and the only contact channels are GitHub and the
+// in-app reporter.
+export const ORGANIZATION_COUNTRY_CODE = "IN";
 
 export interface SitePage {
   path: string;

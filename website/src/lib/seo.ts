@@ -5,9 +5,8 @@ import {
   SITE_PAGES,
   GITHUB_URL,
   DOWNLOAD_URL,
-  CONTACT_EMAIL,
-  MAINTAINER,
-  SOCIAL_PROFILES,
+  GITHUB_ISSUES_URL,
+  ORGANIZATION_COUNTRY_CODE,
   absoluteUrl,
 } from "./site";
 
@@ -46,14 +45,14 @@ export function softwareApplicationSchema() {
     description: SITE_DESCRIPTION,
     softwareHelp: GITHUB_URL,
     license: "https://opensource.org/license/mit",
-    author: { "@type": "Person", name: MAINTAINER.name, url: MAINTAINER.github },
   };
 }
 
 /**
- * The project as a publisher: who stands behind the site and how to reach
- * them. Suniye is an open-source project run by one person, not a company, so
- * the address is the maintainer's public region and nothing more specific.
+ * The project as a publisher and how to reach it. Suniye is an open-source
+ * project run by one person, not a company: the address is a country and
+ * nothing more specific, and contact goes through GitHub rather than a
+ * personal email or phone.
  */
 export function organizationSchema() {
   return {
@@ -64,22 +63,18 @@ export function organizationSchema() {
     url: SITE_URL,
     logo: absoluteUrl("/suniye-icon.png"),
     description: SITE_DESCRIPTION,
-    email: CONTACT_EMAIL,
-    founder: { "@type": "Person", name: MAINTAINER.name, url: MAINTAINER.website },
-    sameAs: [...SOCIAL_PROFILES],
+    sameAs: [GITHUB_URL],
     contactPoint: [
       {
         "@type": "ContactPoint",
         contactType: "customer support",
-        email: CONTACT_EMAIL,
-        url: absoluteUrl("/contact"),
+        url: GITHUB_ISSUES_URL,
         availableLanguage: "English",
       },
     ],
     address: {
       "@type": "PostalAddress",
-      addressRegion: MAINTAINER.region,
-      addressCountry: MAINTAINER.countryCode,
+      addressCountry: ORGANIZATION_COUNTRY_CODE,
     },
   };
 }

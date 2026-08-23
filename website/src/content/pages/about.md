@@ -1,6 +1,6 @@
 ---
 title: "About Suniye"
-description: "Suniye is a free, open-source dictation app for macOS built by one developer. Speech recognition runs on your Mac, so nothing you say leaves it. Here is who builds it, why, and how the project is run."
+description: "Suniye is a free, open-source dictation app for macOS built by one developer. Speech recognition runs on your Mac, so nothing you say leaves it. Here is why it exists and how the project is run."
 ---
 
 ## What Suniye is
@@ -15,7 +15,7 @@ Most dictation apps for the Mac are thin clients for someone else's speech API. 
 
 ## Who builds it
 
-Suniye is built and maintained by [Kishan Kumar](https://kishans.in/), a software developer based in Bihar, India. There is no company behind it. Development happens in the open on [GitHub](https://github.com/kishanhitk/suniye), where every commit, release, and issue is public. The project started in February 2026 and ships new releases often; each one is listed on the [changelog](/changelog).
+Suniye is built and maintained by one developer. There is no company behind it. Development happens in the open on [GitHub](https://github.com/kishanhitk/suniye), where every commit, release, and issue is public. The project started in February 2026 and ships new releases often; each one is listed on the [changelog](/changelog).
 
 ## How it works, briefly
 

@@ -19,6 +19,23 @@ cd website
 npm run build
 ```
 
+## Content negotiation for agents
+
+Every content page (`/`, `/about`, `/contact`, `/privacy`, `/changelog`, the blog,
+and the 404) answers `Accept: text/markdown` with a Markdown version of itself,
+with `Vary: Accept` and an RFC 8288 `Link` header on both representations.
+`src/middleware.ts` does the negotiation (`src/lib/negotiation.ts`) and
+`src/lib/markdown.ts` maps each route pattern to a Markdown builder. The builders
+render the same content modules the HTML pages use (`src/lib/content/*`,
+`src/lib/releases.ts`, `src/content/pages/*.md`), so the two representations
+cannot drift — new copy goes into those modules, not into the `.astro` template.
+
+These pages are rendered on demand (`export const prerender = false`) on
+purpose: a prerendered page is served straight from Workers Static Assets and
+never reaches the middleware. Keep new content pages on demand and register
+them in `src/lib/markdown.ts` and `SITE_PAGES` in `src/lib/site.ts` (which also
+feeds the sitemap, the 404 page, and `/llms.txt`).
+
 ## Deploy
 
 The site runs on **Cloudflare Workers** (Workers Static Assets + Astro on-demand

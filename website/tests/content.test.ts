@@ -3,7 +3,7 @@ import { FAQS, MODELS, homeMarkdown } from "../src/lib/content/home";
 import { COLLECTED, NEVER_COLLECTED, emphasisToHtml, privacyMarkdown } from "../src/lib/content/privacy";
 import { changelogMarkdown, parseFullChangelogUrl, parseReleaseItems } from "../src/lib/releases";
 import { organizationSchema, webSiteSchema } from "../src/lib/seo";
-import { CONTACT_EMAIL, SITE_URL } from "../src/lib/site";
+import { SITE_URL } from "../src/lib/site";
 
 describe("homeMarkdown", () => {
   const md = homeMarkdown();
@@ -94,17 +94,19 @@ describe("releases", () => {
 });
 
 describe("organization JSON-LD", () => {
-  test("has the contact point and postal address agents verify", () => {
+  test("points contact at GitHub and claims only a country, never a person", () => {
     const org = organizationSchema();
     expect(org["@type"]).toBe("Organization");
     expect(org.url).toBe(SITE_URL);
-    expect(org.contactPoint[0]).toMatchObject({
+    expect(org.contactPoint[0]).toEqual({
       "@type": "ContactPoint",
       contactType: "customer support",
-      email: CONTACT_EMAIL,
+      url: "https://github.com/kishanhitk/suniye/issues",
+      availableLanguage: "English",
     });
-    expect(org.address).toEqual({ "@type": "PostalAddress", addressRegion: "Bihar", addressCountry: "IN" });
-    expect(org.sameAs).toContain("https://github.com/kishanhitk/suniye");
+    expect(org.address).toEqual({ "@type": "PostalAddress", addressCountry: "IN" });
+    expect(org.sameAs).toEqual(["https://github.com/kishanhitk/suniye"]);
+    expect(JSON.stringify(org)).not.toMatch(/@|founder|Person/);
   });
 
   test("the WebSite node points at the Organization by @id", () => {

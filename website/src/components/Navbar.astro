@@ -6,14 +6,13 @@
 //                 quarantine dialog instead of navigating.
 //   - "subpage":  always the frosted light bar; Download goes straight to the
 //                 DMG (no modal script exists off the homepage).
+import { DOWNLOAD_URL, GITHUB_URL } from "../lib/site";
+
 interface Props {
   variant?: "over-art" | "subpage";
 }
 const { variant = "subpage" } = Astro.props;
 const overArt = variant === "over-art";
-
-const githubUrl = "https://github.com/kishanhitk/suniye";
-const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/download/Suniye.dmg";
 ---
 
 <nav
@@ -38,7 +37,7 @@ const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/downlo
         <a href="/" class="nav-link hidden text-sm sm:inline">Home</a>
       )}
       <a
-        href={githubUrl}
+        href={GITHUB_URL}
         target="_blank"
         rel="noopener"
         data-track="outbound_click:github"
@@ -47,7 +46,7 @@ const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/downlo
         GitHub
       </a>
       <a
-        href={downloadUrl}
+        href={DOWNLOAD_URL}
         data-dmg={overArt ? "" : undefined}
         data-track="cta_click:nav_download"
         class="nav-cta btn-press rounded-lg bg-ink px-4 py-2 text-sm text-bg hover:bg-ink/85"
