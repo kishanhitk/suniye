@@ -109,6 +109,7 @@ export async function fetchReleases(): Promise<Release[]> {
 export const CHANGELOG_META = {
   title: "Suniye Changelog - What's New",
   description: "Updates to Suniye's recording, transcription, insertion, and local-first macOS workflows.",
+  unavailable: "Release notes are temporarily unavailable.",
 } as const;
 
 export function changelogMarkdown(releases: readonly Release[]): string {
@@ -127,7 +128,7 @@ export function changelogMarkdown(releases: readonly Release[]): string {
             return `${heading}\n\n${items}\n\n${links}`;
           })
           .join("\n\n")
-      : `Release notes could not be loaded right now. The full list is on GitHub: ${GITHUB_RELEASES_URL}`;
+      : `${CHANGELOG_META.unavailable} The full list is on GitHub: ${GITHUB_RELEASES_URL}`;
 
   return `# Suniye Changelog
 

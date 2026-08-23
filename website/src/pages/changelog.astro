@@ -162,7 +162,7 @@ const releases = await fetchReleases();
             </article>
           )) : (
             <p class="reveal border-t border-border/70 py-10 text-muted">
-              Release notes are temporarily unavailable.
+              {CHANGELOG_META.unavailable}
             </p>
           )}
         </div>

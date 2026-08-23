@@ -90,7 +90,7 @@ describe("releases", () => {
     expect(md).toContain("- Warm up the ORT sessions");
     expect(md).toContain("Full changelog: https://github.com/kishanhitk/suniye/compare/v0.0.67...v0.0.68");
     expect(md).toContain("## v0.0.67 — Aug 21, 2026\n\nNo release notes published for this release.");
-    expect(changelogMarkdown([])).toContain("Release notes could not be loaded right now.");
+    expect(changelogMarkdown([])).toContain("Release notes are temporarily unavailable. The full list is on GitHub:");
   });
 });
 
