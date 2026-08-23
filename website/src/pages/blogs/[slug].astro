@@ -1,17 +1,19 @@
 ---
-import { getCollection, render } from "astro:content";
+import { getEntry, render } from "astro:content";
 import Layout from "../../layouts/Layout.astro";
 import Navbar from "../../components/Navbar.astro";
 import Footer from "../../components/Footer.astro";
 import AudioPathDiagram from "../../components/AudioPathDiagram.astro";
 import { blogPostingSchema, breadcrumbSchema, jsonLdString } from "../../lib/seo";
 
-export async function getStaticPaths() {
-  const posts = await getCollection("blog", ({ data }) => !data.draft);
-  return posts.map((post) => ({ params: { slug: post.id }, props: { post } }));
-}
+// On demand so `Accept: text/markdown` reaches the middleware, which serves
+// the post's own Markdown source.
+export const prerender = false;
 
-const { post } = Astro.props;
+const post = await getEntry("blog", Astro.params.slug!);
+if (!post || post.data.draft) {
+  return new Response(null, { status: 404 });
+}
 const { Content } = await render(post);
 
 // See index.astro's fmt for why UTC is pinned explicitly.

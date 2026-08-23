@@ -1,12 +1,15 @@
 ---
 import "../styles/global.css";
 import Beacon from "../components/Beacon.astro";
-import { SITE_URL } from "../lib/seo";
+import { SITE_URL } from "../lib/site";
+import { jsonLdString, organizationSchema, webSiteSchema } from "../lib/seo";
 
 interface Props {
   title?: string;
   description?: string;
   canonicalPath?: string;
+  /** Error pages: no canonical, no og:url, and ask crawlers not to index. */
+  noindex?: boolean;
   /** What the browser paints its own chrome and over-scroll with — iOS Safari
       derives it from the document background colour. Defaults to the page. */
   canvasColor?: string;
@@ -16,6 +19,7 @@ const {
   title = "Suniye — Private Dictation for macOS",
   description = "Dictation for macOS, built for privacy and speed. The models run on your Mac, so nothing is uploaded and the words land as fast as you say them. Free and open source.",
   canonicalPath = "/",
+  noindex = false,
   canvasColor,
 } = Astro.props;
 
@@ -31,13 +35,20 @@ const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
     <meta name="description" content={description} />
     <meta name="theme-color" content="#2b6cc4" />
     <link rel="icon" type="image/png" href="/suniye-icon.png" />
-    <link rel="canonical" href={canonicalUrl} />
+    {noindex ? (
+      <meta name="robots" content="noindex" />
+    ) : (
+      <>
+        <link rel="canonical" href={canonicalUrl} />
+        <link rel="alternate" type="text/markdown" href={canonicalUrl} title="Markdown version of this page" />
+      </>
+    )}
     <link rel="alternate" type="application/rss+xml" title="Suniye Blog" href="/rss.xml" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Suniye" />
-    <meta property="og:url" content={canonicalUrl} />
+    {!noindex && <meta property="og:url" content={canonicalUrl} />}
     <meta property="og:image" content="https://suniye.app/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
@@ -54,6 +65,8 @@ const canonicalUrl = new URL(canonicalPath, SITE_URL).toString();
       type="font/woff2"
       crossorigin
     />
+    <script is:inline type="application/ld+json" set:html={jsonLdString(organizationSchema())} />
+    <script is:inline type="application/ld+json" set:html={jsonLdString(webSiteSchema())} />
     <slot name="head" />
     <!-- Runs before first paint: only a document that reached this line can
          hide content, so a failed or blocked bundle leaves the page readable. -->

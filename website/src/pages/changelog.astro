@@ -2,125 +2,23 @@
 import Layout from "../layouts/Layout.astro";
 import Navbar from "../components/Navbar.astro";
 import Footer from "../components/Footer.astro";
+import { DOWNLOAD_URL, GITHUB_URL } from "../lib/site";
+import { CHANGELOG_META, RELEASES_CACHE_POLICY, fetchReleases } from "../lib/releases";
 
 export const prerender = false;
 
-const githubUrl = "https://github.com/kishanhitk/suniye";
-const downloadUrl = "https://github.com/kishanhitk/suniye/releases/latest/download/Suniye.dmg";
 const heroWords = "Suniye Changelog".split(" ");
 
 if (Astro.cache.enabled) {
-  Astro.cache.set({
-    maxAge: 300,
-    swr: 3600,
-    tags: ["github-releases"],
-  });
+  Astro.cache.set(RELEASES_CACHE_POLICY);
 }
 
-interface GitHubRelease {
-  tag_name: string;
-  name: string | null;
-  html_url: string;
-  published_at: string | null;
-  body: string | null;
-  prerelease: boolean;
-  draft: boolean;
-}
-
-interface ReleaseItem {
-  title: string;
-}
-
-const releaseDateFormatter = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-async function fetchGitHubReleases(): Promise<GitHubRelease[]> {
-  try {
-    const response = await fetch(
-      "https://api.github.com/repos/kishanhitk/suniye/releases?per_page=8",
-      {
-        headers: {
-          Accept: "application/vnd.github+json",
-          "User-Agent": "suniye-website",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      console.warn(`Failed to fetch GitHub releases: ${response.status}`);
-      return [];
-    }
-
-    const payload = await response.json();
-    if (!Array.isArray(payload)) {
-      console.warn("Failed to fetch GitHub releases: unexpected response shape");
-      return [];
-    }
-
-    return payload as GitHubRelease[];
-  } catch (error) {
-    console.warn("Failed to fetch GitHub releases", error);
-    return [];
-  }
-}
-
-const githubReleases = await fetchGitHubReleases();
-
-function parseReleaseItems(body: string | null): ReleaseItem[] {
-  const cleanTitle = (title: string) => title.replace(/^\[codex\]\s*/i, "");
-
-  const seen = new Set<string>();
-  return (body ?? "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("* "))
-    .map((line) => line.slice(2).trim())
-    .map((line) => {
-      const match = line.match(/^(.*?) by @([^\s]+) in (https:\/\/github\.com\/\S+)$/);
-      if (!match) {
-        return { title: cleanTitle(line) };
-      }
-
-      const [, title] = match;
-      return {
-        title: cleanTitle(title),
-      };
-    })
-    .filter((item) => {
-      const key = item.title;
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
-}
-
-function parseFullChangelogUrl(body: string | null): string | undefined {
-  return body?.match(/\*\*Full Changelog\*\*: (https:\/\/\S+)/)?.[1];
-}
-
-const releases = githubReleases
-  .filter((release) => !release.draft && !release.prerelease)
-  .map((release, index) => ({
-    version: release.name || release.tag_name,
-    date: release.published_at
-      ? releaseDateFormatter.format(new Date(release.published_at))
-      : "Unpublished",
-    status: index === 0 ? "Latest" : undefined,
-    href: release.html_url,
-    items: parseReleaseItems(release.body),
-    fullChangelogUrl: parseFullChangelogUrl(release.body),
-  }));
+const releases = await fetchReleases();
 ---
 
 <Layout
-  title="Suniye Changelog - What's New"
-  description="Updates to Suniye's recording, transcription, insertion, and local-first macOS workflows."
+  title={CHANGELOG_META.title}
+  description={CHANGELOG_META.description}
   canonicalPath="/changelog"
 >
   <Navbar variant="subpage" />
@@ -158,13 +56,13 @@ const releases = githubReleases
 
           <div class="fade-in mt-8 flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:items-center">
             <a
-              href={downloadUrl}
+              href={DOWNLOAD_URL}
               class="inline-flex items-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm text-white transition-colors hover:bg-accent-hover"
             >
               Download Latest Release
             </a>
             <a
-              href={`${githubUrl}/releases`}
+              href={`${GITHUB_URL}/releases`}
               target="_blank"
               rel="noopener"
               class="inline-flex items-center gap-2 rounded-lg border border-border px-6 py-3 text-sm text-ink transition-colors hover:bg-surface"
@@ -264,7 +162,7 @@ const releases = githubReleases
             </article>
           )) : (
             <p class="reveal border-t border-border/70 py-10 text-muted">
-              Release notes are temporarily unavailable.
+              {CHANGELOG_META.unavailable}
             </p>
           )}
         </div>

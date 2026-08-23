@@ -1,0 +1,33 @@
+---
+import { getEntry, render } from "astro:content";
+import Layout from "./Layout.astro";
+import Navbar from "../components/Navbar.astro";
+import Footer from "../components/Footer.astro";
+
+interface Props {
+  page: "about" | "contact";
+}
+
+const { page } = Astro.props;
+const entry = await getEntry("pages", page);
+if (!entry) {
+  throw new Error(`Missing content entry: pages/${page}`);
+}
+const { Content } = await render(entry);
+---
+
+<Layout title={`${entry.data.title} — Suniye`} description={entry.data.description} canonicalPath={`/${page}`}>
+  <Navbar variant="subpage" />
+
+  <main class="relative mx-auto max-w-3xl overflow-hidden px-6 pb-24 pt-28">
+    <div class="bloom right-[-14rem] top-[-6rem] h-[22rem] w-[30rem]" aria-hidden="true"></div>
+    <h1 class="font-display text-3xl leading-tight tracking-tight sm:text-4xl">{entry.data.title}</h1>
+    <p class="mt-4 text-lg leading-relaxed text-muted">{entry.data.description}</p>
+
+    <div class="article-prose prose mt-12">
+      <Content />
+    </div>
+  </main>
+
+  <Footer current={`/${page}`} />
+</Layout>
