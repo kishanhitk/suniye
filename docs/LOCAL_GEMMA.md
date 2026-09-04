@@ -23,7 +23,7 @@ llama-server \
   --model <installed-model-path> \
   --host 127.0.0.1 \
   --port <random-port> \
-  --ctx-size 4096 \
+  --ctx-size 16384 \
   --parallel 1 \
   --reasoning off \
   --api-key <random-key> \
