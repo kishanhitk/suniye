@@ -260,9 +260,11 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
     }
 
     func testTimeoutMapsToLLMTimeout() async {
+        // Budget is the 0.01 s floor plus 0.1 s for the 8-character input; the
+        // fake answers well after that.
         let client = FakeAppleFoundationModelsClient(
             outputs: ["Final text."],
-            responseDelayNanoseconds: 100_000_000
+            responseDelayNanoseconds: 500_000_000
         )
         let processor = AppleFoundationModelsPostProcessor(client: client)
 
@@ -280,8 +282,7 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         AppleMagicFormatConfig(
             systemPrompt: "Clean dictation for Suniye.",
             keywords: ["Suniye"],
-            timeoutSeconds: timeoutSeconds,
-            maxTokens: 256
+            timeoutSeconds: timeoutSeconds
         )
     }
 }
@@ -307,7 +308,7 @@ private final class FakeAppleFoundationModelsClient: AppleFoundationModelsClient
         prompts.count
     }
 
-    func generate(instructions: String, prompt: String, maxTokens: Int) async throws -> String {
+    func generate(instructions: String, prompt: String) async throws -> String {
         if responseDelayNanoseconds > 0 {
             try await Task.sleep(nanoseconds: responseDelayNanoseconds)
         }

@@ -52,7 +52,6 @@ enum MagicFormatOutputSanitizer {
 struct MagicFormatGenerationRequest {
     let instructions: String
     let prompt: String
-    let maxTokens: Int?
 }
 
 enum MagicFormatPipeline {
@@ -60,7 +59,6 @@ enum MagicFormatPipeline {
         text: String,
         systemPrompt: String,
         keywords: [String],
-        maxTokens: Int? = nil,
         singleTurn: Bool = false,
         sanitize: (String) -> String = MagicFormatOutputSanitizer.sanitize,
         generate: (MagicFormatGenerationRequest) async throws -> String
@@ -86,15 +84,13 @@ enum MagicFormatPipeline {
                         keywords: keywords,
                         text: trimmedInput,
                         retrying: attempt > 0
-                    ),
-                    maxTokens: maxTokens
+                    )
                 )
             } else {
                 request = makeRequest(
                     text: trimmedInput,
                     systemPrompt: systemPrompt,
                     keywords: keywords,
-                    maxTokens: maxTokens,
                     retrying: attempt > 0
                 )
             }
@@ -117,7 +113,6 @@ enum MagicFormatPipeline {
         text: String,
         systemPrompt: String,
         keywords: [String],
-        maxTokens: Int?,
         retrying: Bool
     ) -> MagicFormatGenerationRequest {
         MagicFormatGenerationRequest(
@@ -127,8 +122,7 @@ enum MagicFormatPipeline {
                 text: text,
                 retrying: retrying
             ),
-            prompt: makePrompt(text: text),
-            maxTokens: maxTokens
+            prompt: makePrompt(text: text)
         )
     }
 

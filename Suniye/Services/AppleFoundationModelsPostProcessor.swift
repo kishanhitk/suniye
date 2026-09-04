@@ -6,7 +6,7 @@ import FoundationModels
 
 protocol AppleFoundationModelsClient {
     var availability: AppleFoundationModelsAvailability { get }
-    func generate(instructions: String, prompt: String, maxTokens: Int) async throws -> String
+    func generate(instructions: String, prompt: String) async throws -> String
 }
 
 final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
@@ -29,15 +29,16 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
             text: text,
             systemPrompt: config.systemPrompt,
             keywords: config.keywords,
-            maxTokens: config.maxTokens,
             singleTurn: true
         ) { request in
             do {
-                return try await withTimeout(seconds: config.timeoutSeconds) {
+                return try await withTimeout(seconds: MagicFormatGenerationBudget.timeoutSeconds(
+                    floor: config.timeoutSeconds,
+                    inputCharacterCount: text.count
+                )) {
                     try await self.client.generate(
                         instructions: request.instructions,
-                        prompt: request.prompt,
-                        maxTokens: request.maxTokens ?? config.maxTokens
+                        prompt: request.prompt
                     )
                 }
             } catch let error as LLMPostProcessorError {
@@ -56,11 +57,13 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
         }
 
         do {
-            let raw = try await withTimeout(seconds: config.timeoutSeconds) {
+            let raw = try await withTimeout(seconds: MagicFormatGenerationBudget.timeoutSeconds(
+                floor: config.timeoutSeconds,
+                inputCharacterCount: userText.count
+            )) {
                 try await self.client.generate(
                     instructions: instructions,
-                    prompt: userText,
-                    maxTokens: config.maxTokens
+                    prompt: userText
                 )
             }
             let sanitized = MagicFormatOutputSanitizer.sanitize(raw)
@@ -171,7 +174,7 @@ struct UnsupportedAppleFoundationModelsClient: AppleFoundationModelsClient {
         .unsupportedSDKOrRuntime
     }
 
-    func generate(instructions: String, prompt: String, maxTokens: Int) async throws -> String {
+    func generate(instructions: String, prompt: String) async throws -> String {
         throw LLMPostProcessorError.invalidConfiguration(AppleFoundationModelsAvailability.unsupportedSDKOrRuntime.logValue)
     }
 }
@@ -187,7 +190,7 @@ private struct LiveAppleFoundationModelsClient: AppleFoundationModelsClient {
         SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations)
     }
 
-    func generate(instructions: String, prompt: String, maxTokens: Int) async throws -> String {
+    func generate(instructions: String, prompt: String) async throws -> String {
         let activeModel = model
         // Empty instructions means single-turn: everything is in `prompt`, so create
         // the session without a separate system-instruction channel (this is what makes
@@ -197,8 +200,7 @@ private struct LiveAppleFoundationModelsClient: AppleFoundationModelsClient {
             : LanguageModelSession(model: activeModel, instructions: instructions)
         let options = GenerationOptions(
             sampling: .greedy,
-            temperature: 0,
-            maximumResponseTokens: maxTokens
+            temperature: 0
         )
         let response = try await session.respond(to: prompt, options: options)
         return response.content

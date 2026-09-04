@@ -48,6 +48,7 @@ extension CleanupFallbackReason {
         case .provider: self = .providerError
         case .malformedResponse: self = .malformedResponse
         case .emptyOutput: self = .emptyOutput
+        case .outputTruncated: self = .outputTruncated
         case .network: self = .network
         }
     }
@@ -433,8 +434,7 @@ final class MagicFormatCoordinator {
         AppleMagicFormatConfig(
             systemPrompt: settings.composedAppleSystemPrompt,
             keywords: settings.keywords,
-            timeoutSeconds: settings.timeoutSeconds,
-            maxTokens: LLMDefaults.appleMaxTokens
+            timeoutSeconds: settings.timeoutSeconds
         )
     }
 
@@ -444,8 +444,7 @@ final class MagicFormatCoordinator {
             keywords: settings.keywords,
             startupTimeoutSeconds: LocalGemmaDefaults.startupTimeoutSeconds,
             generationTimeoutSeconds: LocalGemmaDefaults.generationTimeoutSeconds,
-            idleTimeoutSeconds: settings.localModelKeepAlive.seconds,
-            maxTokens: LocalGemmaDefaults.maxTokens
+            idleTimeoutSeconds: settings.localModelKeepAlive.seconds
         )
     }
 
@@ -453,8 +452,7 @@ final class MagicFormatCoordinator {
         AppleMagicFormatConfig(
             systemPrompt: "",
             keywords: [],
-            timeoutSeconds: settings.timeoutSeconds,
-            maxTokens: LLMDefaults.editModeMaxTokens
+            timeoutSeconds: settings.timeoutSeconds
         )
     }
 
@@ -463,9 +461,8 @@ final class MagicFormatCoordinator {
             systemPrompt: "",
             keywords: [],
             startupTimeoutSeconds: LocalGemmaDefaults.startupTimeoutSeconds,
-            generationTimeoutSeconds: LocalGemmaDefaults.editModeGenerationTimeoutSeconds,
-            idleTimeoutSeconds: settings.localModelKeepAlive.seconds,
-            maxTokens: LLMDefaults.editModeMaxTokens
+            generationTimeoutSeconds: LocalGemmaDefaults.generationTimeoutSeconds,
+            idleTimeoutSeconds: settings.localModelKeepAlive.seconds
         )
     }
 

@@ -13,7 +13,6 @@ struct AppleMagicFormatConfig: Equatable {
     let systemPrompt: String
     let keywords: [String]
     let timeoutSeconds: Double
-    let maxTokens: Int
 }
 
 struct LocalGemmaMagicFormatConfig: Equatable {
@@ -22,7 +21,16 @@ struct LocalGemmaMagicFormatConfig: Equatable {
     let startupTimeoutSeconds: Double
     let generationTimeoutSeconds: Double
     let idleTimeoutSeconds: Double
-    let maxTokens: Int
+}
+
+/// Wall-clock budget for one uncapped generation: the configured floor plus one
+/// second per 80 input characters (~20 tokens, a slow Mac's decode rate), so a
+/// legitimate long polish finishes and a runaway is still bounded near twice
+/// the legitimate decode. Timing out falls back to the untouched input.
+enum MagicFormatGenerationBudget {
+    static func timeoutSeconds(floor: Double, inputCharacterCount: Int) -> Double {
+        floor + Double(inputCharacterCount) / 80
+    }
 }
 
 protocol LLMPostProcessor {
@@ -142,6 +150,9 @@ enum LLMPostProcessorError: LocalizedError {
     case provider(String)
     case malformedResponse
     case emptyOutput
+    /// The provider stopped on a length limit, so the output is only a prefix
+    /// of the answer. Callers fall back to the untouched input.
+    case outputTruncated
     case network(String)
 
     var errorDescription: String? {
@@ -158,6 +169,8 @@ enum LLMPostProcessorError: LocalizedError {
             return "LLM provider returned malformed response"
         case .emptyOutput:
             return "LLM returned empty output"
+        case .outputTruncated:
+            return "LLM output stopped at a length limit"
         case let .network(reason):
             return "Network error: \(reason)"
         }
@@ -177,6 +190,8 @@ enum LLMPostProcessorError: LocalizedError {
             return "malformed_response"
         case .emptyOutput:
             return "empty_output"
+        case .outputTruncated:
+            return "output_truncated"
         case .network:
             return "network"
         }

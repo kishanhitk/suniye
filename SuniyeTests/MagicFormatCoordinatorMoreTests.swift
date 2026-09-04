@@ -48,6 +48,7 @@ final class MagicFormatCoordinatorMoreTests: XCTestCase {
         XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.provider("x")), .providerError)
         XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.malformedResponse), .malformedResponse)
         XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.emptyOutput), .emptyOutput)
+        XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.outputTruncated), .outputTruncated)
         XCTAssertEqual(CleanupFallbackReason(LLMPostProcessorError.network("x")), .network)
     }
 

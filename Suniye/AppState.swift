@@ -742,16 +742,6 @@ final class AppState {
             persistLLMSettings()
         }
     }
-    var llmMaxTokens = LLMDefaults.defaultMaxTokens {
-        didSet {
-            let clamped = LLMDefaults.clampMaxTokens(llmMaxTokens)
-            if llmMaxTokens != clamped {
-                llmMaxTokens = clamped
-                return
-            }
-            persistLLMSettings()
-        }
-    }
 
     var hasLLMAPIKey = false {
         didSet {
@@ -4801,7 +4791,6 @@ final class AppState {
         learnFromEditsEnabled = settings.learnFromEditsEnabled
         llmAppPromptBindings = settings.appPromptBindings
         llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
-        llmMaxTokens = LLMDefaults.defaultMaxTokens
         isHydratingLLMSettings = false
     }
 
@@ -4820,7 +4809,6 @@ final class AppState {
             autoLearnedKeywordsRaw: llmAutoLearnedKeywordsRaw,
             learnFromEditsEnabled: learnFromEditsEnabled,
             timeoutSeconds: LLMDefaults.defaultTimeoutSeconds,
-            maxTokens: LLMDefaults.defaultMaxTokens,
             localModelKeepAlive: localModelKeepAlive,
             appPromptBindings: llmAppPromptBindings
         )
@@ -4968,7 +4956,7 @@ final class AppState {
                 }
             }
             return "The service rejected this setup. Check the URL and model, then try again."
-        case .malformedResponse, .emptyOutput, .invalidConfiguration:
+        case .malformedResponse, .emptyOutput, .outputTruncated, .invalidConfiguration:
             return "The service responded, but not in a compatible format."
         }
     }
@@ -4980,7 +4968,7 @@ final class AppState {
                 return "Local model took too long to respond."
             case .invalidConfiguration:
                 return localGemmaMagicFormatAvailability.statusText
-            case .provider, .malformedResponse, .emptyOutput:
+            case .provider, .malformedResponse, .emptyOutput, .outputTruncated:
                 return "Local model responded, but not in a compatible format."
             case .network:
                 return "Couldn't reach the local model server."

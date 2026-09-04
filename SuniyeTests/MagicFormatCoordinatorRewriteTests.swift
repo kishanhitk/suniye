@@ -97,8 +97,7 @@ final class MagicFormatCoordinatorRewriteTests: XCTestCase {
         // output budget/timeout are the edit-mode values.
         XCTAssertEqual(gemma.lastConfig?.systemPrompt, "")
         XCTAssertEqual(gemma.lastConfig?.keywords, [])
-        XCTAssertEqual(gemma.lastConfig?.maxTokens, LLMDefaults.editModeMaxTokens)
-        XCTAssertEqual(gemma.lastConfig?.generationTimeoutSeconds, LocalGemmaDefaults.editModeGenerationTimeoutSeconds)
+        XCTAssertEqual(gemma.lastConfig?.generationTimeoutSeconds, LocalGemmaDefaults.generationTimeoutSeconds)
     }
 
     func testRewriteCancelsInFlightPrewarm() async throws {

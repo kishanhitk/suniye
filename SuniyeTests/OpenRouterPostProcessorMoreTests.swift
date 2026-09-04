@@ -8,6 +8,40 @@ final class OpenRouterPostProcessorMoreTests: XCTestCase {
         super.tearDown()
     }
 
+    // MARK: - truncation (KIS-214)
+
+    func testPolishRejectsOutputTheProviderCutShort() async {
+        let processor = OpenRouterPostProcessor(session: makeSession())
+        MoreTestsChatURLProtocol.handler = { request in
+            try MoreTestsChatURLProtocol.jsonResponse(for: request, content: "Only the first half of the", finishReason: "length")
+        }
+
+        do {
+            _ = try await processor.polish(text: "raw text", config: makeConfig())
+            XCTFail("Expected outputTruncated")
+        } catch let error as LLMPostProcessorError {
+            XCTAssertEqual(error.logValue, "output_truncated")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testGenerateRejectsOutputTheProviderCutShort() async {
+        let processor = OpenRouterPostProcessor(session: makeSession())
+        MoreTestsChatURLProtocol.handler = { request in
+            try MoreTestsChatURLProtocol.jsonResponse(for: request, content: "Rewritten up to", finishReason: "length")
+        }
+
+        do {
+            _ = try await processor.generate(instructions: "sys", userText: "user", config: makeConfig())
+            XCTFail("Expected outputTruncated")
+        } catch let error as LLMPostProcessorError {
+            XCTAssertEqual(error.logValue, "output_truncated")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     // MARK: - generate
 
     func testGenerateBuildsEditModeRequestAndSanitizesOutput() async throws {
@@ -20,7 +54,7 @@ final class OpenRouterPostProcessorMoreTests: XCTestCase {
             let body = try XCTUnwrap(MoreTestsChatURLProtocol.requestBodyData(from: request))
             let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
             XCTAssertEqual(json["model"] as? String, "google/gemini-2.5-flash")
-            XCTAssertEqual(json["max_tokens"] as? Int, LLMDefaults.editModeMaxTokens)
+            XCTAssertNil(json["max_tokens"])
             let messages = try XCTUnwrap(json["messages"] as? [[String: String]])
             XCTAssertEqual(messages.first?["role"], "system")
             XCTAssertEqual(messages.first?["content"], "Rewrite instructions.")
@@ -148,12 +182,12 @@ final class OpenRouterPostProcessorMoreTests: XCTestCase {
 private final class MoreTestsChatURLProtocol: URLProtocol {
     static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
 
-    static func jsonResponse(for request: URLRequest, content: String) throws -> (HTTPURLResponse, Data) {
-        let responseJSON: [String: Any] = [
-            "choices": [
-                ["message": ["content": content]],
-            ],
-        ]
+    static func jsonResponse(for request: URLRequest, content: String, finishReason: String? = nil) throws -> (HTTPURLResponse, Data) {
+        var choice: [String: Any] = ["message": ["content": content]]
+        if let finishReason {
+            choice["finish_reason"] = finishReason
+        }
+        let responseJSON: [String: Any] = ["choices": [choice]]
         let data = try JSONSerialization.data(withJSONObject: responseJSON)
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
         return (response, data)

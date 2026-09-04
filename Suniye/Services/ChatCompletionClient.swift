@@ -111,6 +111,22 @@ struct ChatCompletionTimings: Decodable, Equatable {
 struct ChatCompletionResult: Equatable {
     let text: String
     let timings: ChatCompletionTimings?
+    /// OpenAI-compatible `finish_reason`; nil when the provider omits it.
+    let finishReason: String?
+
+    static let lengthStop = "length"
+
+    /// `text`, unless the provider stopped on a length limit (`max_tokens` or a
+    /// full context window): then `text` is a prefix of the answer and the only
+    /// honest result is an error.
+    var untruncatedText: String {
+        get throws {
+            guard finishReason != Self.lengthStop else {
+                throw LLMPostProcessorError.outputTruncated
+            }
+            return text
+        }
+    }
 }
 
 final class ChatCompletionClient {
@@ -196,6 +212,13 @@ private struct ChatCompletionResponse: Decodable {
     struct Choice: Decodable {
         let message: Message?
         let text: String?
+        let finishReason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case message
+            case text
+            case finishReason = "finish_reason"
+        }
     }
 
     struct Message: Decodable {
@@ -254,12 +277,16 @@ private struct ChatCompletionResponse: Decodable {
         guard let first = response.choices.first else {
             throw LLMPostProcessorError.malformedResponse
         }
-        if let messageText = first.message?.content.text, !messageText.isEmpty {
-            return ChatCompletionResult(text: messageText, timings: response.timings)
+        let result = ChatCompletionResult(
+            text: first.message?.content.text ?? first.text ?? "",
+            timings: response.timings,
+            finishReason: first.finishReason
+        )
+        // A length stop with nothing generated is still a truncation, not a
+        // malformed reply: the context was already full.
+        guard !result.text.isEmpty || result.finishReason == ChatCompletionResult.lengthStop else {
+            throw LLMPostProcessorError.malformedResponse
         }
-        if let text = first.text, !text.isEmpty {
-            return ChatCompletionResult(text: text, timings: response.timings)
-        }
-        throw LLMPostProcessorError.malformedResponse
+        return result
     }
 }

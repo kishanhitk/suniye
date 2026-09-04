@@ -248,8 +248,7 @@ final class LocalGemmaPostProcessorTests: XCTestCase {
             keywords: [],
             startupTimeoutSeconds: 0.1,
             generationTimeoutSeconds: 0.1,
-            idleTimeoutSeconds: idleTimeoutSeconds,
-            maxTokens: 128
+            idleTimeoutSeconds: idleTimeoutSeconds
         )
     }
 }
@@ -263,7 +262,7 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
     private(set) var callCount = 0
     private(set) var instructions: [String] = []
     private(set) var prompts: [String] = []
-    private(set) var maxTokens: [Int] = []
+    private(set) var maxTokens: [Int?] = []
     private(set) var idleTimeouts: [Double] = []
     private(set) var generateWasCanceled = false
 
@@ -296,7 +295,7 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
     func generate(
         instructions: String,
         prompt: String,
-        maxTokens: Int,
+        maxTokens: Int?,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
@@ -319,6 +318,6 @@ private final class FakeLocalGemmaClient: LocalGemmaClient {
         guard index < outputs.count else {
             throw LLMPostProcessorError.emptyOutput
         }
-        return ChatCompletionResult(text: outputs[index], timings: timings)
+        return ChatCompletionResult(text: outputs[index], timings: timings, finishReason: nil)
     }
 }

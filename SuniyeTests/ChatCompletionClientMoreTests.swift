@@ -127,6 +127,40 @@ final class ChatCompletionClientMoreTests: XCTestCase {
         XCTAssertNil(huge.timings)
     }
 
+    /// `finish_reason` is the provider's own truncation signal: "length" means the
+    /// text is a prefix of the answer; "stop" or no reason means it is complete.
+    func testLengthFinishReasonMarksResultTruncated() async throws {
+        let client = makeClient()
+        ScriptedResponseURLProtocol.handler = { request in
+            try Self.httpResponse(for: request, json: [
+                "choices": [["message": ["content": "Only the first half of the"], "finish_reason": "length"]],
+            ])
+        }
+
+        let truncated = try await client.complete(endpointURL: endpointURL, apiKey: "key", payload: makePayload(), timeoutSeconds: 3)
+
+        XCTAssertEqual(truncated.finishReason, "length")
+        XCTAssertThrowsError(try truncated.untruncatedText) { error in
+            XCTAssertEqual((error as? LLMPostProcessorError)?.logValue, "output_truncated")
+        }
+
+        ScriptedResponseURLProtocol.handler = { request in
+            try Self.httpResponse(for: request, json: [
+                "choices": [["message": ["content": "Whole answer."], "finish_reason": "stop"]],
+            ])
+        }
+        let complete = try await client.complete(endpointURL: endpointURL, apiKey: "key", payload: makePayload(), timeoutSeconds: 3)
+        XCTAssertEqual(complete.finishReason, "stop")
+        XCTAssertEqual(try complete.untruncatedText, "Whole answer.")
+
+        ScriptedResponseURLProtocol.handler = { request in
+            try Self.httpResponse(for: request, json: ["choices": [["message": ["content": "No reason given."]]]])
+        }
+        let unknown = try await client.complete(endpointURL: endpointURL, apiKey: "key", payload: makePayload(), timeoutSeconds: 3)
+        XCTAssertNil(unknown.finishReason)
+        XCTAssertEqual(try unknown.untruncatedText, "No reason given.")
+    }
+
     func testChoiceWithoutUsableContentThrowsMalformedResponse() async {
         let client = makeClient()
         ScriptedResponseURLProtocol.handler = { request in
