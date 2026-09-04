@@ -11,8 +11,7 @@ final class LLMPostProcessorMoreTests: XCTestCase {
             keywords: [],
             startupTimeoutSeconds: 1,
             generationTimeoutSeconds: 1,
-            idleTimeoutSeconds: 1,
-            maxTokens: 32
+            idleTimeoutSeconds: 1
         )
 
         let warm = await formatter.isRuntimeWarm()

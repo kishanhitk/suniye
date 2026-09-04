@@ -1076,13 +1076,10 @@ final class AppStateLLMTests: XCTestCase {
         )
 
         appState.llmTimeoutSeconds = 99
-        appState.llmMaxTokens = 900
         appState.llmSystemPrompt = "old hidden prompt"
 
         XCTAssertEqual(appState.llmTimeoutSeconds, LLMDefaults.maxTimeoutSeconds)
-        XCTAssertEqual(appState.llmMaxTokens, LLMDefaults.maxMaxTokens)
         XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.defaultTimeoutSeconds)
-        XCTAssertEqual(store.latest.maxTokens, LLMDefaults.defaultMaxTokens)
         XCTAssertEqual(store.latest.systemPrompt, "")
     }
 
@@ -1099,8 +1096,7 @@ final class AppStateLLMTests: XCTestCase {
                 baseSystemPrompt: "BASE",
                 systemPrompt: "USER",
                 keywordsRaw: "",
-                timeoutSeconds: 9,
-                maxTokens: 256
+                timeoutSeconds: 9
             )
         )
 
@@ -1114,7 +1110,6 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(appState.llmSystemPrompt, "")
         XCTAssertEqual(store.latest.systemPrompt, "")
         XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.defaultTimeoutSeconds)
-        XCTAssertEqual(store.latest.maxTokens, LLMDefaults.defaultMaxTokens)
     }
 
     func testLoadMigratesLegacyCustomPromptIntoMissingProviderPrompts() throws {
@@ -1164,8 +1159,7 @@ final class AppStateLLMTests: XCTestCase {
                 baseSystemPrompt: "Preserve meaning and intent.",
                 systemPrompt: "Preserve meaning",
                 keywordsRaw: "",
-                timeoutSeconds: 9,
-                maxTokens: 256
+                timeoutSeconds: 9
             )
         )
 
@@ -1196,8 +1190,7 @@ final class AppStateLLMTests: XCTestCase {
                 baseSystemPrompt: "BASE\n\nUSER",
                 systemPrompt: "USER",
                 keywordsRaw: "",
-                timeoutSeconds: 9,
-                maxTokens: 256
+                timeoutSeconds: 9
             )
         )
 

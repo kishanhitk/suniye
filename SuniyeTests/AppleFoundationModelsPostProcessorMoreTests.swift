@@ -202,7 +202,7 @@ final class AppleFoundationModelsPostProcessorMoreTests: XCTestCase {
         XCTAssertEqual(client.availability, .unsupportedSDKOrRuntime)
 
         do {
-            _ = try await client.generate(instructions: "sys", prompt: "user", maxTokens: 8)
+            _ = try await client.generate(instructions: "sys", prompt: "user")
             XCTFail("Expected invalid configuration")
         } catch let error as LLMPostProcessorError {
             XCTAssertEqual(
@@ -218,8 +218,7 @@ final class AppleFoundationModelsPostProcessorMoreTests: XCTestCase {
         AppleMagicFormatConfig(
             systemPrompt: "Clean dictation for Suniye.",
             keywords: ["Suniye"],
-            timeoutSeconds: timeoutSeconds,
-            maxTokens: 256
+            timeoutSeconds: timeoutSeconds
         )
     }
 }
@@ -247,7 +246,7 @@ private final class ScriptedAppleClient: AppleFoundationModelsClient {
         }
     }
 
-    func generate(instructions: String, prompt: String, maxTokens: Int) async throws -> String {
+    func generate(instructions: String, prompt: String) async throws -> String {
         recordedInstructions.append(instructions)
         recordedPrompts.append(prompt)
         if responseDelayNanoseconds > 0 {
@@ -268,7 +267,7 @@ private final class ThrowingAppleClient: AppleFoundationModelsClient {
         self.error = error
     }
 
-    func generate(instructions: String, prompt: String, maxTokens: Int) async throws -> String {
+    func generate(instructions: String, prompt: String) async throws -> String {
         throw error
     }
 }

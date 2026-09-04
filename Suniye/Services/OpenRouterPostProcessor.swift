@@ -15,33 +15,29 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
             systemPrompt: config.systemPrompt,
             keywords: config.keywords
         ) { request in
-            try await client.complete(
-                endpointURL: config.endpointURL,
-                apiKey: config.apiKey,
+            try await completeText(
+                config: config,
+                inputCharacterCount: text.count,
                 payload: makePayload(
                     modelId: config.modelId,
                     instructions: request.instructions,
-                    inputText: request.prompt,
-                    maxTokens: request.maxTokens
-                ),
-                timeoutSeconds: config.timeoutSeconds
-            ).text
+                    inputText: request.prompt
+                )
+            )
         }
     }
 
     func generate(instructions: String, userText: String, config: LLMConfig) async throws -> String {
         try validateConfig(config)
-        let output = try await client.complete(
-            endpointURL: config.endpointURL,
-            apiKey: config.apiKey,
+        let output = try await completeText(
+            config: config,
+            inputCharacterCount: userText.count,
             payload: makePayload(
                 modelId: config.modelId,
                 instructions: instructions,
-                inputText: userText,
-                maxTokens: LLMDefaults.editModeMaxTokens
-            ),
-            timeoutSeconds: config.timeoutSeconds
-        ).text
+                inputText: userText
+            )
+        )
         let sanitized = sanitizeOutput(output)
         guard !sanitized.isEmpty else {
             throw LLMPostProcessorError.emptyOutput
@@ -72,13 +68,27 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
         }
     }
 
-    private func makePayload(modelId: String, instructions: String, inputText: String, maxTokens: Int?) -> ChatCompletionPayload {
+    /// A length stop surfaces as `outputTruncated`: polish falls back to the
+    /// raw transcript, Edit Mode reports the failure.
+    private func completeText(config: LLMConfig, inputCharacterCount: Int, payload: ChatCompletionPayload) async throws -> String {
+        try await client.complete(
+            endpointURL: config.endpointURL,
+            apiKey: config.apiKey,
+            payload: payload,
+            timeoutSeconds: MagicFormatGenerationBudget.timeoutSeconds(
+                floor: config.timeoutSeconds,
+                inputCharacterCount: inputCharacterCount
+            )
+        ).untruncatedText
+    }
+
+    private func makePayload(modelId: String, instructions: String, inputText: String) -> ChatCompletionPayload {
         let messages = [
             ChatCompletionMessage(role: "system", content: instructions),
             ChatCompletionMessage(role: "user", content: inputText),
         ]
 
-        return ChatCompletionPayload(model: modelId, messages: messages, maxTokens: maxTokens)
+        return ChatCompletionPayload(model: modelId, messages: messages)
     }
 
     private func makeSetupPayload(config: LLMConfig) -> ChatCompletionPayload {
@@ -93,8 +103,7 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
         return makePayload(
             modelId: config.modelId,
             instructions: instructions,
-            inputText: "Connection test.",
-            maxTokens: nil
+            inputText: "Connection test."
         )
     }
 

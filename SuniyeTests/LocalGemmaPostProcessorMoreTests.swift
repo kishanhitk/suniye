@@ -44,6 +44,48 @@ final class LocalGemmaPostProcessorMoreTests: XCTestCase {
         }
     }
 
+    // MARK: - truncation (KIS-214)
+
+    func testPolishRejectsOutputTheServerCutShort() async {
+        let client = ScriptedGemmaClient(results: [.success("Only the first half of the")], finishReason: "length")
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        do {
+            _ = try await processor.polish(text: "raw text", config: makeConfig())
+            XCTFail("Expected outputTruncated")
+        } catch let error as LLMPostProcessorError {
+            XCTAssertEqual(error.logValue, "output_truncated")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        // Not retried: the same context would cut the answer at the same place.
+        XCTAssertEqual(client.prompts.count, 1)
+    }
+
+    func testGenerateRejectsOutputTheServerCutShort() async {
+        let client = ScriptedGemmaClient(results: [.success("Rewritten up to")], finishReason: "length")
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        do {
+            _ = try await processor.generate(instructions: "Rewrite it.", userText: "raw text", config: makeConfig())
+            XCTFail("Expected outputTruncated")
+        } catch let error as LLMPostProcessorError {
+            XCTAssertEqual(error.logValue, "output_truncated")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testUserFacingGenerationsSendNoOutputCap() async throws {
+        let client = ScriptedGemmaClient(results: [.success("Polished."), .success("Rewritten.")])
+        let processor = LocalGemmaPostProcessor(client: client)
+
+        _ = try await processor.polish(text: "raw text", config: makeConfig())
+        _ = try await processor.generate(instructions: "Rewrite it.", userText: "raw text", config: makeConfig())
+
+        XCTAssertEqual(client.maxTokens, [nil, nil])
+    }
+
     // MARK: - generate
 
     func testGenerateSanitizesControlTokens() async throws {
@@ -170,8 +212,7 @@ final class LocalGemmaPostProcessorMoreTests: XCTestCase {
             keywords: [],
             startupTimeoutSeconds: 0.1,
             generationTimeoutSeconds: 0.1,
-            idleTimeoutSeconds: 600,
-            maxTokens: 128
+            idleTimeoutSeconds: 600
         )
     }
 }
@@ -186,25 +227,32 @@ private struct MinimalGemmaClient: LocalGemmaClient {
     func generate(
         instructions: String,
         prompt: String,
-        maxTokens: Int,
+        maxTokens: Int?,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> ChatCompletionResult {
-        ChatCompletionResult(text: "OK", timings: nil)
+        ChatCompletionResult(text: "OK", timings: nil, finishReason: nil)
     }
 }
 
 private final class ScriptedGemmaClient: LocalGemmaClient {
     var availability: LocalGemmaAvailability
     private var results: [Result<String, Error>]
+    private let finishReason: String?
     private(set) var instructions: [String] = []
     private(set) var prompts: [String] = []
+    private(set) var maxTokens: [Int?] = []
     private(set) var stopRuntimeCallCount = 0
 
-    init(availability: LocalGemmaAvailability = .available, results: [Result<String, Error>]) {
+    init(
+        availability: LocalGemmaAvailability = .available,
+        results: [Result<String, Error>],
+        finishReason: String? = nil
+    ) {
         self.availability = availability
         self.results = results
+        self.finishReason = finishReason
     }
 
     func isRuntimeWarm() async -> Bool {
@@ -214,17 +262,18 @@ private final class ScriptedGemmaClient: LocalGemmaClient {
     func generate(
         instructions: String,
         prompt: String,
-        maxTokens: Int,
+        maxTokens: Int?,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> ChatCompletionResult {
         self.instructions.append(instructions)
         prompts.append(prompt)
+        self.maxTokens.append(maxTokens)
         guard !results.isEmpty else {
             throw LLMPostProcessorError.emptyOutput
         }
-        return ChatCompletionResult(text: try results.removeFirst().get(), timings: nil)
+        return ChatCompletionResult(text: try results.removeFirst().get(), timings: nil, finishReason: finishReason)
     }
 
     func stopRuntime() async {

@@ -41,7 +41,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
     func generate(
         instructions: String,
         prompt: String,
-        maxTokens: Int,
+        maxTokens: Int?,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
@@ -112,7 +112,7 @@ enum LocalGemmaCompletionRequestFactory {
         endpoint: LocalGemmaServerEndpoint,
         instructions: String,
         prompt: String,
-        maxTokens: Int,
+        maxTokens: Int?,
         modelName: String,
         timeoutSeconds: Double
     ) throws -> URLRequest {
@@ -129,7 +129,7 @@ enum LocalGemmaCompletionRequestFactory {
         )
     }
 
-    static func makePayload(instructions: String, prompt: String, maxTokens: Int, modelName: String) -> ChatCompletionPayload {
+    static func makePayload(instructions: String, prompt: String, maxTokens: Int?, modelName: String) -> ChatCompletionPayload {
         let userContent = """
         \(instructions)
 

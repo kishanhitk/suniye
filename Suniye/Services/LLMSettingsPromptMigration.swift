@@ -41,13 +41,11 @@ extension LLMSettings {
             autoLearnedKeywordsRaw: autoLearnedKeywordsRaw,
             learnFromEditsEnabled: learnFromEditsEnabled,
             timeoutSeconds: LLMDefaults.defaultTimeoutSeconds,
-            maxTokens: LLMDefaults.defaultMaxTokens,
             localModelKeepAlive: localModelKeepAlive,
             appPromptBindings: appPromptBindings
         )
         let shouldPersist = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             || timeoutSeconds != LLMDefaults.defaultTimeoutSeconds
-            || maxTokens != LLMDefaults.defaultMaxTokens
             || shouldMigrateProviderPrompts
         return LLMSettingsPromptMigrationResult(settings: normalized, shouldPersist: shouldPersist)
     }

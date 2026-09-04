@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
-"""Run local Magic Format evals against a llama.cpp OpenAI-compatible server."""
+"""Run local Magic Format evals against a llama.cpp OpenAI-compatible server.
+
+Requests are uncapped by default, matching the app: the model runs to its
+end-of-turn or the context window. A case whose answer stops on a length limit
+(`finish_reason == "length"`) fails regardless of similarity, because the app
+rejects such output and falls back to the raw transcript. Each request gets the
+app's own deadline (30 s plus one second per 80 input characters) unless
+--timeout overrides it.
+"""
 
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import difflib
 import json
 import os
@@ -37,8 +46,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--server", default=shutil.which("llama-server") or "/opt/homebrew/bin/llama-server")
     parser.add_argument("--threshold", type=float, default=0.92)
-    parser.add_argument("--max-tokens", type=int, default=256)
-    parser.add_argument("--timeout", type=float, default=45)
+    parser.add_argument("--max-tokens", type=int, help="cap output tokens; omitted by default, like the app")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        help="request deadline in seconds; default mirrors the app: 30 + len(input)/80",
+    )
     parser.add_argument("--json-output", type=Path)
     parser.add_argument("--keep-server", action="store_true")
     return parser.parse_args()
@@ -77,7 +90,7 @@ def start_server(server: str, model: Path) -> tuple[subprocess.Popen[bytes], str
         "--port",
         str(port),
         "--ctx-size",
-        "4096",
+        "16384",
         "--parallel",
         "1",
         "--reasoning",
@@ -133,7 +146,26 @@ def score_output(actual: str, expected: str) -> tuple[bool, float, bool]:
     return False, similarity, structure_matches
 
 
-def generate(base_url: str, prompt: str, transcript: str, max_tokens: int, timeout: float) -> tuple[str, float]:
+def read_within(request: urllib.request.Request, deadline_seconds: float) -> bytes:
+    """Fetch the whole response under one wall-clock deadline, like the app.
+
+    urlopen's timeout bounds each socket operation, so a server that trickles
+    bytes could run past the budget; a thread plus a bounded wait cannot.
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(
+            lambda: urllib.request.urlopen(request, timeout=deadline_seconds).read()
+        )
+        try:
+            return future.result(timeout=deadline_seconds)
+        except concurrent.futures.TimeoutError as exc:
+            future.cancel()
+            raise TimeoutError(f"request exceeded {deadline_seconds:.1f}s deadline") from exc
+
+
+def generate(
+    base_url: str, prompt: str, transcript: str, max_tokens: int | None, timeout: float
+) -> tuple[str, float, str | None]:
     user_content = f"{prompt}\n\n<transcript>\n{transcript}\n</transcript>"
     payload = {
         "model": "gemma-4-e2b-q4",
@@ -143,9 +175,10 @@ def generate(base_url: str, prompt: str, transcript: str, max_tokens: int, timeo
         "temperature": 0,
         "top_k": 1,
         "top_p": 1,
-        "max_tokens": max_tokens,
         "stream": False,
     }
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
     request = urllib.request.Request(
         f"{base_url}/v1/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
@@ -153,13 +186,12 @@ def generate(base_url: str, prompt: str, transcript: str, max_tokens: int, timeo
         method="POST",
     )
     started = time.perf_counter()
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        body = json.loads(response.read().decode("utf-8"))
+    body = json.loads(read_within(request, timeout).decode("utf-8"))
     latency_ms = (time.perf_counter() - started) * 1000
     choice = body["choices"][0]
     message = choice.get("message") or {}
     content = message.get("content") or choice.get("text") or ""
-    return content.strip(), latency_ms
+    return content.strip(), latency_ms, choice.get("finish_reason")
 
 
 def load_cases(path: Path) -> list[dict[str, str]]:
@@ -192,19 +224,22 @@ def main() -> int:
         results = []
         for case in cases:
             try:
-                actual, latency_ms = generate(
+                actual, latency_ms, finish_reason = generate(
                     base_url,
                     prompt,
                     case["input"],
                     max_tokens=args.max_tokens,
-                    timeout=args.timeout,
+                    timeout=args.timeout or 30 + len(case["input"]) / 80,
                 )
                 exact, similarity, structure_matches = score_output(actual, case["expected"])
-                passed = structure_matches and (exact or similarity >= args.threshold)
+                truncated = finish_reason == "length"
+                passed = structure_matches and not truncated and (exact or similarity >= args.threshold)
                 error = None
             except (TimeoutError, urllib.error.URLError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
                 actual = ""
                 latency_ms = 0.0
+                finish_reason = None
+                truncated = False
                 exact = False
                 similarity = 0.0
                 structure_matches = False
@@ -219,6 +254,8 @@ def main() -> int:
                     "exact": exact,
                     "similarity": round(similarity, 3),
                     "structure_matches": structure_matches,
+                    "finish_reason": finish_reason,
+                    "truncated": truncated,
                     "passed": passed,
                     "error": error,
                 }
@@ -226,12 +263,14 @@ def main() -> int:
 
         exact_count = sum(1 for result in results if result["exact"])
         pass_count = sum(1 for result in results if result["passed"])
+        truncated_count = sum(1 for result in results if result["truncated"])
         latencies = [result["latency_ms"] for result in results if result["latency_ms"] > 0]
         print(f"Prompt: {args.prompt}")
         print(f"Cases: {len(results)}")
         print(f"Server ready: {ready_ms:.0f} ms")
         print(f"Exact: {exact_count}/{len(results)}")
         print(f"Passed @ {args.threshold:.2f}: {pass_count}/{len(results)}")
+        print(f"Truncated: {truncated_count}/{len(results)}")
         if latencies:
             print(
                 "Latency ms: "
@@ -257,6 +296,8 @@ def main() -> int:
                 print(f"\n{result['id']} [{result['category']}] similarity={result['similarity']}")
                 if result["error"]:
                     print(f"error: {result['error']}")
+                if result["truncated"]:
+                    print("truncated: output stopped on a length limit")
                 print(f"input:    {result['input']}")
                 print(f"expected: {result['expected']}")
                 print(f"actual:   {result['actual']}")

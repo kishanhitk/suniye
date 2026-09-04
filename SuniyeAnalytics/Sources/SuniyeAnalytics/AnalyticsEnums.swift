@@ -47,6 +47,7 @@ public enum CleanupFallbackReason: String, Sendable, CaseIterable {
     case keyReadFailed = "key_read_failed"
     case invalidConfig = "invalid_config"
     case emptyOutput = "empty_output"
+    case outputTruncated = "output_truncated"
     case providerError = "provider_error"
     case malformedResponse = "malformed_response"
     case providerUnavailable = "provider_unavailable"
