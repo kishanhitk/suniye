@@ -1,0 +1,10 @@
+# Python 3.12. Pinned to the versions the shipped Parakeet Ultra/Redux artifacts were built with.
+nemo_toolkit[asr]==3.0.0
+torch==2.8.0
+onnx==1.17.0
+onnxruntime==1.23.2
+numpy==1.26.4
+safetensors==0.8.0
+soundfile==0.14.0
+librosa==0.11.0
+sherpa-onnx==1.13.8
