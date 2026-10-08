@@ -45,23 +45,42 @@ else
 fi
 
 RESULT_PATH="${WORK_DIR}/submit.json"
+ERROR_PATH="${WORK_DIR}/submit.err"
 echo "Submitting for notarization: ${ARTIFACT_PATH}"
 SUBMIT_STATUS=0
 /usr/bin/xcrun notarytool submit "${ARTIFACT_PATH}" \
   "${AUTH_ARGS[@]}" \
   --wait \
   --timeout 45m \
-  --output-format json > "${RESULT_PATH}" || SUBMIT_STATUS=$?
+  --output-format json > "${RESULT_PATH}" 2> "${ERROR_PATH}" || SUBMIT_STATUS=$?
 
-SUBMISSION_ID="$(/usr/bin/plutil -extract id raw -o - "${RESULT_PATH}" 2>/dev/null || true)"
-VERDICT="$(/usr/bin/plutil -extract status raw -o - "${RESULT_PATH}" 2>/dev/null || true)"
+# notarytool writes the verdict to stdout, but a timeout or error as JSON on
+# stderr, so read each field from whichever stream carries it.
+json_field() {
+  local field="$1"
+  local path value
+  for path in "${RESULT_PATH}" "${ERROR_PATH}"; do
+    value="$(/usr/bin/plutil -extract "${field}" raw -o - "${path}" 2>/dev/null || true)"
+    if [[ -n "${value}" ]]; then
+      printf '%s' "${value}"
+      return
+    fi
+  done
+}
+
+SUBMISSION_ID="$(json_field id)"
+VERDICT="$(json_field status)"
 echo "Notary submission ${SUBMISSION_ID:-<none>}: ${VERDICT:-<no verdict>}"
 
-if [[ "${SUBMIT_STATUS}" -ne 0 || "${VERDICT}" != "Accepted" ]]; then
-  cat "${RESULT_PATH}" >&2 || true
-  if [[ -n "${SUBMISSION_ID}" ]]; then
-    /usr/bin/xcrun notarytool log "${SUBMISSION_ID}" "${AUTH_ARGS[@]}" >&2 || true
-  fi
-  echo "Notarization failed for ${ARTIFACT_PATH}" >&2
-  exit 1
+if [[ "${SUBMIT_STATUS}" -eq 0 && "${VERDICT}" == "Accepted" ]]; then
+  exit 0
 fi
+
+cat "${RESULT_PATH}" "${ERROR_PATH}" >&2 || true
+if [[ -n "${SUBMISSION_ID}" && -n "${VERDICT}" ]]; then
+  /usr/bin/xcrun notarytool log "${SUBMISSION_ID}" "${AUTH_ARGS[@]}" >&2 || true
+elif [[ -n "${SUBMISSION_ID}" ]]; then
+  echo "Apple is still processing submission ${SUBMISSION_ID}. Check it with: xcrun notarytool info ${SUBMISSION_ID}" >&2
+fi
+echo "Notarization failed for ${ARTIFACT_PATH}" >&2
+exit 1
