@@ -1,7 +1,9 @@
 # Troubleshooting
 
 ## "App is damaged" / blocked by macOS
-Suniye releases are signed with an Apple Developer ID and notarized, so macOS opens them without extra steps. If macOS still blocks the app, you have a release older than the first Developer ID release. Download the latest release and install it again.
+Suniye releases are signed with an Apple Developer ID and notarized, so macOS opens them without extra steps. If macOS still blocks the app, read the exact alert:
+- "Apple could not verify…" or "is damaged": the copy is older than the first Developer ID release, or the download is incomplete. Download the latest release from GitHub and install it again.
+- Any other alert: open **System Settings > Privacy & Security** and check the message in the Security section.
 
 ## Model download fails
 - Run `./scripts/setup_model.sh` manually.
