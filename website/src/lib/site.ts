@@ -12,7 +12,6 @@ export const GITHUB_ISSUES_URL = `${GITHUB_URL}/issues`;
 export const GITHUB_RELEASES_URL = `${GITHUB_URL}/releases`;
 export const DOWNLOAD_URL = `${GITHUB_URL}/releases/latest/download/Suniye.dmg`;
 export const BREW_INSTALL = "brew install --cask kishanhitk/tap/suniye";
-export const QUARANTINE_CMD = "xattr -rd com.apple.quarantine /Applications/Suniye.app";
 
 // The project is one person with no company and no office. The site names
 // no person and publishes no personal contact details; the only location

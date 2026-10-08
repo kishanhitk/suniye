@@ -250,53 +250,6 @@ body {
   pointer-events: none;
 }
 
-/* ── Quarantine dialog (post-download) ──────── */
-
-/* Closed is the `hidden` attribute (display:none from the UA sheet + preflight),
-   never a hidden-but-rendered state. WebKit resolves style for the whole tree
-   before an external stylesheet has arrived — with UA defaults, so opacity:1 —
-   and once the sheet lands it runs whatever transitions the new style declares,
-   starting from that pre-stylesheet state. A closed state built from
-   opacity/visibility plus a transition therefore fades in from fully visible on
-   first paint whenever the CSS isn't already cached. An element that was never
-   rendered has no before-change style, so nothing can animate: enter and exit
-   are driven by @starting-style and a discrete display transition instead. */
-.dmg-modal {
-  transition: opacity 0.25s ease, display 0.25s allow-discrete;
-}
-
-.dmg-modal[hidden] {
-  opacity: 0;
-}
-
-.dmg-card {
-  transition: transform 0.28s var(--curve-out);
-}
-
-.dmg-modal[hidden] .dmg-card {
-  transform: translateY(10px) scale(0.98);
-}
-
-@starting-style {
-  .dmg-modal {
-    opacity: 0;
-  }
-  .dmg-card {
-    transform: translateY(10px) scale(0.98);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .dmg-modal {
-    transition: opacity 0.15s ease, display 0.15s allow-discrete;
-  }
-  .dmg-card,
-  .dmg-modal[hidden] .dmg-card {
-    transform: none;
-    transition: none;
-  }
-}
-
 /* ── FAQ disclosure ────────────────────────── */
 
 .faq-item summary {

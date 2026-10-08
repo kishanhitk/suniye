@@ -1,11 +1,8 @@
 ---
 // The site's top navigation bar. Shared across the homepage and subpages.
 //   - "over-art": starts bar-less and white over the hero painting, then swaps
-//                 to a frosted light bar once the hero scrolls past. Download
-//                 carries `data-dmg` so the homepage script shows the
-//                 quarantine dialog instead of navigating.
-//   - "subpage":  always the frosted light bar; Download goes straight to the
-//                 DMG (no modal script exists off the homepage).
+//                 to a frosted light bar once the hero scrolls past.
+//   - "subpage":  always the frosted light bar.
 import { DOWNLOAD_URL, GITHUB_URL } from "../lib/site";
 
 interface Props {
@@ -47,7 +44,6 @@ const overArt = variant === "over-art";
       </a>
       <a
         href={DOWNLOAD_URL}
-        data-dmg={overArt ? "" : undefined}
         data-track="cta_click:nav_download"
         class="nav-cta btn-press rounded-lg bg-ink px-4 py-2 text-sm text-bg hover:bg-ink/85"
       >

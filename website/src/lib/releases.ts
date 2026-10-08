@@ -144,6 +144,6 @@ ${sections}
 
 ---
 
-Home: ${SITE_URL}/ · Install help and the quarantine unlock command: ${SITE_URL}/#install
+Home: ${SITE_URL}/ · Install help: ${SITE_URL}/#install
 `;
 }
