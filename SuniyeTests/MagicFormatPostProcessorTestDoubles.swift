@@ -186,9 +186,16 @@ final class BlockingAppleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
     }
 }
 
-final class BlockingLLMPostProcessor: LLMPostProcessor {
-    private var continuation: CheckedContinuation<Void, Never>?
-    private var startContinuation: CheckedContinuation<Void, Never>?
+/// Holds `testSetup` open until the test calls `resume()`. `testSetup` runs off
+/// the test's executor, so every hand-off goes through one lock: `started`
+/// flips only after the setup continuation is stored, and a `resume()` that
+/// arrives before that is remembered instead of lost.
+final class BlockingLLMPostProcessor: LLMPostProcessor, @unchecked Sendable {
+    private let lock = NSLock()
+    private var setupContinuation: CheckedContinuation<Void, Never>?
+    private var startWaiter: CheckedContinuation<Void, Never>?
+    private var started = false
+    private var resumeRequested = false
     var testSetupResult: Result<Void, Error> = .success(())
 
     func polish(text: String, config: LLMConfig) async throws -> String {
@@ -200,25 +207,47 @@ final class BlockingLLMPostProcessor: LLMPostProcessor {
     }
 
     func testSetup(config: LLMConfig) async throws {
-        startContinuation?.resume()
-        startContinuation = nil
         await withCheckedContinuation { continuation in
-            self.continuation = continuation
+            lock.lock()
+            started = true
+            let waiter = startWaiter
+            startWaiter = nil
+            let resumeNow = resumeRequested
+            resumeRequested = false
+            if !resumeNow {
+                setupContinuation = continuation
+            }
+            lock.unlock()
+
+            waiter?.resume()
+            if resumeNow {
+                continuation.resume()
+            }
         }
         try testSetupResult.get()
     }
 
     func waitUntilStarted() async {
-        if continuation != nil {
-            return
-        }
         await withCheckedContinuation { continuation in
-            startContinuation = continuation
+            lock.lock()
+            if started {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            startWaiter = continuation
+            lock.unlock()
         }
     }
 
     func resume() {
+        lock.lock()
+        let continuation = setupContinuation
+        setupContinuation = nil
+        if continuation == nil {
+            resumeRequested = true
+        }
+        lock.unlock()
         continuation?.resume()
-        continuation = nil
     }
 }
