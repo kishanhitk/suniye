@@ -422,7 +422,7 @@ struct OnboardingView: View {
                             .controlSize(.small)
                         }
                     } else if appState.accessibilityGrantLikelyStale {
-                        Text("macOS reset this permission after an update. In the Accessibility list, toggle \(appIdentity.displayName) off and back on.")
+                        Text(appState.staleAccessibilityGrantInstruction)
                             .font(AppTypography.caption)
                             .foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)

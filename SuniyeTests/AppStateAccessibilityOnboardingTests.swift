@@ -147,6 +147,53 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
         XCTAssertTrue(openedURLs.first?.absoluteString.contains("Privacy_Accessibility") == true)
     }
 
+    func testPermissionRefreshFlagsStaleGrantBeforeAnyGrantClick() async throws {
+        // After the signing identity changes, bootstrap is the first moment the
+        // app can tell the user why dictation stopped pasting.
+        let appState = makeTestAppState(
+            generalSettingsStore: TestGeneralSettingsStore(
+                value: GeneralSettings(lastKnownAccessibilityGranted: true)
+            ),
+            accessibilityTrustProvider: { false }
+        )
+
+        await appState.refreshPermissions()
+
+        XCTAssertTrue(appState.accessibilityGrantLikelyStale)
+        let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "accessibility-permission-missing" })
+        XCTAssertEqual(item.detail, appState.staleAccessibilityGrantInstruction)
+        XCTAssertTrue(item.detail.contains("remove it with −, then add it back with +"))
+        XCTAssertEqual(item.fixAction, .requestAccessibilityPermission)
+    }
+
+    func testNeverGrantedAccessibilityKeepsGenericAttentionDetail() async throws {
+        let appState = makeTestAppState(accessibilityTrustProvider: { false })
+
+        await appState.refreshPermissions()
+
+        XCTAssertFalse(appState.accessibilityGrantLikelyStale)
+        let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "accessibility-permission-missing" })
+        XCTAssertEqual(item.detail, "Grant accessibility access so transcribed text can be inserted.")
+    }
+
+    func testStaleGrantClearsWhenAccessibilityReturns() async {
+        var trusted = false
+        let appState = makeTestAppState(
+            generalSettingsStore: TestGeneralSettingsStore(
+                value: GeneralSettings(lastKnownAccessibilityGranted: true)
+            ),
+            accessibilityTrustProvider: { trusted }
+        )
+        await appState.refreshPermissions()
+        XCTAssertTrue(appState.accessibilityGrantLikelyStale)
+
+        trusted = true
+        await appState.refreshPermissions()
+
+        XCTAssertFalse(appState.accessibilityGrantLikelyStale)
+        XCTAssertFalse(appState.attentionItems.contains { $0.id == "accessibility-permission-missing" })
+    }
+
     func testGrantPersistsLastKnownAccessibilityState() async {
         let store = TestGeneralSettingsStore()
         let onboarding = SpyAccessibilityOnboarding()
