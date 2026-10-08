@@ -56,18 +56,16 @@ Requires **macOS 14 (Sonoma)** or later.
 brew install --cask kishanhitk/tap/suniye
 ```
 
-This taps [`kishanhitk/homebrew-tap`](https://github.com/kishanhitk/homebrew-tap) and installs the latest release. Suniye is self-signed (not yet notarized), so the cask clears the Gatekeeper quarantine for you — no manual steps. Update with `brew upgrade --cask suniye`, though Suniye also updates itself in the background.
+This taps [`kishanhitk/homebrew-tap`](https://github.com/kishanhitk/homebrew-tap) and installs the latest release. Update with `brew upgrade --cask suniye`, though Suniye also updates itself in the background.
 
-> On Homebrew 6+ you may be asked to trust the tap on first install — third-party taps run code (here, a postflight that clears quarantine), so Homebrew gates them behind trust. The fully-qualified command above trusts just this cask.
+> On Homebrew 6+ you may be asked to trust the tap on first install — Homebrew gates every third-party tap behind trust. The fully-qualified command above trusts just this cask.
 
 ### Direct download
 
 1. Grab **Suniye.dmg** from the [latest release](https://github.com/kishanhitk/suniye/releases/latest).
 2. Open it and drag **Suniye.app** into `/Applications`.
-3. If macOS blocks it on first launch, clear the quarantine and reopen:
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/Suniye.app
-   ```
+
+Suniye is signed with an Apple Developer ID and notarized by Apple, so macOS opens it without extra steps.
 
 ### First launch
 

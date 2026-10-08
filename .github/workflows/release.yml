@@ -51,15 +51,18 @@ jobs:
 
       - name: Import code signing identity
         env:
-          SUNIYE_CODESIGN_CERTIFICATE_P12_BASE64: ${{ secrets.SUNIYE_CODESIGN_CERTIFICATE_P12_BASE64 }}
-          SUNIYE_CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.SUNIYE_CODESIGN_CERTIFICATE_PASSWORD }}
-          SUNIYE_CODESIGN_IDENTITY: ${{ secrets.SUNIYE_CODESIGN_IDENTITY }}
+          SUNIYE_CODESIGN_CERTIFICATE_P12_BASE64: ${{ secrets.SUNIYE_DEVELOPER_ID_P12_BASE64 }}
+          SUNIYE_CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.SUNIYE_DEVELOPER_ID_P12_PASSWORD }}
+          SUNIYE_CODESIGN_IDENTITY: ${{ secrets.SUNIYE_DEVELOPER_ID_IDENTITY }}
         run: ./scripts/import_codesign_identity.sh
 
       - name: Package release artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SUNIYE_NOTARY_API_KEY_P8: ${{ secrets.SUNIYE_NOTARY_API_KEY_P8 }}
+          SUNIYE_NOTARY_API_KEY_ID: ${{ secrets.SUNIYE_NOTARY_API_KEY_ID }}
+          SUNIYE_NOTARY_API_ISSUER_ID: ${{ secrets.SUNIYE_NOTARY_API_ISSUER_ID }}
         run: |
           RELEASE_NOTES_FILE="$(mktemp)"
           gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \

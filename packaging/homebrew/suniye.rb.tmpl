@@ -12,7 +12,7 @@ cask "suniye" do
       verified: "github.com/kishanhitk/suniye/"
   name "Suniye"
   desc "Private, on-device push-to-talk dictation"
-  homepage "https://suniye.kishans.in/"
+  homepage "https://suniye.app/"
 
   livecheck do
     url :url
@@ -23,16 +23,6 @@ cask "suniye" do
   depends_on macos: :sonoma
 
   app "Suniye.app"
-
-  # Suniye is self-signed but not notarized. Homebrew quarantines downloads, which
-  # trips Gatekeeper on first launch, so strip the quarantine attribute here. This
-  # mirrors the manual `xattr -dr com.apple.quarantine` step documented for the DMG.
-  # (Allowed in a personal tap; official homebrew-cask audit would reject it.)
-  postflight do
-    system_command "/usr/bin/xattr",
-                   args:         ["-d", "-r", "com.apple.quarantine", "#{appdir}/Suniye.app"],
-                   must_succeed: false
-  end
 
   zap trash: [
     "~/Library/Application Support/Suniye",

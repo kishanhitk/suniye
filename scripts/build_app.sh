@@ -255,16 +255,14 @@ if [[ -n "${LOCAL_CODESIGN_IDENTITY}" ]]; then
   )
 
   if [[ -n "${SUNIYE_CODESIGN_KEYCHAIN_PATH:-}" ]]; then
-    xcodebuild_args+=(OTHER_CODE_SIGN_FLAGS="--timestamp=none --keychain ${SUNIYE_CODESIGN_KEYCHAIN_PATH}")
-  elif [[ "${SHOULD_RELEASE_SIGN}" == "1" ]]; then
-    xcodebuild_args+=(OTHER_CODE_SIGN_FLAGS="--timestamp=none")
+    xcodebuild_args+=(OTHER_CODE_SIGN_FLAGS="--keychain ${SUNIYE_CODESIGN_KEYCHAIN_PATH}")
   fi
 fi
 
 if [[ "${SHOULD_RELEASE_SIGN}" == "1" ]]; then
   xcodebuild_args+=(
     CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
-    ENABLE_HARDENED_RUNTIME=NO
+    ENABLE_HARDENED_RUNTIME=YES
   )
 fi
 
