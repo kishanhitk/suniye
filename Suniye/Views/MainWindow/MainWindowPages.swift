@@ -117,7 +117,9 @@ struct GeneralPage: View {
             if !appState.hasAccessibilityPermission {
                 ControlSettingRow(
                     title: "Accessibility",
-                    info: "Required to paste transcribed text into other apps."
+                    info: appState.accessibilityGrantLikelyStale
+                        ? appState.staleAccessibilityGrantInstruction
+                        : "Required to paste transcribed text into other apps."
                 ) {
                     HStack(spacing: 8) {
                         Button("Grant") { appState.beginAccessibilityOnboarding() }

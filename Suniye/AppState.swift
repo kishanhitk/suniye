@@ -590,10 +590,18 @@ final class AppState {
     /// The Permiso overlay timed out with no grant — surface a visible hint
     /// instead of the old silent disappearance.
     private(set) var accessibilityAssistTimedOut = false
-    /// macOS reset a previously-working Accessibility grant (app update / TCC
-    /// reset). The drag overlay would mislead ("drag Suniye in" while it is
-    /// already listed), so the UI shows toggle-off-and-on copy instead.
+    /// macOS reset a previously-working Accessibility grant (signing-identity
+    /// change / TCC reset). Suniye is still listed in System Settings, so the
+    /// drag overlay would mislead; the UI shows remove-and-re-add copy instead.
     private(set) var accessibilityGrantLikelyStale = false
+
+    /// A stale entry stays switched on in System Settings while macOS ignores
+    /// it, so toggling it is not reliable. Removing it drops the old code
+    /// requirement; adding it back records the current one.
+    var staleAccessibilityGrantInstruction: String {
+        let name = AppIdentity.current.displayName
+        return "macOS reset this permission after an update. In the Accessibility list, select \(name), remove it with −, then add it back with +."
+    }
 
     /// Per-run dedupe of onboarding_step emissions (relaunch resume re-fires
     /// once per run with resumed=true; navigation within a run fires once per step).
@@ -1568,7 +1576,9 @@ final class AppState {
                 AttentionItem(
                     id: "accessibility-permission-missing",
                     title: "Accessibility permission missing",
-                    detail: "Grant accessibility access so transcribed text can be inserted.",
+                    detail: accessibilityGrantLikelyStale
+                        ? staleAccessibilityGrantInstruction
+                        : "Grant accessibility access so transcribed text can be inserted.",
                     severity: .warning,
                     recommendedSection: .general,
                     fixAction: .requestAccessibilityPermission
@@ -2248,6 +2258,8 @@ final class AppState {
                 lastKnownAccessibilityGranted = true
                 persistGeneralSettings()
             }
+        } else {
+            accessibilityGrantLikelyStale = lastKnownAccessibilityGranted
         }
     }
 
@@ -2260,7 +2272,7 @@ final class AppState {
 
         // Stale TCC entry (post-update): Suniye is already in the Accessibility
         // list, just untrusted. The drag overlay's "drag Suniye into the list"
-        // instruction would mislead; deep-link with toggle-off-and-on copy instead.
+        // instruction would mislead; deep-link with remove-and-re-add copy instead.
         if lastKnownAccessibilityGranted, !hasAccessibilityPermission {
             accessibilityGrantLikelyStale = true
             onStateChange?()
