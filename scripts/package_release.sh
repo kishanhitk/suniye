@@ -107,7 +107,7 @@ fi
 
 if [[ -z "${SUNIYE_CODESIGN_IDENTITY:-}" ]]; then
   echo "SUNIYE_CODESIGN_IDENTITY is required for release packaging." >&2
-  echo "Create/import the stable self-signed release identity before packaging." >&2
+  echo "Import the Developer ID Application identity before packaging." >&2
   exit 1
 fi
 
@@ -151,6 +151,15 @@ fi
 
 rm -f "${ZIP_PATH}" "${DMG_PATH}" "${CHECKSUMS_PATH}" "${APPCAST_PATH}"
 
+# Notarize and staple the app itself, so a copy dragged out of the DMG still
+# carries its ticket and passes Gatekeeper offline.
+NOTARY_WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "${NOTARY_WORK_DIR}"' EXIT
+NOTARY_ZIP_PATH="${NOTARY_WORK_DIR}/Suniye.app.zip"
+/usr/bin/ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "${NOTARY_ZIP_PATH}"
+"${ROOT_DIR}/scripts/notarize_artifact.sh" "${NOTARY_ZIP_PATH}"
+/usr/bin/xcrun stapler staple "${APP_PATH}"
+
 # Create zip artifact
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "${ZIP_PATH}"
 
@@ -164,6 +173,16 @@ ln -s /Applications "${DMG_STAGING}/Applications"
 /usr/bin/hdiutil create -volname "Suniye" -srcfolder "${DMG_STAGING}" -ov -format ULMO "${DMG_PATH}" >/dev/null
 rm -rf "${DMG_STAGING}"
 
+DMG_SIGN_ARGS=(--force --sign "${SUNIYE_CODESIGN_IDENTITY}" --timestamp)
+if [[ -n "${SUNIYE_CODESIGN_KEYCHAIN_PATH:-}" ]]; then
+  DMG_SIGN_ARGS+=(--keychain "${SUNIYE_CODESIGN_KEYCHAIN_PATH}")
+fi
+/usr/bin/codesign "${DMG_SIGN_ARGS[@]}" "${DMG_PATH}"
+"${ROOT_DIR}/scripts/notarize_artifact.sh" "${DMG_PATH}"
+/usr/bin/xcrun stapler staple "${DMG_PATH}"
+
+# Stapling rewrites the DMG, so checksums and the Sparkle EdDSA signature must
+# be computed only from here on.
 (
   cd "${DIST_DIR}"
   shasum -a 256 "Suniye.dmg" "Suniye.app.zip" > "SHA256SUMS.txt"

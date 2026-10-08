@@ -6,7 +6,7 @@
 brew install --cask kishanhitk/tap/suniye
 ```
 
-This taps [`kishanhitk/homebrew-tap`](https://github.com/kishanhitk/homebrew-tap) and installs the latest release. Because Suniye is self-signed but not notarized, the cask clears the Gatekeeper quarantine automatically on install, so you can skip the manual `xattr` step. Updates are delivered in-app by Sparkle; `brew upgrade --cask suniye` works too.
+This taps [`kishanhitk/homebrew-tap`](https://github.com/kishanhitk/homebrew-tap) and installs the latest release. Updates are delivered in-app by Sparkle; `brew upgrade --cask suniye` works too.
 
 Homebrew 6.0+ requires third-party taps to be trusted before their code runs. Using the fully-qualified name above grants trust to just this cask (you may be asked to confirm on first install). To pre-trust it — for example in scripted or CI installs — run `brew trust --cask kishanhitk/tap/suniye` first, or read the cask before trusting it with `brew cat kishanhitk/tap/suniye`.
 
@@ -45,21 +45,15 @@ Match the output against `SHA256SUMS.txt`.
 1. Open `Suniye.dmg`.
 2. Drag `Suniye.app` into `/Applications`.
 
-### 4) First launch (self-signed app)
-Suniye is self-signed but not notarized, so macOS may block first launch.
-
-If that happens, remove quarantine and try again:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Suniye.app
-```
+### 4) First launch
+Suniye is signed with an Apple Developer ID and notarized by Apple. macOS asks once to confirm that you want to open an app downloaded from the internet.
 
 ### 5) Permissions
 Grant permissions when prompted:
 - Microphone
 - Accessibility (for text insertion)
 
-If you are updating from an older ad hoc-signed Suniye release, macOS may ask for these permissions one more time. Future self-signed updates should preserve the grants.
+If you are updating from a release older than the first Developer ID release, grant these permissions one more time. If Accessibility shows Suniye as already on but dictation still asks for it, select Suniye in the Accessibility list, remove it with the minus button, and add it again. Later updates keep the grants.
 
 After that, Suniye shows a short first-run onboarding flow that covers setup, an optional Magic Format choice, and a practice dictation.
 

@@ -64,6 +64,10 @@ targets:
         SUScheduledCheckInterval: 18000
         SUShowReleaseNotes: true
         SUVerifyUpdateBeforeExtraction: true
+    entitlements:
+      path: Suniye/Suniye.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
     settings:
       base:
         PRODUCT_NAME: $(SUNIYE_PRODUCT_NAME)

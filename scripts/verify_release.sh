@@ -80,6 +80,33 @@ done
   shasum -a 256 -c SHA256SUMS.txt
 )
 
+echo "Gatekeeper: $(/usr/sbin/spctl --status 2>&1)"
+
+# Gatekeeper reports "source=Notarized Developer ID" only when the artifact is
+# Developer ID signed and Apple's notary service has issued a ticket for it.
+assess_gatekeeper() {
+  local label="$1"
+  shift
+  local output
+  output="$(/usr/sbin/spctl --assess -vv "$@" 2>&1)" || true
+  if ! grep -q 'source=Notarized Developer ID' <<<"${output}"; then
+    echo "${label} is not accepted by Gatekeeper as notarized Developer ID:" >&2
+    echo "${output}" >&2
+    exit 1
+  fi
+  echo "${label}: ${output}"
+}
+
+verify_notarized_app() {
+  local app_path="$1"
+  local label="$2"
+  /usr/bin/xcrun stapler validate "${app_path}"
+  assess_gatekeeper "${label}" --type execute "${app_path}"
+}
+
+/usr/bin/xcrun stapler validate "${DMG_PATH}"
+assess_gatekeeper "DMG" --type open --context context:primary-signature "${DMG_PATH}"
+
 MOUNT_POINT="$(mktemp -d /tmp/suniye-dmg-XXXXXX)"
 ZIP_EXTRACT_DIR="$(mktemp -d /tmp/suniye-zip-XXXXXX)"
 /usr/bin/hdiutil attach "${DMG_PATH}" -mountpoint "${MOUNT_POINT}" -nobrowse -readonly >/dev/null
@@ -104,13 +131,16 @@ verify_app_build_channel() {
 
 verify_app_build_channel "${MOUNT_POINT}/Suniye.app" "DMG app"
 "${ROOT_DIR}/scripts/verify_release_signing.sh" "${MOUNT_POINT}/Suniye.app"
+verify_notarized_app "${MOUNT_POINT}/Suniye.app" "DMG app"
+SPARKLE_PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "${MOUNT_POINT}/Suniye.app/Contents/Info.plist")"
 
 /usr/bin/ditto -x -k "${ZIP_PATH}" "${ZIP_EXTRACT_DIR}"
 [[ -d "${ZIP_EXTRACT_DIR}/Suniye.app" ]] || { echo "ZIP missing Suniye.app" >&2; exit 1; }
 verify_app_build_channel "${ZIP_EXTRACT_DIR}/Suniye.app" "ZIP app"
 "${ROOT_DIR}/scripts/verify_release_signing.sh" "${ZIP_EXTRACT_DIR}/Suniye.app"
+verify_notarized_app "${ZIP_EXTRACT_DIR}/Suniye.app" "ZIP app"
 
-/usr/bin/python3 - "${APPCAST_PATH}" "${VERSION}" "${DOWNLOAD_URL_PREFIX}" "${APPCAST_CHANNEL}" <<'PY'
+APPCAST_ENCLOSURE="$(/usr/bin/python3 - "${APPCAST_PATH}" "${VERSION}" "${DOWNLOAD_URL_PREFIX}" "${APPCAST_CHANNEL}" <<'PY'
 import sys
 import xml.etree.ElementTree as ET
 
@@ -160,7 +190,21 @@ if version:
         raise SystemExit(f"Appcast short version {short_version!r} does not match {normalized!r}")
 elif not enclosure.attrib.get("url", "").endswith("/Suniye.dmg"):
     raise SystemExit("Appcast enclosure does not point to Suniye.dmg")
+
+print(enclosure.attrib["{http://www.andymatuschak.org/xml-namespaces/sparkle}edSignature"], enclosure.attrib.get("length", ""))
 PY
+)"
+read -r ENCLOSURE_SIGNATURE ENCLOSURE_LENGTH <<<"${APPCAST_ENCLOSURE}"
+
+DMG_SIZE="$(/usr/bin/stat -f %z "${DMG_PATH}")"
+if [[ "${ENCLOSURE_LENGTH}" != "${DMG_SIZE}" ]]; then
+  echo "Appcast enclosure length ${ENCLOSURE_LENGTH:-<missing>} does not match Suniye.dmg size ${DMG_SIZE}" >&2
+  exit 1
+fi
+
+# Existing installs reject the update unless this signature matches the final,
+# stapled DMG under the public key they embed.
+/usr/bin/xcrun swift "${ROOT_DIR}/scripts/verify_sparkle_signature.swift" "${DMG_PATH}" "${SPARKLE_PUBLIC_KEY}" "${ENCLOSURE_SIGNATURE}"
 
 /usr/bin/hdiutil detach "${MOUNT_POINT}" -quiet >/dev/null
 rm -rf "${MOUNT_POINT}"

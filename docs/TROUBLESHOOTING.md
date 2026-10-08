@@ -1,18 +1,7 @@
 # Troubleshooting
 
 ## "App is damaged" / blocked by macOS
-Suniye is currently self-signed but not notarized.
-If macOS blocks the app on first launch, remove quarantine from the installed app:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/Suniye.app
-```
-
-## Quarantine issues
-If needed, remove quarantine from the installed app:
-```bash
-xattr -dr com.apple.quarantine /Applications/Suniye.app
-```
+Suniye releases are signed with an Apple Developer ID and notarized, so macOS opens them without extra steps. If macOS still blocks the app, you have a release older than the first Developer ID release. Download the latest release and install it again.
 
 ## Model download fails
 - Run `./scripts/setup_model.sh` manually.
@@ -51,7 +40,7 @@ Grant and re-check:
 - Microphone access
 - Accessibility permissions
 
-If this happened immediately after updating from an older ad hoc-signed build, grant the permissions once more. Suniye releases now use one stable self-signed identity so future updates should preserve those grants.
+If this happened right after the update to the first Developer ID release, grant the permissions once more. macOS ties the grants to the app's signing identity, and that identity changed once. If Accessibility shows Suniye as already on, select Suniye in the Accessibility list, remove it with the minus button, and add it again.
 
 ## Bluetooth audio drops to call quality while dictating
 - Bluetooth headphones switch to their call-quality profile whenever their microphone is used. This is a Bluetooth limitation, not an audio-quality setting Suniye can override.
