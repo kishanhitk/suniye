@@ -3982,10 +3982,14 @@ final class AppState {
                 return
             }
         }
-        if resolvedDestination == .clipboardOnly, !hasPromptedAccessibilityForClipboardDictation {
+        // The Permiso overlay already asks for the grant; a system dialog on top
+        // of it would compete, and would use up this launch's one prompt.
+        if resolvedDestination == .clipboardOnly,
+           !hasPromptedAccessibilityForClipboardDictation,
+           !accessibilityOnboarding.isPresenting {
             hasPromptedAccessibilityForClipboardDictation = true
             AppLogger.shared.log(.warning, "accessibility not granted; prompting, dictation will be copied, not pasted")
-            await refreshPermissions(promptAccessibility: !accessibilityOnboarding.isPresenting)
+            await refreshPermissions(promptAccessibility: true)
         }
         // Speculatively warm the local LLM while the user speaks, so cleanup runs
         // against an already-loaded model instead of paying the cold start on the
