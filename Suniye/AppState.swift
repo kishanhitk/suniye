@@ -1700,6 +1700,9 @@ final class AppState {
     /// Injectable Accessibility TCC seam for route selection after the user grants
     /// access in System Settings while Suniye is inactive.
     private let accessibilityTrustProvider: () -> Bool
+    /// Same trust read, but macOS shows its "allow Accessibility" dialog when the
+    /// process is not trusted.
+    private let accessibilityTrustPrompter: () -> Bool
     /// Injectable free-disk probe for the onboarding download preflight.
     private let availableDiskCapacityProvider: () async -> Int64?
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
@@ -1736,6 +1739,10 @@ final class AppState {
     private var recordingStart: Date? { activeDictationSession?.context.startedAt }
     private var overlayErrorResetTask: Task<Void, Never>?
     private var isShowingInsertionRecoveryWarning = false
+    /// A dictation without Accessibility still runs, to the clipboard only. The
+    /// system Accessibility dialog is raised for the first such dictation per
+    /// launch; later ones get the not-pasted notice without the dialog.
+    @ObservationIgnored private var hasPromptedAccessibilityForClipboardDictation = false
     private var asrDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
@@ -1813,6 +1820,9 @@ final class AppState {
         micAuthorizationStatusProvider: @escaping () -> AVAuthorizationStatus = { AVCaptureDevice.authorizationStatus(for: .audio) },
         micAccessRequester: @escaping () async -> Bool = { await AVCaptureDevice.requestAccess(for: .audio) },
         accessibilityTrustProvider: @escaping () -> Bool = { AXIsProcessTrusted() },
+        accessibilityTrustPrompter: @escaping () -> Bool = {
+            AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
+        },
         availableDiskCapacityProvider: (() async -> Int64?)? = nil,
         issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { defaultName in
             let panel = NSSavePanel()
@@ -1889,6 +1899,7 @@ final class AppState {
         self.micAuthorizationStatusProvider = micAuthorizationStatusProvider
         self.micAccessRequester = micAccessRequester
         self.accessibilityTrustProvider = accessibilityTrustProvider
+        self.accessibilityTrustPrompter = accessibilityTrustPrompter
         let modelsRootDirectory = try? modelManager.modelsRootDirectoryURL()
         self.availableDiskCapacityProvider = availableDiskCapacityProvider ?? {
             guard let modelsRootDirectory else {
@@ -2217,8 +2228,7 @@ final class AppState {
         hasMicPermissionBeenDenied = micStatus == .denied || micStatus == .restricted
 
         if promptAccessibility {
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-            hasAccessibilityPermission = AXIsProcessTrustedWithOptions(options)
+            hasAccessibilityPermission = accessibilityTrustPrompter()
         } else {
             hasAccessibilityPermission = accessibilityTrustProvider()
         }
@@ -3972,6 +3982,15 @@ final class AppState {
                 return
             }
         }
+        // The Permiso overlay already asks for the grant; a system dialog on top
+        // of it would compete, and would use up this launch's one prompt.
+        if resolvedDestination == .clipboardOnly,
+           !hasPromptedAccessibilityForClipboardDictation,
+           !accessibilityOnboarding.isPresenting {
+            hasPromptedAccessibilityForClipboardDictation = true
+            AppLogger.shared.log(.warning, "accessibility not granted; prompting, dictation will be copied, not pasted")
+            await refreshPermissions(promptAccessibility: true)
+        }
         // Speculatively warm the local LLM while the user speaks, so cleanup runs
         // against an already-loaded model instead of paying the cold start on the
         // critical path. Fire-and-forget; idempotent and self-evicting. Edit Mode
@@ -4303,13 +4322,18 @@ final class AppState {
             )
         }
 
-        completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation)
+        // A clipboard-only session did its job, but the user held the hotkey to
+        // paste; a success chime and an idle pill would hide that nothing landed.
+        let copiedWithoutPaste = destination == .clipboardOnly && didCompleteDictation && !finalText.isEmpty
+        completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation && !copiedWithoutPaste)
         if didFailInsertion {
             showInsertionRecoveryWarning()
         } else {
             isShowingInsertionRecoveryWarning = false
             if submitKeyFailed {
                 showSubmitKeyFailureNotice()
+            } else if copiedWithoutPaste {
+                showClipboardOnlyNotice()
             }
         }
     }
@@ -5037,6 +5061,15 @@ final class AppState {
         let message = "Text inserted, but Enter couldn't be sent. Press it yourself."
         lastError = message
         showTransientIndicatorError(message, restoreState: blockedStartRestoreIndicatorState(), duration: 3.0)
+    }
+
+    var clipboardOnlyNoticeMessage: String {
+        "Not pasted: Accessibility is off. Press ⌘V, then open \(AppIdentity.current.displayName) to fix."
+    }
+
+    private func showClipboardOnlyNotice() {
+        playSoundFeedback(.error)
+        showTransientIndicatorError(clipboardOnlyNoticeMessage, duration: 3.5)
     }
 
     private func showInsertionRecoveryWarning() {

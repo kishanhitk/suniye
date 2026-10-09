@@ -835,6 +835,7 @@ func makeTestAppState(
     micAuthorizationStatusProvider: (() -> AVAuthorizationStatus)? = nil,
     micAccessRequester: (() async -> Bool)? = nil,
     accessibilityTrustProvider: (() -> Bool)? = nil,
+    accessibilityTrustPrompter: (() -> Bool)? = nil,
     availableDiskCapacityProvider: (() async -> Int64?)? = nil,
     issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
@@ -878,6 +879,8 @@ func makeTestAppState(
         micAuthorizationStatusProvider: micAuthorizationStatusProvider ?? { .notDetermined },
         micAccessRequester: micAccessRequester ?? { false },
         accessibilityTrustProvider: accessibilityTrustProvider ?? { true },
+        // Never the live API: a real call would raise the system dialog.
+        accessibilityTrustPrompter: accessibilityTrustPrompter ?? accessibilityTrustProvider ?? { true },
         availableDiskCapacityProvider: availableDiskCapacityProvider ?? { nil },
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
