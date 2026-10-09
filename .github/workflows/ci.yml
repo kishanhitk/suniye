@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Detect app changes
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         id: filter
         with:
           # `every` + all-negated globs = "match any changed file that is NOT one
@@ -100,7 +100,7 @@ jobs:
 
       - name: Upload logs/artifacts on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci-debug-artifacts
           path: |
