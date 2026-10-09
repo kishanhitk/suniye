@@ -21,7 +21,7 @@
   <img src="https://img.shields.io/badge/macOS-14%2B-1a1a1a" alt="macOS 14+" />
 </p>
 
-<img src="docs/assets/dashboard.png" width="760" alt="Suniye's dashboard: sessions, words dictated, total time, and recent transcriptions — all stored locally on your Mac" />
+<img src="docs/assets/dashboard.png" width="760" alt="Suniye's Transcripts view: dictation count, time saved, words per day, and a searchable history of every dictation — all stored locally on your Mac" />
 
 </div>
 
