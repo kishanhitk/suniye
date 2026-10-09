@@ -633,6 +633,85 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(metrics?.destination, .clipboard)
     }
 
+    func testDictationWithoutAccessibilityPromptsOnceAndSaysItWasNotPasted() async {
+        // After a signing-identity change the grant goes stale with the app in
+        // the background: the hotkey is the only moment the user can be told.
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("Hello without access")
+        let textInsertionService = SpyTextInsertionService()
+        let sound = SpySoundFeedbackService()
+        var promptCount = 0
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            textInsertionService: textInsertionService,
+            soundFeedbackService: sound,
+            micAuthorizationStatusProvider: { .authorized },
+            accessibilityTrustProvider: { false },
+            accessibilityTrustPrompter: {
+                promptCount += 1
+                return false
+            }
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = false
+        appState.soundFeedbackEnabled = true
+
+        for _ in 0..<2 {
+            appState.toggleFloatingIndicatorRecording()
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            appState.toggleFloatingIndicatorRecording()
+            try? await Task.sleep(nanoseconds: 50_000_000)
+
+            XCTAssertEqual(appState.floatingIndicatorState, .error(message: appState.clipboardOnlyNoticeMessage))
+        }
+
+        XCTAssertEqual(promptCount, 1, "the system dialog is raised once per launch, not on every dictation")
+        XCTAssertEqual(textInsertionService.copiedTexts, ["Hello without access", "Hello without access"])
+        XCTAssertTrue(textInsertionService.insertedTexts.isEmpty)
+        XCTAssertEqual(sound.playedEvents, [.error, .error])
+        XCTAssertTrue(appState.clipboardOnlyNoticeMessage.contains("Not pasted: Accessibility is off."))
+    }
+
+    func testDictationWithAccessibilityNeitherPromptsNorWarns() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("Hello with access")
+        let textInsertionService = SpyTextInsertionService()
+        let sound = SpySoundFeedbackService()
+        var promptCount = 0
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture,
+            textInsertionService: textInsertionService,
+            soundFeedbackService: sound,
+            micAuthorizationStatusProvider: { .authorized },
+            accessibilityTrustProvider: { true },
+            accessibilityTrustPrompter: {
+                promptCount += 1
+                return true
+            }
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.soundFeedbackEnabled = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(promptCount, 0)
+        XCTAssertFalse(textInsertionService.insertedTexts.isEmpty)
+        XCTAssertEqual(sound.playedEvents, [.transcriptionSucceeded])
+        XCTAssertEqual(appState.floatingIndicatorState, .idle)
+    }
+
     func testDictationRefreshesAccessibilityBeforeChoosingInsertionDestination() async {
         let audioCapture = StubAudioCaptureService()
         audioCapture.stopCaptureResult = makeValidCapturedAudio()
