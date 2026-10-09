@@ -4,7 +4,7 @@ import CopyField from "../components/CopyField.astro";
 import Navbar from "../components/Navbar.astro";
 import Footer from "../components/Footer.astro";
 import { softwareApplicationSchema, faqPageSchema, jsonLdString } from "../lib/seo";
-import { BREW_INSTALL, DOWNLOAD_URL, GITHUB_URL, QUARANTINE_CMD } from "../lib/site";
+import { BREW_INSTALL, DOWNLOAD_URL, GITHUB_URL } from "../lib/site";
 import {
   HERO,
   CLOUD_PATH,
@@ -109,7 +109,6 @@ export const prerender = false;
         <div class="fade-in mt-7 flex justify-center">
           <a
             href={DOWNLOAD_URL}
-            data-dmg
             data-track="download_click:dmg_hero"
             class="glass inline-flex items-center gap-2 px-6 py-3 text-[15px] font-medium"
           >
@@ -463,7 +462,6 @@ export const prerender = false;
           <div class="mt-10 flex flex-wrap items-center gap-4">
             <a
               href={DOWNLOAD_URL}
-              data-dmg
               data-track="download_click:dmg_install"
               class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 text-sm text-ink hover:bg-surface"
             >
@@ -529,7 +527,6 @@ export const prerender = false;
         <div class="mt-8 flex justify-center">
           <a
             href={DOWNLOAD_URL}
-            data-dmg
             data-track="download_click:dmg_footer"
             class="glass inline-flex items-center gap-2 px-6 py-3 text-[15px] font-medium"
           >
@@ -541,115 +538,6 @@ export const prerender = false;
         </div>
       </div>
     </section>
-
-    <!-- ── Quarantine notice — surfaced after a .dmg download ─ -->
-    <div
-      id="dmg-banner"
-      class="dmg-modal fixed inset-0 z-[70] flex items-center justify-center px-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="dmg-title"
-      hidden
-    >
-      <div class="dmg-scrim absolute inset-0 bg-ink/55 backdrop-blur-md" data-dmg-close></div>
-
-      <div class="dmg-card relative w-full max-w-2xl overflow-hidden rounded-2xl border border-white/70 bg-bg shadow-[0_50px_120px_-24px_rgba(16,40,68,0.55)]">
-        <div class="p-7 md:p-8">
-          <div class="flex items-start gap-4">
-            <div class="flex-1">
-              <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted/60">
-                One-time step
-              </p>
-              <p id="dmg-title" class="mt-2 font-display text-2xl leading-tight tracking-tight text-ink">
-                If macOS says the app is damaged
-              </p>
-            </div>
-            <button
-              id="dmg-banner-close"
-              type="button"
-              class="btn-press -mr-1.5 -mt-1.5 flex-none rounded-lg p-2 text-muted/50 hover:bg-surface hover:text-ink"
-              aria-label="Dismiss"
-            >
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M18 6L6 18" />
-              </svg>
-            </button>
-          </div>
-
-          <p class="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-muted">
-            It isn't. Suniye isn't signed with a paid Apple Developer certificate,
-            so macOS quarantines the download. This clears it:
-          </p>
-
-          <!-- The command reads as a terminal line, not a form field: dark ground,
-               mono, and the only thing in the dialog with any weight. -->
-          <div class="mt-5 flex items-center gap-3 rounded-xl bg-ink px-4 py-3.5">
-            <code class="flex-1 break-all font-mono text-[12.5px] leading-relaxed text-white/90">
-              {QUARANTINE_CMD}
-            </code>
-            <button
-              class="copy-btn btn-press relative flex-none rounded-md p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
-              data-copy={QUARANTINE_CMD}
-              aria-label="Copy the command"
-            >
-              <svg class="copy-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-              </svg>
-              <svg class="check-icon h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </button>
-          </div>
-
-          <p class="mt-3 text-[13px] leading-relaxed text-muted/75">
-            Paste it into Terminal after dragging Suniye to Applications, then open
-            the app as usual.
-          </p>
-        </div>
-
-        <!-- Homebrew avoids the whole thing, so it belongs here rather than buried
-             further down the page. Deliberately quieter than the xattr block
-             above: light ground, muted ink, no terminal styling — an alternative
-             for next time, not a second instruction competing with the fix. -->
-        <div class="border-t border-border bg-surface/70 px-7 py-5 md:px-8">
-          <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-            <div class="min-w-0 flex-1">
-              <p class="text-[13px] leading-relaxed text-muted">
-                Or install with Homebrew, which clears this for you.
-              </p>
-              <button
-                class="copy-btn btn-press relative mt-2 flex w-full items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 text-left"
-                data-copy={BREW_INSTALL}
-                data-track="download_click:homebrew_modal"
-                aria-label="Copy the Homebrew install command"
-              >
-                <code class="min-w-0 flex-1 break-all font-mono text-[12px] text-muted">
-                  {BREW_INSTALL}
-                </code>
-                <span class="relative h-3.5 w-3.5 flex-none text-muted/50">
-                  <svg class="copy-icon h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                  </svg>
-                  <svg class="check-icon h-3.5 w-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </span>
-              </button>
-            </div>
-
-            <button
-              type="button"
-              data-dmg-close
-              class="btn-press rounded-lg bg-ink px-5 py-2.5 text-sm text-bg hover:bg-ink/85"
-            >
-              Got it
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   </main>
 
   <!-- ── Footer ─────────────────────────────── -->
@@ -761,53 +649,6 @@ export const prerender = false;
         render();
         demoVideo.controls = false;
         demoPlay.classList.remove("is-playing");
-      });
-    }
-
-    // Surface the quarantine notice once the user grabs the app directly.
-    // As an aria-modal dialog it owns focus while open: move focus in, trap Tab,
-    // lock body scroll, and restore focus to the trigger on close.
-    const dmgBanner = document.getElementById("dmg-banner");
-    if (dmgBanner) {
-      const card = dmgBanner.querySelector(".dmg-card");
-      const closeEl = document.getElementById("dmg-banner-close");
-      let lastFocused = null;
-      const openDmg = () => {
-        lastFocused = document.activeElement;
-        dmgBanner.hidden = false;
-        document.body.style.overflow = "hidden";
-        closeEl?.focus();
-      };
-      const closeDmg = () => {
-        dmgBanner.hidden = true;
-        document.body.style.overflow = "";
-        lastFocused?.focus?.();
-      };
-      document.querySelectorAll("[data-dmg]").forEach((el) => {
-        el.addEventListener("click", openDmg);
-      });
-      dmgBanner
-        .querySelectorAll("[data-dmg-close], #dmg-banner-close")
-        .forEach((el) => el.addEventListener("click", closeDmg));
-      document.addEventListener("keydown", (e) => {
-        if (dmgBanner.hidden) return;
-        if (e.key === "Escape") {
-          closeDmg();
-        } else if (e.key === "Tab" && card) {
-          const items = card.querySelectorAll(
-            'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          );
-          if (!items.length) return;
-          const first = items[0];
-          const last = items[items.length - 1];
-          if (e.shiftKey && document.activeElement === first) {
-            e.preventDefault();
-            last.focus();
-          } else if (!e.shiftKey && document.activeElement === last) {
-            e.preventDefault();
-            first.focus();
-          }
-        }
       });
     }
 

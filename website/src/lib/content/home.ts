@@ -1,5 +1,5 @@
 import type { FaqItem } from "../seo";
-import { BREW_INSTALL, DOWNLOAD_URL, GITHUB_URL, GITHUB_RELEASES_URL, QUARANTINE_CMD, SITE_URL } from "../site";
+import { BREW_INSTALL, DOWNLOAD_URL, GITHUB_URL, GITHUB_RELEASES_URL, SITE_URL } from "../site";
 
 // The homepage's copy, shared by index.astro and the page's Markdown variant
 // so an agent reading text/markdown sees exactly what a browser sees.
@@ -123,7 +123,7 @@ export const PROOF_POINTS = ["MIT licensed", "62 releases since February", "No a
 
 export const INSTALL = {
   headline: "Two ways in.",
-  brewNote: "Homebrew clears the macOS quarantine for you. It will ask you to trust the tap first — that is Homebrew 6 asking about any third-party tap, not something specific to Suniye.",
+  brewNote: "Homebrew will ask you to trust the tap first — that is Homebrew 6 asking about any third-party tap, not something specific to Suniye.",
   requirements: "macOS 14 (Sonoma) or later. Dictation works on Intel and Apple Silicon; the on-device cleanup model needs Apple Silicon.",
   status: "Alpha — expect rough edges",
 } as const;
@@ -144,10 +144,6 @@ export const FAQS: readonly FaqItem[] = [
   {
     q: "What languages can it understand?",
     a: "It depends on the model you pick. Some cover 25 European languages, others handle Chinese, Japanese, Korean, English and Cantonese, and the largest understand a broad mix. Several English-only models are smaller and faster.",
-  },
-  {
-    q: "Why does macOS say the app is damaged?",
-    a: "Only the direct .dmg download is affected. Suniye is not signed with a paid Apple Developer certificate, so macOS quarantines it on first launch. Run xattr -rd com.apple.quarantine /Applications/Suniye.app once to clear it — Suniye also offers the command right after you download the .dmg. Installing with Homebrew avoids it entirely, since brew clears the quarantine for you.",
   },
   {
     q: "How fast is it, really?",
@@ -251,12 +247,6 @@ ${BREW_INSTALL}
 ${INSTALL.brewNote}
 
 **Direct download:** ${DOWNLOAD_URL}
-
-If macOS says the app is damaged after a direct download, clear the quarantine once:
-
-\`\`\`sh
-${QUARANTINE_CMD}
-\`\`\`
 
 **Build from source:** ${GITHUB_URL}#build-from-source
 
