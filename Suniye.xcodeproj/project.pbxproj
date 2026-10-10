@@ -288,6 +288,7 @@
 		3FA96C193EFD137CFA4EEC9B /* ModelsCoverageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelsCoverageTests.swift; sourceTree = "<group>"; };
 		40555912DEAEA0C223525FB8 /* SubtleScroller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtleScroller.swift; sourceTree = "<group>"; };
 		4213B4B666CF5B60F3371019 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
+		436F8EBC13268D2B033EA389 /* onnxruntime_error_code.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = onnxruntime_error_code.h; sourceTree = "<group>"; };
 		45B4345BE4906F835B2CB1DD /* AppStateOnboardingFunnelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateOnboardingFunnelTests.swift; sourceTree = "<group>"; };
 		46CB08DB3B0815DC0E822412 /* SoundFeedbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundFeedbackService.swift; sourceTree = "<group>"; };
 		484DD46A1F033CDDBA2F98DA /* AppStateAnalyticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateAnalyticsTests.swift; sourceTree = "<group>"; };
@@ -493,6 +494,7 @@
 				169B49FF7909FC69CDC3E1B3 /* OnboardingModels.swift */,
 				5CEA7C09DD5097D48B235EF5 /* onnxruntime_c_api.h */,
 				3DA12B4973440B4D8638C5FB /* onnxruntime_ep_c_api.h */,
+				436F8EBC13268D2B033EA389 /* onnxruntime_error_code.h */,
 				045F7AACA142A791AFFA7C43 /* SettingsModels.swift */,
 				E3471ED7BC0D817AF7D5C516 /* SherpaOnnx.swift */,
 				2B2D87825E1C649DC7A33115 /* StatusItemController.swift */,

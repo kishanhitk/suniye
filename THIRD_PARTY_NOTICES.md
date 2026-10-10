@@ -3,14 +3,15 @@
 Suniye depends on third-party software and model artifacts.
 
 ## Runtime dependencies
-- sherpa-onnx
+- sherpa-onnx v1.13.8
   - Source: https://github.com/k2-fsa/sherpa-onnx
+  - Pinned by: `scripts/setup_sherpa.sh`
   - Used for: speech recognition C API runtime
-  - Local files: `Suniye/Frameworks/libsherpa-onnx-c-api.dylib`, `Suniye/c-api.h`
-- ONNX Runtime (via sherpa-onnx build/install)
+  - Local files: `Suniye/Frameworks/libsherpa-onnx-c-api.dylib`, `Suniye/c-api.h`, `Suniye/SherpaOnnx.swift` (from `swift-api-examples`, unmodified)
+- ONNX Runtime 1.28.2 (arm64 build from https://github.com/csukuangfj/onnxruntime-libs, the build sherpa-onnx v1.13.8 pins)
   - Source: https://github.com/microsoft/onnxruntime
   - Used for: model inference runtime; its C API is also called directly by the Cohere Transcribe engine
-  - Local files: `Suniye/Frameworks/libonnxruntime.dylib`, `Suniye/onnxruntime_c_api.h`, `Suniye/onnxruntime_ep_c_api.h` (headers vendored unmodified from the v1.23.2 tag)
+  - Local files: `Suniye/Frameworks/libonnxruntime.dylib`, `Suniye/onnxruntime_c_api.h`, `Suniye/onnxruntime_ep_c_api.h`, `Suniye/onnxruntime_error_code.h` (headers unmodified from the same build)
 - llama.cpp
   - Source: https://github.com/ggml-org/llama.cpp
   - Pinned by: `scripts/setup_llama_cpp.sh`
