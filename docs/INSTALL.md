@@ -55,14 +55,17 @@ Grant permissions when prompted:
 
 If you are updating from a release older than the first Developer ID release, grant these permissions one more time. If Accessibility shows Suniye as already on but dictation still asks for it, select Suniye in the Accessibility list, remove it with the minus button, and add it again. Later updates keep the grants.
 
-After that, Suniye shows a short first-run onboarding flow that covers setup, an optional Magic Format choice, and a practice dictation.
+The first-run onboarding has four screens:
+1. **Welcome** — click `Try your first dictation`. macOS asks for Microphone access here.
+2. **Try your first dictation** — hold the dictation key (Globe by default), speak, and let go. Your words appear in the field.
+3. **Dictate anywhere** — click `Allow Access` and drag Suniye into the Accessibility list. Closing the window on this screen finishes onboarding without Accessibility; Suniye then copies each dictation to the clipboard instead of pasting it.
+4. **There's more when you need it** — names Magic Format, Speech Model, and Hold to edit selection. `Finish` opens the main window.
 
-During setup:
-- Suniye starts downloading the currently selected speech model when the Welcome screen opens.
-- Fresh installs default to `Parakeet TDT 0.6B v3`.
-- After required setup, you can optionally enable Magic Format with Apple Intelligence or download the recommended Local Model.
-- The Local Model download is optional and continues while you try dictation; it never blocks finishing onboarding.
-- After onboarding, you can open `ASR Model` in settings to install or switch to another supported local model.
+Speech model on a fresh install:
+- On macOS 26, Suniye checks that Apple's built-in speech engine works on your Mac and uses it. Nothing is downloaded.
+- If that check fails (macOS 14–15, an unsupported language, a setting from your organization, or the system speech files cannot be installed), Suniye downloads `Parakeet TDT 0.6B v3` and shows the progress on the second screen.
+- After onboarding, open `Speech Model` to install or switch to another supported model.
+- Magic Format is not part of onboarding. Turn it on later from `Magic Format`.
 
 ### 6) Update flow
 Suniye checks for updates in the background. The default update channel is `Stable`.

@@ -22,6 +22,7 @@ export const COLLECTED: readonly (readonly [term: string, detail: string])[] = [
   ["Language", "The interface language and the language coverage of the speech model you pick (e.g. “english”, “multilingual”) — a code only, never what you said."],
   ["What you use", "Which speech model is selected, whether AI cleanup is on, and other feature toggles — as on/off flags and counts."],
   ["Where text lands", "A coarse category of the target app (email, editor, browser, terminal, …) — never the specific app or its identifier."],
+  ["Setup", "Which first-run screens you reach and how long setup takes, whether permissions were granted, and whether the built-in speech engine works on your Mac — as steps, durations, and yes/no flags."],
   ["Reliability", "Error types (no messages) and a coarse country. The country is derived from your connection's IP — the IP itself is never stored, but the country is kept as coarse metadata."],
 ];
 

@@ -69,7 +69,9 @@ Suniye is signed with an Apple Developer ID and notarized by Apple, so macOS ope
 
 ### First launch
 
-Suniye asks for two permissions — **Microphone** (to hear you) and **Accessibility** (to type into other apps) — then walks you through a short setup and a practice dictation. It installs a recommended speech model (**Parakeet TDT 0.6B v3**) in the background while you try it out.
+A short onboarding takes you from Welcome to your first dictation. Suniye asks for **Microphone** when you start your first try, and for **Accessibility** (to type into other apps) once you have seen it work.
+
+On macOS 26 Suniye starts on Apple's built-in on-device speech engine, so there is nothing to download. If that engine can't run on your Mac (older macOS, an unsupported language, or a setting from your organization), Suniye downloads its recommended model, **Parakeet TDT 0.6B v3**, instead. You can switch models any time in **Speech Model**.
 
 See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed steps.
 

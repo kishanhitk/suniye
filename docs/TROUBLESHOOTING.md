@@ -15,18 +15,21 @@ Suniye releases are signed with an Apple Developer ID and notarized, so macOS op
 - If you use the Tip channel, also check network access to `https://suniye.kishans.in/appcast-tip.xml`.
 - If the appcast is unavailable, check that the latest GitHub release includes `appcast.xml`.
 
-## Downloaded the wrong model during onboarding
-- Open the app settings and go to `ASR Model`.
-- Install the model you want, then click `Use Model`.
-- The onboarding flow downloads whichever ASR model is currently selected. Fresh installs default to `Parakeet TDT 0.6B v3`.
+## Onboarding downloaded a speech model on macOS 26
+- Suniye uses Apple's built-in speech engine only when it works on your Mac. If it does not (unsupported language, a setting from your organization, or the system speech files cannot be installed), Suniye downloads `Parakeet TDT 0.6B v3` instead.
+- `~/Library/Application Support/Suniye/logs/app.log` names the reason on the line `system default model unavailable`.
+- To use a different model, open `Speech Model`, install it, then click `Use Model`.
 
-## Local Model download failed during onboarding
-- You can finish onboarding and keep dictating without Magic Format.
+## Holding the dictation key did nothing after the microphone prompt
+- If you let go of the key while macOS asks for Microphone access, Suniye does not start recording. The floating indicator shows `Hold again to dictate`. Hold the key again.
+
+## Local Model download failed
+- Dictation keeps working without Magic Format.
 - Open `Magic Format`, select `Local Model`, and retry the download.
 - The Local Model is optional and separate from the speech model used for transcription.
 
 ## Model is installed but won’t load
-- Open `ASR Model` and try switching to another installed model.
+- Open `Speech Model` and try switching to another installed model.
 - If the current model still fails, delete it from the model library and download it again.
 - Check `~/Library/Application Support/Suniye/logs/app.log` for the failing model name and validation error.
 
