@@ -52,6 +52,22 @@ Both Stable and Tip appcasts must include Sparkle release notes, either as an em
 - `SHA256SUMS.txt`
 - `appcast.xml`
 
+## DMG window
+`Suniye.dmg` opens a Finder window with the app and an Applications link on a background: the text "Drag Suniye into Applications", a dotted arrow, and the landscape of the onboarding Welcome screen. `scripts/create_dmg.sh` builds the DMG. `package_release.sh` calls it for Stable and Tip, and the CI `build-test` job calls it so that a broken DMG step fails the pull request.
+
+- `scripts/render_dmg_background.swift` draws the background at 1x and 2x each time the DMG is built. Change the art there.
+- `packaging/dmg/dmgbuild_settings.py` sets the window size, the icon size and positions, and the volume icon. The arrow and the text in the art line up with the icon positions, so change the two files together.
+- [dmgbuild](https://github.com/dmgbuild/dmgbuild) writes the window layout into the `.DS_Store` of the volume. It does not script Finder, so CI builds the same DMG as a Mac with a desktop session.
+- `create_dmg.sh` needs Python 3.10 or later and access to PyPI. It installs dmgbuild into a temporary virtual environment from `packaging/dmg/requirements.txt`, which pins each package by hash. To update dmgbuild, get the new wheels with `pip download --only-binary :all: dmgbuild==<version>` and update the versions and the `shasum -a 256` hashes.
+- Finder draws the icon labels black over a background picture, in Light Mode and in Dark Mode. Keep the background light.
+
+To preview the window, build the DMG from any build of the app:
+```bash
+./scripts/build_app.sh Debug --output-dir dist
+./scripts/create_dmg.sh --app dist/Suniye.app --output dist/Suniye.dmg
+open dist/Suniye.dmg
+```
+
 ## Sparkle signing key
 GitHub Actions stores the Sparkle private key in `SPARKLE_PRIVATE_KEY`, but GitHub secrets are write-only and cannot be retrieved later.
 
@@ -68,7 +84,7 @@ Stable and Tip releases are signed with the Apple Developer ID Application ident
 1. `scripts/build_app.sh --release-sign` builds the app, then `scripts/sign_release_app.sh` signs every nested binary and the app inside-out. The app gets only the entitlements in `Suniye/Suniye.entitlements` (`com.apple.security.device.audio-input`, which the hardened runtime needs for microphone capture).
 2. `scripts/verify_release_signing.sh` checks the Developer ID authority, the Team ID, the hardened runtime and the secure timestamp on every Mach-O, and the exact entitlements.
 3. `scripts/notarize_artifact.sh` notarizes a zip of the app, then `stapler` staples the ticket to the app.
-4. The script creates `Suniye.app.zip` and `Suniye.dmg` from the stapled app, signs the DMG, notarizes it, and staples it.
+4. The script creates `Suniye.app.zip` from the stapled app, and `scripts/create_dmg.sh` creates `Suniye.dmg` from it (see [DMG window](#dmg-window)). The script signs the DMG, notarizes it, and staples it.
 5. Only then does it write `SHA256SUMS.txt` and the Sparkle appcast. Stapling changes the DMG, so the EdDSA signature must cover the stapled file. If it does not, every installed copy rejects the update.
 
 `scripts/verify_release.sh` checks the stapled tickets, the Gatekeeper assessment (`source=Notarized Developer ID`) of the DMG and both apps, and the appcast EdDSA signature against the app's own `SUPublicEDKey`.
