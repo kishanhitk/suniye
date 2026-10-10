@@ -15,7 +15,7 @@ Release packaging always uses the default Stable app identity: `Suniye.app`, bun
 1. PR description and commits reflect the release changes accurately.
 2. User-facing docs are updated for onboarding, settings, and supported model changes (`README.md`, `docs/*`).
 3. `./scripts/doctor.sh` passes.
-4. `./scripts/setup_llama_cpp.sh` has staged `Suniye/LocalLLM/llama-server` for Local Gemma.
+4. `./scripts/setup_llama_cpp.sh` has staged `Suniye/LocalLLM/llama-server` for Local Gemma and Qwen3-ASR.
 5. `./scripts/e2e_preflight.sh` passes.
 6. `./scripts/e2e_smoke.sh` passes.
 7. `SUNIYE_CODESIGN_IDENTITY="Developer ID Application: <name> (<team-id>)" SUNIYE_NOTARY_KEYCHAIN_PROFILE=suniye-notary ./scripts/package_release.sh --version <version> --build-channel stable` runs locally.

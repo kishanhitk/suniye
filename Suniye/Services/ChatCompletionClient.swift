@@ -1,8 +1,60 @@
 import Foundation
 
 struct ChatCompletionMessage: Encodable {
+    /// OpenAI-compatible message content: a plain string or a list of typed parts.
+    enum Content: Encodable, Equatable {
+        case text(String)
+        case parts([Part])
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            switch self {
+            case let .text(text):
+                try container.encode(text)
+            case let .parts(parts):
+                try container.encode(parts)
+            }
+        }
+    }
+
+    enum Part: Encodable, Equatable {
+        /// A whole audio file, base64-encoded; `format` is its container, e.g. `wav`.
+        case inputAudio(base64: String, format: String)
+
+        private enum CodingKeys: String, CodingKey {
+            case type
+            case inputAudio = "input_audio"
+        }
+
+        private enum AudioKeys: String, CodingKey {
+            case data
+            case format
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            switch self {
+            case let .inputAudio(base64, format):
+                try container.encode("input_audio", forKey: .type)
+                var audio = container.nestedContainer(keyedBy: AudioKeys.self, forKey: .inputAudio)
+                try audio.encode(base64, forKey: .data)
+                try audio.encode(format, forKey: .format)
+            }
+        }
+    }
+
     let role: String
-    let content: String
+    let content: Content
+
+    init(role: String, content: String) {
+        self.role = role
+        self.content = .text(content)
+    }
+
+    init(role: String, parts: [Part]) {
+        self.role = role
+        self.content = .parts(parts)
+    }
 }
 
 struct ChatCompletionPayload: Encodable {

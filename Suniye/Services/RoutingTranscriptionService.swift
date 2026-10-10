@@ -2,8 +2,9 @@ import Foundation
 
 /// Routes `TranscriptionServiceProtocol` calls to the appropriate engine based on the
 /// loaded model's family: sherpa-onnx for the downloaded ONNX families, Apple's
-/// `SpeechAnalyzer` for the system-managed `appleSpeech` family, and our own ONNX
-/// Runtime engine for `cohereTranscribe`.
+/// `SpeechAnalyzer` for the system-managed `appleSpeech` family, our own ONNX
+/// Runtime engine for `cohereTranscribe`, and the bundled llama.cpp helper for
+/// `qwen3ASR`.
 ///
 /// `AppState` talks to this as a single service, so OS-gating and engine selection stay
 /// localized here rather than spreading through the app. Injectable children keep the
@@ -24,21 +25,25 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         case sherpa
         case apple
         case cohere
+        case qwen3
     }
 
     private let sherpaService: TranscriptionServiceProtocol
     private let appleService: TranscriptionServiceProtocol?
     private let cohereService: TranscriptionServiceProtocol
+    private let qwen3Service: TranscriptionServiceProtocol
     private var activeEngine: Engine?
 
     init(
         sherpaService: TranscriptionServiceProtocol = TranscriptionService(),
         appleService: TranscriptionServiceProtocol? = RoutingTranscriptionService.makeAppleServiceIfSupported(),
-        cohereService: TranscriptionServiceProtocol = CohereTranscriptionService()
+        cohereService: TranscriptionServiceProtocol = CohereTranscriptionService(),
+        qwen3Service: TranscriptionServiceProtocol = Qwen3ASRTranscriptionService()
     ) {
         self.sherpaService = sherpaService
         self.appleService = appleService
         self.cohereService = cohereService
+        self.qwen3Service = qwen3Service
     }
 
     static func makeAppleServiceIfSupported() -> TranscriptionServiceProtocol? {
@@ -91,6 +96,8 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
             return .apple
         case .cohereTranscribe:
             return .cohere
+        case .qwen3ASR:
+            return .qwen3
         case .nemoTransducer, .moonshine, .senseVoice, .whisper:
             return .sherpa
         }
@@ -104,6 +111,8 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
             return appleService
         case .cohere:
             return cohereService
+        case .qwen3:
+            return qwen3Service
         }
     }
 }

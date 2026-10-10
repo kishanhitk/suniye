@@ -9,7 +9,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         localManager.installedModelIDs = []
         let client = LocalGemmaLlamaCppClient(
             locator: LocalGemmaRuntimeLocator(modelManager: localManager),
-            server: LocalGemmaLlamaServer(),
+            server: LlamaServer(),
             session: .shared
         )
 
@@ -21,23 +21,8 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
     func testIsRuntimeWarmAsksServerWhenRuntimeResolves() async throws {
         let tempDir = try makeTemporaryDirectory()
         let helperURL = try makeExecutableScript(in: tempDir, named: "fake-helper", body: "exit 0")
-        let previousHelperPath = getenv("SUNIYE_LLAMA_SERVER_PATH").map { String(cString: $0) }
-        setenv("SUNIYE_LLAMA_SERVER_PATH", helperURL.path, 1)
-        addTeardownBlock {
-            if let previousHelperPath {
-                setenv("SUNIYE_LLAMA_SERVER_PATH", previousHelperPath, 1)
-            } else {
-                unsetenv("SUNIYE_LLAMA_SERVER_PATH")
-            }
-        }
-        let localManager = StubLocalLLMModelManager()
-        localManager.rootDirectory = tempDir
-        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
-        let client = LocalGemmaLlamaCppClient(
-            locator: LocalGemmaRuntimeLocator(modelManager: localManager),
-            server: LocalGemmaLlamaServer(),
-            session: .shared
-        )
+        overrideHelperPath(helperURL)
+        let client = makeClient(rootDirectory: tempDir)
 
         // Server never started, so a resolvable runtime is still cold.
         let warm = await client.isRuntimeWarm()
@@ -48,7 +33,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
     func testStopRuntimeForwardsToServer() async {
         let client = LocalGemmaLlamaCppClient(
             locator: LocalGemmaRuntimeLocator(modelManager: StubLocalLLMModelManager()),
-            server: LocalGemmaLlamaServer(),
+            server: LlamaServer(),
             session: .shared
         )
 
@@ -56,162 +41,94 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         await client.stopRuntime()
     }
 
-    // MARK: - Server startup failures
+    // MARK: - Generation against a helper
 
-    func testMissingServerExecutableFailsStartup() async throws {
+    func testGenerateUsesBearerAuthAgainstLocalServer() async throws {
         let tempDir = try makeTemporaryDirectory()
-        let runtime = LocalGemmaRuntime(
-            serverExecutableURL: tempDir.appendingPathComponent("missing-helper"),
-            model: LocalGemmaDefaults.modelEntry,
-            modelURL: tempDir.appendingPathComponent(LocalGemmaDefaults.modelFilename)
-        )
-        let server = LocalGemmaLlamaServer()
+        let logURL = tempDir.appendingPathComponent("starts.log")
+        overrideHelperPath(try FakeLlamaServer.make(in: tempDir, logURL: logURL))
+        let server = LlamaServer()
+        let client = makeClient(rootDirectory: tempDir, server: server)
 
+        let output: ChatCompletionResult
         do {
-            _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 5, idleTimeoutSeconds: 30)
-            XCTFail("Expected server_start_failed")
-        } catch let error as LLMPostProcessorError {
-            XCTAssertEqual(
-                error.errorDescription,
-                LLMPostProcessorError.provider("server_start_failed").errorDescription
+            output = try await client.generate(
+                instructions: "Reply with OK.",
+                prompt: "Connection test.",
+                maxTokens: 8,
+                startupTimeoutSeconds: 8,
+                idleTimeoutSeconds: 600,
+                timeoutSeconds: 5
             )
         } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
-    }
-
-    func testServerExitDuringStartupSurfacesStderrTail() async throws {
-        let tempDir = try makeTemporaryDirectory()
-        let helperURL = try makeExecutableScript(
-            in: tempDir,
-            named: "crashing-helper",
-            body: """
-            echo "boom fatal error" 1>&2
-            exit 3
-            """
-        )
-        let runtime = LocalGemmaRuntime(
-            serverExecutableURL: helperURL,
-            model: LocalGemmaDefaults.modelEntry,
-            modelURL: tempDir.appendingPathComponent(LocalGemmaDefaults.modelFilename)
-        )
-        let server = LocalGemmaLlamaServer()
-
-        do {
-            _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
-            XCTFail("Expected server exit error")
-        } catch let error as LLMPostProcessorError {
-            let description = error.errorDescription ?? ""
-            XCTAssertTrue(description.contains("server_exited_3"), "unexpected: \(description)")
-            XCTAssertTrue(description.contains("boom fatal error"), "unexpected: \(description)")
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
-    }
-
-    func testServerExitDuringStartupWithoutStderrReportsStatusOnly() async throws {
-        let tempDir = try makeTemporaryDirectory()
-        let helperURL = try makeExecutableScript(in: tempDir, named: "silent-helper", body: "exit 7")
-        let runtime = LocalGemmaRuntime(
-            serverExecutableURL: helperURL,
-            model: LocalGemmaDefaults.modelEntry,
-            modelURL: tempDir.appendingPathComponent(LocalGemmaDefaults.modelFilename)
-        )
-        let server = LocalGemmaLlamaServer()
-
-        do {
-            _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 8, idleTimeoutSeconds: 30)
-            XCTFail("Expected server exit error")
-        } catch let error as LLMPostProcessorError {
-            XCTAssertEqual(
-                error.errorDescription,
-                LLMPostProcessorError.provider("server_exited_7").errorDescription
-            )
-        } catch {
-            XCTFail("Unexpected error: \(error)")
-        }
-    }
-
-    func testNonHTTPHealthResponseKeepsServerUnhealthyUntilTimeout() async throws {
-        let tempDir = try makeTemporaryDirectory()
-        let helperURL = try makeExecutableScript(
-            in: tempDir,
-            named: "sleeping-helper",
-            body: "while :; do sleep 0.1; done"
-        )
-        let runtime = LocalGemmaRuntime(
-            serverExecutableURL: helperURL,
-            model: LocalGemmaDefaults.modelEntry,
-            modelURL: tempDir.appendingPathComponent(LocalGemmaDefaults.modelFilename)
-        )
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [NonHTTPResponseURLProtocol.self]
-        let server = LocalGemmaLlamaServer(healthSession: URLSession(configuration: config))
-
-        do {
-            _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 0.8, idleTimeoutSeconds: 30)
-            XCTFail("Expected startup timeout")
-        } catch let error as LLMPostProcessorError {
-            XCTAssertEqual(error.logValue, LLMPostProcessorError.timeout.logValue)
-        } catch {
-            XCTFail("Unexpected error: \(error)")
+            await server.stop()
+            XCTFail("Expected fake llama-server to become reachable, got \(error). Helper log: \(FakeLlamaServer.logContents(at: logURL))")
+            return
         }
 
+        XCTAssertEqual(output.text, "OK")
+        let isWarm = await client.isRuntimeWarm()
+        XCTAssertTrue(isWarm)
         await server.stop()
     }
 
-    // MARK: - Idle shutdown and stop
-
-    func testScheduleIdleShutdownWithZeroTimeoutIsDisabled() async {
-        let server = LocalGemmaLlamaServer()
-
-        await server.scheduleIdleShutdown(after: 0)
-        // No shutdown task exists; the actor stays responsive.
-        await server.stop()
-    }
-
-    func testConcurrentStopsShareOneTerminationAndSIGKILLStubbornHelper() async throws {
+    func testGenerateReportsHelperFailuresAsPostProcessorErrors() async throws {
         let tempDir = try makeTemporaryDirectory()
-        let markerURL = tempDir.appendingPathComponent("started.marker")
-        let helperURL = try makeExecutableScript(
-            in: tempDir,
-            named: "stubborn-helper",
-            body: """
-            trap '' TERM
-            echo started >> "\(markerURL.path)"
-            while :; do sleep 0.2; done
-            """
-        )
-        let runtime = LocalGemmaRuntime(
-            serverExecutableURL: helperURL,
-            model: LocalGemmaDefaults.modelEntry,
-            modelURL: tempDir.appendingPathComponent(LocalGemmaDefaults.modelFilename)
-        )
-        let server = LocalGemmaLlamaServer()
+        let notAProgram = tempDir.appendingPathComponent("not-a-program")
+        try Data("not a program".utf8).write(to: notAProgram)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: notAProgram.path)
+        let cases: [(URL, LLMPostProcessorError)] = [
+            (notAProgram, .provider("server_start_failed")),
+            (try makeExecutableScript(in: tempDir, named: "exiting-helper", body: "exit 7"), .provider("server_exited_7")),
+            (try makeExecutableScript(in: tempDir, named: "silent-helper", body: "while :; do sleep 0.1; done"), .timeout),
+        ]
 
-        // Startup never becomes healthy; we only need the helper process spawned.
-        let startupTask = Task {
-            _ = try await server.endpoint(for: runtime, startupTimeoutSeconds: 30, idleTimeoutSeconds: 30)
+        for (helperURL, expected) in cases {
+            overrideHelperPath(helperURL)
+            let server = LlamaServer()
+            let client = makeClient(rootDirectory: tempDir, server: server)
+
+            do {
+                _ = try await client.generate(
+                    instructions: "Reply with OK.",
+                    prompt: "Connection test.",
+                    maxTokens: 8,
+                    startupTimeoutSeconds: 0.8,
+                    idleTimeoutSeconds: 600,
+                    timeoutSeconds: 5
+                )
+                XCTFail("Expected \(expected) from \(helperURL.lastPathComponent)")
+            } catch let error as LLMPostProcessorError {
+                XCTAssertEqual(error.errorDescription, expected.errorDescription, helperURL.lastPathComponent)
+            }
+            await server.stop()
         }
-        let started = await waitForFile(at: markerURL, timeout: 5)
-        XCTAssertTrue(started, "helper process never started")
-
-        let start = Date()
-        async let firstStop: Void = server.stop()
-        async let secondStop: Void = server.stop()
-        _ = await (firstStop, secondStop)
-        let elapsed = Date().timeIntervalSince(start)
-
-        // TERM is ignored, so the shutdown path must escalate to SIGKILL after
-        // the shutdown timeout instead of hanging forever.
-        XCTAssertGreaterThanOrEqual(elapsed, LocalGemmaDefaults.shutdownTimeoutSeconds - 0.2)
-        XCTAssertLessThan(elapsed, 15)
-
-        startupTask.cancel()
-        _ = try? await startupTask.value
     }
 
     // MARK: - Helpers
+
+    private func makeClient(rootDirectory: URL, server: LlamaServer = LlamaServer()) -> LocalGemmaLlamaCppClient {
+        let localManager = StubLocalLLMModelManager()
+        localManager.rootDirectory = rootDirectory
+        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
+        return LocalGemmaLlamaCppClient(
+            locator: LocalGemmaRuntimeLocator(modelManager: localManager),
+            server: server,
+            session: .shared
+        )
+    }
+
+    private func overrideHelperPath(_ helperURL: URL) {
+        let previousHelperPath = getenv("SUNIYE_LLAMA_SERVER_PATH").map { String(cString: $0) }
+        setenv("SUNIYE_LLAMA_SERVER_PATH", helperURL.path, 1)
+        addTeardownBlock {
+            if let previousHelperPath {
+                setenv("SUNIYE_LLAMA_SERVER_PATH", previousHelperPath, 1)
+            } else {
+                unsetenv("SUNIYE_LLAMA_SERVER_PATH")
+            }
+        }
+    }
 
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
@@ -230,41 +147,4 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
         return scriptURL
     }
-
-    private func waitForFile(at url: URL, timeout: TimeInterval) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if FileManager.default.fileExists(atPath: url.path) {
-                return true
-            }
-            try? await Task.sleep(nanoseconds: 20_000_000)
-        }
-        return false
-    }
-}
-
-/// Responds to health probes with a bare (non-HTTP) URLResponse so the health
-/// check's response-type guard is exercised.
-private final class NonHTTPResponseURLProtocol: URLProtocol {
-    override class func canInit(with request: URLRequest) -> Bool {
-        true
-    }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        let response = URLResponse(
-            url: request.url!,
-            mimeType: "text/plain",
-            expectedContentLength: 2,
-            textEncodingName: nil
-        )
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data("ok".utf8))
-        client?.urlProtocolDidFinishLoading(self)
-    }
-
-    override func stopLoading() {}
 }

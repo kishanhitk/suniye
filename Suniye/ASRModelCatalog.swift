@@ -12,6 +12,9 @@ enum ASRModelFamily: String, Codable {
     // Cohere Transcribe (Fast-Conformer encoder + autoregressive decoder). sherpa-onnx
     // cannot run this architecture, so it is routed to our own ONNX Runtime engine.
     case cohereTranscribe
+    // Qwen3-ASR (audio encoder + Qwen3 LLM) as GGUF, served by the bundled llama.cpp
+    // helper; routed to its own engine.
+    case qwen3ASR
 
     /// Whether repeated partial decodes for the live transcription preview are
     /// affordable. Whisper decodes a fixed 30s mel window regardless of input
@@ -20,12 +23,13 @@ enum ASRModelFamily: String, Codable {
     /// decode roughly proportional to the snapshot length. Apple's stack routes
     /// to a separate engine our partial scheduler doesn't drive, so it opts out.
     /// Cohere decodes at roughly real time, so a partial would never finish
-    /// before the next tick.
+    /// before the next tick. Qwen3-ASR's helper serves one request at a time, so
+    /// an in-flight partial would delay the final decode.
     var supportsLivePreview: Bool {
         switch self {
         case .nemoTransducer, .moonshine, .senseVoice:
             return true
-        case .whisper, .appleSpeech, .cohereTranscribe:
+        case .whisper, .appleSpeech, .cohereTranscribe, .qwen3ASR:
             return false
         }
     }
@@ -44,6 +48,7 @@ enum ASRModelID: String, Codable, CaseIterable, Identifiable {
     case whisperLargeV3
     case appleSpeech
     case cohereTranscribe
+    case qwen3ASR17B
 
     var id: String {
         rawValue
@@ -156,11 +161,18 @@ struct ASRModelCatalogEntry: Identifiable, Equatable {
         family == .appleSpeech
     }
 
-    /// Whether this entry can be used on the current device. Sherpa models are always
-    /// available; system-managed entries require the OS to support them.
+    /// Whether this entry can be used on the current device: system-managed entries
+    /// need the OS to support them, and Qwen3-ASR needs the bundled llama-server,
+    /// which is built for Apple Silicon only.
     var isAvailableOnThisDevice: Bool {
-        guard isSystemManaged else { return true }
-        return AppleSpeechSupport.isAvailable
+        switch family {
+        case .appleSpeech:
+            return AppleSpeechSupport.isAvailable
+        case .qwen3ASR:
+            return LocalLLMHardware.isAppleSilicon
+        case .nemoTransducer, .moonshine, .senseVoice, .whisper, .cohereTranscribe:
+            return true
+        }
     }
 }
 
@@ -176,13 +188,13 @@ enum ASRModelCatalog {
         .whisperSmallEnglish,
         .whisperBaseEnglish,
         .whisperTinyEnglish,
+        .qwen3ASR17B,
         .cohereTranscribe
     ]
 
-    /// Catalog entries usable on the current device. System-managed entries (Apple
-    /// SpeechTranscriber) are filtered out when the OS doesn't support them, which
-    /// cascades through installed-model discovery, fallback, and the UI — so the
-    /// Apple option is hidden entirely on macOS < 26.
+    /// Catalog entries usable on the current device. Entries the device can't run
+    /// (Apple SpeechTranscriber before macOS 26, Qwen3-ASR on Intel) are filtered
+    /// out, which cascades through installed-model discovery, fallback, and the UI.
     static var availableEntries: [ASRModelCatalogEntry] {
         entries.filter(\.isAvailableOnThisDevice)
     }
@@ -403,6 +415,33 @@ enum ASRModelCatalog {
                 decoder: "cohere-decoder.int8.onnx",
                 sidecars: ["cohere-encoder.int8.onnx.data"]
             )
+        ),
+        ASRModelCatalogEntry(
+            id: .qwen3ASR17B,
+            displayName: "Qwen3-ASR 1.7B",
+            description: "Qwen's 1.7-billion-parameter model, among the most accurate here and the strongest for Hindi. It detects the language on its own, writes numbers as words, and uses about 3 GB of memory while loaded.",
+            family: .qwen3ASR,
+            badges: [.bestQuality, .multilingual],
+            languageSummary: "30 languages and 22 Chinese dialects, detected automatically",
+            speedLabel: "Slower",
+            qualityLabel: "Highest",
+            estimatedSizeBytes: 2_520_744_288,
+            downloadSource: .remoteFiles([
+                qwen3ASRFile("Qwen3-ASR-1.7B-Q8_0.gguf", bytes: 2_165_034_944, sha256: "58e22d0532d4eacaf034cfac17a6fed159f37c41390c710186783be439d1fc57"),
+                qwen3ASRFile("mmproj-Qwen3-ASR-1.7B-Q8_0.gguf", bytes: 355_709_344, sha256: "46c1d533af3f354ceb37ce855dbceff7da7fa7cf1e6a523df3b13440bd164c0d")
+            ]),
+            directoryName: "qwen3-asr-1.7b-q8_0-gguf",
+            recognizerModelType: "",
+            languageHint: "",
+            taskHint: "transcribe",
+            useInverseTextNormalization: false,
+            // The vocabulary lives inside the GGUF; the audio encoder and its projector
+            // are the mmproj file.
+            manifest: ASRModelFileManifest(
+                tokens: "Qwen3-ASR-1.7B-Q8_0.gguf",
+                encoder: "mmproj-Qwen3-ASR-1.7B-Q8_0.gguf",
+                model: "Qwen3-ASR-1.7B-Q8_0.gguf"
+            )
         )
     ]
 
@@ -422,6 +461,17 @@ enum ASRModelCatalog {
     private static func cohereFile(_ name: String, bytes: Int64, sha256: String) -> ASRModelRemoteFile {
         ASRModelRemoteFile(
             remoteURL: URL(string: "https://huggingface.co/tristanripke/cohere-transcribe-onnx-int8/resolve/9ecc3a5e64b132ab094bada232650e49e4340ad2/\(name)")!,
+            destinationRelativePath: name,
+            expectedSizeBytes: bytes,
+            sha256: sha256
+        )
+    }
+
+    /// ggml-org's Q8_0 GGUF conversion of Qwen/Qwen3-ASR-1.7B, pinned to a commit so
+    /// the files behind the hashes cannot move under us.
+    private static func qwen3ASRFile(_ name: String, bytes: Int64, sha256: String) -> ASRModelRemoteFile {
+        ASRModelRemoteFile(
+            remoteURL: URL(string: "https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF/resolve/36a678687ba7d07a74ca70ccb0e36902e005fb80/\(name)")!,
             destinationRelativePath: name,
             expectedSizeBytes: bytes,
             sha256: sha256

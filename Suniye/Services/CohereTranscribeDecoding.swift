@@ -5,6 +5,8 @@ import Foundation
 /// `transformers` `cohere_asr` processor so output matches the reference pipeline.
 enum CohereTranscribe {
     static let sampleRate = 16_000
+    /// The encoder takes at most 35 s per call.
+    static let chunker = AudioChunker(maxChunkSamples: 35 * sampleRate)
     static let supportedLanguages: Set<String> = [
         "ar", "de", "el", "en", "es", "fr", "it", "ja", "ko", "nl", "pl", "pt", "vi", "zh"
     ]
@@ -140,59 +142,6 @@ struct CohereVocabulary {
         }
         let hex = piece.dropFirst(3).dropLast()
         return UInt8(hex, radix: 16)
-    }
-}
-
-/// Splits audio the encoder cannot take in one call (≤ 35 s) into chunks cut
-/// at the quietest 100 ms inside the last 5 s before each boundary, matching
-/// the reference feature extractor. Chunks do not overlap.
-enum CohereAudioChunker {
-    static let maxChunkSamples = 35 * CohereTranscribe.sampleRate
-    static let boundarySearchSamples = 5 * CohereTranscribe.sampleRate
-    static let energyWindowSamples = 1_600
-
-    static func split(sampleCount: Int, energy: (Range<Int>) -> Float) -> [Range<Int>] {
-        guard sampleCount > maxChunkSamples else {
-            return sampleCount > 0 ? [0 ..< sampleCount] : []
-        }
-
-        var chunks: [Range<Int>] = []
-        var start = 0
-        while start < sampleCount {
-            if start + maxChunkSamples >= sampleCount {
-                chunks.append(start ..< sampleCount)
-                break
-            }
-            let boundary = start + maxChunkSamples
-            let end = quietestPoint(in: boundary - boundarySearchSamples ..< boundary, energy: energy)
-            chunks.append(start ..< end)
-            start = end
-        }
-        return chunks
-    }
-
-    static func split(_ samples: [Float]) -> [Range<Int>] {
-        split(sampleCount: samples.count) { window in
-            var sum: Float = 0
-            for sample in samples[window] {
-                sum += sample * sample
-            }
-            return (sum / Float(window.count)).squareRoot()
-        }
-    }
-
-    private static func quietestPoint(in range: Range<Int>, energy: (Range<Int>) -> Float) -> Int {
-        var quietest = range.lowerBound
-        var minimum = Float.infinity
-        for offset in stride(from: 0, to: range.count - energyWindowSamples, by: energyWindowSamples) {
-            let window = (range.lowerBound + offset) ..< (range.lowerBound + offset + energyWindowSamples)
-            let value = energy(window)
-            if value < minimum {
-                minimum = value
-                quietest = window.lowerBound
-            }
-        }
-        return quietest
     }
 }
 

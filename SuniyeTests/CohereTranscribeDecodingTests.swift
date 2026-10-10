@@ -144,50 +144,7 @@ final class CohereTranscribeDecodingTests: XCTestCase {
 
     // MARK: - Chunker
 
-    func testChunkerReturnsWholeClipUpToThirtyFiveSeconds() {
-        XCTAssertEqual(CohereAudioChunker.split([]), [])
-        XCTAssertEqual(CohereAudioChunker.split([Float](repeating: 0.1, count: 16_000)), [0 ..< 16_000])
-        XCTAssertEqual(
-            CohereAudioChunker.split([Float](repeating: 0.1, count: CohereAudioChunker.maxChunkSamples)),
-            [0 ..< CohereAudioChunker.maxChunkSamples]
-        )
-    }
-
-    func testChunkerSplitsAtQuietestWindowBeforeTheBoundary() {
-        // 50 s of tone with a silent 200 ms gap at 32 s: inside the 30–35 s search
-        // span, so the cut lands on the first 100 ms window of that gap.
-        let sampleRate = CohereTranscribe.sampleRate
-        var samples = [Float](repeating: 0.3, count: 50 * sampleRate)
-        let gapStart = 32 * sampleRate
-        for index in gapStart ..< gapStart + 3_200 {
-            samples[index] = 0
-        }
-
-        let chunks = CohereAudioChunker.split(samples)
-
-        XCTAssertEqual(chunks.count, 2)
-        XCTAssertEqual(chunks[0], 0 ..< gapStart)
-        XCTAssertEqual(chunks[1], gapStart ..< samples.count)
-        XCTAssertEqual(chunks.map(\.count).reduce(0, +), samples.count, "chunks tile the clip without overlap")
-    }
-
-    func testChunkerCutsAtSearchSpanStartWhenEnergyIsUniform() {
-        let ranges = CohereAudioChunker.split(sampleCount: CohereAudioChunker.maxChunkSamples + 1) { _ in 1 }
-
-        XCTAssertEqual(ranges.count, 2)
-        XCTAssertEqual(ranges[0], 0 ..< CohereAudioChunker.maxChunkSamples - CohereAudioChunker.boundarySearchSamples)
-        XCTAssertEqual(ranges[1].upperBound, CohereAudioChunker.maxChunkSamples + 1)
-    }
-
-    func testChunkerCoversLongUniformAudioWithoutGaps() {
-        let sampleCount = 100 * CohereTranscribe.sampleRate
-        let ranges = CohereAudioChunker.split(sampleCount: sampleCount) { _ in 1 }
-
-        XCTAssertEqual(ranges.first?.lowerBound, 0)
-        XCTAssertEqual(ranges.last?.upperBound, sampleCount)
-        for (previous, next) in zip(ranges, ranges.dropFirst()) {
-            XCTAssertEqual(previous.upperBound, next.lowerBound)
-            XCTAssertLessThanOrEqual(previous.count, CohereAudioChunker.maxChunkSamples)
-        }
+    func testChunkerTakesAtMostThirtyFiveSecondsPerCall() {
+        XCTAssertEqual(CohereTranscribe.chunker.maxChunkSamples, 35 * CohereTranscribe.sampleRate)
     }
 }

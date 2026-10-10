@@ -89,7 +89,7 @@ final class CohereProviderTests: XCTestCase {
         let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: nil, cohereService: cohere)
         try await router.loadModel(config: RecognizerConfig(modelID: .cohereTranscribe, family: .cohereTranscribe, tokensPath: "", numThreads: 1))
 
-        let recorder = TranscriptionProgressRecorder<TranscriptionProgress>()
+        let recorder = LockedRecorder<TranscriptionProgress>()
         let text = try await router.transcribe(samples: [0.1], sampleRate: 16_000) { recorder.record($0) }
 
         XCTAssertEqual(text, "done")
@@ -280,7 +280,7 @@ final class CohereProviderTests: XCTestCase {
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
 
-        let seen = TranscriptionProgressRecorder<FloatingIndicatorState>()
+        let seen = LockedRecorder<FloatingIndicatorState>()
         transcription.onTranscribeAwait = { _ in
             for _ in 0 ..< 8 {
                 await Task.yield()
@@ -322,17 +322,4 @@ private actor PlainTranscriptionService: TranscriptionServiceProtocol {
     }
 
     func unloadModel() async {}
-}
-
-private final class TranscriptionProgressRecorder<Value>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: [Value] = []
-
-    var values: [Value] {
-        lock.withLock { storage }
-    }
-
-    func record(_ value: Value) {
-        lock.withLock { storage.append(value) }
-    }
 }

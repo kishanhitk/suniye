@@ -983,3 +983,17 @@ final class StubIssueReportUploadService: IssueReportUploadServiceProtocol {
         return try result.get()
     }
 }
+
+/// Collects values from callbacks that may fire on any thread.
+final class LockedRecorder<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [Value] = []
+
+    var values: [Value] {
+        lock.withLock { storage }
+    }
+
+    func record(_ value: Value) {
+        lock.withLock { storage.append(value) }
+    }
+}
