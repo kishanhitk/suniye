@@ -74,6 +74,11 @@ jobs:
       - name: Build Release
         run: ./scripts/build_app.sh Release --derived-data-path .derivedData --output-dir dist
 
+      # Releases and Tip builds package this DMG; build it here so a broken
+      # layout step fails the PR, not the next tip or release.
+      - name: Build DMG
+        run: ./scripts/create_dmg.sh --app dist/Suniye.app --output dist/Suniye.dmg
+
       - name: Smoke checks
         run: ./scripts/e2e_smoke.sh
 
