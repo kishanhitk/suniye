@@ -16,6 +16,52 @@ enum AppleSpeechSupport {
     }
 }
 
+/// Whether a fresh install can start on Apple Speech. It is the default only
+/// when it really runs here: a managed Mac can disable it, a language can be
+/// unsupported, and the OS asset fetch can be blocked or slow; each of those
+/// must fall back to a downloaded model.
+enum AppleSpeechDefaultCheck {
+    /// Long enough for a typical first-time locale asset fetch, short enough that
+    /// a blocked fetch does not hold the first screen hostage.
+    static let assetTimeoutSeconds: Double = 20
+
+    static func run() async -> SystemDefaultModelCheck {
+        guard #available(macOS 26, *) else {
+            return .unavailable(reason: .osTooOld, detail: "macOS older than 26")
+        }
+        guard AppleSpeechSupport.isAvailable else {
+            return .unavailable(reason: .transcriberUnavailable, detail: "speech transcriber unavailable")
+        }
+        guard await AppleSpeechAssetInstaller.resolveSupportedLocale() != nil else {
+            return .unavailable(reason: .unsupportedLanguage, detail: "unsupported language \(Locale.current.identifier(.bcp47))")
+        }
+        do {
+            try await withTimeout(seconds: assetTimeoutSeconds) {
+                _ = try await AppleSpeechAssetInstaller.ensureInstalled()
+            }
+        } catch {
+            return .unavailable(reason: .assetUnavailable, detail: "asset not installed: \(error.localizedDescription)")
+        }
+        return .ready(.appleSpeech)
+    }
+
+    private struct TimeoutError: LocalizedError {
+        var errorDescription: String? { "timed out" }
+    }
+
+    private static func withTimeout(seconds: Double, _ operation: @escaping @Sendable () async throws -> Void) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw TimeoutError()
+            }
+            defer { group.cancelAll() }
+            try await group.next()
+        }
+    }
+}
+
 /// Manages the on-device model asset for Apple's `SpeechTranscriber`: presence checks,
 /// install-with-progress, and locale reservation.
 ///

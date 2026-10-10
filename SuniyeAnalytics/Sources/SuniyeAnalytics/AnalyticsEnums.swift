@@ -30,6 +30,38 @@ public enum DictationBlockedReason: String, Sendable, CaseIterable {
     case micDenied = "mic_denied"
     case accessibilityDenied = "accessibility_denied"
     case unknown
+    /// The key came up while a permission prompt held the start open, so the
+    /// recording was cancelled instead of starting with no key held.
+    case releasedDuringPrompt = "released_during_prompt"
+}
+
+/// Whether a fresh install could start on a built-in, download-free speech model.
+public enum SystemDefaultModelOutcome: String, Sendable, CaseIterable {
+    case adopted, unavailable, failed
+}
+
+/// Why the built-in model was not adopted. Closed set: never raw error text.
+public enum SystemDefaultModelReason: String, Sendable, CaseIterable {
+    case osTooOld = "os_too_old"
+    case transcriberUnavailable = "transcriber_unavailable"
+    case unsupportedLanguage = "unsupported_language"
+    case assetUnavailable = "asset_unavailable"
+    case loadFailed = "load_failed"
+    case decodeFailed = "decode_failed"
+}
+
+/// What moved onboarding to a step.
+public enum OnboardingAdvance: String, Sendable, CaseIterable {
+    /// The step's primary button.
+    case button
+    /// A dictation landed in another app while on the Accessibility step.
+    case insertion
+}
+
+/// How onboarding ended.
+public enum OnboardingEnd: String, Sendable, CaseIterable {
+    case finishButton = "finish_button"
+    case windowClosed = "window_closed"
 }
 
 public enum DictationCancelStage: String, Sendable, CaseIterable {
@@ -84,6 +116,8 @@ public enum OnboardingStepName: String, Sendable, CaseIterable {
     // `setup`/`magic_format`/`practice` remain for historical rows only.
     case speak
     case typeAnywhere = "type_anywhere"
+    /// The closing screen that names Magic Format, Speech Model and edit-by-voice.
+    case more
 }
 
 /// Which UI surface initiated an explicit permission ask.

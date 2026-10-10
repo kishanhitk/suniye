@@ -466,18 +466,6 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         XCTAssertTrue(appState.hasMicPermission)
     }
 
-    func testOpenNotesDemoLaunchesNotes() {
-        var openedURLs: [URL] = []
-        let appState = makeTestAppState(fileOpener: { url in
-            openedURLs.append(url)
-            return true
-        })
-
-        appState.openNotesForInsertionDemo()
-
-        XCTAssertTrue(openedURLs.first?.path.contains("Notes.app") == true)
-    }
-
     // MARK: - Disk preflight message
 
     func testDiskShortfallMessageMentionsRequiredSpace() async {

@@ -34,14 +34,36 @@ public enum AnalyticsEvent: Sendable {
     /// gives grant-rate-at-ask-time per surface.
     case permissionRequest(kind: PermissionKind, surface: PermissionAskSurface, outcome: PermissionAskOutcome)
     /// `resumed` is true when the step was re-shown by launch resume rather than
-    /// reached by a user action in this session.
-    case onboardingStep(step: OnboardingStepName, granted: Bool?, resumed: Bool?)
+    /// reached by a user action in this session. `elapsedMs` is time since this
+    /// onboarding session started; `advancedBy` says what moved the user here.
+    case onboardingStep(
+        step: OnboardingStepName,
+        granted: Bool?,
+        resumed: Bool?,
+        elapsedMs: Int? = nil,
+        advancedBy: OnboardingAdvance? = nil
+    )
     /// One practice dictation attempt on the Speak screen. `attempt` is 1-based
     /// and capped by the caller; outcome is a closed enum — never content.
     case onboardingPracticeResult(outcome: PracticeOutcome, attempt: Int)
     /// Fired exactly once from finishOnboarding(): the state the user exited
     /// onboarding in, plus wall-clock duration of the final onboarding session.
-    case onboardingOutcome(durationMs: Int?, practiced: Bool, micGranted: Bool, axGranted: Bool, modelReady: Bool)
+    /// `practiceEdited`: the user changed the practice text by hand (no content).
+    case onboardingOutcome(
+        durationMs: Int?,
+        practiced: Bool,
+        micGranted: Bool,
+        axGranted: Bool,
+        modelReady: Bool,
+        endedBy: OnboardingEnd? = nil,
+        practiceEdited: Bool? = nil
+    )
+    /// The onboarding window was closed before onboarding finished (the step
+    /// the user walked away from).
+    case onboardingWindowClosed(step: OnboardingStepName, elapsedMs: Int?)
+    /// Once per fresh install: whether the built-in speech model became the
+    /// default, why not, and how long the check took.
+    case systemDefaultModel(outcome: SystemDefaultModelOutcome, reason: SystemDefaultModelReason?, model: SafeLabel?, durationMs: Int)
     /// Post-onboarding Magic Format nudge card lifecycle (impressions are the
     /// denominator for nudge-conversion analysis).
     case mfNudge(action: MFNudgeAction)
@@ -82,6 +104,8 @@ public enum AnalyticsEvent: Sendable {
         case .onboardingStep: return "onboarding_step"
         case .onboardingPracticeResult: return "onboarding_practice_result"
         case .onboardingOutcome: return "onboarding_outcome"
+        case .onboardingWindowClosed: return "onboarding_window_closed"
+        case .systemDefaultModel: return "system_default_model"
         case .mfNudge: return "mf_nudge"
         case .modelChanged: return "model_changed"
         case .modelDownload: return "model_download"
@@ -128,14 +152,16 @@ public enum AnalyticsEvent: Sendable {
             // `kind` and `outcome` land in typed AE slots; `surface` rides the
             // blob20 props-JSON backstop until it earns a slot.
             return ["kind": .label(kind), "surface": .label(surface), "outcome": .label(outcome)]
-        case let .onboardingStep(step, granted, resumed):
+        case let .onboardingStep(step, granted, resumed, elapsedMs, advancedBy):
             var out: [String: AnalyticsValue] = ["step": .label(step)]
             if let granted { out["granted"] = .bool(granted) }
             if let resumed { out["resumed"] = .bool(resumed) }
+            if let elapsedMs { out["elapsed_ms"] = .int(elapsedMs) }
+            if let advancedBy { out["advanced_by"] = .label(advancedBy) }
             return out
         case let .onboardingPracticeResult(outcome, attempt):
             return ["outcome": .label(outcome), "attempt": .int(attempt)]
-        case let .onboardingOutcome(durationMs, practiced, micGranted, axGranted, modelReady):
+        case let .onboardingOutcome(durationMs, practiced, micGranted, axGranted, modelReady, endedBy, practiceEdited):
             var out: [String: AnalyticsValue] = [
                 "practiced": .bool(practiced),
                 "mic_granted": .bool(micGranted),
@@ -143,6 +169,17 @@ public enum AnalyticsEvent: Sendable {
                 "model_ready": .bool(modelReady),
             ]
             if let durationMs { out["duration_ms"] = .int(durationMs) }
+            if let endedBy { out["ended_by"] = .label(endedBy) }
+            if let practiceEdited { out["practice_edited"] = .bool(practiceEdited) }
+            return out
+        case let .onboardingWindowClosed(step, elapsedMs):
+            var out: [String: AnalyticsValue] = ["step": .label(step)]
+            if let elapsedMs { out["elapsed_ms"] = .int(elapsedMs) }
+            return out
+        case let .systemDefaultModel(outcome, reason, model, durationMs):
+            var out: [String: AnalyticsValue] = ["outcome": .label(outcome), "duration_ms": .int(durationMs)]
+            if let reason { out["reason"] = .label(reason) }
+            if let model { out["model"] = .label(model) }
             return out
         case let .mfNudge(action):
             return ["action": .label(action)]

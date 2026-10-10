@@ -56,6 +56,62 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         XCTAssertEqual(templateOnly.props["cache_hit"], .bool(false))
     }
 
+    func testSystemDefaultModelEvent() {
+        let adopted = AnalyticsEvent.systemDefaultModel(outcome: .adopted, reason: nil, model: SafeLabel("appleSpeech"), durationMs: 840)
+        XCTAssertEqual(adopted.name, "system_default_model")
+        XCTAssertEqual(adopted.props["outcome"], .label("adopted"))
+        XCTAssertEqual(adopted.props["model"], .label("applespeech"))
+        XCTAssertEqual(adopted.props["duration_ms"], .int(840))
+        XCTAssertNil(adopted.props["reason"])
+
+        let unavailable = AnalyticsEvent.systemDefaultModel(outcome: .unavailable, reason: .unsupportedLanguage, model: nil, durationMs: 12)
+        XCTAssertEqual(unavailable.props["outcome"], .label("unavailable"))
+        XCTAssertEqual(unavailable.props["reason"], .label("unsupported_language"))
+        XCTAssertNil(unavailable.props["model"])
+    }
+
+    func testOnboardingStepOptionalFields() {
+        let bare = AnalyticsEvent.onboardingStep(step: .welcome, granted: nil, resumed: nil)
+        XCTAssertEqual(bare.props, ["step": .label("welcome")])
+
+        let full = AnalyticsEvent.onboardingStep(step: .more, granted: nil, resumed: true, elapsedMs: 41_000, advancedBy: .insertion)
+        XCTAssertEqual(full.name, "onboarding_step")
+        XCTAssertEqual(full.props["step"], .label("more"))
+        XCTAssertEqual(full.props["resumed"], .bool(true))
+        XCTAssertEqual(full.props["elapsed_ms"], .int(41_000))
+        XCTAssertEqual(full.props["advanced_by"], .label("insertion"))
+    }
+
+    func testOnboardingOutcomeOptionalFields() {
+        let legacyShape = AnalyticsEvent.onboardingOutcome(durationMs: nil, practiced: false, micGranted: true, axGranted: false, modelReady: true)
+        XCTAssertNil(legacyShape.props["ended_by"])
+        XCTAssertNil(legacyShape.props["practice_edited"])
+        XCTAssertNil(legacyShape.props["duration_ms"])
+
+        let event = AnalyticsEvent.onboardingOutcome(
+            durationMs: 95_000, practiced: true, micGranted: true, axGranted: true, modelReady: true,
+            endedBy: .windowClosed, practiceEdited: true
+        )
+        XCTAssertEqual(event.name, "onboarding_outcome")
+        XCTAssertEqual(event.props["ended_by"], .label("window_closed"))
+        XCTAssertEqual(event.props["practice_edited"], .bool(true))
+        XCTAssertEqual(event.props["duration_ms"], .int(95_000))
+    }
+
+    func testOnboardingWindowClosedEvent() {
+        let event = AnalyticsEvent.onboardingWindowClosed(step: .speak, elapsedMs: 9_000)
+        XCTAssertEqual(event.name, "onboarding_window_closed")
+        XCTAssertEqual(event.props["step"], .label("speak"))
+        XCTAssertEqual(event.props["elapsed_ms"], .int(9_000))
+        XCTAssertNil(AnalyticsEvent.onboardingWindowClosed(step: .welcome, elapsedMs: nil).props["elapsed_ms"])
+    }
+
+    func testReleasedDuringPromptBlockedReason() {
+        let event = AnalyticsEvent.dictationBlocked(reason: .releasedDuringPrompt)
+        XCTAssertEqual(event.name, "dictation_blocked")
+        XCTAssertEqual(event.props["reason"], .label("released_during_prompt"))
+    }
+
     func testDictationEditedEvent() {
         let event = AnalyticsEvent.dictationEdited(editRateBucket: 30)
         XCTAssertEqual(event.name, "dictation_edited")

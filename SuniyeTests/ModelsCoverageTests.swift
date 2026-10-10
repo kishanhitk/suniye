@@ -31,12 +31,14 @@ final class OnboardingModelsTests: XCTestCase {
         XCTAssertEqual(OnboardingStep.welcome.title, "Welcome")
         XCTAssertEqual(OnboardingStep.speak.title, "Speak")
         XCTAssertEqual(OnboardingStep.typeAnywhere.title, "Type Anywhere")
+        XCTAssertEqual(OnboardingStep.more.title, "More")
     }
 
     func testStepAnalyticsNames() {
         XCTAssertEqual(OnboardingStep.welcome.analyticsName, .welcome)
         XCTAssertEqual(OnboardingStep.speak.analyticsName, .speak)
         XCTAssertEqual(OnboardingStep.typeAnywhere.analyticsName, .typeAnywhere)
+        XCTAssertEqual(OnboardingStep.more.analyticsName, .more)
     }
 
     func testProgressResumeSteps() {

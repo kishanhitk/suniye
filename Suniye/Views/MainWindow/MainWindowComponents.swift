@@ -122,8 +122,6 @@ enum AppTypography {
     static let codeBody = Font.system(.body, design: .monospaced)
     static let codeBodyMedium = Font.system(.body, design: .monospaced, weight: .medium)
     static let codeCalloutSemibold = Font.system(.callout, design: .monospaced, weight: .semibold)
-    // Semantic, so the first screen a user meets still honours their text size.
-    static let onboardingTitle = Font.title.weight(.semibold)
     static let metricValue = Font.system(.title, design: .rounded, weight: .semibold).monospacedDigit()
     static let emptyIcon = Font.system(size: 34, weight: .light)
 }
@@ -133,7 +131,6 @@ enum AppMetrics {
     /// entirely; this leaves just enough for the pane to still read as glass.
     static let detailPaneOpacity: Double = 0.9
 
-    static let onboardingBrandIconSize: CGFloat = 64
     static let sidebarWidth: CGFloat = 208
     static let sidebarBrandTop: CGFloat = 24
     static let sidebarBrandHorizontal: CGFloat = 24

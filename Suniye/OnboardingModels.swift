@@ -1,12 +1,14 @@
+import Foundation
 import SuniyeAnalytics
 
-/// The three onboarding screens. `speak` is the activation screen: microphone
-/// grant, model download progress, and the first dictation all live there so
-/// value arrives before the scarier Accessibility ask on `typeAnywhere`.
+/// The onboarding screens. `speak` is the activation screen: the first
+/// dictation lives there so value arrives before the scarier Accessibility ask
+/// on `typeAnywhere`. `more` only names what else exists, then hands off.
 enum OnboardingStep: Int, CaseIterable {
     case welcome
     case speak
     case typeAnywhere
+    case more
 
     var title: String {
         switch self {
@@ -16,6 +18,8 @@ enum OnboardingStep: Int, CaseIterable {
             return "Speak"
         case .typeAnywhere:
             return "Type Anywhere"
+        case .more:
+            return "More"
         }
     }
 
@@ -27,6 +31,8 @@ enum OnboardingStep: Int, CaseIterable {
             return .speak
         case .typeAnywhere:
             return .typeAnywhere
+        case .more:
+            return .more
         }
     }
 }
@@ -96,4 +102,9 @@ struct OnboardingPracticeResult: Equatable {
 
     let message: String
     let severity: Severity
+}
+
+extension Notification.Name {
+    /// Posted when onboarding finishes, so the menu bar can show where Suniye lives.
+    static let suniyeOnboardingDidFinish = Notification.Name("dev.suniye.onboardingDidFinish")
 }

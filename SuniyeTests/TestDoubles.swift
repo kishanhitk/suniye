@@ -226,6 +226,9 @@ final class StubModelManager: ModelManagerProtocol {
     var lastDownloadedModelID: ASRModelID?
     var downloadResult: Result<Void, Error> = .success(())
     var installsModelAfterDownload = true
+    /// What a fresh install's built-in model check reports.
+    var systemDefaultCheck: SystemDefaultModelCheck = .unavailable(reason: .transcriberUnavailable, detail: "stub")
+    private(set) var systemDefaultCheckCallCount = 0
     var recognizerConfigs: [ASRModelID: RecognizerConfig] = [
         .parakeetV3: RecognizerConfig(
             modelID: .parakeetV3,
@@ -328,8 +331,14 @@ final class StubModelManager: ModelManagerProtocol {
         installedModelIDs.contains(modelID)
     }
 
+    /// Mirrors the real contract: system-managed models never count as installed files.
     func installedModels() -> [ASRModelID] {
-        catalog.map(\.id).filter { installedModelIDs.contains($0) }
+        catalog.filter { !$0.isSystemManaged }.map(\.id).filter { installedModelIDs.contains($0) }
+    }
+
+    func systemDefaultModelCheck() async -> SystemDefaultModelCheck {
+        systemDefaultCheckCallCount += 1
+        return systemDefaultCheck
     }
 
     func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig {
