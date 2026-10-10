@@ -9,7 +9,7 @@ import { Section } from "./components/Section";
 import { Skeleton } from "./components/Skeleton";
 import { KeyFigure, TotalsStrip } from "./components/TotalsStrip";
 import { Sparkline } from "./components/Sparkline";
-import { deltaPct, formatCount, formatPct, relativeTime } from "./lib/utils";
+import { deltaPct, formatCount, formatMs, formatPct, relativeTime } from "./lib/utils";
 import { FILTER_DIMS } from "./types";
 import type { FilterDim, Filters, StatsResponse } from "./types";
 import { WebView } from "./WebView";
@@ -20,6 +20,20 @@ const RANGES = [7, 30, 90];
 const notRecorded = (dim: FilterDim) => `Not recorded under the ${dim.replace("_", " ")} filter.`;
 
 const clampRange = (n: number) => (RANGES.includes(n) ? n : 30);
+
+/** Onboarding step wire names → the screen names people know. */
+const STEP_LABELS: Record<string, string> = {
+  welcome: "welcome",
+  speak: "try first dictation",
+  type_anywhere: "dictate anywhere",
+  more: "there's more",
+  completed: "finished",
+};
+const stepLabel = (step: string) => STEP_LABELS[step] ?? step;
+
+/** "p50 / p95" for a duration pair, or an em dash when the window has none. */
+const quantilePair = (p50: number, p95: number) =>
+  p50 > 0 || p95 > 0 ? `${formatMs(p50)} / ${formatMs(p95)}` : "—";
 
 /** Hydrate range + filters from the URL so a sliced view is shareable and
  *  survives reload. Multi-value dims arrive as repeated params. */
@@ -336,6 +350,83 @@ export default function App() {
               </div>
             </Section>
 
+            {stats.onboarding && (
+              <Section eyebrow="Onboarding" note="installs that reached each screen · sampling-corrected">
+                <div className="grid gap-8 md:grid-cols-3">
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">Funnel</h3>
+                    {blocked.onboardingFunnel ? (
+                      <EmptyState message={notRecorded(blocked.onboardingFunnel)} />
+                    ) : (
+                      <BreakdownList
+                        items={stats.onboarding.funnel.every((step) => step.installs === 0) ? [] : stats.onboarding.funnel.map((step) => ({
+                          label: `${stepLabel(step.step)}${step.pctOfWelcome === null ? "" : ` · ${formatPct(step.pctOfWelcome)}`}`,
+                          value: step.installs,
+                        }))}
+                        emptyMessage="No onboarding in this window."
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">Built-in speech model</h3>
+                    {blocked.systemModel ? (
+                      <EmptyState message={notRecorded(blocked.systemModel)} />
+                    ) : stats.onboarding.systemModelAdoptionPct === null ? (
+                      <EmptyState message="No fresh installs checked in this window." />
+                    ) : (
+                      <>
+                        <p className="font-mono text-2xl tabular-nums text-ink">{formatPct(stats.onboarding.systemModelAdoptionPct)}</p>
+                        <p className="mb-3 mt-1 font-mono text-[11px] text-muted">
+                          of fresh installs started without a download · check took {quantilePair(stats.onboarding.systemModelCheckMs.p50, stats.onboarding.systemModelCheckMs.p95)}
+                        </p>
+                        <BreakdownList items={stats.onboarding.systemModelReasons} emptyMessage="Every check adopted it." />
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">First dictation</h3>
+                    {blocked.practice ? (
+                      <EmptyState message={notRecorded(blocked.practice)} />
+                    ) : (
+                      <BreakdownList items={stats.onboarding.practiceOutcomes} emptyMessage="No practice attempts in this window." />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">How onboarding ended</h3>
+                    {blocked.onboardingOutcome ? (
+                      <EmptyState message={notRecorded(blocked.onboardingOutcome)} />
+                    ) : (
+                      <>
+                        <p className="mb-3 font-mono text-[11px] text-muted">
+                          took {quantilePair(stats.onboarding.durationMs.p50, stats.onboarding.durationMs.p95)} (p50 / p95)
+                        </p>
+                        <BreakdownList items={stats.onboarding.endedBy} emptyMessage="No finished onboarding in this window." />
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">Window closed on</h3>
+                    {blocked.windowClosed ? (
+                      <EmptyState message={notRecorded(blocked.windowClosed)} />
+                    ) : (
+                      <BreakdownList
+                        items={stats.onboarding.windowClosedAt.map((b) => ({ ...b, label: stepLabel(b.label) }))}
+                        emptyMessage="Nobody left onboarding early."
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">Permission asks</h3>
+                    {blocked.permissions ? (
+                      <EmptyState message={notRecorded(blocked.permissions)} />
+                    ) : (
+                      <BreakdownList items={stats.onboarding.permissionAsks} emptyMessage="No permission asks in this window." />
+                    )}
+                  </div>
+                </div>
+              </Section>
+            )}
+
             <Section
               eyebrow="Pipeline latency"
               note={
@@ -418,11 +509,24 @@ export default function App() {
             </Section>
 
             <Section eyebrow="Reliability">
-              {blocked.errors ? (
-                <EmptyState message={notRecorded(blocked.errors)} />
-              ) : (
-                <BreakdownList items={stats.errorsByType} emptyMessage="No errors in this window." />
-              )}
+              <div className="grid gap-8 md:grid-cols-2">
+                <div>
+                  <h3 className="mb-2 text-sm text-ink">Errors</h3>
+                  {blocked.errors ? (
+                    <EmptyState message={notRecorded(blocked.errors)} />
+                  ) : (
+                    <BreakdownList items={stats.errorsByType} emptyMessage="No errors in this window." />
+                  )}
+                </div>
+                <div>
+                  <h3 className="mb-2 text-sm text-ink">Dictation starts refused</h3>
+                  {blocked.blockedReasons ? (
+                    <EmptyState message={notRecorded(blocked.blockedReasons)} />
+                  ) : (
+                    <BreakdownList items={stats.dictationBlockedReasons ?? []} emptyMessage="No refused starts in this window." />
+                  )}
+                </div>
+              </div>
             </Section>
           </>
         )}
