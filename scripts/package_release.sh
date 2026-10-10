@@ -163,15 +163,8 @@ NOTARY_ZIP_PATH="${NOTARY_WORK_DIR}/Suniye.app.zip"
 # Create zip artifact
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "${ZIP_PATH}"
 
-# Create DMG with app + Applications link
-DMG_STAGING="${ROOT_DIR}/.dmg-staging"
-rm -rf "${DMG_STAGING}"
-mkdir -p "${DMG_STAGING}"
-/usr/bin/ditto "${APP_PATH}" "${DMG_STAGING}/Suniye.app"
-ln -s /Applications "${DMG_STAGING}/Applications"
-
-/usr/bin/hdiutil create -volname "Suniye" -srcfolder "${DMG_STAGING}" -ov -format ULMO "${DMG_PATH}" >/dev/null
-rm -rf "${DMG_STAGING}"
+# Create DMG with app, Applications link, and Finder window layout
+"${ROOT_DIR}/scripts/create_dmg.sh" --app "${APP_PATH}" --output "${DMG_PATH}"
 
 DMG_SIGN_ARGS=(--force --sign "${SUNIYE_CODESIGN_IDENTITY}" --timestamp)
 if [[ -n "${SUNIYE_CODESIGN_KEYCHAIN_PATH:-}" ]]; then
