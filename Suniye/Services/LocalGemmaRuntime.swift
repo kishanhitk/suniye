@@ -4,6 +4,14 @@ struct LocalGemmaRuntime: Equatable {
     let serverExecutableURL: URL
     let model: LocalLLMModelCatalogEntry
     let modelURL: URL
+
+    var launch: LlamaServerLaunch {
+        LlamaServerLaunch(
+            executableURL: serverExecutableURL,
+            arguments: LocalGemmaDefaults.serverArguments(modelPath: modelURL.path),
+            modelName: model.displayName
+        )
+    }
 }
 
 enum LocalGemmaRuntimeResolution {
@@ -31,7 +39,7 @@ struct LocalGemmaRuntimeLocator {
               let modelURL = try? modelManager.modelFileURL(for: LocalGemmaDefaults.modelID) else {
             return .failure(.modelNotInstalled)
         }
-        guard let serverURL = findExecutable(named: "llama-server") else {
+        guard let serverURL = LlamaServer.locateExecutable(fileManager: fileManager) else {
             return .failure(.runtimeUnavailable)
         }
         return .success(LocalGemmaRuntime(
@@ -39,37 +47,5 @@ struct LocalGemmaRuntimeLocator {
             model: LocalGemmaDefaults.modelEntry,
             modelURL: modelURL
         ))
-    }
-
-    private func findExecutable(named name: String) -> URL? {
-        if let override = ProcessInfo.processInfo.environment["SUNIYE_LLAMA_SERVER_PATH"], !override.isEmpty {
-            let url = URL(fileURLWithPath: override)
-            if fileManager.isExecutableFile(atPath: url.path) {
-                return url
-            }
-        }
-
-        let bundleCandidates = [
-            Bundle.main.url(forAuxiliaryExecutable: name),
-            Bundle.main.url(forResource: name, withExtension: nil),
-            Bundle.main.url(forResource: name, withExtension: nil, subdirectory: "LocalLLM"),
-            Bundle.main.url(forResource: name, withExtension: nil, subdirectory: "LocalLLM/bin"),
-            Bundle.main.bundleURL
-                .appendingPathComponent("Contents", isDirectory: true)
-                .appendingPathComponent("Helpers", isDirectory: true)
-                .appendingPathComponent(name),
-            Bundle.main.bundleURL
-                .appendingPathComponent("Contents", isDirectory: true)
-                .appendingPathComponent("MacOS", isDirectory: true)
-                .appendingPathComponent(name),
-            Bundle.main.bundleURL
-                .appendingPathComponent("Contents", isDirectory: true)
-                .appendingPathComponent("Resources", isDirectory: true)
-                .appendingPathComponent(name),
-        ].compactMap { $0 }
-
-        return bundleCandidates
-            .lazy
-            .first { fileManager.isExecutableFile(atPath: $0.path) }
     }
 }

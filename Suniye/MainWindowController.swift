@@ -113,6 +113,12 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger(subsystem: "dev.suniye.app", category: "window").notice("applicationDidFinishLaunching")
         AppLogger.shared.log(.info, "applicationDidFinishLaunching")
+        if let helperURL = LlamaServer.locateExecutable() {
+            let orphans = LlamaServerChildren.terminateOrphans(of: helperURL)
+            if orphans > 0 {
+                AppLogger.shared.log(.warning, "stopped \(orphans) llama-server helper(s) left running by an earlier session")
+            }
+        }
         statusItemController = StatusItemController(appState: sharedAppState)
         observeWorkspaceLifecycle()
         MainWindowController.shared.show(appState: sharedAppState)
@@ -152,6 +158,8 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         // queue behind it, so quitting right after a dictation would drop the
         // session the dashboard has already counted.
         sharedAppState.flushDictationStats()
+        // The helpers would otherwise outlive the app, models loaded.
+        LlamaServerChildren.terminateAll()
     }
 
     private func observeWorkspaceLifecycle() {

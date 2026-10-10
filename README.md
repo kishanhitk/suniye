@@ -98,7 +98,7 @@ Turn a raw transcript into polished text on your terms. It's off until you turn 
 
 ## Choose your speech model
 
-Suniye ships a curated catalog instead of a single fixed recognizer — from Apple's built-in engine to on-device Parakeet, Whisper, and Cohere Transcribe models. Pick the trade-off you want between speed, accuracy, size, and languages; everything runs offline, and you can switch instantly from the **Model** page.
+Suniye ships a curated catalog instead of a single fixed recognizer — from Apple's built-in engine to on-device Parakeet, Whisper, Cohere Transcribe, and Qwen3-ASR models. Pick the trade-off you want between speed, accuracy, size, and languages; everything runs offline, and you can switch instantly from the **Model** page.
 
 | Model | Best for |
 |---|---|
@@ -110,6 +110,7 @@ Suniye ships a curated catalog instead of a single fixed recognizer — from App
 | **Whisper Large v3 Turbo · Distil · v3** | Broad multilingual coverage |
 | **Whisper Tiny · Base · Small (English)** | Small, fast English downloads |
 | **Cohere Transcribe** | Highest accuracy, 14 languages — 2B parameters, ~2.9 GB download, ~4× slower than Parakeet |
+| **Qwen3-ASR 1.7B** | Cohere-class accuracy in 30 languages and 22 Chinese dialects, detected automatically, and the best Hindi here — ~2.5 GB download, Apple Silicon only |
 
 ## Privacy
 
@@ -127,7 +128,7 @@ Suniye is a native macOS app. The technical bits, for the curious and for contri
 |---|---|
 | **Platform** | macOS 14+ (Apple Silicon and Intel) |
 | **UI** | SwiftUI |
-| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with a curated local model catalog (Parakeet, Moonshine, SenseVoice, and Whisper variants) |
+| **Speech engine** | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) with a curated local model catalog (Parakeet, Moonshine, SenseVoice, and Whisper variants), ONNX Runtime for Cohere Transcribe, and a bundled [llama.cpp](https://github.com/ggml-org/llama.cpp) helper for Qwen3-ASR |
 | **Text insertion** | macOS Accessibility APIs |
 | **Updates** | [Sparkle](https://sparkle-project.org) — Stable and Tip channels |
 | **License** | [MIT](LICENSE) |

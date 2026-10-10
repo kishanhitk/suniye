@@ -13,24 +13,18 @@ enum LocalGemmaDefaults {
     /// length is bounded only by the context window, the same bound both share.
     static let generationTimeoutSeconds = 30.0
     static let idleTimeoutSeconds = 600.0
-    static let shutdownTimeoutSeconds = 2.0
     static let probeMaxTokens = 8
     static let probeText = "warm up"
 
-    static func serverArguments(modelPath: String, port: Int, apiKey: String) -> [String] {
+    static func serverArguments(modelPath: String) -> [String] {
         return [
             "--model", modelPath,
-            "--host", "127.0.0.1",
-            "--port", "\(port)",
             // ~80 minutes of dictation. Gemma 4 E2B keeps full attention on 3 of
             // its layers, so their KV cache is 96 MiB here (24 MiB at 4096) on
             // top of a fixed 12 MiB sliding-window cache.
             "--ctx-size", "16384",
             "--parallel", "1",
             "--reasoning", "off",
-            "--api-key", apiKey,
-            "--no-webui",
-            "--log-disable",
         ]
     }
 }

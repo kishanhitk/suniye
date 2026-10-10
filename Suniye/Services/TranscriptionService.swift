@@ -395,7 +395,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
                 provider: "cpu",
                 debug: 0
             )
-        case .appleSpeech, .cohereTranscribe:
+        case .appleSpeech, .cohereTranscribe, .qwen3ASR:
             // Not sherpa-onnx models; each is handled by its own engine and must never
             // reach this recognizer.
             throw ServiceError.invalidRecognizerConfiguration
@@ -426,7 +426,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
             paths.append(contentsOf: [config.modelPath].compactMap { $0 })
         case .whisper:
             paths.append(contentsOf: [config.encoderPath, config.decoderPath].compactMap { $0 })
-        case .appleSpeech, .cohereTranscribe:
+        case .appleSpeech, .cohereTranscribe, .qwen3ASR:
             // Other engines' families must never reach this sherpa-only path; reject
             // them the same way makeRecognizerConfig does rather than validating paths
             // for a recognizer that cannot be built.

@@ -5,7 +5,7 @@ import Foundation
 /// so this engine owns its sessions and decode loop.
 ///
 /// Batch only: the encoder takes up to 35 s of raw 16 kHz audio per call, so
-/// longer dictations are chunked (`CohereAudioChunker`) and decoded in order.
+/// longer dictations are chunked (`CohereTranscribe.chunker`) and decoded in order.
 actor CohereTranscriptionService: TranscriptionServiceProtocol {
     enum ServiceError: LocalizedError {
         case notLoaded
@@ -95,7 +95,7 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         // Capture runs at the device's native rate (typically 48 kHz); the encoder's
         // baked-in frontend assumes 16 kHz.
         let audio = try AudioResampler.resample(samples, from: max(8_000, sampleRate), to: CohereTranscribe.sampleRate)
-        let chunks = CohereAudioChunker.split(audio)
+        let chunks = CohereTranscribe.chunker.split(audio)
         AppLogger.shared.log(
             .info,
             String(

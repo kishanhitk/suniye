@@ -15,7 +15,7 @@ Suniye depends on third-party software and model artifacts.
 - llama.cpp
   - Source: https://github.com/ggml-org/llama.cpp
   - Pinned by: `scripts/setup_llama_cpp.sh`
-  - Used for: Local Gemma `llama-server` runtime
+  - Used for: the `llama-server` runtime for Local Gemma and Qwen3-ASR
   - Local file: `Suniye/LocalLLM/llama-server`, embedded as `Contents/Helpers/llama-server`
 
 ## Model artifacts
@@ -28,6 +28,15 @@ Suniye depends on third-party software and model artifacts.
   - https://huggingface.co/tristanripke/cohere-transcribe-onnx-int8 (pinned to commit `9ecc3a5e`)
 - Installed by: in-app downloader (opt-in)
 - Expected SHA-256: see `ASRModelCatalog.swift` (`cohereFile`), one per file
+- Model: `qwen3-asr-1.7b-q8_0-gguf` (Qwen3-ASR 1.7B, Apache-2.0)
+- Download source: Hugging Face, ggml-org's Q8_0 GGUF conversion of `Qwen/Qwen3-ASR-1.7B`
+  - https://huggingface.co/ggml-org/Qwen3-ASR-1.7B-GGUF (pinned to commit `36a67868`)
+- Installed by: in-app downloader (opt-in)
+- Expected SHA-256: see `ASRModelCatalog.swift` (`qwen3ASRFile`), one per file
+- Model: Silero VAD v5 (`silero_vad_v5.onnx`, MIT, Copyright (c) 2020-present Silero Team)
+  - Source: https://github.com/snakers4/silero-vad, as published by sherpa-onnx at https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad_v5.onnx
+  - Bundled as `Suniye/Resources/silero_vad_v5.onnx`; gates Qwen3-ASR so silence never reaches it
+  - Expected SHA-256: `6b99cbfd39246b6706f98ec13c7c50c6b299181f2474fa05cbc8046acc274396`
 - Model: `gemma-4-e2b-Q4_K_M.gguf`
 - Download source: Hugging Face
   - https://huggingface.co/dahus/gemma-4-e2b-it-Q4_K_M-GGUF

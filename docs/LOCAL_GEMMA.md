@@ -31,7 +31,7 @@ llama-server \
   --log-disable
 ```
 
-Completion requests use `Authorization: Bearer <random-key>`. The server is reused while warm and shuts down after an idle timeout.
+Completion requests use `Authorization: Bearer <random-key>`. The server is reused while warm and shuts down after an idle timeout. Quitting Suniye stops it; a helper left running by a crash is stopped at the next launch. The same helper also runs the Qwen3-ASR speech model ([QWEN3_ASR.md](QWEN3_ASR.md)).
 
 ## Preparing The Helper
 
