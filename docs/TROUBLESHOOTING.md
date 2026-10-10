@@ -34,10 +34,9 @@ Suniye releases are signed with an Apple Developer ID and notarized, so macOS op
 - Check `~/Library/Application Support/Suniye/logs/app.log` for the failing model name and validation error.
 
 ## Missing dylibs
-Rebuild and copy runtime libs:
+Rebuild the pinned sherpa-onnx release and copy the runtime libs:
 ```bash
 ./scripts/setup_sherpa.sh
-./scripts/fix_dylibs.sh
 ```
 
 ## Permission errors while dictating
