@@ -1,4 +1,5 @@
 import XCTest
+import SuniyeAnalytics
 @testable import Suniye
 
 /// URLProtocol stub used to exercise ModelManager download paths without network access.
@@ -83,7 +84,29 @@ private final class ProgressRecorder: @unchecked Sendable {
     }
 }
 
+/// Implements only the required members, so the protocol's default
+/// `systemDefaultModelCheck` is the one under test.
+private final class FileOnlyModelManager: ModelManagerProtocol {
+    var catalog: [ASRModelCatalogEntry] { ASRModelCatalog.entries }
+    var fallbackOrder: [ASRModelID] { ASRModelCatalog.fallbackOrder }
+    func modelsRootDirectoryURL() throws -> URL { URL(fileURLWithPath: "/tmp") }
+    func modelDirectoryURL(for modelID: ASRModelID) throws -> URL { URL(fileURLWithPath: "/tmp") }
+    func isInstalled(_ modelID: ASRModelID) -> Bool { false }
+    func installedModels() -> [ASRModelID] { [] }
+    func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig { RecognizerConfig(tokensPath: "", numThreads: 1) }
+    func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {}
+    func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64 { 0 }
+    func installedByteCount(for modelID: ASRModelID) -> Int64 { 0 }
+    func deleteModel(_ modelID: ASRModelID) throws {}
+}
+
 final class ModelManagerCoverageTests: XCTestCase {
+    func testFileOnlyManagerHasNoBuiltInDefault() async {
+        let check = await FileOnlyModelManager().systemDefaultModelCheck()
+
+        XCTAssertEqual(check, .unavailable(reason: .transcriberUnavailable, detail: "no built-in model"))
+    }
+
     private let fileManager = FileManager.default
     private var tempDirectory: URL!
 

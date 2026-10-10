@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import SuniyeAnalytics
 
 enum ModelDownloadProgressEstimator {
     static func estimate(
@@ -42,12 +43,27 @@ protocol ModelManagerProtocol {
     func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64
     func installedByteCount(for modelID: ASRModelID) -> Int64
     func deleteModel(_ modelID: ASRModelID) throws
+    /// The model a fresh install can start on without a download. Checks that the
+    /// OS can run it here (support, language, asset); the caller still loads it.
+    func systemDefaultModelCheck() async -> SystemDefaultModelCheck
+}
+
+/// Outcome of asking whether a built-in, download-free model can be the default.
+enum SystemDefaultModelCheck: Equatable {
+    case ready(ASRModelID)
+    /// `detail` is for the local log only; analytics gets `reason`.
+    case unavailable(reason: SystemDefaultModelReason, detail: String)
 }
 
 extension ModelManagerProtocol {
     /// Default: file-based conformers have no async asset, so mirror `isInstalled`.
     func isSystemManagedAssetInstalled(_ modelID: ASRModelID) async -> Bool {
         isInstalled(modelID)
+    }
+
+    /// Default: no built-in model, so a fresh install downloads one.
+    func systemDefaultModelCheck() async -> SystemDefaultModelCheck {
+        .unavailable(reason: .transcriberUnavailable, detail: "no built-in model")
     }
 }
 
@@ -147,11 +163,14 @@ final class ModelManager: ModelManagerProtocol {
         return false
     }
 
+    func systemDefaultModelCheck() async -> SystemDefaultModelCheck {
+        await AppleSpeechDefaultCheck.run()
+    }
+
     func installedModels() -> [ASRModelID] {
-        // System-managed models (Apple Speech) are opt-in: they are always "available"
-        // on a supported OS, but must not count as installed for onboarding or
-        // auto-fallback, or a fresh macOS 26 user would silently bypass the default
-        // Parakeet download. They remain selectable via the per-model isInstalled path.
+        // System-managed models (Apple Speech) are always "available" on a supported
+        // OS, so they never count as downloaded files here: a fresh install adopts one
+        // only through `systemDefaultModelCheck`, which proves it actually runs.
         catalog
             .filter { !$0.isSystemManaged }
             .map(\.id)

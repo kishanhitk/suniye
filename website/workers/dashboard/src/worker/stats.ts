@@ -5,11 +5,12 @@
 // Column mapping mirrors the ingest field->slot registry (workers/ingest):
 //   blob1 = event name, blob3 = app_version, blob4 = channel, blob5 = asr_model,
 //   blob7 = language, blob10 = cleanup_fallback_reason, blob11 = target_category,
-//   blob14 = reason/type/backend (+device arch), blob16 = kind/feature (+chip),
+//   blob14 = reason/type/backend/step (+device arch),
+//   blob15 = code/outcome/advanced_by/ended_by, blob16 = kind/feature (+chip),
 //   blob17 = model (+mac_model), blob18 = from/to_version (+os_version),
 //   blob19 = country;  double1 = event_ts (ms), double2 = word_count,
 //   double5 = lat_end_to_end, double6 = lat_asr_processing, double7 = lat_llm_total,
-//   double14 = load_ms, double16 = was_llm_polished, double17 = bools (shared),
+//   double14 = load_ms/duration_ms/elapsed_ms, double16 = was_llm_polished, double17 = bools (shared),
 //   double18 = rung (+cpu_cores), double19 = ram_gb, double20 = edit_rate_bucket.
 //
 // CRITICAL: time is bucketed on the client event_ts (double1), NEVER on the AE
@@ -25,7 +26,7 @@
 // structural/range values (cutoff dates) still go through bind params.
 
 import { FILTER_DIMS } from "./types";
-import type { BlockedPanels, Breakdown, FilterDim, FilterOption, Filters, LatencySummary, StatsResponse, TimePoint } from "./types";
+import type { BlockedPanels, Breakdown, FilterDim, FilterOption, Filters, LatencySummary, OnboardingStats, StatsResponse, TimePoint } from "./types";
 
 const DAY_MS = 86_400_000;
 
@@ -79,11 +80,15 @@ const DIM_SPECS: Record<FilterDim, {
   // the slot for its other meaning → silent undercount. Omitting the flag makes
   // active-installs block under these filters (honest empty) instead.
   chip:      { ae: "blob16", d1: "chip",
-               unavailableOn: ["permission_transition", "model_changed", "model_download", "feature_toggled", "update_action"] },
+               unavailableOn: ["permission_transition", "permission_request", "model_changed", "model_download", "feature_toggled", "update_action"] },
   os:        { ae: "blob18", d1: "os_version", unavailableOn: ["update_action"] },
-  mac_model: { ae: "blob17", d1: "mac_model", unavailableOn: ["model_load", "model_changed", "model_download", "llm_generation"] },
+  // system_default_model carries `model` only when adopted, so blob17 is mixed
+  // there — filtering it by mac_model would keep only the non-adopted rows.
+  mac_model: { ae: "blob17", d1: "mac_model", unavailableOn: ["model_load", "model_changed", "model_download", "llm_generation", "system_default_model"] },
+  // system_default_model carries `reason` only when not adopted (same mixed-slot
+  // problem as mac_model above), and onboarding_window_closed always carries `step`.
   arch:      { ae: "blob14", // not in D1 (installs has no arch column)
-               unavailableOn: ["error", "audio_backend_used", "dictation_blocked", "dictation_cancelled", "onboarding_step", "audio_capture_interrupted"] },
+               unavailableOn: ["error", "audio_backend_used", "dictation_blocked", "dictation_cancelled", "onboarding_step", "audio_capture_interrupted", "system_default_model", "onboarding_window_closed"] },
   cpu_cores: { ae: "double18", numeric: true, d1: "cpu_cores", unavailableOn: ["audio_backend_used"] },
   asr_model:     { ae: "blob5",  dictationOnly: true },
   cleanup_model: { ae: "blob9",  dictationOnly: true },
@@ -308,7 +313,30 @@ export const sql = {
   llmCacheHitRate: (ds: string, cutoffMs: number, where = "") =>
     `SELECT SUM(double17 * _sample_interval) AS hits, SUM(_sample_interval) AS total ` +
     `FROM ${ds} WHERE blob1 = 'llm_generation' AND double1 >= ${cutoffMs}${where}`,
+
+  // Installs that reached each onboarding step (blob14 = step). Same sampling
+  // caveat as activeInstallsPerDay: COUNT(DISTINCT) is exact only at sample_rate 1.
+  // Resumed steps re-fire once per launch, which DISTINCT absorbs.
+  onboardingFunnel: (ds: string, cutoffMs: number, where = "") =>
+    `SELECT blob14 AS step, COUNT(DISTINCT index1) AS installs FROM ${ds} ` +
+    `WHERE blob1 = 'onboarding_step' AND double1 >= ${cutoffMs}${where} GROUP BY step`,
+
+  // p50/p95 of the generic value_ms slot (double14) for one event. `event` is a
+  // server-side constant, never user input. `> 0` keeps rows that omit the
+  // optional duration from dragging the quantile to zero.
+  valueMsQuantiles: (ds: string, event: string, cutoffMs: number, where = "") =>
+    `SELECT quantileWeighted(0.5, double14, _sample_interval) AS p50, quantileWeighted(0.95, double14, _sample_interval) AS p95 ` +
+    `FROM ${ds} WHERE blob1 = '${event}' AND double14 > 0 AND double1 >= ${cutoffMs}${where}`,
+
+  // Permission asks by kind (blob16) × outcome (blob15). `surface` rides only
+  // the blob20 JSON backstop, so this covers every ask surface, not just onboarding.
+  permissionAsks: (ds: string, cutoffMs: number, where = "") =>
+    `SELECT blob16 AS kind, blob15 AS outcome, SUM(_sample_interval) AS value FROM ${ds} ` +
+    `WHERE blob1 = 'permission_request' AND double1 >= ${cutoffMs}${where} GROUP BY kind, outcome ORDER BY value DESC LIMIT 20`,
 };
+
+/** Onboarding funnel order; `completed` is emitted by finishOnboarding(). */
+export const ONBOARDING_STEPS = ["welcome", "speak", "type_anywhere", "more", "completed"] as const;
 
 // ---- helpers ----
 
@@ -399,6 +427,19 @@ export async function buildStats(
       dictCount: safeAe(sql.eventCount(ds, "dictation_completed", cutoffMs, w("dictation_completed"))),
       editFinalized: safeAe(sql.eventCount(ds, "dictation_edited", cutoffMs, w("dictation_edited"))),
       editChanged: safeAe(sql.editedCount(ds, cutoffMs, w("dictation_edited"))),
+      onbFunnel: safeAe(sql.onboardingFunnel(ds, cutoffMs, w("onboarding_step"))),
+      sysModelOutcomes: safeAe(sql.breakdown(ds, "blob15", "blob1 = 'system_default_model'", cutoffMs, w("system_default_model"))),
+      // Reasons only exist on the non-adopted rows; on adopted rows blob14 falls
+      // back to the device arch, which must not leak into this list.
+      sysModelReasons: safeAe(sql.breakdown(ds, "blob14", "blob1 = 'system_default_model' AND blob15 != 'adopted'", cutoffMs, w("system_default_model"))),
+      sysModelCheck: safeAe(sql.valueMsQuantiles(ds, "system_default_model", cutoffMs, w("system_default_model"))),
+      practice: safeAe(sql.breakdown(ds, "blob15", "blob1 = 'onboarding_practice_result'", cutoffMs, w("onboarding_practice_result"))),
+      onbDuration: safeAe(sql.valueMsQuantiles(ds, "onboarding_outcome", cutoffMs, w("onboarding_outcome"))),
+      // ended_by only exists from onboarding v1 on; older outcome rows leave blob15 empty.
+      endedBy: safeAe(sql.breakdown(ds, "blob15", "blob1 = 'onboarding_outcome' AND blob15 != ''", cutoffMs, w("onboarding_outcome"))),
+      windowClosed: safeAe(sql.breakdown(ds, "blob14", "blob1 = 'onboarding_window_closed'", cutoffMs, w("onboarding_window_closed"))),
+      permissions: safeAe(sql.permissionAsks(ds, cutoffMs, w("permission_request"))),
+      blockedReasons: safeAe(sql.breakdown(ds, "blob14", "blob1 = 'dictation_blocked'", cutoffMs, w("dictation_blocked"))),
     }),
     // totalInstalls is all-time by definition; the breakdowns honor the selected
     // range (installs active in the window) so the range toggle affects every
@@ -467,6 +508,39 @@ export async function buildStats(
   block("crash", blockedDim(filters, "app_launch") ?? blockedDim(filters, "session_end"));
   block("modelLoad", blockedDim(filters, "model_load"));
   block("installs", blockedDimD1(filters));
+  block("onboardingFunnel", blockedDim(filters, "onboarding_step"));
+  block("systemModel", blockedDim(filters, "system_default_model"));
+  block("practice", blockedDim(filters, "onboarding_practice_result"));
+  block("onboardingOutcome", blockedDim(filters, "onboarding_outcome"));
+  block("windowClosed", blockedDim(filters, "onboarding_window_closed"));
+  block("permissions", blockedDim(filters, "permission_request"));
+  block("blockedReasons", blockedDim(filters, "dictation_blocked"));
+
+  const funnelCounts = new Map(aeRows.onbFunnel.map((r) => [String(r.step ?? ""), num(r.installs)]));
+  const welcomeInstalls = funnelCounts.get("welcome") ?? 0;
+  const sysModelOutcomes = toBreakdown(aeRows.sysModelOutcomes);
+  const sysModelTotal = sysModelOutcomes.reduce((sum, b) => sum + b.value, 0);
+  const sysModelAdopted = sysModelOutcomes.find((b) => b.label === "adopted")?.value ?? 0;
+  const sysModelCheck = aeRows.sysModelCheck[0] ?? {};
+  const onbDuration = aeRows.onbDuration[0] ?? {};
+  const onboarding: OnboardingStats = {
+    funnel: ONBOARDING_STEPS.map((step) => {
+      const installs = funnelCounts.get(step) ?? 0;
+      return { step, installs, pctOfWelcome: ratio(installs, welcomeInstalls) };
+    }),
+    systemModelOutcomes: sysModelOutcomes,
+    systemModelAdoptionPct: ratio(sysModelAdopted, sysModelTotal),
+    systemModelReasons: toBreakdown(aeRows.sysModelReasons),
+    systemModelCheckMs: { stage: "system_default_model", p50: num(sysModelCheck.p50), p95: num(sysModelCheck.p95) },
+    practiceOutcomes: toBreakdown(aeRows.practice),
+    durationMs: { stage: "onboarding", p50: num(onbDuration.p50), p95: num(onbDuration.p95) },
+    endedBy: toBreakdown(aeRows.endedBy),
+    windowClosedAt: toBreakdown(aeRows.windowClosed),
+    permissionAsks: aeRows.permissions.map((r) => ({
+      label: `${String(r.kind ?? "") || "unknown"} · ${String(r.outcome ?? "") || "unknown"}`,
+      value: num(r.value),
+    })),
+  };
 
   return {
     rangeDays: opts.rangeDays,
@@ -492,6 +566,8 @@ export async function buildStats(
     keepAliveEvictions: num(aeRows.evictions[0]?.value),
     llmCacheHitRatePct,
     segmentEventCount: dictCount,
+    onboarding,
+    dictationBlockedReasons: toBreakdown(aeRows.blockedReasons),
     filterOptions,
   };
 }

@@ -608,6 +608,13 @@ final class AppState {
     @ObservationIgnored private var onboardingStepsTracked: Set<OnboardingStep> = []
     @ObservationIgnored private var onboardingResumedPending = false
     @ObservationIgnored private var onboardingStartedAt: Date?
+    /// A start still waiting on a permission prompt; a key release clears it.
+    @ObservationIgnored private var pendingRecordingStart: RecordingSource?
+    /// What is about to move onboarding to its next step (read by step tracking).
+    @ObservationIgnored private var pendingOnboardingAdvance: OnboardingAdvance?
+    /// The practice dictation as transcribed, to tell whether the user edited it.
+    @ObservationIgnored private var onboardingPracticeTranscript: String?
+    @ObservationIgnored private var onboardingPracticeEdited = false
     @ObservationIgnored private var hasTrackedMagicFormatNudgeShown = false
     @ObservationIgnored private var firstLaunchRecorded = false
     @ObservationIgnored private var lastKnownAccessibilityGranted = false
@@ -1478,15 +1485,6 @@ final class AppState {
             .first
     }
 
-    var onboardingPracticeLevels: [Float] {
-        switch floatingIndicatorState {
-        case let .listening(levels, _, _):
-            return levels
-        default:
-            return Self.defaultIndicatorLevels(level: 0.08)
-        }
-    }
-
     var isOnboardingPracticeRecording: Bool {
         activeOnboardingStep == .speak && phase == .recording
     }
@@ -1973,6 +1971,7 @@ final class AppState {
         if startServices {
             analytics.start()
             emitAppLaunchEvent()
+            presentOnboardingIfNeeded()
             wireHotkey()
             Task {
                 await bootstrap()
@@ -2033,8 +2032,26 @@ final class AppState {
         await refreshPermissions()
 
         statusText = "Checking model..."
-        let bootstrapCandidates = orderedInstalledASRModelIDs()
-        if !bootstrapCandidates.isEmpty {
+        var bootstrapCandidates = orderedInstalledASRModelIDs()
+        // A chosen system-managed model (Apple Speech) has no files, so the
+        // installed list never contains it; without this it was silently replaced
+        // by whichever downloaded model came first on every launch.
+        if ASRModelCatalog.entry(for: selectedASRModelID).isSystemManaged,
+           modelManager.isInstalled(selectedASRModelID) {
+            bootstrapCandidates.insert(selectedASRModelID, at: 0)
+        }
+        if bootstrapCandidates.isEmpty, !onboardingProgress.isFinished {
+            phase = .loading
+            statusText = "Loading model..."
+            if await adoptSystemDefaultModel() {
+                phase = .ready
+                statusText = "Ready"
+                lastError = nil
+            } else {
+                phase = .needsModel
+                statusText = "Model required"
+            }
+        } else if !bootstrapCandidates.isEmpty {
             phase = .loading
             statusText = "Loading model..."
             do {
@@ -2061,13 +2078,78 @@ final class AppState {
         AppLogger.shared.log(.info, "bootstrap done")
     }
 
+    /// A fresh install starts on the built-in model when it really works here, so
+    /// the first dictation needs no download. Every failed step falls back to the
+    /// downloaded default; the outcome and reason go to the log and analytics.
+    private func adoptSystemDefaultModel() async -> Bool {
+        let startedAt = nowProvider()
+        func report(_ outcome: SystemDefaultModelOutcome, _ reason: SystemDefaultModelReason?, _ modelID: ASRModelID?) {
+            analytics.track(.systemDefaultModel(
+                outcome: outcome,
+                reason: reason,
+                model: modelID.map { SafeLabel($0.rawValue) },
+                durationMs: Int(nowProvider().timeIntervalSince(startedAt) * 1000)
+            ))
+        }
+
+        let check = await modelManager.systemDefaultModelCheck()
+        guard case let .ready(modelID) = check else {
+            if case let .unavailable(reason, detail) = check {
+                AppLogger.shared.log(.info, "system default model unavailable: \(detail)")
+                report(.unavailable, reason, nil)
+            }
+            return false
+        }
+        activeASRModelOperationID = modelID
+        defer { activeASRModelOperationID = nil }
+        do {
+            try await loadRecognizer(for: modelID)
+        } catch {
+            AppLogger.shared.log(.warning, "system default model load failed id=\(modelID.rawValue) error=\(error.localizedDescription)")
+            report(.failed, .loadFailed, modelID)
+            return false
+        }
+        do {
+            // One silent decode proves the engine runs, not just that it loads.
+            _ = try await transcriptionService.transcribe(
+                samples: [Float](repeating: 0, count: 16_000),
+                sampleRate: 16_000
+            )
+        } catch {
+            AppLogger.shared.log(.warning, "system default model decode failed id=\(modelID.rawValue) error=\(error.localizedDescription)")
+            await transcriptionService.unloadModel()
+            loadedASRModelID = nil
+            report(.failed, .decodeFailed, modelID)
+            return false
+        }
+        selectedASRModelID = modelID
+        AppLogger.shared.log(.info, "system default model adopted id=\(modelID.rawValue)")
+        report(.adopted, nil, modelID)
+        return true
+    }
+
     // MARK: - Onboarding state machine
 
     /// Resumes onboarding at the persisted position (or dismisses it once
     /// finished). Steps re-shown by resume carry `resumed=true` in analytics.
     func startOnboardingIfNeeded() {
+        presentOnboardingIfNeeded()
+        guard activeOnboardingStep != nil else {
+            return
+        }
+        // Any step, not just Welcome: a relaunch that resumes mid-flow must not
+        // wait on a download that nothing restarts.
+        startOnboardingModelDownloadIfNeeded()
+    }
+
+    /// Shows the persisted step without touching the model, so the window opens
+    /// on onboarding instead of flashing the main page while bootstrap runs.
+    func presentOnboardingIfNeeded() {
         guard let step = onboardingProgress.resumeStep else {
             activeOnboardingStep = nil
+            return
+        }
+        guard activeOnboardingStep == nil else {
             return
         }
         if onboardingProgress != .notStarted {
@@ -2077,9 +2159,6 @@ final class AppState {
             onboardingStartedAt = nowProvider()
         }
         activeOnboardingStep = step
-        if step == .welcome {
-            startOnboardingModelDownloadIfNeeded()
-        }
     }
 
     /// Single forward transition used by the onboarding UI.
@@ -2090,6 +2169,8 @@ final class AppState {
         case .speak:
             advanceOnboardingFromSpeak()
         case .typeAnywhere:
+            advanceOnboardingFromTypeAnywhere()
+        case .more:
             finishOnboarding()
         case nil:
             startOnboardingIfNeeded()
@@ -2110,9 +2191,15 @@ final class AppState {
             return
         }
         setOnboardingProgress(.speakReached)
+        pendingOnboardingAdvance = .button
         activeOnboardingStep = .speak
         if !isModelInstalled, activeASRModelOperationID == nil {
             startModelDownload()
+        }
+        // Ask now, as the answer to this click, so the first fn hold records
+        // instead of opening a system prompt mid-hold.
+        if !hasMicPermission, !hasMicPermissionBeenDenied {
+            await refreshPermissions(requestMicrophone: true, askSurface: .onboarding)
         }
     }
 
@@ -2133,36 +2220,77 @@ final class AppState {
         }
     }
 
+    /// Accessibility is settled (or skipped by closing): name what else exists
+    /// before handing off. Not persisted as its own position: a relaunch resumes
+    /// on the Accessibility screen, which leads straight back here.
+    func advanceOnboardingFromTypeAnywhere(by advance: OnboardingAdvance = .button) {
+        guard activeOnboardingStep == .typeAnywhere else {
+            return
+        }
+        pendingOnboardingAdvance = advance
+        activeOnboardingStep = .more
+    }
+
     func advanceOnboardingFromSpeak() {
         guard activeOnboardingStep == .speak else {
             return
         }
+        onboardingPracticeEdited = onboardingPracticeTranscript.map { $0 != onboardingPracticeText } ?? false
+        pendingOnboardingAdvance = .button
         setOnboardingProgress(.typeAnywhereReached)
         activeOnboardingStep = .typeAnywhere
     }
 
-    /// Terminal transition (Finish, or the "Later — I'll paste with ⌘V" skip on
-    /// the Accessibility screen). This is where completion is persisted and the
+    /// Terminal transition (Finish on the closing screen, or closing the window on
+    /// the last two screens). This is where completion is persisted and the
     /// `completed` + `onboarding_outcome` events fire — after the flow actually
     /// ends, not before the practice step as the old wizard did.
-    func finishOnboarding() {
+    func finishOnboarding(endedBy: OnboardingEnd = .finishButton) {
         guard activeOnboardingStep != nil else {
             return
         }
-        let durationMs = onboardingStartedAt.map { Int(nowProvider().timeIntervalSince($0) * 1000) }
-        analytics.track(.onboardingStep(step: .completed, granted: nil, resumed: nil))
+        let durationMs = onboardingElapsedMs
+        analytics.track(.onboardingStep(step: .completed, granted: nil, resumed: nil, elapsedMs: durationMs))
         analytics.track(.onboardingOutcome(
             durationMs: durationMs,
             practiced: onboardingPracticeSucceeded,
             micGranted: hasMicPermission,
             axGranted: hasAccessibilityPermission,
-            modelReady: asrModelReady
+            modelReady: asrModelReady,
+            endedBy: endedBy,
+            practiceEdited: onboardingPracticeSucceeded ? onboardingPracticeEdited : nil
         ))
         setOnboardingProgress(.finished)
         onboardingPracticeText = ""
         onboardingPracticeResult = nil
         onboardingStartedAt = nil
         activeOnboardingStep = nil
+        NotificationCenter.default.post(name: .suniyeOnboardingDidFinish, object: self)
+    }
+
+    /// The window was closed on a step that does not finish onboarding (Welcome
+    /// or the practice screen): where people walk away.
+    func recordOnboardingWindowClosed() {
+        guard let step = activeOnboardingStep else {
+            return
+        }
+        analytics.track(.onboardingWindowClosed(step: step.analyticsName, elapsedMs: onboardingElapsedMs))
+    }
+
+    private var onboardingElapsedMs: Int? {
+        onboardingStartedAt.map { Int(nowProvider().timeIntervalSince($0) * 1000) }
+    }
+
+    /// A dictation that really lands in another app proves the Accessibility
+    /// step, so the window moves on by itself to the closing screen.
+    private func advanceOnboardingAfterFirstInsertionIfNeeded(appBundleID: String?) {
+        guard activeOnboardingStep == .typeAnywhere,
+              let appBundleID,
+              appBundleID != Bundle.main.bundleIdentifier else {
+            return
+        }
+        AppLogger.shared.log(.info, "onboarding advanced by first insertion app=\(appBundleID)")
+        advanceOnboardingFromTypeAnywhere(by: .insertion)
     }
 
     private func setOnboardingProgress(_ progress: OnboardingProgress) {
@@ -2179,7 +2307,15 @@ final class AppState {
         onboardingStepsTracked.insert(step)
         let resumed = onboardingResumedPending
         onboardingResumedPending = false
-        analytics.track(.onboardingStep(step: step.analyticsName, granted: nil, resumed: resumed ? true : nil))
+        let advancedBy = pendingOnboardingAdvance
+        pendingOnboardingAdvance = nil
+        analytics.track(.onboardingStep(
+            step: step.analyticsName,
+            granted: nil,
+            resumed: resumed ? true : nil,
+            elapsedMs: onboardingElapsedMs,
+            advancedBy: advancedBy
+        ))
     }
 
     /// True while dictation prerequisites for the Speak screen's practice box
@@ -3400,17 +3536,6 @@ final class AppState {
         return "Finish Setting Up \(AppIdentity.current.displayName)…"
     }
 
-    /// The Accessibility screen's "Try it in Notes" demo: real insertion into a
-    /// real app is the product's actual value, and the old preview-only practice
-    /// never demonstrated it.
-    func openNotesForInsertionDemo() {
-        guard let notesURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Notes") else {
-            AppLogger.shared.log(.warning, "notes demo: Notes.app not found")
-            return
-        }
-        _ = fileOpener(notesURL)
-    }
-
     func openIssueReportWindow() {
         prepareIssueReportWindowPresentation()
         IssueReportWindowController.shared.show(appState: self)
@@ -3943,6 +4068,15 @@ final class AppState {
             showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             return
         }
+        // Permission prompts below can hold this start open for as long as a
+        // system dialog is up; a release in that window must cancel it, or
+        // recording begins after the key is already up and nothing ends it.
+        pendingRecordingStart = trigger
+        defer {
+            if pendingRecordingStart == trigger {
+                pendingRecordingStart = nil
+            }
+        }
         if !hasMicPermission {
             await refreshPermissions(requestMicrophone: true, askSurface: .dictationAttempt)
         }
@@ -3991,6 +4125,13 @@ final class AppState {
             AppLogger.shared.log(.warning, "accessibility not granted; prompting, dictation will be copied, not pasted")
             await refreshPermissions(promptAccessibility: true)
         }
+        guard pendingRecordingStart == trigger else {
+            AppLogger.shared.log(.info, "recording start canceled: key released during a permission prompt")
+            analytics.track(.dictationBlocked(reason: .releasedDuringPrompt))
+            showTransientIndicatorError("Hold again to dictate", restoreState: .idle, duration: 1.6)
+            return
+        }
+        pendingRecordingStart = nil
         // Speculatively warm the local LLM while the user speaks, so cleanup runs
         // against an already-loaded model instead of paying the cold start on the
         // critical path. Fire-and-forget; idempotent and self-evicting. Edit Mode
@@ -4078,6 +4219,10 @@ final class AppState {
     }
 
     private func stopRecordingAndTranscribe(trigger: RecordingSource) async {
+        if phase != .recording, pendingRecordingStart == trigger {
+            pendingRecordingStart = nil
+            return
+        }
         guard phase == .recording else {
             return
         }
@@ -4254,6 +4399,9 @@ final class AppState {
                     beginEditLearningTracking(insertedText: insertionText)
                     AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
                     didCompleteDictation = true
+                    if insertionWasVerified {
+                        advanceOnboardingAfterFirstInsertionIfNeeded(appBundleID: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
+                    }
                 } catch {
                     didFailInsertion = true
                     AppLogger.shared.log(
@@ -4434,6 +4582,7 @@ final class AppState {
             playSoundFeedback(.error)
         } else {
             onboardingPracticeSucceeded = true
+            onboardingPracticeTranscript = finalText
             onboardingPracticeResult = OnboardingPracticeResult(
                 message: "That's it — this works in any app.",
                 severity: .success

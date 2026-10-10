@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 @MainActor
 final class StatusItemController: NSObject, NSMenuDelegate {
@@ -14,6 +15,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let downloadItem = NSMenuItem(title: "Download Model", action: #selector(downloadModel), keyEquivalent: "d")
     private let reportIssueItem = NSMenuItem(title: "Report a Problem...", action: #selector(reportIssue), keyEquivalent: "")
     private lazy var quitItem = NSMenuItem(title: "Quit \(appIdentity.displayName)", action: #selector(quitApp), keyEquivalent: "q")
+    private var onboardingFinishObserver: NSObjectProtocol?
+    private var homeHint: NSPopover?
 
     init(appState: AppState) {
         self.appState = appState
@@ -25,6 +28,42 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             Task { @MainActor in
                 self?.refresh()
             }
+        }
+        onboardingFinishObserver = NotificationCenter.default.addObserver(
+            forName: .suniyeOnboardingDidFinish,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.showHomeHint()
+            }
+        }
+    }
+
+    /// The window closes when onboarding ends, so point once at where the app
+    /// now lives. It leaves on its own; clicking anywhere also dismisses it.
+    private func showHomeHint() {
+        guard let button = statusItem.button, homeHint == nil else {
+            return
+        }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        let content = NSHostingController(
+            rootView: Text("\(appIdentity.displayName) lives here.")
+                .font(.callout.weight(.medium))
+                .fixedSize()
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+        )
+        popover.contentViewController = content
+        popover.contentSize = content.view.fittingSize
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        homeHint = popover
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            self?.homeHint?.performClose(nil)
+            self?.homeHint = nil
         }
     }
 

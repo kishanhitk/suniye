@@ -20,6 +20,13 @@
 //
 // `blob20` always carries the full compact props JSON (event props + device) as a
 // backstop, so a field is never lost before it earns a dedicated slot.
+//
+// ONBOARDING V1 (appended aliases, no slot moved):
+//   system_default_model     reason→blob14, outcome→blob15, model→blob17, duration_ms→double14
+//   onboarding_window_closed step→blob14, elapsed_ms→double14
+//   onboarding_step          advanced_by→blob15, elapsed_ms→double14 (step stays blob14)
+//   onboarding_outcome       ended_by→blob15; practice_edited rides blob20 JSON only
+//                            (double17 already carries `practiced` on this event)
 
 import type { PropValue, WireBatch, WireEvent } from "./types";
 
@@ -67,7 +74,7 @@ const BLOB_FIELDS: StrPick[] = [
   str("insertion_method"),                        // blob12
   str("source"),                                  // blob13
   firstStr("reason", "stage", "step", "type", "backend", "arch"),   // blob14 - categorical detail A (+ device arch)
-  firstStr("code", "outcome"),                    // blob15 - categorical detail B
+  firstStr("code", "outcome", "advanced_by", "ended_by"), // blob15 - categorical detail B (+ onboarding_step advanced_by, onboarding_outcome ended_by)
   firstStr("kind", "feature", "chip"),            // blob16 (+ device chip)
   firstStr("model", "mac_model"),                 // blob17 (+ device mac_model)
   firstStr("from_version", "to_version", "os_version"),   // blob18 (+ device os_version)
@@ -91,7 +98,7 @@ const DOUBLE_FIELDS: NumPick[] = [
   // llm_generation appends prefill_ms (double14) and cached_tokens (double15): the
   // two numbers the dashboard reads for the prompt-cache panel. prompt/predicted
   // tokens and decode_ms ride the blob20 props backstop only.
-  firstNum("load_ms", "duration_ms", "prefill_ms"),             // double14 - generic value_ms (+ llm_generation prefill_ms)
+  firstNum("load_ms", "duration_ms", "prefill_ms", "elapsed_ms"), // double14 - generic value_ms (+ llm_generation prefill_ms, onboarding elapsed_ms)
   firstNum("count", "event_count", "queue_depth", "upload_failures", "evicted_by_ttl", "attempt", "cached_tokens"), // double15 (+ onboarding_practice_result attempt, llm_generation cached_tokens)
   boolNum("was_llm_polished"),                    // double16
   // `resumed` (onboarding_step) and `practiced` (onboarding_outcome) are appended:

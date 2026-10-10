@@ -20,7 +20,7 @@ Suniye/Services/HotkeyService.swift                   # Carbon hotkey registrati
 Suniye/Services/AccessibilityOnboarding.swift         # drives live AXIsProcessTrusted permission flow
 Suniye/Services/SoundFeedbackService.swift            # NSSound playback wrapper
 Suniye/Services/LaunchAtLoginService.swift            # SMAppService registration; needs signed, installed app
-Suniye/Services/AppleSpeechTranscriptionService.swift # SpeechAnalyzer/SpeechTranscriber/AssetInventory; needs macOS 26 + a downloaded speech model asset (engine routing is tested via RoutingTranscriptionServiceTests)
+Suniye/Services/AppleSpeechTranscriptionService.swift # SpeechAnalyzer/SpeechTranscriber/AssetInventory (incl. the fresh-install default check); needs macOS 26 + a downloaded speech model asset (engine routing is tested via RoutingTranscriptionServiceTests)
 Suniye/Services/OrtSession.swift                      # ONNX Runtime session create/run; needs a real model (opt-in CohereTranscriptionServiceRealModelTests). Env + tensor helpers stay gated in OnnxRuntime.swift
 Suniye/Services/CohereTranscriptionService.swift      # encoder/decoder sessions over the 2.9 GB Cohere model; decode logic is extracted to CohereTranscribeDecoding.swift (covered), guards to CohereProviderTests
 Suniye/Services/AppleFoundationModelsPostProcessor.swift # Apple Intelligence FoundationModels API; its on-device paths compile on the macOS 26 SDK but can't run on a headless CI runner (no provisioned model), so they count as uncovered. Exercised locally where the model is available.
@@ -38,7 +38,8 @@ Suniye/Views/FloatingIndicatorView.swift              # SwiftUI render only
 Suniye/Views/IssueReportView.swift                    # SwiftUI render only
 Suniye/Views/ListeningOverlay.swift                   # SwiftUI render only
 Suniye/Views/OnboardingView.swift                     # SwiftUI render only
-Suniye/Views/WelcomeView.swift                        # SwiftUI render only
+Suniye/Views/Onboarding/SuniyeMark.swift              # SwiftUI render only
+Suniye/Views/Onboarding/OnboardingLandscape.swift     # SwiftUI Canvas render only
 Suniye/Views/MainWindow/MagicFormatComponents.swift   # SwiftUI render only
 Suniye/Views/MainWindow/MagicFormatPage.swift         # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowComponents.swift    # SwiftUI render only

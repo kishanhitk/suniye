@@ -1,5 +1,6 @@
 import AppKit
 import OSLog
+import SuniyeAnalytics
 import SwiftUI
 
 @MainActor
@@ -61,6 +62,18 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        // Closing on the last two screens finishes onboarding; without
+        // Accessibility that is the quiet skip, and dictations are copied.
+        if let appState {
+            switch appState.activeOnboardingStep {
+            case .typeAnywhere, .more:
+                appState.finishOnboarding(endedBy: .windowClosed)
+            case .welcome, .speak:
+                appState.recordOnboardingWindowClosed()
+            case nil:
+                break
+            }
+        }
         // Revert to a pure menu-bar app when the window closes — but keep the
         // Dock icon (a second resume affordance) while onboarding is unfinished.
         guard appState?.onboardingProgress.isFinished ?? true else {

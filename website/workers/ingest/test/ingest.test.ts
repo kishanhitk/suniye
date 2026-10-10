@@ -295,6 +295,63 @@ describe("buildDataPoint slot registry", () => {
     expect(JSON.parse(outcome.blobs[19] as string).ax_granted).toBe(false);
   });
 
+  test("system_default_model maps outcome, reason, model and duration to shared slots", () => {
+    const adopted = buildDataPoint(
+      event("system_default_model", { outcome: "adopted", model: "appleSpeech", duration_ms: 940 }),
+      b({ device }),
+      ""
+    );
+    expect(adopted.blobs[0]).toBe("system_default_model");
+    expect(adopted.blobs[14]).toBe("adopted");       // blob15 = outcome
+    expect(adopted.blobs[16]).toBe("appleSpeech");   // blob17 = model (wins over device mac_model)
+    expect(adopted.blobs[13]).toBe("arm64");         // blob14: no reason → device arch fills it
+    expect(adopted.doubles[13]).toBe(940);           // double14 = duration_ms
+
+    const unavailable = buildDataPoint(
+      event("system_default_model", { outcome: "unavailable", reason: "unsupported_language", duration_ms: 12 }),
+      b({ device }),
+      ""
+    );
+    expect(unavailable.blobs[13]).toBe("unsupported_language"); // blob14 = reason (wins over device arch)
+    expect(unavailable.blobs[14]).toBe("unavailable");          // blob15 = outcome
+    expect(unavailable.blobs[16]).toBe("mac15-3");              // blob17: no model → device mac_model
+    expect(unavailable.doubles[13]).toBe(12);
+  });
+
+  test("onboarding_window_closed maps step and elapsed_ms", () => {
+    const closed = buildDataPoint(event("onboarding_window_closed", { step: "speak", elapsed_ms: 42_000 }), b({ device }), "");
+    expect(closed.blobs[13]).toBe("speak");   // blob14 = step
+    expect(closed.doubles[13]).toBe(42_000);  // double14 = elapsed_ms
+  });
+
+  test("onboarding v1 fields map to appended aliases", () => {
+    // onboarding_step: advanced_by → blob15, elapsed_ms → double14; step stays blob14.
+    const step = buildDataPoint(
+      event("onboarding_step", { step: "more", advanced_by: "insertion", elapsed_ms: 75_000 }),
+      b({ device }),
+      ""
+    );
+    expect(step.blobs[13]).toBe("more");
+    expect(step.blobs[14]).toBe("insertion");
+    expect(step.doubles[13]).toBe(75_000);
+    expect(step.doubles[16]).toBe(0); // no resumed on this event
+
+    // onboarding_outcome: ended_by → blob15; practice_edited rides blob20 only.
+    const outcome = buildDataPoint(
+      event("onboarding_outcome", { duration_ms: 90_000, practiced: true, ended_by: "window_closed", practice_edited: true }),
+      b({ device }),
+      ""
+    );
+    expect(outcome.blobs[14]).toBe("window_closed");
+    expect(outcome.doubles[13]).toBe(90_000); // duration_ms still wins double14
+    expect(outcome.doubles[16]).toBe(1);      // double17 = practiced
+    expect(JSON.parse(outcome.blobs[19] as string).practice_edited).toBe(true);
+
+    // dictation_blocked: the new reason rides blob14 like the others.
+    const blocked = buildDataPoint(event("dictation_blocked", { reason: "released_during_prompt" }), b({ device }), "");
+    expect(blocked.blobs[13]).toBe("released_during_prompt");
+  });
+
   test("llm_generation maps prefill_ms, cached_tokens and cache_hit to shared slots", () => {
     const gen = buildDataPoint(
       event("llm_generation", {

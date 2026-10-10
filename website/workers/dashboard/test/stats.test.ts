@@ -62,6 +62,29 @@ describe("sql builders", () => {
     expect(sql.breakdown("ds", "blob5", "blob1 = 'dictation_completed'", 0)).toContain("SUM(_sample_interval)");
   });
 
+  test("onboarding funnel counts distinct installs per step", () => {
+    const q = sql.onboardingFunnel("ds", 0);
+    expect(q).toContain("blob14 AS step");
+    expect(q).toContain("COUNT(DISTINCT index1) AS installs");
+    expect(q).toContain("blob1 = 'onboarding_step'");
+    expect(q).toContain("GROUP BY step");
+  });
+
+  test("value_ms quantiles are scoped to one event and skip rows without a duration", () => {
+    const q = sql.valueMsQuantiles("ds", "system_default_model", 0, " AND blob3 = '0.0.71'");
+    expect(q).toContain("quantileWeighted(0.5, double14, _sample_interval) AS p50");
+    expect(q).toContain("blob1 = 'system_default_model'");
+    expect(q).toContain("double14 > 0");
+    expect(q).toContain("AND blob3 = '0.0.71'");
+  });
+
+  test("permission asks group by kind and outcome, sampling-correct", () => {
+    const q = sql.permissionAsks("ds", 0);
+    expect(q).toContain("blob16 AS kind, blob15 AS outcome");
+    expect(q).toContain("SUM(_sample_interval) AS value");
+    expect(q).toContain("GROUP BY kind, outcome");
+  });
+
   test("builders inject the filter fragment before GROUP BY", () => {
     const q = sql.wordsPerDay("ds", 1000, " AND blob16 = 'apple-m3-pro'");
     expect(q).toContain("double1 >= 1000 AND blob16 = 'apple-m3-pro' GROUP BY day");
@@ -169,6 +192,12 @@ describe("blocked-panel detection", () => {
     expect(blockedDim({ arch: ["arm64"] }, "error")).toBe("arch");
     expect(blockedDim({ mac_model: ["mac15-3"] }, "model_load")).toBe("mac_model");
     expect(blockedDim({ chip: ["apple-m3-pro"] }, "dictation_completed")).toBeNull();
+    // Onboarding v1 events that put native fields on shared slots.
+    expect(blockedDim({ chip: ["apple-m3-pro"] }, "permission_request")).toBe("chip");
+    expect(blockedDim({ arch: ["arm64"] }, "system_default_model")).toBe("arch");
+    expect(blockedDim({ arch: ["arm64"] }, "onboarding_window_closed")).toBe("arch");
+    expect(blockedDim({ mac_model: ["mac15-3"] }, "system_default_model")).toBe("mac_model");
+    expect(blockedDim({ chip: ["apple-m3-pro"] }, "onboarding_outcome")).toBeNull();
     expect(blockedDimD1({ asr_model: ["parakeet-v3"] })).toBe("asr_model");
     expect(blockedDimD1({ chip: ["apple-m3-pro"] })).toBeNull();
     // Invalid values are dropped before the check — they never block.
@@ -204,6 +233,19 @@ describe("buildStats", () => {
   const aeQueries: string[] = [];
   const ae: AeRunner = async (q) => {
     aeQueries.push(q);
+    // Onboarding queries first: several share shapes with the generic matchers below.
+    if (q.includes("blob14 AS step")) {
+      return [{ step: "welcome", installs: 10 }, { step: "speak", installs: 8 }, { step: "type_anywhere", installs: 6 }, { step: "completed", installs: 5 }];
+    }
+    if (q.includes("blob16 AS kind")) return [{ kind: "microphone", outcome: "granted", value: 7 }, { kind: "accessibility", outcome: "overlay_dismissed", value: 2 }];
+    if (q.includes("'system_default_model'") && q.includes("AS p50")) return [{ p50: 900, p95: 4000 }];
+    if (q.includes("'onboarding_outcome'") && q.includes("AS p50")) return [{ p50: 70_000, p95: 240_000 }];
+    if (q.includes("blob15 AS label") && q.includes("'system_default_model'")) return [{ label: "adopted", value: 6 }, { label: "unavailable", value: 2 }];
+    if (q.includes("blob14 AS label") && q.includes("'system_default_model'")) return [{ label: "os_too_old", value: 2 }];
+    if (q.includes("blob15 AS label") && q.includes("'onboarding_practice_result'")) return [{ label: "success", value: 9 }, { label: "empty_audio", value: 3 }];
+    if (q.includes("blob15 AS label") && q.includes("'onboarding_outcome'")) return [{ label: "finish_button", value: 4 }, { label: "window_closed", value: 1 }];
+    if (q.includes("blob14 AS label") && q.includes("'onboarding_window_closed'")) return [{ label: "speak", value: 2 }];
+    if (q.includes("blob14 AS label") && q.includes("'dictation_blocked'")) return [{ label: "wrong_phase", value: 5 }, { label: "released_during_prompt", value: 1 }];
     if (q.includes("SUM(double2")) return [{ day: "2026-07-06 00:00:00", value: 100 }, { day: "2026-07-07 00:00:00", value: 150 }];
     if (q.includes("COUNT(DISTINCT index1)")) return [{ day: "2026-07-06 00:00:00", value: 5 }];
     // Breakdowns AND facet option lists both select "<slot> AS label" (facets add
@@ -290,6 +332,24 @@ describe("buildStats", () => {
     expect(stats.filterOptions.asr_model).toEqual([{ value: "parakeet-v3", count: 42 }]);
     expect(stats.filterOptions.ram).toEqual([{ value: 36, count: 5 }]);
     expect(stats.filterOptions.version).toEqual([{ value: "0.0.51", count: 50 }]);
+    // Onboarding: funnel in screen order with % of Welcome; a step nobody reached reads 0.
+    expect(stats.onboarding.funnel.map((s) => s.step)).toEqual(["welcome", "speak", "type_anywhere", "more", "completed"]);
+    expect(stats.onboarding.funnel.map((s) => s.installs)).toEqual([10, 8, 6, 0, 5]);
+    expect(stats.onboarding.funnel[1].pctOfWelcome).toBeCloseTo(80, 5);
+    expect(stats.onboarding.funnel[3].pctOfWelcome).toBe(0);
+    expect(stats.onboarding.systemModelAdoptionPct).toBeCloseTo(75, 5); // 6 adopted / 8 checked
+    expect(stats.onboarding.systemModelReasons).toEqual([{ label: "os_too_old", value: 2 }]);
+    expect(stats.onboarding.systemModelCheckMs).toEqual({ stage: "system_default_model", p50: 900, p95: 4000 });
+    expect(stats.onboarding.practiceOutcomes[0]).toEqual({ label: "success", value: 9 });
+    expect(stats.onboarding.durationMs.p50).toBe(70_000);
+    expect(stats.onboarding.endedBy).toEqual([{ label: "finish_button", value: 4 }, { label: "window_closed", value: 1 }]);
+    expect(stats.onboarding.windowClosedAt).toEqual([{ label: "speak", value: 2 }]);
+    expect(stats.onboarding.permissionAsks[0]).toEqual({ label: "microphone · granted", value: 7 });
+    expect(stats.dictationBlockedReasons[1]).toEqual({ label: "released_during_prompt", value: 1 });
+    // Reasons exclude adopted rows (where blob14 falls back to the device arch);
+    // ended_by excludes pre-v1 outcome rows with an empty blob15.
+    expect(aeQueries.find((q) => q.includes("blob14 AS label") && q.includes("'system_default_model'"))).toContain("blob15 != 'adopted'");
+    expect(aeQueries.find((q) => q.includes("blob15 AS label") && q.includes("'onboarding_outcome'"))).toContain("blob15 != ''");
   });
 
   test("threads sanitized filters into AE queries and D1 install queries, and echoes them", async () => {
@@ -304,7 +364,8 @@ describe("buildStats", () => {
     expect(stats.appliedFilters).toEqual({ chip: ["apple-m3-pro"], version: ["0.0.51"] }); // invalid dropped
     // chip is on a shared slot → it blocks only the event-unscoped active-installs
     // query; every other panel (incl. dictation) applies it.
-    expect(stats.blocked).toEqual({ activeInstalls: "chip" });
+    // permission_request puts `kind` on blob16, so chip can't filter that panel either.
+    expect(stats.blocked).toEqual({ activeInstalls: "chip", permissions: "chip" });
     const words = aeQueries.find((q) => q.includes("SUM(double2"))!;
     expect(words).toContain("AND blob16 = 'apple-m3-pro'");
     expect(words).toContain("AND blob3 = '0.0.51'");
@@ -331,6 +392,13 @@ describe("buildStats", () => {
     expect(stats.blocked.audio).toBe("asr_model");
     expect(stats.blocked.errors).toBe("asr_model");
     expect(stats.blocked.modelLoad).toBe("asr_model");
+    expect(stats.blocked.onboardingFunnel).toBe("asr_model");
+    expect(stats.blocked.systemModel).toBe("asr_model");
+    expect(stats.blocked.practice).toBe("asr_model");
+    expect(stats.blocked.onboardingOutcome).toBe("asr_model");
+    expect(stats.blocked.windowClosed).toBe("asr_model");
+    expect(stats.blocked.permissions).toBe("asr_model");
+    expect(stats.blocked.blockedReasons).toBe("asr_model");
     // Dictation panels themselves stay live.
     expect(stats.segmentEventCount).toBe(50);
   });
@@ -360,5 +428,8 @@ describe("buildStats", () => {
     expect(stats.audioFallbackRatePct).toBe(0);
     expect(stats.editedSharePct).toBeNull(); // no edit sessions → "—", not "0%"
     expect(stats.llmCacheHitRatePct).toBeNull(); // no local generations → "—", not "0%"
+    expect(stats.onboarding.systemModelAdoptionPct).toBeNull(); // no checks → "—", not "0%"
+    expect(stats.onboarding.funnel.every((s) => s.installs === 0 && s.pctOfWelcome === null)).toBe(true);
+    expect(stats.onboarding.durationMs).toEqual({ stage: "onboarding", p50: 0, p95: 0 });
   });
 });

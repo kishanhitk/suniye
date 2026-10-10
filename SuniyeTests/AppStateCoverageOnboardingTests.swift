@@ -24,7 +24,7 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
 
     private func onboardingStepEvents(_ spy: SpyAnalytics) -> [(step: OnboardingStepName, resumed: Bool?)] {
         spy.trackedEvents.compactMap {
-            if case let .onboardingStep(step, _, resumed) = $0 {
+            if case let .onboardingStep(step, _, resumed, _, _) = $0 {
                 return (step, resumed)
             }
             return nil
@@ -255,7 +255,10 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
         XCTAssertEqual(appState.activeOnboardingStep, .speak)
         await appState.advanceOnboarding() // speak -> typeAnywhere
         XCTAssertEqual(appState.activeOnboardingStep, .typeAnywhere)
-        await appState.advanceOnboarding() // typeAnywhere -> finished
+        await appState.advanceOnboarding() // typeAnywhere -> more
+        XCTAssertEqual(appState.activeOnboardingStep, .more)
+        XCTAssertFalse(appState.onboardingProgress.isFinished)
+        await appState.advanceOnboarding() // more -> finished
         XCTAssertNil(appState.activeOnboardingStep)
         XCTAssertTrue(appState.onboardingProgress.isFinished)
 
@@ -281,7 +284,7 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
         XCTAssertTrue(onboardingStepEvents(spy).contains { $0.step == .completed })
 
         let outcome = spy.trackedEvents.compactMap { event -> (practiced: Bool, mic: Bool, ax: Bool, model: Bool)? in
-            if case let .onboardingOutcome(_, practiced, mic, ax, model) = event {
+            if case let .onboardingOutcome(_, practiced, mic, ax, model, _, _) = event {
                 return (practiced, mic, ax, model)
             }
             return nil
@@ -307,17 +310,6 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
     }
 
     // MARK: - Practice display state
-
-    func testOnboardingPracticeLevelsFollowIndicatorState() {
-        let appState = makeTestAppState()
-
-        let idleLevels = appState.onboardingPracticeLevels
-        XCTAssertEqual(idleLevels, Array(repeating: Float(0.08), count: idleLevels.count))
-
-        let levels = Array(repeating: Float(0.6), count: AudioLevelMeter.bandCount)
-        appState.floatingIndicatorState = .listening(levels: levels, source: .manual)
-        XCTAssertEqual(appState.onboardingPracticeLevels, levels)
-    }
 
     func testOnboardingPracticeActivityFlags() {
         let appState = makeTestAppState()

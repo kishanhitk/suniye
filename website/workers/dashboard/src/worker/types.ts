@@ -61,6 +61,44 @@ export interface BlockedPanels {
   modelLoad?: FilterDim;
   /** D1 install registry (installs tile, new-installs, fleet breakdowns). */
   installs?: FilterDim;
+  onboardingFunnel?: FilterDim;
+  systemModel?: FilterDim;
+  practice?: FilterDim;
+  /** onboarding_outcome: duration and how onboarding ended. */
+  onboardingOutcome?: FilterDim;
+  windowClosed?: FilterDim;
+  permissions?: FilterDim;
+  blockedReasons?: FilterDim;
+}
+
+/** One onboarding step: installs that reached it, and that as a share of Welcome. */
+export interface OnboardingFunnelStep {
+  step: string;
+  installs: number;
+  /** null when no install reached Welcome in the window (render "—"). */
+  pctOfWelcome: number | null;
+}
+
+export interface OnboardingStats {
+  /** welcome → speak → type_anywhere → more → completed, in that order. */
+  funnel: OnboardingFunnelStep[];
+  /** system_default_model outcomes: adopted / unavailable / failed. */
+  systemModelOutcomes: Breakdown[];
+  /** Share of fresh installs that started on the built-in model; null when none. */
+  systemModelAdoptionPct: number | null;
+  /** Why the built-in model was not adopted (non-adopted rows only). */
+  systemModelReasons: Breakdown[];
+  /** How long the built-in model check took (p50/p95). */
+  systemModelCheckMs: LatencySummary;
+  practiceOutcomes: Breakdown[];
+  /** Wall-clock onboarding duration (p50/p95) from onboarding_outcome. */
+  durationMs: LatencySummary;
+  /** finish_button vs window_closed (v1 onward). */
+  endedBy: Breakdown[];
+  /** The step people closed the window on before finishing. */
+  windowClosedAt: Breakdown[];
+  /** "kind · outcome" across every permission-ask surface. */
+  permissionAsks: Breakdown[];
 }
 
 export interface StatsResponse {
@@ -106,6 +144,9 @@ export interface StatsResponse {
   keepAliveEvictions: number;
   /** dictation_completed count in the window under the active filters. */
   segmentEventCount: number;
+  onboarding: OnboardingStats;
+  /** Why dictation starts were refused (wrong_phase, mic_denied, released_during_prompt, …). */
+  dictationBlockedReasons: Breakdown[];
   /**
    * Selectable values per dimension, each with a contextual facet count
    * (dictations under the other active filters). Ordered by count, so the most
