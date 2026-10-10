@@ -104,6 +104,26 @@ final class LlamaServerTests: XCTestCase {
         await server.stop()
     }
 
+    func testConcurrentColdStartsWhileAnOldProcessStopsShareOneStartup() async throws {
+        let tempDir = try makeTemporaryDirectory()
+        let logURL = tempDir.appendingPathComponent("starts.log")
+        let helperURL = try FakeLlamaServer.make(in: tempDir, logURL: logURL, terminationDelaySeconds: 0.5)
+        let first = makeLaunch(helperURL: helperURL, modelArgument: "/tmp/first.gguf")
+        let second = makeLaunch(helperURL: helperURL, modelArgument: "/tmp/second.gguf")
+        let server = LlamaServer()
+        _ = try await server.endpoint(for: first, startupTimeoutSeconds: 8, idleTimeoutSeconds: 0)
+
+        // Both callers reach the cold path while the first process takes 0.5 s to
+        // stop; the second must join the first's startup, not kill it.
+        async let firstEndpoint = server.endpoint(for: second, startupTimeoutSeconds: 8, idleTimeoutSeconds: 0)
+        async let secondEndpoint = server.endpoint(for: second, startupTimeoutSeconds: 8, idleTimeoutSeconds: 0)
+        let endpoints = try await (firstEndpoint, secondEndpoint)
+
+        XCTAssertEqual(endpoints.0, endpoints.1)
+        XCTAssertEqual(FakeLlamaServer.count(of: "start", at: logURL), 2)
+        await server.stop()
+    }
+
     func testStopCancelsSharedStartupWithoutRestarting() async throws {
         let tempDir = try makeTemporaryDirectory()
         let logURL = tempDir.appendingPathComponent("starts.log")

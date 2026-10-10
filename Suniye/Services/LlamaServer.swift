@@ -122,6 +122,16 @@ actor LlamaServer {
         }
 
         await stop()
+        // `stop()` suspends while an old process exits, and another caller can start
+        // or finish a startup meanwhile. Start over so this caller joins or replaces
+        // that startup instead of killing its process.
+        if startup != nil || process != nil {
+            return try await endpoint(
+                for: launch,
+                startupTimeoutSeconds: startupTimeoutSeconds,
+                idleTimeoutSeconds: idleTimeoutSeconds
+            )
+        }
 
         let startupID = UUID()
         let startupTask = Task { [weak self] () throws -> LlamaServerEndpoint in

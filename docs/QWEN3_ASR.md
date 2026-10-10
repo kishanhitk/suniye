@@ -36,7 +36,7 @@ Each dictation:
 4. Sends each chunk as one `/v1/chat/completions` request: an empty system turn, then a user turn whose only content is the chunk as a 16-bit WAV `input_audio` part. Temperature is 0, and the reply budget is 20 tokens per second of audio plus 32.
 5. Parses the reply `language <Name><asr_text><transcript>` the way the reference `qwen-asr` toolkit does, including its collapse of decoding loops.
 
-The model writes numbers as words ("four thirty p.m."). Magic Format can rewrite them. The model has no live preview.
+The model writes numbers as words ("four thirty p.m."). Magic Format can rewrite them. Live preview is off for this model.
 
 ## Tests
 
