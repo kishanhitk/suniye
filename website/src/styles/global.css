@@ -355,6 +355,37 @@ body {
     0 1px 16px rgba(15, 40, 95, 0.4);
 }
 
+/* Fine print on the painting: the install command and the requirements. The sky
+   behind them is a mid-tone. At 11–12px neither white nor dark letters read on a
+   mid-tone, so the ground is lifted instead of the letters outlined: navy ink on
+   a soft pool of light. The pool is faint on purpose: more light reads better
+   but shows as a white patch. The Download button stacks above the pool, so the
+   light gathers behind its glass. */
+.hero-fine {
+  isolation: isolate;
+  position: relative;
+  color: var(--color-ink);
+}
+
+.hero-fine::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: -1;
+  width: 720px;
+  height: 190px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 255, 255, 0.41),
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0)
+  );
+  filter: blur(10px);
+}
+
 
 /* ── Section atmosphere ────────────────────── */
 /* A wide, soft bloom sitting behind a section's heading — the light from the
@@ -389,7 +420,6 @@ body {
   position: relative;
   min-width: 0;
   max-width: 100%;
-  text-shadow: 0 1px 10px rgba(20, 50, 110, 0.45);
 }
 
 /* Parked outside the line so the command itself stays optically centred under
@@ -403,7 +433,7 @@ body {
   margin-left: 0.6rem;
   white-space: nowrap;
   opacity: 0;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(16, 40, 68, 0.55);
   transition: opacity 150ms var(--curve-out);
 }
 
@@ -423,13 +453,9 @@ body {
   opacity: 1;
 }
 
-.brew-line.copied {
-  color: #fff;
-}
-
 .brew-line.copied .brew-state {
   opacity: 1;
-  color: #fff;
+  color: inherit;
 }
 
 /* The word is swapped whole — appending a suffix to "copy" spells "copyed". */

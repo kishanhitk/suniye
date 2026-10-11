@@ -98,7 +98,9 @@ export const prerender = false;
           {HERO.lead}
         </p>
 
-        <div class="fade-in mt-7 flex justify-center">
+        <!-- Stacks over the fine print's pool of light (.hero-fine), which would
+             otherwise wash across the bottom of the button. -->
+        <div class="fade-in relative z-[1] mt-7 flex justify-center">
           <a
             href={DOWNLOAD_URL}
             data-track="download_click:dmg_hero"
@@ -111,21 +113,23 @@ export const prerender = false;
           </a>
         </div>
 
-        <button
-          type="button"
-          class="brew-line copy-btn fade-in mx-auto mt-5 flex max-w-full items-center gap-2 rounded-md px-2 py-1 font-mono text-[10.5px] text-white/85 transition-colors hover:text-white/95 sm:text-[12px]"
-          data-copy={BREW_INSTALL}
-          data-track="download_click:homebrew_hero"
-          aria-label="Copy the Homebrew install command"
-        >
-          <span aria-hidden="true">$</span>
-          {BREW_INSTALL}
-          <span class="brew-state" aria-hidden="true"></span>
-        </button>
+        <div class="hero-fine fade-in flex flex-col items-center">
+          <button
+            type="button"
+            class="brew-line copy-btn mt-5 flex max-w-full items-center gap-2 rounded-md px-2 py-1 font-mono text-[10.5px] sm:text-[12px]"
+            data-copy={BREW_INSTALL}
+            data-track="download_click:homebrew_hero"
+            aria-label="Copy the Homebrew install command"
+          >
+            <span aria-hidden="true">$</span>
+            {BREW_INSTALL}
+            <span class="brew-state" aria-hidden="true"></span>
+          </button>
 
-        <p class="on-art-muted fade-in mt-4 text-[11px]">
-          {HERO.requirements}
-        </p>
+          <p class="mt-4 text-[11px]">
+            {HERO.requirements}
+          </p>
+        </div>
       </div>
     </section>
 
