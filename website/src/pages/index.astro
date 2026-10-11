@@ -314,8 +314,10 @@ export const prerender = false;
       // No observer support — reveal everything rather than leave it hidden.
       revealEls.forEach((el) => el.classList.add("visible"));
     } else {
+      let reported = false;
       const observer = new IntersectionObserver(
         (entries) => {
+          reported = true;
           entries.forEach((entry) => {
             if (entry.isIntersecting) {
               entry.target.classList.add("visible");
@@ -329,9 +331,12 @@ export const prerender = false;
 
       // Backstop: if the observer has reported nothing after a second and a
       // half, show everything. A missing fade is invisible; missing content
-      // is the whole page.
+      // is the whole page. An observer reports every element once as soon as
+      // it starts observing, in view or not, so silence means it is broken.
+      // "Nothing revealed yet" is no such sign: the hero fills the first
+      // screen, so nothing below it is in view until the reader scrolls.
       setTimeout(() => {
-        if (!document.querySelector(".reveal.visible")) {
+        if (!reported) {
           revealEls.forEach((el) => el.classList.add("visible"));
         }
       }, 1500);
