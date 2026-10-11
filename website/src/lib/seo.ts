@@ -96,23 +96,6 @@ export function jsonLdString(schema: unknown): string {
   return JSON.stringify(schema).replace(/</g, "\\u003c");
 }
 
-export interface FaqItem {
-  q: string;
-  a: string;
-}
-
-export function faqPageSchema(faqs: readonly FaqItem[]) {
-  return {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: faqs.map((item) => ({
-      "@type": "Question",
-      name: item.q,
-      acceptedAnswer: { "@type": "Answer", text: item.a },
-    })),
-  };
-}
-
 export function blogPostingSchema(post: {
   title: string;
   description: string;

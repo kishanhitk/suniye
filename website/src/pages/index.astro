@@ -1,28 +1,26 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import CopyField from "../components/CopyField.astro";
 import Navbar from "../components/Navbar.astro";
 import Footer from "../components/Footer.astro";
-import { softwareApplicationSchema, faqPageSchema, jsonLdString } from "../lib/seo";
-import { BREW_INSTALL, DOWNLOAD_URL, GITHUB_URL } from "../lib/site";
+import { softwareApplicationSchema, jsonLdString } from "../lib/seo";
+import { BREW_INSTALL, DOWNLOAD_URL } from "../lib/site";
 import {
   HERO,
-  CLOUD_PATH,
-  LOCAL_PATH,
-  ARGUMENT,
-  INTERFACE,
-  MODELS,
-  MODELS_SECTION,
-  CLEANUPS,
-  MAGIC_FORMAT,
-  TONES,
-  SURFACES,
-  WHERE_IT_WORKS,
-  PROOF_POINTS,
-  INSTALL,
-  FAQS,
+  PRICES,
+  PLAN_PRICES,
+  PRICE_YEARS,
+  planCost,
+  formatDollars,
+  costPeriod,
+  yearsLabel,
+  CLAIMS,
+  SWITCHING,
+  HABITS,
   CLOSING,
 } from "../lib/content/home";
+
+// The bars share one scale: the most expensive plan fills the track.
+const priciest = Math.max(...PLAN_PRICES.map((plan) => plan.monthly));
 
 // Rendered on demand so the middleware can answer `Accept: text/markdown`
 // with the page's Markdown variant; a prerendered page never reaches it.
@@ -38,12 +36,6 @@ export const prerender = false;
     is:inline
     type="application/ld+json"
     set:html={jsonLdString(softwareApplicationSchema())}
-  />
-  <script
-    slot="head"
-    is:inline
-    type="application/ld+json"
-    set:html={jsonLdString(faqPageSchema(FAQS))}
   />
   <!-- Preload the same candidate set the <picture> will resolve, so the
        preloader fetches the tier this viewport actually needs rather than a
@@ -106,7 +98,9 @@ export const prerender = false;
           {HERO.lead}
         </p>
 
-        <div class="fade-in mt-7 flex justify-center">
+        <!-- Stacks over the fine print's pool of light (.hero-fine), which would
+             otherwise wash across the bottom of the button. -->
+        <div class="fade-in relative z-[1] mt-7 flex justify-center">
           <a
             href={DOWNLOAD_URL}
             data-track="download_click:dmg_hero"
@@ -119,395 +113,140 @@ export const prerender = false;
           </a>
         </div>
 
-        <button
-          type="button"
-          class="brew-line copy-btn fade-in mx-auto mt-5 flex max-w-full items-center gap-2 rounded-md px-2 py-1 font-mono text-[10.5px] text-white/85 transition-colors hover:text-white/95 sm:text-[12px]"
-          data-copy={BREW_INSTALL}
-          data-track="download_click:homebrew_hero"
-          aria-label="Copy the Homebrew install command"
+        <div class="hero-fine fade-in flex flex-col items-center">
+          <button
+            type="button"
+            class="brew-line copy-btn mt-5 flex max-w-full items-center gap-2 rounded-md px-2 py-1 font-mono text-[10.5px] sm:text-[12px]"
+            data-copy={BREW_INSTALL}
+            data-track="download_click:homebrew_hero"
+            aria-label="Copy the Homebrew install command"
+          >
+            <span aria-hidden="true">$</span>
+            {BREW_INSTALL}
+            <span class="brew-state" aria-hidden="true"></span>
+          </button>
+
+          <p class="mt-4 text-[11px]">
+            {HERO.requirements}
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── The bill ─────────────────────────── -->
+    <!-- The page's thesis: what the alternatives cost in money, and that they
+         cost your voice too. The chart is the one place other apps are named,
+         and every figure in it is sourced on the line beneath it. -->
+    <section class="px-6 pt-24 pb-20 md:pt-32 md:pb-28">
+      <div class="mx-auto flex max-w-[62.5rem] flex-col gap-14">
+        <div class="reveal flex flex-col items-center gap-5 text-center">
+          <h2 class="font-display text-[clamp(2.25rem,5vw,3.5rem)] font-medium leading-[1.06] tracking-[-0.02em] text-balance">
+            {PRICES.headline}
+          </h2>
+          <p class="max-w-[34em] text-lg leading-relaxed text-muted text-pretty">{PRICES.lead}</p>
+        </div>
+
+        <div
+          class="reveal flex flex-col gap-8 rounded-[28px] border border-border bg-surface p-6 shadow-[0_30px_70px_-40px_rgba(18,35,61,0.35)] sm:p-10"
+          data-cost-chart
         >
-          <span aria-hidden="true">$</span>
-          {BREW_INSTALL}
-          <span class="brew-state" aria-hidden="true"></span>
-        </button>
-
-        <p class="on-art-muted fade-in mt-4 text-[11px]">
-          {HERO.requirements}
-        </p>
-      </div>
-    </section>
-
-    <!-- ── The argument ─────────────────────── -->
-    <!-- The page's thesis, and the only place set at lead size. The two paths are
-         a real sequence, so they are numbered; the cloud column is deliberately
-         the longer one, and the layout lets it read longer rather than squaring
-         both columns into a symmetric pair. -->
-    <section class="band relative overflow-hidden">
-      <div class="bloom left-[6rem] top-[-8rem] h-[26rem] w-[42rem]" aria-hidden="true"></div>
-      <div class="band-inner relative z-10">
-        <p class="rail reveal">The argument</p>
-        <div>
-          <h2 class="t-lead reveal">{ARGUMENT.headline}</h2>
-          <p class="t-sub reveal">{ARGUMENT.lead}</p>
-
-          <div class="mt-14 grid gap-x-10 gap-y-10 md:grid-cols-[0.85fr_1fr]">
-            <div class="reveal">
-              <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-muted/60">
-                Cloud dictation
-              </p>
-              <ol class="mt-5 space-y-3.5">
-                {CLOUD_PATH.map((step, i) => (
-                  <li class="flex items-baseline gap-3 text-[15px] text-muted">
-                    <span class="font-mono text-[10px] tabular-nums text-muted/40">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    {step}
-                  </li>
-                ))}
-              </ol>
-              <p class="mt-6 max-w-[34ch] text-sm leading-relaxed text-muted/75">
-                {ARGUMENT.cloudNote}
-              </p>
-            </div>
-
-            <div class="reveal" style="transition-delay: 0.08s">
-              <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
-                Suniye
-              </p>
-              <ol class="mt-5 space-y-3.5">
-                {LOCAL_PATH.map((step, i) => (
-                  <li class="flex items-baseline gap-3 text-[15px] text-ink">
-                    <span class="font-mono text-[10px] tabular-nums text-accent/50">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    {step}
-                  </li>
-                ))}
-              </ol>
-              <p class="mt-3 max-w-[34ch] text-sm leading-relaxed text-muted">
-                {ARGUMENT.localNote}
-              </p>
-
-              <!-- The page's one warm mark: the measured number, lit like the dawn
-                   edge of the painting above it. -->
-              <div class="mt-8 border-t border-border pt-6">
-                <p class="mark font-display text-[3.25rem] leading-none tracking-tight">
-                  177<span class="ml-1 text-2xl text-muted">ms</span>
-                </p>
-                <p class="mt-3 max-w-[36ch] text-sm leading-relaxed text-muted">
-                  {ARGUMENT.latencyNote}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Demo ─────────────────────────────── -->
-    <!-- Click-to-play with sound: the narration is the point, and browsers block
-         autoplay-with-audio, so we lead with a poster and a play affordance. -->
-    <section class="band">
-      <div class="band-inner">
-        <p class="rail reveal">The whole interface</p>
-        <div>
-          <h2 class="t-head reveal">{INTERFACE.headline}</h2>
-          <p class="t-sub reveal">{INTERFACE.lead}</p>
-
-        <figure class="reveal mt-10" style="transition-delay: 0.1s">
-          <div class="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-float)]">
-            <div class="flex items-center gap-1.5 border-b border-border/70 bg-surface/70 px-4 py-3">
-              <span class="h-2.5 w-2.5 rounded-full bg-border"></span>
-              <span class="h-2.5 w-2.5 rounded-full bg-border"></span>
-              <span class="h-2.5 w-2.5 rounded-full bg-border"></span>
-              <span class="ml-2.5 flex items-center gap-1.5 font-mono text-[11px] tracking-tight text-muted/70">
-                <img src="/suniye-icon.png" alt="" class="h-3.5 w-3.5 rounded-[3px]" />
-                Suniye
-              </span>
-            </div>
-
-            <div class="relative bg-ink">
-              <video
-                id="demo-video"
-                class="block w-full"
-                poster="/demo-poster.jpg"
-                preload="metadata"
-                playsinline
-                data-track-video
-              >
-                <source src="/demo.mp4" type="video/mp4" />
-                Your browser can't play this video.
-                <a href="/demo.mp4" class="underline">Download the demo</a> instead.
-              </video>
-
-              <!-- Live stopwatch, synced to the real playback clock -->
-              <div
-                id="demo-timer"
-                class="pointer-events-none absolute right-3 top-3 z-20 rounded-md bg-ink/70 px-2.5 py-1 font-mono text-xs tabular-nums tracking-tight text-white backdrop-blur-sm"
-                aria-hidden="true"
-              >
-                00:00.000
-              </div>
-
-              <button
-                id="demo-play"
-                type="button"
-                class="demo-play group absolute inset-0 flex items-center justify-center bg-ink/25 transition-opacity duration-300"
-                aria-label="Play the demo with sound"
-              >
-                <span
-                  class="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-accent text-white shadow-xl ring-1 ring-white/10 transition-transform duration-150 [transition-timing-function:var(--curve-out)] group-hover:scale-105 group-active:scale-95 md:h-[88px] md:w-[88px]"
+          <div class="flex flex-wrap items-center justify-between gap-5">
+            <h3 class="text-[22px] font-medium">
+              {PRICES.chartTitle}{" "}<span aria-live="polite" data-cost-period>{costPeriod(PRICE_YEARS[0])}</span>
+            </h3>
+            <!-- Hidden until the script runs: without it the chart shows one year
+                 and a switch that does nothing would only mislead. -->
+            <div role="group" aria-label="Period" class="inline-flex gap-1 rounded-full bg-[#eef3f9] p-1" data-cost-switch hidden>
+              {PRICE_YEARS.map((years, i) => (
+                <button
+                  type="button"
+                  class="btn-press rounded-full px-[18px] py-[9px] text-sm text-muted aria-pressed:bg-ink aria-pressed:text-white"
+                  aria-pressed={i === 0 ? "true" : "false"}
+                  data-years={years}
                 >
-                  <svg class="h-7 w-7 translate-x-[2px] md:h-9 md:w-9" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M6 4.5l13 7.5-13 7.5z" />
-                  </svg>
-                </span>
-              </button>
+                  {yearsLabel(years)}
+                </button>
+              ))}
             </div>
           </div>
 
-        </figure>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Cleanup, shown ───────────────────── -->
-    <!-- Every competitor leads with a before/after because it is the only way to
-         make "polished text" mean anything. Ours uses the eval suite so the
-         right-hand column is behaviour we actually test for. -->
-    <!-- Set as an actual transcript: the spoken line in mono at transcript grey,
-         the written line directly beneath it in reading type. Stacking them
-         vertically shows the transformation as one motion down the page; two
-         side-by-side boxes made it a comparison of two separate things. -->
-    <section class="band relative overflow-hidden">
-      <div class="bloom left-[-10rem] top-[4rem] h-[24rem] w-[34rem]" aria-hidden="true"></div>
-      <div class="band-inner relative z-10">
-        <p class="rail reveal">Magic Format</p>
-        <div>
-          <h2 class="t-head reveal">{MAGIC_FORMAT.headline}</h2>
-          <p class="t-sub reveal">{MAGIC_FORMAT.lead}</p>
-
-          <div class="mt-12 divide-y divide-border">
-            {CLEANUPS.map((c, i) => (
-              <div class="reveal py-8 first:pt-0">
-                <p class="font-mono text-[13px] leading-relaxed text-muted/70">
-                  {c.said}
-                </p>
-                <div class="mt-4 flex gap-4">
-                  <span class="mt-2 h-px w-8 shrink-0 bg-accent/40" aria-hidden="true"></span>
-                  <div>
-                    <p class="whitespace-pre-line text-[17px] leading-relaxed text-ink">
-                      {c.wrote}
-                    </p>
-                    <p class="mt-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted/50">
-                      {c.label}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Anywhere, in the right register ──── -->
-    <section class="band relative overflow-hidden">
-      <div class="bloom right-[-10rem] top-[6rem] h-[22rem] w-[32rem]" aria-hidden="true"></div>
-      <div class="band-inner relative z-10">
-        <p class="rail reveal">Where it works</p>
-        <div>
-          <h2 class="t-head reveal">{WHERE_IT_WORKS.headline}</h2>
-          <p class="t-sub reveal">{WHERE_IT_WORKS.lead}</p>
-
-        <div class="reveal mt-8 flex flex-wrap items-center gap-2.5" style="transition-delay: 0.08s">
-          <kbd class="rounded-lg border border-white/70 bg-white/70 px-3 py-1.5 font-mono text-xs text-ink shadow-[0_1px_2px_rgba(18,35,61,0.06)] backdrop-blur-sm">
-            fn
-          </kbd>
-          <span class="font-mono text-xs text-muted/60">hold &rarr;</span>
-          {SURFACES.map((app) => (
-            <span class="rounded-full border border-white/60 bg-white/50 px-3.5 py-1.5 text-[13px] text-muted backdrop-blur-sm">
-              {app}
-            </span>
-          ))}
-          <span class="text-[13px] text-muted/60">&hellip; and anywhere else you type</span>
-        </div>
-
-        <div class="reveal mt-20" style="transition-delay: 0.12s">
-          <h3 class="t-head">{WHERE_IT_WORKS.tonesHeadline}</h3>
-          <p class="t-sub">{WHERE_IT_WORKS.tonesLead}</p>
-        </div>
-
-        <div class="mt-10 divide-y divide-border border-t border-border">
-          {TONES.map((t, i) => (
-            <div
-              class="reveal grid gap-x-8 gap-y-3 py-7 md:grid-cols-[7rem_1fr]"
-             
-            >
-              <div>
-                <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">{t.app}</p>
-                <p class="mt-2 text-[13px] leading-relaxed text-muted/75">{t.prompt}</p>
-              </div>
-              <p class="whitespace-pre-line text-[15px] leading-relaxed text-ink">{t.out}</p>
-            </div>
-          ))}
-        </div>
-
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Models ───────────────────────────── -->
-    <!-- The choice is the selling point; the catalogue is reference, so it stays
-         folded until someone actually wants to compare sizes. -->
-    <section id="models" class="band scroll-mt-20 bg-[linear-gradient(180deg,rgba(43,108,196,0.05),transparent)]">
-      <div class="band-inner">
-        <p class="rail reveal">Speech models</p>
-        <div>
-          <h2 class="t-head reveal">{MODELS_SECTION.headline}</h2>
-          <p class="t-sub reveal">{MODELS_SECTION.lead}</p>
-
-          <ul class="reveal mt-10 divide-y divide-border border-t border-border" style="transition-delay: 0.08s">
-            {[MODELS[0], MODELS[1], MODELS[7]].map((m) => (
-              <li class="grid gap-x-6 gap-y-1 py-4 md:grid-cols-[13rem_1fr_5rem]">
-                <span class="flex items-center gap-2 text-[15px] tracking-tight text-ink">
-                  {m.name}
-                  {m.tag && <span class="pill pill-accent">{m.tag}</span>}
+          <ul class="flex flex-col gap-[22px]">
+            {PLAN_PRICES.map((plan) => (
+              <li class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-2 sm:grid-cols-[11.5rem_minmax(0,1fr)_5.5rem]">
+                <span class="text-[15px]">{plan.app}</span>
+                <span
+                  class="order-last col-span-2 block h-[18px] rounded-full bg-[#c9d6e6] sm:order-none sm:col-span-1"
+                  style={`width: ${(plan.monthly / priciest) * 100}%`}
+                  aria-hidden="true"
+                ></span>
+                <span class="text-right font-mono text-base tabular-nums" data-monthly={plan.monthly}>
+                  {formatDollars(planCost(plan, PRICE_YEARS[0]))}
                 </span>
-                <span class="text-sm text-muted/80">{m.langs}</span>
-                <span class="font-mono text-xs text-muted/60 md:text-right">{m.size}</span>
               </li>
             ))}
-          </ul>
-
-        <details class="reveal group mt-8" style="transition-delay: 0.1s" data-track-open="models_list">
-          <summary class="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full border border-border bg-white px-5 py-2.5 font-mono text-[11px] tracking-wide text-muted transition-colors [&::-webkit-details-marker]:hidden hover:text-ink">
-            <span class="group-open:hidden">And nine more</span>
-            <span class="hidden group-open:inline">Hide the list</span>
-            <svg class="h-3.5 w-3.5 transition-transform duration-200 [transition-timing-function:var(--curve-out)] group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </summary>
-
-          <ul class="mt-8 divide-y divide-border border-t border-border">
-            {MODELS.filter((_, i) => ![0, 1, 7].includes(i)).map((m) => (
-              <li class="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-3.5">
-                <span class="text-[15px] tracking-tight text-ink">{m.name}</span>
-                {m.tag && <span class="pill pill-accent">{m.tag}</span>}
-                <span class="ml-auto font-mono text-xs text-muted/70">{m.size}</span>
-                <span class="w-full text-sm text-muted/80">{m.langs}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── Proof ────────────────────────────── -->
-    <!-- Deliberately not stars or download counts: at this stage those numbers
-         argue against the app. Shipping cadence is the honest signal that an
-         alpha is alive, and it is checkable on the releases page. -->
-    <section class="border-y border-border bg-white/50 py-7">
-      <div class="mx-auto max-w-6xl px-6">
-        <!-- One column on phones: the dot separators only make sense while the
-             items share a line, and wrapping strands them at the ends of rows. -->
-        <ul class="reveal flex flex-col items-center gap-y-2.5 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-muted/70 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-8 sm:gap-y-3">
-          <li>{PROOF_POINTS[0]}</li>
-          <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
-          <li>
-            <a
-              href={`${GITHUB_URL}/releases`}
-              target="_blank"
-              rel="noopener"
-              class="transition-colors hover:text-ink"
-            >
-              {PROOF_POINTS[1]}
-            </a>
-          </li>
-          <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
-          <li>{PROOF_POINTS[2]}</li>
-          <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
-          <li>{PROOF_POINTS[3]}</li>
-          <li aria-hidden="true" class="hidden text-muted/25 sm:block">&middot;</li>
-          <li>{PROOF_POINTS[4]}</li>
-        </ul>
-      </div>
-    </section>
-
-    <!-- ── Install ──────────────────────────── -->
-    <section id="install" class="band scroll-mt-20 border-t-0">
-      <div class="band-inner">
-        <p class="rail reveal">Install</p>
-        <div class="reveal max-w-xl">
-          <h2 class="t-head">{INSTALL.headline}</h2>
-
-          <div class="mt-8">
-            <div class="mb-2 flex items-center gap-2">
-              <span class="font-mono text-xs uppercase tracking-widest text-muted">
-                Homebrew
+            <li class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-2 sm:grid-cols-[11.5rem_minmax(0,1fr)_5.5rem]">
+              <span class="flex items-center gap-2 text-[15px] font-semibold">
+                <img src="/suniye-icon.png" alt="" class="h-5 w-5 rounded-[4px]" />
+                Suniye
               </span>
-              <span class="pill pill-accent">Recommended</span>
-            </div>
-            <CopyField
-              value={BREW_INSTALL}
-              label="Copy install command"
-              dataTrack="download_click:homebrew"
-            />
-            <p class="mt-3 text-sm leading-relaxed text-muted/80">
-              {INSTALL.brewNote}
-            </p>
-          </div>
+              <span class="order-last col-span-2 block h-[18px] w-[18px] rounded-full bg-accent sm:order-none sm:col-span-1" aria-hidden="true"></span>
+              <span class="text-right font-mono text-base tabular-nums text-accent">{formatDollars(0)}</span>
+            </li>
+          </ul>
 
-          <div class="mt-10 flex flex-wrap items-center gap-4">
-            <a
-              href={DOWNLOAD_URL}
-              data-track="download_click:dmg_install"
-              class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 text-sm text-ink hover:bg-surface"
-            >
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
-              </svg>
-              Download .dmg
-            </a>
-            <a
-              href={`${GITHUB_URL}#build-from-source`}
-              target="_blank"
-              rel="noopener"
-              class="btn-press inline-flex items-center gap-2 rounded-lg border border-border px-7 py-3.5 text-sm text-ink hover:bg-surface"
-            >
-              Build from source
-            </a>
-          </div>
-
-          <p class="mt-8 text-sm leading-relaxed text-muted/80">
-            {INSTALL.requirements}
-          </p>
-
-          <p class="mt-6">
-            <span class="pill pill-accent">{INSTALL.status}</span>
-          </p>
+          <p class="text-xs leading-relaxed text-muted">{PRICES.source}</p>
         </div>
       </div>
     </section>
 
-    <!-- ── FAQ ──────────────────────────────── -->
-    <section id="faq" class="band scroll-mt-20 bg-[linear-gradient(180deg,transparent,rgba(43,108,196,0.05))]">
-      <div class="band-inner">
-        <p class="rail reveal">Questions</p>
-        <div>
-          <div class="reveal divide-y divide-border border-y border-border" style="transition-delay: 0.1s">
-            {FAQS.map((item) => (
-              <details class="faq-item group" data-track-open={`faq_${item.q.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40)}`}>
-                <summary class="flex items-center justify-between gap-4 py-5">
-                  <span class="text-base tracking-tight text-ink">{item.q}</span>
-                  <span class="faq-sign shrink-0 text-xl leading-none text-accent">+</span>
-                </summary>
-                <p class="max-w-[62ch] pb-5 text-[15px] leading-relaxed text-muted">{item.a}</p>
-              </details>
-            ))}
-          </div>
+    <!-- ── Three claims, each with its proof ── -->
+    <section class="border-y border-border bg-surface px-6 py-24 md:py-28">
+      <div class="mx-auto grid max-w-6xl grid-cols-[repeat(auto-fit,minmax(min(20rem,100%),1fr))] gap-8">
+        {CLAIMS.map((claim) => (
+          <article class="reveal flex flex-col gap-[18px] py-2">
+            <p class:list={[
+              "font-mono text-xs uppercase tracking-[0.08em]",
+              claim.tone === "fast" ? "text-fast-strong" : "text-accent",
+            ]}>
+              {claim.label}
+            </p>
+            <p class:list={[
+              "font-display text-[52px] leading-none tracking-[-0.02em]",
+              claim.tone === "fast" && "text-fast",
+            ]}>
+              {claim.figure}
+            </p>
+            <p class="text-[15px]">{claim.caption}</p>
+            <p class="text-[15px] leading-relaxed text-muted">{claim.detail}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <!-- ── Switching, habit to feature ──────── -->
+    <section class="px-6 py-24 md:py-28">
+      <div class="mx-auto flex max-w-[62.5rem] flex-col gap-12">
+        <div class="reveal flex flex-col gap-3.5">
+          <h2 class="font-display text-[clamp(2rem,4vw,2.75rem)] font-medium leading-[1.1] tracking-[-0.015em]">
+            {SWITCHING.headline}
+          </h2>
+          <p class="max-w-[34em] text-[17px] leading-relaxed text-muted">{SWITCHING.lead}</p>
         </div>
+
+        <ul class="reveal border-t border-border">
+          {HABITS.map((h) => (
+            <li class="grid grid-cols-1 items-center gap-x-4 gap-y-2 border-b border-border py-[22px] sm:grid-cols-[minmax(0,1fr)_2.5rem_minmax(0,1fr)]">
+              <span class="font-display text-[22px]">{h.habit}</span>
+              <svg class="hidden text-accent sm:block" width="28" height="12" viewBox="0 0 28 12" fill="none" aria-hidden="true">
+                <path d="M1 6h24M20 1l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span class="flex flex-col gap-1">
+                <span class="text-base font-medium">{h.feature}</span>
+                <span class="text-sm text-muted">{h.detail}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
 
@@ -545,6 +284,8 @@ export const prerender = false;
 
   <!-- ── Behaviour ──────────────────────────── -->
   <script>
+    import { costPeriod, formatDollars } from "../lib/content/home";
+
     // Cross-fade the hero painting over its blurred placeholder once decoded.
     // complete === true covers the cached case, where load never fires.
     const heroArt = document.querySelector("[data-hero-art]");
@@ -577,8 +318,10 @@ export const prerender = false;
       // No observer support — reveal everything rather than leave it hidden.
       revealEls.forEach((el) => el.classList.add("visible"));
     } else {
+      let reported = false;
       const observer = new IntersectionObserver(
         (entries) => {
+          reported = true;
           entries.forEach((entry) => {
             if (entry.isIntersecting) {
               entry.target.classList.add("visible");
@@ -592,73 +335,41 @@ export const prerender = false;
 
       // Backstop: if the observer has reported nothing after a second and a
       // half, show everything. A missing fade is invisible; missing content
-      // is the whole page.
+      // is the whole page. An observer reports every element once as soon as
+      // it starts observing, in view or not, so silence means it is broken.
+      // "Nothing revealed yet" is no such sign: the hero fills the first
+      // screen, so nothing below it is in view until the reader scrolls.
       setTimeout(() => {
-        if (!document.querySelector(".reveal.visible")) {
+        if (!reported) {
           revealEls.forEach((el) => el.classList.add("visible"));
         }
       }, 1500);
     }
 
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    // Demo video: click the poster overlay to play with sound and native controls,
-    // and run a stopwatch read from the real playback clock. Under reduced motion
-    // we drop the 60fps millisecond repaint and tick on the video's own updates.
-    const demoVideo = document.getElementById("demo-video");
-    const demoPlay = document.getElementById("demo-play");
-    const demoTimer = document.getElementById("demo-timer");
-    if (demoVideo && demoPlay) {
-      const fmt = (t) => {
-        const base =
-          String(Math.floor(t / 60)).padStart(2, "0") + ":" +
-          String(Math.floor(t % 60)).padStart(2, "0");
-        if (reduceMotion) return base;
-        return base + "." + String(Math.floor((t % 1) * 1000)).padStart(3, "0");
-      };
-      const render = () => {
-        if (demoTimer) demoTimer.textContent = fmt(demoVideo.currentTime);
-      };
-      let raf = 0;
-      const tick = () => {
-        render();
-        raf = requestAnimationFrame(tick);
-      };
-      render();
-      demoVideo.addEventListener("play", () => {
-        if (reduceMotion) return;
-        cancelAnimationFrame(raf);
-        tick();
-      });
-      demoVideo.addEventListener("pause", () => {
-        cancelAnimationFrame(raf);
-        render();
-      });
-      demoVideo.addEventListener("seeked", render);
-      if (reduceMotion) demoVideo.addEventListener("timeupdate", render);
-      demoPlay.addEventListener("click", () => {
-        demoVideo.controls = true;
-        demoPlay.classList.add("is-playing");
-        demoVideo.play().catch(() => {
-          demoPlay.classList.remove("is-playing");
-          demoVideo.controls = false;
+    // The price chart's period switch rewrites the amounts in place. The bars
+    // keep their widths: every plan scales by the same number of years.
+    const chart = document.querySelector("[data-cost-chart]");
+    if (chart) {
+      const period = chart.querySelector("[data-cost-period]");
+      const amounts = chart.querySelectorAll<HTMLElement>("[data-monthly]");
+      const buttons = chart.querySelectorAll<HTMLButtonElement>("[data-years]");
+      const show = (years: number) => {
+        amounts.forEach((amount) => {
+          amount.textContent = formatDollars(Number(amount.dataset.monthly) * 12 * years);
         });
-      });
-      demoVideo.addEventListener("ended", () => {
-        cancelAnimationFrame(raf);
-        render();
-        demoVideo.controls = false;
-        demoPlay.classList.remove("is-playing");
-      });
+        if (period) period.textContent = costPeriod(years);
+        buttons.forEach((button) => {
+          button.setAttribute("aria-pressed", String(Number(button.dataset.years) === years));
+        });
+      };
+      buttons.forEach((button) => button.addEventListener("click", () => show(Number(button.dataset.years))));
+      chart.querySelector("[data-cost-switch]")?.removeAttribute("hidden");
     }
 
     // Copy the command associated with each copy button to the clipboard.
     document.querySelectorAll(".copy-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const text =
-          btn.getAttribute("data-copy") ||
-          btn.parentElement?.querySelector("code")?.textContent?.trim() ||
-          "";
+        const text = btn.getAttribute("data-copy");
         if (!text) return;
         try {
           await navigator.clipboard.writeText(text);

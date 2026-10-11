@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { authoredMarkdown } from "../src/lib/content/authored";
-import { FAQS, MODELS, homeMarkdown } from "../src/lib/content/home";
+import {
+  CLAIMS,
+  HABITS,
+  PRICE_YEARS,
+  costPeriod,
+  formatDollars,
+  homeMarkdown,
+  planCost,
+  yearsLabel,
+} from "../src/lib/content/home";
 import { COLLECTED, NEVER_COLLECTED, emphasisToHtml, privacyMarkdown } from "../src/lib/content/privacy";
 import { changelogMarkdown, parseFullChangelogUrl, parseReleaseItems } from "../src/lib/releases";
 import { organizationSchema, webSiteSchema } from "../src/lib/seo";
@@ -13,28 +22,54 @@ describe("homeMarkdown", () => {
     expect(md.startsWith("# Suniye — Private Dictation for macOS\n")).toBe(true);
     expect(md.match(/^# /gm)?.length).toBe(1);
     for (const heading of [
-      "## Every other dictation app sends your voice away.",
-      "## Hold a key. Talk. Let go.",
-      "## Speak like a person. Paste like an editor.",
-      "## One key, every text field.",
-      "## Twelve ways to listen.",
-      "## Two ways in.",
-      "## FAQ",
+      "## Voice typing that costs nothing. Not even your voice.",
+      "### What unlimited dictation costs",
+      "## Private, fast, free",
+      "## Switching costs you nothing you use.",
+      "## Your voice, your machine.",
     ]) {
       expect(md).toContain(heading);
     }
   });
 
-  test("lists every speech model and every FAQ", () => {
-    for (const m of MODELS) expect(md).toContain(`| ${m.name} |`);
-    for (const f of FAQS) {
-      expect(md).toContain(`### ${f.q}`);
-      expect(md).toContain(f.a);
-    }
+  test("prices every plan for each period the chart offers, and Suniye at zero", () => {
+    expect(md).toContain("| App | 1 year | 3 years | 5 years |");
+    expect(md).toContain("| Wispr Flow | $144 | $432 | $720 |");
+    expect(md).toContain("| Willow | $144 | $432 | $720 |");
+    expect(md).toContain("| Aqua Voice | $96 | $288 | $480 |");
+    expect(md).toContain("| Suniye | $0 | $0 | $0 |");
+  });
+
+  test("carries every claim and every habit", () => {
+    for (const c of CLAIMS) expect(md).toContain(`**${c.figure}** ${c.caption}`);
+    for (const h of HABITS) expect(md).toContain(`| ${h.habit} | ${h.feature} — ${h.detail} |`);
   });
 
   test("contains no HTML entities or tags", () => {
     expect(md).not.toMatch(/&[a-z]+;|<[a-z]+[ >]/i);
+  });
+});
+
+describe("price chart", () => {
+  test("costs a plan from its monthly price on annual billing", () => {
+    expect(planCost({ app: "A", monthly: 12 }, 1)).toBe(144);
+    expect(planCost({ app: "B", monthly: 8 }, 5)).toBe(480);
+  });
+
+  test("formats dollars with thousands separators", () => {
+    expect(formatDollars(0)).toBe("$0");
+    expect(formatDollars(1440)).toBe("$1,440");
+  });
+
+  test("names the period in the heading and on the switch", () => {
+    expect(costPeriod(1)).toBe("in a year");
+    expect(costPeriod(5)).toBe("over 5 years");
+    expect(yearsLabel(1)).toBe("1 year");
+    expect(yearsLabel(3)).toBe("3 years");
+  });
+
+  test("switches between 1, 3 and 5 years, starting at one", () => {
+    expect([...PRICE_YEARS]).toEqual([1, 3, 5]);
   });
 });
 
