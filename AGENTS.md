@@ -77,8 +77,8 @@ xcodebuild \
 - New code must ship with tests that keep the gate green.
 
 ## Targeted E2E scripts
-- LLM forced success/fallback and submit-command smoke tests run via launch args:
-  - `--e2e-llm-success`, `--e2e-llm-fallback`, `--e2e-submit-command`
+- LLM forced success/fallback smoke tests run via launch args:
+  - `--e2e-llm-success`, `--e2e-llm-fallback`
 - Scripts under `scripts/e2e_*.sh` expect app installed at:
   - `~/Applications/Suniye.app`
 

@@ -75,7 +75,6 @@
 		4A072429D520B1509AC68689 /* AppStateOnboardingFunnelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45B4345BE4906F835B2CB1DD /* AppStateOnboardingFunnelTests.swift */; };
 		4AF9B1202D7019824CA6D851 /* GeneralSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3161CA1497B7EEA0FB2CE36 /* GeneralSettingsStore.swift */; };
 		4B30AE36C13C0DA07F5B9BB0 /* EditModeServiceMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFA029A8D395DF106BEEB35E /* EditModeServiceMoreTests.swift */; };
-		4C5922B0B6EE913379AECED2 /* AppStateSubmitCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10EFB6CFB00782DD57172E26 /* AppStateSubmitCommandTests.swift */; };
 		4D8662CE6850AD46ECB306BA /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF483C4F8F43B591D1E13ABA /* AppState.swift */; };
 		4F37908DEC15B105CAD05C4F /* CoreAudioDeviceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74358CCAA04D28E170CC02C2 /* CoreAudioDeviceMonitor.swift */; };
 		50530ADD0EB72B0C65FDF940 /* ASRModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EEF5DAFB9957AB9ADBF7E3 /* ASRModelCatalog.swift */; };
@@ -260,7 +259,6 @@
 		0B9102217BDA1AFAF69837DE /* LLMSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMSettings.swift; sourceTree = "<group>"; };
 		0F2DDA03B5269D9475CA06C9 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		104370E76CFD4D8D685CEAC7 /* IssueReportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueReportService.swift; sourceTree = "<group>"; };
-		10EFB6CFB00782DD57172E26 /* AppStateSubmitCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateSubmitCommandTests.swift; sourceTree = "<group>"; };
 		11558F5387C6D3FFC7B1B354 /* TestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestDoubles.swift; sourceTree = "<group>"; };
 		1215194BCE451924E1C06FDD /* libonnxruntime.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libonnxruntime.dylib; path = Suniye/Frameworks/libonnxruntime.dylib; sourceTree = "<group>"; };
 		139684AE1E0F9DE6F60EBA10 /* EditModeServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditModeServiceTests.swift; sourceTree = "<group>"; };
@@ -569,7 +567,6 @@
 				B6A4D5D4BB6BF33D034DD09E /* AppStateOnboardingV1Tests.swift */,
 				7F99CBD1DBECD891AFEFBB26 /* AppStatePerAppPromptTests.swift */,
 				DDBA8DA30905F29C03B8A36D /* AppStateSettingsTests.swift */,
-				10EFB6CFB00782DD57172E26 /* AppStateSubmitCommandTests.swift */,
 				F198C419B5376572D7185A29 /* AppStateUpdateTests.swift */,
 				5F934A177DEC448B6268E7E5 /* AppVariantMoreTests.swift */,
 				C458ACBB3D8ABC559FB7C89C /* AppVersionMoreTests.swift */,
@@ -1075,7 +1072,6 @@
 				76534DE89766A93888FC488C /* AppStateOnboardingV1Tests.swift in Sources */,
 				E5DA6A27CD61997F29F1471B /* AppStatePerAppPromptTests.swift in Sources */,
 				33659F330869ED86EC4C95FD /* AppStateSettingsTests.swift in Sources */,
-				4C5922B0B6EE913379AECED2 /* AppStateSubmitCommandTests.swift in Sources */,
 				17F9EC88DB57EDE0C99E7A51 /* AppStateUpdateTests.swift in Sources */,
 				1B492E84F706C121CF6937B5 /* AppVariantMoreTests.swift in Sources */,
 				CF5F1EB9A9CE05B6132B7686 /* AppVersionMoreTests.swift in Sources */,
