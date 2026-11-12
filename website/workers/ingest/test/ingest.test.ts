@@ -352,6 +352,26 @@ describe("buildDataPoint slot registry", () => {
     expect(blocked.blobs[13]).toBe("released_during_prompt");
   });
 
+  test("feature-use fields map to blob15, and rows without them leave it empty", () => {
+    const standIn = buildDataPoint(
+      event("audio_backend_used", { backend: "voice_processing", fallback_occurred: false, rung: 0, input_stand_in: "bluetooth_default" }),
+      b({ device }), ""
+    );
+    expect(standIn.blobs[13]).toBe("voice_processing"); // blob14 backend unchanged
+    expect(standIn.blobs[14]).toBe("bluetooth_default");
+
+    const empty = buildDataPoint(event("dictation_empty", { empty_reason: "no_speech" }), b({ device }), "");
+    expect(empty.blobs[13]).toBe("arm64"); // blob14 keeps the device arch, as on older rows
+    expect(empty.blobs[14]).toBe("no_speech");
+
+    expect(buildDataPoint(event("raw_transcript", { action: "copied" }), b({ device }), "").blobs[14]).toBe("copied");
+    expect(buildDataPoint(event("app_launch", { setting_double_tap: "globe_shows_emoji" }), b({ device }), "").blobs[14]).toBe("globe_shows_emoji");
+
+    // Rows from app versions before these fields existed.
+    expect(buildDataPoint(event("dictation_empty"), b({ device }), "").blobs[14]).toBeNull();
+    expect(buildDataPoint(event("audio_backend_used", { backend: "voice_processing", fallback_occurred: false, rung: 0 }), b({ device }), "").blobs[14]).toBeNull();
+  });
+
   test("llm_generation maps prefill_ms, cached_tokens and cache_hit to shared slots", () => {
     const gen = buildDataPoint(
       event("llm_generation", {
