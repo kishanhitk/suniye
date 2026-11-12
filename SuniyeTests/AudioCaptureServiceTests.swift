@@ -173,6 +173,76 @@ final class AudioCaptureServiceTests: XCTestCase {
         await service.cancelCapture(sessionID: sessionID, reason: .noAudioArriving)
     }
 
+    func testStopKeepsRecordingUntilTheReleaseTailEnds() async throws {
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 1_600)
+        )
+        let tail = StubReleaseTail()
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10,
+            scheduleReleaseTail: tail.schedule
+        )
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+
+        let stop = Task { await service.stopCapture(sessionID: sessionID) }
+        await fulfillment(of: [tail.armed], timeout: 1)
+        XCTAssertEqual(factory.drivers.last?.stopCallCount, 0)
+        _ = write(Array(repeating: 0.3, count: 800), to: try XCTUnwrap(factory.rings.last))
+        tail.end()
+        let captured = await stop.value
+
+        XCTAssertEqual(captured.outcome, .complete)
+        XCTAssertEqual(captured.samples.count, 2_400)
+        XCTAssertEqual(captured.samples.last, 0.3)
+        XCTAssertEqual(factory.drivers.last?.stopCallCount, 1)
+    }
+
+    func testInterruptionDuringTheReleaseTailKeepsTheDictation() async throws {
+        let monitor = StubAudioDeviceMonitor()
+        let tail = StubReleaseTail()
+        let service = AudioCaptureService(
+            deviceMonitor: monitor,
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: StubAudioCaptureDriverFactory(
+                format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1),
+                samples: Array(repeating: 0.2, count: 1_600)
+            ),
+            firstFrameDeadlineSeconds: 10,
+            scheduleReleaseTail: tail.schedule
+        )
+        let interrupted = expectation(description: "no interrupted event")
+        interrupted.isInverted = true
+        service.onEvent = { event in
+            if case .interrupted = event {
+                interrupted.fulfill()
+            }
+        }
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+
+        let stop = Task { await service.stopCapture(sessionID: sessionID) }
+        await fulfillment(of: [tail.armed], timeout: 1)
+        monitor.emit(.selectedDeviceFormat)
+        let captured = await stop.value
+
+        XCTAssertEqual(captured.outcome, .complete)
+        XCTAssertEqual(captured.samples.count, 1_600)
+        await fulfillment(of: [interrupted], timeout: 0.1)
+    }
+
     func testSpuriousEngineConfigChangeForSameDeviceRestartsInsteadOfInterrupting() async throws {
         // Reproduces KIS-141: the standardEngine fallback emits one benign
         // AVAudioEngineConfigurationChange right after start. It must NOT surface
@@ -560,6 +630,21 @@ private final class StubAudioCaptureHardwareCatalog: AudioCaptureHardwareCatalog
     }
 }
 
+/// Holds the end of the release tail until the test calls `end()`.
+private final class StubReleaseTail {
+    let armed = XCTestExpectation(description: "release tail armed")
+    private var endOfTail: (() -> Void)?
+
+    func schedule(_ endOfTail: @escaping () -> Void) {
+        self.endOfTail = endOfTail
+        armed.fulfill()
+    }
+
+    func end() {
+        endOfTail?()
+    }
+}
+
 private final class StubAudioCaptureDriver: AudioCaptureDriver {
     let backend: AudioCaptureBackend
     let format: AudioCaptureFormat
@@ -581,6 +666,7 @@ private final class StubAudioCaptureDriverFactory: AudioCaptureDriverFactoryProt
     let failingBackends: [AudioCaptureBackend]
     private(set) var startedBackends: [AudioCaptureBackend] = []
     private(set) var drivers: [StubAudioCaptureDriver] = []
+    private(set) var rings: [OpaquePointer] = []
     private(set) var configurationChangeHandlers: [() -> Void] = []
     /// Called after each *successful* start with the cumulative count in `startedBackends`,
     /// letting tests await a restart deterministically instead of sleeping.
@@ -613,6 +699,7 @@ private final class StubAudioCaptureDriverFactory: AudioCaptureDriverFactoryProt
         }
         let driver = StubAudioCaptureDriver(backend: plan.backend, format: format)
         drivers.append(driver)
+        rings.append(ring)
         configurationChangeHandlers.append(onConfigurationChange)
         onStartDriver?(startedBackends.count)
         return AudioCaptureDriverStart(driver: driver, format: format)
