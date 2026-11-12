@@ -73,6 +73,18 @@ final class MagicFormatOutputPolicyMoreTests: XCTestCase {
         XCTAssertEqual(output, "The bakery sold out by noon.\n\nWe baked more bread.\n\nWe open earlier tomorrow.")
     }
 
+    func testPipelineKeepsLineBreaksWhenTheModelMergedADictatedParagraph() async throws {
+        let output = try await MagicFormatPipeline.polish(
+            text: "the bakery sold out by noon new paragraph we baked more bread new paragraph we open earlier tomorrow",
+            systemPrompt: "prompt",
+            keywords: []
+        ) { _ in
+            "The bakery sold out by noon. We baked more bread.\nWe open earlier tomorrow."
+        }
+
+        XCTAssertEqual(output, "The bakery sold out by noon. We baked more bread.\nWe open earlier tomorrow.")
+    }
+
     func testPipelineKeepsLineBreaksWhenTheDictationAlsoAsksForLines() async throws {
         let output = try await MagicFormatPipeline.polish(
             text: "hi grace thanks new line sam new paragraph p s call me",
