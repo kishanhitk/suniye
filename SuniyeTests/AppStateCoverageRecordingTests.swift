@@ -253,6 +253,27 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         XCTAssertEqual(appState.recentResults.first?.text, "hello there")
     }
 
+    func testDictationEndingInSendPastesEveryWordWithoutPressingEnter() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcription = StubTranscriptionService()
+        transcription.transcribeResult = .success("Tell me when you are ready to send.")
+        let insertion = SpyTextInsertionService()
+        let appState = readyAppState(
+            audioCapture: audioCapture,
+            transcriptionService: transcription,
+            textInsertionService: insertion
+        )
+        await startRecording(appState, audioCapture: audioCapture)
+
+        appState.stopRecordingFromUI()
+        await waitUntil { appState.phase == .ready }
+
+        XCTAssertEqual(insertion.insertedTexts, ["Tell me when you are ready to send."])
+        XCTAssertEqual(insertion.submitCallCount, 0)
+        XCTAssertEqual(appState.recentResults.first?.text, "Tell me when you are ready to send.")
+    }
+
     /// KIS-205: a paste into an app that publishes no focus information still
     /// delivers the text, but Return must not follow it — nothing knows where
     /// it would land.

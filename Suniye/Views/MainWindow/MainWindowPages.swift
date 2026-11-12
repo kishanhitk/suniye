@@ -308,7 +308,6 @@ struct GeneralPage: View {
         SettingsGroup(heading: "Dictation") {
             ToggleSettingRow(
                 title: "Press Enter after pasting",
-                info: "You can also say \"send\" or \"enter\" at the end of a dictation to trigger this once, without turning it on here.",
                 isOn: $appState.autoSubmitEnabled
             )
         }

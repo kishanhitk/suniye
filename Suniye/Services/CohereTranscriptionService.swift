@@ -6,6 +6,7 @@ import Foundation
 ///
 /// Batch only: the encoder takes up to 35 s of raw 16 kHz audio per call, so
 /// longer dictations are chunked (`CohereTranscribe.chunker`) and decoded in order.
+/// Chunks without speech are skipped: Cohere writes long, repeated text for one.
 actor CohereTranscriptionService: TranscriptionServiceProtocol {
     enum ServiceError: LocalizedError {
         case notLoaded
@@ -50,13 +51,16 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         let language = CohereTranscribe.resolveLanguage(hint: config.language)
         let promptIDs = try vocabulary.promptIDs(language: language)
 
+        let speechDetector = try SpeechDetector.bundled()
+
         let started = DispatchTime.now()
         let model = LoadedModel(
             encoder: try OrtSession(modelPath: encoderPath, intraOpThreads: config.numThreads),
             decoder: try OrtSession(modelPath: decoderPath, intraOpThreads: config.numThreads),
             vocabulary: vocabulary,
             promptIDs: promptIDs,
-            language: language
+            language: language,
+            speechDetector: speechDetector
         )
         let sessionsReady = DispatchTime.now()
 
@@ -95,13 +99,15 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         // Capture runs at the device's native rate (typically 48 kHz); the encoder's
         // baked-in frontend assumes 16 kHz.
         let audio = try AudioResampler.resample(samples, from: max(8_000, sampleRate), to: CohereTranscribe.sampleRate)
-        let chunks = CohereTranscribe.chunker.split(audio)
+        let allChunks = CohereTranscribe.chunker.split(audio)
+        let chunks = allChunks.filter { model.speechDetector.containsSpeech(Array(audio[$0])) }
         AppLogger.shared.log(
             .info,
             String(
-                format: "cohere transcribe start duration=%.2fs chunks=%d",
+                format: "cohere transcribe start duration=%.2fs chunks=%d skipped=%d",
                 Double(audio.count) / Double(CohereTranscribe.sampleRate),
-                chunks.count
+                chunks.count,
+                allChunks.count - chunks.count
             )
         )
 
@@ -143,6 +149,7 @@ actor CohereTranscriptionService: TranscriptionServiceProtocol {
         let vocabulary: CohereVocabulary
         let promptIDs: [Int64]
         let language: String
+        let speechDetector: SpeechDetecting
     }
 
     private static let inferenceQueue = DispatchQueue(label: "dev.suniye.cohere-inference", qos: .userInitiated)

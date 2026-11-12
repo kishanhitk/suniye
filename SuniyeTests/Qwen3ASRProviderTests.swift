@@ -54,7 +54,8 @@ final class Qwen3ASRProviderTests: XCTestCase {
             sherpaService: sherpa,
             appleService: nil,
             cohereService: StubTranscriptionService(),
-            qwen3Service: qwen3
+            qwen3Service: qwen3,
+            makeSpeechDetector: { StubSpeechDetector(result: true) }
         )
 
         try await router.loadModel(config: RecognizerConfig(modelID: .qwen3ASR17B, family: .qwen3ASR, tokensPath: "", numThreads: 1))
