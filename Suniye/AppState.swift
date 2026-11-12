@@ -3120,6 +3120,18 @@ final class AppState {
         return pasteboard.setString(text, forType: .string)
     }
 
+    func copyOriginalTranscript(_ text: String) -> Bool {
+        guard copyText(text) else {
+            return false
+        }
+        analytics.track(.rawTranscript(action: .copied))
+        return true
+    }
+
+    func originalTranscriptOpened() {
+        analytics.track(.rawTranscript(action: .opened))
+    }
+
     @discardableResult
     func copyLastTranscript() -> Bool {
         guard let text = lastTranscriptText else {
