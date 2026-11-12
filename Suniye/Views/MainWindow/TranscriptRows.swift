@@ -186,7 +186,7 @@ struct CompactTranscriptRow: View {
         guard onCopyOriginal(rawText) else {
             return
         }
-        AccessibilityNotification.Announcement("Copied").post()
+        AccessibilityNotification.Announcement("Copied original").post()
     }
 }
 
@@ -213,6 +213,7 @@ private struct OriginalTranscriptPopover: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicatorsFlash(onAppear: true)
             // A popover sizes to its content, and a bare ScrollView always
             // asks for the cap: a five-word original got a 240 pt box.
             .frame(maxHeight: 240)
@@ -220,8 +221,10 @@ private struct OriginalTranscriptPopover: View {
 
             HStack {
                 Spacer()
+                // Only the glyph confirms the copy: a "Copied" title is wider
+                // and would move the button under the pointer.
                 Button(action: copy) {
-                    Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
+                    Label("Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
                         .contentTransition(.symbolEffect(.replace))
                 }
             }
@@ -235,7 +238,7 @@ private struct OriginalTranscriptPopover: View {
             return
         }
         didCopy = true
-        AccessibilityNotification.Announcement("Copied").post()
+        AccessibilityNotification.Announcement("Copied original").post()
         Task {
             try? await Task.sleep(for: .seconds(1))
             didCopy = false

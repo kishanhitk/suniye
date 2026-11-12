@@ -3103,7 +3103,6 @@ final class AppState {
     /// has already run by the time `setString` can fail, so a caller that
     /// confirms unconditionally would promise a copy that left the clipboard
     /// empty.
-    @discardableResult
     func copyText(_ text: String) -> Bool {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
