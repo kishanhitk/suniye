@@ -24,7 +24,7 @@ Suniye releases are signed with an Apple Developer ID and notarized, so macOS op
 - If you let go of the key while macOS asks for Microphone access, Suniye does not start recording. The floating indicator shows `Hold again to dictate`. Hold the key again.
 
 ## Double-tap does not lock the recording with the Globe shortcut
-- If Keyboard settings say "Press 🌐 key to: Start Dictation", macOS starts its own Dictation when you press Globe twice. Suniye then turns double-tap off for Globe, so the two do not both record. Settings > General shows a notice.
+- With Globe as the shortcut, double-tap works only when Keyboard settings say "Press 🌐 key to: Do Nothing". Any other choice also runs on each Globe tap: Show Emoji & Symbols (the macOS default), Change Input Source, or Start Dictation, which records at the same time as Suniye. Settings > General shows a notice.
 - Open System Settings > Keyboard and set "Press 🌐 key to" to Do Nothing. Or choose a key-combo shortcut in Suniye.
 
 ## Esc did not cancel the recording
