@@ -594,13 +594,24 @@ final class AppState {
     /// change / TCC reset). Suniye is still listed in System Settings, so the
     /// drag overlay would mislead; the UI shows remove-and-re-add copy instead.
     private(set) var accessibilityGrantLikelyStale = false
+    /// `tccutil` could not remove the stale entry, so the user must do it by hand.
+    private(set) var accessibilityGrantResetFailed = false
 
     /// A stale entry stays switched on in System Settings while macOS ignores
     /// it, so toggling it is not reliable. Removing it drops the old code
-    /// requirement; adding it back records the current one.
+    /// requirement; adding it back records the current one. Grant does both
+    /// unless `tccutil` failed.
     var staleAccessibilityGrantInstruction: String {
+        guard accessibilityGrantResetFailed else {
+            return "macOS reset this permission after an update. Grant it again to paste into other apps."
+        }
         let name = AppIdentity.current.displayName
-        return "macOS reset this permission after an update. In the Accessibility list, select \(name), remove it with −, then add it back with +."
+        return "macOS reset this permission after an update. In the \(Self.accessibilityListName) list, select \(name), remove it with −, then add it back with +."
+    }
+
+    private static var accessibilityListName: String {
+        let renamed = OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0)
+        return ProcessInfo.processInfo.isOperatingSystemAtLeast(renamed) ? "Device Control and Data Access" : "Accessibility"
     }
 
     /// Per-run dedupe of onboarding_step emissions (relaunch resume re-fires
@@ -1701,6 +1712,9 @@ final class AppState {
     /// Same trust read, but macOS shows its "allow Accessibility" dialog when the
     /// process is not trusted.
     private let accessibilityTrustPrompter: () -> Bool
+    /// Removes this app's own Accessibility entry; true when `tccutil` succeeded.
+    private let accessibilityGrantReset: () async -> Bool
+    @ObservationIgnored private var isResettingAccessibilityGrant = false
     /// Injectable free-disk probe for the onboarding download preflight.
     private let availableDiskCapacityProvider: () async -> Int64?
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
@@ -1821,6 +1835,7 @@ final class AppState {
         accessibilityTrustPrompter: @escaping () -> Bool = {
             AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
         },
+        accessibilityGrantReset: @escaping () async -> Bool = { await AccessibilityGrantReset().run() },
         availableDiskCapacityProvider: (() async -> Int64?)? = nil,
         issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { defaultName in
             let panel = NSSavePanel()
@@ -1898,6 +1913,7 @@ final class AppState {
         self.micAccessRequester = micAccessRequester
         self.accessibilityTrustProvider = accessibilityTrustProvider
         self.accessibilityTrustPrompter = accessibilityTrustPrompter
+        self.accessibilityGrantReset = accessibilityGrantReset
         let modelsRootDirectory = try? modelManager.modelsRootDirectoryURL()
         self.availableDiskCapacityProvider = availableDiskCapacityProvider ?? {
             guard let modelsRootDirectory else {
@@ -2399,6 +2415,7 @@ final class AppState {
     private func updateLastKnownAccessibilityGranted() {
         if hasAccessibilityPermission {
             accessibilityGrantLikelyStale = false
+            accessibilityGrantResetFailed = false
             accessibilityAssistTimedOut = false
             if !lastKnownAccessibilityGranted {
                 lastKnownAccessibilityGranted = true
@@ -2418,11 +2435,11 @@ final class AppState {
 
         // Stale TCC entry (post-update): Suniye is already in the Accessibility
         // list, just untrusted. The drag overlay's "drag Suniye into the list"
-        // instruction would mislead; deep-link with remove-and-re-add copy instead.
+        // instruction is only right once that entry is gone.
         if lastKnownAccessibilityGranted, !hasAccessibilityPermission {
             accessibilityGrantLikelyStale = true
             onStateChange?()
-            openAccessibilityPrivacySettings()
+            resetStaleAccessibilityGrant(askSurface: askSurface)
             return
         }
 
@@ -2460,6 +2477,31 @@ final class AppState {
                 }
             }
         )
+    }
+
+    /// Removes the stale entry, then asks again as for a first grant. When
+    /// `tccutil` fails, the user gets the manual steps and the pane.
+    private func resetStaleAccessibilityGrant(askSurface: PermissionAskSurface) {
+        guard !isResettingAccessibilityGrant else {
+            return
+        }
+        isResettingAccessibilityGrant = true
+        Task {
+            let reset = await accessibilityGrantReset()
+            isResettingAccessibilityGrant = false
+            guard reset else {
+                accessibilityGrantResetFailed = true
+                onStateChange?()
+                openAccessibilityPrivacySettings()
+                return
+            }
+            accessibilityGrantResetFailed = false
+            accessibilityGrantLikelyStale = false
+            lastKnownAccessibilityGranted = false
+            persistGeneralSettings()
+            onStateChange?()
+            beginAccessibilityOnboarding(askSurface: askSurface)
+        }
     }
 
     func requestMicrophonePermission(askSurface: PermissionAskSurface = .settings) {

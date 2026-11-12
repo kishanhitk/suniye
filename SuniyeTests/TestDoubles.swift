@@ -845,6 +845,7 @@ func makeTestAppState(
     micAccessRequester: (() async -> Bool)? = nil,
     accessibilityTrustProvider: (() -> Bool)? = nil,
     accessibilityTrustPrompter: (() -> Bool)? = nil,
+    accessibilityGrantReset: (() async -> Bool)? = nil,
     availableDiskCapacityProvider: (() async -> Int64?)? = nil,
     issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
@@ -890,6 +891,9 @@ func makeTestAppState(
         accessibilityTrustProvider: accessibilityTrustProvider ?? { true },
         // Never the live API: a real call would raise the system dialog.
         accessibilityTrustPrompter: accessibilityTrustPrompter ?? accessibilityTrustProvider ?? { true },
+        // Never the live tccutil: the test host is the real app bundle, so it
+        // would reset the developer's own Accessibility grant.
+        accessibilityGrantReset: accessibilityGrantReset ?? { false },
         availableDiskCapacityProvider: availableDiskCapacityProvider ?? { nil },
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,

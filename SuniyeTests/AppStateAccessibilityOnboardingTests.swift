@@ -14,15 +14,28 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
         }
     }
 
+    private func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
     func testDragHelperEnabledPresentsOverlayAndDoesNotDeepLink() {
         let onboarding = SpyAccessibilityOnboarding()
         var openedURLs: [URL] = []
+        var resetCount = 0
         let appState = makeTestAppState(
             fileOpener: { url in
                 openedURLs.append(url)
                 return true
             },
-            accessibilityOnboarding: onboarding
+            accessibilityOnboarding: onboarding,
+            accessibilityGrantReset: {
+                resetCount += 1
+                return true
+            }
         )
         appState.accessibilityDragHelperEnabled = true
 
@@ -30,6 +43,7 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
 
         XCTAssertEqual(onboarding.presentCallCount, 1)
         XCTAssertTrue(openedURLs.isEmpty, "Should not deep-link to System Settings when the overlay is used")
+        XCTAssertEqual(resetCount, 0, "a grant that never worked has no stale entry to remove")
     }
 
     func testDragHelperDisabledFallsBackToDeepLink() {
@@ -122,10 +136,41 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
         XCTAssertFalse(appState.accessibilityAssistTimedOut)
     }
 
-    func testStaleTCCGrantSkipsOverlayAndDeepLinks() async {
+    func testStaleGrantResetsOwnEntryThenPresentsOverlay() async {
         // Previously granted (persisted), but AXIsProcessTrusted() now reads
-        // false (app update / TCC reset): the drag overlay would mislead — the
-        // app is already in the list, just toggled off.
+        // false after a signing change: Suniye's old entry is still listed.
+        let onboarding = SpyAccessibilityOnboarding()
+        let store = TestGeneralSettingsStore(value: GeneralSettings(lastKnownAccessibilityGranted: true))
+        var openedURLs: [URL] = []
+        var resetCount = 0
+        let appState = makeTestAppState(
+            generalSettingsStore: store,
+            fileOpener: { url in
+                openedURLs.append(url)
+                return true
+            },
+            accessibilityOnboarding: onboarding,
+            accessibilityTrustProvider: { false },
+            accessibilityGrantReset: {
+                resetCount += 1
+                return true
+            }
+        )
+        appState.accessibilityDragHelperEnabled = true
+        await appState.refreshPermissions()
+
+        appState.beginAccessibilityOnboarding()
+        appState.beginAccessibilityOnboarding()
+        await waitUntil { onboarding.presentCallCount > 0 }
+
+        XCTAssertEqual(resetCount, 1, "a double click must not start a second reset")
+        XCTAssertEqual(onboarding.presentCallCount, 1, "with the old entry gone, ask as for a first grant")
+        XCTAssertTrue(openedURLs.isEmpty)
+        XCTAssertFalse(appState.accessibilityGrantLikelyStale)
+        XCTAssertEqual(store.latest.lastKnownAccessibilityGranted, false)
+    }
+
+    func testStaleGrantResetFailureShowsManualStepsAndOpensSettings() async throws {
         let onboarding = SpyAccessibilityOnboarding()
         var openedURLs: [URL] = []
         let appState = makeTestAppState(
@@ -136,15 +181,21 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
                 openedURLs.append(url)
                 return true
             },
-            accessibilityOnboarding: onboarding
+            accessibilityOnboarding: onboarding,
+            accessibilityTrustProvider: { false },
+            accessibilityGrantReset: { false }
         )
         appState.accessibilityDragHelperEnabled = true
+        await appState.refreshPermissions()
 
         appState.beginAccessibilityOnboarding()
+        await waitUntil { !openedURLs.isEmpty }
 
-        XCTAssertEqual(onboarding.presentCallCount, 0, "stale grants must not present the drag overlay")
-        XCTAssertTrue(appState.accessibilityGrantLikelyStale)
+        XCTAssertEqual(onboarding.presentCallCount, 0, "the old entry is still listed, so the drag overlay would mislead")
         XCTAssertTrue(openedURLs.first?.absoluteString.contains("Privacy_Accessibility") == true)
+        XCTAssertTrue(appState.accessibilityGrantLikelyStale)
+        let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "accessibility-permission-missing" })
+        XCTAssertTrue(item.detail.contains("remove it with −, then add it back with +"))
     }
 
     func testPermissionRefreshFlagsStaleGrantBeforeAnyGrantClick() async throws {
@@ -162,7 +213,7 @@ final class AppStateAccessibilityOnboardingTests: XCTestCase {
         XCTAssertTrue(appState.accessibilityGrantLikelyStale)
         let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "accessibility-permission-missing" })
         XCTAssertEqual(item.detail, appState.staleAccessibilityGrantInstruction)
-        XCTAssertTrue(item.detail.contains("remove it with −, then add it back with +"))
+        XCTAssertFalse(item.detail.contains("remove it with −"), "Grant removes the entry; manual steps only after a failed reset")
         XCTAssertEqual(item.fixAction, .requestAccessibilityPermission)
     }
 

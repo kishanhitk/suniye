@@ -44,7 +44,7 @@ Grant and re-check:
 - Microphone access
 - Accessibility permissions
 
-If this happened right after the update to the first Developer ID release, grant the permissions once more. macOS ties the grants to the app's signing identity, and that identity changed once. If Accessibility shows Suniye as already on, select Suniye in the Accessibility list, remove it with the minus button, and add it again.
+If this happened right after the update to the first Developer ID release, grant the permissions once more. macOS ties the grants to the app's signing identity, and that identity changed once. If Accessibility shows Suniye as already on, click Grant in Suniye: it removes the old entry and asks again. If Suniye then shows the manual steps, select Suniye in the Accessibility list (Device Control and Data Access on macOS 27), remove it with the minus button, and add it again.
 
 ## Bluetooth audio drops to call quality while dictating
 - Bluetooth headphones switch to their call-quality profile whenever their microphone is used. This is a Bluetooth limitation, not an audio-quality setting Suniye can override.

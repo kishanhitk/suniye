@@ -427,7 +427,7 @@ struct GeneralSettings: Codable, Equatable {
     var firstLaunchRecorded: Bool = false
     /// Last observed Accessibility trust state. When this is true but
     /// AXIsProcessTrusted() is false, the grant went stale (app update / TCC
-    /// reset) and the drag overlay would mislead — we show toggle-off/on copy.
+    /// reset): Grant removes the stale entry before it asks again.
     var lastKnownAccessibilityGranted: Bool = false
     /// The post-onboarding Magic Format nudge card was dismissed; never re-nag.
     var magicFormatNudgeDismissed: Bool = false

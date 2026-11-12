@@ -53,7 +53,7 @@ Grant permissions when prompted:
 - Microphone
 - Accessibility (for text insertion)
 
-If you are updating from a release older than the first Developer ID release, grant these permissions one more time. If Accessibility shows Suniye as already on but dictation still asks for it, select Suniye in the Accessibility list, remove it with the minus button, and add it again. Later updates keep the grants.
+If you are updating from a release older than the first Developer ID release, grant these permissions one more time. If Accessibility shows Suniye as already on but dictation still asks for it, click Grant in Suniye: it removes the old entry and asks again. If that fails, Suniye shows the manual steps: select Suniye in the Accessibility list (Device Control and Data Access on macOS 27), remove it with the minus button, and add it again. Later updates keep the grants.
 
 The first-run onboarding has four screens:
 1. **Welcome** — click `Try your first dictation`. macOS asks for Microphone access here.
