@@ -104,7 +104,7 @@ final class AppStateHandsFreeTests: XCTestCase {
 
         await press(at: 0)
         await release(at: 120)
-        await waitUntil { appState.phase == .ready }
+        await waitUntil { appState.phase == .ready && audio.cancelCaptureCallCount == 1 }
 
         XCTAssertEqual(audio.cancelCaptureCallCount, 1)
         XCTAssertEqual(transcription.transcribeCallCount, 0)
@@ -119,7 +119,7 @@ final class AppStateHandsFreeTests: XCTestCase {
         await doubleTap()
 
         hotkey.onCancel?()
-        await waitUntil { appState.phase == .ready }
+        await waitUntil { appState.phase == .ready && audio.cancelCaptureCallCount == 1 }
 
         XCTAssertEqual(audio.cancelCaptureCallCount, 1)
         XCTAssertEqual(transcription.transcribeCallCount, 0)
