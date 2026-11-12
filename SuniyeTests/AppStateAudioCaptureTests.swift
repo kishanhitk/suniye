@@ -76,7 +76,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
             appState.availableInputDevices.first(where: { $0.id == "studio-mic" })?.availability,
             .notConnected
         )
-        XCTAssertEqual(appState.selectedInputDeviceName, "MacBook Pro Microphone")
+        XCTAssertEqual(appState.activeInputDeviceName, "MacBook Pro Microphone")
         XCTAssertEqual(
             appState.inputStandInNote,
             "Studio Microphone isn't connected, so Suniye uses MacBook Pro Microphone."
@@ -180,12 +180,12 @@ final class AppStateAudioCaptureTests: XCTestCase {
         audioCapture.route = makeRoute(id: "studio-mic", name: "Studio Microphone", transport: .usb, standIn: nil)
         audioCapture.onEvent?(.devicesChanged(audioCapture.availableDevices))
         await drainScheduledTasks()
-        XCTAssertEqual(appState.selectedInputDeviceName, "System Microphone")
+        XCTAssertEqual(appState.activeInputDeviceName, "System Microphone")
 
         audioCapture.onEvent?(.interrupted(sessionID: sessionID, reason: .inputMuted))
         await fulfillment(of: [canceled], timeout: 1)
         await drainScheduledTasks()
-        XCTAssertEqual(appState.selectedInputDeviceName, "Studio Microphone")
+        XCTAssertEqual(appState.activeInputDeviceName, "Studio Microphone")
     }
 
     func testRecommendedInputDeviceActionPersistsActualDeviceName() {

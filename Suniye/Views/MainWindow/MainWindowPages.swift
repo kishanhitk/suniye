@@ -141,11 +141,7 @@ struct GeneralPage: View {
         SettingsGroup(heading: "Microphone") {
             ControlSettingRow(
                 title: "Input device",
-                // Only while the picker says "System Default" and therefore hides
-                // which device that actually is, and no stand-in note names it.
-                info: appState.selectedInputDeviceID == nil && appState.inputStandInNote == nil
-                    ? appState.effectiveInputDeviceStatusText
-                    : nil
+                info: appState.inputDeviceInfoText
             ) {
                 NativePopupPicker(
                     items: inputDeviceChoices,
@@ -187,22 +183,36 @@ struct GeneralPage: View {
         return appState.audioRouteWarningText
     }
 
+    /// One icon column, so the note and the warning text start at the same x.
+    private func noticeIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .frame(width: 18)
+    }
+
     /// Not a warning: skipping a Bluetooth or switched-off microphone is the
     /// intended behavior, so the row only names the stand-in.
     private func inputStandInRow(_ note: String) -> some View {
-        Label(note, systemImage: "mic")
-            .font(AppTypography.subheadline)
-            .foregroundStyle(MainWindowPalette.secondaryText)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 12)
-            .padding(.horizontal, 4)
-            .transition(SettingsMotion.notice)
+        Label {
+            Text(note)
+        } icon: {
+            noticeIcon("mic")
+        }
+        .font(AppTypography.subheadline)
+        .foregroundStyle(MainWindowPalette.secondaryText)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, 12)
+        .padding(.horizontal, 4)
+        .transition(SettingsMotion.notice)
     }
 
     private func inputWarningRow(_ warning: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Label(warning, systemImage: "exclamationmark.triangle.fill")
+            Label {
+                Text(warning)
+            } icon: {
+                noticeIcon("exclamationmark.triangle.fill")
+            }
                 .font(AppTypography.subheadline)
                 .foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)

@@ -326,6 +326,9 @@ final class AppState {
     }
     private(set) var audioRouteSnapshot: AudioRouteSnapshot? {
         didSet {
+            if audioRouteSnapshot != nil {
+                audioRouteErrorText = nil
+            }
             if oldValue != audioRouteSnapshot {
                 onStateChange?()
             }
@@ -1434,7 +1437,7 @@ final class AppState {
 
     /// The microphone Suniye records from, which can be a stand-in for the
     /// saved one.
-    var selectedInputDeviceName: String {
+    var activeInputDeviceName: String {
         if let route = audioRouteSnapshot {
             return route.effectiveInputName
         }
@@ -1467,7 +1470,16 @@ final class AppState {
         case let .bluetoothDefault(name):
             skipped = "\(name) is Bluetooth"
         }
-        return "\(skipped), so Suniye uses \(route.effectiveInputName)."
+        return "\(skipped), so \(AppIdentity.current.displayName) uses \(route.effectiveInputName)."
+    }
+
+    /// The info tip of the input picker: only while it says "System Default" and
+    /// so hides the device, and no stand-in note already names it.
+    var inputDeviceInfoText: String? {
+        guard selectedInputDeviceID == nil, inputStandInNote == nil else {
+            return nil
+        }
+        return effectiveInputDeviceStatusText
     }
 
     var audioRouteWarningText: String? {
@@ -2567,7 +2579,6 @@ final class AppState {
                 preferredInputDeviceID: selectedInputDeviceID,
                 echoCancellationEnabled: echoCancellationEnabled
             )
-            audioRouteErrorText = nil
         } catch {
             audioRouteSnapshot = nil
             audioRouteErrorText = error.localizedDescription

@@ -57,7 +57,7 @@ enum AudioInputResolver {
             return AudioInputResolution(device: preferred, standIn: nil)
         }
 
-        let wired = usable.filter { canStandIn($0.transport) }
+        let wired = usable.filter(\.transport.isRecommendedPhysicalInput)
         guard let device = usable.first(where: { $0.isDefault && !$0.transport.isBluetooth })
             ?? wired.first(where: { $0.transport == .builtIn })
             ?? wired.first
@@ -89,18 +89,6 @@ enum AudioInputResolver {
             return .bluetoothDefault(name: device.name)
         case .available, .notConnected:
             return nil
-        }
-    }
-
-    /// A virtual or aggregate input can record silence while its app is idle,
-    /// and an iPhone's Continuity microphone prompts on the phone and can fail,
-    /// so neither replaces a skipped microphone.
-    private static func canStandIn(_ transport: AudioDeviceTransport) -> Bool {
-        switch transport {
-        case .builtIn, .usb, .other:
-            return true
-        case .bluetooth, .bluetoothLE, .continuity, .aggregate, .virtual:
-            return false
         }
     }
 }

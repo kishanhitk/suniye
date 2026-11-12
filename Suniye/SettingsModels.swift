@@ -75,8 +75,16 @@ enum AudioDeviceTransport: String, Equatable, Codable, Sendable {
         self == .bluetooth || self == .bluetoothLE
     }
 
+    /// A wired input Suniye may use in place of a skipped one. A virtual or
+    /// aggregate input can record silence while its app is idle, and an iPhone's
+    /// Continuity microphone prompts on the phone and can fail.
     var isRecommendedPhysicalInput: Bool {
-        self == .builtIn || self == .usb
+        switch self {
+        case .builtIn, .usb, .other:
+            return true
+        case .bluetooth, .bluetoothLE, .continuity, .aggregate, .virtual:
+            return false
+        }
     }
 }
 
