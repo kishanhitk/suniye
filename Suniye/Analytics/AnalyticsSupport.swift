@@ -94,6 +94,15 @@ enum AnalyticsMapping {
         }
     }
 
+    /// The reason only: the microphone name in the stand-in is never sent.
+    static func inputStandIn(_ standIn: AudioInputStandIn) -> InputStandInReason {
+        switch standIn {
+        case .preferredMissing: return .preferredMissing
+        case .offWithLidClosed: return .lidClosed
+        case .bluetoothDefault: return .bluetoothDefault
+        }
+    }
+
     static func interruptionReason(_ reason: AudioCaptureInterruption) -> AudioInterruptionReason {
         switch reason {
         case .deviceChanged: return .deviceChanged

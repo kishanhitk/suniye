@@ -4538,7 +4538,8 @@ final class AppState {
             // descent; `.bluetoothRoute` is an echo-cancellation degrade that
             // stays on the primary rung, so it must NOT count as a fallback.
             fallbackOccurred: route.fallbackReason == .backendStartFailed,
-            rung: route.backend == .standardEngine ? 1 : 0
+            rung: route.backend == .standardEngine ? 1 : 0,
+            inputStandIn: route.standIn.map(AnalyticsMapping.inputStandIn)
         )
     }
 

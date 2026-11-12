@@ -4,13 +4,35 @@ import XCTest
 
 @MainActor
 final class AppStateAudioCaptureTests: XCTestCase {
-    private func audioRoute(backend: AudioCaptureBackend, fallback: AudioCaptureFallbackReason?) -> AudioRouteSnapshot {
+    private func audioRoute(
+        backend: AudioCaptureBackend,
+        fallback: AudioCaptureFallbackReason?,
+        standIn: AudioInputStandIn? = nil
+    ) -> AudioRouteSnapshot {
         AudioRouteSnapshot(
             preferredInputDeviceID: nil, effectiveInputDeviceID: "d", effectiveInputName: "Mic",
             inputTransport: .builtIn, outputTransport: .builtIn, inputSampleRate: 16_000,
             inputChannelCount: 1, requestedEchoCancellation: false, effectiveEchoCancellation: false,
-            backend: backend, fallbackReason: fallback, standIn: nil
+            backend: backend, fallbackReason: fallback, standIn: standIn
         )
+    }
+
+    func testAudioBackendUsedEventNamesTheStandInReasonAndNotTheMicrophone() {
+        let standIns: [(AudioInputStandIn, String)] = [
+            (.preferredMissing, "preferred_missing"),
+            (.offWithLidClosed(name: "MacBook Pro Microphone"), "lid_closed"),
+            (.bluetoothDefault(name: "AirPods Pro"), "bluetooth_default"),
+        ]
+        for (standIn, label) in standIns {
+            let props = AppState.audioBackendUsedEvent(
+                for: audioRoute(backend: .voiceProcessingEngine, fallback: nil, standIn: standIn)
+            ).props
+            XCTAssertEqual(props["input_stand_in"], .label(label))
+            XCTAssertEqual(Set(props.keys), ["backend", "fallback_occurred", "rung", "input_stand_in"])
+        }
+
+        let chosen = AppState.audioBackendUsedEvent(for: audioRoute(backend: .voiceProcessingEngine, fallback: nil)).props
+        XCTAssertNil(chosen["input_stand_in"])
     }
 
     func testAudioBackendUsedEventDerivesRungAndFallback() {
