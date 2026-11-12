@@ -315,17 +315,10 @@ final class AppStateCoverageMiscTests: XCTestCase {
 
     // MARK: - Pasteboard
 
-    func testCopyRecentResultWritesTextToPasteboard() {
+    func testCopyTextWritesTextToPasteboard() {
         let appState = makeTestAppState()
-        let result = RecentResult(
-            id: UUID(),
-            text: "copied dictation",
-            createdAt: Date(),
-            durationSeconds: 2,
-            wasLLMPolished: false
-        )
 
-        appState.copyRecentResult(result)
+        XCTAssertTrue(appState.copyText("copied dictation"))
 
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "copied dictation")
     }
