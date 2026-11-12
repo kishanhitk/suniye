@@ -2113,7 +2113,8 @@ final class AppState {
             // One silent decode proves the engine runs, not just that it loads.
             _ = try await transcriptionService.transcribe(
                 samples: [Float](repeating: 0, count: 16_000),
-                sampleRate: 16_000
+                sampleRate: 16_000,
+                purpose: .probe
             )
         } catch {
             AppLogger.shared.log(.warning, "system default model decode failed id=\(modelID.rawValue) error=\(error.localizedDescription)")

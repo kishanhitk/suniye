@@ -460,6 +460,7 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     var loadCallCount = 0
     var transcribeCallCount = 0
     var transcribePurposes: [TranscriptionPurpose] = []
+    var lastTranscribeInput: (samples: [Float], sampleRate: Int)?
     var loadedConfigs: [RecognizerConfig] = []
     var onTranscribe: (() -> Void)?
     /// Awaited after the scripted result is claimed; receives the 1-based call number.
@@ -487,6 +488,7 @@ final class StubTranscriptionService: TranscriptionServiceProtocol {
     ) async throws -> String {
         transcribeCallCount += 1
         transcribePurposes.append(purpose)
+        lastTranscribeInput = (samples, sampleRate)
         let callNumber = transcribeCallCount
         progressToReport.forEach(onProgress)
         onTranscribe?()
@@ -995,5 +997,25 @@ final class LockedRecorder<Value>: @unchecked Sendable {
 
     func record(_ value: Value) {
         lock.withLock { storage.append(value) }
+    }
+}
+
+/// Answers each `containsSpeech` call from `answers` in turn, repeating the last
+/// one, and records the length of every clip it is asked about.
+final class StubSpeechDetector: SpeechDetecting {
+    private var answers: [Bool]
+    private(set) var clipLengths: [Int] = []
+
+    init(answers: [Bool]) {
+        self.answers = answers
+    }
+
+    convenience init(result: Bool) {
+        self.init(answers: [result])
+    }
+
+    func containsSpeech(_ samples: [Float]) -> Bool {
+        clipLengths.append(samples.count)
+        return answers.count > 1 ? answers.removeFirst() : answers[0]
     }
 }
