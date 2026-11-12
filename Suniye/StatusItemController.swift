@@ -227,8 +227,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 }
 
 extension StatusItemController: NSMenuItemValidation {
-    /// The menu auto-enables its items, so `isEnabled` is ignored; only the
-    /// restart item depends on state.
+    /// The menu auto-enables its items and ignores `isEnabled`, so the restart
+    /// item is greyed here while a dictation runs.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         menuItem.action != #selector(restartToUpdate) || appState.canRestartToUpdate
     }
