@@ -34,7 +34,8 @@ enum MagicFormatOutputSanitizer {
     }
 
     /// Blank lines only where the speaker said "new paragraph". Without a list cue,
-    /// each dictated paragraph is one line, so a preamble line still fails.
+    /// each dictated paragraph is one line, so a preamble line fails unless the model
+    /// also merged two paragraphs.
     private static func isValidMultilineOutput(_ output: String, for input: String) -> Bool {
         let paragraphBreaks = MagicFormatParagraphBreaks.dictatedCount(in: input)
         guard MagicFormatParagraphBreaks.blankLineGapCount(in: output) <= paragraphBreaks else {
@@ -64,13 +65,12 @@ enum MagicFormatPipeline {
         sanitize: (String) -> String = MagicFormatOutputSanitizer.sanitize,
         generate: (MagicFormatGenerationRequest) async throws -> String
     ) async throws -> String {
-        // Models keep a blank line they read more often than they write one for the
-        // spoken command, so the transcript carries its paragraph breaks in place.
-        let trimmedInput = MagicFormatParagraphBreaks.applied(to: text)
-        guard !trimmedInput.isEmpty else {
+        let transcript = MagicFormatParagraphBreaks.applied(to: text)
+        guard !transcript.isEmpty else {
             throw LLMPostProcessorError.emptyOutput
         }
-        let paragraphBreaks = MagicFormatParagraphBreaks.dictatedCount(in: trimmedInput)
+        let paragraphBreaks = MagicFormatParagraphBreaks.dictatedCount(in: transcript)
+        let lineBreaksAreParagraphs = !MagicFormatFormattingIntentDetector.detect(in: transcript).allowsMultiline
 
         var lastInvalidOutputWasEmpty = false
         for attempt in 0 ..< 2 {
@@ -86,13 +86,13 @@ enum MagicFormatPipeline {
                     prompt: makeSingleTurnPrompt(
                         systemPrompt: systemPrompt,
                         keywords: keywords,
-                        text: trimmedInput,
+                        text: transcript,
                         retrying: attempt > 0
                     )
                 )
             } else {
                 request = makeRequest(
-                    text: trimmedInput,
+                    text: transcript,
                     systemPrompt: systemPrompt,
                     keywords: keywords,
                     retrying: attempt > 0
@@ -101,7 +101,10 @@ enum MagicFormatPipeline {
 
             let raw = try await generate(request)
             let sanitized = sanitize(raw)
-            if MagicFormatOutputSanitizer.isValidPlainText(sanitized, for: trimmedInput) {
+            if MagicFormatOutputSanitizer.isValidPlainText(sanitized, for: transcript) {
+                guard lineBreaksAreParagraphs else {
+                    return sanitized
+                }
                 return MagicFormatParagraphBreaks.separatingParagraphs(in: sanitized, dictatedCount: paragraphBreaks)
             }
             lastInvalidOutputWasEmpty = sanitized.isEmpty

@@ -78,16 +78,16 @@ final class MagicFormatOutputPolicyMoreTests: XCTestCase {
         XCTAssertEqual(output, "The bakery sold out by noon.\n\nWe baked more bread.\n\nWe open earlier tomorrow.")
     }
 
-    func testPipelineKeepsLineBreaksThatDoNotMatchTheDictatedParagraphs() async throws {
+    func testPipelineKeepsLineBreaksWhenTheDictationAlsoAsksForLines() async throws {
         let output = try await MagicFormatPipeline.polish(
-            text: "hi grace new paragraph the plumber comes thursday cheers new line sam",
+            text: "hi grace thanks new line sam new paragraph p s call me",
             systemPrompt: "prompt",
             keywords: []
         ) { _ in
-            "Hi Grace,\nThe plumber comes Thursday.\nCheers,\nSam"
+            "Hi Grace, thanks,\nSam P.S. call me."
         }
 
-        XCTAssertEqual(output, "Hi Grace,\nThe plumber comes Thursday.\nCheers,\nSam")
+        XCTAssertEqual(output, "Hi Grace, thanks,\nSam P.S. call me.")
     }
 
     func testPipelineRejectsWhitespaceOnlyInput() async {

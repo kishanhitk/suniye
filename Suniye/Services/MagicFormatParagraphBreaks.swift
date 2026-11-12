@@ -28,9 +28,10 @@ enum MagicFormatParagraphBreaks {
         blankLineGapCount(in: applied(to: transcript))
     }
 
-    /// Models often keep a dictated paragraph break as a single line break. When the
-    /// answer has no blank line and exactly one line break per dictated break, each
-    /// line break can only be one of them, so it becomes a blank line.
+    /// Models often keep a dictated paragraph break as a single line break. Call this
+    /// only for a transcript with no list cue: the output check then allows one line
+    /// per paragraph, so when the answer has no blank line and one line break per
+    /// dictated break, each line break is one of them and becomes a blank line.
     static func separatingParagraphs(in answer: String, dictatedCount: Int) -> String {
         guard dictatedCount > 0, blankLineGapCount(in: answer) == 0 else {
             return answer
