@@ -60,7 +60,8 @@ enum TranscriptionPurpose: String {
     case final
     case partial
     /// Proves that a newly loaded engine decodes: the router sends it to the
-    /// engine without the speech check, even when it holds only silence.
+    /// engine without the speech check, even when it holds only silence. Only
+    /// Apple Speech gets a probe; Cohere and Qwen3 still check their chunks.
     case probe
 }
 

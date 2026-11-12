@@ -36,8 +36,7 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
     private let cohereService: TranscriptionServiceProtocol
     private let qwen3Service: TranscriptionServiceProtocol
     private let makeSpeechDetector: () throws -> SpeechDetecting
-    private var speechDetector: SpeechDetecting?
-    private var activeEngine: Engine?
+    private var active: (engine: Engine, speechDetector: SpeechDetecting)?
 
     init(
         sherpaService: TranscriptionServiceProtocol = TranscriptionService(),
@@ -65,9 +64,7 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         guard let target = service(for: engine) else {
             throw RoutingError.appleSpeechUnavailable
         }
-        if speechDetector == nil {
-            speechDetector = try makeSpeechDetector()
-        }
+        let speechDetector = try active?.speechDetector ?? makeSpeechDetector()
 
         // Load the target first; only after it succeeds do we release the previously
         // active engine. Unloading first would destroy a working recognizer even when
@@ -75,10 +72,10 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         // Apple asset), leaving the app "Ready" with no usable model.
         try await target.loadModel(config: config)
 
-        if let activeEngine, activeEngine != engine, let previous = service(for: activeEngine) {
+        if let previousEngine = active?.engine, previousEngine != engine, let previous = service(for: previousEngine) {
             await previous.unloadModel()
         }
-        activeEngine = engine
+        active = (engine, speechDetector)
     }
 
     func transcribe(
@@ -87,13 +84,13 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         purpose: TranscriptionPurpose,
         onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
     ) async throws -> String {
-        guard let activeEngine, let service = service(for: activeEngine), let speechDetector else {
+        guard let active, let service = service(for: active.engine) else {
             throw TranscriptionService.ServiceError.recognizerNotLoaded
         }
         if purpose != .probe {
             let rate = max(8_000, sampleRate)
             let audio = try AudioResampler.resample(samples, from: rate, to: SpeechDetector.sampleRate)
-            guard speechDetector.containsSpeech(audio) else {
+            guard active.speechDetector.containsSpeech(audio) else {
                 if purpose == .final {
                     AppLogger.shared.log(
                         .info,
@@ -107,10 +104,10 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
     }
 
     func unloadModel() async {
-        if let activeEngine, let service = service(for: activeEngine) {
+        if let engine = active?.engine, let service = service(for: engine) {
             await service.unloadModel()
         }
-        activeEngine = nil
+        active = nil
     }
 
     private static func engine(for family: ASRModelFamily) -> Engine {

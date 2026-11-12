@@ -81,8 +81,8 @@ final class SpeechDetector: SpeechDetecting {
         SherpaOnnxDestroyVoiceActivityDetector(detector)
     }
 
-    /// Quiet input is first raised to speaking level with the gain the sherpa
-    /// engines decode with, so a quiet speaker is judged as the engine hears them.
+    /// Quiet input is raised before the check (`AudioRecognitionPreprocessor`), so a
+    /// quiet speaker still counts as speech.
     func containsSpeech(_ samples: [Float]) -> Bool {
         let samples = AudioRecognitionPreprocessor.prepareForRecognition(samples).samples
         SherpaOnnxVoiceActivityDetectorReset(detector)
