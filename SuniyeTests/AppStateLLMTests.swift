@@ -595,6 +595,20 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(fakeLLM.callCount, 1)
     }
 
+    func testHistoryKeepsTheTranscriptWhenMagicFormatChangesIt() async {
+        let result = await dictate(transcript: "um so lets meet at five", polishedTo: "Let's meet at 5.")
+
+        XCTAssertEqual(result?.text, "Let's meet at 5.")
+        XCTAssertEqual(result?.rawText, "um so lets meet at five")
+    }
+
+    func testHistoryKeepsNoTranscriptWhenMagicFormatLeavesItUnchanged() async {
+        let result = await dictate(transcript: "Let's meet at 5.", polishedTo: "Let's meet at 5.")
+
+        XCTAssertEqual(result?.text, "Let's meet at 5.")
+        XCTAssertNil(result?.rawText)
+    }
+
     func testAppleProviderFailureFallsBackToRaw() async {
         let fakeLLM = FakeLLMPostProcessor(result: .success("api polished"))
         let fakeApple = CapturingAppleMagicFormatPostProcessor(
@@ -1203,6 +1217,35 @@ final class AppStateLLMTests: XCTestCase {
         XCTAssertEqual(appState.llmBaseSystemPrompt, "BASE\n\nUSER")
         XCTAssertEqual(appState.llmSystemPrompt, "")
         XCTAssertEqual(store.latest.systemPrompt, "")
+    }
+
+    /// One full dictation with Magic Format on: capture, transcribe, polish,
+    /// insert. Returns the history entry it stored.
+    private func dictate(transcript: String, polishedTo polished: String) async -> RecentResult? {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let started = expectation(description: "capture started")
+        audioCapture.onStartCapture = { _ in started.fulfill() }
+        let transcription = StubTranscriptionService()
+        transcription.transcribeResult = .success(transcript)
+        let appState = makeTestAppState(
+            transcriptionService: transcription,
+            audioCaptureService: audioCapture,
+            llmPostProcessor: FakeLLMPostProcessor(result: .success(polished)),
+            keychainService: TestKeychainService(value: "api-key")
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.llmEnabled = true
+        appState.llmProvider = .openAICompatible
+        appState.refreshLLMKeyStatus()
+
+        appState.startRecordingFromUI()
+        await fulfillment(of: [started], timeout: 1)
+        appState.stopRecordingFromUI()
+        await waitUntil(timeoutSeconds: 2) { !appState.recentResults.isEmpty && appState.phase == .ready }
+        return appState.recentResults.first
     }
 
     private func waitUntil(
