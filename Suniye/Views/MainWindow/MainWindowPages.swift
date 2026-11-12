@@ -195,13 +195,13 @@ struct GeneralPage: View {
         case .doNothing:
             return nil
         case .startDictation:
-            action = "Pressing Globe twice starts macOS Dictation"
+            action = "pressing Globe twice starts macOS Dictation"
         case .showEmojiAndSymbols:
-            action = "Pressing Globe opens Emoji & Symbols"
+            action = "Globe opens Emoji & Symbols"
         case .changeInputSource:
-            action = "Pressing Globe changes the input source"
+            action = "Globe changes the input source"
         }
-        return "\(action), so double-tap is off. In Keyboard settings, set \u{201C}Press \u{1F310} key to\u{201D} to Do Nothing."
+        return "Double-tap is off: \(action). In Keyboard settings, choose Do Nothing for \u{201C}Press \u{1F310} key to\u{201D}."
     }
 
     private func warningRow<Action: View>(_ warning: String, @ViewBuilder action: () -> Action) -> some View {
@@ -226,7 +226,7 @@ struct GeneralPage: View {
         SettingsGroup(heading: "Shortcuts") {
             ControlSettingRow(
                 title: "Hold to dictate",
-                info: "Hold the shortcut and speak. To dictate hands-free, double-tap it, then press it once to finish. Esc cancels until you type or click in another app."
+                info: "Hold the shortcut and speak. To dictate hands-free, double-tap it, then press it again to finish. Esc cancels until you type or click in another app."
             ) {
                 HotkeyRecorderButton(
                     configuration: Binding(
@@ -242,7 +242,7 @@ struct GeneralPage: View {
 
             if let notice = appState.globeDoubleTapConflict.flatMap(Self.globeDoubleTapNotice) {
                 warningRow(notice) {
-                    Button("Open Keyboard Settings") {
+                    Button("Open Settings") {
                         appState.openKeyboardSettings()
                     }
                     .buttonStyle(.bordered)
