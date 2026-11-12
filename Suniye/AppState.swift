@@ -4329,15 +4329,12 @@ final class AppState {
             appBundleID: nil
         )
 
-        // A completed system transcript must be recoverable even if insertion
-        // fails because focus moved before transcription finished.
-        if usesSystemInsertion && !finalText.isEmpty {
-            recentResults.insert(result, at: 0)
-            try await requireAccessibilityForInsertion()
-        }
-
         if !finalText.isEmpty {
             if usesSystemInsertion {
+                // A completed system transcript must be recoverable even if insertion
+                // fails because focus moved before transcription finished.
+                recentResults.insert(result, at: 0)
+                try await requireAccessibilityForInsertion()
                 editLearningService.finalizeActiveSession()
                 let insertionText = DictationInsertionTextFormatter.textForInsertion(
                     finalText,
