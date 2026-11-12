@@ -6,7 +6,7 @@ import Foundation
 /// user turn holds only the audio, as a WAV.
 ///
 /// Batch only: long dictations are chunked (`Qwen3ASR.chunker`) and decoded in
-/// order. Clips without speech never reach the model (`SpeechDetecting`).
+/// order. Chunks without speech never reach the model (`SpeechDetecting`).
 actor Qwen3ASRTranscriptionService: TranscriptionServiceProtocol {
     enum ServiceError: LocalizedError, Equatable {
         case notLoaded
@@ -111,15 +111,16 @@ actor Qwen3ASRTranscriptionService: TranscriptionServiceProtocol {
         // Capture runs at the device's native rate (typically 48 kHz).
         let audio = try AudioResampler.resample(samples, from: max(8_000, sampleRate), to: Qwen3ASR.sampleRate)
         let duration = Double(audio.count) / Double(Qwen3ASR.sampleRate)
-        guard model.speechDetector.containsSpeech(audio) else {
-            AppLogger.shared.log(.info, String(format: "qwen3-asr skipped: no speech in %.2fs", duration))
-            return ""
-        }
-
-        let chunks = Qwen3ASR.chunker.split(audio)
+        let allChunks = Qwen3ASR.chunker.split(audio)
+        let chunks = allChunks.filter { model.speechDetector.containsSpeech(Array(audio[$0])) }
         AppLogger.shared.log(
             .info,
-            String(format: "qwen3-asr transcribe start duration=%.2fs chunks=%d", duration, chunks.count)
+            String(
+                format: "qwen3-asr transcribe start duration=%.2fs chunks=%d skipped=%d",
+                duration,
+                chunks.count,
+                allChunks.count - chunks.count
+            )
         )
         var replies: [Qwen3ASR.Reply] = []
         for (index, chunk) in chunks.enumerated() {

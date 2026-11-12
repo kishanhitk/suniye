@@ -1,4 +1,3 @@
-import type { APIContext } from "astro";
 import { DOWNLOAD_URL, GITHUB_RELEASES_URL, SITE_URL } from "./site";
 
 // GitHub releases → the changelog, shared by changelog.astro and its Markdown
@@ -18,6 +17,10 @@ export interface ReleaseItem {
   title: string;
 }
 
+export interface ReleasesEnv {
+  GITHUB_TOKEN?: string;
+}
+
 export interface Release {
   version: string;
   date: string;
@@ -27,12 +30,9 @@ export interface Release {
   fullChangelogUrl?: string;
 }
 
-export type CachePolicy = Parameters<APIContext["cache"]["set"]>[0];
-
-/** How long either representation of the changelog may be served from Astro's cache. */
-export const RELEASES_CACHE_POLICY: CachePolicy = { maxAge: 300, swr: 3600, tags: ["github-releases"] };
-
+const GITHUB_RELEASES_API_URL = "https://api.github.com/repos/kishanhitk/suniye/releases?per_page=8";
 const GITHUB_TIMEOUT_MS = 5_000;
+const RELEASES_FRESH_MS = 5 * 60_000;
 
 const releaseDateFormatter = new Intl.DateTimeFormat("en", {
   month: "short",
@@ -41,18 +41,29 @@ const releaseDateFormatter = new Intl.DateTimeFormat("en", {
   timeZone: "UTC",
 });
 
-async function fetchGitHubReleases(): Promise<GitHubRelease[]> {
+function requestGitHubReleases(fetcher: typeof fetch, githubToken: string | undefined): Promise<Response> {
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "suniye-website",
+  };
+  if (githubToken) {
+    headers.Authorization = `Bearer ${githubToken}`;
+  }
+  return fetcher(GITHUB_RELEASES_API_URL, { headers, signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS) });
+}
+
+async function fetchGitHubReleases(fetcher: typeof fetch, githubToken: string | undefined): Promise<GitHubRelease[]> {
   try {
-    const response = await fetch("https://api.github.com/repos/kishanhitk/suniye/releases?per_page=8", {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "User-Agent": "suniye-website",
-      },
-      signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
-    });
+    let response = await requestGitHubReleases(fetcher, githubToken);
+    if (response.status === 401 && githubToken) {
+      console.warn("GitHub rejected GITHUB_TOKEN (401); fetching releases without it");
+      response = await requestGitHubReleases(fetcher, undefined);
+    }
 
     if (!response.ok) {
-      console.warn(`Failed to fetch GitHub releases: ${response.status}`);
+      console.warn(
+        `Failed to fetch GitHub releases: ${response.status} (rate limit remaining: ${response.headers.get("x-ratelimit-remaining")})`
+      );
       return [];
     }
 
@@ -95,8 +106,7 @@ export function parseFullChangelogUrl(body: string | null): string | undefined {
   return body?.match(/\*\*Full Changelog\*\*: (https:\/\/\S+)/)?.[1];
 }
 
-export async function fetchReleases(): Promise<Release[]> {
-  const githubReleases = await fetchGitHubReleases();
+function toReleases(githubReleases: readonly GitHubRelease[]): Release[] {
   return githubReleases
     .filter((release) => !release.draft && !release.prerelease)
     .map((release, index) => ({
@@ -108,6 +118,35 @@ export async function fetchReleases(): Promise<Release[]> {
       fullChangelogUrl: parseFullChangelogUrl(release.body),
     }));
 }
+
+/**
+ * Keeps the last good list: it answers without a GitHub call for five minutes,
+ * and stands in for a failed call however old it is. While it stands in, the
+ * next try waits five minutes. With no saved list, each request tries again.
+ */
+export function createReleasesSource(fetcher: typeof fetch = fetch, now: () => number = Date.now) {
+  let lastGood: { releases: Release[]; fetchedAt: number } | undefined;
+
+  return async function fetchReleases(githubToken: string | undefined): Promise<Release[]> {
+    if (lastGood && now() - lastGood.fetchedAt < RELEASES_FRESH_MS) {
+      return lastGood.releases;
+    }
+
+    const releases = toReleases(await fetchGitHubReleases(fetcher, githubToken));
+    if (releases.length === 0) {
+      if (!lastGood) {
+        return [];
+      }
+      lastGood.fetchedAt = now();
+      return lastGood.releases;
+    }
+
+    lastGood = { releases, fetchedAt: now() };
+    return releases;
+  };
+}
+
+export const fetchReleases = createReleasesSource();
 
 export const CHANGELOG_META = {
   title: "Suniye Changelog - What's New",

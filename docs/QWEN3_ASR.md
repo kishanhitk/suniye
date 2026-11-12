@@ -31,8 +31,8 @@ llama-server \
 Each dictation:
 
 1. Resamples the capture to 16 kHz.
-2. Runs Silero VAD (`Suniye/Resources/silero_vad_v5.onnx`). A clip without speech returns no text. Like Whisper, the model turns silence and room noise into fluent, invented sentences.
-3. Splits audio longer than 90 s at the quietest point before each boundary.
+2. Splits audio longer than 90 s at the quietest point before each boundary.
+3. Runs Silero VAD (`Suniye/Resources/silero_vad_v5.onnx`) on each chunk and skips a chunk without speech. Like Whisper, the model turns silence and room noise into fluent, invented sentences. `RoutingTranscriptionService` has already checked the whole clip, as it does for every engine.
 4. Sends each chunk as one `/v1/chat/completions` request: an empty system turn, then a user turn whose only content is the chunk as a 16-bit WAV `input_audio` part. Temperature is 0, and the reply budget is 20 tokens per second of audio plus 32.
 5. Parses the reply `language <Name><asr_text><transcript>` the way the reference `qwen-asr` toolkit does, including its collapse of decoding loops.
 

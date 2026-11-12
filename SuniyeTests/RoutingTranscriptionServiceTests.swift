@@ -14,7 +14,7 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
         sherpa.transcribeResult = .success("sherpa-text")
         let apple = StubTranscriptionService()
         apple.transcribeResult = .success("apple-text")
-        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: apple)
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: apple, makeSpeechDetector: { StubSpeechDetector(result: true) })
 
         try await router.loadModel(config: config(family: .nemoTransducer, modelID: .parakeetV3))
         let text = try await router.transcribe(samples: [0.1], sampleRate: 16_000)
@@ -31,7 +31,7 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
         sherpa.transcribeResult = .success("sherpa-text")
         let apple = StubTranscriptionService()
         apple.transcribeResult = .success("apple-text")
-        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: apple)
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: apple, makeSpeechDetector: { StubSpeechDetector(result: true) })
 
         try await router.loadModel(config: config(family: .appleSpeech, modelID: .appleSpeech))
         let text = try await router.transcribe(samples: [0.1], sampleRate: 16_000)
@@ -45,7 +45,7 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
     func testSwitchingEnginesUnloadsPreviousEngine() async throws {
         let sherpa = StubTranscriptionService()
         let apple = StubTranscriptionService()
-        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: apple)
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: apple, makeSpeechDetector: { StubSpeechDetector(result: true) })
 
         try await router.loadModel(config: config(family: .nemoTransducer, modelID: .parakeetV3))
         try await router.loadModel(config: config(family: .appleSpeech, modelID: .appleSpeech))
@@ -59,7 +59,7 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
         sherpa.transcribeResult = .success("sherpa-text")
         let apple = StubTranscriptionService()
         apple.loadModelResult = .failure(FakeError(message: "asset install failed"))
-        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: apple)
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: apple, makeSpeechDetector: { StubSpeechDetector(result: true) })
 
         try await router.loadModel(config: config(family: .nemoTransducer, modelID: .parakeetV3))
 
@@ -78,7 +78,7 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
 
     func testReloadingSameEngineDoesNotUnload() async throws {
         let sherpa = StubTranscriptionService()
-        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil)
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil, makeSpeechDetector: { StubSpeechDetector(result: true) })
 
         try await router.loadModel(config: config(family: .nemoTransducer, modelID: .parakeetV3))
         try await router.loadModel(config: config(family: .whisper, modelID: .whisperLargeV3Turbo))
@@ -89,7 +89,7 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
 
     func testAppleFamilyWithoutAppleServiceThrows() async {
         let sherpa = StubTranscriptionService()
-        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil)
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil, makeSpeechDetector: { StubSpeechDetector(result: true) })
 
         do {
             try await router.loadModel(config: config(family: .appleSpeech, modelID: .appleSpeech))
@@ -105,7 +105,7 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
     }
 
     func testTranscribeBeforeLoadThrows() async {
-        let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: nil)
+        let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: nil, makeSpeechDetector: { StubSpeechDetector(result: true) })
 
         do {
             _ = try await router.transcribe(samples: [0.1], sampleRate: 16_000)
@@ -113,6 +113,77 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
         } catch {
             // Expected: no active engine.
         }
+    }
+
+    func testClipWithoutSpeechNeverReachesTheEngine() async throws {
+        let sherpa = StubTranscriptionService()
+        sherpa.transcribeResult = .success("Thank you.")
+        let detector = StubSpeechDetector(result: false)
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil, makeSpeechDetector: { detector })
+        try await router.loadModel(config: config(family: .nemoTransducer, modelID: .parakeetV3))
+        let samples = [Float](repeating: 0.01, count: 48_000)
+
+        let final = try await router.transcribe(samples: samples, sampleRate: 48_000)
+        let partial = try await router.transcribe(samples: samples, sampleRate: 48_000, purpose: .partial)
+
+        XCTAssertEqual([final, partial], ["", ""])
+        XCTAssertEqual(sherpa.transcribeCallCount, 0)
+        let resampled = try AudioResampler.resample(samples, from: 48_000, to: 16_000).count
+        XCTAssertEqual(detector.clipLengths, [resampled, resampled], "the detector hears the clip at 16 kHz")
+    }
+
+    func testClipWithSpeechReachesTheEngineAtItsOwnRate() async throws {
+        let sherpa = StubTranscriptionService()
+        sherpa.transcribeResult = .success("hello")
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil, makeSpeechDetector: { StubSpeechDetector(result: true) })
+        try await router.loadModel(config: config(family: .nemoTransducer, modelID: .parakeetV3))
+        let samples = [Float](repeating: 0.01, count: 48_000)
+
+        let text = try await router.transcribe(samples: samples, sampleRate: 48_000)
+
+        XCTAssertEqual(text, "hello")
+        XCTAssertEqual(sherpa.lastTranscribeInput?.samples, samples)
+        XCTAssertEqual(sherpa.lastTranscribeInput?.sampleRate, 48_000)
+    }
+
+    func testProbeReachesTheEngineWithoutASpeechCheck() async throws {
+        let apple = StubTranscriptionService()
+        let detector = StubSpeechDetector(result: false)
+        let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: apple, makeSpeechDetector: { detector })
+        try await router.loadModel(config: config(family: .appleSpeech, modelID: .appleSpeech))
+
+        _ = try await router.transcribe(samples: [Float](repeating: 0, count: 16_000), sampleRate: 16_000, purpose: .probe)
+
+        XCTAssertEqual(apple.transcribePurposes, [.probe])
+        XCTAssertEqual(detector.clipLengths, [])
+    }
+
+    func testFailedDetectorFailsTheLoadAndIsTriedAgain() async throws {
+        let sherpa = StubTranscriptionService()
+        sherpa.transcribeResult = .success("hello")
+        var attempts = 0
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil, makeSpeechDetector: {
+            attempts += 1
+            if attempts == 1 {
+                throw SpeechDetector.DetectorError.modelMissing("silero_vad_v5.onnx")
+            }
+            return StubSpeechDetector(result: true)
+        })
+
+        do {
+            try await router.loadModel(config: config(family: .nemoTransducer, modelID: .parakeetV3))
+            XCTFail("Expected the detector error")
+        } catch let error as SpeechDetector.DetectorError {
+            XCTAssertEqual(error, .modelMissing("silero_vad_v5.onnx"))
+        }
+        XCTAssertEqual(sherpa.loadCallCount, 0, "no engine loads without a detector")
+
+        try await router.loadModel(config: config(family: .nemoTransducer, modelID: .parakeetV3))
+        try await router.loadModel(config: config(family: .whisper, modelID: .whisperLargeV3Turbo))
+        let text = try await router.transcribe(samples: [0.1], sampleRate: 16_000)
+
+        XCTAssertEqual(text, "hello")
+        XCTAssertEqual(attempts, 2, "a working detector is kept across loads")
     }
 
     func testDefaultInitDoesNotCrash() {
@@ -132,7 +203,7 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
 
     func testUnloadClearsActiveEngine() async throws {
         let sherpa = StubTranscriptionService()
-        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil)
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil, makeSpeechDetector: { StubSpeechDetector(result: true) })
 
         try await router.loadModel(config: config(family: .nemoTransducer, modelID: .parakeetV3))
         await router.unloadModel()

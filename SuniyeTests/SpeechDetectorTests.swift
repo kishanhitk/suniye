@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import Suniye
 
@@ -33,6 +34,17 @@ final class SpeechDetectorTests: XCTestCase {
         let detector = try SpeechDetector.bundled()
 
         XCTAssertTrue(detector.containsSpeech([Float](repeating: 0, count: 32_000) + word))
+    }
+
+    func testQuietShortWordIsSpeech() async throws {
+        guard let voice = AVSpeechSynthesisVoice.speechVoices().first(where: { $0.name == "Samantha" && $0.language == "en-US" }) else {
+            throw XCTSkip("Needs the Samantha voice")
+        }
+        let word = await SpeechTestAudio.synthesizeSpeech("No.", sampleRate: 16_000, voice: voice)
+        try XCTSkipUnless(word.count > 4_000, "Speech synthesis unavailable")
+        let detector = try SpeechDetector.bundled()
+
+        XCTAssertTrue(detector.containsSpeech([Float](repeating: 0, count: 16_000) + word.map { $0 * 0.01 }), "a word 40 dB down is still speech")
     }
 
     func testMissingModelThrows() {

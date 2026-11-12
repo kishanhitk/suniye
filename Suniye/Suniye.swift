@@ -13,10 +13,17 @@ struct SuniyeApp: App {
         }
         .commands {
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates...") {
-                    sharedAppState.checkForUpdates()
+                if sharedAppState.isUpdateReadyToInstall {
+                    Button("Restart to Update") {
+                        sharedAppState.restartToUpdate()
+                    }
+                    .disabled(!sharedAppState.canRestartToUpdate)
+                } else {
+                    Button("Check for Updates...") {
+                        sharedAppState.checkForUpdates()
+                    }
+                    .disabled(!sharedAppState.canCheckForUpdates)
                 }
-                .disabled(!sharedAppState.canCheckForUpdates)
             }
 
             CommandGroup(after: .help) {
@@ -48,9 +55,7 @@ extension ProcessInfo {
         }
 
         let args = Set(CommandLine.arguments)
-        if args.contains("--e2e-llm-success") ||
-            args.contains("--e2e-llm-fallback") ||
-            args.contains("--e2e-submit-command") {
+        if args.contains("--e2e-llm-success") || args.contains("--e2e-llm-fallback") {
             return false
         }
 

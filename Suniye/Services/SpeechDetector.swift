@@ -7,8 +7,8 @@ protocol SpeechDetecting: AnyObject {
 
 /// Silero VAD v5 (the bundled `silero_vad_v5.onnx`, MIT) run by sherpa-onnx.
 ///
-/// LLM-based recognizers write fluent text for silence and room noise: Qwen3-ASR
-/// turns a second of quiet room into a Spanish sentence. A clip this detector
+/// Every engine writes text for some silence and room noise: Cohere answers
+/// "Thank you." and Qwen3-ASR a Spanish sentence. A clip or chunk this detector
 /// rejects is never decoded.
 final class SpeechDetector: SpeechDetecting {
     enum DetectorError: LocalizedError, Equatable {
@@ -53,12 +53,10 @@ final class SpeechDetector: SpeechDetecting {
             "cpu".withCString { provider in
                 var config = SherpaOnnxVadModelConfig()
                 config.silero_vad.model = model
-                // Silero's default. In testing it passed speech as loud as the noise
-                // around it, which Qwen3-ASR still transcribes, and rejected quiet
-                // rooms, white noise, tones, and speech 11 dB under the noise.
+                // Silero's default. Coughs and sneezes often pass; then the engine runs.
                 config.silero_vad.threshold = 0.5
-                // A single short word ("No.") still passes.
-                config.silero_vad.min_speech_duration = 0.25
+                // Short enough for a one-word reply such as "Ok." or "It.".
+                config.silero_vad.min_speech_duration = 0.16
                 config.silero_vad.min_silence_duration = 0.25
                 config.silero_vad.max_speech_duration = 20
                 config.silero_vad.window_size = 512
@@ -83,7 +81,10 @@ final class SpeechDetector: SpeechDetecting {
         SherpaOnnxDestroyVoiceActivityDetector(detector)
     }
 
+    /// Quiet input is raised before the check (`AudioRecognitionPreprocessor`), so a
+    /// quiet speaker still counts as speech.
     func containsSpeech(_ samples: [Float]) -> Bool {
+        let samples = AudioRecognitionPreprocessor.prepareForRecognition(samples).samples
         SherpaOnnxVoiceActivityDetectorReset(detector)
         var start = 0
         while start < samples.count {

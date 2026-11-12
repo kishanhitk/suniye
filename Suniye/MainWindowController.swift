@@ -131,9 +131,6 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--e2e-llm-success") || CommandLine.arguments.contains("--e2e-llm-fallback") {
             sharedAppState.runLLME2ESmoke()
         }
-        if CommandLine.arguments.contains("--e2e-submit-command") {
-            sharedAppState.runSubmitCommandE2ESmoke()
-        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

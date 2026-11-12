@@ -60,6 +60,24 @@ cd website
 npm run deploy
 ```
 
+## Changelog GitHub token
+
+`/changelog` reads the GitHub releases API with the `GITHUB_TOKEN` Worker secret.
+Without a token, GitHub allows 60 calls per hour per IP address, and Cloudflare
+shares its outbound IP addresses between customers, so the page fails when another
+customer used up that quota.
+
+- Token: fine-grained personal access token, repository access "Public repositories",
+  no permissions, no expiration.
+- Set it: `npx wrangler secret put GITHUB_TOKEN` from `website/`. It fails while the
+  newest Worker version is an undeployed branch build; run it after a `main` deploy.
+- A rejected token (401) is logged as `GitHub rejected GITHUB_TOKEN (401)`, and the
+  Worker calls without it.
+- Each Worker isolate reuses its last good release list for 5 minutes, and serves
+  it at any age when GitHub fails; it then waits 5 minutes to retry. With no saved
+  list, each request calls GitHub again.
+- Local dev reads the token from `website/.dev.vars` (optional).
+
 ## Issue report endpoint
 
 `POST https://suniye.app/api/issue-reports` creates Linear issues from Suniye's in-app
