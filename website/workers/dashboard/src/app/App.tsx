@@ -31,6 +31,13 @@ const STEP_LABELS: Record<string, string> = {
 };
 const stepLabel = (step: string) => STEP_LABELS[step] ?? step;
 
+/** dictation_completed source wire names → what the user did. */
+const SOURCE_LABELS: Record<string, string> = {
+  hotkey: "hold",
+  hotkey_lock: "double-tap lock",
+  manual: "pill or menu",
+};
+
 /** "p50 / p95" for a duration pair, or an em dash when the window has none. */
 const quantilePair = (p50: number, p95: number) =>
   p50 > 0 || p95 > 0 ? `${formatMs(p50)} / ${formatMs(p95)}` : "—";
@@ -421,6 +428,70 @@ export default function App() {
                       <EmptyState message={notRecorded(blocked.permissions)} />
                     ) : (
                       <BreakdownList items={stats.onboarding.permissionAsks} emptyMessage="No permission asks in this window." />
+                    )}
+                  </div>
+                </div>
+              </Section>
+            )}
+
+            {stats.featureUse && (
+              <Section eyebrow="Feature use" note="events · sampling-corrected">
+                <div className="grid gap-8 md:grid-cols-3">
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">How dictations start</h3>
+                    <BreakdownList
+                      items={stats.featureUse.dictationSources.map((b) => ({ ...b, label: SOURCE_LABELS[b.label] ?? b.label }))}
+                      emptyMessage="No dictations in this window."
+                    />
+                    <p className="mt-2 font-mono text-[11px] text-muted">
+                      {blocked.escCancels
+                        ? `Esc cancels: ${notRecorded(blocked.escCancels).toLowerCase()}`
+                        : `${formatCount(stats.featureUse.escCancels)} canceled with Esc`}
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">Double-tap availability</h3>
+                    {blocked.launchSettings ? (
+                      <EmptyState message={notRecorded(blocked.launchSettings)} />
+                    ) : (
+                      <>
+                        <BreakdownList items={stats.featureUse.doubleTapAvailability} emptyMessage="No launches with this setting in this window." />
+                        {stats.featureUse.doubleTapAvailability.length > 0 && (
+                          <p className="mt-2 font-mono text-[11px] text-muted">installs · globe_* = macOS also acts on a Globe tap</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">Microphone stand-in</h3>
+                    {blocked.audio ? (
+                      <EmptyState message={notRecorded(blocked.audio)} />
+                    ) : (
+                      <BreakdownList items={stats.featureUse.micStandIns} emptyMessage="No stand-in microphone in this window." />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">Empty dictations</h3>
+                    {blocked.emptyDictations ? (
+                      <EmptyState message={notRecorded(blocked.emptyDictations)} />
+                    ) : (
+                      <BreakdownList items={stats.featureUse.emptyDictationReasons} emptyMessage="No empty dictations with a reason in this window." />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">Update actions</h3>
+                    {blocked.updateActions ? (
+                      <EmptyState message={notRecorded(blocked.updateActions)} />
+                    ) : (
+                      <BreakdownList items={stats.featureUse.updateActions} emptyMessage="No update actions in this window." />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="mb-2 text-sm text-ink">Original transcript</h3>
+                    {blocked.rawTranscript ? (
+                      <EmptyState message={notRecorded(blocked.rawTranscript)} />
+                    ) : (
+                      <BreakdownList items={stats.featureUse.rawTranscriptActions} emptyMessage="Nobody opened an original in this window." />
                     )}
                   </div>
                 </div>
