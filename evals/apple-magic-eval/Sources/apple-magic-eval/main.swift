@@ -110,9 +110,11 @@ for c in cases {
     var refused = false
     var error: String?
     switch outcome {
-    case let .success(text): actual = MagicFormatParagraphBreaks.separatingParagraphs(
-            in: text.trimmingCharacters(in: .whitespacesAndNewlines),
-            dictatedCount: MagicFormatParagraphBreaks.dictatedCount(in: transcript)
+    case let .success(text): actual = MagicFormatParagraphBreaks.capitalizingParagraphStarts(
+            in: MagicFormatParagraphBreaks.separatingParagraphs(
+                in: text.trimmingCharacters(in: .whitespacesAndNewlines),
+                dictatedCount: MagicFormatParagraphBreaks.dictatedCount(in: transcript)
+            )
         )
     case let .refusal(msg): actual = ""; refused = true; error = msg
     case let .failure(msg): actual = ""; error = msg

@@ -102,10 +102,10 @@ enum MagicFormatPipeline {
             let raw = try await generate(request)
             let sanitized = sanitize(raw)
             if MagicFormatOutputSanitizer.isValidPlainText(sanitized, for: transcript) {
-                guard lineBreaksAreParagraphs else {
-                    return sanitized
-                }
-                return MagicFormatParagraphBreaks.separatingParagraphs(in: sanitized, dictatedCount: paragraphBreaks)
+                let paragraphs = lineBreaksAreParagraphs
+                    ? MagicFormatParagraphBreaks.separatingParagraphs(in: sanitized, dictatedCount: paragraphBreaks)
+                    : sanitized
+                return MagicFormatParagraphBreaks.capitalizingParagraphStarts(in: paragraphs)
             }
             lastInvalidOutputWasEmpty = sanitized.isEmpty
         }

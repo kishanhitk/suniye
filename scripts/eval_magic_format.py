@@ -142,6 +142,17 @@ def separate_paragraphs(answer: str, dictated_count: int) -> str:
     return "\n\n".join(line.strip() for line in lines)
 
 
+def capitalize_paragraph_starts(text: str) -> str:
+    lines = text.split("\n")
+    for index in range(1, len(lines)):
+        if lines[index - 1].strip() or not lines[index].strip():
+            continue
+        first_word = lines[index].split()[0] if lines[index].split() else ""
+        if lines[index][:1].islower() and not any(ch.isupper() for ch in first_word):
+            lines[index] = lines[index][0].upper() + lines[index][1:]
+    return "\n".join(lines)
+
+
 def normalize(text: str) -> str:
     normalized = text.strip().replace("’", "'").replace("–", "-")
     normalized = re.sub(r"[ \t]+", " ", normalized)
@@ -270,7 +281,7 @@ def main() -> int:
                     max_tokens=args.max_tokens,
                     timeout=args.timeout or 30 + len(case["input"]) / 80,
                 )
-                actual = separate_paragraphs(answer, blank_line_gap_count(transcript))
+                actual = capitalize_paragraph_starts(separate_paragraphs(answer, blank_line_gap_count(transcript)))
                 exact, similarity, structure_matches = score_output(actual, case["expected"])
                 truncated = finish_reason == "length"
                 passed = structure_matches and not truncated and (exact or similarity >= args.threshold)

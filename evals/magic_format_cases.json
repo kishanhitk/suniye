@@ -256,5 +256,11 @@
     "category": "over_formatting_guard",
     "input": "please add a new paragraph about pricing to the proposal",
     "expected": "Please add a new paragraph about pricing to the proposal."
+  },
+  {
+    "id": "paragraph_command_003",
+    "category": "paragraphs",
+    "input": "Hi Nora, new paragraph, the lease is signed, thanks, Amar.",
+    "expected": "Hi Nora,\n\nThe lease is signed, thanks, Amar."
   }
 ]

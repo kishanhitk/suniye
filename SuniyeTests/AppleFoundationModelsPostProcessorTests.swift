@@ -230,6 +230,20 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         XCTAssertFalse(prompt.localizedCaseInsensitiveContains("new paragraph"))
     }
 
+    func testParagraphAfterADictatedBreakStartsWithACapital() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "Hi Nora,\n\nthe lease is signed, thanks, Amar.",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(
+            text: "Hi Nora, new paragraph, the lease is signed, thanks, Amar.",
+            config: makeConfig()
+        )
+
+        XCTAssertEqual(output, "Hi Nora,\n\nThe lease is signed, thanks, Amar.")
+    }
+
     func testUnrequestedMultilineOutputRetries() async throws {
         let client = FakeAppleFoundationModelsClient(outputs: [
             "First line.\nSecond line.",

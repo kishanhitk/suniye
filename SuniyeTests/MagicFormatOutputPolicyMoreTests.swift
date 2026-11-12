@@ -73,6 +73,18 @@ final class MagicFormatOutputPolicyMoreTests: XCTestCase {
         XCTAssertEqual(output, "The bakery sold out by noon.\n\nWe baked more bread.\n\nWe open earlier tomorrow.")
     }
 
+    func testPipelineLeavesAParagraphStartWithAnInnerCapitalAsWritten() async throws {
+        let output = try await MagicFormatPipeline.polish(
+            text: "my phone died new paragraph iPhone repairs take a week",
+            systemPrompt: "prompt",
+            keywords: []
+        ) { _ in
+            "My phone died.\n\niPhone repairs take a week."
+        }
+
+        XCTAssertEqual(output, "My phone died.\n\niPhone repairs take a week.")
+    }
+
     func testPipelineKeepsLineBreaksWhenTheModelMergedADictatedParagraph() async throws {
         let output = try await MagicFormatPipeline.polish(
             text: "the bakery sold out by noon new paragraph we baked more bread new paragraph we open earlier tomorrow",

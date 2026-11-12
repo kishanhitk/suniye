@@ -53,6 +53,20 @@ enum MagicFormatParagraphBreaks {
             .joined(separator: "\n\n")
     }
 
+    /// The models copy a lowercase word that follows a dictated break ("Hi Nora, new
+    /// paragraph, the lease…"). A word with a capital inside ("iPhone") stays as is.
+    static func capitalizingParagraphStarts(in text: String) -> String {
+        var lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
+        for index in lines.indices.dropFirst() where isBlank(lines[index - 1][...]) && !isBlank(lines[index][...]) {
+            let firstWord = lines[index].prefix { !$0.isWhitespace }
+            guard let first = firstWord.first, first.isLowercase, !firstWord.contains(where: \.isUppercase) else {
+                continue
+            }
+            lines[index] = first.uppercased() + lines[index].dropFirst()
+        }
+        return lines.joined(separator: "\n")
+    }
+
     /// How many places in `text` have one or more empty lines between text lines.
     static func blankLineGapCount(in text: String) -> Int {
         let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
