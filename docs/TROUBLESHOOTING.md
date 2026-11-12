@@ -23,6 +23,14 @@ Suniye releases are signed with an Apple Developer ID and notarized, so macOS op
 ## Holding the dictation key did nothing after the microphone prompt
 - If you let go of the key while macOS asks for Microphone access, Suniye does not start recording. The floating indicator shows `Hold again to dictate`. Hold the key again.
 
+## Double-tap does not lock the recording with the Globe shortcut
+- If Keyboard settings say "Press 🌐 key to: Start Dictation", macOS starts its own Dictation when you press Globe twice. Suniye then turns double-tap off for Globe, so the two do not both record. Settings > General shows a notice.
+- Open System Settings > Keyboard and set "Press 🌐 key to" to Do Nothing. Or choose a key-combo shortcut in Suniye.
+
+## Esc did not cancel the recording
+- Esc cancels a recording only until you type or click in another app. After that, Esc goes to that app, so an Esc for a dialog cannot discard your dictation. Press the shortcut to finish the recording.
+- Esc with another key held (for example while you hold Control + Option + D) goes to the app.
+
 ## Local Model download failed
 - Dictation keeps working without Magic Format.
 - Open `Magic Format`, select `Local Model`, and retry the download.
