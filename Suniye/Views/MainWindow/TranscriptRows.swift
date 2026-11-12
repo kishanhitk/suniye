@@ -39,9 +39,11 @@ struct CompactTranscriptRow: View {
     var isSelected = false
     var searchQuery = ""
     let onCopy: () -> Bool
+    let onCopyOriginal: (String) -> Bool
     let onDelete: () -> Void
 
     @State private var isHovered = false
+    @State private var isShowingOriginal = false
 
     /// Plain Text when there is nothing to highlight: building an
     /// AttributedString for every row on every evaluation is wasted work in
@@ -55,12 +57,15 @@ struct CompactTranscriptRow: View {
     @FocusState private var focusedAction: RowAction?
 
     private enum RowAction: Hashable {
+        case original
         case copy
         case delete
     }
 
+    /// The popover counts too: the pointer leaves the row to reach it, and
+    /// the icon it points at must not fade out under its arrow.
     private var showsActions: Bool {
-        isHovered || isSelected || didCopy || focusedAction != nil
+        isHovered || isSelected || didCopy || isShowingOriginal || focusedAction != nil
     }
 
     var body: some View {
@@ -77,6 +82,13 @@ struct CompactTranscriptRow: View {
             .accessibilityHint("Copies this transcript")
             .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             .accessibilityAction(named: "Copy", copy)
+            .accessibilityActions {
+                if let rawText = result.rawText {
+                    Button("Copy original") {
+                        copyOriginal(rawText)
+                    }
+                }
+            }
     }
 
     private var row: some View {
@@ -98,6 +110,23 @@ struct CompactTranscriptRow: View {
 
             // Reserve the space so revealing the actions never reflows the row.
             HStack(spacing: 4) {
+                if let rawText = result.rawText {
+                    ActionIconButton(
+                        systemName: "quote.bubble",
+                        accessibilityLabel: "Show original",
+                        tint: isShowingOriginal ? Color.primary : MainWindowPalette.tertiaryText,
+                        hoverTint: Color.primary,
+                        action: { isShowingOriginal.toggle() }
+                    )
+                    .focused($focusedAction, equals: .original)
+                    .help("Show original")
+                    .popover(isPresented: $isShowingOriginal, arrowEdge: .bottom) {
+                        OriginalTranscriptPopover(text: rawText) {
+                            onCopyOriginal(rawText)
+                        }
+                    }
+                }
+
                 // Clicking the row copies; the icon is still a button so it
                 // responds to the pointer like the delete next to it.
                 // Focus is tracked here too, not just on delete: keyboard
@@ -142,6 +171,66 @@ struct CompactTranscriptRow: View {
         // No checkmark and no announcement unless the pasteboard took it:
         // clearContents has already run, so a failed write leaves an empty
         // clipboard and a confirmation would be a lie.
+        guard onCopy() else {
+            return
+        }
+        didCopy = true
+        AccessibilityNotification.Announcement("Copied").post()
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            didCopy = false
+        }
+    }
+
+    private func copyOriginal(_ rawText: String) {
+        guard onCopyOriginal(rawText) else {
+            return
+        }
+        AccessibilityNotification.Announcement("Copied").post()
+    }
+}
+
+/// What the user said before Magic Format changed it, readable in full and
+/// selectable, since the row can only show one line of the final text.
+private struct OriginalTranscriptPopover: View {
+    let text: String
+    let onCopy: () -> Bool
+
+    @State private var didCopy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Original")
+                .font(AppTypography.subheadline)
+                .foregroundStyle(MainWindowPalette.tertiaryText)
+
+            ScrollView {
+                Text(text)
+                    .font(AppTypography.body)
+                    .foregroundStyle(Color.primary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            // A popover sizes to its content, and a bare ScrollView always
+            // asks for the cap: a five-word original got a 240 pt box.
+            .frame(maxHeight: 240)
+            .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button(action: copy) {
+                    Label(didCopy ? "Copied" : "Copy", systemImage: didCopy ? "checkmark" : "doc.on.doc")
+                        .contentTransition(.symbolEffect(.replace))
+                }
+            }
+        }
+        .padding(14)
+        .frame(width: 340)
+    }
+
+    private func copy() {
         guard onCopy() else {
             return
         }

@@ -3104,10 +3104,10 @@ final class AppState {
     /// confirms unconditionally would promise a copy that left the clipboard
     /// empty.
     @discardableResult
-    func copyRecentResult(_ result: RecentResult) -> Bool {
+    func copyText(_ text: String) -> Bool {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        return pasteboard.setString(result.text, forType: .string)
+        return pasteboard.setString(text, forType: .string)
     }
 
     @discardableResult
