@@ -44,11 +44,6 @@ final class MagicFormatOutputPolicyMoreTests: XCTestCase {
         XCTAssertFalse(MagicFormatOutputSanitizer.isValidPlainText("Here is the cleaned text:\nHi Nora,\n\nThe lease is signed.", for: input))
     }
 
-    func testNewParagraphAfterAnArticleIsNotACommand() {
-        let input = "please add a new paragraph about pricing to the proposal"
-        XCTAssertFalse(MagicFormatOutputSanitizer.isValidPlainText("Please add a\n\nabout pricing to the proposal.", for: input))
-    }
-
     // MARK: - MagicFormatPipeline
 
     func testPipelineSendsDictatedParagraphsAsBlankLinesAndAcceptsThem() async throws {
@@ -88,6 +83,18 @@ final class MagicFormatOutputPolicyMoreTests: XCTestCase {
         }
 
         XCTAssertEqual(output, "Hi Grace, thanks,\nSam P.S. call me.")
+    }
+
+    func testPipelineKeepsNewParagraphAsWordsWhenItNamesAThing() async throws {
+        for phrase in ["please add a new paragraph about pricing", "the docs need new paragraph spacing"] {
+            var prompts: [String] = []
+            _ = try await MagicFormatPipeline.polish(text: phrase, systemPrompt: "prompt", keywords: []) { request in
+                prompts.append(request.prompt)
+                return "Cleaned."
+            }
+
+            XCTAssertEqual(prompts, ["<transcript>\n\(phrase)\n</transcript>"])
+        }
     }
 
     func testPipelineRejectsWhitespaceOnlyInput() async {

@@ -6,14 +6,22 @@ enum MagicFormatParagraphBreaks {
     /// After one of these words, "new paragraph" is a noun phrase ("add a new
     /// paragraph"), not a command.
     private static let nounPhraseWords = [
-        "a", "an", "the", "this", "that", "each", "every", "another", "any", "one",
+        "a", "an", "the", "this", "that", "each", "every", "another", "any", "one", "no", "some", "more",
         "my", "your", "our", "their", "his", "her", "its",
-        "whole", "short", "long", "next", "last", "first", "final", "brand",
+        "whole", "entire", "short", "long", "next", "last", "first", "final", "brand", "separate", "fresh", "extra",
+    ]
+
+    /// Before one of these words, "new paragraph" names a thing ("new paragraph spacing").
+    private static let nounFollowers = [
+        "break", "breaks", "spacing", "style", "format", "formatting", "mark", "symbol", "tag",
+        "setting", "button", "key", "command", "indent",
     ]
 
     private static let commandPattern = #"(?i)\s*"#
         + nounPhraseWords.map { #"(?<!\b\#($0) )"# }.joined()
-        + #"\bnew\s+paragraph\b[\s,.;:]*"#
+        + #"\bnew\s+paragraph\b(?!\s+(?:"#
+        + nounFollowers.joined(separator: "|")
+        + #")\b)[\s,.;:]*"#
 
     /// The transcript with each spoken command replaced by one blank line.
     static func applied(to transcript: String) -> String {

@@ -106,14 +106,20 @@ def start_server(server: str, model: Path) -> tuple[subprocess.Popen[bytes], str
 # Mirrors Suniye/Services/MagicFormatParagraphBreaks.swift, which the app applies
 # around every Magic Format request.
 NOUN_PHRASE_WORDS = [
-    "a", "an", "the", "this", "that", "each", "every", "another", "any", "one",
+    "a", "an", "the", "this", "that", "each", "every", "another", "any", "one", "no", "some", "more",
     "my", "your", "our", "their", "his", "her", "its",
-    "whole", "short", "long", "next", "last", "first", "final", "brand",
+    "whole", "entire", "short", "long", "next", "last", "first", "final", "brand", "separate", "fresh", "extra",
+]
+NOUN_FOLLOWERS = [
+    "break", "breaks", "spacing", "style", "format", "formatting", "mark", "symbol", "tag",
+    "setting", "button", "key", "command", "indent",
 ]
 PARAGRAPH_COMMAND = re.compile(
     r"(?i)\s*"
     + "".join(rf"(?<!\b{word} )" for word in NOUN_PHRASE_WORDS)
-    + r"\bnew\s+paragraph\b[\s,.;:]*"
+    + r"\bnew\s+paragraph\b(?!\s+(?:"
+    + "|".join(NOUN_FOLLOWERS)
+    + r")\b)[\s,.;:]*"
 )
 
 

@@ -232,8 +232,8 @@ rounds** (the previously flappy cases included). Run artifacts: `evals/runs/v14_
 
 Both harnesses handle a spoken "new paragraph" the way `MagicFormatPipeline.polish` does:
 
-- The transcript gets a blank line in place of each command before the model reads it. "new paragraph" after a word such as "a", "the", "each" or "my" stays as words.
-- If the answer has no blank line and one line break per dictated break, each of those line breaks becomes a blank line.
+- The transcript gets a blank line in place of each command before the model reads it. "new paragraph" after a word such as "a", "the", "each" or "my", or before a word such as "spacing" or "break", stays as words.
+- If the answer has no blank line and one line break per dictated break, each of those line breaks becomes a blank line. The app does this only when the dictation has no list cue; the harnesses have no list-cue detector and always do it.
 - Blank lines are compared. Before KIS-252 both harnesses changed "\n\n" to "\n", so a paragraph case passed even though the app rejected the answer.
 - The Apple harness compiles `Suniye/Services/MagicFormatParagraphBreaks.swift` through a symlink. `scripts/eval_magic_format.py` has a Python copy of it.
 - Neither harness runs the app's output check, its retry or the prompt composer's list section.
