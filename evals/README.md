@@ -228,6 +228,26 @@ v14 then closed every remaining model gap:
 Result: **39/39, 24/24 referential probe, 4/4 advanced, injection 2/2 — five consecutive all-green
 rounds** (the previously flappy cases included). Run artifacts: `evals/runs/v14_*.json`.
 
+## Paragraph breaks (KIS-252)
+
+Both harnesses handle a spoken "new paragraph" the way `MagicFormatPipeline.polish` does:
+
+- The transcript gets a blank line in place of each command before the model reads it. "new paragraph" after a word such as "a", "the", "each" or "my" stays as words.
+- If the answer has no blank line and one line break per dictated break, each of those line breaks becomes a blank line.
+- Blank lines are compared. Before KIS-252 both harnesses changed "\n\n" to "\n", so a paragraph case passed even though the app rejected the answer.
+- The Apple harness compiles `Suniye/Services/MagicFormatParagraphBreaks.swift` through a symlink. `scripts/eval_magic_format.py` has a Python copy of it.
+- Neither harness runs the app's output check, its retry or the prompt composer's list section.
+
+The 39-case suite (now 43) has two "new paragraph" cases (`paragraph_command_001`, lowercase; `paragraph_command_002`, ASR punctuation) and one content case (`paragraph_phrase_kept_001`, "add a new paragraph about pricing").
+
+| suite | Gemma v14 | Apple v45 (single-turn) |
+|-------|-----------|-------------------------|
+| main (43) | 43/43, two runs | 38/43 (same 5 failures as before; 3 new cases pass) |
+| advanced (4) | 4/4, two runs | 3/4 (paragraph case now passes) |
+| referential (24) | 24/24 | not run |
+
+On 20 extra "new paragraph" dictations (not committed), the blank lines were correct in 20/20 for Gemma and 20/20 for Apple. Before KIS-252 the app accepted 0 of them with a blank line: the output check rejected every empty line.
+
 ## ASR model comparison (`evals/asr-compare`)
 
 Record your own voice, run every installed speech model over the clips, and judge

@@ -103,10 +103,42 @@ def start_server(server: str, model: Path) -> tuple[subprocess.Popen[bytes], str
     return process, base_url, ready_ms
 
 
+# Mirrors Suniye/Services/MagicFormatParagraphBreaks.swift, which the app applies
+# around every Magic Format request.
+NOUN_PHRASE_WORDS = [
+    "a", "an", "the", "this", "that", "each", "every", "another", "any", "one",
+    "my", "your", "our", "their", "his", "her", "its",
+    "whole", "short", "long", "next", "last", "first", "final", "brand",
+]
+PARAGRAPH_COMMAND = re.compile(
+    r"(?i)\s*"
+    + "".join(rf"(?<!\b{word} )" for word in NOUN_PHRASE_WORDS)
+    + r"\bnew\s+paragraph\b[\s,.;:]*"
+)
+
+
+def apply_paragraph_breaks(transcript: str) -> str:
+    applied = PARAGRAPH_COMMAND.sub("\n\n", transcript)
+    return re.sub(r"\n{3,}", "\n\n", applied).strip()
+
+
+def blank_line_gap_count(text: str) -> int:
+    lines = text.splitlines()
+    return sum(1 for before, after in zip(lines, lines[1:]) if before.strip() and not after.strip())
+
+
+def separate_paragraphs(answer: str, dictated_count: int) -> str:
+    if dictated_count == 0 or blank_line_gap_count(answer) > 0:
+        return answer
+    lines = [line for line in answer.splitlines() if line]
+    if len(lines) != dictated_count + 1:
+        return answer
+    return "\n\n".join(line.strip() for line in lines)
+
+
 def normalize(text: str) -> str:
     normalized = text.strip().replace("’", "'").replace("–", "-")
     normalized = re.sub(r"[ \t]+", " ", normalized)
-    normalized = re.sub(r"\n{2,}", "\n", normalized)
     return normalized
 
 
@@ -224,13 +256,15 @@ def main() -> int:
         results = []
         for case in cases:
             try:
-                actual, latency_ms, finish_reason = generate(
+                transcript = apply_paragraph_breaks(case["input"])
+                answer, latency_ms, finish_reason = generate(
                     base_url,
                     prompt,
-                    case["input"],
+                    transcript,
                     max_tokens=args.max_tokens,
                     timeout=args.timeout or 30 + len(case["input"]) / 80,
                 )
+                actual = separate_paragraphs(answer, blank_line_gap_count(transcript))
                 exact, similarity, structure_matches = score_output(actual, case["expected"])
                 truncated = finish_reason == "length"
                 passed = structure_matches and not truncated and (exact or similarity >= args.threshold)

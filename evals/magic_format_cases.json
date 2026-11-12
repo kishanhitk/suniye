@@ -238,5 +238,23 @@
     "category": "long_input",
     "input": "Hey so quick update on the onboarding experiment, we shipped the new welcome flow to fifty percent of new signups on Monday and so far the numbers look pretty good. Activation in the first twenty four hours is up from thirty one percent to thirty eight percent in the treatment group, and the drop off on the permissions screen is basically gone because we moved that step to after the first successful dictation instead of before it. Um, the one thing that got worse is the time to first dictation, it went up by about forty seconds on average because people are reading the new tips screen, so I want to try a version where the tips are collapsed by default and see if we keep the activation gain without the delay. Support tickets are flat, no new complaints about the flow specifically, although two people said the sound effect on the first recording was too loud, so we might want to lower that a bit. I am going to let this run until Friday to get enough samples for the smaller segments, especially the people coming from the homebrew install since they behave differently, and then I will write up the full results with the confidence intervals and share them in the channel. If the numbers hold I think we should roll it out to everyone next week and then start on the collapsed tips variant right after.",
     "expected": "Hey, quick update on the onboarding experiment. We shipped the new welcome flow to fifty percent of new signups on Monday, and so far the numbers look pretty good. Activation in the first twenty-four hours is up from thirty-one percent to thirty-eight percent in the treatment group, and the drop-off on the permissions screen is gone because we moved that step to after the first successful dictation instead of before it. The one thing that got worse is the time to first dictation; it went up by about forty seconds on average because people are reading the new tips screen. I want to try a version where the tips are collapsed by default and see if we keep the activation gain without the delay. Support tickets are flat; no new complaints about the flow specifically, although two people said the sound effect on the first recording was too loud, so we might want to lower that a bit. I am going to let this run until Friday to get enough samples for the smaller segments, especially the people coming from the homebrew install since they behave differently, and then I will write up the full results with the confidence intervals and share them in the channel. If the numbers hold, I think we should roll it out to everyone next week and then start on the collapsed tips variant right after."
+  },
+  {
+    "id": "paragraph_command_001",
+    "category": "paragraphs",
+    "input": "the movers arrive in the morning new paragraph tape the fragile boxes first",
+    "expected": "The movers arrive in the morning.\n\nTape the fragile boxes first."
+  },
+  {
+    "id": "paragraph_command_002",
+    "category": "paragraphs",
+    "input": "Thanks for the photos. New paragraph. I printed the best ones for the wall.",
+    "expected": "Thanks for the photos.\n\nI printed the best ones for the wall."
+  },
+  {
+    "id": "paragraph_phrase_kept_001",
+    "category": "over_formatting_guard",
+    "input": "please add a new paragraph about pricing to the proposal",
+    "expected": "Please add a new paragraph about pricing to the proposal."
   }
 ]
