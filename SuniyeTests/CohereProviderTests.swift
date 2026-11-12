@@ -69,7 +69,7 @@ final class CohereProviderTests: XCTestCase {
         let sherpa = StubTranscriptionService()
         let cohere = StubTranscriptionService()
         cohere.transcribeResult = .success("cohere-text")
-        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil, cohereService: cohere)
+        let router = RoutingTranscriptionService(sherpaService: sherpa, appleService: nil, cohereService: cohere, makeSpeechDetector: { StubSpeechDetector(result: true) })
 
         try await router.loadModel(config: RecognizerConfig(modelID: .cohereTranscribe, family: .cohereTranscribe, tokensPath: "", numThreads: 1))
         let text = try await router.transcribe(samples: [0.1], sampleRate: 16_000)
@@ -86,7 +86,7 @@ final class CohereProviderTests: XCTestCase {
         let cohere = StubTranscriptionService()
         cohere.transcribeResult = .success("done")
         cohere.progressToReport = [TranscriptionProgress(chunk: 1, totalChunks: 2), TranscriptionProgress(chunk: 2, totalChunks: 2)]
-        let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: nil, cohereService: cohere)
+        let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: nil, cohereService: cohere, makeSpeechDetector: { StubSpeechDetector(result: true) })
         try await router.loadModel(config: RecognizerConfig(modelID: .cohereTranscribe, family: .cohereTranscribe, tokensPath: "", numThreads: 1))
 
         let recorder = LockedRecorder<TranscriptionProgress>()
@@ -97,7 +97,7 @@ final class CohereProviderTests: XCTestCase {
     }
 
     func testRouterProgressTranscribeBeforeLoadThrows() async {
-        let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: nil, cohereService: StubTranscriptionService())
+        let router = RoutingTranscriptionService(sherpaService: StubTranscriptionService(), appleService: nil, cohereService: StubTranscriptionService(), makeSpeechDetector: { StubSpeechDetector(result: true) })
         do {
             _ = try await router.transcribe(samples: [0.1], sampleRate: 16_000) { _ in }
             XCTFail("Expected recognizerNotLoaded")

@@ -14,12 +14,13 @@ enum SpeechTestAudio {
         return convert(source, to: target)
     }
 
-    static func synthesizeSpeech(_ text: String, sampleRate: Double) async -> [Float] {
+    static func synthesizeSpeech(_ text: String, sampleRate: Double, voice: AVSpeechSynthesisVoice? = nil) async -> [Float] {
         guard let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false) else {
             return []
         }
         let synthesizer = AVSpeechSynthesizer()
         let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = voice
 
         var floats: [Float] = []
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in

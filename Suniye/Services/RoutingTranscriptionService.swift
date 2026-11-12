@@ -9,6 +9,9 @@ import Foundation
 /// `AppState` talks to this as a single service, so OS-gating and engine selection stay
 /// localized here rather than spreading through the app. Injectable children keep the
 /// service mockable in tests.
+///
+/// A clip without speech never reaches an engine: engines write text for noise.
+/// Only a `.probe` skips that check.
 actor RoutingTranscriptionService: TranscriptionServiceProtocol {
     enum RoutingError: LocalizedError {
         case appleSpeechUnavailable
@@ -32,18 +35,21 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
     private let appleService: TranscriptionServiceProtocol?
     private let cohereService: TranscriptionServiceProtocol
     private let qwen3Service: TranscriptionServiceProtocol
-    private var activeEngine: Engine?
+    private let makeSpeechDetector: () throws -> SpeechDetecting
+    private var active: (engine: Engine, speechDetector: SpeechDetecting)?
 
     init(
         sherpaService: TranscriptionServiceProtocol = TranscriptionService(),
         appleService: TranscriptionServiceProtocol? = RoutingTranscriptionService.makeAppleServiceIfSupported(),
         cohereService: TranscriptionServiceProtocol = CohereTranscriptionService(),
-        qwen3Service: TranscriptionServiceProtocol = Qwen3ASRTranscriptionService()
+        qwen3Service: TranscriptionServiceProtocol = Qwen3ASRTranscriptionService(),
+        makeSpeechDetector: @escaping () throws -> SpeechDetecting = { try SpeechDetector.bundled() }
     ) {
         self.sherpaService = sherpaService
         self.appleService = appleService
         self.cohereService = cohereService
         self.qwen3Service = qwen3Service
+        self.makeSpeechDetector = makeSpeechDetector
     }
 
     static func makeAppleServiceIfSupported() -> TranscriptionServiceProtocol? {
@@ -58,6 +64,7 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         guard let target = service(for: engine) else {
             throw RoutingError.appleSpeechUnavailable
         }
+        let speechDetector = try active?.speechDetector ?? makeSpeechDetector()
 
         // Load the target first; only after it succeeds do we release the previously
         // active engine. Unloading first would destroy a working recognizer even when
@@ -65,10 +72,10 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         // Apple asset), leaving the app "Ready" with no usable model.
         try await target.loadModel(config: config)
 
-        if let activeEngine, activeEngine != engine, let previous = service(for: activeEngine) {
+        if let previousEngine = active?.engine, previousEngine != engine, let previous = service(for: previousEngine) {
             await previous.unloadModel()
         }
-        activeEngine = engine
+        active = (engine, speechDetector)
     }
 
     func transcribe(
@@ -77,17 +84,30 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         purpose: TranscriptionPurpose,
         onProgress: @escaping @Sendable (TranscriptionProgress) -> Void
     ) async throws -> String {
-        guard let activeEngine, let service = service(for: activeEngine) else {
+        guard let active, let service = service(for: active.engine) else {
             throw TranscriptionService.ServiceError.recognizerNotLoaded
+        }
+        if purpose != .probe {
+            let rate = max(8_000, sampleRate)
+            let audio = try AudioResampler.resample(samples, from: rate, to: SpeechDetector.sampleRate)
+            guard active.speechDetector.containsSpeech(audio) else {
+                if purpose == .final {
+                    AppLogger.shared.log(
+                        .info,
+                        String(format: "transcribe skipped: no speech in %.2fs", Double(samples.count) / Double(rate))
+                    )
+                }
+                return ""
+            }
         }
         return try await service.transcribe(samples: samples, sampleRate: sampleRate, purpose: purpose, onProgress: onProgress)
     }
 
     func unloadModel() async {
-        if let activeEngine, let service = service(for: activeEngine) {
+        if let engine = active?.engine, let service = service(for: engine) {
             await service.unloadModel()
         }
-        activeEngine = nil
+        active = nil
     }
 
     private static func engine(for family: ASRModelFamily) -> Engine {

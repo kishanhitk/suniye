@@ -110,7 +110,7 @@ final class AppStateOnboardingV1Tests: XCTestCase {
         XCTAssertEqual(appState.selectedASRModelID, .appleSpeech)
         XCTAssertEqual(appState.loadedASRModelID, .appleSpeech)
         XCTAssertEqual(appState.phase, .ready)
-        XCTAssertEqual(transcription.transcribeCallCount, 1, "one silent decode proves the engine runs")
+        XCTAssertEqual(transcription.transcribePurposes, [.probe], "one silent decode that skips the speech check proves the engine runs")
         XCTAssertNil(appState.activeASRModelOperationID)
         XCTAssertNil(modelManager.lastDownloadedModelID, "an adopted built-in model needs no download")
         let events = systemDefaultEvents(spy)

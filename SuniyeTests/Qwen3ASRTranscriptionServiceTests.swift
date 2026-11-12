@@ -61,6 +61,20 @@ final class Qwen3ASRTranscriptionServiceTests: XCTestCase {
         await service.unloadModel()
     }
 
+    func testSilentChunkOfALongClipNeverReachesTheHelper() async throws {
+        let fixture = try makeFixture()
+        let service = Qwen3ASRTranscriptionService(makeSpeechDetector: { StubSpeechDetector(answers: [false, true]) })
+        try await service.loadModel(config: fixture.config)
+
+        let recorder = LockedRecorder<TranscriptionProgress>()
+        let text = try await service.transcribe(samples: [Float](repeating: 0.1, count: 100 * 16_000), sampleRate: 16_000) { recorder.record($0) }
+
+        XCTAssertEqual(text, "Hello from Qwen.")
+        XCTAssertEqual(recorder.values, [TranscriptionProgress(chunk: 1, totalChunks: 1)])
+        XCTAssertEqual(FakeLlamaServer.count(of: "request", at: fixture.logURL), 2, "the warm-up and the chunk with speech")
+        await service.unloadModel()
+    }
+
     func testHelperThatDiesIsRestartedForTheNextDictation() async throws {
         let fixture = try makeFixture()
         let service = Qwen3ASRTranscriptionService(makeSpeechDetector: { StubSpeechDetector(result: true) })
@@ -282,19 +296,5 @@ final class Qwen3ASRTranscriptionServiceTests: XCTestCase {
             return nil
         }
         return Data(base64Encoded: base64)
-    }
-}
-
-private final class StubSpeechDetector: SpeechDetecting {
-    let result: Bool
-    private(set) var clipLengths: [Int] = []
-
-    init(result: Bool) {
-        self.result = result
-    }
-
-    func containsSpeech(_ samples: [Float]) -> Bool {
-        clipLengths.append(samples.count)
-        return result
     }
 }
