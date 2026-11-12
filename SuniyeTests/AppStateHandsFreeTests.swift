@@ -1,4 +1,5 @@
 import Carbon
+import SuniyeAnalytics
 import XCTest
 @testable import Suniye
 
@@ -13,6 +14,7 @@ final class AppStateHandsFreeTests: XCTestCase {
     private let transcription = StubTranscriptionService()
     private let insertion = SpyTextInsertionService()
     private let sounds = SpySoundFeedbackService()
+    private let analytics = SpyAnalytics()
 
     private func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) async {
         let deadline = Date().addingTimeInterval(timeout)
@@ -45,6 +47,7 @@ final class AppStateHandsFreeTests: XCTestCase {
             hotkeyService: hotkey,
             soundFeedbackService: sounds,
             generalSettingsStore: TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .finished)),
+            analytics: analytics,
             nowProvider: { [unowned self] in self.now },
             systemGlobeKeyActionProvider: { globeKeyAction },
             startServices: true
@@ -97,6 +100,52 @@ final class AppStateHandsFreeTests: XCTestCase {
         XCTAssertEqual(transcription.transcribeCallCount, 1)
         XCTAssertEqual(insertion.insertedTexts, ["hello world"])
         XCTAssertFalse(hotkey.isCancelShortcutEnabled)
+    }
+
+    private var completedSources: [DictationSource] {
+        analytics.trackedEvents.compactMap { event -> DictationSource? in
+            if case let .dictationCompleted(metrics) = event { return metrics.source }
+            return nil
+        }
+    }
+
+    func testAnalyticsTellALockedDictationFromAHeldOne() async {
+        let appState = await readyState()
+
+        await doubleTap()
+        await press(at: 9_000)
+        await release(at: 9_100)
+        await waitUntil { appState.phase == .ready && completedSources.count == 1 }
+        await press(at: 20_000)
+        await release(at: 21_000)
+        await waitUntil { appState.phase == .ready && completedSources.count == 2 }
+
+        XCTAssertEqual(completedSources, [.hotkeyLock, .hotkey], "the lock label does not carry over to the next dictation")
+    }
+
+    func testAnalyticsCountAnEscCancelOnlyWhenTheRecordingWasDiscarded() async {
+        let appState = await readyState()
+
+        await press(at: 0)
+        hotkey.onCancel?()
+        await waitUntil { appState.phase == .ready && audio.cancelCaptureCallCount == 1 }
+        XCTAssertEqual(analytics.trackedEventNames.filter { $0 == "dictation_cancelled" }.count, 1)
+        XCTAssertTrue(completedSources.isEmpty)
+
+        // The release ends the recording first, so the late Esc cancels nothing.
+        await press(at: 5_000)
+        await release(at: 6_000)
+        hotkey.onCancel?()
+        await waitUntil { appState.phase == .ready && completedSources.count == 1 }
+        await drain()
+        XCTAssertEqual(analytics.trackedEventNames.filter { $0 == "dictation_cancelled" }.count, 1)
+    }
+
+    func testLaunchReportsWhetherDoubleTapIsAvailable() async {
+        _ = await readyState(globeKeyAction: .startDictation)
+
+        let launch = analytics.trackedEvents.first { $0.name == "app_launch" }
+        XCTAssertEqual(launch?.props["setting_double_tap"], .label("globe_starts_dictation"))
     }
 
     func testSingleTapIsDroppedWithNoTextAndNoError() async {

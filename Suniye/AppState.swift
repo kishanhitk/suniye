@@ -631,6 +631,8 @@ final class AppState {
     @ObservationIgnored private var dictationShortcutGesture = DictationShortcutGesture()
     @ObservationIgnored private var secondTapWindowTask: Task<Void, Never>?
     @ObservationIgnored private var previousTapWithDoubleTapOff: Date?
+    /// The session that a double tap locked, for the source label of its analytics event.
+    @ObservationIgnored private var lockedDictationSessionID: UUID?
     private(set) var systemGlobeKeyAction: SystemGlobeKeyAction = .doNothing
     /// What is about to move onboarding to its next step (read by step tracking).
     @ObservationIgnored private var pendingOnboardingAdvance: OnboardingAdvance?
@@ -2049,6 +2051,7 @@ final class AppState {
             "magic_format_enabled": .bool(llmEnabled),
             "magic_format_provider": .label(AnalyticsMapping.cleanupProvider(llmProvider)),
             "update_channel": .label(SafeLabel(updateChannel.rawValue)),
+            "double_tap": .label(AnalyticsMapping.doubleTapAvailability(conflict: globeDoubleTapConflict)),
         ])
     }
 
@@ -4217,6 +4220,7 @@ final class AppState {
     /// pill takes the same look and a click on it finishes the recording.
     private func lockDictationRecording() {
         AppLogger.shared.log(.info, "recording locked by double tap")
+        lockedDictationSessionID = activeAudioCaptureSessionID
         if case let .listening(levels, _, preview) = floatingIndicatorState {
             setFloatingIndicatorState(.listening(levels: levels, source: .manual, preview: preview))
         }
@@ -4260,13 +4264,19 @@ final class AppState {
 
     private func cancelRecording() async {
         AppLogger.shared.log(.info, "recording canceled with Esc")
-        await discardRecording(message: "Dictation canceled")
+        // A key release that ran first already sent the recording to
+        // transcription; that dictation is not a cancel.
+        if await discardRecording(message: "Dictation canceled") {
+            analytics.track(.dictationCancelled(stage: .recording))
+        }
     }
 
     /// Ends the recording with no transcription, no paste and no error sound.
-    private func discardRecording(message: String?) async {
+    /// Returns false when no recording was there to end.
+    @discardableResult
+    private func discardRecording(message: String?) async -> Bool {
         guard phase == .recording, let sessionID = activeAudioCaptureSessionID else {
-            return
+            return false
         }
         resetDictationShortcutGesture()
         clearActiveDictationSession(sessionID: sessionID)
@@ -4278,6 +4288,7 @@ final class AppState {
             setFloatingIndicatorState(.idle)
         }
         await audioCaptureService.cancelCapture(sessionID: sessionID, reason: nil)
+        return true
     }
 
     private func beginRecordingFlow(trigger: RecordingSource, destination: DictationDestination? = nil) async {
@@ -4682,6 +4693,7 @@ final class AppState {
                 duration: duration,
                 llmOutcome: llmOutcome,
                 source: source,
+                lockedByDoubleTap: sessionID == lockedDictationSessionID,
                 frontmostAppBundleID: frontmostAppBundleID,
                 destination: destination.analyticsDestination
             )
@@ -4730,6 +4742,7 @@ final class AppState {
         duration: TimeInterval,
         llmOutcome: MagicFormatPolishOutcome?,
         source: RecordingSource,
+        lockedByDoubleTap: Bool,
         frontmostAppBundleID: String?,
         destination: SuniyeAnalytics.DictationDestination = .systemInsertion
     ) {
@@ -4743,7 +4756,7 @@ final class AppState {
             wordCount: wordCount,
             charCount: finalText.count,
             audioDurationMs: Int(duration * 1000),
-            source: AnalyticsMapping.source(source),
+            source: AnalyticsMapping.source(source, lockedByDoubleTap: lockedByDoubleTap),
             destination: destination,
             asrModel: SafeLabel(selectedASRModelID.rawValue),
             asrFamily: SafeLabel(ASRModelCatalog.entry(for: selectedASRModelID).family.rawValue),
@@ -4816,6 +4829,7 @@ final class AppState {
                 duration: duration,
                 llmOutcome: llmOutcome,
                 source: source,
+                lockedByDoubleTap: sessionID == lockedDictationSessionID,
                 frontmostAppBundleID: nil,
                 destination: .onboardingPractice
             )
