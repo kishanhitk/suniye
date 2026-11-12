@@ -4236,6 +4236,8 @@ final class AppState {
         phase = .transcribing
         statusText = "Transcribing..."
         setFloatingIndicatorState(Self.transcribingIndicatorState)
+        let duration = Date().timeIntervalSince(context.startedAt)
+        dictationTiming.stopped = .now()
 
         let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
         guard let context = activeDictationSession?.context, context.id == sessionID else {
@@ -4243,8 +4245,6 @@ final class AppState {
         }
         let samples = captured.samples
         let sampleRate = captured.sampleRate
-        let duration = Date().timeIntervalSince(context.startedAt)
-        dictationTiming.stopped = .now()
         let destination = context.destination
         AppLogger.shared.log(.info, "dictation stop samples=\(samples.count) sr=\(sampleRate) duration=\(String(format: "%.2f", duration))")
 
