@@ -44,9 +44,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
       if (preferred === null) {
         return notAcceptableResponse();
       }
-      if (doc.cache && context.cache.enabled) {
-        context.cache.set(doc.cache);
-      }
       return markdownResponse(doc.body, pageUrl, doc.status);
     }
   }
