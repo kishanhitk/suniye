@@ -63,6 +63,15 @@ describe("releases source", () => {
     expect(releases).toHaveLength(1);
   });
 
+  test("calls without the token when the token is not a valid header value", async () => {
+    const github = fakeGitHub(ok());
+
+    const releases = await createReleasesSource(github.fetcher, now)("t0ken\nsecond line");
+
+    expect(github.authorizations).toEqual([null]);
+    expect(releases).toHaveLength(1);
+  });
+
   test("answers from the last good list for five minutes", async () => {
     const github = fakeGitHub(ok());
     const fetchReleases = createReleasesSource(github.fetcher, now);

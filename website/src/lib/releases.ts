@@ -42,12 +42,16 @@ const releaseDateFormatter = new Intl.DateTimeFormat("en", {
 });
 
 function requestGitHubReleases(fetcher: typeof fetch, githubToken: string | undefined): Promise<Response> {
-  const headers: Record<string, string> = {
+  const headers = new Headers({
     Accept: "application/vnd.github+json",
     "User-Agent": "suniye-website",
-  };
+  });
   if (githubToken) {
-    headers.Authorization = `Bearer ${githubToken}`;
+    try {
+      headers.set("Authorization", `Bearer ${githubToken}`);
+    } catch {
+      console.warn("GITHUB_TOKEN is not a valid header value; fetching releases without it");
+    }
   }
   return fetcher(GITHUB_RELEASES_API_URL, { headers, signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS) });
 }
