@@ -33,19 +33,20 @@ enum MagicFormatOutputSanitizer {
         return true
     }
 
+    /// Blank lines only where the speaker said "new paragraph". Without a list cue,
+    /// each dictated paragraph is one line, so a preamble line still fails.
     private static func isValidMultilineOutput(_ output: String, for input: String) -> Bool {
-        guard MagicFormatFormattingIntentDetector.detect(in: input).allowsMultiline else {
+        let paragraphBreaks = MagicFormatParagraphBreaks.dictatedCount(in: input)
+        guard MagicFormatParagraphBreaks.blankLineGapCount(in: output) <= paragraphBreaks else {
             return false
         }
 
-        let lines = output
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-        guard lines.count <= 20, lines.allSatisfy({ !$0.isEmpty }) else {
-            return false
-        }
-
-        return true
+        let textLineCount = output
+            .split(whereSeparator: \.isNewline)
+            .filter { !MagicFormatParagraphBreaks.isBlank($0) }
+            .count
+        let maxTextLines = MagicFormatFormattingIntentDetector.detect(in: input).allowsMultiline ? 20 : paragraphBreaks + 1
+        return textLineCount <= maxTextLines
     }
 }
 
@@ -63,10 +64,13 @@ enum MagicFormatPipeline {
         sanitize: (String) -> String = MagicFormatOutputSanitizer.sanitize,
         generate: (MagicFormatGenerationRequest) async throws -> String
     ) async throws -> String {
-        let trimmedInput = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Models keep a blank line they read more often than they write one for the
+        // spoken command, so the transcript carries its paragraph breaks in place.
+        let trimmedInput = MagicFormatParagraphBreaks.applied(to: text)
         guard !trimmedInput.isEmpty else {
             throw LLMPostProcessorError.emptyOutput
         }
+        let paragraphBreaks = MagicFormatParagraphBreaks.dictatedCount(in: trimmedInput)
 
         var lastInvalidOutputWasEmpty = false
         for attempt in 0 ..< 2 {
@@ -98,7 +102,7 @@ enum MagicFormatPipeline {
             let raw = try await generate(request)
             let sanitized = sanitize(raw)
             if MagicFormatOutputSanitizer.isValidPlainText(sanitized, for: trimmedInput) {
-                return sanitized
+                return MagicFormatParagraphBreaks.separatingParagraphs(in: sanitized, dictatedCount: paragraphBreaks)
             }
             lastInvalidOutputWasEmpty = sanitized.isEmpty
         }
@@ -296,7 +300,9 @@ enum MagicFormatPromptComposer {
         }
 
         if retrying {
-            if formattingIntent.allowsMultiline {
+            if MagicFormatParagraphBreaks.dictatedCount(in: text) > 0 {
+                sections.append("Retry correction: return only the cleaned transcript text. Put an empty line only where the speaker said \"new paragraph\". Do not add wrapper text, markdown, quotes around the answer, or extra commentary.")
+            } else if formattingIntent.allowsMultiline {
                 sections.append("Retry correction: return only the cleaned transcript text as a plain-text list. Do not add wrapper text, markdown, quotes around the answer, or extra commentary.")
             } else {
                 sections.append("Retry correction: return only the cleaned transcript text. One line. Do not add wrapper text, markdown, quotes around the answer, or extra commentary.")

@@ -28,7 +28,67 @@ final class MagicFormatOutputPolicyMoreTests: XCTestCase {
         XCTAssertFalse(MagicFormatOutputSanitizer.isValidPlainText("- one\n\n- two", for: input))
     }
 
+    func testSpokenNewParagraphsAllowOneBlankLineEach() {
+        let input = "Hi Nora, new paragraph. The lease is signed. New paragraph. Thanks, new line, Omar"
+        XCTAssertTrue(MagicFormatOutputSanitizer.isValidPlainText("Hi Nora,\n\nThe lease is signed.\n\nThanks,\nOmar", for: input))
+    }
+
+    func testBlankLinesBeyondTheDictatedParagraphsAreInvalid() {
+        let input = "hi nora new paragraph the lease is signed"
+        XCTAssertFalse(MagicFormatOutputSanitizer.isValidPlainText("Sure, here it is:\n\nHi Nora,\n\nThe lease is signed.", for: input))
+    }
+
+    func testPreambleLineBeforeDictatedParagraphsIsInvalid() {
+        let input = "hi nora new paragraph the lease is signed"
+        XCTAssertTrue(MagicFormatOutputSanitizer.isValidPlainText("Hi Nora,\n\nThe lease is signed.", for: input))
+        XCTAssertFalse(MagicFormatOutputSanitizer.isValidPlainText("Here is the cleaned text:\nHi Nora,\n\nThe lease is signed.", for: input))
+    }
+
+    func testNewParagraphAfterAnArticleIsNotACommand() {
+        let input = "please add a new paragraph about pricing to the proposal"
+        XCTAssertFalse(MagicFormatOutputSanitizer.isValidPlainText("Please add a\n\nabout pricing to the proposal.", for: input))
+    }
+
     // MARK: - MagicFormatPipeline
+
+    func testPipelineSendsDictatedParagraphsAsBlankLinesAndAcceptsThem() async throws {
+        var prompts: [String] = []
+        let output = try await MagicFormatPipeline.polish(
+            text: "the movers arrive in the morning new paragraph tape the fragile boxes first",
+            systemPrompt: "prompt",
+            keywords: []
+        ) { request in
+            prompts.append(request.prompt)
+            return "The movers arrive in the morning.\n\nTape the fragile boxes first."
+        }
+
+        XCTAssertEqual(output, "The movers arrive in the morning.\n\nTape the fragile boxes first.")
+        XCTAssertEqual(prompts, ["<transcript>\nthe movers arrive in the morning\n\ntape the fragile boxes first\n</transcript>"])
+    }
+
+    func testPipelineTurnsALineBreakAtADictatedParagraphIntoABlankLine() async throws {
+        let output = try await MagicFormatPipeline.polish(
+            text: "the bakery sold out by noon new paragraph we baked more bread new paragraph we open earlier tomorrow",
+            systemPrompt: "prompt",
+            keywords: []
+        ) { _ in
+            "The bakery sold out by noon.  \nWe baked more bread.\nWe open earlier tomorrow."
+        }
+
+        XCTAssertEqual(output, "The bakery sold out by noon.\n\nWe baked more bread.\n\nWe open earlier tomorrow.")
+    }
+
+    func testPipelineKeepsLineBreaksThatDoNotMatchTheDictatedParagraphs() async throws {
+        let output = try await MagicFormatPipeline.polish(
+            text: "hi grace new paragraph the plumber comes thursday cheers new line sam",
+            systemPrompt: "prompt",
+            keywords: []
+        ) { _ in
+            "Hi Grace,\nThe plumber comes Thursday.\nCheers,\nSam"
+        }
+
+        XCTAssertEqual(output, "Hi Grace,\nThe plumber comes Thursday.\nCheers,\nSam")
+    }
 
     func testPipelineRejectsWhitespaceOnlyInput() async {
         do {
@@ -78,6 +138,19 @@ final class MagicFormatOutputPolicyMoreTests: XCTestCase {
 
         XCTAssertTrue(instructions.contains("Retry correction: return only the cleaned transcript text as a plain-text list."))
         XCTAssertFalse(instructions.contains("One line."))
+    }
+
+    func testRetryCorrectionForDictatedParagraphsAsksForThoseBlankLinesOnly() {
+        let instructions = MagicFormatPromptComposer.makeInstructions(
+            systemPrompt: "prompt",
+            keywords: [],
+            text: "dear team comma new paragraph the offsite moves to friday new paragraph regards comma new line mia",
+            retrying: true
+        )
+
+        XCTAssertTrue(instructions.contains("Put an empty line only where the speaker said \"new paragraph\"."))
+        XCTAssertFalse(instructions.contains("One line."))
+        XCTAssertFalse(instructions.contains("as a plain-text list"))
     }
 
     func testRetryCorrectionForSingleLineIntentAsksForOneLine() {
