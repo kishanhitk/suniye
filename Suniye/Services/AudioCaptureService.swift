@@ -120,7 +120,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     private var eventCallback: ((AudioCaptureEvent) -> Void)?
     private var activeCapture: ActiveCapture?
 
-    /// `scheduleReleaseTail` runs its closure when the release tail is over.
+    static let releaseTail: DispatchTimeInterval = .milliseconds(200)
+
     init(
         deviceMonitor: AudioDeviceMonitorProtocol = CoreAudioDeviceMonitor(),
         hardwareCatalog: AudioCaptureHardwareCatalogProtocol = CoreAudioCaptureHardwareCatalog(),
@@ -128,7 +129,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         maximumDurationSeconds: Double = 10 * 60,
         firstFrameDeadlineSeconds: Double = 1.5,
         scheduleReleaseTail: @escaping (@escaping () -> Void) -> Void = { endOfTail in
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + .milliseconds(200), execute: endOfTail)
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + AudioCaptureService.releaseTail, execute: endOfTail)
         }
     ) {
         self.deviceMonitor = deviceMonitor
