@@ -788,33 +788,6 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(soundFeedback.playedEvents, [.transcriptionSucceeded])
     }
 
-    func testSoundFeedbackEnabledPlaysSuccessForSubmitOnlyCommand() async {
-        let audioCapture = StubAudioCaptureService()
-        audioCapture.stopCaptureResult = makeValidCapturedAudio()
-        let transcriptionService = StubTranscriptionService()
-        transcriptionService.transcribeResult = .success("send")
-        let textInsertionService = SpyTextInsertionService()
-        let soundFeedback = SpySoundFeedbackService()
-        let appState = makeTestAppState(
-            transcriptionService: transcriptionService,
-            audioCaptureService: audioCapture,
-            textInsertionService: textInsertionService,
-            soundFeedbackService: soundFeedback
-        )
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-        appState.soundFeedbackEnabled = true
-
-        appState.toggleFloatingIndicatorRecording()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        appState.toggleFloatingIndicatorRecording()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        XCTAssertEqual(textInsertionService.submitCallCount, 1)
-        XCTAssertEqual(soundFeedback.playedEvents, [.transcriptionSucceeded])
-    }
-
     func testSoundFeedbackEnabledPlaysErrorForInsertionFailure() async {
         let audioCapture = StubAudioCaptureService()
         audioCapture.stopCaptureResult = makeValidCapturedAudio()

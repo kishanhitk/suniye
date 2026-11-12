@@ -3860,30 +3860,6 @@ final class AppState {
         }
     }
 
-    func runSubmitCommandE2ESmoke() {
-        Task { @MainActor in
-            AppLogger.shared.log(.info, "e2e submit smoke start")
-            let cases: [(input: String, expectedText: String, expectedSubmit: Bool)] = [
-                ("hello world send", "hello world", true),
-                ("hello world, enter.", "hello world", true),
-                ("send", "", true),
-                ("please send me notes", "please send me notes", false)
-            ]
-
-            var passed = true
-            for testCase in cases {
-                let parsed = AppState.parseSubmitCommand(from: testCase.input)
-                if parsed.text != testCase.expectedText || parsed.shouldSubmit != testCase.expectedSubmit {
-                    passed = false
-                    AppLogger.shared.log(.error, "e2e submit smoke case failed")
-                }
-            }
-
-            AppLogger.shared.log(.info, "e2e submit smoke done passed=\(passed)")
-            NSApp.terminate(nil)
-        }
-    }
-
     private func wireHotkey() {
         hotkeyService.onHotkeyDown = { [weak self] in
             AppLogger.shared.log(.debug, "hotkey callback: down")
@@ -4320,23 +4296,15 @@ final class AppState {
         destination: DictationDestination
     ) async throws {
         let usesSystemInsertion = destination == .systemInsertion
-        let rawParse = AppState.parseSubmitCommand(from: rawText)
-        var shouldSubmit = usesSystemInsertion && rawParse.shouldSubmit
-        var finalText = rawParse.text
+        var finalText = rawText
         var llmOutcome: MagicFormatPolishOutcome?
 
-        if !finalText.isEmpty {
+        if !rawText.isEmpty {
             dictationTiming.llmStart = .now()
-            let outcome = await polishOutcome(rawParse.text, frontmostAppBundleID: frontmostAppBundleID)
+            let outcome = await polishOutcome(rawText, frontmostAppBundleID: frontmostAppBundleID)
             dictationTiming.llmEnd = .now()
             llmOutcome = outcome
-            let polishedParse = AppState.parseSubmitCommand(from: outcome.text)
-            finalText = polishedParse.text
-            shouldSubmit = shouldSubmit || (usesSystemInsertion && polishedParse.shouldSubmit)
-        }
-
-        if usesSystemInsertion && autoSubmitEnabled && !finalText.isEmpty {
-            shouldSubmit = true
+            finalText = outcome.text
         }
 
         let wordCount = finalText.dictationWordCount
@@ -4346,9 +4314,7 @@ final class AppState {
         var didCompleteDictation = false
         var didFailInsertion = false
         var submitKeyFailed = false
-        var didInsertFinalText = finalText.isEmpty
-        // Submit-only sessions have nothing to verify, so they stay eligible.
-        var insertionWasVerified = true
+        var insertionWasVerified = false
 
         // Attribution is applied after insertion succeeds, not here: the record
         // is stored before insertion is attempted so a failure is still
@@ -4367,9 +4333,6 @@ final class AppState {
         // fails because focus moved before transcription finished.
         if usesSystemInsertion && !finalText.isEmpty {
             recentResults.insert(result, at: 0)
-        }
-
-        if usesSystemInsertion && (!finalText.isEmpty || shouldSubmit) {
             try await requireAccessibilityForInsertion()
         }
 
@@ -4382,7 +4345,6 @@ final class AppState {
                 )
                 do {
                     let outcome = try await textInsertionService.insertText(insertionText)
-                    didInsertFinalText = true
                     insertionWasVerified = outcome == .intoFocusedElement
                     if !insertionWasVerified {
                         AppLogger.shared.log(
@@ -4426,27 +4388,24 @@ final class AppState {
         // the insertion succeeded.
         // An unverified paste went out without any idea of what holds focus, so
         // Return could land anywhere; withhold it rather than guess (KIS-205).
-        if usesSystemInsertion && shouldSubmit && didInsertFinalText && insertionWasVerified {
-            if !finalText.isEmpty {
-                try? await Task.sleep(nanoseconds: 120_000_000)
-            }
-            didCompleteDictation = true
+        if autoSubmitEnabled && insertionWasVerified {
+            try? await Task.sleep(nanoseconds: 120_000_000)
             do {
                 try textInsertionService.submitActiveInput()
-                AppLogger.shared.log(.info, "submit command executed")
+                AppLogger.shared.log(.info, "submit key posted")
             } catch {
                 // Not rethrown: the transcript was produced and inserted, so
                 // letting this reach the transcription catch reported
                 // "Transcription failed" for a dictation that in fact
                 // succeeded — only the Enter key did not land. The user is
                 // told exactly that, not that the text is missing.
-                AppLogger.shared.log(.error, "submit command failed error=\(error.localizedDescription)")
+                AppLogger.shared.log(.error, "submit key failed error=\(error.localizedDescription)")
                 analytics.track(.error(type: .insertion, code: .unknown))
                 submitKeyFailed = true
             }
         }
 
-        if finalText.isEmpty && !shouldSubmit {
+        if finalText.isEmpty {
             AppLogger.shared.log(.warning, "transcription returned empty text samples=\(sampleCount) sr=\(sampleRate)")
             playSoundFeedback(.error)
             analytics.track(.dictationEmpty)
@@ -5480,24 +5439,6 @@ final class AppState {
         statusText = "Ready"
         phase = .ready
         AppLogger.shared.log(.info, "cleared retryable error state before recording")
-    }
-
-    nonisolated static func parseSubmitCommand(from text: String) -> (text: String, shouldSubmit: Bool) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return ("", false)
-        }
-
-        let pattern = #"(?i)(?:^|\s)(send|enter)\b[\s\.\!\?,;:\)\]\"']*$"#
-        guard let commandRange = trimmed.range(of: pattern, options: .regularExpression) else {
-            return (trimmed, false)
-        }
-
-        var cleaned = String(trimmed[..<commandRange.lowerBound])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        cleaned = cleaned.replacingOccurrences(of: #"[,\s]+$"#, with: "", options: .regularExpression)
-
-        return (cleaned, true)
     }
 
     private static func detectLLME2EMode(arguments: [String]) -> LLME2EMode {

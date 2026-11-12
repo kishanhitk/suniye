@@ -48,9 +48,7 @@ extension ProcessInfo {
         }
 
         let args = Set(CommandLine.arguments)
-        if args.contains("--e2e-llm-success") ||
-            args.contains("--e2e-llm-fallback") ||
-            args.contains("--e2e-submit-command") {
+        if args.contains("--e2e-llm-success") || args.contains("--e2e-llm-fallback") {
             return false
         }
 
