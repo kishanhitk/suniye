@@ -212,6 +212,38 @@ final class AppleFoundationModelsPostProcessorTests: XCTestCase {
         XCTAssertFalse(client.prompts.first?.contains("<transcript>") == true)
     }
 
+    func testSpokenNewParagraphReachesTheModelAsABlankLine() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "Hi Grace,\n\nThe plumber can come on Thursday.",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(
+            text: "Hi Grace, new paragraph. The plumber can come on Thursday.",
+            config: makeConfig()
+        )
+
+        XCTAssertEqual(output, "Hi Grace,\n\nThe plumber can come on Thursday.")
+        XCTAssertEqual(client.callCount, 1)
+        let prompt = try XCTUnwrap(client.prompts.first)
+        XCTAssertTrue(prompt.hasSuffix("Hi Grace,\n\nThe plumber can come on Thursday."))
+        XCTAssertFalse(prompt.localizedCaseInsensitiveContains("new paragraph"))
+    }
+
+    func testParagraphAfterADictatedBreakStartsWithACapital() async throws {
+        let client = FakeAppleFoundationModelsClient(outputs: [
+            "Hi Nora,\n\nthe lease is signed, thanks, Amar.",
+        ])
+        let processor = AppleFoundationModelsPostProcessor(client: client)
+
+        let output = try await processor.polish(
+            text: "Hi Nora, new paragraph, the lease is signed, thanks, Amar.",
+            config: makeConfig()
+        )
+
+        XCTAssertEqual(output, "Hi Nora,\n\nThe lease is signed, thanks, Amar.")
+    }
+
     func testUnrequestedMultilineOutputRetries() async throws {
         let client = FakeAppleFoundationModelsClient(outputs: [
             "First line.\nSecond line.",

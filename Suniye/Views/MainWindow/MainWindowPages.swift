@@ -308,7 +308,6 @@ struct GeneralPage: View {
         SettingsGroup(heading: "Dictation") {
             ToggleSettingRow(
                 title: "Press Enter after pasting",
-                info: "You can also say \"send\" or \"enter\" at the end of a dictation to trigger this once, without turning it on here.",
                 isOn: $appState.autoSubmitEnabled
             )
         }
@@ -368,17 +367,26 @@ struct GeneralPage: View {
                         .font(AppTypography.codeBody)
                         .foregroundStyle(MainWindowPalette.secondaryText)
 
-                    ActionIconButton(
-                        systemName: "arrow.triangle.2.circlepath",
-                        accessibilityLabel: "Check for updates",
-                        tint: MainWindowPalette.tertiaryText,
-                        hoverTint: Color.primary
-                    ) {
-                        appState.checkForUpdates()
+                    if appState.isUpdateReadyToInstall {
+                        Button("Restart to Update") {
+                            appState.restartToUpdate()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(!appState.canRestartToUpdate)
+                    } else {
+                        ActionIconButton(
+                            systemName: "arrow.triangle.2.circlepath",
+                            accessibilityLabel: "Check for updates",
+                            tint: MainWindowPalette.tertiaryText,
+                            hoverTint: Color.primary
+                        ) {
+                            appState.checkForUpdates()
+                        }
+                        .help("Check for updates")
+                        .disabled(!appState.canCheckForUpdates)
+                        .opacity(appState.canCheckForUpdates ? 1 : 0.4)
                     }
-                    .help("Check for updates")
-                    .disabled(!appState.canCheckForUpdates)
-                    .opacity(appState.canCheckForUpdates ? 1 : 0.4)
                 }
             }
 

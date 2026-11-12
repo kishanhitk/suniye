@@ -23,6 +23,11 @@ Suniye releases are signed with an Apple Developer ID and notarized, so macOS op
 ## Holding the dictation key did nothing after the microphone prompt
 - If you let go of the key while macOS asks for Microphone access, Suniye does not start recording. The floating indicator shows `Hold again to dictate`. Hold the key again.
 
+## Nothing was pasted and Suniye played the error sound
+- Suniye heard no speech. It checks each recording for speech before it transcribes it, so room noise, key clicks or a silent pause do not become invented text.
+- Speak closer to the microphone, or check the input in **General > Microphone**.
+- `~/Library/Application Support/Suniye/logs/app.log` has the line `transcribe skipped: no speech` for each such recording.
+
 ## Local Model download failed
 - Dictation keeps working without Magic Format.
 - Open `Magic Format`, select `Local Model`, and retry the download.

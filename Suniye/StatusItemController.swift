@@ -121,9 +121,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         copyLastTranscriptItem.isEnabled = appState.lastTranscriptText != nil
 
-        checkUpdatesItem.title = "Check for Updates..."
-        checkUpdatesItem.action = #selector(checkForUpdates)
-        checkUpdatesItem.isEnabled = appState.canCheckForUpdates
+        if appState.isUpdateReadyToInstall {
+            checkUpdatesItem.title = "Restart to Update"
+            checkUpdatesItem.action = #selector(restartToUpdate)
+        } else {
+            checkUpdatesItem.title = "Check for Updates..."
+            checkUpdatesItem.action = #selector(checkForUpdates)
+        }
 
         downloadItem.isEnabled = phase == .needsModel || phase == .downloadingModel || phase == .error
         downloadItem.isHidden = !(phase == .needsModel || phase == .downloadingModel || phase == .error)
@@ -198,6 +202,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc
+    private func restartToUpdate() {
+        AppLogger.shared.log(.info, "menu action: restart to update")
+        appState.restartToUpdate()
+    }
+
+    @objc
     private func downloadModel() {
         AppLogger.shared.log(.info, "menu action: download model")
         appState.startModelDownload()
@@ -213,6 +223,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func quitApp() {
         AppLogger.shared.log(.info, "menu action: quit app")
         NSApplication.shared.terminate(nil)
+    }
+}
+
+extension StatusItemController: NSMenuItemValidation {
+    /// The menu auto-enables its items and ignores `isEnabled`, so the restart
+    /// item is greyed here while a dictation runs.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        menuItem.action != #selector(restartToUpdate) || appState.canRestartToUpdate
     }
 }
 
