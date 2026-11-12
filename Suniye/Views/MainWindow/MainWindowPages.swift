@@ -77,6 +77,7 @@ struct GeneralPage: View {
         .animation(motion, value: appState.hasMicPermission)
         .animation(motion, value: appState.hasAccessibilityPermission)
         .animation(motion, value: inputWarning)
+        .animation(motion, value: appState.inputStandInNote)
         .animation(motion, value: appState.hotkeyValidationMessage)
         .animation(motion, value: appState.launchAtLoginError ?? appState.launchAtLoginWarningText)
     }
@@ -141,8 +142,10 @@ struct GeneralPage: View {
             ControlSettingRow(
                 title: "Input device",
                 // Only while the picker says "System Default" and therefore hides
-                // which device that actually is.
-                info: appState.selectedInputDeviceID == nil ? appState.effectiveInputDeviceStatusText : nil
+                // which device that actually is, and no stand-in note names it.
+                info: appState.selectedInputDeviceID == nil && appState.inputStandInNote == nil
+                    ? appState.effectiveInputDeviceStatusText
+                    : nil
             ) {
                 NativePopupPicker(
                     items: inputDeviceChoices,
@@ -150,6 +153,10 @@ struct GeneralPage: View {
                     title: \.title
                 )
                 .frame(maxWidth: 260)
+            }
+
+            if let note = appState.inputStandInNote {
+                inputStandInRow(note)
             }
 
             if let warning = inputWarning {
@@ -178,6 +185,19 @@ struct GeneralPage: View {
             return appState.audioRouteWarningText ?? appState.effectiveInputDeviceStatusText
         }
         return appState.audioRouteWarningText
+    }
+
+    /// Not a warning: skipping a Bluetooth or switched-off microphone is the
+    /// intended behavior, so the row only names the stand-in.
+    private func inputStandInRow(_ note: String) -> some View {
+        Label(note, systemImage: "mic")
+            .font(AppTypography.subheadline)
+            .foregroundStyle(MainWindowPalette.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 12)
+            .padding(.horizontal, 4)
+            .transition(SettingsMotion.notice)
     }
 
     private func inputWarningRow(_ warning: String) -> some View {

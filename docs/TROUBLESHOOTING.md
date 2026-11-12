@@ -48,13 +48,20 @@ If this happened right after the update to the first Developer ID release, grant
 
 ## Bluetooth audio drops to call quality while dictating
 - Bluetooth headphones switch to their call-quality profile whenever their microphone is used. This is a Bluetooth limitation, not an audio-quality setting Suniye can override.
-- To keep high-quality headphone playback, choose the built-in Mac microphone or a USB microphone while continuing to use the Bluetooth headphones for output. Suniye shows the current route and offers a recommended local microphone when one is available.
+- With **System Default**, Suniye does not record from a Bluetooth default input. It uses the built-in microphone, else another wired microphone, and uses Bluetooth only when nothing else can record. **General > Microphone** names the microphone in use.
+- To dictate into the headset on purpose, choose it in **General > Microphone**. Suniye then shows the call-quality warning and offers a local microphone.
 - Echo Cancellation uses Apple's Voice Processing only when both the input and output route support it. Suniye bypasses it for Bluetooth routes.
 
-## Selected microphone is unavailable
-- Suniye preserves an explicitly selected microphone when it is disconnected instead of silently recording from a different device.
-- Reconnect the microphone or choose another input device in **General > Microphone**. The unavailable device remains visible in the picker until you make a different choice.
+## Saved microphone is not connected
+- Suniye keeps the saved microphone and records from the **System Default** choice until it is connected again. **General > Microphone** names the microphone that stands in.
+- The disconnected microphone stays in the picker as unavailable until you make a different choice.
+
+## Dictation with the lid closed
+- A MacBook switches its built-in microphone off in hardware while the lid is closed. Suniye then records from another microphone and names it in **General > Microphone**.
+- With no other microphone, dictation shows `The built-in microphone is off while the lid is closed.`
+- Closing the lid during a dictation is not detected; the rest of that recording is silent.
 
 ## Dictation stops after an audio-device change
-- Suniye stops the current dictation if the active microphone changes, becomes unavailable, changes format, is muted, or Core Audio restarts.
+- A dictation keeps its microphone when the default input changes or another microphone connects. The next dictation picks again.
+- Suniye stops the current dictation if its microphone disconnects, changes format, is muted, or Core Audio restarts. With Echo Cancellation on, a change of the default output also stops it.
 - Check the current route in **General > Microphone**, then start the dictation again.

@@ -16,6 +16,95 @@ struct AudioCaptureFormat: Equatable, Sendable {
     let channelCount: Int
 }
 
+/// Why Suniye records from a microphone other than the one the user chose.
+enum AudioInputStandIn: Equatable, Sendable {
+    /// The saved microphone is not connected.
+    case preferredMissing
+    /// The chosen microphone is this built-in one, off while the lid is closed.
+    case offWithLidClosed(name: String)
+    /// The system default is this Bluetooth microphone. Recording from it
+    /// switches the headset to call-quality audio.
+    case bluetoothDefault(name: String)
+
+    var logValue: String {
+        switch self {
+        case .preferredMissing: return "preferred_missing"
+        case .offWithLidClosed: return "lid_closed"
+        case .bluetoothDefault: return "bluetooth_default"
+        }
+    }
+}
+
+struct AudioInputResolution {
+    let device: AudioInputDevice
+    let standIn: AudioInputStandIn?
+}
+
+/// Picks the microphone a dictation records from.
+///
+/// A connected saved microphone always wins, Bluetooth included: that is how a
+/// user chooses a headset on purpose. Otherwise the system default, unless it is
+/// Bluetooth or off with the lid closed; then the built-in microphone, then
+/// another wired input. Bluetooth only when nothing else can record.
+enum AudioInputResolver {
+    static func resolve(
+        preferredInputDeviceID: String?,
+        devices: [AudioInputDevice]
+    ) throws -> AudioInputResolution {
+        let usable = devices.filter(\.isAvailable)
+        if let preferredInputDeviceID,
+           let preferred = usable.first(where: { $0.id == preferredInputDeviceID }) {
+            return AudioInputResolution(device: preferred, standIn: nil)
+        }
+
+        let wired = usable.filter { canStandIn($0.transport) }
+        guard let device = usable.first(where: { $0.isDefault && !$0.transport.isBluetooth })
+            ?? wired.first(where: { $0.transport == .builtIn })
+            ?? wired.first
+            // A Bluetooth microphone beats recording nothing.
+            ?? usable.first(where: \.isDefault)
+            ?? usable.first(where: \.transport.isBluetooth)
+        else {
+            throw devices.contains { $0.availability == .offWithLidClosed }
+                ? AudioCaptureServiceError.builtInMicrophoneOff
+                : AudioCaptureServiceError.noInputDevice
+        }
+
+        let standIn: AudioInputStandIn?
+        if let preferredInputDeviceID {
+            standIn = devices.first { $0.id == preferredInputDeviceID }.flatMap(reasonSkipped) ?? .preferredMissing
+        } else if let systemDefault = devices.first(where: \.isDefault), systemDefault.id != device.id {
+            standIn = reasonSkipped(systemDefault)
+        } else {
+            standIn = nil
+        }
+        return AudioInputResolution(device: device, standIn: standIn)
+    }
+
+    private static func reasonSkipped(_ device: AudioInputDevice) -> AudioInputStandIn? {
+        switch device.availability {
+        case .offWithLidClosed:
+            return .offWithLidClosed(name: device.name)
+        case .available where device.transport.isBluetooth:
+            return .bluetoothDefault(name: device.name)
+        case .available, .notConnected:
+            return nil
+        }
+    }
+
+    /// A virtual or aggregate input can record silence while its app is idle,
+    /// and an iPhone's Continuity microphone prompts on the phone and can fail,
+    /// so neither replaces a skipped microphone.
+    private static func canStandIn(_ transport: AudioDeviceTransport) -> Bool {
+        switch transport {
+        case .builtIn, .usb, .other:
+            return true
+        case .bluetooth, .bluetoothLE, .continuity, .aggregate, .virtual:
+            return false
+        }
+    }
+}
+
 struct AudioDeviceRoute: Equatable, Sendable {
     let preferredInputDeviceID: String?
     let effectiveInputDeviceID: String
@@ -24,6 +113,7 @@ struct AudioDeviceRoute: Equatable, Sendable {
     let outputTransport: AudioDeviceTransport
     let nominalInputSampleRate: Int
     let inputChannelCount: Int
+    let standIn: AudioInputStandIn?
 }
 
 struct AudioCapturePlan: Equatable, Sendable {
@@ -45,7 +135,8 @@ struct AudioCapturePlan: Equatable, Sendable {
             requestedEchoCancellation: requestedEchoCancellation,
             effectiveEchoCancellation: effectiveEchoCancellation,
             backend: backend,
-            fallbackReason: fallbackReason
+            fallbackReason: fallbackReason,
+            standIn: deviceRoute.standIn
         )
     }
 }
@@ -98,7 +189,7 @@ enum AudioCaptureInterruption: String, Codable, Equatable, Sendable {
         case .deviceChanged, .engineConfigurationChanged:
             return "Microphone changed. Try again."
         case .deviceUnavailable:
-            return "The selected microphone disconnected. Reconnect it or choose another input."
+            return "The microphone disconnected. Try again."
         case .formatChanged:
             return "The microphone format changed. Try again."
         case .serviceRestarted:
@@ -129,9 +220,10 @@ struct AudioRouteSnapshot: Equatable, Sendable {
     let effectiveEchoCancellation: Bool
     let backend: AudioCaptureBackend
     let fallbackReason: AudioCaptureFallbackReason?
+    let standIn: AudioInputStandIn?
 
     var privacySafeLogValue: String {
-        "input=\(inputTransport.rawValue) output=\(outputTransport.rawValue) sr=\(inputSampleRate) channels=\(inputChannelCount) backend=\(backend.rawValue) aec_requested=\(requestedEchoCancellation) aec_effective=\(effectiveEchoCancellation) fallback=\(fallbackReason?.rawValue ?? "none")"
+        "input=\(inputTransport.rawValue) output=\(outputTransport.rawValue) sr=\(inputSampleRate) channels=\(inputChannelCount) backend=\(backend.rawValue) aec_requested=\(requestedEchoCancellation) aec_effective=\(effectiveEchoCancellation) fallback=\(fallbackReason?.rawValue ?? "none") standin=\(standIn?.logValue ?? "none")"
     }
 }
 

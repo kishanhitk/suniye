@@ -81,24 +81,36 @@ enum AudioDeviceTransport: String, Equatable, Codable, Sendable {
 }
 
 struct AudioInputDevice: Identifiable, Equatable, Codable, Sendable {
+    enum Availability: String, Equatable, Codable, Sendable {
+        case available
+        /// The saved microphone, listed while it is disconnected.
+        case notConnected
+        /// A MacBook's built-in microphone: listed, but switched off in hardware.
+        case offWithLidClosed
+    }
+
     let id: String
     let name: String
     let isDefault: Bool
     let transport: AudioDeviceTransport
-    let isAvailable: Bool
+    let availability: Availability
+
+    var isAvailable: Bool {
+        availability == .available
+    }
 
     init(
         id: String,
         name: String,
         isDefault: Bool,
         transport: AudioDeviceTransport = .other,
-        isAvailable: Bool = true
+        availability: Availability = .available
     ) {
         self.id = id
         self.name = name
         self.isDefault = isDefault
         self.transport = transport
-        self.isAvailable = isAvailable
+        self.availability = availability
     }
 }
 
