@@ -58,6 +58,39 @@ final class AppStateAnalyticsEmissionTests: XCTestCase {
         XCTAssertEqual(metrics?.insertionMethod, .clipboard) // always clipboard paste
     }
 
+    func testEmptyDictationSaysWhetherSpeechWasDetected() async {
+        let results: [(Result<String, Error>, DictationEmptyReason)] = [
+            (.failure(NoSpeechDetected()), .noSpeech),
+            (.success("  "), .emptyTranscript),
+        ]
+        for (result, expectedReason) in results {
+            let spy = SpyAnalytics()
+            let audio = StubAudioCaptureService()
+            audio.stopCaptureResult = makeValidCapturedAudio()
+            let transcription = StubTranscriptionService()
+            transcription.transcribeResult = result
+            let started = expectation(description: "started")
+            let transcribed = expectation(description: "transcribed")
+            audio.onStartCapture = { _ in started.fulfill() }
+            transcription.onTranscribe = { transcribed.fulfill() }
+            let appState = readyAppState(spy: spy, audioCapture: audio, transcription: transcription)
+
+            appState.startRecordingFromUI()
+            await fulfillment(of: [started], timeout: 1)
+            appState.stopRecordingFromUI()
+            await fulfillment(of: [transcribed], timeout: 1)
+            await drain()
+
+            let reasons = spy.trackedEvents.compactMap { event -> DictationEmptyReason? in
+                if case let .dictationEmpty(reason) = event { return reason }
+                return nil
+            }
+            XCTAssertEqual(reasons, [expectedReason])
+            XCTAssertFalse(spy.trackedEventNames.contains("error"), "no speech is not a transcription failure")
+            XCTAssertEqual(appState.phase, .ready)
+        }
+    }
+
     func testAudioCaptureFailureEmitted() async {
         let spy = SpyAnalytics()
         let audio = StubAudioCaptureService()

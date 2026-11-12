@@ -39,6 +39,7 @@ struct CompactTranscriptRow: View {
     var isSelected = false
     var searchQuery = ""
     let onCopy: () -> Bool
+    let onShowOriginal: () -> Void
     let onCopyOriginal: (String) -> Bool
     let onDelete: () -> Void
 
@@ -120,6 +121,11 @@ struct CompactTranscriptRow: View {
                     )
                     .focused($focusedAction, equals: .original)
                     .help("Show original")
+                    .onChange(of: isShowingOriginal) { _, isShowing in
+                        if isShowing {
+                            onShowOriginal()
+                        }
+                    }
                     .popover(isPresented: $isShowingOriginal, arrowEdge: .bottom) {
                         OriginalTranscriptPopover(text: rawText) {
                             onCopyOriginal(rawText)

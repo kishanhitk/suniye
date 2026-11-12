@@ -180,7 +180,8 @@ struct TranscriptsPage: View {
                 select(result)
                 return appState.copyText(result.text)
             },
-            onCopyOriginal: appState.copyText,
+            onShowOriginal: appState.originalTranscriptOpened,
+            onCopyOriginal: appState.copyOriginalTranscript,
             onDelete: { deleteAndAdvance(result) }
         )
         .id(result.id)

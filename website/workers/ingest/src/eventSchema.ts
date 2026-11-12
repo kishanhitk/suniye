@@ -27,6 +27,13 @@
 //   onboarding_step          advanced_by→blob15, elapsed_ms→double14 (step stays blob14)
 //   onboarding_outcome       ended_by→blob15; practice_edited rides blob20 JSON only
 //                            (double17 already carries `practiced` on this event)
+//
+// FEATURE USE (appended aliases on blob15, no slot moved):
+//   audio_backend_used  input_stand_in      (why another microphone recorded)
+//   dictation_empty     empty_reason        (`reason` would land on blob14, which
+//                                            holds the device arch on older rows)
+//   raw_transcript      action              (also fills blob15 on mf_nudge)
+//   app_launch          setting_double_tap  (double tap available, or the Globe conflict)
 
 import type { PropValue, WireBatch, WireEvent } from "./types";
 
@@ -74,7 +81,7 @@ const BLOB_FIELDS: StrPick[] = [
   str("insertion_method"),                        // blob12
   str("source"),                                  // blob13
   firstStr("reason", "stage", "step", "type", "backend", "arch"),   // blob14 - categorical detail A (+ device arch)
-  firstStr("code", "outcome", "advanced_by", "ended_by"), // blob15 - categorical detail B (+ onboarding_step advanced_by, onboarding_outcome ended_by)
+  firstStr("code", "outcome", "advanced_by", "ended_by", "input_stand_in", "empty_reason", "action", "setting_double_tap"), // blob15 - categorical detail B (+ onboarding_step advanced_by, onboarding_outcome ended_by, feature use)
   firstStr("kind", "feature", "chip"),            // blob16 (+ device chip)
   firstStr("model", "mac_model"),                 // blob17 (+ device mac_model)
   firstStr("from_version", "to_version", "os_version"),   // blob18 (+ device os_version)

@@ -65,6 +65,10 @@ enum TranscriptionPurpose: String {
     case probe
 }
 
+/// A final clip held no speech, so no engine ran. Not a failure: the caller
+/// treats it as an empty dictation.
+struct NoSpeechDetected: Error {}
+
 /// Where a multi-chunk batch decode is: `chunk` is 1-based and is reported as
 /// each chunk starts, so the UI can say "2 of 3" while chunk 2 runs.
 struct TranscriptionProgress: Equatable, Sendable {

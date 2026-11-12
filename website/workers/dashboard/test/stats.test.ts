@@ -246,6 +246,13 @@ describe("buildStats", () => {
     if (q.includes("blob15 AS label") && q.includes("'onboarding_outcome'")) return [{ label: "finish_button", value: 4 }, { label: "window_closed", value: 1 }];
     if (q.includes("blob14 AS label") && q.includes("'onboarding_window_closed'")) return [{ label: "speak", value: 2 }];
     if (q.includes("blob14 AS label") && q.includes("'dictation_blocked'")) return [{ label: "wrong_phase", value: 5 }, { label: "released_during_prompt", value: 1 }];
+    if (q.includes("blob13 AS label")) return [{ label: "hotkey", value: 40 }, { label: "hotkey_lock", value: 8 }, { label: "manual", value: 2 }];
+    if (q.includes("'dictation_cancelled'")) return [{ value: 4 }];
+    if (q.includes("blob15 AS label") && q.includes("'audio_backend_used'")) return [{ label: "bluetooth_default", value: 6 }, { label: "lid_closed", value: 2 }];
+    if (q.includes("blob15 AS label") && q.includes("'dictation_empty'")) return [{ label: "no_speech", value: 5 }, { label: "empty_transcript", value: 1 }];
+    if (q.includes("blob16 AS label") && q.includes("'update_action'")) return [{ label: "restart_to_update", value: 3 }];
+    if (q.includes("blob15 AS label") && q.includes("'raw_transcript'")) return [{ label: "opened", value: 7 }, { label: "copied", value: 2 }];
+    if (q.includes("blob15 AS label") && q.includes("'app_launch'")) return [{ label: "available", value: 9 }, { label: "globe_shows_emoji", value: 3 }];
     if (q.includes("SUM(double2")) return [{ day: "2026-07-06 00:00:00", value: 100 }, { day: "2026-07-07 00:00:00", value: 150 }];
     if (q.includes("COUNT(DISTINCT index1)")) return [{ day: "2026-07-06 00:00:00", value: 5 }];
     // Breakdowns AND facet option lists both select "<slot> AS label" (facets add
@@ -345,6 +352,18 @@ describe("buildStats", () => {
     expect(stats.onboarding.endedBy).toEqual([{ label: "finish_button", value: 4 }, { label: "window_closed", value: 1 }]);
     expect(stats.onboarding.windowClosedAt).toEqual([{ label: "speak", value: 2 }]);
     expect(stats.onboarding.permissionAsks[0]).toEqual({ label: "microphone · granted", value: 7 });
+    expect(stats.featureUse.dictationSources[1]).toEqual({ label: "hotkey_lock", value: 8 });
+    expect(stats.featureUse.escCancels).toBe(4);
+    expect(stats.featureUse.micStandIns).toEqual([{ label: "bluetooth_default", value: 6 }, { label: "lid_closed", value: 2 }]);
+    expect(stats.featureUse.emptyDictationReasons[0]).toEqual({ label: "no_speech", value: 5 });
+    expect(stats.featureUse.updateActions).toEqual([{ label: "restart_to_update", value: 3 }]);
+    expect(stats.featureUse.rawTranscriptActions).toEqual([{ label: "opened", value: 7 }, { label: "copied", value: 2 }]);
+    expect(stats.featureUse.doubleTapAvailability).toEqual([{ label: "available", value: 9 }, { label: "globe_shows_emoji", value: 3 }]);
+    // Rows without the field (older app versions, the chosen microphone) stay out of the lists.
+    expect(aeQueries.find((q) => q.includes("blob15 AS label") && q.includes("'dictation_empty'"))).toContain("blob15 != ''");
+    expect(aeQueries.find((q) => q.includes("blob15 AS label") && q.includes("'audio_backend_used'"))).toContain("blob15 != ''");
+    // A state of the install is counted in installs, not in launches.
+    expect(aeQueries.find((q) => q.includes("blob15 AS label") && q.includes("'app_launch'"))).toContain("COUNT(DISTINCT index1)");
     expect(stats.dictationBlockedReasons[1]).toEqual({ label: "released_during_prompt", value: 1 });
     // Reasons exclude adopted rows (where blob14 falls back to the device arch);
     // ended_by excludes pre-v1 outcome rows with an empty blob15.
@@ -364,8 +383,9 @@ describe("buildStats", () => {
     expect(stats.appliedFilters).toEqual({ chip: ["apple-m3-pro"], version: ["0.0.51"] }); // invalid dropped
     // chip is on a shared slot → it blocks only the event-unscoped active-installs
     // query; every other panel (incl. dictation) applies it.
-    // permission_request puts `kind` on blob16, so chip can't filter that panel either.
-    expect(stats.blocked).toEqual({ activeInstalls: "chip", permissions: "chip" });
+    // permission_request and update_action put `kind` on blob16, so chip can't
+    // filter those panels either.
+    expect(stats.blocked).toEqual({ activeInstalls: "chip", permissions: "chip", updateActions: "chip" });
     const words = aeQueries.find((q) => q.includes("SUM(double2"))!;
     expect(words).toContain("AND blob16 = 'apple-m3-pro'");
     expect(words).toContain("AND blob3 = '0.0.51'");
@@ -398,6 +418,11 @@ describe("buildStats", () => {
     expect(stats.blocked.onboardingOutcome).toBe("asr_model");
     expect(stats.blocked.windowClosed).toBe("asr_model");
     expect(stats.blocked.permissions).toBe("asr_model");
+    expect(stats.blocked.escCancels).toBe("asr_model");
+    expect(stats.blocked.emptyDictations).toBe("asr_model");
+    expect(stats.blocked.updateActions).toBe("asr_model");
+    expect(stats.blocked.rawTranscript).toBe("asr_model");
+    expect(stats.blocked.launchSettings).toBe("asr_model");
     expect(stats.blocked.blockedReasons).toBe("asr_model");
     // Dictation panels themselves stay live.
     expect(stats.segmentEventCount).toBe(50);

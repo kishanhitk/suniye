@@ -5,8 +5,9 @@
 // Column mapping mirrors the ingest field->slot registry (workers/ingest):
 //   blob1 = event name, blob3 = app_version, blob4 = channel, blob5 = asr_model,
 //   blob7 = language, blob10 = cleanup_fallback_reason, blob11 = target_category,
-//   blob14 = reason/type/backend/step (+device arch),
-//   blob15 = code/outcome/advanced_by/ended_by, blob16 = kind/feature (+chip),
+//   blob13 = source, blob14 = reason/type/backend/step (+device arch),
+//   blob15 = code/outcome/advanced_by/ended_by/input_stand_in/empty_reason/action/setting_double_tap,
+//   blob16 = kind/feature (+chip),
 //   blob17 = model (+mac_model), blob18 = from/to_version (+os_version),
 //   blob19 = country;  double1 = event_ts (ms), double2 = word_count,
 //   double5 = lat_end_to_end, double6 = lat_asr_processing, double7 = lat_llm_total,
@@ -26,7 +27,7 @@
 // structural/range values (cutoff dates) still go through bind params.
 
 import { FILTER_DIMS } from "./types";
-import type { BlockedPanels, Breakdown, FilterDim, FilterOption, Filters, LatencySummary, OnboardingStats, StatsResponse, TimePoint } from "./types";
+import type { BlockedPanels, Breakdown, FeatureUseStats, FilterDim, FilterOption, Filters, LatencySummary, OnboardingStats, StatsResponse, TimePoint } from "./types";
 
 const DAY_MS = 86_400_000;
 
@@ -321,6 +322,13 @@ export const sql = {
     `SELECT blob14 AS step, COUNT(DISTINCT index1) AS installs FROM ${ds} ` +
     `WHERE blob1 = 'onboarding_step' AND double1 >= ${cutoffMs}${where} GROUP BY step`,
 
+  // Installs by double-tap availability (blob15 = setting_double_tap on
+  // app_launch). A state of the install, so it counts installs, not launches.
+  // Same sampling caveat as activeInstallsPerDay. Older app versions leave blob15 empty.
+  doubleTapAvailability: (ds: string, cutoffMs: number, where = "") =>
+    `SELECT blob15 AS label, COUNT(DISTINCT index1) AS value FROM ${ds} ` +
+    `WHERE blob1 = 'app_launch' AND blob15 != '' AND double1 >= ${cutoffMs}${where} GROUP BY label ORDER BY value DESC LIMIT 20`,
+
   // p50/p95 of the generic value_ms slot (double14) for one event. `event` is a
   // server-side constant, never user input. `> 0` keeps rows that omit the
   // optional duration from dragging the quantile to zero.
@@ -440,6 +448,15 @@ export async function buildStats(
       windowClosed: safeAe(sql.breakdown(ds, "blob14", "blob1 = 'onboarding_window_closed'", cutoffMs, w("onboarding_window_closed"))),
       permissions: safeAe(sql.permissionAsks(ds, cutoffMs, w("permission_request"))),
       blockedReasons: safeAe(sql.breakdown(ds, "blob14", "blob1 = 'dictation_blocked'", cutoffMs, w("dictation_blocked"))),
+      dictationSources: safeAe(sql.breakdown(ds, "blob13", "blob1 = 'dictation_completed'", cutoffMs, w("dictation_completed"))),
+      escCancels: safeAe(sql.eventCount(ds, "dictation_cancelled", cutoffMs, w("dictation_cancelled"))),
+      // The three blob15 fields below are absent on rows from app versions that
+      // did not send them, and on captures that used the chosen microphone.
+      micStandIns: safeAe(sql.breakdown(ds, "blob15", "blob1 = 'audio_backend_used' AND blob15 != ''", cutoffMs, w("audio_backend_used"))),
+      emptyReasons: safeAe(sql.breakdown(ds, "blob15", "blob1 = 'dictation_empty' AND blob15 != ''", cutoffMs, w("dictation_empty"))),
+      updateActions: safeAe(sql.breakdown(ds, "blob16", "blob1 = 'update_action'", cutoffMs, w("update_action"))),
+      rawTranscript: safeAe(sql.breakdown(ds, "blob15", "blob1 = 'raw_transcript'", cutoffMs, w("raw_transcript"))),
+      doubleTap: safeAe(sql.doubleTapAvailability(ds, cutoffMs, w("app_launch"))),
     }),
     // totalInstalls is all-time by definition; the breakdowns honor the selected
     // range (installs active in the window) so the range toggle affects every
@@ -515,6 +532,11 @@ export async function buildStats(
   block("windowClosed", blockedDim(filters, "onboarding_window_closed"));
   block("permissions", blockedDim(filters, "permission_request"));
   block("blockedReasons", blockedDim(filters, "dictation_blocked"));
+  block("escCancels", blockedDim(filters, "dictation_cancelled"));
+  block("emptyDictations", blockedDim(filters, "dictation_empty"));
+  block("updateActions", blockedDim(filters, "update_action"));
+  block("rawTranscript", blockedDim(filters, "raw_transcript"));
+  block("launchSettings", blockedDim(filters, "app_launch"));
 
   const funnelCounts = new Map(aeRows.onbFunnel.map((r) => [String(r.step ?? ""), num(r.installs)]));
   const welcomeInstalls = funnelCounts.get("welcome") ?? 0;
@@ -542,6 +564,16 @@ export async function buildStats(
     })),
   };
 
+  const featureUse: FeatureUseStats = {
+    dictationSources: toBreakdown(aeRows.dictationSources),
+    escCancels: num(aeRows.escCancels[0]?.value),
+    micStandIns: toBreakdown(aeRows.micStandIns),
+    emptyDictationReasons: toBreakdown(aeRows.emptyReasons),
+    updateActions: toBreakdown(aeRows.updateActions),
+    rawTranscriptActions: toBreakdown(aeRows.rawTranscript),
+    doubleTapAvailability: toBreakdown(aeRows.doubleTap),
+  };
+
   return {
     rangeDays: opts.rangeDays,
     appliedFilters: sanitizeFilters(filters),
@@ -567,6 +599,7 @@ export async function buildStats(
     llmCacheHitRatePct,
     segmentEventCount: dictCount,
     onboarding,
+    featureUse,
     dictationBlockedReasons: toBreakdown(aeRows.blockedReasons),
     filterOptions,
   };

@@ -7,7 +7,7 @@ final class EventQueueTests: XCTestCase {
     private var baseMs: Int64 { Int64(base.timeIntervalSince1970 * 1000) }
 
     private func event(id: String, offsetMs: Int64 = 0) -> EncodedEvent {
-        EncodedEvent(event: .dictationEmpty, eventID: id, eventTS: baseMs + offsetMs, sessionID: "s")
+        EncodedEvent(event: .dictationEmpty(reason: .emptyTranscript), eventID: id, eventTS: baseMs + offsetMs, sessionID: "s")
     }
 
     func testAppendPeekRemove() {
@@ -51,7 +51,7 @@ final class EventQueueTests: XCTestCase {
         queue.append(event(id: "old", offsetMs: 0), now: base)
         // 2 minutes later, the old event is beyond the 60s TTL.
         let later = base.addingTimeInterval(120)
-        queue.append(EncodedEvent(event: .dictationEmpty, eventID: "new", eventTS: Int64(later.timeIntervalSince1970 * 1000), sessionID: "s"), now: later)
+        queue.append(EncodedEvent(event: .dictationEmpty(reason: .emptyTranscript), eventID: "new", eventTS: Int64(later.timeIntervalSince1970 * 1000), sessionID: "s"), now: later)
         XCTAssertEqual(queue.peek(max: 10, now: later).map(\.eventID), ["new"])
         XCTAssertEqual(queue.takeEvictedCounts().ttl, 1) // dropped by TTL, not size cap
     }

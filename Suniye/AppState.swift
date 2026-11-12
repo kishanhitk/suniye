@@ -631,6 +631,8 @@ final class AppState {
     @ObservationIgnored private var dictationShortcutGesture = DictationShortcutGesture()
     @ObservationIgnored private var secondTapWindowTask: Task<Void, Never>?
     @ObservationIgnored private var previousTapWithDoubleTapOff: Date?
+    /// The session that a double tap locked, for the source label of its analytics event.
+    @ObservationIgnored private var lockedDictationSessionID: UUID?
     private(set) var systemGlobeKeyAction: SystemGlobeKeyAction = .doNothing
     /// What is about to move onboarding to its next step (read by step tracking).
     @ObservationIgnored private var pendingOnboardingAdvance: OnboardingAdvance?
@@ -2049,6 +2051,7 @@ final class AppState {
             "magic_format_enabled": .bool(llmEnabled),
             "magic_format_provider": .label(AnalyticsMapping.cleanupProvider(llmProvider)),
             "update_channel": .label(SafeLabel(updateChannel.rawValue)),
+            "double_tap": .label(AnalyticsMapping.doubleTapAvailability(conflict: globeDoubleTapConflict)),
         ])
     }
 
@@ -3182,6 +3185,18 @@ final class AppState {
         return pasteboard.setString(text, forType: .string)
     }
 
+    func copyOriginalTranscript(_ text: String) -> Bool {
+        guard copyText(text) else {
+            return false
+        }
+        analytics.track(.rawTranscript(action: .copied))
+        return true
+    }
+
+    func originalTranscriptOpened() {
+        analytics.track(.rawTranscript(action: .opened))
+    }
+
     @discardableResult
     func copyLastTranscript() -> Bool {
         guard let text = lastTranscriptText else {
@@ -3809,6 +3824,7 @@ final class AppState {
             return
         }
         AppLogger.shared.log(.info, "sparkle restart to update")
+        analytics.track(.updateAction(kind: .restartToUpdate, fromVersion: nil, toVersion: nil))
         appUpdateController.installUpdateAndRelaunch()
     }
 
@@ -4204,6 +4220,7 @@ final class AppState {
     /// pill takes the same look and a click on it finishes the recording.
     private func lockDictationRecording() {
         AppLogger.shared.log(.info, "recording locked by double tap")
+        lockedDictationSessionID = activeAudioCaptureSessionID
         if case let .listening(levels, _, preview) = floatingIndicatorState {
             setFloatingIndicatorState(.listening(levels: levels, source: .manual, preview: preview))
         }
@@ -4247,13 +4264,19 @@ final class AppState {
 
     private func cancelRecording() async {
         AppLogger.shared.log(.info, "recording canceled with Esc")
-        await discardRecording(message: "Dictation canceled")
+        // A key release that ran first already sent the recording to
+        // transcription; that dictation is not a cancel.
+        if await discardRecording(message: "Dictation canceled") {
+            analytics.track(.dictationCancelled(stage: .recording))
+        }
     }
 
     /// Ends the recording with no transcription, no paste and no error sound.
-    private func discardRecording(message: String?) async {
+    /// Returns false when no recording was there to end.
+    @discardableResult
+    private func discardRecording(message: String?) async -> Bool {
         guard phase == .recording, let sessionID = activeAudioCaptureSessionID else {
-            return
+            return false
         }
         resetDictationShortcutGesture()
         clearActiveDictationSession(sessionID: sessionID)
@@ -4265,6 +4288,7 @@ final class AppState {
             setFloatingIndicatorState(.idle)
         }
         await audioCaptureService.cancelCapture(sessionID: sessionID, reason: nil)
+        return true
     }
 
     private func beginRecordingFlow(trigger: RecordingSource, destination: DictationDestination? = nil) async {
@@ -4469,10 +4493,17 @@ final class AppState {
 
         do {
             dictationTiming.asrStart = .now()
-            let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate) { [weak self] progress in
-                Task { @MainActor in
-                    self?.showTranscriptionProgress(progress, sessionID: sessionID)
+            let text: String
+            var emptyReason = DictationEmptyReason.emptyTranscript
+            do {
+                text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate) { [weak self] progress in
+                    Task { @MainActor in
+                        self?.showTranscriptionProgress(progress, sessionID: sessionID)
+                    }
                 }
+            } catch is NoSpeechDetected {
+                text = ""
+                emptyReason = .noSpeech
             }
             dictationTiming.asrEnd = .now()
             let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
@@ -4494,7 +4525,8 @@ final class AppState {
                     sampleRate: sampleRate,
                     frontmostAppBundleID: context.frontmostAppBundleID,
                     source: context.source,
-                    destination: destination
+                    destination: destination,
+                    emptyReason: emptyReason
                 )
             case .onboardingPractice:
                 await completeOnboardingPracticeDictation(
@@ -4531,7 +4563,8 @@ final class AppState {
         sampleRate: Int,
         frontmostAppBundleID: String?,
         source: RecordingSource,
-        destination: DictationDestination
+        destination: DictationDestination,
+        emptyReason: DictationEmptyReason
     ) async throws {
         let usesSystemInsertion = destination == .systemInsertion
         var finalText = rawText
@@ -4644,7 +4677,7 @@ final class AppState {
         if finalText.isEmpty {
             AppLogger.shared.log(.warning, "transcription returned empty text samples=\(sampleCount) sr=\(sampleRate)")
             playSoundFeedback(.error)
-            analytics.track(.dictationEmpty)
+            analytics.track(.dictationEmpty(reason: emptyReason))
         }
 
         if didCompleteDictation {
@@ -4660,6 +4693,7 @@ final class AppState {
                 duration: duration,
                 llmOutcome: llmOutcome,
                 source: source,
+                lockedByDoubleTap: sessionID == lockedDictationSessionID,
                 frontmostAppBundleID: frontmostAppBundleID,
                 destination: destination.analyticsDestination
             )
@@ -4697,7 +4731,8 @@ final class AppState {
             // descent; `.bluetoothRoute` is an echo-cancellation degrade that
             // stays on the primary rung, so it must NOT count as a fallback.
             fallbackOccurred: route.fallbackReason == .backendStartFailed,
-            rung: route.backend == .standardEngine ? 1 : 0
+            rung: route.backend == .standardEngine ? 1 : 0,
+            inputStandIn: route.standIn.map(AnalyticsMapping.inputStandIn)
         )
     }
 
@@ -4707,6 +4742,7 @@ final class AppState {
         duration: TimeInterval,
         llmOutcome: MagicFormatPolishOutcome?,
         source: RecordingSource,
+        lockedByDoubleTap: Bool,
         frontmostAppBundleID: String?,
         destination: SuniyeAnalytics.DictationDestination = .systemInsertion
     ) {
@@ -4720,7 +4756,7 @@ final class AppState {
             wordCount: wordCount,
             charCount: finalText.count,
             audioDurationMs: Int(duration * 1000),
-            source: AnalyticsMapping.source(source),
+            source: AnalyticsMapping.source(source, lockedByDoubleTap: lockedByDoubleTap),
             destination: destination,
             asrModel: SafeLabel(selectedASRModelID.rawValue),
             asrFamily: SafeLabel(ASRModelCatalog.entry(for: selectedASRModelID).family.rawValue),
@@ -4793,6 +4829,7 @@ final class AppState {
                 duration: duration,
                 llmOutcome: llmOutcome,
                 source: source,
+                lockedByDoubleTap: sessionID == lockedDictationSessionID,
                 frontmostAppBundleID: nil,
                 destination: .onboardingPractice
             )

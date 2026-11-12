@@ -1,4 +1,5 @@
 import AppKit
+import SuniyeAnalytics
 import XCTest
 @testable import Suniye
 
@@ -323,5 +324,20 @@ final class AppStateCoverageMiscTests: XCTestCase {
         XCTAssertTrue(appState.copyText("copied dictation"))
 
         XCTAssertEqual(NSPasteboard.general.string(forType: .string), "copied dictation")
+    }
+
+    func testOriginalTranscriptOpenAndCopyAreCounted() {
+        let spy = SpyAnalytics()
+        let appState = makeTestAppState(analytics: spy)
+
+        appState.originalTranscriptOpened()
+        XCTAssertTrue(appState.copyOriginalTranscript("um so hello"))
+
+        XCTAssertEqual(NSPasteboard.general.string(forType: .string), "um so hello")
+        let actions = spy.trackedEvents.compactMap { event -> RawTranscriptAction? in
+            if case let .rawTranscript(action) = event { return action }
+            return nil
+        }
+        XCTAssertEqual(actions, [.opened, .copied])
     }
 }

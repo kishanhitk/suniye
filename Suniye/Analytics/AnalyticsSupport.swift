@@ -75,10 +75,24 @@ enum TargetCategoryMapper {
 /// switches over the real (closed) enums — lossless, and the compiler forces any
 /// future source case to be classified rather than silently bucketed.
 enum AnalyticsMapping {
-    static func source(_ source: FloatingIndicatorState.Source) -> SuniyeAnalytics.DictationSource {
+    static func source(
+        _ source: FloatingIndicatorState.Source,
+        lockedByDoubleTap: Bool
+    ) -> SuniyeAnalytics.DictationSource {
         switch source {
-        case .hotkey, .editHotkey: return .hotkey
+        case .hotkey: return lockedByDoubleTap ? .hotkeyLock : .hotkey
+        case .editHotkey: return .hotkey
         case .manual: return .manual
+        }
+    }
+
+    /// `conflict` is the macOS Globe action that keeps double-tap off, if any.
+    static func doubleTapAvailability(conflict: SystemGlobeKeyAction?) -> DoubleTapAvailability {
+        switch conflict {
+        case nil, .doNothing: return .available
+        case .changeInputSource: return .globeChangesInputSource
+        case .showEmojiAndSymbols: return .globeShowsEmoji
+        case .startDictation: return .globeStartsDictation
         }
     }
 
@@ -91,6 +105,15 @@ enum AnalyticsMapping {
         case .bufferOverflow: return .bufferOverflow
         case .invalidSamples: return .invalidSamples
         case .interrupted: return .interrupted
+        }
+    }
+
+    /// The reason only: the microphone name in the stand-in is never sent.
+    static func inputStandIn(_ standIn: AudioInputStandIn) -> InputStandInReason {
+        switch standIn {
+        case .preferredMissing: return .preferredMissing
+        case .offWithLidClosed: return .lidClosed
+        case .bluetoothDefault: return .bluetoothDefault
         }
     }
 

@@ -6,6 +6,8 @@ import Foundation
 
 public enum DictationSource: String, Sendable, CaseIterable {
     case hotkey, manual, floatingIndicator, unknown
+    /// A double tap of the shortcut locked the recording. `hotkey` is a hold.
+    case hotkeyLock = "hotkey_lock"
 }
 
 public enum DictationDestination: String, Sendable, CaseIterable {
@@ -91,6 +93,32 @@ public enum AudioOutcome: String, Sendable, CaseIterable {
     case invalidSamples = "invalid_samples", interrupted, unknown
 }
 
+/// Why a capture used a microphone other than the saved one or the system default.
+public enum InputStandInReason: String, Sendable, CaseIterable {
+    case preferredMissing = "preferred_missing"
+    case lidClosed = "lid_closed"
+    case bluetoothDefault = "bluetooth_default"
+}
+
+public enum DictationEmptyReason: String, Sendable, CaseIterable {
+    /// The speech detector found no speech, so no engine ran.
+    case noSpeech = "no_speech"
+    case emptyTranscript = "empty_transcript"
+}
+
+/// Whether a double tap of the shortcut can lock a recording. The Globe key
+/// cannot while macOS also runs an action on each Globe tap.
+public enum DoubleTapAvailability: String, Sendable, CaseIterable {
+    case available
+    case globeChangesInputSource = "globe_changes_input_source"
+    case globeShowsEmoji = "globe_shows_emoji"
+    case globeStartsDictation = "globe_starts_dictation"
+}
+
+public enum RawTranscriptAction: String, Sendable, CaseIterable {
+    case opened, copied
+}
+
 public enum AudioInterruptionReason: String, Sendable, CaseIterable {
     case deviceChanged = "device_changed"
     case deviceUnavailable = "device_unavailable"
@@ -157,6 +185,7 @@ public enum ModelDownloadOutcome: String, Sendable, CaseIterable {
 
 public enum UpdateActionKind: String, Sendable, CaseIterable {
     case manualCheck = "manual_check", autoToggle = "auto_toggle", channelChange = "channel_change", completed
+    case restartToUpdate = "restart_to_update"
 }
 
 /// A small, closed set of feature toggles worth tracking adoption for.

@@ -20,10 +20,10 @@ export const COLLECTED: readonly (readonly [term: string, detail: string])[] = [
   ["Timing", "How long each pipeline stage takes (speech recognition, AI cleanup, insertion) so we can make it faster."],
   ["Your Mac", "Hardware class — Mac model identifier (e.g. Mac15,3, not a serial), chip, CPU core counts, architecture (Apple Silicon / Intel), memory tier, and macOS version — so we know which on-device models run well on which hardware."],
   ["Language", "The interface language and the language coverage of the speech model you pick (e.g. “english”, “multilingual”) — a code only, never what you said."],
-  ["What you use", "Which speech model is selected, whether AI cleanup is on, and other feature toggles — as on/off flags and counts."],
+  ["What you use", "Which speech model is selected, whether AI cleanup is on, and other feature toggles — as on/off flags and counts. Also how you start a dictation (hold, double-tap, or the on-screen pill), whether you cancel one with Esc, whether you open or copy the original text of a history entry, and whether you click Restart to Update. These are counts only."],
   ["Where text lands", "A coarse category of the target app (email, editor, browser, terminal, …) — never the specific app or its identifier."],
   ["Setup", "Which first-run screens you reach and how long setup takes, whether permissions were granted, and whether the built-in speech engine works on your Mac — as steps, durations, and yes/no flags."],
-  ["Reliability", "Error types (no messages) and a coarse country. The country is derived from your connection's IP — the IP itself is never stored, but the country is kept as coarse metadata."],
+  ["Reliability", "Error types (no messages), why a dictation came back empty (no speech heard, or no text from the speech model), why Suniye recorded from a different microphone than the one you chose (never the microphone's name), whether the macOS Globe key setting keeps double-tap off, and a coarse country. The country is derived from your connection's IP — the IP itself is never stored, but the country is kept as coarse metadata."],
 ];
 
 export const NEVER_COLLECTED: readonly string[] = [
