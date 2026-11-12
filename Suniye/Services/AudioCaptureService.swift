@@ -77,6 +77,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         var smoothedLevels = Array(repeating: Float(0), count: AudioLevelMeter.bandCount)
         var lastLevelEmissionTime: CFTimeInterval = 0
         var drainTimer: DispatchSourceTimer?
+        var pendingStop: CheckedContinuation<CapturedAudio, Never>?
 
         init(
             id: UUID,
@@ -110,23 +111,30 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     private let maximumDurationSeconds: Double
     private let firstFrameDeadlineSeconds: Double
     private let maximumEngineRestarts = 2
+    private let scheduleReleaseTail: (@escaping () -> Void) -> Void
     private let drainScratch: UnsafeMutablePointer<Float>
 
     private var eventCallback: ((AudioCaptureEvent) -> Void)?
     private var activeCapture: ActiveCapture?
+
+    static let releaseTail: DispatchTimeInterval = .milliseconds(200)
 
     init(
         deviceMonitor: AudioDeviceMonitorProtocol = CoreAudioDeviceMonitor(),
         hardwareCatalog: AudioCaptureHardwareCatalogProtocol = CoreAudioCaptureHardwareCatalog(),
         driverFactory: AudioCaptureDriverFactoryProtocol = DefaultAudioCaptureDriverFactory(),
         maximumDurationSeconds: Double = 10 * 60,
-        firstFrameDeadlineSeconds: Double = 1.5
+        firstFrameDeadlineSeconds: Double = 1.5,
+        scheduleReleaseTail: @escaping (@escaping () -> Void) -> Void = { endOfTail in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + AudioCaptureService.releaseTail, execute: endOfTail)
+        }
     ) {
         self.deviceMonitor = deviceMonitor
         self.hardwareCatalog = hardwareCatalog
         self.driverFactory = driverFactory
         self.maximumDurationSeconds = maximumDurationSeconds
         self.firstFrameDeadlineSeconds = firstFrameDeadlineSeconds
+        self.scheduleReleaseTail = scheduleReleaseTail
         self.drainScratch = .allocate(capacity: drainCapacity)
         controlQueue.setSpecific(key: controlQueueKey, value: ())
 
@@ -204,18 +212,29 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         }
     }
 
+    /// Keeps recording for the release tail before it returns the audio: a
+    /// shortcut often goes up while the last word is still being said.
     func stopCapture(sessionID: UUID) async -> CapturedAudio {
         await withCheckedContinuation { continuation in
             controlQueue.async {
-                guard let active = self.activeCapture, active.id == sessionID else {
+                guard let active = self.activeCapture, active.id == sessionID, active.pendingStop == nil else {
                     continuation.resume(returning: CapturedAudio.interrupted(
                         sessionID: sessionID,
                         reason: .ioStoppedAbnormally
                     ))
                     return
                 }
-                let captured = self.finalize(active: active, discard: false)
-                continuation.resume(returning: captured)
+                guard active.interruption == nil else {
+                    continuation.resume(returning: self.finalize(active: active, discard: false))
+                    return
+                }
+                active.pendingStop = continuation
+                self.scheduleReleaseTail { [weak self, weak active] in
+                    self?.controlQueue.async {
+                        guard let self, let active, self.activeCapture === active else { return }
+                        _ = self.finalize(active: active, discard: false)
+                    }
+                }
             }
         }
     }
@@ -444,6 +463,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                   let active,
                   self.activeCapture === active,
                   active.interruption == nil,
+                  active.pendingStop == nil,
                   !active.firstFrameSeen,
                   active.firstFrameDeadlineGeneration == generation else {
                 return
@@ -520,6 +540,11 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         guard let active = activeCapture, active.interruption == nil else {
             return
         }
+        if active.pendingStop != nil {
+            AppLogger.shared.log(.info, "audio capture release tail ended early session=\(active.id.uuidString) reason=\(reason.rawValue)")
+            _ = finalize(active: active, discard: false)
+            return
+        }
         active.interruption = reason
         stopHardware(for: active)
         drain(active)
@@ -530,6 +555,10 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     }
 
     private func finalize(active: ActiveCapture, discard: Bool) -> CapturedAudio {
+        // Taken first: the drain below can reach the length limit and come back
+        // through interruptActiveCapture while this finalize still runs.
+        let pendingStop = active.pendingStop
+        active.pendingStop = nil
         stopHardware(for: active)
         drain(active)
         active.drainTimer?.cancel()
@@ -552,6 +581,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         onEvent?(.levelsUpdated(sessionID: active.id, levels: Array(repeating: 0, count: AudioLevelMeter.bandCount)))
         logFinalCapture(captured, discarded: discard)
         scheduleReleaseCheck(sessionID: active.id)
+        pendingStop?.resume(returning: captured)
         return captured
     }
 
