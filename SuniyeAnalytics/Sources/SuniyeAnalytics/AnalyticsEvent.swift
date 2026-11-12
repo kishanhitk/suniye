@@ -26,7 +26,7 @@ public enum AnalyticsEvent: Sendable {
     case audioCaptureFailed(outcome: AudioOutcome)
     case audioCaptureInterrupted(reason: AudioInterruptionReason)
     /// `inputStandIn`: why the capture used a microphone other than the chosen one.
-    case audioBackendUsed(backend: SafeLabel, fallbackOccurred: Bool, rung: Int, inputStandIn: InputStandInReason? = nil)
+    case audioBackendUsed(backend: SafeLabel, fallbackOccurred: Bool, rung: Int, inputStandIn: InputStandInReason?)
 
     case permissionTransition(kind: PermissionKind, granted: Bool)
     /// A permission was explicitly asked for (system prompt shown, Permiso overlay

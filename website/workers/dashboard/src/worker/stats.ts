@@ -322,12 +322,12 @@ export const sql = {
     `SELECT blob14 AS step, COUNT(DISTINCT index1) AS installs FROM ${ds} ` +
     `WHERE blob1 = 'onboarding_step' AND double1 >= ${cutoffMs}${where} GROUP BY step`,
 
-  // Installs per label of one event, for a label that is a state of the install
-  // and not an action. Same sampling caveat as activeInstallsPerDay. `event` and
-  // `col` are server-side constants, never user input.
-  installsByLabel: (ds: string, col: string, event: string, cutoffMs: number, where = "") =>
-    `SELECT ${col} AS label, COUNT(DISTINCT index1) AS value FROM ${ds} ` +
-    `WHERE blob1 = '${event}' AND ${col} != '' AND double1 >= ${cutoffMs}${where} GROUP BY label ORDER BY value DESC LIMIT 20`,
+  // Installs by double-tap availability (blob15 = setting_double_tap on
+  // app_launch). A state of the install, so it counts installs, not launches.
+  // Same sampling caveat as activeInstallsPerDay. Older app versions leave blob15 empty.
+  doubleTapAvailability: (ds: string, cutoffMs: number, where = "") =>
+    `SELECT blob15 AS label, COUNT(DISTINCT index1) AS value FROM ${ds} ` +
+    `WHERE blob1 = 'app_launch' AND blob15 != '' AND double1 >= ${cutoffMs}${where} GROUP BY label ORDER BY value DESC LIMIT 20`,
 
   // p50/p95 of the generic value_ms slot (double14) for one event. `event` is a
   // server-side constant, never user input. `> 0` keeps rows that omit the
@@ -456,7 +456,7 @@ export async function buildStats(
       emptyReasons: safeAe(sql.breakdown(ds, "blob15", "blob1 = 'dictation_empty' AND blob15 != ''", cutoffMs, w("dictation_empty"))),
       updateActions: safeAe(sql.breakdown(ds, "blob16", "blob1 = 'update_action'", cutoffMs, w("update_action"))),
       rawTranscript: safeAe(sql.breakdown(ds, "blob15", "blob1 = 'raw_transcript'", cutoffMs, w("raw_transcript"))),
-      doubleTap: safeAe(sql.installsByLabel(ds, "blob15", "app_launch", cutoffMs, w("app_launch"))),
+      doubleTap: safeAe(sql.doubleTapAvailability(ds, cutoffMs, w("app_launch"))),
     }),
     // totalInstalls is all-time by definition; the breakdowns honor the selected
     // range (installs active in the window) so the range toggle affects every

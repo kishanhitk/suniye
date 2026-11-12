@@ -35,7 +35,7 @@ const stepLabel = (step: string) => STEP_LABELS[step] ?? step;
 const SOURCE_LABELS: Record<string, string> = {
   hotkey: "hold",
   hotkey_lock: "double-tap lock",
-  manual: "pill or menu",
+  manual: "pill",
 };
 
 /** "p50 / p95" for a duration pair, or an em dash when the window has none. */
@@ -435,7 +435,7 @@ export default function App() {
             )}
 
             {stats.featureUse && (
-              <Section eyebrow="Feature use" note="events · sampling-corrected">
+              <Section eyebrow="Feature use" note="event counts · double-tap availability counts installs">
                 <div className="grid gap-8 md:grid-cols-3">
                   <div>
                     <h3 className="mb-2 text-sm text-ink">How dictations start</h3>

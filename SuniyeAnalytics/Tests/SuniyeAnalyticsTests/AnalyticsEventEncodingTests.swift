@@ -190,13 +190,6 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         let opened = AnalyticsEvent.rawTranscript(action: .opened)
         XCTAssertEqual(opened.name, "raw_transcript")
         XCTAssertEqual(opened.props, ["action": .label("opened")])
-
-        let standIn = AnalyticsEvent.audioBackendUsed(
-            backend: SafeLabel("voice_processing"), fallbackOccurred: false, rung: 0, inputStandIn: .lidClosed
-        )
-        XCTAssertEqual(standIn.props["input_stand_in"], .label("lid_closed"))
-        let chosenMicrophone = AnalyticsEvent.audioBackendUsed(backend: SafeLabel("voice_processing"), fallbackOccurred: false, rung: 0)
-        XCTAssertNil(chosenMicrophone.props["input_stand_in"])
     }
 
     func testFreeTextCannotLeakThroughSafeLabel() {

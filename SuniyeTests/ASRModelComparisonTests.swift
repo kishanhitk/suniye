@@ -92,6 +92,8 @@ final class ASRModelComparisonTests: XCTestCase {
                 do {
                     let text = try await router.transcribe(samples: clip.samples, sampleRate: clip.sampleRate)
                     results.append(Decode(file: clip.name, ms: Self.elapsedMs(since: started), text: text, error: nil))
+                } catch is NoSpeechDetected {
+                    results.append(Decode(file: clip.name, ms: Self.elapsedMs(since: started), text: "", error: nil))
                 } catch {
                     results.append(Decode(file: clip.name, ms: Self.elapsedMs(since: started), text: "", error: error.localizedDescription))
                 }
