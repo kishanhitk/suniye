@@ -4,13 +4,13 @@ import Layout from "../layouts/Layout.astro";
 import Navbar from "../components/Navbar.astro";
 import Footer from "../components/Footer.astro";
 import { DOWNLOAD_URL, GITHUB_URL } from "../lib/site";
-import { CHANGELOG_META, fetchReleases } from "../lib/releases";
+import { CHANGELOG_META, fetchReleases, type ReleasesEnv } from "../lib/releases";
 
 export const prerender = false;
 
 const heroWords = "Suniye Changelog".split(" ");
 
-const releases = await fetchReleases(env.GITHUB_TOKEN);
+const releases = await fetchReleases((env as ReleasesEnv).GITHUB_TOKEN);
 ---
 
 <Layout

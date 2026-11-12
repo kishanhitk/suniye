@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { authoredMarkdown } from "./content/authored";
 import { homeMarkdown } from "./content/home";
 import { privacyMarkdown } from "./content/privacy";
-import { changelogMarkdown, fetchReleases } from "./releases";
+import { changelogMarkdown, fetchReleases, type ReleasesEnv } from "./releases";
 import { SITE_NAME, SITE_PAGES, SITE_URL, absoluteUrl } from "./site";
 
 // The Markdown representation of every content route, keyed by Astro route
@@ -53,7 +53,7 @@ Every page above also answers \`Accept: text/markdown\` with a Markdown version 
 const builders: Record<string, Builder> = {
   "/": async () => ok(homeMarkdown()),
   "/privacy": async () => ok(privacyMarkdown()),
-  "/changelog": async () => ok(changelogMarkdown(await fetchReleases(env.GITHUB_TOKEN))),
+  "/changelog": async () => ok(changelogMarkdown(await fetchReleases((env as ReleasesEnv).GITHUB_TOKEN))),
   "/about": async () => pageMarkdown("about"),
   "/contact": async () => pageMarkdown("contact"),
   "/blogs": async () => {

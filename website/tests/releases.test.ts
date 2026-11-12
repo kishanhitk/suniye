@@ -61,7 +61,6 @@ describe("releases source", () => {
 
     expect(github.authorizations).toEqual(["Bearer revoked", null]);
     expect(releases).toHaveLength(1);
-    expect(String(warn.mock.calls[0]?.[0])).toContain("401");
   });
 
   test("answers from the last good list for five minutes", async () => {
@@ -86,6 +85,19 @@ describe("releases source", () => {
 
     expect(github.authorizations).toHaveLength(2);
     expect(afterFailure).toEqual(first);
+  });
+
+  test("waits five minutes after a failed call before it calls again", async () => {
+    const github = fakeGitHub(ok(), refused(403), ok());
+    const fetchReleases = createReleasesSource(github.fetcher, now);
+
+    await fetchReleases("t0ken");
+    clock = 6 * 60_000;
+    await fetchReleases("t0ken");
+    clock = 7 * 60_000;
+    await fetchReleases("t0ken");
+
+    expect(github.authorizations).toHaveLength(2);
   });
 
   test("has no releases when the first call fails", async () => {

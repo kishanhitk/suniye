@@ -17,6 +17,10 @@ export interface ReleaseItem {
   title: string;
 }
 
+export interface ReleasesEnv {
+  GITHUB_TOKEN?: string;
+}
+
 export interface Release {
   version: string;
   date: string;
@@ -116,8 +120,9 @@ function toReleases(githubReleases: readonly GitHubRelease[]): Release[] {
 }
 
 /**
- * Keeps the last good list: it answers without a GitHub call while fresh,
- * and stands in for a failed call however old it is.
+ * Keeps the last good list: it answers without a GitHub call for five minutes,
+ * and stands in for a failed call however old it is. A failed call also waits
+ * five minutes before the next try.
  */
 export function createReleasesSource(fetcher: typeof fetch = fetch, now: () => number = Date.now) {
   let lastGood: { releases: Release[]; fetchedAt: number } | undefined;
@@ -129,7 +134,11 @@ export function createReleasesSource(fetcher: typeof fetch = fetch, now: () => n
 
     const releases = toReleases(await fetchGitHubReleases(fetcher, githubToken));
     if (releases.length === 0) {
-      return lastGood?.releases ?? [];
+      if (!lastGood) {
+        return [];
+      }
+      lastGood.fetchedAt = now();
+      return lastGood.releases;
     }
 
     lastGood = { releases, fetchedAt: now() };
