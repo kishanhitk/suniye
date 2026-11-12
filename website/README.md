@@ -74,7 +74,8 @@ customer used up that quota.
 - A rejected token (401) is logged as `GitHub rejected GITHUB_TOKEN (401)`, and the
   Worker calls without it.
 - Each Worker isolate reuses its last good release list for 5 minutes, and serves
-  it at any age when GitHub fails. After a failed call it waits 5 minutes to retry.
+  it at any age when GitHub fails; it then waits 5 minutes to retry. With no saved
+  list, each request calls GitHub again.
 - Local dev reads the token from `website/.dev.vars` (optional).
 
 ## Issue report endpoint

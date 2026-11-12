@@ -121,8 +121,8 @@ function toReleases(githubReleases: readonly GitHubRelease[]): Release[] {
 
 /**
  * Keeps the last good list: it answers without a GitHub call for five minutes,
- * and stands in for a failed call however old it is. A failed call also waits
- * five minutes before the next try.
+ * and stands in for a failed call however old it is. While it stands in, the
+ * next try waits five minutes. With no saved list, each request tries again.
  */
 export function createReleasesSource(fetcher: typeof fetch = fetch, now: () => number = Date.now) {
   let lastGood: { releases: Release[]; fetchedAt: number } | undefined;
