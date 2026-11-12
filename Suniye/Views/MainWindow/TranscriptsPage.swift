@@ -161,7 +161,7 @@ struct TranscriptsPage: View {
                     guard let selected = selectedResult else {
                         return .ignored
                     }
-                    guard appState.copyRecentResult(selected) else {
+                    guard appState.copyText(selected.text) else {
                         return .handled
                     }
                     AccessibilityNotification.Announcement("Copied").post()
@@ -178,8 +178,9 @@ struct TranscriptsPage: View {
             searchQuery: searchText,
             onCopy: {
                 select(result)
-                return appState.copyRecentResult(result)
+                return appState.copyText(result.text)
             },
+            onCopyOriginal: appState.copyText,
             onDelete: { deleteAndAdvance(result) }
         )
         .id(result.id)
@@ -281,7 +282,7 @@ struct TranscriptsPage: View {
             guard let selectedResult else {
                 return .ignored
             }
-            guard appState.copyRecentResult(selectedResult) else {
+            guard appState.copyText(selectedResult.text) else {
                 return .handled
             }
             AccessibilityNotification.Announcement("Copied").post()

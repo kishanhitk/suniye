@@ -17,10 +17,11 @@ final class HistoryStoreTests: XCTestCase {
             ),
             RecentResult(
                 id: UUID(),
-                text: "second",
+                text: "Second.",
                 createdAt: Date(timeIntervalSince1970: 1_699_999_880.456),
                 durationSeconds: 3.4,
-                wasLLMPolished: true
+                wasLLMPolished: true,
+                rawText: "um second"
             )
         ]
 
@@ -32,6 +33,7 @@ final class HistoryStoreTests: XCTestCase {
         for (loadedResult, expectedResult) in zip(loaded, results) {
             XCTAssertEqual(loadedResult.id, expectedResult.id)
             XCTAssertEqual(loadedResult.text, expectedResult.text)
+            XCTAssertEqual(loadedResult.rawText, expectedResult.rawText)
             XCTAssertEqual(loadedResult.durationSeconds, expectedResult.durationSeconds, accuracy: 0.0001)
             XCTAssertEqual(loadedResult.wasLLMPolished, expectedResult.wasLLMPolished)
             XCTAssertEqual(

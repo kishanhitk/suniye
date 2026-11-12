@@ -103,10 +103,59 @@ def start_server(server: str, model: Path) -> tuple[subprocess.Popen[bytes], str
     return process, base_url, ready_ms
 
 
+# Mirrors Suniye/Services/MagicFormatParagraphBreaks.swift, which the app applies
+# around every Magic Format request.
+NOUN_PHRASE_WORDS = [
+    "a", "an", "the", "this", "that", "each", "every", "another", "any", "one", "no", "some", "more",
+    "my", "your", "our", "their", "his", "her", "its",
+    "whole", "entire", "short", "long", "next", "last", "first", "final", "brand", "separate", "fresh", "extra",
+]
+NOUN_FOLLOWERS = [
+    "break", "breaks", "spacing", "style", "format", "formatting", "mark", "symbol", "tag",
+    "setting", "button", "key", "command", "indent",
+]
+PARAGRAPH_COMMAND = re.compile(
+    r"(?i)\s*"
+    + "".join(rf"(?<!\b{word} )" for word in NOUN_PHRASE_WORDS)
+    + r"\bnew\s+paragraph\b(?!\s+(?:"
+    + "|".join(NOUN_FOLLOWERS)
+    + r")\b)[\s,.;:]*"
+)
+
+
+def apply_paragraph_breaks(transcript: str) -> str:
+    applied = PARAGRAPH_COMMAND.sub("\n\n", transcript)
+    return re.sub(r"\n{3,}", "\n\n", applied).strip()
+
+
+def blank_line_gap_count(text: str) -> int:
+    lines = text.splitlines()
+    return sum(1 for before, after in zip(lines, lines[1:]) if before.strip() and not after.strip())
+
+
+def separate_paragraphs(answer: str, dictated_count: int) -> str:
+    if dictated_count == 0 or blank_line_gap_count(answer) > 0:
+        return answer
+    lines = [line for line in answer.splitlines() if line]
+    if len(lines) != dictated_count + 1:
+        return answer
+    return "\n\n".join(line.strip() for line in lines)
+
+
+def capitalize_paragraph_starts(text: str) -> str:
+    lines = text.split("\n")
+    for index in range(1, len(lines)):
+        if lines[index - 1].strip() or not lines[index].strip():
+            continue
+        first_word = lines[index].split()[0] if lines[index].split() else ""
+        if lines[index][:1].islower() and not any(ch.isupper() for ch in first_word):
+            lines[index] = lines[index][0].upper() + lines[index][1:]
+    return "\n".join(lines)
+
+
 def normalize(text: str) -> str:
     normalized = text.strip().replace("’", "'").replace("–", "-")
     normalized = re.sub(r"[ \t]+", " ", normalized)
-    normalized = re.sub(r"\n{2,}", "\n", normalized)
     return normalized
 
 
@@ -224,13 +273,15 @@ def main() -> int:
         results = []
         for case in cases:
             try:
-                actual, latency_ms, finish_reason = generate(
+                transcript = apply_paragraph_breaks(case["input"])
+                answer, latency_ms, finish_reason = generate(
                     base_url,
                     prompt,
-                    case["input"],
+                    transcript,
                     max_tokens=args.max_tokens,
                     timeout=args.timeout or 30 + len(case["input"]) / 80,
                 )
+                actual = capitalize_paragraph_starts(separate_paragraphs(answer, blank_line_gap_count(transcript)))
                 exact, similarity, structure_matches = score_output(actual, case["expected"])
                 truncated = finish_reason == "length"
                 passed = structure_matches and not truncated and (exact or similarity >= args.threshold)

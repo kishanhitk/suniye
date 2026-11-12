@@ -59,6 +59,117 @@ final class AudioCaptureServiceTests: XCTestCase {
         XCTAssertEqual(plan.fallbackReason, .backendStartFailed)
     }
 
+    // MARK: - Microphone choice
+
+    func testSystemDefaultSkipsABluetoothDefaultForTheBuiltInMicrophone() throws {
+        let resolution = try AudioInputResolver.resolve(
+            preferredInputDeviceID: nil,
+            devices: [
+                makeInput("AirPods Pro", .bluetooth, isDefault: true),
+                makeInput("Studio Mic", .usb),
+                makeInput("MacBook Pro Microphone", .builtIn),
+            ]
+        )
+
+        XCTAssertEqual(resolution.device.id, "MacBook Pro Microphone")
+        XCTAssertEqual(resolution.standIn, .bluetoothDefault(name: "AirPods Pro"))
+    }
+
+    func testBluetoothIsUsedOnlyWhenNothingElseCanRecord() throws {
+        // A virtual input and an iPhone's Continuity microphone never stand in.
+        let resolution = try AudioInputResolver.resolve(
+            preferredInputDeviceID: nil,
+            devices: [
+                makeInput("AirPods Pro", .bluetooth, isDefault: true),
+                makeInput("iPhone Microphone", .continuity),
+                makeInput("Teams Audio", .virtual),
+            ]
+        )
+
+        XCTAssertEqual(resolution.device.id, "AirPods Pro")
+        XCTAssertNil(resolution.standIn)
+    }
+
+    func testSavedBluetoothMicrophoneIsUsed() throws {
+        let resolution = try AudioInputResolver.resolve(
+            preferredInputDeviceID: "AirPods Pro",
+            devices: [
+                makeInput("MacBook Pro Microphone", .builtIn, isDefault: true),
+                makeInput("AirPods Pro", .bluetooth),
+            ]
+        )
+
+        XCTAssertEqual(resolution.device.id, "AirPods Pro")
+        XCTAssertNil(resolution.standIn)
+    }
+
+    func testClosedLidSkipsTheBuiltInMicrophone() throws {
+        let builtIn = makeInput("MacBook Pro Microphone", .builtIn, isDefault: true, availability: .offWithLidClosed)
+
+        let systemDefault = try AudioInputResolver.resolve(
+            preferredInputDeviceID: nil,
+            devices: [builtIn, makeInput("Studio Display Microphone", .usb)]
+        )
+        XCTAssertEqual(systemDefault.device.id, "Studio Display Microphone")
+        XCTAssertEqual(systemDefault.standIn, .offWithLidClosed(name: "MacBook Pro Microphone"))
+
+        // A saved built-in microphone is skipped the same way; a PCI interface can stand in.
+        let saved = try AudioInputResolver.resolve(
+            preferredInputDeviceID: "MacBook Pro Microphone",
+            devices: [builtIn, makeInput("Audio Interface", .other)]
+        )
+        XCTAssertEqual(saved.device.id, "Audio Interface")
+        XCTAssertEqual(saved.standIn, .offWithLidClosed(name: "MacBook Pro Microphone"))
+    }
+
+    func testClosedLidWithNoOtherMicrophoneSaysWhy() {
+        let lidClosed = [
+            makeInput("MacBook Pro Microphone", .builtIn, isDefault: true, availability: .offWithLidClosed),
+            makeInput("iPhone Microphone", .continuity),
+        ]
+
+        XCTAssertThrowsError(try AudioInputResolver.resolve(preferredInputDeviceID: nil, devices: lidClosed)) {
+            XCTAssertEqual($0 as? AudioCaptureServiceError, .builtInMicrophoneOff)
+        }
+        XCTAssertThrowsError(try AudioInputResolver.resolve(preferredInputDeviceID: nil, devices: [])) {
+            XCTAssertEqual($0 as? AudioCaptureServiceError, .noInputDevice)
+        }
+    }
+
+    func testMissingSavedMicrophoneFallsBackToTheSystemDefaultChoice() throws {
+        let toDefault = try AudioInputResolver.resolve(
+            preferredInputDeviceID: "Studio Mic",
+            devices: [makeInput("MacBook Pro Microphone", .builtIn, isDefault: true)]
+        )
+        XCTAssertEqual(toDefault.device.id, "MacBook Pro Microphone")
+        XCTAssertEqual(toDefault.standIn, .preferredMissing)
+
+        // The fallback still skips a Bluetooth default, and the note still names
+        // the missing microphone.
+        let pastBluetooth = try AudioInputResolver.resolve(
+            preferredInputDeviceID: "Studio Mic",
+            devices: [
+                makeInput("AirPods Pro", .bluetooth, isDefault: true),
+                makeInput("MacBook Pro Microphone", .builtIn),
+            ]
+        )
+        XCTAssertEqual(pastBluetooth.device.id, "MacBook Pro Microphone")
+        XCTAssertEqual(pastBluetooth.standIn, .preferredMissing)
+    }
+
+    func testOnlyTheInternalMicrophoneIsSwitchedOffByTheLid() {
+        let internalMicrophone: UInt32 = 0x696D_6963 // 'imic'
+        let externalMicrophone: UInt32 = 0x656D_6963 // 'emic'
+        let lineIn: UInt32 = 0x6C69_6E65 // 'line'
+        let intelInput = "AppleHDAEngineInput:1B,0,1,0:1"
+
+        XCTAssertTrue(CoreAudioDeviceCatalog.isLidSwitchedMicrophone(uid: "BuiltInMicrophoneDevice", dataSource: internalMicrophone))
+        XCTAssertTrue(CoreAudioDeviceCatalog.isLidSwitchedMicrophone(uid: intelInput, dataSource: nil))
+        XCTAssertFalse(CoreAudioDeviceCatalog.isLidSwitchedMicrophone(uid: "BuiltInHeadphoneInputDevice", dataSource: nil))
+        XCTAssertFalse(CoreAudioDeviceCatalog.isLidSwitchedMicrophone(uid: intelInput, dataSource: externalMicrophone))
+        XCTAssertFalse(CoreAudioDeviceCatalog.isLidSwitchedMicrophone(uid: intelInput, dataSource: lineIn))
+    }
+
     func testServiceUsesDriverActualFormatAndStopsOwnedDriver() async throws {
         let monitor = StubAudioDeviceMonitor()
         let catalog = StubAudioCaptureHardwareCatalog(route: makeDeviceRoute())
@@ -173,6 +284,76 @@ final class AudioCaptureServiceTests: XCTestCase {
         await service.cancelCapture(sessionID: sessionID, reason: .noAudioArriving)
     }
 
+    func testStopKeepsRecordingUntilTheReleaseTailEnds() async throws {
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 1_600)
+        )
+        let tail = StubReleaseTail()
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10,
+            scheduleReleaseTail: tail.schedule
+        )
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+
+        let stop = Task { await service.stopCapture(sessionID: sessionID) }
+        await fulfillment(of: [tail.armed], timeout: 1)
+        XCTAssertEqual(factory.drivers.last?.stopCallCount, 0)
+        _ = write(Array(repeating: 0.3, count: 800), to: try XCTUnwrap(factory.rings.last))
+        tail.end()
+        let captured = await stop.value
+
+        XCTAssertEqual(captured.outcome, .complete)
+        XCTAssertEqual(captured.samples.count, 2_400)
+        XCTAssertEqual(captured.samples.last, 0.3)
+        XCTAssertEqual(factory.drivers.last?.stopCallCount, 1)
+    }
+
+    func testInterruptionDuringTheReleaseTailKeepsTheDictation() async throws {
+        let monitor = StubAudioDeviceMonitor()
+        let tail = StubReleaseTail()
+        let service = AudioCaptureService(
+            deviceMonitor: monitor,
+            hardwareCatalog: StubAudioCaptureHardwareCatalog(route: makeDeviceRoute()),
+            driverFactory: StubAudioCaptureDriverFactory(
+                format: AudioCaptureFormat(sampleRate: 16_000, channelCount: 1),
+                samples: Array(repeating: 0.2, count: 1_600)
+            ),
+            firstFrameDeadlineSeconds: 10,
+            scheduleReleaseTail: tail.schedule
+        )
+        let interrupted = expectation(description: "no interrupted event")
+        interrupted.isInverted = true
+        service.onEvent = { event in
+            if case .interrupted = event {
+                interrupted.fulfill()
+            }
+        }
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+
+        let stop = Task { await service.stopCapture(sessionID: sessionID) }
+        await fulfillment(of: [tail.armed], timeout: 1)
+        monitor.emit(.selectedDeviceFormat)
+        let captured = await stop.value
+
+        XCTAssertEqual(captured.outcome, .complete)
+        XCTAssertEqual(captured.samples.count, 1_600)
+        await fulfillment(of: [interrupted], timeout: 0.1)
+    }
+
     func testSpuriousEngineConfigChangeForSameDeviceRestartsInsteadOfInterrupting() async throws {
         // Reproduces KIS-141: the standardEngine fallback emits one benign
         // AVAudioEngineConfigurationChange right after start. It must NOT surface
@@ -218,7 +399,10 @@ final class AudioCaptureServiceTests: XCTestCase {
         XCTAssertEqual(factory.startedBackends, [.inputOnlyHAL, .standardEngine, .standardEngine])
     }
 
-    func testEngineConfigChangeAfterRealDeviceSwitchInterrupts() async throws {
+    func testEngineConfigChangeAfterDefaultInputSwitchKeepsTheMicrophone() async throws {
+        // The default input moves to another microphone during the dictation, and
+        // the engine reports a configuration change. The capture restarts in place
+        // on its own microphone instead of stopping.
         let catalog = StubAudioCaptureHardwareCatalog(route: makeDeviceRoute())
         let factory = StubAudioCaptureDriverFactory(
             format: AudioCaptureFormat(sampleRate: 48_000, channelCount: 1),
@@ -231,10 +415,51 @@ final class AudioCaptureServiceTests: XCTestCase {
             driverFactory: factory,
             firstFrameDeadlineSeconds: 10
         )
-        let interrupted = expectation(description: "interrupted on real device change")
+        var interruptedReason: AudioCaptureInterruption?
         service.onEvent = { event in
             if case let .interrupted(_, reason) = event {
-                XCTAssertEqual(reason, .deviceChanged)
+                interruptedReason = reason
+            }
+        }
+        let restarted = expectation(description: "engine restarted in place")
+        factory.onStartDriver = { startCount in
+            if startCount == 3 { restarted.fulfill() }
+        }
+        let sessionID = UUID()
+        _ = try await service.startCapture(
+            sessionID: sessionID,
+            preferredInputDeviceID: nil,
+            echoCancellationEnabled: false
+        )
+
+        catalog.route = makeDeviceRoute(effectiveInputDeviceID: "airpods", inputTransport: .bluetooth)
+        catalog.devices.append(AudioInputDevice(id: "airpods", name: "AirPods Pro", isDefault: true, transport: .bluetooth))
+        factory.triggerConfigurationChange()
+        await fulfillment(of: [restarted], timeout: 2)
+
+        let captured = await service.stopCapture(sessionID: sessionID)
+        XCTAssertNil(interruptedReason)
+        XCTAssertEqual(captured.outcome, .complete)
+        XCTAssertEqual(captured.route?.effectiveInputDeviceID, "test-device")
+    }
+
+    func testEngineConfigChangeAfterMicrophoneUnpluggedInterruptsAsUnavailable() async throws {
+        let catalog = StubAudioCaptureHardwareCatalog(route: makeDeviceRoute())
+        let factory = StubAudioCaptureDriverFactory(
+            format: AudioCaptureFormat(sampleRate: 48_000, channelCount: 1),
+            samples: Array(repeating: 0.2, count: 4_800),
+            failingBackends: [.inputOnlyHAL]
+        )
+        let service = AudioCaptureService(
+            deviceMonitor: StubAudioDeviceMonitor(),
+            hardwareCatalog: catalog,
+            driverFactory: factory,
+            firstFrameDeadlineSeconds: 10
+        )
+        let interrupted = expectation(description: "interrupted when the microphone left")
+        service.onEvent = { event in
+            if case let .interrupted(_, reason) = event {
+                XCTAssertEqual(reason, .deviceUnavailable)
                 interrupted.fulfill()
             }
         }
@@ -245,13 +470,11 @@ final class AudioCaptureServiceTests: XCTestCase {
             echoCancellationEnabled: false
         )
 
-        // The active input device is swapped out from under us before the engine
-        // reports its configuration change.
-        catalog.route = makeDeviceRoute(effectiveInputDeviceID: "different-device")
+        catalog.devices = []
         factory.triggerConfigurationChange()
 
         await fulfillment(of: [interrupted], timeout: 2)
-        await service.cancelCapture(sessionID: sessionID, reason: .deviceChanged)
+        await service.cancelCapture(sessionID: sessionID, reason: nil)
     }
 
     func testBenignConfigChangePreservesVoiceProcessingBackend() async throws {
@@ -476,12 +699,14 @@ final class AudioCaptureServiceTests: XCTestCase {
             requestedEchoCancellation: true,
             effectiveEchoCancellation: false,
             backend: .inputOnlyHAL,
-            fallbackReason: .bluetoothRoute
+            fallbackReason: .bluetoothRoute,
+            standIn: .bluetoothDefault(name: "Kishan's AirPods")
         )
 
         XCTAssertFalse(route.privacySafeLogValue.contains("private-device-uid"))
         XCTAssertFalse(route.privacySafeLogValue.contains("Kishan"))
         XCTAssertTrue(route.privacySafeLogValue.contains("input=bluetooth"))
+        XCTAssertTrue(route.privacySafeLogValue.contains("standin=bluetooth_default"))
     }
 
     private func write(_ samples: [Float], to ring: OpaquePointer) -> Int {
@@ -498,6 +723,15 @@ final class AudioCaptureServiceTests: XCTestCase {
         return Array(result.prefix(readCount))
     }
 
+    private func makeInput(
+        _ name: String,
+        _ transport: AudioDeviceTransport,
+        isDefault: Bool = false,
+        availability: AudioInputDevice.Availability = .available
+    ) -> AudioInputDevice {
+        AudioInputDevice(id: name, name: name, isDefault: isDefault, transport: transport, availability: availability)
+    }
+
     private func makeDeviceRoute(
         effectiveInputDeviceID: String = "test-device",
         inputTransport: AudioDeviceTransport = .builtIn,
@@ -510,7 +744,8 @@ final class AudioCaptureServiceTests: XCTestCase {
             inputTransport: inputTransport,
             outputTransport: outputTransport,
             nominalInputSampleRate: 16_000,
-            inputChannelCount: 1
+            inputChannelCount: 1,
+            standIn: nil
         )
     }
 }
@@ -533,14 +768,21 @@ private final class StubAudioDeviceMonitor: AudioDeviceMonitorProtocol {
 
 private final class StubAudioCaptureHardwareCatalog: AudioCaptureHardwareCatalogProtocol {
     var route: AudioDeviceRoute
+    var devices: [AudioInputDevice]
     var processInputMuted = false
 
     init(route: AudioDeviceRoute) {
         self.route = route
+        devices = [AudioInputDevice(
+            id: route.effectiveInputDeviceID,
+            name: route.effectiveInputName,
+            isDefault: true,
+            transport: route.inputTransport
+        )]
     }
 
     func availableInputDevices() -> [AudioInputDevice] {
-        []
+        devices
     }
 
     func resolveDeviceRoute(preferredInputDeviceID: String?) throws -> CoreAudioRouteResolution {
@@ -557,6 +799,21 @@ private final class StubAudioCaptureHardwareCatalog: AudioCaptureHardwareCatalog
 
     func processInputIsMuted() -> Bool? {
         processInputMuted
+    }
+}
+
+/// Holds the end of the release tail until the test calls `end()`.
+private final class StubReleaseTail {
+    let armed = XCTestExpectation(description: "release tail armed")
+    private var endOfTail: (() -> Void)?
+
+    func schedule(_ endOfTail: @escaping () -> Void) {
+        self.endOfTail = endOfTail
+        armed.fulfill()
+    }
+
+    func end() {
+        endOfTail?()
     }
 }
 
@@ -581,6 +838,7 @@ private final class StubAudioCaptureDriverFactory: AudioCaptureDriverFactoryProt
     let failingBackends: [AudioCaptureBackend]
     private(set) var startedBackends: [AudioCaptureBackend] = []
     private(set) var drivers: [StubAudioCaptureDriver] = []
+    private(set) var rings: [OpaquePointer] = []
     private(set) var configurationChangeHandlers: [() -> Void] = []
     /// Called after each *successful* start with the cumulative count in `startedBackends`,
     /// letting tests await a restart deterministically instead of sleeping.
@@ -613,6 +871,7 @@ private final class StubAudioCaptureDriverFactory: AudioCaptureDriverFactoryProt
         }
         let driver = StubAudioCaptureDriver(backend: plan.backend, format: format)
         drivers.append(driver)
+        rings.append(ring)
         configurationChangeHandlers.append(onConfigurationChange)
         onStartDriver?(startedBackends.count)
         return AudioCaptureDriverStart(driver: driver, format: format)

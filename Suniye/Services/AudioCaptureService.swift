@@ -12,7 +12,7 @@ enum AudioLevelMeter {
 
 enum AudioCaptureServiceError: LocalizedError, Equatable {
     case noInputDevice
-    case preferredDeviceUnavailable
+    case builtInMicrophoneOff
     case invalidInputFormat
     case failedToSelectInput(Int32)
     case ringBufferUnavailable
@@ -22,8 +22,8 @@ enum AudioCaptureServiceError: LocalizedError, Equatable {
         switch self {
         case .noInputDevice:
             return "No microphone is available."
-        case .preferredDeviceUnavailable:
-            return "The selected microphone is unavailable."
+        case .builtInMicrophoneOff:
+            return "The built-in microphone is off while the lid is closed."
         case .invalidInputFormat:
             return "The selected microphone has an invalid audio format."
         case let .failedToSelectInput(status):
@@ -61,7 +61,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
 
     private final class ActiveCapture {
         let id: UUID
-        let preferredInputDeviceID: String?
         let requestedEchoCancellation: Bool
         let inputDeviceID: AudioObjectID
         let deviceRoute: AudioDeviceRoute
@@ -78,10 +77,10 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         var smoothedLevels = Array(repeating: Float(0), count: AudioLevelMeter.bandCount)
         var lastLevelEmissionTime: CFTimeInterval = 0
         var drainTimer: DispatchSourceTimer?
+        var pendingStop: CheckedContinuation<CapturedAudio, Never>?
 
         init(
             id: UUID,
-            preferredInputDeviceID: String?,
             requestedEchoCancellation: Bool,
             inputDeviceID: AudioObjectID,
             deviceRoute: AudioDeviceRoute,
@@ -89,7 +88,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
             ring: OpaquePointer
         ) {
             self.id = id
-            self.preferredInputDeviceID = preferredInputDeviceID
             self.requestedEchoCancellation = requestedEchoCancellation
             self.inputDeviceID = inputDeviceID
             self.deviceRoute = deviceRoute
@@ -113,23 +111,30 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     private let maximumDurationSeconds: Double
     private let firstFrameDeadlineSeconds: Double
     private let maximumEngineRestarts = 2
+    private let scheduleReleaseTail: (@escaping () -> Void) -> Void
     private let drainScratch: UnsafeMutablePointer<Float>
 
     private var eventCallback: ((AudioCaptureEvent) -> Void)?
     private var activeCapture: ActiveCapture?
+
+    static let releaseTail: DispatchTimeInterval = .milliseconds(200)
 
     init(
         deviceMonitor: AudioDeviceMonitorProtocol = CoreAudioDeviceMonitor(),
         hardwareCatalog: AudioCaptureHardwareCatalogProtocol = CoreAudioCaptureHardwareCatalog(),
         driverFactory: AudioCaptureDriverFactoryProtocol = DefaultAudioCaptureDriverFactory(),
         maximumDurationSeconds: Double = 10 * 60,
-        firstFrameDeadlineSeconds: Double = 1.5
+        firstFrameDeadlineSeconds: Double = 1.5,
+        scheduleReleaseTail: @escaping (@escaping () -> Void) -> Void = { endOfTail in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + AudioCaptureService.releaseTail, execute: endOfTail)
+        }
     ) {
         self.deviceMonitor = deviceMonitor
         self.hardwareCatalog = hardwareCatalog
         self.driverFactory = driverFactory
         self.maximumDurationSeconds = maximumDurationSeconds
         self.firstFrameDeadlineSeconds = firstFrameDeadlineSeconds
+        self.scheduleReleaseTail = scheduleReleaseTail
         self.drainScratch = .allocate(capacity: drainCapacity)
         controlQueue.setSpecific(key: controlQueueKey, value: ())
 
@@ -178,7 +183,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
 
                     let active = ActiveCapture(
                         id: sessionID,
-                        preferredInputDeviceID: preferredInputDeviceID,
                         requestedEchoCancellation: echoCancellationEnabled,
                         inputDeviceID: resolution.inputDeviceID,
                         deviceRoute: resolution.route,
@@ -208,18 +212,29 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         }
     }
 
+    /// Keeps recording for the release tail before it returns the audio: a
+    /// shortcut often goes up while the last word is still being said.
     func stopCapture(sessionID: UUID) async -> CapturedAudio {
         await withCheckedContinuation { continuation in
             controlQueue.async {
-                guard let active = self.activeCapture, active.id == sessionID else {
+                guard let active = self.activeCapture, active.id == sessionID, active.pendingStop == nil else {
                     continuation.resume(returning: CapturedAudio.interrupted(
                         sessionID: sessionID,
                         reason: .ioStoppedAbnormally
                     ))
                     return
                 }
-                let captured = self.finalize(active: active, discard: false)
-                continuation.resume(returning: captured)
+                guard active.interruption == nil else {
+                    continuation.resume(returning: self.finalize(active: active, discard: false))
+                    return
+                }
+                active.pendingStop = continuation
+                self.scheduleReleaseTail { [weak self, weak active] in
+                    self?.controlQueue.async {
+                        guard let self, let active, self.activeCapture === active else { return }
+                        _ = self.finalize(active: active, discard: false)
+                    }
+                }
             }
         }
     }
@@ -330,7 +345,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     private func handleEngineConfigurationChange(_ active: ActiveCapture) {
         guard activeCapture === active, active.interruption == nil else { return }
 
-        if let interruption = resolvedRouteChangeInterruption(for: active) {
+        if let interruption = lostInputInterruption(for: active, devices: hardwareCatalog.availableInputDevices()) {
             interruptActiveCapture(interruption)
             return
         }
@@ -448,6 +463,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                   let active,
                   self.activeCapture === active,
                   active.interruption == nil,
+                  active.pendingStop == nil,
                   !active.firstFrameSeen,
                   active.firstFrameDeadlineGeneration == generation else {
                 return
@@ -473,17 +489,18 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
             deviceMonitor.stop()
             deviceMonitor.start()
         }
-        onEvent?(.devicesChanged(hardwareCatalog.availableInputDevices()))
+        let devices = hardwareCatalog.availableInputDevices()
+        onEvent?(.devicesChanged(devices))
 
         guard let active else { return }
         let interruption: AudioCaptureInterruption?
         switch reason {
         case .defaultInput:
-            interruption = active.preferredInputDeviceID == nil ? .deviceChanged : nil
+            interruption = nil
         case .defaultOutput:
             interruption = active.route.backend == .voiceProcessingEngine ? .deviceChanged : nil
         case .devices, .selectedDeviceAlive:
-            interruption = resolvedRouteChangeInterruption(for: active)
+            interruption = lostInputInterruption(for: active, devices: devices)
         case .selectedDeviceFormat:
             interruption = .formatChanged
         case .selectedDeviceChanged:
@@ -507,21 +524,25 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         activeCapture
     }
 
-    private func resolvedRouteChangeInterruption(for active: ActiveCapture) -> AudioCaptureInterruption? {
-        do {
-            let resolution = try hardwareCatalog.resolveDeviceRoute(
-                preferredInputDeviceID: active.preferredInputDeviceID
-            )
-            return resolution.route.effectiveInputDeviceID == active.route.effectiveInputDeviceID
-                ? nil
-                : .deviceChanged
-        } catch {
-            return .deviceUnavailable
-        }
+    /// A dictation keeps the microphone it started with, even when the default
+    /// input changes or a better one connects; the next dictation picks again.
+    /// It stops only when its own microphone can no longer record.
+    private func lostInputInterruption(
+        for active: ActiveCapture,
+        devices: [AudioInputDevice]
+    ) -> AudioCaptureInterruption? {
+        devices.contains { $0.id == active.route.effectiveInputDeviceID && $0.isAvailable }
+            ? nil
+            : .deviceUnavailable
     }
 
     private func interruptActiveCapture(_ reason: AudioCaptureInterruption) {
         guard let active = activeCapture, active.interruption == nil else {
+            return
+        }
+        if active.pendingStop != nil {
+            AppLogger.shared.log(.info, "audio capture release tail ended early session=\(active.id.uuidString) reason=\(reason.rawValue)")
+            _ = finalize(active: active, discard: false)
             return
         }
         active.interruption = reason
@@ -534,6 +555,10 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     }
 
     private func finalize(active: ActiveCapture, discard: Bool) -> CapturedAudio {
+        // Taken first: the drain below can reach the length limit and come back
+        // through interruptActiveCapture while this finalize still runs.
+        let pendingStop = active.pendingStop
+        active.pendingStop = nil
         stopHardware(for: active)
         drain(active)
         active.drainTimer?.cancel()
@@ -556,6 +581,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         onEvent?(.levelsUpdated(sessionID: active.id, levels: Array(repeating: 0, count: AudioLevelMeter.bandCount)))
         logFinalCapture(captured, discarded: discard)
         scheduleReleaseCheck(sessionID: active.id)
+        pendingStop?.resume(returning: captured)
         return captured
     }
 
