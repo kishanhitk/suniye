@@ -115,6 +115,7 @@
 		7739558005EE588E176936C5 /* MagicFormatPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A43576952A870136E63581 /* MagicFormatPage.swift */; };
 		775525A23D0120E0D562F6DE /* IssueReportWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A40680D7D6D6D80DF33509F /* IssueReportWindowController.swift */; };
 		7BA13DAAFBDA2321F26E9138 /* OnnxRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B64604C1307F588241DE590 /* OnnxRuntimeTests.swift */; };
+		7D0C3E9CD9DF909018216FE9 /* MagicFormatParagraphBreaks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F469A9011B7E8CE6ACF0E72 /* MagicFormatParagraphBreaks.swift */; };
 		7EB9B5550B0A955CDFC3FC17 /* LLMSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2C954DD9B2466B271CC6A1D /* LLMSettingsStoreTests.swift */; };
 		7FFDBD4254F504A0E5EC9D45 /* AudioCaptureDrivers.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC0D2D7052852D86CA19FCC5 /* AudioCaptureDrivers.swift */; };
 		8026BDFF0398AE05E7C479C9 /* ChatCompletionClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73E0B8EFFC4C811FB6EDB2C3 /* ChatCompletionClient.swift */; };
@@ -364,6 +365,7 @@
 		7C7E3E8C3B5862812BB9CD0E /* LocalGemmaPrewarmBenchmarkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaPrewarmBenchmarkTests.swift; sourceTree = "<group>"; };
 		7C803DEDF9EAE9D4E8C14C7E /* LLMPostProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMPostProcessor.swift; sourceTree = "<group>"; };
 		7EEDE3A134D7940680E98B65 /* LaunchAtLoginService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginService.swift; sourceTree = "<group>"; };
+		7F469A9011B7E8CE6ACF0E72 /* MagicFormatParagraphBreaks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatParagraphBreaks.swift; sourceTree = "<group>"; };
 		7F99CBD1DBECD891AFEFBB26 /* AppStatePerAppPromptTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStatePerAppPromptTests.swift; sourceTree = "<group>"; };
 		83DBF264EA361B497944C9B3 /* AppStateCoverageOnboardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateCoverageOnboardingTests.swift; sourceTree = "<group>"; };
 		85BCA4A71724B17FDD57DFAD /* Suniye-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Suniye-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -771,6 +773,7 @@
 				D04231EADA487127BD0F97D0 /* LocalLLMModelManager.swift */,
 				1D833B22A455551351698DF5 /* MagicFormatCoordinator.swift */,
 				CF1DD54B813C7230F0B16B34 /* MagicFormatOutputPolicy.swift */,
+				7F469A9011B7E8CE6ACF0E72 /* MagicFormatParagraphBreaks.swift */,
 				6F437FB8217873D7CB27AEDD /* MagicFormatPromptFileStore.swift */,
 				865C597BBA404F5F6A049278 /* ModelManager.swift */,
 				39051EB772E2A2A5F3560055 /* OnnxRuntime.swift */,
@@ -995,6 +998,7 @@
 				B8A7569026298BB562FD8AFA /* MagicFormatOffState.swift in Sources */,
 				E7256E2787DFE4B1178B876F /* MagicFormatOutputPolicy.swift in Sources */,
 				7739558005EE588E176936C5 /* MagicFormatPage.swift in Sources */,
+				7D0C3E9CD9DF909018216FE9 /* MagicFormatParagraphBreaks.swift in Sources */,
 				FE62E7BC7833A6D7D88CE00F /* MagicFormatPromptFileStore.swift in Sources */,
 				46CCC583C6502528306225E2 /* MagicFormatProviderPresentation.swift in Sources */,
 				F04F419B046855E73DB2A19F /* MagicFormatSheets.swift in Sources */,

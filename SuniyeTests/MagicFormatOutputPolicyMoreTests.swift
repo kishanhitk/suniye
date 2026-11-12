@@ -28,7 +28,98 @@ final class MagicFormatOutputPolicyMoreTests: XCTestCase {
         XCTAssertFalse(MagicFormatOutputSanitizer.isValidPlainText("- one\n\n- two", for: input))
     }
 
+    func testSpokenNewParagraphsAllowOneBlankLineEach() {
+        let input = "Hi Nora, new paragraph. The lease is signed. New paragraph. Thanks, new line, Omar"
+        XCTAssertTrue(MagicFormatOutputSanitizer.isValidPlainText("Hi Nora,\n\nThe lease is signed.\n\nThanks,\nOmar", for: input))
+    }
+
+    func testBlankLinesBeyondTheDictatedParagraphsAreInvalid() {
+        let input = "hi nora new paragraph the lease is signed"
+        XCTAssertFalse(MagicFormatOutputSanitizer.isValidPlainText("Sure, here it is:\n\nHi Nora,\n\nThe lease is signed.", for: input))
+    }
+
+    func testPreambleLineBeforeDictatedParagraphsIsInvalid() {
+        let input = "hi nora new paragraph the lease is signed"
+        XCTAssertTrue(MagicFormatOutputSanitizer.isValidPlainText("Hi Nora,\n\nThe lease is signed.", for: input))
+        XCTAssertFalse(MagicFormatOutputSanitizer.isValidPlainText("Here is the cleaned text:\nHi Nora,\n\nThe lease is signed.", for: input))
+    }
+
     // MARK: - MagicFormatPipeline
+
+    func testPipelineSendsDictatedParagraphsAsBlankLinesAndAcceptsThem() async throws {
+        var prompts: [String] = []
+        let output = try await MagicFormatPipeline.polish(
+            text: "the movers arrive in the morning new paragraph tape the fragile boxes first",
+            systemPrompt: "prompt",
+            keywords: []
+        ) { request in
+            prompts.append(request.prompt)
+            return "The movers arrive in the morning.\n\nTape the fragile boxes first."
+        }
+
+        XCTAssertEqual(output, "The movers arrive in the morning.\n\nTape the fragile boxes first.")
+        XCTAssertEqual(prompts, ["<transcript>\nthe movers arrive in the morning\n\ntape the fragile boxes first\n</transcript>"])
+    }
+
+    func testPipelineTurnsALineBreakAtADictatedParagraphIntoABlankLine() async throws {
+        let output = try await MagicFormatPipeline.polish(
+            text: "the bakery sold out by noon new paragraph we baked more bread new paragraph we open earlier tomorrow",
+            systemPrompt: "prompt",
+            keywords: []
+        ) { _ in
+            "The bakery sold out by noon.  \nWe baked more bread.\nWe open earlier tomorrow."
+        }
+
+        XCTAssertEqual(output, "The bakery sold out by noon.\n\nWe baked more bread.\n\nWe open earlier tomorrow.")
+    }
+
+    func testPipelineLeavesAParagraphStartWithAnInnerCapitalAsWritten() async throws {
+        let output = try await MagicFormatPipeline.polish(
+            text: "my phone died new paragraph iPhone repairs take a week",
+            systemPrompt: "prompt",
+            keywords: []
+        ) { _ in
+            "My phone died.\n\niPhone repairs take a week."
+        }
+
+        XCTAssertEqual(output, "My phone died.\n\niPhone repairs take a week.")
+    }
+
+    func testPipelineKeepsLineBreaksWhenTheModelMergedADictatedParagraph() async throws {
+        let output = try await MagicFormatPipeline.polish(
+            text: "the bakery sold out by noon new paragraph we baked more bread new paragraph we open earlier tomorrow",
+            systemPrompt: "prompt",
+            keywords: []
+        ) { _ in
+            "The bakery sold out by noon. We baked more bread.\nWe open earlier tomorrow."
+        }
+
+        XCTAssertEqual(output, "The bakery sold out by noon. We baked more bread.\nWe open earlier tomorrow.")
+    }
+
+    func testPipelineKeepsLineBreaksWhenTheDictationAlsoAsksForLines() async throws {
+        let output = try await MagicFormatPipeline.polish(
+            text: "hi grace thanks new line sam new paragraph p s call me",
+            systemPrompt: "prompt",
+            keywords: []
+        ) { _ in
+            "Hi Grace, thanks,\nSam P.S. call me."
+        }
+
+        XCTAssertEqual(output, "Hi Grace, thanks,\nSam P.S. call me.")
+    }
+
+    func testPipelineKeepsNewParagraphAsWordsWhenItNamesAThing() async throws {
+        for phrase in ["please add a new paragraph about pricing", "the docs need new paragraph spacing"] {
+            var prompts: [String] = []
+            _ = try await MagicFormatPipeline.polish(text: phrase, systemPrompt: "prompt", keywords: []) { request in
+                prompts.append(request.prompt)
+                return "Cleaned."
+            }
+
+            XCTAssertEqual(prompts, ["<transcript>\n\(phrase)\n</transcript>"])
+        }
+    }
 
     func testPipelineRejectsWhitespaceOnlyInput() async {
         do {
@@ -78,6 +169,19 @@ final class MagicFormatOutputPolicyMoreTests: XCTestCase {
 
         XCTAssertTrue(instructions.contains("Retry correction: return only the cleaned transcript text as a plain-text list."))
         XCTAssertFalse(instructions.contains("One line."))
+    }
+
+    func testRetryCorrectionForDictatedParagraphsAsksForThoseBlankLinesOnly() {
+        let instructions = MagicFormatPromptComposer.makeInstructions(
+            systemPrompt: "prompt",
+            keywords: [],
+            text: "dear team comma new paragraph the offsite moves to friday new paragraph regards comma new line mia",
+            retrying: true
+        )
+
+        XCTAssertTrue(instructions.contains("Put an empty line only where the speaker said \"new paragraph\"."))
+        XCTAssertFalse(instructions.contains("One line."))
+        XCTAssertFalse(instructions.contains("as a plain-text list"))
     }
 
     func testRetryCorrectionForSingleLineIntentAsksForOneLine() {
