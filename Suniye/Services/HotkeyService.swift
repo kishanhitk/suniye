@@ -52,6 +52,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var otherInputMonitor: Any?
+    private var chordMonitors: [Any] = []
     private var carbonHotKeyRefs: [Slot: EventHotKeyRef] = [:]
     private var carbonEventHandlerRef: EventHandlerRef?
     private var heldSlots: Set<Slot> = []
@@ -91,6 +92,7 @@ final class HotkeyService: HotkeyServiceProtocol {
             self.localMonitor = nil
         }
         removeOtherInputMonitor()
+        removeChordMonitors()
         for hotKeyRef in carbonHotKeyRefs.values {
             UnregisterEventHotKey(hotKeyRef)
         }
@@ -117,7 +119,7 @@ final class HotkeyService: HotkeyServiceProtocol {
         ) { [weak self] event in
             guard let self else { return }
             if event.type == .keyDown,
-               event.keyCode == UInt16(kVK_Escape) || isDictationShortcutKey(event.keyCode) {
+               event.keyCode == UInt16(kVK_Escape) || isDictationShortcutKey(event) {
                 return
             }
             AppLogger.shared.log(.debug, "cancel shortcut released: input in another app")
@@ -127,16 +129,41 @@ final class HotkeyService: HotkeyServiceProtocol {
 
     /// The shortcut's own key is neither a chord nor input in another app. With
     /// Karabiner-Elements running, Globe also sends its own key, code 179.
-    private func isDictationShortcutKey(_ keyCode: UInt16) -> Bool {
+    private func isDictationShortcutKey(_ event: NSEvent) -> Bool {
         guard let dictationConfiguration else {
             return false
         }
         switch dictationConfiguration.kind {
         case .globe:
-            return keyCode == 179
+            return event.keyCode == 179
         case .keyCombo:
-            return UInt32(keyCode) == dictationConfiguration.keyCode
+            return UInt32(event.keyCode) == dictationConfiguration.keyCode
+                && HotkeyConfiguration.carbonModifiers(from: event.modifierFlags) == dictationConfiguration.carbonModifiers
         }
+    }
+
+    /// Watches keys only while the Globe dictation key is held, so other typing
+    /// never wakes Suniye.
+    private func installChordMonitors() {
+        removeChordMonitors()
+        let handleKey: (NSEvent) -> Void = { [weak self] event in
+            guard let self, !isDictationShortcutKey(event) else { return }
+            onHotkeyChord?()
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: handleKey) {
+            chordMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { event in
+            handleKey(event)
+            return event
+        }) {
+            chordMonitors.append(local)
+        }
+    }
+
+    private func removeChordMonitors() {
+        chordMonitors.forEach(NSEvent.removeMonitor)
+        chordMonitors.removeAll()
     }
 
     private func releaseCancelShortcut() {
@@ -197,11 +224,11 @@ final class HotkeyService: HotkeyServiceProtocol {
             return
         }
 
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             self?.handle(event: event)
         }
 
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             self?.handle(event: event)
             return event
         }
@@ -235,13 +262,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     }
 
     private func handle(event: NSEvent) {
-        guard let globeSlot else {
-            return
-        }
-        if event.type == .keyDown {
-            if globeSlot == .dictation, heldSlots.contains(globeSlot), !isDictationShortcutKey(event.keyCode) {
-                onHotkeyChord?()
-            }
+        guard event.type == .flagsChanged, let globeSlot else {
             return
         }
 
@@ -251,10 +272,14 @@ final class HotkeyService: HotkeyServiceProtocol {
         if fnDown && !heldSlots.contains(globeSlot) {
             heldSlots.insert(globeSlot)
             AppLogger.shared.log(.debug, "hotkey fn down keyCode=\(event.keyCode) slot=\(globeSlot.rawValue)")
+            if globeSlot == .dictation {
+                installChordMonitors()
+            }
             downCallback(for: globeSlot)?()
         } else if !fnDown && heldSlots.contains(globeSlot) {
             heldSlots.remove(globeSlot)
             AppLogger.shared.log(.debug, "hotkey fn up keyCode=\(event.keyCode) slot=\(globeSlot.rawValue)")
+            removeChordMonitors()
             upCallback(for: globeSlot)?()
         }
     }

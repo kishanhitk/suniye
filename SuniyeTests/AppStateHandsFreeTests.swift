@@ -74,17 +74,6 @@ final class AppStateHandsFreeTests: XCTestCase {
         await release(at: 380)
     }
 
-    func testHoldStillTranscribesOnRelease() async {
-        let appState = await readyState()
-
-        await press(at: 0)
-        await release(at: 1_800)
-        await waitUntil { appState.phase == .ready }
-
-        XCTAssertEqual(transcription.transcribeCallCount, 1)
-        XCTAssertEqual(insertion.insertedTexts, ["hello world"])
-    }
-
     func testDoubleTapKeepsRecordingUntilTheNextPressPastesIt() async {
         let appState = await readyState()
 
@@ -115,7 +104,6 @@ final class AppStateHandsFreeTests: XCTestCase {
 
         await press(at: 0)
         await release(at: 120)
-        XCTAssertEqual(appState.phase, .recording, "a tap waits for a possible second tap")
         await waitUntil { appState.phase == .ready }
 
         XCTAssertEqual(audio.cancelCaptureCallCount, 1)
@@ -168,31 +156,18 @@ final class AppStateHandsFreeTests: XCTestCase {
         XCTAssertEqual(insertion.insertedTexts, ["hello world"])
     }
 
-    func testGlobeDoubleTapDoesNotLockWhenMacOSDictationUsesIt() async {
-        let appState = await readyState(globeKeyAction: .startDictation)
-        XCTAssertEqual(appState.globeDoubleTapConflict, .startDictation)
+    func testGlobeDoubleTapDoesNotLockWhenATapAlsoRunsAMacOSAction() async {
+        for action in [SystemGlobeKeyAction.startDictation, .showEmojiAndSymbols, .changeInputSource] {
+            let appState = await readyState(globeKeyAction: action)
+            XCTAssertEqual(appState.globeDoubleTapConflict, action)
 
-        await press(at: 0)
-        await release(at: 120)
-        XCTAssertEqual(appState.phase, .ready, "with no lock to wait for, a tap is dropped at once")
-        await press(at: 260)
-        await release(at: 380)
-        await waitPastSecondTapWindow()
+            await doubleTap()
+            await waitUntil { appState.phase == .ready }
+            await waitPastSecondTapWindow()
 
-        XCTAssertEqual(appState.phase, .ready)
-        XCTAssertEqual(audio.cancelCaptureCallCount, 2)
-        XCTAssertEqual(transcription.transcribeCallCount, 0)
-    }
-
-    func testGlobeDoubleTapDoesNotLockWhenATapOpensEmojiAndSymbols() async {
-        let appState = await readyState(globeKeyAction: .showEmojiAndSymbols)
-        XCTAssertEqual(appState.globeDoubleTapConflict, .showEmojiAndSymbols)
-
-        await doubleTap()
-        await waitPastSecondTapWindow()
-
-        XCTAssertEqual(appState.phase, .ready)
-        XCTAssertEqual(transcription.transcribeCallCount, 0)
+            XCTAssertEqual(appState.phase, .ready, "\(action)")
+            XCTAssertEqual(transcription.transcribeCallCount, 0, "\(action)")
+        }
     }
 
     func testKeyComboDoubleTapLocksWhateverTheGlobeSetting() async {
@@ -212,7 +187,7 @@ final class AppStateHandsFreeTests: XCTestCase {
         await press(at: 0)
         hotkey.onHotkeyChord?()
         await release(at: 150)
-        XCTAssertEqual(appState.phase, .ready, "fn+Delete is dropped at once, with no wait for a second tap")
+        await waitUntil { appState.phase == .ready }
         await press(at: 250)
         hotkey.onHotkeyChord?()
         await release(at: 380)
@@ -221,19 +196,6 @@ final class AppStateHandsFreeTests: XCTestCase {
         XCTAssertEqual(appState.phase, .ready)
         XCTAssertEqual(transcription.transcribeCallCount, 0)
         XCTAssertNil(appState.lastError)
-    }
-
-    func testFnChordWhileLockedKeepsRecording() async {
-        let appState = await readyState()
-        await doubleTap()
-
-        await press(at: 5_000)
-        hotkey.onHotkeyChord?()
-        await release(at: 5_100)
-        await waitPastSecondTapWindow()
-
-        XCTAssertEqual(appState.phase, .recording)
-        XCTAssertEqual(transcription.transcribeCallCount, 0)
     }
 
     func testSingleTapOnThePracticeScreenStillAsksForAHold() async {

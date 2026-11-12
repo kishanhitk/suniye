@@ -2514,7 +2514,10 @@ final class AppState {
     }
 
     func refreshSystemGlobeKeyAction() {
-        systemGlobeKeyAction = systemGlobeKeyActionProvider()
+        let action = systemGlobeKeyActionProvider()
+        if action != systemGlobeKeyAction {
+            systemGlobeKeyAction = action
+        }
     }
 
     func openKeyboardSettings() {
@@ -4103,11 +4106,12 @@ final class AppState {
     }
 
     private func handleDictationShortcutPress() async {
-        cancelSecondTapWindow()
-        if !isRecordingFromDictationShortcut {
-            dictationShortcutGesture.reset()
+        if isRecordingFromDictationShortcut {
+            cancelSecondTapWindow()
+        } else {
+            resetDictationShortcutGesture()
         }
-        if dictationShortcutGesture.press(at: nowProvider()) == .start {
+        if dictationShortcutGesture.press(at: nowProvider()) {
             await beginRecordingFlow(trigger: .hotkey)
         }
     }
@@ -4119,11 +4123,14 @@ final class AppState {
             await stopRecordingAndTranscribe(trigger: .hotkey)
             return
         }
-        // The user can change the macOS setting while Suniye is in the background.
-        if hotkeyConfiguration.kind == .globe {
-            refreshSystemGlobeKeyAction()
+        let command = dictationShortcutGesture.release(at: nowProvider()) {
+            // The user can change the macOS setting while Suniye is in the background.
+            if hotkeyConfiguration.kind == .globe {
+                refreshSystemGlobeKeyAction()
+            }
+            return globeDoubleTapConflict == nil
         }
-        switch dictationShortcutGesture.release(at: nowProvider(), canLock: globeDoubleTapConflict == nil) {
+        switch command {
         case .finish:
             await stopRecordingAndTranscribe(trigger: .hotkey)
         case .discard:
@@ -4133,7 +4140,7 @@ final class AppState {
             startSecondTapWindow()
         case .lock:
             lockDictationRecording()
-        case .start, nil:
+        case nil:
             break
         }
     }
@@ -4141,12 +4148,12 @@ final class AppState {
     private func startSecondTapWindow() {
         let sessionID = activeAudioCaptureSessionID
         secondTapWindowTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(DictationShortcutGesture.tapInterval * 1_000_000_000))
+            try? await Task.sleep(for: .seconds(DictationShortcutGesture.tapInterval))
             guard let self, !Task.isCancelled, activeAudioCaptureSessionID == sessionID else {
                 return
             }
             secondTapWindowTask = nil
-            if dictationShortcutGesture.secondTapWindowEnded() == .discard {
+            if dictationShortcutGesture.secondTapWindowEnded() {
                 AppLogger.shared.log(.info, "recording discarded: single tap")
                 await discardShortPress()
             }
@@ -4185,9 +4192,6 @@ final class AppState {
     }
 
     private func cancelRecording() async {
-        guard phase == .recording else {
-            return
-        }
         AppLogger.shared.log(.info, "recording canceled with Esc")
         await discardRecording(message: "Dictation canceled")
     }

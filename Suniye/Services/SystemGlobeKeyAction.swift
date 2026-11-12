@@ -12,18 +12,23 @@ enum SystemGlobeKeyAction: Equatable {
 
     /// Apple does not document the key. With no value, System Settings on
     /// macOS 27.2 shows Show Emoji & Symbols.
+    init(fnUsageType: Int?) {
+        switch fnUsageType {
+        case 0:
+            self = .doNothing
+        case 1:
+            self = .changeInputSource
+        case 3:
+            self = .startDictation
+        default:
+            // 2, no value, or a value this version does not know.
+            self = .showEmojiAndSymbols
+        }
+    }
+
     static func current() -> SystemGlobeKeyAction {
         let domain = "com.apple.HIToolbox" as CFString
         CFPreferencesAppSynchronize(domain)
-        switch CFPreferencesCopyAppValue("AppleFnUsageType" as CFString, domain) as? Int {
-        case 0:
-            return .doNothing
-        case 1:
-            return .changeInputSource
-        case 3:
-            return .startDictation
-        default:
-            return .showEmojiAndSymbols
-        }
+        return SystemGlobeKeyAction(fnUsageType: CFPreferencesCopyAppValue("AppleFnUsageType" as CFString, domain) as? Int)
     }
 }

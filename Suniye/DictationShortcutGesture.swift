@@ -5,13 +5,12 @@ import Foundation
 /// starts on the first press in every case, so a double tap loses no audio.
 /// A press with another key in it (fn+Delete) is typing: it is never a tap,
 /// never locks, and never finishes a lock.
-struct DictationShortcutGesture: Equatable {
+struct DictationShortcutGesture {
     /// A press shorter than this is a tap. The second tap of a double tap must
     /// start within this time of the first release.
     static let tapInterval: TimeInterval = 0.3
 
-    enum Command: Equatable {
-        case start
+    enum ReleaseCommand: Equatable {
         case finish
         case discard
         case waitForSecondTap
@@ -21,10 +20,6 @@ struct DictationShortcutGesture: Equatable {
     private struct Press: Equatable {
         let since: Date
         var isChord = false
-
-        func isTap(releasedAt time: Date) -> Bool {
-            !isChord && time.timeIntervalSince(since) < DictationShortcutGesture.tapInterval
-        }
 
         func isHold(releasedAt time: Date) -> Bool {
             time.timeIntervalSince(since) >= DictationShortcutGesture.tapInterval
@@ -46,20 +41,20 @@ struct DictationShortcutGesture: Equatable {
         state == .locked
     }
 
-    mutating func press(at time: Date) -> Command? {
+    /// Returns true when the press starts a new recording.
+    mutating func press(at time: Date) -> Bool {
         switch state {
         case .idle:
             state = .firstPress(Press(since: time))
-            return .start
+            return true
         case .waitingForSecondTap:
             state = .secondPress(Press(since: time))
-            return nil
         case .locked:
             state = .finishingPress(isChord: false)
-            return nil
         case .firstPress, .secondPress, .finishingPress:
-            return nil
+            break
         }
+        return false
     }
 
     mutating func markChord() {
@@ -77,15 +72,16 @@ struct DictationShortcutGesture: Equatable {
         }
     }
 
-    /// `canLock` is false when a Globe tap also runs a macOS action.
-    mutating func release(at time: Date, canLock: Bool) -> Command? {
+    /// `canLock` is read only for a first tap. It is false when a Globe tap
+    /// also runs a macOS action.
+    mutating func release(at time: Date, canLock: () -> Bool) -> ReleaseCommand? {
         switch state {
         case let .firstPress(press):
             if press.isHold(releasedAt: time) {
                 state = .idle
                 return .finish
             }
-            guard press.isTap(releasedAt: time), canLock else {
+            guard !press.isChord, canLock() else {
                 state = .idle
                 return .discard
             }
@@ -96,7 +92,7 @@ struct DictationShortcutGesture: Equatable {
                 state = .idle
                 return .finish
             }
-            guard press.isTap(releasedAt: time) else {
+            guard !press.isChord else {
                 state = .idle
                 return .discard
             }
@@ -114,12 +110,13 @@ struct DictationShortcutGesture: Equatable {
         }
     }
 
-    mutating func secondTapWindowEnded() -> Command? {
+    /// Returns true when the recording waited for a second tap that did not come.
+    mutating func secondTapWindowEnded() -> Bool {
         guard state == .waitingForSecondTap else {
-            return nil
+            return false
         }
         state = .idle
-        return .discard
+        return true
     }
 
     mutating func reset() {
