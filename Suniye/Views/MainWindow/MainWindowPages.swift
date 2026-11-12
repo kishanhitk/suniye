@@ -78,6 +78,7 @@ struct GeneralPage: View {
         .animation(motion, value: appState.hasAccessibilityPermission)
         .animation(motion, value: inputWarning)
         .animation(motion, value: appState.hotkeyValidationMessage)
+        .animation(motion, value: appState.globeDoubleTapConflict)
         .animation(motion, value: appState.launchAtLoginError ?? appState.launchAtLoginWarningText)
     }
 
@@ -153,7 +154,15 @@ struct GeneralPage: View {
             }
 
             if let warning = inputWarning {
-                inputWarningRow(warning)
+                warningRow(warning) {
+                    if let recommended = appState.recommendedInputDevice {
+                        Button("Use \(recommended.name)") {
+                            appState.useRecommendedInputDevice()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
             }
 
             RowSeparator()
@@ -180,7 +189,22 @@ struct GeneralPage: View {
         return appState.audioRouteWarningText
     }
 
-    private func inputWarningRow(_ warning: String) -> some View {
+    private static func globeDoubleTapNotice(_ conflict: SystemGlobeKeyAction) -> String? {
+        let action: String
+        switch conflict {
+        case .doNothing:
+            return nil
+        case .startDictation:
+            action = "Pressing Globe twice starts macOS Dictation"
+        case .showEmojiAndSymbols:
+            action = "Pressing Globe opens Emoji & Symbols"
+        case .changeInputSource:
+            action = "Pressing Globe changes the input source"
+        }
+        return "\(action), so double-tap is off. In Keyboard settings, set \u{201C}Press \u{1F310} key to\u{201D} to Do Nothing."
+    }
+
+    private func warningRow<Action: View>(_ warning: String, @ViewBuilder action: () -> Action) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Label(warning, systemImage: "exclamationmark.triangle.fill")
                 .font(AppTypography.subheadline)
@@ -189,13 +213,7 @@ struct GeneralPage: View {
 
             Spacer(minLength: 12)
 
-            if let recommended = appState.recommendedInputDevice {
-                Button("Use \(recommended.name)") {
-                    appState.useRecommendedInputDevice()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
+            action()
         }
         .padding(.bottom, 12)
         .padding(.horizontal, 4)
@@ -207,7 +225,8 @@ struct GeneralPage: View {
     private var shortcuts: some View {
         SettingsGroup(heading: "Shortcuts") {
             ControlSettingRow(
-                title: "Hold to dictate"
+                title: "Hold to dictate",
+                info: "Hold the shortcut and speak. To dictate hands-free, double-tap it, then press it once to finish. Esc cancels until you type or click in another app."
             ) {
                 HotkeyRecorderButton(
                     configuration: Binding(
@@ -219,6 +238,16 @@ struct GeneralPage: View {
                         }
                     )
                 )
+            }
+
+            if let notice = appState.globeDoubleTapConflict.flatMap(Self.globeDoubleTapNotice) {
+                warningRow(notice) {
+                    Button("Open Keyboard Settings") {
+                        appState.openKeyboardSettings()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
             }
 
             RowSeparator()

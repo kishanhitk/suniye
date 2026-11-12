@@ -4,15 +4,23 @@ import Carbon
 protocol HotkeyServiceProtocol: AnyObject {
     var onHotkeyDown: (() -> Void)? { get set }
     var onHotkeyUp: (() -> Void)? { get set }
+    /// Another key went down while the Globe dictation shortcut is held, as in
+    /// fn+Delete. Key events reach Suniye only with Accessibility.
+    var onHotkeyChord: (() -> Void)? { get set }
     var onEditModeHotkeyDown: (() -> Void)? { get set }
     var onEditModeHotkeyUp: (() -> Void)? { get set }
     var onPasteLastTranscript: (() -> Void)? { get set }
+    var onCancel: (() -> Void)? { get set }
     func startMonitoring(
         configuration: HotkeyConfiguration,
         editModeConfiguration: HotkeyConfiguration?,
         pasteLastTranscriptConfiguration: HotkeyConfiguration
     )
     func stopMonitoring()
+    /// While enabled, Esc is taken from other apps and calls `onCancel`. A key
+    /// press or a click in another app gives Esc back to the apps until the
+    /// next enable, so an Esc meant for a dialog cannot end a dictation.
+    func setCancelShortcutEnabled(_ enabled: Bool)
 }
 
 private let hotKeyEventHandler: EventHandlerUPP = { _, eventRef, userData in
@@ -28,20 +36,27 @@ final class HotkeyService: HotkeyServiceProtocol {
         case dictation = 1
         case editMode = 2
         case pasteLastTranscript = 3
+        case cancel = 4
     }
+
+    private static let cancelConfiguration = HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_Escape), carbonModifiers: 0)
 
     var onHotkeyDown: (() -> Void)?
     var onHotkeyUp: (() -> Void)?
+    var onHotkeyChord: (() -> Void)?
     var onEditModeHotkeyDown: (() -> Void)?
     var onEditModeHotkeyUp: (() -> Void)?
     var onPasteLastTranscript: (() -> Void)?
+    var onCancel: (() -> Void)?
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private var otherInputMonitor: Any?
     private var carbonHotKeyRefs: [Slot: EventHotKeyRef] = [:]
     private var carbonEventHandlerRef: EventHandlerRef?
     private var heldSlots: Set<Slot> = []
     private var globeSlot: Slot?
+    private var dictationConfiguration: HotkeyConfiguration?
 
     func startMonitoring(
         configuration: HotkeyConfiguration,
@@ -50,6 +65,7 @@ final class HotkeyService: HotkeyServiceProtocol {
     ) {
         stopMonitoring()
 
+        dictationConfiguration = configuration
         register(configuration, for: .dictation)
         if pasteLastTranscriptConfiguration == configuration {
             AppLogger.shared.log(.warning, "paste last transcript hotkey ignored: matches dictation hotkey")
@@ -74,6 +90,7 @@ final class HotkeyService: HotkeyServiceProtocol {
             NSEvent.removeMonitor(localMonitor)
             self.localMonitor = nil
         }
+        removeOtherInputMonitor()
         for hotKeyRef in carbonHotKeyRefs.values {
             UnregisterEventHotKey(hotKeyRef)
         }
@@ -83,7 +100,60 @@ final class HotkeyService: HotkeyServiceProtocol {
             self.carbonEventHandlerRef = nil
         }
         globeSlot = nil
+        dictationConfiguration = nil
         heldSlots.removeAll()
+    }
+
+    func setCancelShortcutEnabled(_ enabled: Bool) {
+        releaseCancelShortcut()
+        guard enabled else {
+            return
+        }
+        register(Self.cancelConfiguration, for: .cancel)
+        // Key events reach a global monitor only with Accessibility; clicks
+        // always do.
+        otherInputMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] event in
+            guard let self else { return }
+            if event.type == .keyDown,
+               event.keyCode == UInt16(kVK_Escape) || isDictationShortcutKey(event.keyCode) {
+                return
+            }
+            AppLogger.shared.log(.debug, "cancel shortcut released: input in another app")
+            releaseCancelShortcut()
+        }
+    }
+
+    /// The shortcut's own key is neither a chord nor input in another app. With
+    /// Karabiner-Elements running, Globe also sends its own key, code 179.
+    private func isDictationShortcutKey(_ keyCode: UInt16) -> Bool {
+        guard let dictationConfiguration else {
+            return false
+        }
+        switch dictationConfiguration.kind {
+        case .globe:
+            return keyCode == 179
+        case .keyCombo:
+            return UInt32(keyCode) == dictationConfiguration.keyCode
+        }
+    }
+
+    private func releaseCancelShortcut() {
+        removeOtherInputMonitor()
+        if let hotKeyRef = carbonHotKeyRefs.removeValue(forKey: .cancel) {
+            UnregisterEventHotKey(hotKeyRef)
+        }
+        // The cancel press itself ends the recording, which releases the
+        // shortcut before its key-up arrives.
+        heldSlots.remove(.cancel)
+    }
+
+    private func removeOtherInputMonitor() {
+        if let otherInputMonitor {
+            NSEvent.removeMonitor(otherInputMonitor)
+            self.otherInputMonitor = nil
+        }
     }
 
     private func register(_ configuration: HotkeyConfiguration, for slot: Slot) {
@@ -127,11 +197,11 @@ final class HotkeyService: HotkeyServiceProtocol {
             return
         }
 
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
             self?.handle(event: event)
         }
 
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
             self?.handle(event: event)
             return event
         }
@@ -165,7 +235,13 @@ final class HotkeyService: HotkeyServiceProtocol {
     }
 
     private func handle(event: NSEvent) {
-        guard event.type == .flagsChanged, let globeSlot else {
+        guard let globeSlot else {
+            return
+        }
+        if event.type == .keyDown {
+            if globeSlot == .dictation, heldSlots.contains(globeSlot), !isDictationShortcutKey(event.keyCode) {
+                onHotkeyChord?()
+            }
             return
         }
 
@@ -230,6 +306,8 @@ final class HotkeyService: HotkeyServiceProtocol {
             // The recovery path may synthesize Command+V. Wait until the
             // physical shortcut key is released so the paste is not swallowed.
             return nil
+        case .cancel:
+            return onCancel
         }
     }
 
@@ -241,6 +319,8 @@ final class HotkeyService: HotkeyServiceProtocol {
             return onEditModeHotkeyUp
         case .pasteLastTranscript:
             return onPasteLastTranscript
+        case .cancel:
+            return nil
         }
     }
 }

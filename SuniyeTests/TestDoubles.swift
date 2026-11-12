@@ -631,13 +631,16 @@ func makeValidCapturedAudio(sampleRate: Int = 16_000) -> CapturedAudio {
 final class StubHotkeyService: HotkeyServiceProtocol {
     var onHotkeyDown: (() -> Void)?
     var onHotkeyUp: (() -> Void)?
+    var onHotkeyChord: (() -> Void)?
     var onEditModeHotkeyDown: (() -> Void)?
     var onEditModeHotkeyUp: (() -> Void)?
     var onPasteLastTranscript: (() -> Void)?
+    var onCancel: (() -> Void)?
     private(set) var startMonitoringCallCount = 0
     private(set) var lastConfiguration: HotkeyConfiguration?
     private(set) var lastEditModeConfiguration: HotkeyConfiguration?
     private(set) var lastPasteLastTranscriptConfiguration: HotkeyConfiguration?
+    private(set) var isCancelShortcutEnabled = false
 
     func startMonitoring(
         configuration: HotkeyConfiguration,
@@ -651,6 +654,10 @@ final class StubHotkeyService: HotkeyServiceProtocol {
     }
 
     func stopMonitoring() {}
+
+    func setCancelShortcutEnabled(_ enabled: Bool) {
+        isCancelShortcutEnabled = enabled
+    }
 }
 
 @MainActor
@@ -845,6 +852,7 @@ func makeTestAppState(
     micAccessRequester: (() async -> Bool)? = nil,
     accessibilityTrustProvider: (() -> Bool)? = nil,
     accessibilityTrustPrompter: (() -> Bool)? = nil,
+    systemGlobeKeyActionProvider: @escaping () -> SystemGlobeKeyAction = { .doNothing },
     availableDiskCapacityProvider: (() async -> Int64?)? = nil,
     issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { _ in nil },
     temporaryFileCleanupScheduler: @escaping (URL) -> Void = { _ in },
@@ -890,6 +898,8 @@ func makeTestAppState(
         accessibilityTrustProvider: accessibilityTrustProvider ?? { true },
         // Never the live API: a real call would raise the system dialog.
         accessibilityTrustPrompter: accessibilityTrustPrompter ?? accessibilityTrustProvider ?? { true },
+        // Never the live setting: the test Mac's Keyboard settings must not change results.
+        systemGlobeKeyActionProvider: systemGlobeKeyActionProvider,
         availableDiskCapacityProvider: availableDiskCapacityProvider ?? { nil },
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,

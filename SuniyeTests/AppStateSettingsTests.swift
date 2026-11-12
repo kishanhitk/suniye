@@ -1182,11 +1182,13 @@ final class AppStateSettingsTests: XCTestCase {
         transcriptionService.transcribeResult = .success("")
         let audioCapture = StubAudioCaptureService()
         audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        var now = Date(timeIntervalSince1970: 1_000)
         let appState = makeTestAppState(
             modelManager: modelManager,
             transcriptionService: transcriptionService,
             audioCaptureService: audioCapture,
             hotkeyService: hotkeyService,
+            nowProvider: { now },
             startServices: true
         )
         try? await Task.sleep(nanoseconds: 100_000_000)
@@ -1202,6 +1204,7 @@ final class AppStateSettingsTests: XCTestCase {
             .listening(levels: Array(repeating: 0, count: AudioLevelMeter.bandCount), source: .hotkey, preview: .off)
         )
 
+        now = now.addingTimeInterval(1)
         hotkeyService.onHotkeyUp?()
         try? await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertEqual(appState.phase, .ready)
