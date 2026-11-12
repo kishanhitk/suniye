@@ -181,7 +181,7 @@ final class AppStateCoverageMiscTests: XCTestCase {
         )
         appState.refreshInputDevices()
 
-        XCTAssertEqual(appState.selectedInputDeviceName, "New Name")
+        XCTAssertEqual(appState.preferredInputDeviceName, "New Name")
         XCTAssertEqual(settingsStore.latest.preferredInputDeviceName, "New Name")
     }
 
@@ -194,27 +194,27 @@ final class AppStateCoverageMiscTests: XCTestCase {
     }
 
     func testSelectedInputDeviceNameFallbacks() {
-        // Route snapshot present, no selection: uses the effective route name.
+        // A route names the microphone in use, whatever the selection.
         let routed = makeTestAppState()
-        XCTAssertEqual(routed.selectedInputDeviceName, "System Microphone")
-
-        // Selection points at a vanished device with no remembered name.
         routed.selectedInputDeviceID = "ghost-device"
-        routed.availableInputDevices = []
-        XCTAssertEqual(routed.selectedInputDeviceName, "Selected Microphone")
+        XCTAssertEqual(routed.activeInputDeviceName, "System Microphone")
 
         // No route: fall back to the default device, then to "System Default".
         let unrouted = StubAudioCaptureService()
-        unrouted.routeSnapshotError = FakeError(message: "no route")
+        unrouted.routeSnapshotError = AudioCaptureServiceError.noInputDevice
         unrouted.availableDevices = [
             AudioInputDevice(id: "mac-mic", name: "Mac Microphone", isDefault: true, transport: .builtIn),
         ]
         let fallbackState = makeTestAppState(audioCaptureService: unrouted)
-        XCTAssertEqual(fallbackState.selectedInputDeviceName, "Mac Microphone")
+        XCTAssertEqual(fallbackState.activeInputDeviceName, "Mac Microphone")
 
         fallbackState.availableInputDevices = []
-        XCTAssertEqual(fallbackState.selectedInputDeviceName, "System Default")
-        XCTAssertEqual(fallbackState.effectiveInputDeviceStatusText, "No microphone is available")
+        XCTAssertEqual(fallbackState.activeInputDeviceName, "System Default")
+        XCTAssertEqual(fallbackState.effectiveInputDeviceStatusText, "No microphone is available.")
+
+        // Selection points at a vanished device with no remembered name.
+        fallbackState.selectedInputDeviceID = "ghost-device"
+        XCTAssertEqual(fallbackState.activeInputDeviceName, "Selected Microphone")
     }
 
     func testAudioRouteWarningTextEchoCancellationMismatch() {
@@ -230,7 +230,8 @@ final class AppStateCoverageMiscTests: XCTestCase {
             requestedEchoCancellation: true,
             effectiveEchoCancellation: false,
             backend: .inputOnlyHAL,
-            fallbackReason: nil
+            fallbackReason: nil,
+            standIn: nil
         )
         let appState = makeTestAppState(audioCaptureService: audioCapture)
 
@@ -263,7 +264,8 @@ final class AppStateCoverageMiscTests: XCTestCase {
             requestedEchoCancellation: false,
             effectiveEchoCancellation: false,
             backend: .inputOnlyHAL,
-            fallbackReason: nil
+            fallbackReason: nil,
+            standIn: nil
         )
         let appState = makeTestAppState(audioCaptureService: audioCapture)
 

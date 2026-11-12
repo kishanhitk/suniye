@@ -1,6 +1,7 @@
 import AudioToolbox
 import CoreAudio
 import Foundation
+import IOKit
 
 enum AudioDeviceChangeReason: String, Equatable, Sendable {
     case devices
@@ -171,7 +172,44 @@ struct CoreAudioCaptureHardwareCatalog: AudioCaptureHardwareCatalogProtocol {
 
 enum CoreAudioDeviceCatalog {
     static func availableInputDevices() -> [AudioInputDevice] {
+        inputDevices().map(\.device)
+    }
+
+    static func resolveDeviceRoute(preferredInputDeviceID: String?) throws -> CoreAudioRouteResolution {
+        let inputs = inputDevices()
+        let resolution = try AudioInputResolver.resolve(
+            preferredInputDeviceID: preferredInputDeviceID,
+            devices: inputs.map(\.device)
+        )
+        guard let resolvedInputID = inputs.first(where: { $0.device.id == resolution.device.id })?.objectID else {
+            throw AudioCaptureServiceError.noInputDevice
+        }
+        let outputID = defaultDeviceID(selector: kAudioHardwarePropertyDefaultOutputDevice)
+        let route = AudioDeviceRoute(
+            preferredInputDeviceID: preferredInputDeviceID,
+            effectiveInputDeviceID: resolution.device.id,
+            effectiveInputName: resolution.device.name,
+            inputTransport: resolution.device.transport,
+            outputTransport: outputID.map(transport(for:)) ?? .other,
+            nominalInputSampleRate: max(8_000, Int(nominalSampleRate(for: resolvedInputID).rounded())),
+            inputChannelCount: inputChannelCount(for: resolvedInputID),
+            standIn: resolution.standIn
+        )
+        return CoreAudioRouteResolution(inputDeviceID: resolvedInputID, route: route)
+    }
+
+    /// Whether a built-in input is the internal microphone that a closed lid
+    /// switches off. A headphone-jack microphone stays on: Apple silicon lists it
+    /// as its own device, Intel Macs as an external-mic or line-in data source.
+    static func isLidSwitchedMicrophone(uid: String, dataSource: UInt32?) -> Bool {
+        let externalMicrophone: UInt32 = 0x656D_6963 // 'emic'
+        let lineIn: UInt32 = 0x6C69_6E65 // 'line'
+        return !uid.contains("HeadphoneInput") && dataSource != externalMicrophone && dataSource != lineIn
+    }
+
+    private static func inputDevices() -> [(objectID: AudioObjectID, device: AudioInputDevice)] {
         let defaultID = defaultDeviceID(selector: kAudioHardwarePropertyDefaultInputDevice)
+        let lidClosed = isLidClosed()
         return allDeviceIDs()
             .filter { inputChannelCount(for: $0) > 0 && isAlive($0) }
             .compactMap { deviceID in
@@ -179,54 +217,48 @@ enum CoreAudioDeviceCatalog {
                       let name = stringProperty(deviceID, selector: kAudioObjectPropertyName) else {
                     return nil
                 }
-                return AudioInputDevice(
+                let transport = transport(for: deviceID)
+                let switchedOff = lidClosed
+                    && transport == .builtIn
+                    && isLidSwitchedMicrophone(
+                        uid: uid,
+                        dataSource: uint32Property(
+                            deviceID,
+                            selector: kAudioDevicePropertyDataSource,
+                            scope: kAudioDevicePropertyScopeInput
+                        )
+                    )
+                return (deviceID, AudioInputDevice(
                     id: uid,
                     name: name,
                     isDefault: deviceID == defaultID,
-                    transport: transport(for: deviceID),
-                    isAvailable: true
-                )
+                    transport: transport,
+                    availability: switchedOff ? .offWithLidClosed : .available
+                ))
             }
             .sorted {
-                if $0.isDefault != $1.isDefault {
-                    return $0.isDefault
+                if $0.device.isDefault != $1.device.isDefault {
+                    return $0.device.isDefault
                 }
-                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                return $0.device.name.localizedCaseInsensitiveCompare($1.device.name) == .orderedAscending
             }
     }
 
-    static func resolveDeviceRoute(preferredInputDeviceID: String?) throws -> CoreAudioRouteResolution {
-        let resolvedInputID: AudioObjectID
-        if let preferredInputDeviceID {
-            guard let preferred = deviceID(forUID: preferredInputDeviceID), isAlive(preferred), inputChannelCount(for: preferred) > 0 else {
-                throw AudioCaptureServiceError.preferredDeviceUnavailable
-            }
-            resolvedInputID = preferred
-        } else if let defaultInput = defaultDeviceID(selector: kAudioHardwarePropertyDefaultInputDevice),
-                  isAlive(defaultInput),
-                  inputChannelCount(for: defaultInput) > 0 {
-            resolvedInputID = defaultInput
-        } else {
-            throw AudioCaptureServiceError.noInputDevice
+    /// MacBooks disconnect the built-in microphone in hardware while the lid is
+    /// closed, but CoreAudio still lists it, often as the default input.
+    private static func isLidClosed() -> Bool {
+        let rootDomain = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+        guard rootDomain != IO_OBJECT_NULL else {
+            return false
         }
-
-        guard let inputUID = stringProperty(resolvedInputID, selector: kAudioDevicePropertyDeviceUID),
-              let inputName = stringProperty(resolvedInputID, selector: kAudioObjectPropertyName) else {
-            throw AudioCaptureServiceError.noInputDevice
-        }
-        let outputID = defaultDeviceID(selector: kAudioHardwarePropertyDefaultOutputDevice)
-        let inputTransport = transport(for: resolvedInputID)
-        let outputTransport = outputID.map(transport(for:)) ?? .other
-        let route = AudioDeviceRoute(
-            preferredInputDeviceID: preferredInputDeviceID,
-            effectiveInputDeviceID: inputUID,
-            effectiveInputName: inputName,
-            inputTransport: inputTransport,
-            outputTransport: outputTransport,
-            nominalInputSampleRate: max(8_000, Int(nominalSampleRate(for: resolvedInputID).rounded())),
-            inputChannelCount: inputChannelCount(for: resolvedInputID)
-        )
-        return CoreAudioRouteResolution(inputDeviceID: resolvedInputID, route: route)
+        defer { IOObjectRelease(rootDomain) }
+        let state = IORegistryEntryCreateCFProperty(
+            rootDomain,
+            "AppleClamshellState" as CFString,
+            kCFAllocatorDefault,
+            0
+        )?.takeRetainedValue()
+        return state as? Bool ?? false
     }
 
     static func processIsRunningInput() -> Bool? {

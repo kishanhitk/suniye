@@ -550,7 +550,8 @@ final class StubAudioCaptureService: AudioCaptureServiceProtocol {
         requestedEchoCancellation: false,
         effectiveEchoCancellation: false,
         backend: .inputOnlyHAL,
-        fallbackReason: nil
+        fallbackReason: nil,
+        standIn: nil
     )
 
     func startCapture(

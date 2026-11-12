@@ -824,9 +824,11 @@ struct SidebarInputDeviceRow: View {
                 Button {
                     appState.selectedInputDeviceID = device.id
                 } label: {
-                    Text(device.isAvailable ? device.name : "\(device.name) — Unavailable")
+                    Text(device.availability == .notConnected ? "\(device.name) — Unavailable" : device.name)
                 }
-                .disabled(!device.isAvailable)
+                // A disconnected saved mic cannot be chosen again; a built-in mic
+                // that the closed lid switched off can, for use after undocking.
+                .disabled(device.availability == .notConnected)
             }
         } label: {
             HStack(alignment: .center, spacing: 14) {
@@ -842,7 +844,7 @@ struct SidebarInputDeviceRow: View {
                 // push the chevron off the edge and hide that this is a picker.
                 // A footer control, not a destination: it sits a step below the
                 // navigation rows above it.
-                Text(appState.selectedInputDeviceName)
+                Text(appState.activeInputDeviceName)
                     .font(AppTypography.subheadline)
                     .foregroundStyle(Color.primary)
                     .lineLimit(1)

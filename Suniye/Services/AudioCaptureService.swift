@@ -12,7 +12,7 @@ enum AudioLevelMeter {
 
 enum AudioCaptureServiceError: LocalizedError, Equatable {
     case noInputDevice
-    case preferredDeviceUnavailable
+    case builtInMicrophoneOff
     case invalidInputFormat
     case failedToSelectInput(Int32)
     case ringBufferUnavailable
@@ -22,8 +22,8 @@ enum AudioCaptureServiceError: LocalizedError, Equatable {
         switch self {
         case .noInputDevice:
             return "No microphone is available."
-        case .preferredDeviceUnavailable:
-            return "The selected microphone is unavailable."
+        case .builtInMicrophoneOff:
+            return "The built-in microphone is off while the lid is closed."
         case .invalidInputFormat:
             return "The selected microphone has an invalid audio format."
         case let .failedToSelectInput(status):
@@ -61,7 +61,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
 
     private final class ActiveCapture {
         let id: UUID
-        let preferredInputDeviceID: String?
         let requestedEchoCancellation: Bool
         let inputDeviceID: AudioObjectID
         let deviceRoute: AudioDeviceRoute
@@ -81,7 +80,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
 
         init(
             id: UUID,
-            preferredInputDeviceID: String?,
             requestedEchoCancellation: Bool,
             inputDeviceID: AudioObjectID,
             deviceRoute: AudioDeviceRoute,
@@ -89,7 +87,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
             ring: OpaquePointer
         ) {
             self.id = id
-            self.preferredInputDeviceID = preferredInputDeviceID
             self.requestedEchoCancellation = requestedEchoCancellation
             self.inputDeviceID = inputDeviceID
             self.deviceRoute = deviceRoute
@@ -178,7 +175,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
 
                     let active = ActiveCapture(
                         id: sessionID,
-                        preferredInputDeviceID: preferredInputDeviceID,
                         requestedEchoCancellation: echoCancellationEnabled,
                         inputDeviceID: resolution.inputDeviceID,
                         deviceRoute: resolution.route,
@@ -330,7 +326,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     private func handleEngineConfigurationChange(_ active: ActiveCapture) {
         guard activeCapture === active, active.interruption == nil else { return }
 
-        if let interruption = resolvedRouteChangeInterruption(for: active) {
+        if let interruption = lostInputInterruption(for: active, devices: hardwareCatalog.availableInputDevices()) {
             interruptActiveCapture(interruption)
             return
         }
@@ -473,17 +469,18 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
             deviceMonitor.stop()
             deviceMonitor.start()
         }
-        onEvent?(.devicesChanged(hardwareCatalog.availableInputDevices()))
+        let devices = hardwareCatalog.availableInputDevices()
+        onEvent?(.devicesChanged(devices))
 
         guard let active else { return }
         let interruption: AudioCaptureInterruption?
         switch reason {
         case .defaultInput:
-            interruption = active.preferredInputDeviceID == nil ? .deviceChanged : nil
+            interruption = nil
         case .defaultOutput:
             interruption = active.route.backend == .voiceProcessingEngine ? .deviceChanged : nil
         case .devices, .selectedDeviceAlive:
-            interruption = resolvedRouteChangeInterruption(for: active)
+            interruption = lostInputInterruption(for: active, devices: devices)
         case .selectedDeviceFormat:
             interruption = .formatChanged
         case .selectedDeviceChanged:
@@ -507,17 +504,16 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         activeCapture
     }
 
-    private func resolvedRouteChangeInterruption(for active: ActiveCapture) -> AudioCaptureInterruption? {
-        do {
-            let resolution = try hardwareCatalog.resolveDeviceRoute(
-                preferredInputDeviceID: active.preferredInputDeviceID
-            )
-            return resolution.route.effectiveInputDeviceID == active.route.effectiveInputDeviceID
-                ? nil
-                : .deviceChanged
-        } catch {
-            return .deviceUnavailable
-        }
+    /// A dictation keeps the microphone it started with, even when the default
+    /// input changes or a better one connects; the next dictation picks again.
+    /// It stops only when its own microphone can no longer record.
+    private func lostInputInterruption(
+        for active: ActiveCapture,
+        devices: [AudioInputDevice]
+    ) -> AudioCaptureInterruption? {
+        devices.contains { $0.id == active.route.effectiveInputDeviceID && $0.isAvailable }
+            ? nil
+            : .deviceUnavailable
     }
 
     private func interruptActiveCapture(_ reason: AudioCaptureInterruption) {
