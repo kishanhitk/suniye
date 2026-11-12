@@ -177,7 +177,8 @@ final class AppStateCoverageRecordingTests: XCTestCase {
             requestedEchoCancellation: false,
             effectiveEchoCancellation: false,
             backend: .inputOnlyHAL,
-            fallbackReason: nil
+            fallbackReason: nil,
+            standIn: nil
         )
 
         audioCapture.onEvent?(.routeChanged(sessionID: UUID(), route: newRoute))

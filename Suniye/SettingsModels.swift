@@ -80,30 +80,50 @@ enum AudioDeviceTransport: String, Equatable, Codable, Sendable {
         self == .bluetooth || self == .bluetoothLE
     }
 
+    /// A wired input Suniye may use in place of a skipped one. A virtual or
+    /// aggregate input can record silence while its app is idle, and an iPhone's
+    /// Continuity microphone prompts on the phone and can fail.
     var isRecommendedPhysicalInput: Bool {
-        self == .builtIn || self == .usb
+        switch self {
+        case .builtIn, .usb, .other:
+            return true
+        case .bluetooth, .bluetoothLE, .continuity, .aggregate, .virtual:
+            return false
+        }
     }
 }
 
 struct AudioInputDevice: Identifiable, Equatable, Codable, Sendable {
+    enum Availability: String, Equatable, Codable, Sendable {
+        case available
+        /// The saved microphone, listed while it is disconnected.
+        case notConnected
+        /// A MacBook's built-in microphone: listed, but switched off in hardware.
+        case offWithLidClosed
+    }
+
     let id: String
     let name: String
     let isDefault: Bool
     let transport: AudioDeviceTransport
-    let isAvailable: Bool
+    let availability: Availability
+
+    var isAvailable: Bool {
+        availability == .available
+    }
 
     init(
         id: String,
         name: String,
         isDefault: Bool,
         transport: AudioDeviceTransport = .other,
-        isAvailable: Bool = true
+        availability: Availability = .available
     ) {
         self.id = id
         self.name = name
         self.isDefault = isDefault
         self.transport = transport
-        self.isAvailable = isAvailable
+        self.availability = availability
     }
 }
 

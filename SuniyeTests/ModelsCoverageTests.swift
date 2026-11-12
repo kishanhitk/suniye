@@ -331,7 +331,7 @@ final class AudioCaptureModelsTests: XCTestCase {
         XCTAssertEqual(AudioCaptureInterruption.engineConfigurationChanged.userMessage, "Microphone changed. Try again.")
         XCTAssertEqual(
             AudioCaptureInterruption.deviceUnavailable.userMessage,
-            "The selected microphone disconnected. Reconnect it or choose another input."
+            "The microphone disconnected. Try again."
         )
         XCTAssertEqual(AudioCaptureInterruption.formatChanged.userMessage, "The microphone format changed. Try again.")
         XCTAssertEqual(AudioCaptureInterruption.serviceRestarted.userMessage, "Audio service restarted. Try again.")

@@ -324,7 +324,7 @@ final class AppState {
                 return
             }
             if let selectedInputDeviceID,
-               let selected = availableInputDevices.first(where: { $0.id == selectedInputDeviceID && $0.isAvailable }) {
+               let selected = availableInputDevices.first(where: { $0.id == selectedInputDeviceID && $0.availability != .notConnected }) {
                 preferredInputDeviceName = selected.name
             } else if selectedInputDeviceID == nil {
                 preferredInputDeviceName = nil
@@ -336,11 +336,16 @@ final class AppState {
     }
     private(set) var audioRouteSnapshot: AudioRouteSnapshot? {
         didSet {
+            if audioRouteSnapshot != nil {
+                audioRouteErrorText = nil
+            }
             if oldValue != audioRouteSnapshot {
                 onStateChange?()
             }
         }
     }
+    /// Why no microphone can record, while `audioRouteSnapshot` is nil.
+    private(set) var audioRouteErrorText: String?
     var autoSubmitEnabled = false {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -1440,33 +1445,54 @@ final class AppState {
         launchAtLoginStatus.isEnabledForUI
     }
 
-    var selectedInputDeviceName: String {
-        if let selectedInputDeviceID,
-           let selected = availableInputDevices.first(where: { $0.id == selectedInputDeviceID }) {
-            return selected.name
+    /// The microphone Suniye records from, which can be a stand-in for the
+    /// saved one.
+    var activeInputDeviceName: String {
+        if let route = audioRouteSnapshot {
+            return route.effectiveInputName
         }
-        if selectedInputDeviceID != nil {
-            return preferredInputDeviceName ?? "Selected Microphone"
+        if let selectedInputDeviceID {
+            return availableInputDevices.first(where: { $0.id == selectedInputDeviceID })?.name
+                ?? preferredInputDeviceName
+                ?? "Selected Microphone"
         }
-        return audioRouteSnapshot?.effectiveInputName
-            ?? availableInputDevices.first(where: \.isDefault)?.name
-            ?? "System Default"
+        return availableInputDevices.first(where: \.isDefault)?.name ?? "System Default"
     }
 
     var effectiveInputDeviceStatusText: String {
         guard let route = audioRouteSnapshot else {
-            if selectedInputDeviceID != nil {
-                return "\(selectedInputDeviceName) is unavailable"
-            }
-            return "No microphone is available"
+            return audioRouteErrorText ?? AudioCaptureServiceError.noInputDevice.localizedDescription
         }
-        return "Using \(route.effectiveInputName) - \(route.inputTransport.title)"
+        return inputStandInNote ?? "Using \(route.effectiveInputName) - \(route.inputTransport.title)"
+    }
+
+    /// Names the microphone Suniye uses in place of the chosen one, and why.
+    var inputStandInNote: String? {
+        guard let route = audioRouteSnapshot, let standIn = route.standIn else {
+            return nil
+        }
+        let skipped: String
+        switch standIn {
+        case .preferredMissing:
+            skipped = "\(preferredInputDeviceName ?? "The selected microphone") isn't connected"
+        case let .offWithLidClosed(name):
+            skipped = "\(name) is off while the lid is closed"
+        case let .bluetoothDefault(name):
+            skipped = "\(name) is Bluetooth"
+        }
+        return "\(skipped), so \(AppIdentity.current.displayName) uses \(route.effectiveInputName)."
+    }
+
+    /// The info tip of the input picker: only while it says "System Default" and
+    /// so hides the device, and no stand-in note or warning row already says it.
+    var inputDeviceInfoText: String? {
+        guard selectedInputDeviceID == nil, audioRouteSnapshot != nil, inputStandInNote == nil else {
+            return nil
+        }
+        return effectiveInputDeviceStatusText
     }
 
     var audioRouteWarningText: String? {
-        if selectedInputDeviceID != nil, audioRouteSnapshot == nil {
-            return "Reconnect this microphone or choose another input device."
-        }
         guard let route = audioRouteSnapshot else {
             return nil
         }
@@ -2545,18 +2571,29 @@ final class AppState {
                     name: preferredInputDeviceName ?? "Selected Microphone",
                     isDefault: false,
                     transport: .other,
-                    isAvailable: false
+                    availability: .notConnected
                 )
             )
         }
         availableInputDevices = visibleDevices
     }
 
+    /// While a dictation runs, the route stays the one it records from; device
+    /// changes apply to the next dictation, so the route refreshes when this one
+    /// ends.
     func refreshAudioRouteSnapshot() {
-        audioRouteSnapshot = try? audioCaptureService.routeSnapshot(
-            preferredInputDeviceID: selectedInputDeviceID,
-            echoCancellationEnabled: echoCancellationEnabled
-        )
+        guard activeDictationSession == nil else {
+            return
+        }
+        do {
+            audioRouteSnapshot = try audioCaptureService.routeSnapshot(
+                preferredInputDeviceID: selectedInputDeviceID,
+                echoCancellationEnabled: echoCancellationEnabled
+            )
+        } catch {
+            audioRouteSnapshot = nil
+            audioRouteErrorText = error.localizedDescription
+        }
     }
 
     func useRecommendedInputDevice() {
@@ -5298,6 +5335,7 @@ final class AppState {
         }
         activeDictationSession = nil
         stopLivePreview()
+        refreshAudioRouteSnapshot()
     }
 
     private func startLivePreview(sessionID: UUID) {
