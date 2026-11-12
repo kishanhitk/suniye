@@ -79,6 +79,7 @@ struct GeneralPage: View {
         .animation(motion, value: inputWarning)
         .animation(motion, value: appState.inputStandInNote)
         .animation(motion, value: appState.hotkeyValidationMessage)
+        .animation(motion, value: appState.globeDoubleTapConflict)
         .animation(motion, value: appState.launchAtLoginError ?? appState.launchAtLoginWarningText)
     }
 
@@ -156,7 +157,15 @@ struct GeneralPage: View {
             }
 
             if let warning = inputWarning {
-                inputWarningRow(warning)
+                warningRow(warning) {
+                    if let recommended = appState.recommendedInputDevice {
+                        Button("Use \(recommended.name)") {
+                            appState.useRecommendedInputDevice()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
             }
 
             RowSeparator()
@@ -183,6 +192,21 @@ struct GeneralPage: View {
         return appState.audioRouteWarningText
     }
 
+    private static func globeDoubleTapNotice(_ conflict: SystemGlobeKeyAction) -> String? {
+        let action: String
+        switch conflict {
+        case .doNothing:
+            return nil
+        case .startDictation:
+            action = "pressing Globe twice starts macOS Dictation"
+        case .showEmojiAndSymbols:
+            action = "Globe opens Emoji & Symbols"
+        case .changeInputSource:
+            action = "Globe changes the input source"
+        }
+        return "Double-tap is off: \(action). In Keyboard settings, choose Do Nothing for \u{201C}Press \u{1F310} key to\u{201D}."
+    }
+
     /// One icon column, so the note and the warning text start at the same x.
     private func noticeIcon(_ systemName: String) -> some View {
         Image(systemName: systemName)
@@ -206,26 +230,20 @@ struct GeneralPage: View {
         .transition(SettingsMotion.notice)
     }
 
-    private func inputWarningRow(_ warning: String) -> some View {
+    private func warningRow<Action: View>(_ warning: String, @ViewBuilder action: () -> Action) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
+            // Orange text on a light page is below 3:1; the icon carries the color.
             Label {
-                Text(warning)
+                Text(warning).foregroundStyle(.primary)
             } icon: {
-                noticeIcon("exclamationmark.triangle.fill")
+                noticeIcon("exclamationmark.triangle.fill").foregroundStyle(.orange)
             }
-                .font(AppTypography.subheadline)
-                .foregroundStyle(.orange)
-                .fixedSize(horizontal: false, vertical: true)
+            .font(AppTypography.subheadline)
+            .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 12)
 
-            if let recommended = appState.recommendedInputDevice {
-                Button("Use \(recommended.name)") {
-                    appState.useRecommendedInputDevice()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
+            action()
         }
         .padding(.bottom, 12)
         .padding(.horizontal, 4)
@@ -237,7 +255,8 @@ struct GeneralPage: View {
     private var shortcuts: some View {
         SettingsGroup(heading: "Shortcuts") {
             ControlSettingRow(
-                title: "Hold to dictate"
+                title: "Hold to dictate",
+                info: "Hold the shortcut and speak. To dictate hands-free, double-tap it, then press it again to finish. Esc cancels until you type or click in another app."
             ) {
                 HotkeyRecorderButton(
                     configuration: Binding(
@@ -249,6 +268,16 @@ struct GeneralPage: View {
                         }
                     )
                 )
+            }
+
+            if let notice = appState.globeDoubleTapConflict.flatMap(Self.globeDoubleTapNotice) {
+                warningRow(notice) {
+                    Button("Open Settings") {
+                        appState.openKeyboardSettings()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
             }
 
             RowSeparator()

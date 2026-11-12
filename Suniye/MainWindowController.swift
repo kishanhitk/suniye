@@ -144,6 +144,7 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         AppLogger.shared.log(.info, "applicationDidBecomeActive; refreshing permission status")
         sharedAppState.refreshPermissionStatus()
         sharedAppState.refreshInputDevices()
+        sharedAppState.refreshSystemGlobeKeyAction()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

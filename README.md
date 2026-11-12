@@ -44,7 +44,8 @@ Hold your hotkey, say what you mean, release. Your words land at the cursor in M
 1. A small icon lives in your **menu bar** — that's Suniye, listening for its hotkey.
 2. **Hold your hotkey** (default: Fn/Globe) and speak naturally.
 3. **Release** — your speech is transcribed on-device and pasted at the cursor.
-4. If focus moved before insertion, focus a text field and press **Control + Command + V** to paste the last transcript. The recovery shortcut is customizable.
+4. For long dictation, **double-tap** the hotkey to record hands-free, then press it once to finish. **Esc** cancels a recording.
+5. If focus moved before insertion, focus a text field and press **Control + Command + V** to paste the last transcript. The recovery shortcut is customizable.
 
 ## Install
 
