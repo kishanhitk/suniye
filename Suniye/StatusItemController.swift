@@ -70,7 +70,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func configureMenu() {
         let menu = NSMenu()
         menu.delegate = self
-        menu.autoenablesItems = false
 
         finishSetupItem.target = self
         openSettingsItem.target = self
@@ -125,11 +124,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         if appState.isUpdateReadyToInstall {
             checkUpdatesItem.title = "Restart to Update"
             checkUpdatesItem.action = #selector(restartToUpdate)
-            checkUpdatesItem.isEnabled = appState.canRestartToUpdate
         } else {
             checkUpdatesItem.title = "Check for Updates..."
             checkUpdatesItem.action = #selector(checkForUpdates)
-            checkUpdatesItem.isEnabled = appState.canCheckForUpdates
         }
 
         downloadItem.isEnabled = phase == .needsModel || phase == .downloadingModel || phase == .error
@@ -226,6 +223,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func quitApp() {
         AppLogger.shared.log(.info, "menu action: quit app")
         NSApplication.shared.terminate(nil)
+    }
+}
+
+extension StatusItemController: NSMenuItemValidation {
+    /// The menu auto-enables its items, so `isEnabled` is ignored; only the
+    /// restart item depends on state.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        menuItem.action != #selector(restartToUpdate) || appState.canRestartToUpdate
     }
 }
 
