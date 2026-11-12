@@ -73,6 +73,8 @@ customer used up that quota.
   newest Worker version is an undeployed branch build; run it after a `main` deploy.
 - A rejected token (401) is logged as `GitHub rejected GITHUB_TOKEN (401)`, and the
   Worker calls without it.
+- A token that is not a valid header value (for example, one with a line break in it)
+  is logged as `GITHUB_TOKEN is not a valid header value`, and the Worker calls without it.
 - Each Worker isolate reuses its last good release list for 5 minutes, and serves
   it at any age when GitHub fails; it then waits 5 minutes to retry. With no saved
   list, each request calls GitHub again.
