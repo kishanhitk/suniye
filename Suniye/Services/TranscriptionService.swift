@@ -194,6 +194,10 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         }
     }
 
+    /// Parakeet drops the last word or the closing punctuation of a clip that
+    /// ends at speech; silence after the clip lets it emit them.
+    private static let parakeetTrailingSilenceSeconds = 0.4
+
     private var recognizer: OpaquePointer?
     private var loadedConfig: RecognizerConfig?
 
@@ -275,7 +279,11 @@ actor TranscriptionService: TranscriptionServiceProtocol {
             SherpaOnnxDestroyOfflineStream(stream)
         }
 
-        preparedAudio.samples.withUnsafeBufferPointer { buffer in
+        var decoderInput = preparedAudio.samples
+        if purpose == .final, loadedConfig?.family == .nemoTransducer {
+            decoderInput += repeatElement(0, count: Int(Self.parakeetTrailingSilenceSeconds * Double(effectiveSampleRate)))
+        }
+        decoderInput.withUnsafeBufferPointer { buffer in
             guard let baseAddress = buffer.baseAddress, !buffer.isEmpty else {
                 return
             }
