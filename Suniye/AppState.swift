@@ -202,6 +202,9 @@ final class AppState {
                 onStateChange?()
                 AppLogger.shared.log(.info, "phase changed: \(oldValue.rawValue) -> \(phase.rawValue)")
             }
+            if (oldValue == .recording) != (phase == .recording) {
+                hotkeyService.setCancelShortcutEnabled(phase == .recording)
+            }
         }
     }
     var statusText = "Initializing..." {
@@ -625,6 +628,10 @@ final class AppState {
     @ObservationIgnored private var onboardingStartedAt: Date?
     /// A start still waiting on a permission prompt; a key release clears it.
     @ObservationIgnored private var pendingRecordingStart: RecordingSource?
+    @ObservationIgnored private var dictationShortcutGesture = DictationShortcutGesture()
+    @ObservationIgnored private var secondTapWindowTask: Task<Void, Never>?
+    @ObservationIgnored private var previousTapWithDoubleTapOff: Date?
+    private(set) var systemGlobeKeyAction: SystemGlobeKeyAction = .doNothing
     /// What is about to move onboarding to its next step (read by step tracking).
     @ObservationIgnored private var pendingOnboardingAdvance: OnboardingAdvance?
     /// The practice dictation as transcribed, to tell whether the user edited it.
@@ -1737,6 +1744,7 @@ final class AppState {
     /// Same trust read, but macOS shows its "allow Accessibility" dialog when the
     /// process is not trusted.
     private let accessibilityTrustPrompter: () -> Bool
+    private let systemGlobeKeyActionProvider: () -> SystemGlobeKeyAction
     /// Injectable free-disk probe for the onboarding download preflight.
     private let availableDiskCapacityProvider: () async -> Int64?
     private let issueReportDiagnosticsDestinationPicker: @MainActor (String) -> URL?
@@ -1857,6 +1865,7 @@ final class AppState {
         accessibilityTrustPrompter: @escaping () -> Bool = {
             AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
         },
+        systemGlobeKeyActionProvider: @escaping () -> SystemGlobeKeyAction = SystemGlobeKeyAction.current,
         availableDiskCapacityProvider: (() async -> Int64?)? = nil,
         issueReportDiagnosticsDestinationPicker: @escaping @MainActor (String) -> URL? = { defaultName in
             let panel = NSSavePanel()
@@ -1934,6 +1943,7 @@ final class AppState {
         self.micAccessRequester = micAccessRequester
         self.accessibilityTrustProvider = accessibilityTrustProvider
         self.accessibilityTrustPrompter = accessibilityTrustPrompter
+        self.systemGlobeKeyActionProvider = systemGlobeKeyActionProvider
         let modelsRootDirectory = try? modelManager.modelsRootDirectoryURL()
         self.availableDiskCapacityProvider = availableDiskCapacityProvider ?? {
             guard let modelsRootDirectory else {
@@ -1993,6 +2003,7 @@ final class AppState {
         refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
         refreshLocalGemmaInstallState()
+        refreshSystemGlobeKeyAction()
 
         if floatingIndicatorEnabled {
             floatingIndicatorController.onAction = { [weak self] in
@@ -2537,6 +2548,20 @@ final class AppState {
         openSystemSettings(urlCandidates: [
             "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
             "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+        ])
+    }
+
+    func refreshSystemGlobeKeyAction() {
+        let action = systemGlobeKeyActionProvider()
+        if action != systemGlobeKeyAction {
+            systemGlobeKeyAction = action
+        }
+    }
+
+    func openKeyboardSettings() {
+        openSystemSettings(urlCandidates: [
+            "x-apple.systempreferences:com.apple.Keyboard-Settings.extension",
+            "x-apple.systempreferences:com.apple.preference.keyboard",
         ])
     }
 
@@ -3729,6 +3754,9 @@ final class AppState {
                 await beginRecordingFlow(trigger: .manual)
             case .recording where activeRecordingSource == .manual:
                 await stopRecordingAndTranscribe(trigger: .manual)
+            case .recording where activeRecordingSource == .hotkey && dictationShortcutGesture.isLocked:
+                resetDictationShortcutGesture()
+                await stopRecordingAndTranscribe(trigger: .hotkey)
             default:
                 showTransientIndicatorError(startBlockedMessage(for: phase), restoreState: blockedStartRestoreIndicatorState(), duration: 1.2)
             }
@@ -3921,14 +3949,27 @@ final class AppState {
         hotkeyService.onHotkeyDown = { [weak self] in
             AppLogger.shared.log(.debug, "hotkey callback: down")
             Task { @MainActor in
-                await self?.beginRecordingFlow(trigger: .hotkey)
+                await self?.handleDictationShortcutPress()
             }
         }
 
         hotkeyService.onHotkeyUp = { [weak self] in
             AppLogger.shared.log(.debug, "hotkey callback: up")
             Task { @MainActor in
-                await self?.stopRecordingAndTranscribe(trigger: .hotkey)
+                await self?.handleDictationShortcutRelease()
+            }
+        }
+
+        hotkeyService.onHotkeyChord = { [weak self] in
+            Task { @MainActor in
+                self?.dictationShortcutGesture.markChord()
+            }
+        }
+
+        hotkeyService.onCancel = { [weak self] in
+            AppLogger.shared.log(.debug, "cancel shortcut callback")
+            Task { @MainActor in
+                await self?.cancelRecording()
             }
         }
 
@@ -4062,7 +4103,7 @@ final class AppState {
             statusText = "Magic Format required"
             AppLogger.shared.log(.warning, "edit mode blocked: magic format not ready")
             playSoundFeedback(.error)
-            showTransientIndicatorError("Set up Magic Format to use Edit Mode")
+            showTransientIndicatorError("Set up Magic Format to use Edit Mode", restoreState: blockedStartRestoreIndicatorState())
             return
         }
         // Same self-heal as the dictation flow: a transient audio/transcription
@@ -4084,6 +4125,146 @@ final class AppState {
     /// Edit Mode hotkey up: transcribe the instruction and run the rewrite.
     func finishEditModeRecording() async {
         await stopRecordingAndTranscribe(trigger: .editHotkey)
+    }
+
+    private var isRecordingFromDictationShortcut: Bool {
+        phase == .recording && activeRecordingSource == .hotkey
+    }
+
+    /// The macOS action that a Globe tap also runs, when it keeps double-tap off.
+    var globeDoubleTapConflict: SystemGlobeKeyAction? {
+        guard hotkeyConfiguration.kind == .globe, systemGlobeKeyAction != .doNothing else {
+            return nil
+        }
+        return systemGlobeKeyAction
+    }
+
+    private func handleDictationShortcutPress() async {
+        if isRecordingFromDictationShortcut {
+            cancelSecondTapWindow()
+        } else {
+            resetDictationShortcutGesture()
+        }
+        if dictationShortcutGesture.press(at: nowProvider()) {
+            await beginRecordingFlow(trigger: .hotkey)
+        }
+    }
+
+    private func handleDictationShortcutRelease() async {
+        guard isRecordingFromDictationShortcut else {
+            resetDictationShortcutGesture()
+            // Also cancels a start that a permission prompt still holds open.
+            await stopRecordingAndTranscribe(trigger: .hotkey)
+            return
+        }
+        let releasedAt = nowProvider()
+        var tapCouldNotLock = false
+        let command = dictationShortcutGesture.release(at: releasedAt) {
+            // The user can change the macOS setting while Suniye is in the background.
+            if hotkeyConfiguration.kind == .globe {
+                refreshSystemGlobeKeyAction()
+            }
+            tapCouldNotLock = globeDoubleTapConflict != nil
+            return !tapCouldNotLock
+        }
+        switch command {
+        case .finish:
+            await stopRecordingAndTranscribe(trigger: .hotkey)
+        case .discard where tapCouldNotLock:
+            AppLogger.shared.log(.info, "recording discarded: tap with double-tap off")
+            await discardTapWithDoubleTapOff(releasedAt: releasedAt)
+        case .discard:
+            AppLogger.shared.log(.info, "recording discarded: short press")
+            await discardShortPress()
+        case .waitForSecondTap:
+            startSecondTapWindow()
+        case .lock:
+            lockDictationRecording()
+        case nil:
+            break
+        }
+    }
+
+    private func startSecondTapWindow() {
+        let sessionID = activeAudioCaptureSessionID
+        secondTapWindowTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(DictationShortcutGesture.tapInterval))
+            guard let self, !Task.isCancelled, activeAudioCaptureSessionID == sessionID else {
+                return
+            }
+            secondTapWindowTask = nil
+            if dictationShortcutGesture.secondTapWindowEnded() {
+                AppLogger.shared.log(.info, "recording discarded: single tap")
+                await discardShortPress()
+            }
+        }
+    }
+
+    /// A locked recording is hands-free, like one started from the pill, so the
+    /// pill takes the same look and a click on it finishes the recording.
+    private func lockDictationRecording() {
+        AppLogger.shared.log(.info, "recording locked by double tap")
+        if case let .listening(levels, _, preview) = floatingIndicatorState {
+            setFloatingIndicatorState(.listening(levels: levels, source: .manual, preview: preview))
+        }
+    }
+
+    private func resetDictationShortcutGesture() {
+        dictationShortcutGesture.reset()
+        cancelSecondTapWindow()
+    }
+
+    private func cancelSecondTapWindow() {
+        secondTapWindowTask?.cancel()
+        secondTapWindowTask = nil
+    }
+
+    /// A second quick tap means the user tried to double-tap. The Settings
+    /// notice alone went unnoticed, so the pill says why nothing happened.
+    private func discardTapWithDoubleTapOff(releasedAt: Date) async {
+        let isSecondTap = previousTapWithDoubleTapOff.map {
+            releasedAt.timeIntervalSince($0) < DictationShortcutGesture.tapInterval * 2
+        } ?? false
+        previousTapWithDoubleTapOff = isSecondTap ? nil : releasedAt
+        guard isSecondTap else {
+            await discardShortPress()
+            return
+        }
+        await discardRecording(message: "Double-tap is off. See Settings.")
+    }
+
+    /// Onboarding practice still tells a new user to hold the key, as it did
+    /// when such a press was rejected as too short.
+    private func discardShortPress() async {
+        if activeDictationSession?.context.destination == .onboardingPractice,
+           let message = AudioCaptureOutcome.tooShort.userMessage {
+            onboardingPracticeText = ""
+            onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
+            recordOnboardingPracticeAttempt(outcome: .emptyAudio)
+        }
+        await discardRecording(message: nil)
+    }
+
+    private func cancelRecording() async {
+        AppLogger.shared.log(.info, "recording canceled with Esc")
+        await discardRecording(message: "Dictation canceled")
+    }
+
+    /// Ends the recording with no transcription, no paste and no error sound.
+    private func discardRecording(message: String?) async {
+        guard phase == .recording, let sessionID = activeAudioCaptureSessionID else {
+            return
+        }
+        resetDictationShortcutGesture()
+        clearActiveDictationSession(sessionID: sessionID)
+        phase = .ready
+        statusText = "Ready"
+        if let message {
+            showTransientIndicatorError(message, duration: 1.2)
+        } else {
+            setFloatingIndicatorState(.idle)
+        }
+        await audioCaptureService.cancelCapture(sessionID: sessionID, reason: nil)
     }
 
     private func beginRecordingFlow(trigger: RecordingSource, destination: DictationDestination? = nil) async {
