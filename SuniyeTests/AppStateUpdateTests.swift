@@ -34,6 +34,39 @@ final class AppStateUpdateTests: XCTestCase {
         XCTAssertTrue(appState.canCheckForUpdates)
     }
 
+    func testRestartToUpdateInstallsTheStagedUpdate() {
+        let updateController = StubAppUpdateController()
+        let appState = makeAppState(appUpdateController: updateController)
+        appState.phase = .ready
+
+        appState.restartToUpdate()
+        XCTAssertEqual(updateController.installUpdateAndRelaunchCallCount, 0)
+
+        updateController.isUpdateReadyToInstall = true
+        updateController.notifyStateChanged()
+        appState.restartToUpdate()
+
+        XCTAssertTrue(appState.isUpdateReadyToInstall)
+        XCTAssertEqual(updateController.installUpdateAndRelaunchCallCount, 1)
+    }
+
+    func testRestartToUpdateIsRefusedWhileRecordingOrTranscribing() {
+        let updateController = StubAppUpdateController()
+        updateController.isUpdateReadyToInstall = true
+        let appState = makeAppState(appUpdateController: updateController)
+        updateController.notifyStateChanged()
+
+        for phase in [AppState.Phase.recording, .transcribing] {
+            appState.phase = phase
+            XCTAssertFalse(appState.canRestartToUpdate, "\(phase)")
+            appState.restartToUpdate()
+        }
+        XCTAssertEqual(updateController.installUpdateAndRelaunchCallCount, 0)
+
+        appState.phase = .ready
+        XCTAssertTrue(appState.canRestartToUpdate)
+    }
+
     func testAutomaticallyChecksForUpdatesWritesThroughToController() {
         let updateController = StubAppUpdateController()
         let appState = makeAppState(appUpdateController: updateController)

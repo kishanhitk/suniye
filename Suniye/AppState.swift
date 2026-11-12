@@ -220,6 +220,16 @@ final class AppState {
             }
         }
     }
+    var isUpdateReadyToInstall = false {
+        didSet {
+            if oldValue != isUpdateReadyToInstall {
+                onStateChange?()
+            }
+        }
+    }
+    var canRestartToUpdate: Bool {
+        isUpdateReadyToInstall && !isCapturing
+    }
     var automaticallyChecksForUpdates = false {
         didSet {
             if oldValue != automaticallyChecksForUpdates {
@@ -3729,6 +3739,15 @@ final class AppState {
         refreshUpdateControllerState()
     }
 
+    func restartToUpdate() {
+        guard canRestartToUpdate else {
+            AppLogger.shared.log(.info, "sparkle restart to update refused ready=\(isUpdateReadyToInstall) phase=\(phase.rawValue)")
+            return
+        }
+        AppLogger.shared.log(.info, "sparkle restart to update")
+        appUpdateController.installUpdateAndRelaunch()
+    }
+
     func setAutomaticallyChecksForUpdates(_ enabled: Bool) {
         appUpdateController.automaticallyChecksForUpdates = enabled
         refreshUpdateControllerState()
@@ -3744,6 +3763,7 @@ final class AppState {
 
     private func refreshUpdateControllerState() {
         canCheckForUpdates = appUpdateController.canCheckForUpdates
+        isUpdateReadyToInstall = appUpdateController.isUpdateReadyToInstall
         automaticallyChecksForUpdates = appUpdateController.automaticallyChecksForUpdates
     }
 

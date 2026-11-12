@@ -183,12 +183,14 @@ final class TestKeychainService: KeychainServiceProtocol {
 @MainActor
 final class StubAppUpdateController: AppUpdateControllerProtocol {
     var canCheckForUpdates = false
+    var isUpdateReadyToInstall = false
     var automaticallyChecksForUpdates = false
     var updateChannel: UpdateChannel = .stable
     var onStateChange: (() -> Void)?
 
     private(set) var startCallCount = 0
     private(set) var checkForUpdatesCallCount = 0
+    private(set) var installUpdateAndRelaunchCallCount = 0
 
     func start() {
         startCallCount += 1
@@ -198,6 +200,10 @@ final class StubAppUpdateController: AppUpdateControllerProtocol {
 
     func checkForUpdates() {
         checkForUpdatesCallCount += 1
+    }
+
+    func installUpdateAndRelaunch() {
+        installUpdateAndRelaunchCallCount += 1
     }
 
     func notifyStateChanged() {
