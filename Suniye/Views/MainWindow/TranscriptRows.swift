@@ -197,6 +197,7 @@ private struct OriginalTranscriptPopover: View {
     let onCopy: () -> Bool
 
     @State private var didCopy = false
+    @State private var copyCount = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -231,6 +232,18 @@ private struct OriginalTranscriptPopover: View {
         }
         .padding(14)
         .frame(width: 340)
+        // Keyed on the copy count, so a second copy restarts the 1 s
+        // checkmark instead of the first copy's timer cutting it short.
+        .task(id: copyCount) {
+            guard didCopy else {
+                return
+            }
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else {
+                return
+            }
+            didCopy = false
+        }
     }
 
     private func copy() {
@@ -238,11 +251,8 @@ private struct OriginalTranscriptPopover: View {
             return
         }
         didCopy = true
+        copyCount += 1
         AccessibilityNotification.Announcement("Copied original").post()
-        Task {
-            try? await Task.sleep(for: .seconds(1))
-            didCopy = false
-        }
     }
 }
 
