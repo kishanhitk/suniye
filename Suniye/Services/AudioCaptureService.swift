@@ -228,11 +228,11 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                     ))
                     return
                 }
-                active.pendingStop = continuation
                 guard active.interruption == nil else {
-                    _ = self.finalize(active: active, discard: false)
+                    continuation.resume(returning: self.finalize(active: active, discard: false))
                     return
                 }
+                active.pendingStop = continuation
                 self.scheduleReleaseTail { [weak self, weak active] in
                     self?.controlQueue.async {
                         guard let self, let active, self.activeCapture === active else { return }
