@@ -54,6 +54,41 @@ final class UpdateServiceMoreTests: XCTestCase {
         XCTAssertEqual(stateChanges, 2)
     }
 
+    func testStagedUpdateInstallsUntilItsUpdateCycleEnds() {
+        let controller = SparkleUpdateController()
+        let updater = SPUStandardUpdaterController(
+            startingUpdater: false,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        ).updater
+        var stateChanges = 0
+        var installs = 0
+        controller.onStateChange = { stateChanges += 1 }
+
+        controller.installUpdateAndRelaunch()
+        XCTAssertFalse(controller.isUpdateReadyToInstall)
+        XCTAssertEqual(installs, 0)
+
+        let handledByApp = controller.updater(
+            updater,
+            willInstallUpdateOnQuit: SUAppcastItem.empty(),
+            immediateInstallationBlock: { installs += 1 }
+        )
+        XCTAssertTrue(handledByApp)
+        XCTAssertTrue(controller.isUpdateReadyToInstall)
+        XCTAssertEqual(stateChanges, 1)
+
+        controller.installUpdateAndRelaunch()
+        XCTAssertEqual(installs, 1)
+
+        controller.updater(updater, didFinishUpdateCycleFor: .updatesInBackground, error: nil)
+        XCTAssertFalse(controller.isUpdateReadyToInstall)
+        XCTAssertEqual(stateChanges, 2)
+
+        controller.installUpdateAndRelaunch()
+        XCTAssertEqual(installs, 1)
+    }
+
     func testSparkleDelegateExposesChannelConfiguration() {
         let controller = SparkleUpdateController()
         let updater = SPUStandardUpdaterController(

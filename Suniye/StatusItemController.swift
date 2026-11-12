@@ -70,6 +70,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func configureMenu() {
         let menu = NSMenu()
         menu.delegate = self
+        menu.autoenablesItems = false
 
         finishSetupItem.target = self
         openSettingsItem.target = self
@@ -121,9 +122,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         copyLastTranscriptItem.isEnabled = appState.lastTranscriptText != nil
 
-        checkUpdatesItem.title = "Check for Updates..."
-        checkUpdatesItem.action = #selector(checkForUpdates)
-        checkUpdatesItem.isEnabled = appState.canCheckForUpdates
+        if appState.isUpdateReadyToInstall {
+            checkUpdatesItem.title = "Restart to Update"
+            checkUpdatesItem.action = #selector(restartToUpdate)
+            checkUpdatesItem.isEnabled = appState.canRestartToUpdate
+        } else {
+            checkUpdatesItem.title = "Check for Updates..."
+            checkUpdatesItem.action = #selector(checkForUpdates)
+            checkUpdatesItem.isEnabled = appState.canCheckForUpdates
+        }
 
         downloadItem.isEnabled = phase == .needsModel || phase == .downloadingModel || phase == .error
         downloadItem.isHidden = !(phase == .needsModel || phase == .downloadingModel || phase == .error)
@@ -195,6 +202,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func checkForUpdates() {
         AppLogger.shared.log(.info, "menu action: check updates")
         appState.checkForUpdates()
+    }
+
+    @objc
+    private func restartToUpdate() {
+        AppLogger.shared.log(.info, "menu action: restart to update")
+        appState.restartToUpdate()
     }
 
     @objc
