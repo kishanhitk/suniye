@@ -4327,7 +4327,7 @@ final class AppState {
             durationSeconds: duration,
             wasLLMPolished: wasLLMPolished,
             appBundleID: nil,
-            rawText: finalText == rawParse.text ? nil : rawParse.text
+            rawText: finalText == rawText ? nil : rawText
         )
 
         if !finalText.isEmpty {
