@@ -1474,9 +1474,9 @@ final class AppState {
     }
 
     /// The info tip of the input picker: only while it says "System Default" and
-    /// so hides the device, and no stand-in note already names it.
+    /// so hides the device, and no stand-in note or warning row already says it.
     var inputDeviceInfoText: String? {
-        guard selectedInputDeviceID == nil, inputStandInNote == nil else {
+        guard selectedInputDeviceID == nil, audioRouteSnapshot != nil, inputStandInNote == nil else {
             return nil
         }
         return effectiveInputDeviceStatusText

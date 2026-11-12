@@ -824,7 +824,7 @@ struct SidebarInputDeviceRow: View {
                 Button {
                     appState.selectedInputDeviceID = device.id
                 } label: {
-                    Text(device.isAvailable ? device.name : "\(device.name) — Unavailable")
+                    Text(device.availability == .notConnected ? "\(device.name) — Unavailable" : device.name)
                 }
                 // A disconnected saved mic cannot be chosen again; a built-in mic
                 // that the closed lid switched off can, for use after undocking.
