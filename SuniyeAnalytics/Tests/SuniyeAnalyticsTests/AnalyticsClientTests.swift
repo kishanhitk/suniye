@@ -24,8 +24,8 @@ final class AnalyticsClientTests: XCTestCase {
 
     func testTrackEnqueues() {
         let (client, _, queue) = makeClient()
-        client.track(.dictationEmpty)
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         XCTAssertEqual(queue.count, 2)
     }
 
@@ -37,18 +37,18 @@ final class AnalyticsClientTests: XCTestCase {
 
     func testDisabledIsNoOpAndClearsQueue() {
         let (client, _, queue) = makeClient()
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         XCTAssertEqual(queue.count, 1)
         client.setEnabled(false)
         XCTAssertEqual(queue.count, 0)      // opt-out drops unsent events
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         XCTAssertEqual(queue.count, 0)      // and stops emitting
     }
 
     func testFlushSendsAndClearsOnAccepted() async {
         let (client, uploader, queue) = makeClient(outcome: .accepted(nil))
-        client.track(.dictationEmpty)
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         await client.flush()
         XCTAssertEqual(uploader.uploadedEventCount, 2)
         XCTAssertEqual(queue.count, 0)
@@ -56,21 +56,21 @@ final class AnalyticsClientTests: XCTestCase {
 
     func testRetryKeepsEvents() async {
         let (client, _, queue) = makeClient(outcome: .retry)
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         await client.flush()
         XCTAssertEqual(queue.count, 1)   // kept for a later attempt
     }
 
     func testRejectedDropsEvents() async {
         let (client, _, queue) = makeClient(outcome: .rejected)
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         await client.flush()
         XCTAssertEqual(queue.count, 0)   // poison dropped, no infinite loop
     }
 
     func testAmbiguousDropsEventsToAvoidDoubleCount() async {
         let (client, _, queue) = makeClient(outcome: .ambiguous)
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         await client.flush()
         XCTAssertEqual(queue.count, 0)
     }
@@ -78,9 +78,9 @@ final class AnalyticsClientTests: XCTestCase {
     func testAcceptedDirectiveDisablesEmission() async {
         let (client, uploader, queue) = makeClient()
         uploader.outcome = .accepted(KillSwitchDirective(disabled: true))
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         await client.flush()               // receives the kill directive
-        client.track(.dictationEmpty)      // now suppressed
+        client.track(.dictationEmpty(reason: .emptyTranscript))      // now suppressed
         XCTAssertEqual(queue.count, 0)
     }
 
@@ -89,7 +89,7 @@ final class AnalyticsClientTests: XCTestCase {
             outcome: .accepted(nil),
             config: .init(flushThreshold: 1000, maxBatchSize: 2)
         )
-        for _ in 0..<5 { client.track(.dictationEmpty) }
+        for _ in 0..<5 { client.track(.dictationEmpty(reason: .emptyTranscript)) }
         await client.flush()
         XCTAssertEqual(uploader.uploadedEventCount, 5)
         XCTAssertTrue(uploader.batches.allSatisfy { $0.events.count <= 2 })
@@ -98,16 +98,16 @@ final class AnalyticsClientTests: XCTestCase {
     func testSessionRotatesAfterInactivity() {
         let clock = TestClock()
         let (client, _, queue) = makeClient(clock: clock)
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         clock.advance(10 * 60)             // exceeds 5-min gap
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         let sessions = Set(queue.peek(max: 10, now: clock.now()).map(\.sessionID))
         XCTAssertEqual(sessions.count, 2)
     }
 
     func testEndSessionEmitsSessionEndAndFlushes() async {
         let (client, uploader, _) = makeClient()
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         await client.endSession(cleanExit: true)
         let names = uploader.batches.flatMap { $0.events.map(\.name) }
         XCTAssertTrue(names.contains("session_end"))
@@ -115,7 +115,7 @@ final class AnalyticsClientTests: XCTestCase {
 
     func testBatchCarriesIdentity() async {
         let (client, uploader, _) = makeClient()
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         await client.flush()
         let batch = uploader.batches.first
         XCTAssertEqual(batch?.installID, "install-1")
@@ -124,7 +124,7 @@ final class AnalyticsClientTests: XCTestCase {
 
     func testBatchCarriesDeviceWhenPresent() async {
         let (client, uploader, _) = makeClient(device: TestFixtures.sampleDevice)
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         await client.flush()
         let device = uploader.batches.first?.device
         XCTAssertEqual(device?["chip"], .label("apple-m3-pro"))
@@ -136,7 +136,7 @@ final class AnalyticsClientTests: XCTestCase {
 
     func testBatchOmitsDeviceWhenAbsent() async {
         let (client, uploader, _) = makeClient()   // no device injected
-        client.track(.dictationEmpty)
+        client.track(.dictationEmpty(reason: .emptyTranscript))
         await client.flush()
         XCTAssertNil(uploader.batches.first?.device)
     }

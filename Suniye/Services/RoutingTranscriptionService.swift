@@ -11,6 +11,7 @@ import Foundation
 /// service mockable in tests.
 ///
 /// A clip without speech never reaches an engine: engines write text for noise.
+/// A final clip then throws `NoSpeechDetected`; a partial one gives no text.
 /// Only a `.probe` skips that check.
 actor RoutingTranscriptionService: TranscriptionServiceProtocol {
     enum RoutingError: LocalizedError {
@@ -91,13 +92,14 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
             let rate = max(8_000, sampleRate)
             let audio = try AudioResampler.resample(samples, from: rate, to: SpeechDetector.sampleRate)
             guard active.speechDetector.containsSpeech(audio) else {
-                if purpose == .final {
-                    AppLogger.shared.log(
-                        .info,
-                        String(format: "transcribe skipped: no speech in %.2fs", Double(samples.count) / Double(rate))
-                    )
+                guard purpose == .final else {
+                    return ""
                 }
-                return ""
+                AppLogger.shared.log(
+                    .info,
+                    String(format: "transcribe skipped: no speech in %.2fs", Double(samples.count) / Double(rate))
+                )
+                throw NoSpeechDetected()
             }
         }
         return try await service.transcribe(samples: samples, sampleRate: sampleRate, purpose: purpose, onProgress: onProgress)

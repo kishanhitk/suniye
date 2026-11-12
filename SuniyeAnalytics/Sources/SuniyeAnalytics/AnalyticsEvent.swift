@@ -17,7 +17,7 @@ public enum AnalyticsEvent: Sendable {
     case dictationCompleted(DictationMetrics)
     case dictationBlocked(reason: DictationBlockedReason)
     case dictationCancelled(stage: DictationCancelStage)
-    case dictationEmpty
+    case dictationEmpty(reason: DictationEmptyReason)
     /// Emitted when an inserted dictation's edit-learning session finalizes. The
     /// bucket is a coarse % of the dictation the user corrected (0..100, content-
     /// free) — an ASR/cleanup accuracy proxy that arrives after `dictation_completed`.
@@ -25,7 +25,8 @@ public enum AnalyticsEvent: Sendable {
 
     case audioCaptureFailed(outcome: AudioOutcome)
     case audioCaptureInterrupted(reason: AudioInterruptionReason)
-    case audioBackendUsed(backend: SafeLabel, fallbackOccurred: Bool, rung: Int)
+    /// `inputStandIn`: why the capture used a microphone other than the chosen one.
+    case audioBackendUsed(backend: SafeLabel, fallbackOccurred: Bool, rung: Int, inputStandIn: InputStandInReason? = nil)
 
     case permissionTransition(kind: PermissionKind, granted: Bool)
     /// A permission was explicitly asked for (system prompt shown, Permiso overlay
@@ -80,6 +81,8 @@ public enum AnalyticsEvent: Sendable {
 
     case vocabLearnedFromEdit(count: Int)
     case featureToggled(feature: TrackableFeature, enabled: Bool)
+    /// The history popover that shows the text from before Magic Format.
+    case rawTranscript(action: RawTranscriptAction)
     case updateAction(kind: UpdateActionKind, fromVersion: SafeLabel?, toVersion: SafeLabel?)
     case error(type: AnalyticsErrorType, code: AnalyticsErrorCode)
 
@@ -113,6 +116,7 @@ public enum AnalyticsEvent: Sendable {
         case .llmGeneration: return "llm_generation"
         case .vocabLearnedFromEdit: return "vocab_learned_from_edit"
         case .featureToggled: return "feature_toggled"
+        case .rawTranscript: return "raw_transcript"
         case .updateAction: return "update_action"
         case .error: return "error"
         case .analyticsHealth: return "analytics_health"
@@ -136,16 +140,18 @@ public enum AnalyticsEvent: Sendable {
             return ["reason": .label(reason)]
         case let .dictationCancelled(stage):
             return ["stage": .label(stage)]
-        case .dictationEmpty:
-            return [:]
+        case let .dictationEmpty(reason):
+            return ["empty_reason": .label(reason)]
         case let .dictationEdited(editRateBucket):
             return ["edit_rate_bucket": .int(editRateBucket)]
         case let .audioCaptureFailed(outcome):
             return ["outcome": .label(outcome)]
         case let .audioCaptureInterrupted(reason):
             return ["reason": .label(reason)]
-        case let .audioBackendUsed(backend, fallbackOccurred, rung):
-            return ["backend": .label(backend), "fallback_occurred": .bool(fallbackOccurred), "rung": .int(rung)]
+        case let .audioBackendUsed(backend, fallbackOccurred, rung, inputStandIn):
+            var out: [String: AnalyticsValue] = ["backend": .label(backend), "fallback_occurred": .bool(fallbackOccurred), "rung": .int(rung)]
+            if let inputStandIn { out["input_stand_in"] = .label(inputStandIn) }
+            return out
         case let .permissionTransition(kind, granted):
             return ["kind": .label(kind), "granted": .bool(granted)]
         case let .permissionRequest(kind, surface, outcome):
@@ -205,6 +211,8 @@ public enum AnalyticsEvent: Sendable {
             return ["count": .int(count)]
         case let .featureToggled(feature, enabled):
             return ["feature": .label(feature), "enabled": .bool(enabled)]
+        case let .rawTranscript(action):
+            return ["action": .label(action)]
         case let .updateAction(kind, fromVersion, toVersion):
             var out: [String: AnalyticsValue] = ["kind": .label(kind)]
             if let fromVersion { out["from_version"] = .label(fromVersion) }

@@ -156,7 +156,7 @@ final class AnalyticsEventEncodingTests: XCTestCase {
     }
 
     func testBatchEnvelopeKeys() throws {
-        let event = EncodedEvent(event: .dictationEmpty, eventID: "e", eventTS: 1, sessionID: "s")
+        let event = EncodedEvent(event: .dictationEmpty(reason: .emptyTranscript), eventID: "e", eventTS: 1, sessionID: "s")
         let batch = AnalyticsBatch(
             schemaVersion: analyticsSchemaVersion, installID: "i", appVersion: "0.0.8",
             build: "8", channel: "stable", isDebug: false, sentAt: 123, device: nil, events: [event]
@@ -170,7 +170,7 @@ final class AnalyticsEventEncodingTests: XCTestCase {
     }
 
     func testBatchEncodesDeviceWhenPresent() throws {
-        let event = EncodedEvent(event: .dictationEmpty, eventID: "e", eventTS: 1, sessionID: "s")
+        let event = EncodedEvent(event: .dictationEmpty(reason: .emptyTranscript), eventID: "e", eventTS: 1, sessionID: "s")
         let batch = AnalyticsBatch(
             schemaVersion: analyticsSchemaVersion, installID: "i", appVersion: "0.0.8",
             build: "8", channel: "stable", isDebug: false, sentAt: 123,
@@ -182,6 +182,21 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         XCTAssertTrue(json.contains("apple-m3-pro"))
         // Device language excluded (would collide with dictation's blob7 language).
         XCTAssertFalse(json.contains("\"language\""))
+    }
+
+    func testFeatureUseEvents() {
+        XCTAssertEqual(AnalyticsEvent.dictationEmpty(reason: .noSpeech).props, ["empty_reason": .label("no_speech")])
+
+        let opened = AnalyticsEvent.rawTranscript(action: .opened)
+        XCTAssertEqual(opened.name, "raw_transcript")
+        XCTAssertEqual(opened.props, ["action": .label("opened")])
+
+        let standIn = AnalyticsEvent.audioBackendUsed(
+            backend: SafeLabel("voice_processing"), fallbackOccurred: false, rung: 0, inputStandIn: .lidClosed
+        )
+        XCTAssertEqual(standIn.props["input_stand_in"], .label("lid_closed"))
+        let chosenMicrophone = AnalyticsEvent.audioBackendUsed(backend: SafeLabel("voice_processing"), fallbackOccurred: false, rung: 0)
+        XCTAssertNil(chosenMicrophone.props["input_stand_in"])
     }
 
     func testFreeTextCannotLeakThroughSafeLabel() {

@@ -3745,6 +3745,7 @@ final class AppState {
             return
         }
         AppLogger.shared.log(.info, "sparkle restart to update")
+        analytics.track(.updateAction(kind: .restartToUpdate, fromVersion: nil, toVersion: nil))
         appUpdateController.installUpdateAndRelaunch()
     }
 
@@ -4252,10 +4253,17 @@ final class AppState {
 
         do {
             dictationTiming.asrStart = .now()
-            let text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate) { [weak self] progress in
-                Task { @MainActor in
-                    self?.showTranscriptionProgress(progress, sessionID: sessionID)
+            let text: String
+            var emptyReason = DictationEmptyReason.emptyTranscript
+            do {
+                text = try await transcriptionService.transcribe(samples: samples, sampleRate: sampleRate) { [weak self] progress in
+                    Task { @MainActor in
+                        self?.showTranscriptionProgress(progress, sessionID: sessionID)
+                    }
                 }
+            } catch is NoSpeechDetected {
+                text = ""
+                emptyReason = .noSpeech
             }
             dictationTiming.asrEnd = .now()
             let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
@@ -4277,7 +4285,8 @@ final class AppState {
                     sampleRate: sampleRate,
                     frontmostAppBundleID: context.frontmostAppBundleID,
                     source: context.source,
-                    destination: destination
+                    destination: destination,
+                    emptyReason: emptyReason
                 )
             case .onboardingPractice:
                 await completeOnboardingPracticeDictation(
@@ -4314,7 +4323,8 @@ final class AppState {
         sampleRate: Int,
         frontmostAppBundleID: String?,
         source: RecordingSource,
-        destination: DictationDestination
+        destination: DictationDestination,
+        emptyReason: DictationEmptyReason
     ) async throws {
         let usesSystemInsertion = destination == .systemInsertion
         var finalText = rawText
@@ -4426,7 +4436,7 @@ final class AppState {
         if finalText.isEmpty {
             AppLogger.shared.log(.warning, "transcription returned empty text samples=\(sampleCount) sr=\(sampleRate)")
             playSoundFeedback(.error)
-            analytics.track(.dictationEmpty)
+            analytics.track(.dictationEmpty(reason: emptyReason))
         }
 
         if didCompleteDictation {

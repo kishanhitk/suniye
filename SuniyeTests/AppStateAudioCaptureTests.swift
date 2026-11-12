@@ -15,7 +15,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
 
     func testAudioBackendUsedEventDerivesRungAndFallback() {
         func decode(_ r: AudioRouteSnapshot) -> (backend: SafeLabel, fell: Bool, rung: Int)? {
-            guard case let .audioBackendUsed(backend, fell, rung) = AppState.audioBackendUsedEvent(for: r) else { return nil }
+            guard case let .audioBackendUsed(backend, fell, rung, _) = AppState.audioBackendUsedEvent(for: r) else { return nil }
             return (backend, fell, rung)
         }
         // Primary rung, no fallback.

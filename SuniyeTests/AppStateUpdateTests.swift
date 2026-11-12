@@ -1,4 +1,5 @@
 import Foundation
+import SuniyeAnalytics
 import XCTest
 @testable import Suniye
 
@@ -36,11 +37,13 @@ final class AppStateUpdateTests: XCTestCase {
 
     func testRestartToUpdateInstallsTheStagedUpdate() {
         let updateController = StubAppUpdateController()
-        let appState = makeAppState(appUpdateController: updateController)
+        let spy = SpyAnalytics()
+        let appState = makeAppState(appUpdateController: updateController, analytics: spy)
         appState.phase = .ready
 
         appState.restartToUpdate()
         XCTAssertEqual(updateController.installUpdateAndRelaunchCallCount, 0)
+        XCTAssertFalse(spy.trackedEventNames.contains("update_action"), "a refused restart is not a restart")
 
         updateController.isUpdateReadyToInstall = true
         updateController.notifyStateChanged()
@@ -48,6 +51,11 @@ final class AppStateUpdateTests: XCTestCase {
 
         XCTAssertTrue(appState.isUpdateReadyToInstall)
         XCTAssertEqual(updateController.installUpdateAndRelaunchCallCount, 1)
+        let kinds = spy.trackedEvents.compactMap { event -> UpdateActionKind? in
+            if case let .updateAction(kind, _, _) = event { return kind }
+            return nil
+        }
+        XCTAssertEqual(kinds, [.restartToUpdate])
     }
 
     func testRestartToUpdateIsRefusedWhileRecordingOrTranscribing() {
@@ -172,7 +180,8 @@ final class AppStateUpdateTests: XCTestCase {
 
     private func makeAppState(
         generalSettingsStore: GeneralSettingsStoreProtocol = TestGeneralSettingsStore(),
-        appUpdateController: StubAppUpdateController? = nil
+        appUpdateController: StubAppUpdateController? = nil,
+        analytics: Analytics = SpyAnalytics()
     ) -> AppState {
         makeTestAppState(
             llmSettingsStore: TestLLMSettingsStore(),
@@ -180,7 +189,8 @@ final class AppStateUpdateTests: XCTestCase {
             historyStore: TestHistoryStore(),
             keychainService: TestKeychainService(value: nil),
             appUpdateController: appUpdateController ?? StubAppUpdateController(),
-            launchAtLoginService: StubLaunchAtLoginService()
+            launchAtLoginService: StubLaunchAtLoginService(),
+            analytics: analytics
         )
     }
 }

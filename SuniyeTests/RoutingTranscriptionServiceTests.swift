@@ -123,10 +123,15 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
         try await router.loadModel(config: config(family: .nemoTransducer, modelID: .parakeetV3))
         let samples = [Float](repeating: 0.01, count: 48_000)
 
-        let final = try await router.transcribe(samples: samples, sampleRate: 48_000)
+        do {
+            _ = try await router.transcribe(samples: samples, sampleRate: 48_000)
+            XCTFail("A final clip without speech must throw NoSpeechDetected")
+        } catch {
+            XCTAssertTrue(error is NoSpeechDetected, "\(error)")
+        }
         let partial = try await router.transcribe(samples: samples, sampleRate: 48_000, purpose: .partial)
 
-        XCTAssertEqual([final, partial], ["", ""])
+        XCTAssertEqual(partial, "")
         XCTAssertEqual(sherpa.transcribeCallCount, 0)
         let resampled = try AudioResampler.resample(samples, from: 48_000, to: 16_000).count
         XCTAssertEqual(detector.clipLengths, [resampled, resampled], "the detector hears the clip at 16 kHz")
