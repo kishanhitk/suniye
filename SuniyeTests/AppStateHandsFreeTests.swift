@@ -167,6 +167,11 @@ final class AppStateHandsFreeTests: XCTestCase {
 
             XCTAssertEqual(appState.phase, .ready, "\(action)")
             XCTAssertEqual(transcription.transcribeCallCount, 0, "\(action)")
+            XCTAssertEqual(
+                appState.floatingIndicatorState,
+                .error(message: "Double-tap is off. See Settings."),
+                "the pill says why the double-tap did nothing"
+            )
         }
     }
 

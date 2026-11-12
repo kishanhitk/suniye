@@ -206,10 +206,14 @@ struct GeneralPage: View {
 
     private func warningRow<Action: View>(_ warning: String, @ViewBuilder action: () -> Action) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Label(warning, systemImage: "exclamationmark.triangle.fill")
-                .font(AppTypography.subheadline)
-                .foregroundStyle(.orange)
-                .fixedSize(horizontal: false, vertical: true)
+            // Orange text on a light page is below 3:1; the icon carries the color.
+            Label {
+                Text(warning).foregroundStyle(.primary)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            }
+            .font(AppTypography.subheadline)
+            .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 12)
 

@@ -615,6 +615,7 @@ final class AppState {
     @ObservationIgnored private var pendingRecordingStart: RecordingSource?
     @ObservationIgnored private var dictationShortcutGesture = DictationShortcutGesture()
     @ObservationIgnored private var secondTapWindowTask: Task<Void, Never>?
+    @ObservationIgnored private var previousTapWithDoubleTapOff: Date?
     private(set) var systemGlobeKeyAction: SystemGlobeKeyAction = .doNothing
     /// What is about to move onboarding to its next step (read by step tracking).
     @ObservationIgnored private var pendingOnboardingAdvance: OnboardingAdvance?
@@ -4123,16 +4124,22 @@ final class AppState {
             await stopRecordingAndTranscribe(trigger: .hotkey)
             return
         }
-        let command = dictationShortcutGesture.release(at: nowProvider()) {
+        let releasedAt = nowProvider()
+        var tapCouldNotLock = false
+        let command = dictationShortcutGesture.release(at: releasedAt) {
             // The user can change the macOS setting while Suniye is in the background.
             if hotkeyConfiguration.kind == .globe {
                 refreshSystemGlobeKeyAction()
             }
-            return globeDoubleTapConflict == nil
+            tapCouldNotLock = globeDoubleTapConflict != nil
+            return !tapCouldNotLock
         }
         switch command {
         case .finish:
             await stopRecordingAndTranscribe(trigger: .hotkey)
+        case .discard where tapCouldNotLock:
+            AppLogger.shared.log(.info, "recording discarded: tap with double-tap off")
+            await discardTapWithDoubleTapOff(releasedAt: releasedAt)
         case .discard:
             AppLogger.shared.log(.info, "recording discarded: short press")
             await discardShortPress()
@@ -4177,6 +4184,20 @@ final class AppState {
     private func cancelSecondTapWindow() {
         secondTapWindowTask?.cancel()
         secondTapWindowTask = nil
+    }
+
+    /// A second quick tap means the user tried to double-tap. The Settings
+    /// notice alone went unnoticed, so the pill says why nothing happened.
+    private func discardTapWithDoubleTapOff(releasedAt: Date) async {
+        let isSecondTap = previousTapWithDoubleTapOff.map {
+            releasedAt.timeIntervalSince($0) < DictationShortcutGesture.tapInterval * 2
+        } ?? false
+        previousTapWithDoubleTapOff = isSecondTap ? nil : releasedAt
+        guard isSecondTap else {
+            await discardShortPress()
+            return
+        }
+        await discardRecording(message: "Double-tap is off. See Settings.")
     }
 
     /// Onboarding practice still tells a new user to hold the key, as it did
