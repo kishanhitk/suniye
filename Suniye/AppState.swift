@@ -4360,7 +4360,8 @@ final class AppState {
             createdAt: Date(),
             durationSeconds: duration,
             wasLLMPolished: wasLLMPolished,
-            appBundleID: nil
+            appBundleID: nil,
+            rawText: finalText == rawParse.text ? nil : rawParse.text
         )
 
         // A completed system transcript must be recoverable even if insertion

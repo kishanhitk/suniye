@@ -19,6 +19,9 @@ extension String {
 struct RecentResult: Identifiable, Equatable, Codable {
     let id: UUID
     let text: String
+    /// The transcript before Magic Format changed it; nil when `text` is the
+    /// transcript as spoken, and for history written before this existed.
+    let rawText: String?
     let createdAt: Date
     let durationSeconds: TimeInterval
     let wasLLMPolished: Bool
@@ -37,10 +40,12 @@ struct RecentResult: Identifiable, Equatable, Codable {
         createdAt: Date,
         durationSeconds: TimeInterval,
         wasLLMPolished: Bool,
-        appBundleID: String? = nil
+        appBundleID: String? = nil,
+        rawText: String? = nil
     ) {
         self.id = id
         self.text = text
+        self.rawText = rawText
         self.createdAt = createdAt
         self.durationSeconds = durationSeconds
         self.wasLLMPolished = wasLLMPolished
