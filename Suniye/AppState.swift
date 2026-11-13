@@ -5973,8 +5973,8 @@ extension AppState: MeetingHost {
             summaryAvailability: {
                 MeetingSummaryAvailability(apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
             },
-            makeSummaryModel: { provider in
-                switch provider {
+            makeSummaryModel: { engine in
+                switch engine {
                 case .localModel:
                     return LocalGemmaMeetingSummaryModel(client: localGemmaClient)
                 case .appleIntelligence:
