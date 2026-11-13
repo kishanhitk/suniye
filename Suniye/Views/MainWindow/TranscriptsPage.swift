@@ -23,7 +23,7 @@ struct TranscriptsPage: View {
     @State private var groups: [TranscriptDayGroup] = []
 
     private func rebuildVisibleResults() {
-        let filtered = TranscriptBrowser.filter(appState.recentResults, searchText: searchText)
+        let filtered = TranscriptBrowser.filter(appState.library.results, searchText: searchText)
         visibleResults = filtered
         groups = TranscriptBrowser.group(filtered)
     }
@@ -33,12 +33,8 @@ struct TranscriptsPage: View {
             attentionSection
 
             TranscriptsHeaderView(
-                stats: appState.dictationStats,
-                timeSaved: appState.timeSavedSeconds,
-                wordsPerMinute: appState.averageWordsPerMinute,
-                streakDays: appState.currentStreakDays,
-                days: appState.dailyWordCounts(days: 14),
-                topApps: appState.topDictationApps
+                stats: appState.library.stats,
+                topApps: appState.library.topApps
             )
 
             TranscriptSearchBar(
@@ -71,7 +67,7 @@ struct TranscriptsPage: View {
             selectedID = nil
             rebuildVisibleResults()
         }
-        .onChange(of: appState.recentResults) { _, _ in rebuildVisibleResults() }
+        .onChange(of: appState.library.results) { _, _ in rebuildVisibleResults() }
         .onAppear(perform: rebuildVisibleResults)
     }
 
@@ -108,13 +104,13 @@ struct TranscriptsPage: View {
         emptyStateAwareContent
             .animation(
                 reduceMotion ? nil : .easeOut(duration: 0.22),
-                value: appState.recentResults.isEmpty
+                value: appState.library.results.isEmpty
             )
     }
 
     @ViewBuilder
     private var emptyStateAwareContent: some View {
-        if appState.recentResults.isEmpty {
+        if appState.library.results.isEmpty {
             EmptyStateCard(
                 icon: "quote.opening",
                 title: "No Transcripts Yet",
@@ -254,7 +250,7 @@ struct TranscriptsPage: View {
     private func deleteAndAdvance(_ result: RecentResult) {
         let results = visibleResults
         let index = results.firstIndex { $0.id == result.id }
-        appState.deleteRecentResult(result)
+        appState.library.delete(result)
 
         guard let index else {
             selectedID = nil
@@ -298,12 +294,15 @@ struct TranscriptsPage: View {
 /// bought you, in the order you would say it out loud.
 struct TranscriptsHeaderView: View {
     let stats: DictationStats
-    let timeSaved: TimeInterval
-    let wordsPerMinute: Int
-    let streakDays: Int
-    let days: [DailyWordCount]
     let topApps: [DictationAppUsage]
 
+    /// Seconds saved versus typing the same words by hand. The assumption is
+    /// shown to the user next to the number.
+    private var timeSaved: TimeInterval { stats.timeSavedSeconds() }
+    private var wordsPerMinute: Int { stats.averageWordsPerMinute }
+    /// Read from the live clock, so that a window left open across midnight is right.
+    private var streakDays: Int { stats.currentStreakDays() }
+    private var days: [DailyWordCount] { stats.dailyWordCounts(days: 14) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {

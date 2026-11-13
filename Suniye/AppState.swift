@@ -304,20 +304,12 @@ final class AppState {
     var loadedASRModelID: ASRModelID?
     var lastFailedASRModelID: ASRModelID?
     var lastFailedASRModelError: String?
-    /// Durable dictation totals. Mirrored from `statsStore` so the dashboard
-    /// never sums buckets during a SwiftUI body evaluation.
-    var dictationStats = DictationStats.empty
-    /// Where dictation lands most, recomputed when history changes rather than
-    /// scanned per body evaluation.
-    private(set) var topDictationApps: [DictationAppUsage] = []
-    var recentResults: [RecentResult] = [] {
-        didSet {
-            guard !isHydratingHistory else {
-                return
-            }
-            persistHistory()
-        }
+    let library: DictationLibrary
+    var recentResults: [RecentResult] {
+        get { library.results }
+        set { library.replaceResults(newValue) }
     }
+    var dictationStats: DictationStats { library.stats }
 
     var availableInputDevices: [AudioInputDevice] = []
     private(set) var audioRouteSnapshot: AudioRouteSnapshot? {
@@ -812,36 +804,8 @@ final class AppState {
         }
     }
 
-    var recentResultsPreview: [RecentResult] {
-        Array(recentResults.prefix(12))
-    }
-
-    /// Seconds saved versus typing the same words by hand. The assumption is
-    /// shown to the user next to the number, never hidden.
-    var timeSavedSeconds: TimeInterval {
-        dictationStats.timeSavedSeconds()
-    }
-
-    var averageWordsPerMinute: Int {
-        dictationStats.averageWordsPerMinute
-    }
-
-    /// Recomputed from the live clock on read, so it does not go stale in a
-    /// window left open across midnight.
-    var currentStreakDays: Int {
-        dictationStats.currentStreakDays()
-    }
-
-    /// Words per day for the activity chart, oldest first, gaps filled with zero.
-    func dailyWordCounts(days: Int) -> [DailyWordCount] {
-        let keys = DictationStats.recentDayKeys(count: days)
-        return keys.map { key in
-            DailyWordCount(dayKey: key, words: dictationStats.days[key]?.words ?? 0)
-        }
-    }
-
     var lastTranscriptText: String? {
-        recentResults.first?.text
+        library.lastTranscriptText
     }
 
     var modelInstalledSizeText: String {
@@ -1438,8 +1402,6 @@ final class AppState {
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol
     private let generalSettingsStore: GeneralSettingsStoreProtocol
-    private let historyStore: HistoryStoreProtocol
-    private let statsStore: DictationStatsStoring
     private let keychainService: KeychainServiceProtocol
     private let appUpdateController: AppUpdateControllerProtocol
     private let launchAtLoginService: LaunchAtLoginServiceProtocol
@@ -1511,7 +1473,6 @@ final class AppState {
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
     private var localGemmaDownloadStartedAt: Date?
-    private var isHydratingHistory = false
     private let llmE2EMode: LLME2EMode
     private enum DictationDestination: Equatable {
         case systemInsertion
@@ -1636,8 +1597,7 @@ final class AppState {
         self.llmSettingsStore = llmSettingsStore
         self.magicFormatPromptFileStore = magicFormatPromptFileStore
         self.generalSettingsStore = generalSettingsStore
-        self.historyStore = historyStore
-        self.statsStore = statsStore
+        self.library = DictationLibrary(historyStore: historyStore, statsStore: statsStore)
         self.keychainService = keychainService
         self.appUpdateController = appUpdateController ?? AppUpdateControllerFactory.makeDefault()
         self.launchAtLoginService = launchAtLoginService
@@ -1706,7 +1666,6 @@ final class AppState {
         }
 
         AppLogger.shared.log(.info, "app state init")
-        loadHistory()
         loadGeneralSettings()
         loadLLMSettings()
         analytics.setEnabled(shareAnalyticsEnabled)
@@ -2923,7 +2882,7 @@ final class AppState {
     }
 
     func deleteRecentResult(_ result: RecentResult) {
-        recentResults.removeAll { $0.id == result.id }
+        library.delete(result)
     }
 
     func startModelDownload() {
@@ -4299,7 +4258,7 @@ final class AppState {
             if usesSystemInsertion {
                 // A completed system transcript must be recoverable even if insertion
                 // fails because focus moved before transcription finished.
-                recentResults.insert(result, at: 0)
+                library.insert(result)
                 try await requireAccessibilityForInsertion()
                 editLearningService.finalizeActiveSession()
                 let insertionText = DictationInsertionTextFormatter.textForInsertion(
@@ -4319,7 +4278,7 @@ final class AppState {
                     // service retries for around a second while a focused
                     // element hydrates, so anything captured earlier can name
                     // the app the user has since left.
-                    attributeStoredResult(result.id, to: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
+                    library.attribute(result.id, to: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
                     dictationTiming.inserted = .now()
                     beginEditLearningTracking(insertedText: insertionText)
                     AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
@@ -4338,7 +4297,7 @@ final class AppState {
             } else {
                 try textInsertionService.copyTextToClipboard(finalText)
                 dictationTiming.inserted = .now()
-                recentResults.insert(result, at: 0)
+                library.insert(result)
                 AppLogger.shared.log(.info, "transcription copied to clipboard words=\(wordCount)")
                 didCompleteDictation = true
             }
@@ -4378,8 +4337,7 @@ final class AppState {
             // Audio length, not hold time: the seconds the user actually spoke
             // is the honest denominator for pace and time saved.
             let audioSeconds = sampleRate > 0 ? Double(sampleCount) / Double(sampleRate) : duration
-            statsStore.record(words: wordCount, seconds: audioSeconds, at: Date())
-            refreshDictationStats()
+            library.recordDictation(words: wordCount, seconds: audioSeconds, at: Date())
 
             emitDictationCompleted(
                 finalText: finalText,
@@ -4571,7 +4529,7 @@ final class AppState {
             // session's app — or anything read before the call — can be stale.
             let destinationApp = frontmostAppBundleIDProvider()
                 ?? activeDictationSession?.context.frontmostAppBundleID
-            recentResults.insert(
+            library.insert(
                 RecentResult(
                     id: UUID(),
                     text: rewritten,
@@ -4579,8 +4537,7 @@ final class AppState {
                     durationSeconds: duration,
                     wasLLMPolished: true,
                     appBundleID: destinationApp
-                ),
-                at: 0
+                )
             )
             AppLogger.shared.log(.info, "edit mode complete words=\(rewritten.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count)")
             completeDictationSession(sessionID: sessionID, playSuccessSound: true)
@@ -4670,71 +4627,9 @@ final class AppState {
         )
     }
 
-    private func loadHistory() {
-        isHydratingHistory = true
-        recentResults = historyStore.load()
-        isHydratingHistory = false
-        // Fold pre-existing history into the counters once, so upgrading does not
-        // reset anyone's numbers. Edit-mode rewrites cannot be told apart in old
-        // history (RecentResult has no kind), so seeded totals include them; only
-        // new sessions are attributed exactly.
-        statsStore.seedFromHistoryIfNeeded(recentResults)
-        refreshDictationStats()
-        refreshTopDictationApps()
-    }
-
-    private func persistHistory() {
-        historyStore.save(recentResults)
-        refreshTopDictationApps()
-    }
-
-    /// Counts are a floor, not a share: the source app was only recorded from a
-    /// certain version on, and older transcripts carry no bundle ID at all. So
-    /// this reports "how many landed here", never a percentage of everything.
-    private func refreshTopDictationApps() {
-        var counts: [String: Int] = [:]
-        for result in recentResults {
-            guard let bundleID = result.appBundleID else {
-                continue
-            }
-            counts[bundleID, default: 0] += 1
-        }
-
-        topDictationApps = counts
-            // Drop apps that are no longer installed before cutting to three,
-            // otherwise an uninstalled leader takes an installed fourth place
-            // down with it and the header shows fewer apps than it has.
-            .compactMap { bundleID, count -> DictationAppUsage? in
-                guard let name = DictationAppUsage.resolvedName(for: bundleID) else {
-                    return nil
-                }
-                return DictationAppUsage(bundleID: bundleID, count: count, name: name)
-            }
-            // Count first, then bundle ID, so equal counts do not reshuffle on
-            // every refresh.
-            .sorted { ($0.count, $1.bundleID) > ($1.count, $0.bundleID) }
-            .prefix(3)
-            .map { $0 }
-    }
-
-    /// Mirrors the store into the observable properties the dashboard reads, so
-    /// no SwiftUI body evaluation ever sums buckets.
-    /// Records which app a stored transcript actually landed in, once the
-    /// insertion has succeeded.
-    private func attributeStoredResult(_ id: UUID, to bundleID: String?) {
-        guard let bundleID, let index = recentResults.firstIndex(where: { $0.id == id }) else {
-            return
-        }
-        recentResults[index].appBundleID = bundleID
-    }
-
     /// Called on termination: see `DictationStatsStore.flush()`.
     func flushDictationStats() {
-        statsStore.flush()
-    }
-
-    private func refreshDictationStats() {
-        dictationStats = statsStore.stats
+        library.flush()
     }
 
     private func loadGeneralSettings() {
@@ -4748,8 +4643,7 @@ final class AppState {
     }
 
     /// The legacy auto-complete heuristic for installs that predate the
-    /// onboarding flags: only real usage signals count. It reads the history,
-    /// so `loadHistory()` runs first.
+    /// onboarding flags: only real usage signals count.
     private func legacyUserShowsUsage(settings: GeneralSettings) -> Bool {
         isModelInstalled
             || !recentResults.isEmpty

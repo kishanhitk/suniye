@@ -199,6 +199,7 @@
 		DB41AE744EEE09C11E39DB1C /* ListeningOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1FAF2B003307FDF0EBA9BA0 /* ListeningOverlay.swift */; };
 		DC8532A515E87705B0F4BFC5 /* SherpaOnnx.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3471ED7BC0D817AF7D5C516 /* SherpaOnnx.swift */; };
 		DF97C8B594E2C877231ECCF7 /* SuniyeAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 1F908BB9A2C4E07874586F5D /* SuniyeAnalytics */; };
+		E0F7E2976E060BE6CA41AD6C /* DictationLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B02C1EAE42EE78952CA4061 /* DictationLibrary.swift */; };
 		E33C6F87D430F3BB3ED2AE08 /* AppStateCoverageRecordingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A8C4EB347A24D4AE75A0462 /* AppStateCoverageRecordingTests.swift */; };
 		E435A53080A9CFFB863EB188 /* TranscriptionServiceE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 626CB9CE980C310ED49F770F /* TranscriptionServiceE2ETests.swift */; };
 		E561E486956229F3CC1D3A6C /* FloatingIndicatorStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 920198666EB5634CA199A1B4 /* FloatingIndicatorStateTests.swift */; };
@@ -277,6 +278,7 @@
 		17C618FC1DF7747D6FA464EF /* PartialTranscriptionScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartialTranscriptionScheduler.swift; sourceTree = "<group>"; };
 		19B3EE9E70828221B854F1BA /* AudioCaptureServiceMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureServiceMoreTests.swift; sourceTree = "<group>"; };
 		19EE19E33409A6D383FBBC27 /* silero_vad_v5.onnx */ = {isa = PBXFileReference; path = silero_vad_v5.onnx; sourceTree = "<group>"; };
+		1B02C1EAE42EE78952CA4061 /* DictationLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationLibrary.swift; sourceTree = "<group>"; };
 		1B2090CE8148347D8A1A12DE /* AppStateCoverageModelOpsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateCoverageModelOpsTests.swift; sourceTree = "<group>"; };
 		1B6F2EB76CF32A101E8454D9 /* AudioCaptureServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureServiceTests.swift; sourceTree = "<group>"; };
 		1BFAD0B3FD93106BF02E29E5 /* FloatingIndicatorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorController.swift; sourceTree = "<group>"; };
@@ -762,6 +764,7 @@
 				A756A4C063C1ADA169DC22CA /* CohereTranscribeDecoding.swift */,
 				36124E42ED84C44BD282650F /* CohereTranscriptionService.swift */,
 				74358CCAA04D28E170CC02C2 /* CoreAudioDeviceMonitor.swift */,
+				1B02C1EAE42EE78952CA4061 /* DictationLibrary.swift */,
 				6A4E350732F3AA71DE5D2BFD /* DictationStatsStore.swift */,
 				612ADA3D26971DBD5CC4369B /* EditLearning.swift */,
 				A99390B0C1FFE4B2791DA2BC /* EditLearningService.swift */,
@@ -979,6 +982,7 @@
 				06E382BAC6100DE4F3B14E78 /* CohereTranscribeDecoding.swift in Sources */,
 				36E286D35169D99FE18DEA78 /* CohereTranscriptionService.swift in Sources */,
 				4F37908DEC15B105CAD05C4F /* CoreAudioDeviceMonitor.swift in Sources */,
+				E0F7E2976E060BE6CA41AD6C /* DictationLibrary.swift in Sources */,
 				B23BD5BABB0B43CA5C544D71 /* DictationShortcutGesture.swift in Sources */,
 				A028110B9B654D2727282F78 /* DictationStatsStore.swift in Sources */,
 				0A63B97243811A96C593B4B7 /* EditLearning.swift in Sources */,

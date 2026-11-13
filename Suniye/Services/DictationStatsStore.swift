@@ -67,6 +67,13 @@ struct DictationStats: Codable, Equatable {
 
     // MARK: - Derived values
 
+    /// Words per day for the activity chart, oldest first, gaps filled with zero.
+    func dailyWordCounts(days: Int) -> [DailyWordCount] {
+        Self.recentDayKeys(count: days).map { key in
+            DailyWordCount(dayKey: key, words: self.days[key]?.words ?? 0)
+        }
+    }
+
     var averageWordsPerMinute: Int {
         guard lifetimeSeconds >= 1, lifetimeWords > 0 else {
             return 0

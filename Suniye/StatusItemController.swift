@@ -120,7 +120,7 @@ final class StatusItemController: NSObject {
 
         checkUpdatesItem.target = self
 
-        copyLastTranscriptItem.isEnabled = appState.lastTranscriptText != nil
+        copyLastTranscriptItem.isEnabled = appState.library.lastTranscriptText != nil
 
         if appState.isUpdateReadyToInstall {
             checkUpdatesItem.title = "Restart to Update"
