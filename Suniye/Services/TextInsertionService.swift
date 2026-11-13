@@ -277,19 +277,10 @@ final class TextInsertionService: TextInsertionServiceProtocol {
             return .notTextInput
         }
 
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedElement: AnyObject?
-        let status = AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedUIElementAttribute as CFString,
-            &focusedElement
-        )
-
-        guard status == .success, let focusedElement else {
-            return status == .noValue ? .unavailable : .notTextInput
+        let focus = SystemFocus.focusedElement()
+        guard let element = focus.element else {
+            return focus.status == .noValue ? .unavailable : .notTextInput
         }
-
-        let element = focusedElement as! AXUIElement
         return Self.isTextInputElement(element) ? .found(element) : .notTextInput
     }
 
@@ -375,16 +366,9 @@ final class TextInsertionService: TextInsertionServiceProtocol {
             return
         }
 
-        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
-              let up = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else {
+        guard SystemKeyboard.post(keyCode, flags: flags) else {
             throw InsertError.cannotCreateEvent
         }
-
-        down.flags = flags
-        up.flags = flags
-
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
     }
 
     static func clipboardSnapshot(from items: [NSPasteboardItem]) -> ClipboardSnapshot {

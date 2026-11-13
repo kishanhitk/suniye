@@ -62,14 +62,7 @@ final class EditModeService: EditModeSelectionProviding {
     }
 
     nonisolated static func systemFocusedElement() -> AXUIElement? {
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedElement: AnyObject?
-        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement) == .success,
-              let focusedElement,
-              CFGetTypeID(focusedElement) == AXUIElementGetTypeID() else {
-            return nil
-        }
-        return (focusedElement as! AXUIElement)
+        SystemFocus.focusedElement().element
     }
 
     nonisolated static func selectedTextAttribute(of element: AXUIElement) -> String? {
@@ -120,16 +113,9 @@ final class EditModeService: EditModeSelectionProviding {
             return
         }
 
-        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
-              let up = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else {
+        guard SystemKeyboard.post(keyCode, flags: flags) else {
             throw CaptureError.cannotCreateEvent
         }
-
-        down.flags = flags
-        up.flags = flags
-
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
     }
 }
 
