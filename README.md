@@ -81,6 +81,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed st
 | | |
 |---|---|
 | **Transcripts** | Sessions, words dictated, time saved and where you dictate most, above a searchable log of every past transcription — copy or delete any entry |
+| **Meetings** | Record a call or a meeting in the room: a live transcript of your microphone and the call audio, then a summary from a template and your notes ([how it works](docs/MEETINGS.md)) |
 | **Magic Format** | Optional AI cleanup for punctuation, capitalization, and formatting |
 | **Per-app prompts** | Give each app its own Magic Format style — terse in chat, prose in notes |
 | **Edit Mode** | Select text anywhere, hold a second shortcut, and speak an instruction (“make this formal”) to rewrite it in place |
@@ -118,6 +119,7 @@ Suniye ships a curated catalog instead of a single fixed recognizer — from App
 - Transcription happens **entirely on your Mac**. Audio is processed in memory and never sent anywhere.
 - The only network calls are model downloads, update checks, optional pseudonymous usage stats (counts and timings — never your words, and opt-out in Settings), and issue reports you explicitly submit.
 - With Magic Format's on-device options, cleanup stays local too. Only the optional API provider sends text (never audio) off your Mac — and it's off by default.
+- Meetings stay on your Mac: no audio, transcript, notes or summary leaves it.
 
 ---
 
