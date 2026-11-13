@@ -1,17 +1,14 @@
 import Foundation
 
+/// Samples `start ..< end` of one track's audio file. A chunk holds no audio:
+/// the transcriber reads it from the file when it decodes.
 struct MeetingAudioChunk: Equatable, Sendable {
     let track: MeetingTrack
-    /// Sample position of the first sample in the track's audio file.
     let start: Int
-    let samples: [Float]
+    let end: Int
     /// False when no 100 ms window rose above `MeetingAudioFormat.silenceLevel`:
     /// the chunk is silence and is not decoded.
     let hasSound: Bool
-
-    var end: Int {
-        start + samples.count
-    }
 }
 
 /// Cuts one track into chunks while the meeting records. A chunk ends at the
@@ -88,16 +85,10 @@ struct MeetingSegmenter {
     /// Returns `pending[..<position]` as a chunk and analyzes the rest again
     /// as the start of the next chunk.
     private mutating func cut(at position: Int) -> MeetingAudioChunk {
-        let samples = Array(pending[..<position])
-        var hasSound = false
-        for start in stride(from: 0, to: samples.count, by: Self.windowSamples) {
-            let end = min(start + Self.windowSamples, samples.count)
-            if MeetingAudioFormat.rms(samples[start ..< end]) >= MeetingAudioFormat.silenceLevel {
-                hasSound = true
-                break
-            }
+        let hasSound = stride(from: 0, to: position, by: Self.windowSamples).contains { start in
+            MeetingAudioFormat.rms(pending[start ..< min(start + Self.windowSamples, position)]) >= MeetingAudioFormat.silenceLevel
         }
-        let chunk = MeetingAudioChunk(track: track, start: pendingStart, samples: samples, hasSound: hasSound)
+        let chunk = MeetingAudioChunk(track: track, start: pendingStart, end: pendingStart + position, hasSound: hasSound)
         pending.removeFirst(position)
         pendingStart += position
         analyzedWindows = 0

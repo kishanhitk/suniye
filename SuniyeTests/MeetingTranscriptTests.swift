@@ -215,6 +215,7 @@ final class MeetingTranscriberTests: XCTestCase {
         await transcriber.start()
 
         let audio = tone(2.5) + silence(0.5)
+        try writeAudio(audio, track: .you)
         transcriber.enqueue(.samples(.you, Array(audio[..<samples(1)]), position: 0))
         transcriber.enqueue(.samples(.you, Array(audio[samples(1)...]), position: samples(1)))
         let transcript = try await transcriber.finish()
@@ -232,6 +233,7 @@ final class MeetingTranscriberTests: XCTestCase {
         let transcriber = makeTranscriber(engine: engine, tracks: [.you], gate: gate)
         await transcriber.start()
 
+        try writeAudio(tone(2.5) + silence(0.5), track: .you)
         transcriber.enqueue(.samples(.you, tone(2.5) + silence(0.5), position: 0))
         try await Task.sleep(for: .milliseconds(200))
         let callsWhileHeld = await engine.decodedPeaks.count
@@ -248,6 +250,7 @@ final class MeetingTranscriberTests: XCTestCase {
         let transcriber = makeTranscriber(engine: engine, tracks: [.you])
         await transcriber.start()
 
+        try writeAudio(tone(1, level: 0.2) + tone(1, level: 0.4), track: .you)
         transcriber.enqueue(.samples(.you, tone(1, level: 0.2), position: 0))
         transcriber.enqueue(.paused)
         transcriber.enqueue(.samples(.you, tone(1, level: 0.4), position: samples(1)))

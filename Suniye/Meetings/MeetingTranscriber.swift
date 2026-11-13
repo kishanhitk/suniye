@@ -3,7 +3,9 @@ import Foundation
 /// Turns the audio of one meeting into stored transcript segments: while the
 /// meeting records, and later for a meeting that the app did not finish.
 ///
-/// - The recorder's output arrives in order through `enqueue`.
+/// - The recorder's output arrives in order through `enqueue`, after the
+///   recorder wrote it to the track's file. A chunk's audio is read from the
+///   file when it decodes, so chunks that wait hold no audio.
 /// - One chunk decodes at a time, the earliest first across both tracks,
 ///   through the speech engine that dictation uses.
 /// - A chunk whose decode fails is tried again after `retryDelay`: a decode
@@ -212,7 +214,8 @@ actor MeetingTranscriber {
         let id = ChunkID(track: chunk.track, start: chunk.start)
         let started = ContinuousClock.now
         do {
-            let text = try await engine.transcribe(samples: chunk.samples, sampleRate: MeetingAudioFormat.sampleRate, purpose: .meeting)
+            let samples = try MeetingAudioFileReader.samples(at: store.audioURL(chunk.track, for: meetingID), range: chunk.start ..< chunk.end)
+            let text = try await engine.transcribe(samples: samples, sampleRate: MeetingAudioFormat.sampleRate, purpose: .meeting)
             stats.decodeSeconds += (ContinuousClock.now - started) / .seconds(1)
             attempts[id] = nil
             await save(text, of: chunk)
