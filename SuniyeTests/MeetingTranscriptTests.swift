@@ -134,6 +134,13 @@ final class MeetingTranscriptRulesTests: XCTestCase {
         XCTAssertEqual(later, [mine, theirs])
         XCTAssertEqual(noCall, [mine])
     }
+
+    func testTheLiveViewDropsTheEchoAlsoAfterTheCallTrackFailed() {
+        let call = segment(.them, 0, 3, "We ship the release on Friday.")
+        let echo = segment(.you, 0.5, 2.5, "ship the release on friday")
+
+        XCTAssertEqual(MeetingTranscript.live([echo, call], callDecodedThrough: nil, callPlayedOnSpeakers: true), [call])
+    }
 }
 
 final class MeetingTranscriberTests: XCTestCase {
