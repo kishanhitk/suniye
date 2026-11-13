@@ -88,6 +88,18 @@ enum MagicFormatProvider: String, CaseIterable, Codable {
 }
 
 extension MagicFormatProvider {
+    /// The choice that names exactly this engine.
+    init(_ engine: MagicFormatEngine) {
+        switch engine {
+        case .appleFoundationModels:
+            self = .appleFoundationModels
+        case .localGemma:
+            self = .localGemma
+        case .openAICompatible:
+            self = .openAICompatible
+        }
+    }
+
     /// The engine whose settings apply. "Automatic" takes Apple Intelligence,
     /// then the local model, then the API endpoint. A chosen engine applies
     /// even while it cannot run.

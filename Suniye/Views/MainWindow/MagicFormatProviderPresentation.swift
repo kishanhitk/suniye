@@ -17,14 +17,7 @@ struct MagicFormatProviderPresenter {
         guard appState.llmProvider == .automatic else {
             return appState.llmProvider
         }
-        switch appState.activeMagicFormatEngine {
-        case .appleFoundationModels:
-            return .appleFoundationModels
-        case .localGemma:
-            return .localGemma
-        case .openAICompatible:
-            return .openAICompatible
-        }
+        return MagicFormatProvider(appState.activeMagicFormatEngine)
     }
 
     var topStatusText: String {

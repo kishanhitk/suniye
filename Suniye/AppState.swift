@@ -2328,39 +2328,55 @@ final class AppState {
 
     func testMagicFormatSetup(apiKeyDraft: String) async {
         clearMagicFormatSetupTestResult()
-
-        guard llmEnabled else {
+        guard llmEnabled,
+              let endpointURL = llmSettings.validatedEndpointURL,
+              let modelId = llmSettings.validatedModelId,
+              let apiKey = effectiveMagicFormatTestAPIKey(apiKeyDraft: apiKeyDraft) else {
             return
         }
-        guard let endpointURL = llmSettings.validatedEndpointURL else {
-            return
-        }
-        guard let modelId = llmSettings.validatedModelId else {
-            return
-        }
-        guard let apiKey = effectiveMagicFormatTestAPIKey(apiKeyDraft: apiKeyDraft) else {
-            return
-        }
-
-        let requestID = magicFormatSetupTestRequestID
-        isMagicFormatSetupTestInProgress = true
-        magicFormatTestingProvider = .openAICompatible
-        magicFormatLastTestedProvider = .openAICompatible
-        // The configuration this run actually used, so a success against an
-        // unsaved draft key, or against an endpoint or model that is then
-        // edited, cannot certify what is stored now.
-        magicFormatLastTestedAPIFingerprint = Self.apiConfigurationFingerprint(
-            keyFingerprint: apiKey.hashValue,
-            settings: llmSettings
-        )
+        // The configuration this run used, so that a success against an unsaved
+        // draft key, or against an endpoint or model edited later, cannot
+        // certify what is stored now.
+        let fingerprint = Self.apiConfigurationFingerprint(keyFingerprint: apiKey.hashValue, settings: llmSettings)
         let config = MagicFormatCoordinator.makeAPIConfig(
             settings: llmSettings,
             apiKey: apiKey,
             endpointURL: endpointURL,
             modelId: modelId
         )
-        let startTime = Date()
+        await runMagicFormatSetupTest(
+            .openAICompatible,
+            logName: "magic format",
+            logDetail: " model=\(config.modelId)",
+            successMessage: "Connection works.",
+            testedAPIFingerprint: fingerprint,
+            failure: { [weak self] error in
+                guard let error = error as? LLMPostProcessorError else {
+                    return ("Couldn't reach that service URL.", " reason=unknown")
+                }
+                return (self?.magicFormatSetupTestMessage(for: error) ?? "", " reason=\(error.logValue)")
+            }
+        ) { [llmPostProcessor] in
+            try await llmPostProcessor.testSetup(config: config)
+        }
+    }
 
+    /// Runs one engine's setup test. Only the newest test may write the result.
+    private func runMagicFormatSetupTest(
+        _ engine: MagicFormatEngine,
+        logName: String,
+        logDetail: String = "",
+        successMessage: String,
+        testedAPIFingerprint: Int? = nil,
+        failure: (Error) -> (message: String, logDetail: String),
+        test: () async throws -> Void
+    ) async {
+        let requestID = magicFormatSetupTestRequestID
+        isMagicFormatSetupTestInProgress = true
+        magicFormatTestingProvider = MagicFormatProvider(engine)
+        magicFormatLastTestedProvider = MagicFormatProvider(engine)
+        magicFormatLastTestedAPIFingerprint = testedAPIFingerprint
+        let startTime = Date()
         defer {
             if requestID == magicFormatSetupTestRequestID {
                 isMagicFormatSetupTestInProgress = false
@@ -2369,40 +2385,23 @@ final class AppState {
         }
 
         do {
-            try await llmPostProcessor.testSetup(config: config)
+            try await test()
             guard requestID == magicFormatSetupTestRequestID else {
-                AppLogger.shared.log(.info, "ignored stale magic format setup test success")
+                AppLogger.shared.log(.info, "ignored stale \(logName) setup test success")
                 return
             }
             let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            magicFormatSetupTestResult = MagicFormatSetupTestResult(
-                message: "Connection works.",
-                severity: .success,
-                latencyMs: latencyMs
-            )
-            AppLogger.shared.log(.info, "magic format setup test success model=\(config.modelId) latency_ms=\(latencyMs)")
-        } catch let error as LLMPostProcessorError {
-            guard requestID == magicFormatSetupTestRequestID else {
-                AppLogger.shared.log(.info, "ignored stale magic format setup test failure reason=\(error.logValue)")
-                return
-            }
-            magicFormatSetupTestResult = MagicFormatSetupTestResult(
-                message: magicFormatSetupTestMessage(for: error),
-                severity: .error
-            )
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            AppLogger.shared.log(.warning, "magic format setup test failed reason=\(error.logValue) model=\(config.modelId) latency_ms=\(latencyMs)")
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(message: successMessage, severity: .success, latencyMs: latencyMs)
+            AppLogger.shared.log(.info, "\(logName) setup test success\(logDetail) latency_ms=\(latencyMs)")
         } catch {
+            let (message, failureLogDetail) = failure(error)
             guard requestID == magicFormatSetupTestRequestID else {
-                AppLogger.shared.log(.info, "ignored stale magic format setup test failure reason=unknown")
+                AppLogger.shared.log(.info, "ignored stale \(logName) setup test failure\(failureLogDetail)")
                 return
             }
-            magicFormatSetupTestResult = MagicFormatSetupTestResult(
-                message: "Couldn't reach that service URL.",
-                severity: .error
-            )
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(message: message, severity: .error)
             let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            AppLogger.shared.log(.warning, "magic format setup test failed reason=unknown model=\(config.modelId) latency_ms=\(latencyMs)")
+            AppLogger.shared.log(.warning, "\(logName) setup test failed\(failureLogDetail)\(logDetail) latency_ms=\(latencyMs)")
         }
     }
 
@@ -2663,113 +2662,43 @@ final class AppState {
     /// answerable before committing to it.
     func testAppleMagicFormatSetup() async {
         clearMagicFormatSetupTestResult()
-
         guard llmEnabled else {
             return
         }
-
         guard appleMagicFormatAvailability.isAvailable else {
-            magicFormatSetupTestResult = MagicFormatSetupTestResult(
-                message: appleMagicFormatAvailability.statusText,
-                severity: .error
-            )
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(message: appleMagicFormatAvailability.statusText, severity: .error)
             return
         }
-
-        let requestID = magicFormatSetupTestRequestID
-        isMagicFormatSetupTestInProgress = true
-        magicFormatTestingProvider = .appleFoundationModels
-        magicFormatLastTestedProvider = .appleFoundationModels
-        let startTime = Date()
         let config = MagicFormatCoordinator.makeAppleConfig(settings: llmSettings)
-
-        defer {
-            if requestID == magicFormatSetupTestRequestID {
-                isMagicFormatSetupTestInProgress = false
-                magicFormatTestingProvider = nil
-            }
-        }
-
-        do {
+        await runMagicFormatSetupTest(
+            .appleFoundationModels,
+            logName: "apple",
+            successMessage: "Apple Intelligence works.",
+            failure: { error in (error.localizedDescription, "") }
+        ) { [appleMagicFormatPostProcessor] in
             try await appleMagicFormatPostProcessor.testSetup(config: config)
-            guard requestID == magicFormatSetupTestRequestID else {
-                AppLogger.shared.log(.info, "ignored stale apple setup test success")
-                return
-            }
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            magicFormatSetupTestResult = MagicFormatSetupTestResult(
-                message: "Apple Intelligence works.",
-                severity: .success,
-                latencyMs: latencyMs
-            )
-            AppLogger.shared.log(.info, "apple setup test success latency_ms=\(latencyMs)")
-        } catch {
-            guard requestID == magicFormatSetupTestRequestID else {
-                AppLogger.shared.log(.info, "ignored stale apple setup test failure")
-                return
-            }
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            magicFormatSetupTestResult = MagicFormatSetupTestResult(
-                message: error.localizedDescription,
-                severity: .error
-            )
-            AppLogger.shared.log(.warning, "apple setup test failed latency_ms=\(latencyMs)")
         }
     }
 
     func testLocalGemmaSetup() async {
         clearMagicFormatSetupTestResult()
-
         guard llmEnabled else {
             return
         }
-
         guard localGemmaInstallState.isInstalled else {
-            magicFormatSetupTestResult = MagicFormatSetupTestResult(
-                message: "Download the local model first.",
-                severity: .error
-            )
+            magicFormatSetupTestResult = MagicFormatSetupTestResult(message: "Download the local model first.", severity: .error)
             return
         }
-
-        let requestID = magicFormatSetupTestRequestID
-        isMagicFormatSetupTestInProgress = true
-        magicFormatTestingProvider = .localGemma
-        magicFormatLastTestedProvider = .localGemma
-        let startTime = Date()
         let config = MagicFormatCoordinator.makeLocalGemmaConfig(settings: llmSettings)
-
-        defer {
-            if requestID == magicFormatSetupTestRequestID {
-                isMagicFormatSetupTestInProgress = false
-                magicFormatTestingProvider = nil
+        await runMagicFormatSetupTest(
+            .localGemma,
+            logName: "local gemma",
+            successMessage: "Local model works.",
+            failure: { [weak self] error in
+                (self?.localGemmaSetupTestMessage(for: error) ?? "", " error=\(error.localizedDescription)")
             }
-        }
-
-        do {
+        ) { [localGemmaMagicFormatPostProcessor] in
             try await localGemmaMagicFormatPostProcessor.testSetup(config: config)
-            guard requestID == magicFormatSetupTestRequestID else {
-                AppLogger.shared.log(.info, "ignored stale local gemma setup test success")
-                return
-            }
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            magicFormatSetupTestResult = MagicFormatSetupTestResult(
-                message: "Local model works.",
-                severity: .success,
-                latencyMs: latencyMs
-            )
-            AppLogger.shared.log(.info, "local gemma setup test success latency_ms=\(latencyMs)")
-        } catch {
-            guard requestID == magicFormatSetupTestRequestID else {
-                AppLogger.shared.log(.info, "ignored stale local gemma setup test failure")
-                return
-            }
-            magicFormatSetupTestResult = MagicFormatSetupTestResult(
-                message: localGemmaSetupTestMessage(for: error),
-                severity: .error
-            )
-            let latencyMs = Int(Date().timeIntervalSince(startTime) * 1000)
-            AppLogger.shared.log(.warning, "local gemma setup test failed latency_ms=\(latencyMs) error=\(error.localizedDescription)")
         }
     }
 
