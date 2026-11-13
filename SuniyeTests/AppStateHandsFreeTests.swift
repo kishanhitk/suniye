@@ -1,4 +1,5 @@
 import Carbon
+import Observation
 import SuniyeAnalytics
 import XCTest
 @testable import Suniye
@@ -107,6 +108,25 @@ final class AppStateHandsFreeTests: XCTestCase {
             if case let .dictationCompleted(metrics) = event { return metrics.source }
             return nil
         }
+    }
+
+    /// The main window pages and the status menu observe the settings value,
+    /// so a dictation must not write it.
+    func testHeldDictationDoesNotWriteTheSettings() async {
+        let appState = await readyState()
+        var settingsChanged = false
+        withObservationTracking {
+            _ = appState.generalSettings
+        } onChange: {
+            settingsChanged = true
+        }
+
+        await press(at: 0)
+        await release(at: 1_000)
+        await waitUntil { appState.phase == .ready && insertion.insertedTexts.count == 1 }
+
+        XCTAssertEqual(insertion.insertedTexts.count, 1)
+        XCTAssertFalse(settingsChanged)
     }
 
     func testAnalyticsTellALockedDictationFromAHeldOne() async {

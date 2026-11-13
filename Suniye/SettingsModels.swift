@@ -468,80 +468,9 @@ struct GeneralSettings: Codable, Equatable {
     /// Opt-out toggle for anonymous usage analytics. Default on; disclosed in
     /// onboarding and controllable in Settings. When false, nothing is emitted.
     var shareAnalyticsEnabled: Bool = true
+}
 
-    init(
-        preferredInputDeviceID: String? = nil,
-        preferredInputDeviceName: String? = nil,
-        autoSubmitEnabled: Bool = false,
-        hotkeyConfiguration: HotkeyConfiguration = .globe,
-        pasteLastTranscriptHotkeyConfiguration: HotkeyConfiguration = .pasteLastTranscriptDefault,
-        editModeHotkeyConfiguration: HotkeyConfiguration? = nil,
-        echoCancellationEnabled: Bool = false,
-        soundFeedbackEnabled: Bool = false,
-        hideFloatingIndicatorWhenIdle: Bool = false,
-        liveTranscriptionPreviewEnabled: Bool = false,
-        floatingIndicatorPlacement: FloatingIndicatorPlacement? = nil,
-        hasSeenOnboardingWelcome: Bool? = nil,
-        hasCompletedCoreOnboarding: Bool? = nil,
-        onboardingProgress: OnboardingProgress? = nil,
-        firstLaunchRecorded: Bool = false,
-        lastKnownAccessibilityGranted: Bool = false,
-        magicFormatNudgeDismissed: Bool = false,
-        localGemmaDownloadCancelled: Bool = false,
-        selectedASRModelID: ASRModelID = .parakeetV3,
-        updateChannel: UpdateChannel = .stable,
-        accessibilityDragHelperEnabled: Bool = true,
-        shareAnalyticsEnabled: Bool = true
-    ) {
-        self.preferredInputDeviceID = preferredInputDeviceID
-        self.preferredInputDeviceName = preferredInputDeviceName
-        self.autoSubmitEnabled = autoSubmitEnabled
-        self.hotkeyConfiguration = hotkeyConfiguration
-        self.pasteLastTranscriptHotkeyConfiguration = pasteLastTranscriptHotkeyConfiguration
-        self.editModeHotkeyConfiguration = editModeHotkeyConfiguration
-        self.echoCancellationEnabled = echoCancellationEnabled
-        self.soundFeedbackEnabled = soundFeedbackEnabled
-        self.hideFloatingIndicatorWhenIdle = hideFloatingIndicatorWhenIdle
-        self.liveTranscriptionPreviewEnabled = liveTranscriptionPreviewEnabled
-        self.floatingIndicatorPlacement = floatingIndicatorPlacement
-        self.hasSeenOnboardingWelcome = hasSeenOnboardingWelcome
-        self.hasCompletedCoreOnboarding = hasCompletedCoreOnboarding
-        self.onboardingProgress = onboardingProgress
-        self.firstLaunchRecorded = firstLaunchRecorded
-        self.lastKnownAccessibilityGranted = lastKnownAccessibilityGranted
-        self.magicFormatNudgeDismissed = magicFormatNudgeDismissed
-        self.localGemmaDownloadCancelled = localGemmaDownloadCancelled
-        self.selectedASRModelID = selectedASRModelID
-        self.updateChannel = updateChannel
-        self.accessibilityDragHelperEnabled = accessibilityDragHelperEnabled
-        self.shareAnalyticsEnabled = shareAnalyticsEnabled
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case preferredInputDeviceID
-        case preferredInputDeviceName
-        case autoSubmitEnabled
-        case hotkeyConfiguration
-        case pasteLastTranscriptHotkeyConfiguration
-        case editModeHotkeyConfiguration
-        case echoCancellationEnabled
-        case soundFeedbackEnabled
-        case hideFloatingIndicatorWhenIdle
-        case liveTranscriptionPreviewEnabled
-        case floatingIndicatorPlacement
-        case hasSeenOnboardingWelcome
-        case hasCompletedCoreOnboarding
-        case onboardingProgress
-        case firstLaunchRecorded
-        case lastKnownAccessibilityGranted
-        case magicFormatNudgeDismissed
-        case localGemmaDownloadCancelled
-        case selectedASRModelID
-        case updateChannel
-        case accessibilityDragHelperEnabled
-        case shareAnalyticsEnabled
-    }
-
+extension GeneralSettings {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         preferredInputDeviceID = try container.decodeIfPresent(String.self, forKey: .preferredInputDeviceID)
@@ -574,6 +503,130 @@ struct GeneralSettings: Codable, Equatable {
         updateChannel = storedUpdateChannel.flatMap(UpdateChannel.init(rawValue:)) ?? .stable
         accessibilityDragHelperEnabled = try container.decodeIfPresent(Bool.self, forKey: .accessibilityDragHelperEnabled) ?? true
         shareAnalyticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .shareAnalyticsEnabled) ?? true
+    }
+}
+
+extension GeneralSettings {
+    var hotkeys: HotkeyBindings {
+        get {
+            HotkeyBindings(
+                dictation: hotkeyConfiguration,
+                pasteLastTranscript: pasteLastTranscriptHotkeyConfiguration,
+                editMode: editModeHotkeyConfiguration
+            )
+        }
+        set {
+            hotkeyConfiguration = newValue.dictation
+            pasteLastTranscriptHotkeyConfiguration = newValue.pasteLastTranscript
+            editModeHotkeyConfiguration = newValue.editMode
+        }
+    }
+
+    /// The legacy Bools are still written so that a downgraded build keeps working.
+    mutating func setOnboardingProgress(_ progress: OnboardingProgress) {
+        onboardingProgress = progress
+        hasSeenOnboardingWelcome = progress != .notStarted
+        hasCompletedCoreOnboarding = progress.isFinished
+    }
+
+    /// The settings as this build uses them: onboarding migrated from the legacy
+    /// flags, and the three shortcuts made distinct. `needsSave` is true when
+    /// the stored value is out of date.
+    func normalized(legacyUserShowsUsage: Bool) -> (settings: GeneralSettings, needsSave: Bool) {
+        var settings = self
+        settings.hotkeys = hotkeys.normalized()
+        let needsFirstLaunchMigration = onboardingProgress == nil
+            && (hasSeenOnboardingWelcome == true || hasCompletedCoreOnboarding == true || legacyUserShowsUsage)
+        settings.firstLaunchRecorded = firstLaunchRecorded || needsFirstLaunchMigration
+        settings.setOnboardingProgress(onboardingProgress ?? .migrating(
+            hasSeenOnboardingWelcome: hasSeenOnboardingWelcome,
+            hasCompletedCoreOnboarding: hasCompletedCoreOnboarding,
+            legacyUserShowsUsage: legacyUserShowsUsage
+        ))
+        let needsSave = onboardingProgress == nil || needsFirstLaunchMigration || settings.hotkeys != hotkeys
+        return (settings, needsSave)
+    }
+}
+
+/// The three global shortcuts. No two of them may be the same.
+struct HotkeyBindings: Equatable {
+    enum Rejection: Error, Equatable {
+        case dictationMatchesPasteLastTranscript
+        case pasteLastTranscriptNeedsModifier
+        case pasteLastTranscriptMatchesDictation
+        case pasteLastTranscriptMatchesEditMode
+        case editModeMatchesDictation
+        case editModeMatchesPasteLastTranscript
+    }
+
+    var dictation: HotkeyConfiguration
+    var pasteLastTranscript: HotkeyConfiguration
+    /// nil turns Edit Mode off.
+    var editMode: HotkeyConfiguration?
+
+    /// A new dictation shortcut takes over an Edit Mode shortcut that matches it.
+    func settingDictation(_ configuration: HotkeyConfiguration) -> Result<HotkeyBindings, Rejection> {
+        guard configuration != pasteLastTranscript else {
+            return .failure(.dictationMatchesPasteLastTranscript)
+        }
+        var bindings = self
+        bindings.dictation = configuration
+        if editMode == configuration {
+            bindings.editMode = nil
+        }
+        return .success(bindings)
+    }
+
+    func settingPasteLastTranscript(_ configuration: HotkeyConfiguration) -> Result<HotkeyBindings, Rejection> {
+        guard configuration != pasteLastTranscript else {
+            return .success(self)
+        }
+        guard configuration.isModifiedKeyCombo else {
+            return .failure(.pasteLastTranscriptNeedsModifier)
+        }
+        guard configuration != dictation else {
+            return .failure(.pasteLastTranscriptMatchesDictation)
+        }
+        guard configuration != editMode else {
+            return .failure(.pasteLastTranscriptMatchesEditMode)
+        }
+        var bindings = self
+        bindings.pasteLastTranscript = configuration
+        return .success(bindings)
+    }
+
+    func settingEditMode(_ configuration: HotkeyConfiguration?) -> Result<HotkeyBindings, Rejection> {
+        if let configuration, configuration != editMode {
+            guard configuration != dictation else {
+                return .failure(.editModeMatchesDictation)
+            }
+            guard configuration != pasteLastTranscript else {
+                return .failure(.editModeMatchesPasteLastTranscript)
+            }
+        }
+        var bindings = self
+        bindings.editMode = configuration
+        return .success(bindings)
+    }
+
+    /// Stored settings from older builds can hold colliding shortcuts. Paste Last
+    /// Transcript moves to the first free ⌃⌘V variant, and a colliding Edit Mode
+    /// shortcut is turned off.
+    func normalized() -> HotkeyBindings {
+        let fallbackModifiers: [UInt32] = [
+            UInt32(controlKey | cmdKey),
+            UInt32(controlKey | optionKey | cmdKey),
+            UInt32(controlKey | shiftKey | cmdKey),
+            UInt32(controlKey | optionKey | shiftKey | cmdKey),
+        ]
+        let candidates = [pasteLastTranscript] + fallbackModifiers.map {
+            HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: $0)
+        }
+        let pasteLastTranscript = candidates.first { candidate in
+            candidate.isModifiedKeyCombo && candidate != dictation && candidate != editMode
+        } ?? .pasteLastTranscriptDefault
+        let editMode = editMode == dictation || editMode == pasteLastTranscript ? nil : editMode
+        return HotkeyBindings(dictation: dictation, pasteLastTranscript: pasteLastTranscript, editMode: editMode)
     }
 }
 

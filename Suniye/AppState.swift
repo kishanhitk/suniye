@@ -209,22 +209,84 @@ final class AppState {
     var statusText = "Initializing..."
     var lastError: String?
 
+    /// Every change goes through `updateGeneralSettings`, which saves it and
+    /// applies its effects in `generalSettingsDidChange(from:)`.
+    private(set) var generalSettings = GeneralSettings()
+
+    var selectedInputDeviceID: String? {
+        get { generalSettings.preferredInputDeviceID }
+        set { selectInputDevice(id: newValue) }
+    }
+    var preferredInputDeviceName: String? { generalSettings.preferredInputDeviceName }
+    var autoSubmitEnabled: Bool {
+        get { generalSettings.autoSubmitEnabled }
+        set { updateGeneralSettings { $0.autoSubmitEnabled = newValue } }
+    }
+    var echoCancellationEnabled: Bool {
+        get { generalSettings.echoCancellationEnabled }
+        set { updateGeneralSettings { $0.echoCancellationEnabled = newValue } }
+    }
+    var soundFeedbackEnabled: Bool {
+        get { generalSettings.soundFeedbackEnabled }
+        set { updateGeneralSettings { $0.soundFeedbackEnabled = newValue } }
+    }
+    /// Opt-out toggle for anonymous usage analytics (default on).
+    var shareAnalyticsEnabled: Bool {
+        get { generalSettings.shareAnalyticsEnabled }
+        set { updateGeneralSettings { $0.shareAnalyticsEnabled = newValue } }
+    }
+    var hideFloatingIndicatorWhenIdle: Bool {
+        get { generalSettings.hideFloatingIndicatorWhenIdle }
+        set { updateGeneralSettings { $0.hideFloatingIndicatorWhenIdle = newValue } }
+    }
+    var liveTranscriptionPreviewEnabled: Bool {
+        get { generalSettings.liveTranscriptionPreviewEnabled }
+        set { updateGeneralSettings { $0.liveTranscriptionPreviewEnabled = newValue } }
+    }
+    /// Kill switch for the Permiso drag-to-grant Accessibility overlay.
+    /// When false, the Accessibility buttons fall back to the System Settings deep-link.
+    var accessibilityDragHelperEnabled: Bool {
+        get { generalSettings.accessibilityDragHelperEnabled }
+        set { updateGeneralSettings { $0.accessibilityDragHelperEnabled = newValue } }
+    }
+    var floatingIndicatorPlacement: FloatingIndicatorPlacement? {
+        get { generalSettings.floatingIndicatorPlacement }
+        set { updateGeneralSettings { $0.floatingIndicatorPlacement = newValue } }
+    }
+    var selectedASRModelID: ASRModelID {
+        get { generalSettings.selectedASRModelID }
+        set { updateGeneralSettings { $0.selectedASRModelID = newValue } }
+    }
+    var updateChannel: UpdateChannel {
+        get { generalSettings.updateChannel }
+        set { updateGeneralSettings { $0.updateChannel = newValue } }
+    }
+    var hotkeyConfiguration: HotkeyConfiguration {
+        get { generalSettings.hotkeyConfiguration }
+        set { changeHotkeys(generalSettings.hotkeys.settingDictation(newValue)) }
+    }
+    var pasteLastTranscriptHotkeyConfiguration: HotkeyConfiguration {
+        generalSettings.pasteLastTranscriptHotkeyConfiguration
+    }
+    var editModeHotkeyConfiguration: HotkeyConfiguration? {
+        get { generalSettings.editModeHotkeyConfiguration }
+        set { changeHotkeys(generalSettings.hotkeys.settingEditMode(newValue)) }
+    }
+    var hotkeyValidationMessage: String?
+    /// Every transition goes through the onboarding functions, so that
+    /// persistence, analytics and the active step agree.
+    var onboardingProgress: OnboardingProgress {
+        generalSettings.onboardingProgress ?? .notStarted
+    }
+    var hasSeenOnboardingWelcome: Bool { onboardingProgress != .notStarted }
+    var hasCompletedCoreOnboarding: Bool { onboardingProgress.isFinished }
+
     var canCheckForUpdates = false
     var isUpdateReadyToInstall = false
     var canRestartToUpdate: Bool {
         isUpdateReadyToInstall && !isCapturing
     }
     var automaticallyChecksForUpdates = false
-    var updateChannel: UpdateChannel = .stable {
-        didSet {
-            guard !isHydratingGeneralSettings, oldValue != updateChannel else {
-                return
-            }
-
-            persistGeneralSettings()
-            applyUpdateChannelToController()
-        }
-    }
     var appVersionText: String {
         currentAppVersionProvider()?.displayString ?? "Unknown"
     }
@@ -258,22 +320,6 @@ final class AppState {
     }
 
     var availableInputDevices: [AudioInputDevice] = []
-    private(set) var preferredInputDeviceName: String?
-    var selectedInputDeviceID: String? {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            if let selectedInputDeviceID,
-               let selected = availableInputDevices.first(where: { $0.id == selectedInputDeviceID && $0.availability != .notConnected }) {
-                preferredInputDeviceName = selected.name
-            } else if selectedInputDeviceID == nil {
-                preferredInputDeviceName = nil
-            }
-            persistGeneralSettings()
-            refreshAudioRouteSnapshot()
-        }
-    }
     private(set) var audioRouteSnapshot: AudioRouteSnapshot? {
         didSet {
             if audioRouteSnapshot != nil {
@@ -283,210 +329,7 @@ final class AppState {
     }
     /// Why no microphone can record, while `audioRouteSnapshot` is nil.
     private(set) var audioRouteErrorText: String?
-    var autoSubmitEnabled = false {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            persistGeneralSettings()
-            analytics.track(.featureToggled(feature: .autoSubmit, enabled: autoSubmitEnabled))
-        }
-    }
-    var echoCancellationEnabled = false {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            persistGeneralSettings()
-            analytics.track(.featureToggled(feature: .echoCancellation, enabled: echoCancellationEnabled))
-            refreshAudioRouteSnapshot()
-        }
-    }
-    var soundFeedbackEnabled = false {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            persistGeneralSettings()
-            analytics.track(.featureToggled(feature: .soundFeedback, enabled: soundFeedbackEnabled))
-        }
-    }
-    /// Opt-out toggle for anonymous usage analytics (default on).
-    var shareAnalyticsEnabled = true {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            guard oldValue != shareAnalyticsEnabled else {
-                return
-            }
-            persistGeneralSettings()
-            analytics.setEnabled(shareAnalyticsEnabled)
-        }
-    }
-    var hideFloatingIndicatorWhenIdle = false {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            guard oldValue != hideFloatingIndicatorWhenIdle else {
-                return
-            }
-            persistGeneralSettings()
-            syncFloatingIndicatorPreferences()
-        }
-    }
-    var liveTranscriptionPreviewEnabled = false {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            guard oldValue != liveTranscriptionPreviewEnabled else {
-                return
-            }
-            if !liveTranscriptionPreviewEnabled {
-                // Take effect immediately when toggled off mid-recording;
-                // re-enabling applies from the next recording.
-                stopLivePreview()
-            }
-            persistGeneralSettings()
-        }
-    }
-    /// Kill switch for the Permiso drag-to-grant Accessibility overlay.
-    /// When false, the Accessibility buttons fall back to the System Settings deep-link.
-    var accessibilityDragHelperEnabled = true {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            guard oldValue != accessibilityDragHelperEnabled else {
-                return
-            }
-            persistGeneralSettings()
-        }
-    }
-    var floatingIndicatorPlacement: FloatingIndicatorPlacement? {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            guard oldValue != floatingIndicatorPlacement else {
-                return
-            }
-            persistGeneralSettings()
-            syncFloatingIndicatorPreferences()
-        }
-    }
-    var hotkeyConfiguration: HotkeyConfiguration = .globe {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            guard oldValue != hotkeyConfiguration else {
-                return
-            }
-            guard hotkeyConfiguration != pasteLastTranscriptHotkeyConfiguration else {
-                hotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
-                return
-            }
-            hotkeyValidationMessage = nil
-            // Collision policy lives at this settings boundary: the Edit Mode slot always yields.
-            if editModeHotkeyConfiguration == hotkeyConfiguration {
-                editModeHotkeyConfiguration = nil
-                AppLogger.shared.log(.warning, "edit mode hotkey cleared: matched new dictation hotkey")
-                showTransientIndicatorError("Edit Mode shortcut cleared: it matched dictation")
-            }
-            persistGeneralSettings()
-            if runtimeServicesEnabled {
-                wireHotkey()
-            }
-        }
-    }
-    private(set) var pasteLastTranscriptHotkeyConfiguration: HotkeyConfiguration = .pasteLastTranscriptDefault {
-        didSet {
-            guard !isHydratingGeneralSettings, oldValue != pasteLastTranscriptHotkeyConfiguration else {
-                return
-            }
-            guard pasteLastTranscriptHotkeyConfiguration.isModifiedKeyCombo else {
-                pasteLastTranscriptHotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Paste Last Transcript requires at least one modifier key."
-                return
-            }
-            guard pasteLastTranscriptHotkeyConfiguration != hotkeyConfiguration else {
-                pasteLastTranscriptHotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
-                return
-            }
-            guard pasteLastTranscriptHotkeyConfiguration != editModeHotkeyConfiguration else {
-                pasteLastTranscriptHotkeyConfiguration = oldValue
-                hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
-                return
-            }
-            hotkeyValidationMessage = nil
-            persistGeneralSettings()
-            if runtimeServicesEnabled {
-                wireHotkey()
-            }
-            if isShowingInsertionRecoveryWarning {
-                showInsertionRecoveryWarning()
-            }
-        }
-    }
-    var hotkeyValidationMessage: String?
-    var editModeHotkeyConfiguration: HotkeyConfiguration? {
-        didSet {
-            guard !isHydratingGeneralSettings, oldValue != editModeHotkeyConfiguration else {
-                return
-            }
-            if let editModeHotkeyConfiguration {
-                if editModeHotkeyConfiguration == hotkeyConfiguration {
-                    self.editModeHotkeyConfiguration = oldValue == hotkeyConfiguration ? nil : oldValue
-                    AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches dictation hotkey")
-                    showTransientIndicatorError("Edit Mode shortcut must differ from dictation")
-                    return
-                }
-                if editModeHotkeyConfiguration == pasteLastTranscriptHotkeyConfiguration {
-                    self.editModeHotkeyConfiguration = oldValue == pasteLastTranscriptHotkeyConfiguration ? nil : oldValue
-                    hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
-                    AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches paste last transcript hotkey")
-                    showTransientIndicatorError("Edit Mode shortcut must differ from Paste Last Transcript")
-                    return
-                }
-            }
-            hotkeyValidationMessage = nil
-            persistGeneralSettings()
-            if runtimeServicesEnabled {
-                wireHotkey()
-            }
-        }
-    }
-    var selectedASRModelID: ASRModelID = .parakeetV3 {
-        didSet {
-            guard !isHydratingGeneralSettings else {
-                return
-            }
-            guard oldValue != selectedASRModelID else {
-                return
-            }
-            persistGeneralSettings()
-        }
-    }
-    /// Single persisted onboarding position. Private setter: every transition
-    /// goes through the state-machine funcs so persistence, analytics, and the
-    /// active step can never disagree.
-    private(set) var onboardingProgress: OnboardingProgress = .notStarted {
-        didSet {
-            guard !isHydratingGeneralSettings, oldValue != onboardingProgress else {
-                return
-            }
-            persistGeneralSettings()
-        }
-    }
 
-    /// Legacy accessors kept for read sites (diagnostics, tests).
-    var hasSeenOnboardingWelcome: Bool { onboardingProgress != .notStarted }
-    var hasCompletedCoreOnboarding: Bool { onboardingProgress.isFinished }
 
     var activeOnboardingStep: OnboardingStep? {
         didSet {
@@ -544,16 +387,6 @@ final class AppState {
     @ObservationIgnored private var onboardingPracticeTranscript: String?
     @ObservationIgnored private var onboardingPracticeEdited = false
     @ObservationIgnored private var hasTrackedMagicFormatNudgeShown = false
-    @ObservationIgnored private var firstLaunchRecorded = false
-    @ObservationIgnored private var lastKnownAccessibilityGranted = false
-    private var magicFormatNudgeDismissed = false {
-        didSet {
-            guard !isHydratingGeneralSettings, oldValue != magicFormatNudgeDismissed else {
-                return
-            }
-            persistGeneralSettings()
-        }
-    }
 
     var hasMicPermission = false
     /// True when the mic authorization is `.denied`/`.restricted` — the system
@@ -1435,7 +1268,7 @@ final class AppState {
     var shouldShowMagicFormatNudge: Bool {
         onboardingProgress.isFinished
             && !llmEnabled
-            && !magicFormatNudgeDismissed
+            && !generalSettings.magicFormatNudgeDismissed
             && recentResults.count >= 3
     }
 
@@ -1451,7 +1284,7 @@ final class AppState {
 
     func dismissMagicFormatNudge() {
         analytics.track(.mfNudge(action: .dismissed))
-        magicFormatNudgeDismissed = true
+        updateGeneralSettings { $0.magicFormatNudgeDismissed = true }
     }
 
     /// The nudge's CTA: records the open, retires the card, and hands the
@@ -1459,7 +1292,7 @@ final class AppState {
     /// page, which already handles provider choice, unavailability, and repair).
     func openMagicFormatSetupFromNudge() -> MainWindowSection {
         analytics.track(.mfNudge(action: .opened))
-        magicFormatNudgeDismissed = true
+        updateGeneralSettings { $0.magicFormatNudgeDismissed = true }
         return .style
     }
 
@@ -1681,16 +1514,7 @@ final class AppState {
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
     private var localGemmaDownloadStartedAt: Date?
-    private var localGemmaDownloadCancelled = false {
-        didSet {
-            guard !isHydratingGeneralSettings, oldValue != localGemmaDownloadCancelled else {
-                return
-            }
-            persistGeneralSettings()
-        }
-    }
     private var isHydratingLLMSettings = false
-    private var isHydratingGeneralSettings = false
     private var isHydratingHistory = false
     private let llmE2EMode: LLME2EMode
     private enum DictationDestination: Equatable {
@@ -1922,13 +1746,12 @@ final class AppState {
         analytics.track(.appLaunch(
             device: DeviceProfileReader.read(),
             settings: analyticsSettingsSnapshot(),
-            firstLaunch: !firstLaunchRecorded
+            firstLaunch: !generalSettings.firstLaunchRecorded
         ))
-        if !firstLaunchRecorded {
+        if !generalSettings.firstLaunchRecorded {
             // Dedicated flag (not the onboarding position): quitting on the
             // welcome screen must not re-count as a new install next launch.
-            firstLaunchRecorded = true
-            persistGeneralSettings()
+            updateGeneralSettings { $0.firstLaunchRecorded = true }
         }
     }
 
@@ -2233,7 +2056,7 @@ final class AppState {
     }
 
     private func setOnboardingProgress(_ progress: OnboardingProgress) {
-        onboardingProgress = progress
+        updateGeneralSettings { $0.setOnboardingProgress(progress) }
     }
 
     /// One emission point for onboarding_step, deduped per run so launch-resume
@@ -2337,12 +2160,9 @@ final class AppState {
         if hasAccessibilityPermission {
             accessibilityGrantLikelyStale = false
             accessibilityAssistTimedOut = false
-            if !lastKnownAccessibilityGranted {
-                lastKnownAccessibilityGranted = true
-                persistGeneralSettings()
-            }
+            updateGeneralSettings { $0.lastKnownAccessibilityGranted = true }
         } else {
-            accessibilityGrantLikelyStale = lastKnownAccessibilityGranted
+            accessibilityGrantLikelyStale = generalSettings.lastKnownAccessibilityGranted
         }
     }
 
@@ -2356,7 +2176,7 @@ final class AppState {
         // Stale TCC entry (post-update): Suniye is already in the Accessibility
         // list, just untrusted. The drag overlay's "drag Suniye into the list"
         // instruction would mislead; deep-link with remove-and-re-add copy instead.
-        if lastKnownAccessibilityGranted, !hasAccessibilityPermission {
+        if generalSettings.lastKnownAccessibilityGranted, !hasAccessibilityPermission {
             accessibilityGrantLikelyStale = true
             openAccessibilityPrivacySettings()
             return
@@ -2469,10 +2289,7 @@ final class AppState {
         if let selectedInputDeviceID,
            let selected = devices.first(where: { $0.id == selectedInputDeviceID }),
            preferredInputDeviceName != selected.name {
-            preferredInputDeviceName = selected.name
-            if !isHydratingGeneralSettings {
-                persistGeneralSettings()
-            }
+            updateGeneralSettings { $0.preferredInputDeviceName = selected.name }
         }
         if let selectedInputDeviceID,
            !devices.contains(where: { $0.id == selectedInputDeviceID }) {
@@ -2841,7 +2658,7 @@ final class AppState {
 
         let modelID = localLLMModelManager.preferredModelID
         let entry = localGemmaCatalogEntry(for: modelID)
-        localGemmaDownloadCancelled = false
+        updateGeneralSettings { $0.localGemmaDownloadCancelled = false }
         localGemmaInstallState = .downloading(LocalLLMDownloadProgress(
             fractionCompleted: 0,
             downloadedBytes: 0,
@@ -2903,7 +2720,7 @@ final class AppState {
               llmProvider == .localGemma,
               localLLMModelManager.isHardwareSupported,
               !localGemmaInstallState.isInstalled,
-              !localGemmaDownloadCancelled,
+              !generalSettings.localGemmaDownloadCancelled,
               canStartLocalGemmaDownload else {
             return
         }
@@ -2915,7 +2732,7 @@ final class AppState {
         guard canCancelLocalGemmaDownload else {
             return
         }
-        localGemmaDownloadCancelled = true
+        updateGeneralSettings { $0.localGemmaDownloadCancelled = true }
         localGemmaDownloadTask?.cancel()
         localLLMModelManager.cancelDownload()
     }
@@ -3666,7 +3483,7 @@ final class AppState {
     }
 
     func updatePasteLastTranscriptHotkey(_ configuration: HotkeyConfiguration) {
-        pasteLastTranscriptHotkeyConfiguration = configuration
+        changeHotkeys(generalSettings.hotkeys.settingPasteLastTranscript(configuration))
     }
 
     func startRecordingFromUI() {
@@ -4922,85 +4739,19 @@ final class AppState {
         dictationStats = statsStore.stats
     }
 
-    private static func normalizedPasteLastTranscriptHotkey(
-        _ configuredHotkey: HotkeyConfiguration,
-        dictationHotkey: HotkeyConfiguration,
-        editModeHotkey: HotkeyConfiguration?
-    ) -> HotkeyConfiguration {
-        let fallbackModifiers: [UInt32] = [
-            UInt32(controlKey | cmdKey),
-            UInt32(controlKey | optionKey | cmdKey),
-            UInt32(controlKey | shiftKey | cmdKey),
-            UInt32(controlKey | optionKey | shiftKey | cmdKey),
-        ]
-        let candidates = [configuredHotkey] + fallbackModifiers.map {
-            HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: $0)
-        }
-
-        return candidates.first { candidate in
-            candidate.isModifiedKeyCombo
-                && candidate != dictationHotkey
-                && candidate != editModeHotkey
-        } ?? .pasteLastTranscriptDefault
-    }
-
     private func loadGeneralSettings() {
-        isHydratingGeneralSettings = true
-        let settings = generalSettingsStore.load()
-        let normalizedPasteLastTranscriptHotkey = Self.normalizedPasteLastTranscriptHotkey(
-            settings.pasteLastTranscriptHotkeyConfiguration,
-            dictationHotkey: settings.hotkeyConfiguration,
-            editModeHotkey: settings.editModeHotkeyConfiguration
-        )
-        let normalizedEditModeHotkey = settings.editModeHotkeyConfiguration == settings.hotkeyConfiguration
-            || settings.editModeHotkeyConfiguration == normalizedPasteLastTranscriptHotkey
-            ? nil
-            : settings.editModeHotkeyConfiguration
-        let didNormalizeHotkeys = normalizedPasteLastTranscriptHotkey != settings.pasteLastTranscriptHotkeyConfiguration
-            || normalizedEditModeHotkey != settings.editModeHotkeyConfiguration
-        selectedInputDeviceID = settings.preferredInputDeviceID
-        preferredInputDeviceName = settings.preferredInputDeviceName
-        autoSubmitEnabled = settings.autoSubmitEnabled
-        hotkeyConfiguration = settings.hotkeyConfiguration
-        pasteLastTranscriptHotkeyConfiguration = normalizedPasteLastTranscriptHotkey
-        editModeHotkeyConfiguration = normalizedEditModeHotkey
-        echoCancellationEnabled = settings.echoCancellationEnabled
-        soundFeedbackEnabled = settings.soundFeedbackEnabled
-        hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
-        liveTranscriptionPreviewEnabled = settings.liveTranscriptionPreviewEnabled
-        floatingIndicatorPlacement = settings.floatingIndicatorPlacement
-        selectedASRModelID = settings.selectedASRModelID
-        updateChannel = settings.updateChannel
-        accessibilityDragHelperEnabled = settings.accessibilityDragHelperEnabled
-        shareAnalyticsEnabled = settings.shareAnalyticsEnabled
-        let legacyUserHasUsage = legacyUserShowsUsage(settings: settings)
-        let needsFirstLaunchMigration = settings.onboardingProgress == nil
-            && (settings.hasSeenOnboardingWelcome == true
-                || settings.hasCompletedCoreOnboarding == true
-                || legacyUserHasUsage)
-        firstLaunchRecorded = settings.firstLaunchRecorded || needsFirstLaunchMigration
-        lastKnownAccessibilityGranted = settings.lastKnownAccessibilityGranted
-        magicFormatNudgeDismissed = settings.magicFormatNudgeDismissed
-        localGemmaDownloadCancelled = settings.localGemmaDownloadCancelled
-
-        let needsProgressMigration = settings.onboardingProgress == nil
-        onboardingProgress = settings.onboardingProgress ?? OnboardingProgress.migrating(
-            hasSeenOnboardingWelcome: settings.hasSeenOnboardingWelcome,
-            hasCompletedCoreOnboarding: settings.hasCompletedCoreOnboarding,
-            legacyUserShowsUsage: legacyUserHasUsage
-        )
-        isHydratingGeneralSettings = false
+        let stored = generalSettingsStore.load()
+        let (settings, needsSave) = stored.normalized(legacyUserShowsUsage: legacyUserShowsUsage(settings: stored))
+        generalSettings = settings
         applyUpdateChannelToController()
-        if needsProgressMigration || needsFirstLaunchMigration || didNormalizeHotkeys {
-            persistGeneralSettings()
+        if needsSave {
+            generalSettingsStore.save(settings)
         }
     }
 
     /// The legacy auto-complete heuristic for installs that predate the
-    /// onboarding flags: only real usage signals count. The old version also
-    /// keyed on `autoSubmitEnabled`/`echoCancellationEnabled`, which meant a
-    /// future default flip could have silently skipped onboarding for every
-    /// fresh install.
+    /// onboarding flags: only real usage signals count. It reads the history,
+    /// so `loadHistory()` runs first.
     private func legacyUserShowsUsage(settings: GeneralSettings) -> Bool {
         isModelInstalled
             || !recentResults.isEmpty
@@ -5008,37 +4759,97 @@ final class AppState {
             || settings.hotkeyConfiguration != .globe
     }
 
-    private func persistGeneralSettings() {
-        generalSettingsStore.save(currentGeneralSettings())
+    /// A call that changes nothing does not save and does not notify observers.
+    private func updateGeneralSettings(_ change: (inout GeneralSettings) -> Void) {
+        var updated = generalSettings
+        change(&updated)
+        guard updated != generalSettings else {
+            return
+        }
+        let previous = generalSettings
+        generalSettings = updated
+        generalSettingsStore.save(updated)
+        generalSettingsDidChange(from: previous)
     }
 
-    private func currentGeneralSettings() -> GeneralSettings {
-        GeneralSettings(
-            preferredInputDeviceID: selectedInputDeviceID,
-            preferredInputDeviceName: preferredInputDeviceName,
-            autoSubmitEnabled: autoSubmitEnabled,
-            hotkeyConfiguration: hotkeyConfiguration,
-            pasteLastTranscriptHotkeyConfiguration: pasteLastTranscriptHotkeyConfiguration,
-            editModeHotkeyConfiguration: editModeHotkeyConfiguration,
-            echoCancellationEnabled: echoCancellationEnabled,
-            soundFeedbackEnabled: soundFeedbackEnabled,
-            hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,
-            liveTranscriptionPreviewEnabled: liveTranscriptionPreviewEnabled,
-            floatingIndicatorPlacement: floatingIndicatorPlacement,
-            // Legacy Bools still written (derived) so a downgraded build keeps
-            // working; `onboardingProgress` wins on load in this build.
-            hasSeenOnboardingWelcome: hasSeenOnboardingWelcome,
-            hasCompletedCoreOnboarding: hasCompletedCoreOnboarding,
-            onboardingProgress: onboardingProgress,
-            firstLaunchRecorded: firstLaunchRecorded,
-            lastKnownAccessibilityGranted: lastKnownAccessibilityGranted,
-            magicFormatNudgeDismissed: magicFormatNudgeDismissed,
-            localGemmaDownloadCancelled: localGemmaDownloadCancelled,
-            selectedASRModelID: selectedASRModelID,
-            updateChannel: updateChannel,
-            accessibilityDragHelperEnabled: accessibilityDragHelperEnabled,
-            shareAnalyticsEnabled: shareAnalyticsEnabled
-        )
+    private func generalSettingsDidChange(from old: GeneralSettings) {
+        let new = generalSettings
+        if new.autoSubmitEnabled != old.autoSubmitEnabled {
+            analytics.track(.featureToggled(feature: .autoSubmit, enabled: new.autoSubmitEnabled))
+        }
+        if new.echoCancellationEnabled != old.echoCancellationEnabled {
+            analytics.track(.featureToggled(feature: .echoCancellation, enabled: new.echoCancellationEnabled))
+        }
+        if new.soundFeedbackEnabled != old.soundFeedbackEnabled {
+            analytics.track(.featureToggled(feature: .soundFeedback, enabled: new.soundFeedbackEnabled))
+        }
+        if new.shareAnalyticsEnabled != old.shareAnalyticsEnabled {
+            analytics.setEnabled(new.shareAnalyticsEnabled)
+        }
+        if old.liveTranscriptionPreviewEnabled, !new.liveTranscriptionPreviewEnabled {
+            // Re-enabling applies from the next recording.
+            stopLivePreview()
+        }
+        if new.hideFloatingIndicatorWhenIdle != old.hideFloatingIndicatorWhenIdle
+            || new.floatingIndicatorPlacement != old.floatingIndicatorPlacement {
+            syncFloatingIndicatorPreferences()
+        }
+        if new.preferredInputDeviceID != old.preferredInputDeviceID
+            || new.echoCancellationEnabled != old.echoCancellationEnabled {
+            refreshAudioRouteSnapshot()
+        }
+        if new.hotkeys != old.hotkeys {
+            if runtimeServicesEnabled {
+                wireHotkey()
+            }
+            if new.pasteLastTranscriptHotkeyConfiguration != old.pasteLastTranscriptHotkeyConfiguration,
+               isShowingInsertionRecoveryWarning {
+                showInsertionRecoveryWarning()
+            }
+        }
+        if new.updateChannel != old.updateChannel {
+            applyUpdateChannelToController()
+        }
+    }
+
+    private func selectInputDevice(id: String?) {
+        updateGeneralSettings { settings in
+            settings.preferredInputDeviceID = id
+            if let id, let selected = availableInputDevices.first(where: { $0.id == id && $0.availability != .notConnected }) {
+                settings.preferredInputDeviceName = selected.name
+            } else if id == nil {
+                settings.preferredInputDeviceName = nil
+            }
+        }
+    }
+
+    private func changeHotkeys(_ result: Result<HotkeyBindings, HotkeyBindings.Rejection>) {
+        let current = generalSettings.hotkeys
+        switch result {
+        case let .success(bindings):
+            guard bindings != current else {
+                return
+            }
+            hotkeyValidationMessage = nil
+            if bindings.dictation != current.dictation, current.editMode == bindings.dictation {
+                AppLogger.shared.log(.warning, "edit mode hotkey cleared: matched new dictation hotkey")
+                showTransientIndicatorError("Edit Mode shortcut cleared: it matched dictation")
+            }
+            updateGeneralSettings { $0.hotkeys = bindings }
+        case .failure(.dictationMatchesPasteLastTranscript), .failure(.pasteLastTranscriptMatchesDictation):
+            hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
+        case .failure(.pasteLastTranscriptNeedsModifier):
+            hotkeyValidationMessage = "Paste Last Transcript requires at least one modifier key."
+        case .failure(.pasteLastTranscriptMatchesEditMode):
+            hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
+        case .failure(.editModeMatchesDictation):
+            AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches dictation hotkey")
+            showTransientIndicatorError("Edit Mode shortcut must differ from dictation")
+        case .failure(.editModeMatchesPasteLastTranscript):
+            hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
+            AppLogger.shared.log(.warning, "edit mode hotkey rejected: matches paste last transcript hotkey")
+            showTransientIndicatorError("Edit Mode shortcut must differ from Paste Last Transcript")
+        }
     }
 
     private func loadLLMSettings() {
