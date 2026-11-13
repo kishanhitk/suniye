@@ -919,8 +919,34 @@ func makeTestAppState(
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
         magicFormatSlowWarningDelaySeconds: magicFormatSlowWarningDelaySeconds,
+        meetingCoordinator: makeTestMeetingCoordinator(engine: transcriptionService, analytics: analytics),
         startServices: startServices,
         llmE2EMode: llmE2EMode
+    )
+}
+
+/// Meetings on a temporary folder, with no audio source and no call app, so
+/// a test app never reads, recovers or records the real meetings.
+@MainActor
+func makeTestMeetingCoordinator(engine: TranscriptionServiceProtocol, analytics: Analytics) -> MeetingCoordinator {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("suniye-meeting-tests-\(UUID().uuidString)", isDirectory: true)
+    return MeetingCoordinator(
+        store: MeetingStore(rootDirectory: root.appendingPathComponent("meetings", isDirectory: true)),
+        templates: MeetingTemplateStore(fileURL: root.appendingPathComponent("templates.json")),
+        settingsStore: MeetingSettingsStore(userDefaults: UserDefaults(suiteName: "suniye-meeting-tests-\(UUID().uuidString)")!),
+        engine: engine,
+        environment: MeetingEnvironment(
+            makeSources: { _, _ in [:] },
+            confirmNotice: { false },
+            freeDiskBytes: { nil },
+            callPlaysOnSpeakers: { false },
+            makeMicrophoneUsers: { FakeMicrophoneUsers() },
+            now: Date.init
+        ),
+        canRecordCallAudio: false,
+        summaryAvailability: { .unavailable },
+        makeSummaryModel: { _ in nil },
+        analytics: analytics
     )
 }
 
