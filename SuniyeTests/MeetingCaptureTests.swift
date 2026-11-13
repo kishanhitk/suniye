@@ -487,14 +487,19 @@ final class MeetingRecorderTests: XCTestCase {
         let recorder = makeRecorder(you: you, them: nil)
         let received = expectation(description: "event")
         let events = Collected<MeetingRecorderEvent>()
-        recorder.onEvent = { events.append([$0]); received.fulfill() }
+        recorder.onEvent = { event in
+            events.append([event])
+            if case .trackFailed = event {
+                received.fulfill()
+            }
+        }
         try recorder.start()
 
         you.onEvent?(.failed("gone"))
         wait(for: [received], timeout: 2)
         recorder.stop()
 
-        XCTAssertEqual(events.samples, [.trackFailed(.you, "gone")])
+        XCTAssertEqual(events.samples, [.trackStarted(.you), .trackFailed(.you, "gone")])
     }
 }
 
