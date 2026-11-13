@@ -25,7 +25,8 @@ struct MeetingPage: View {
     @State private var actions = MeetingActions()
     @State private var segments: [MeetingSegment] = []
     @State private var summary: String?
-    @State private var notes = ""
+    /// Nil until the notes are read, so the editor never saves over them.
+    @State private var notes: String?
 
     init(meetings: MeetingCoordinator, appState: AppState, id: UUID) {
         self.meetings = meetings
@@ -75,7 +76,7 @@ struct MeetingPage: View {
                 }
             }
             .onChange(of: live == nil) { _, finished in
-                if finished, tab == .notes, notes.isEmpty {
+                if finished, tab == .notes, notes?.isEmpty ?? true {
                     tab = .summary
                 }
             }
@@ -168,7 +169,7 @@ struct MeetingPage: View {
         case .summary:
             text = summary ?? ""
         case .notes:
-            text = notes
+            text = notes ?? ""
         case .transcript:
             text = MeetingExport.transcript(record: record, segments: segments)
         }
@@ -184,8 +185,13 @@ struct MeetingPage: View {
             MeetingSummaryTab(meetings: meetings, appState: appState, actions: actions, record: record, summary: summary)
         case .notes:
             VStack(alignment: .leading, spacing: 12) {
-                MeetingNotesEditor(text: $notes) { text in
-                    Task { await meetings.saveNotes(text, for: id) }
+                if let loaded = notes {
+                    MeetingNotesEditor(
+                        text: Binding(get: { notes ?? loaded }, set: { notes = $0 }),
+                        saved: loaded
+                    ) { text in
+                        Task { await meetings.saveNotes(text, for: id) }
+                    }
                 }
                 if live == nil {
                     MeetingRegenerateMenu(title: "Regenerate Summary", meetings: meetings, actions: actions, record: record)

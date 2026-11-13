@@ -9,11 +9,15 @@ struct MeetingTranscriptLine: Equatable {
     let text: String
 }
 
-/// The notes that the user types, saved a moment after each change and when
-/// the editor goes away.
+/// The notes that the user types, saved a moment after each edit and when
+/// the editor goes away. Only an edit saves: notes that failed to load are
+/// never written over.
 struct MeetingNotesEditor: View {
     @Binding var text: String
+    /// The notes on disk when the editor appears.
+    let saved: String
     let save: (String) -> Void
+    @State private var lastSaved: String?
 
     var body: some View {
         TextEditor(text: $text)
@@ -22,11 +26,17 @@ struct MeetingNotesEditor: View {
             .task(id: text) {
                 try? await Task.sleep(for: .milliseconds(750))
                 guard !Task.isCancelled else { return }
-                save(text)
+                saveIfEdited()
             }
             .onDisappear {
-                save(text)
+                saveIfEdited()
             }
+    }
+
+    private func saveIfEdited() {
+        guard text != (lastSaved ?? saved) else { return }
+        lastSaved = text
+        save(text)
     }
 }
 
