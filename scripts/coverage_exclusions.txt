@@ -16,6 +16,7 @@ Suniye/Vendor/Permiso/SettingsWindowLocator.swift     # vendored; inspects live 
 # --- Hardware / OS-permission bound ---
 Suniye/Services/AudioCaptureDrivers.swift             # AVAudioEngine/HAL AudioUnit render callbacks; needs microphone
 Suniye/Services/CoreAudioDeviceMonitor.swift          # CoreAudio HAL property listeners; needs audio hardware
+Suniye/Meetings/SystemAudioTap.swift                  # Core Audio process tap + private aggregate device; needs the system audio permission and real output (recorder logic is tested with fake sources in MeetingCaptureTests)
 Suniye/Services/HotkeyService.swift                   # Carbon hotkey registration + global NSEvent taps; needs input-monitoring
 Suniye/Services/AccessibilityOnboarding.swift         # drives live AXIsProcessTrusted permission flow
 Suniye/Services/SoundFeedbackService.swift            # NSSound playback wrapper

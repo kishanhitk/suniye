@@ -22,8 +22,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Suniye records the sound of your calls for meeting notes.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Suniye needs microphone access to capture dictation.</string>
+	<string>Suniye needs microphone access to capture dictation and meetings.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Suniye uses on-device speech recognition to transcribe your dictation.</string>
 	<key>SUAutomaticallyUpdate</key>
