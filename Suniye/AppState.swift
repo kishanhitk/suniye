@@ -5797,6 +5797,36 @@ extension AppState: MeetingHost {
         prewarmLocalLLMIfEligible()
     }
 
+    /// A recording meeting stops and saves before the app quits, and its
+    /// transcript finishes at the next launch. A quit from the user asks
+    /// first; a logout, restart or shutdown does not, so it never blocks one.
+    func terminateReplyForMeeting() -> NSApplication.TerminateReply {
+        guard meetings.live != nil else { return .terminateNow }
+        if !Self.systemIsQuittingApps() {
+            let alert = NSAlert()
+            alert.messageText = "A meeting is recording"
+            alert.informativeText = "Quitting stops the recording. Suniye finishes the transcript when it opens again."
+            alert.addButton(withTitle: "Keep Recording")
+            alert.addButton(withTitle: "Stop and Quit")
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+        }
+        Task {
+            await meetings.stopForQuit()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
+    private static func systemIsQuittingApps() -> Bool {
+        guard let reason = NSAppleEventManager.shared().currentAppleEvent?
+            .attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason))?
+            .typeCodeValue
+        else { return false }
+        let systemReasons = [kAELogOut, kAEReallyLogOut, kAEShowRestartDialog, kAERestart, kAEShowShutdownDialog, kAEShutDown]
+        return systemReasons.map { OSType($0) }.contains(reason)
+    }
+
     func startMeetingFromMenu() {
         Task {
             do {

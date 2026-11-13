@@ -286,6 +286,27 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(noticeCount, 2)
     }
 
+    func testAQuitSavesTheRecordingAndTheNextLaunchFinishesIt() async throws {
+        let first = makeCoordinator()
+        first.speechModelChanged(.parakeetV3)
+        try await first.startMeeting(source: .manual)
+        let id = try XCTUnwrap(first.live?.id)
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+        clock += 3
+
+        await first.stopForQuit()
+        let saved = await store.record(id)
+        let next = makeCoordinator()
+        next.speechModelChanged(.parakeetV3)
+        await next.start()
+        let finished = await waitUntil { next.record(id)?.status == .done }
+
+        XCTAssertNil(first.live)
+        XCTAssertEqual(saved?.status, .recording, "the next launch finishes it")
+        XCTAssertEqual(saved?.endedAt, saved?.startedAt.addingTimeInterval(3))
+        XCTAssertTrue(finished)
+    }
+
     private func waitUntil(_ condition: @MainActor () async -> Bool) async -> Bool {
         for _ in 0 ..< 500 {
             if await condition() {

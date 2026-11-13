@@ -342,6 +342,24 @@ final class MeetingCoordinator {
         }
     }
 
+    /// Before the app quits: stops the recording and saves it, and leaves the
+    /// transcript to the next launch, which finishes it with no click.
+    func stopForQuit() async {
+        guard let session = live else { return }
+        session.recorder.stop()
+        outputCheck?.cancel()
+        outputCheck = nil
+        let now = wallSeconds(of: session)
+        await update(session.id) {
+            if let last = $0.pauses.indices.last, $0.pauses[last].end == nil {
+                $0.pauses[last].end = now
+            }
+            $0.endedAt = $0.startedAt.addingTimeInterval(now)
+        }
+        live = nil
+        AppLogger.shared.log(.info, "meeting stopped for quit id=\(session.id.uuidString)")
+    }
+
     /// Finishes the transcript of a meeting from its audio files: after a
     /// quit or a crash, or when the user asks again after a failed finish.
     func finishTranscript(_ id: UUID) {
