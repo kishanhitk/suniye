@@ -1,12 +1,12 @@
 import SwiftUI
 
 struct IssueReportView: View {
-    @Bindable var appState: AppState
+    @Bindable var form: IssueReportForm
     var onClose: () -> Void = {}
 
     var body: some View {
         Group {
-            switch appState.issueReportStatus {
+            switch form.status {
             case .sent:
                 successView
             case .idle, .preparing, .sending, .failed:
@@ -57,7 +57,7 @@ struct IssueReportView: View {
             Text("Issue Type")
                 .font(AppTypography.bodyMedium)
 
-            Picker("Issue Type", selection: $appState.issueReportType) {
+            Picker("Issue Type", selection: $form.type) {
                 ForEach(IssueReportType.allCases) { type in
                     Text(type.title).tag(type)
                 }
@@ -65,7 +65,7 @@ struct IssueReportView: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .frame(maxWidth: 260, alignment: .leading)
-            .disabled(appState.issueReportStatus.isBusy)
+            .disabled(form.status.isBusy)
         }
     }
 
@@ -73,14 +73,14 @@ struct IssueReportView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Title")
                 .font(AppTypography.bodyMedium)
-            TextField("Briefly summarize the issue", text: $appState.issueReportTitle)
+            TextField("Briefly summarize the issue", text: $form.title)
                 .textFieldStyle(.roundedBorder)
-                .disabled(appState.issueReportStatus.isBusy)
+                .disabled(form.status.isBusy)
 
-            if let message = appState.issueReportTitleRequirementMessage {
+            if let message = form.titleRequirementMessage {
                 validationCaption(
                     message,
-                    isEmpty: appState.issueReportTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    isEmpty: form.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 )
             }
         }
@@ -90,7 +90,7 @@ struct IssueReportView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("What happened?")
                 .font(AppTypography.bodyMedium)
-            TextEditor(text: $appState.issueReportDescription)
+            TextEditor(text: $form.description)
                 .font(AppTypography.body)
                 .frame(minHeight: 130)
                 .scrollContentBackground(.hidden)
@@ -100,12 +100,12 @@ struct IssueReportView: View {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(MainWindowPalette.cardStroke, lineWidth: 1)
                 )
-                .disabled(appState.issueReportStatus.isBusy)
+                .disabled(form.status.isBusy)
 
-            if let message = appState.issueReportDescriptionRequirementMessage {
+            if let message = form.descriptionRequirementMessage {
                 validationCaption(
                     message,
-                    isEmpty: appState.issueReportDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    isEmpty: form.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 )
             }
         }
@@ -115,11 +115,11 @@ struct IssueReportView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Email")
                 .font(AppTypography.bodyMedium)
-            TextField("Optional", text: $appState.issueReportContactEmail)
+            TextField("Optional", text: $form.contactEmail)
                 .textFieldStyle(.roundedBorder)
-                .disabled(appState.issueReportStatus.isBusy)
+                .disabled(form.status.isBusy)
 
-            if let error = appState.issueReportContactEmailValidationError {
+            if let error = form.contactEmailValidationError {
                 Text(error)
                     .font(AppTypography.caption)
                     .foregroundStyle(.red)
@@ -130,7 +130,7 @@ struct IssueReportView: View {
     private var diagnosticsSection: some View {
         SurfaceCard {
             VStack(alignment: .leading, spacing: 12) {
-                Toggle(isOn: $appState.issueReportIncludesDiagnostics) {
+                Toggle(isOn: $form.includesDiagnostics) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Include diagnostic logs")
                             .font(AppTypography.bodyMedium)
@@ -141,25 +141,25 @@ struct IssueReportView: View {
                     }
                 }
                 .toggleStyle(.switch)
-                .disabled(appState.issueReportStatus.isBusy)
+                .disabled(form.status.isBusy)
 
                 CardDivider()
 
                 HStack(spacing: 8) {
                     Button("Review Diagnostics") {
-                        Task { await appState.reviewIssueReportDiagnostics() }
+                        Task { await form.reviewDiagnostics() }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(appState.issueReportStatus.isBusy)
+                    .disabled(form.status.isBusy)
 
                     Button("Export Diagnostics") {
-                        Task { await appState.exportIssueReportDiagnostics() }
+                        Task { await form.exportDiagnostics() }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(appState.issueReportStatus.isBusy)
+                    .disabled(form.status.isBusy)
                 }
 
-                if let message = appState.issueReportDiagnosticsMessage {
+                if let message = form.diagnosticsMessage {
                     Text(message)
                         .font(AppTypography.caption)
                         .foregroundStyle(MainWindowPalette.secondaryText)
@@ -170,7 +170,7 @@ struct IssueReportView: View {
 
     @ViewBuilder
     private var statusView: some View {
-        switch appState.issueReportStatus {
+        switch form.status {
         case .idle:
             EmptyView()
         case .preparing:
@@ -194,20 +194,20 @@ struct IssueReportView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             Button("Reset") {
-                appState.resetIssueReportDraft()
+                form.reset()
             }
             .buttonStyle(.bordered)
-            .disabled(appState.issueReportStatus.isBusy)
+            .disabled(form.status.isBusy)
 
             Spacer()
 
             Button("Send Report") {
-                Task { await appState.submitIssueReport() }
+                Task { await form.submit() }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!appState.canSubmitIssueReport)
-            .help(appState.issueReportSubmitRequirementMessage ?? "Send the issue report")
-            .accessibilityHint(appState.issueReportSubmitRequirementMessage ?? "Sends the issue report and selected diagnostics.")
+            .disabled(!form.canSubmit)
+            .help(form.submitRequirementMessage ?? "Send the issue report")
+            .accessibilityHint(form.submitRequirementMessage ?? "Sends the issue report and selected diagnostics.")
         }
         .padding(24)
         .overlay(alignment: .top) {
@@ -247,7 +247,7 @@ struct IssueReportView: View {
                 }
 
                 Button("Close") {
-                    appState.resetIssueReportDraft()
+                    form.reset()
                     onClose()
                 }
                 .buttonStyle(.borderedProminent)

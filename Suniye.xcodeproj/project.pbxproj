@@ -64,6 +64,7 @@
 		3D616BA48FFE3D5426E7D9DE /* LocalGemmaRuntimeMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0A6D38E4E72DDF85556F041 /* LocalGemmaRuntimeMoreTests.swift */; };
 		3F99795CBF268592F921BD0E /* LLMSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E03421F785ED24BFBF7A030 /* LLMSettingsStore.swift */; };
 		3FCC82782692D489F759960E /* SuniyeAppMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACD17ADB7342F21D32EF95DC /* SuniyeAppMoreTests.swift */; };
+		4280DE0F1C2A26D74F71120D /* IssueReportForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02E8150C7C2087005EF1A4B6 /* IssueReportForm.swift */; };
 		431F47907133C7A4CA1E84AE /* DictationShortcutGestureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F818D7A6D3D4AB87F91D5BD6 /* DictationShortcutGestureTests.swift */; };
 		43615B312641FB1F76AFD25F /* MagicFormatPromptFileStoreMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EFF47A5E0665156193DD0B4 /* MagicFormatPromptFileStoreMoreTests.swift */; };
 		4579E5C220D90608E10AB26A /* IssueReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97F653004C40ED6CF13FA61 /* IssueReportView.swift */; };
@@ -259,6 +260,7 @@
 		009C7CFCF4E1D8C844EF02AE /* AppIconCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconCache.swift; sourceTree = "<group>"; };
 		01EE242F81867FE9A5048297 /* TextInsertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionService.swift; sourceTree = "<group>"; };
 		0267D23A463945CDA26CD070 /* SystemGlobeKeyAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemGlobeKeyAction.swift; sourceTree = "<group>"; };
+		02E8150C7C2087005EF1A4B6 /* IssueReportForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueReportForm.swift; sourceTree = "<group>"; };
 		045F7AACA142A791AFFA7C43 /* SettingsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModels.swift; sourceTree = "<group>"; };
 		085051FC41D278B1C6830108 /* AudioResampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioResampler.swift; sourceTree = "<group>"; };
 		09900DB72F300BBB0FD974BA /* ASRModelComparisonTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASRModelComparisonTests.swift; sourceTree = "<group>"; };
@@ -772,6 +774,7 @@
 				D3161CA1497B7EEA0FB2CE36 /* GeneralSettingsStore.swift */,
 				9E2ECDB4CFB11C5B9831460F /* HistoryStore.swift */,
 				34CC65DD3994740D7F4B27AB /* HotkeyService.swift */,
+				02E8150C7C2087005EF1A4B6 /* IssueReportForm.swift */,
 				104370E76CFD4D8D685CEAC7 /* IssueReportService.swift */,
 				3ECD2622B5D49CEAF4D4736A /* KeychainService.swift */,
 				7EEDE3A134D7940680E98B65 /* LaunchAtLoginService.swift */,
@@ -994,6 +997,7 @@
 				4AF9B1202D7019824CA6D851 /* GeneralSettingsStore.swift in Sources */,
 				2FD2254875BF111D3522E161 /* HistoryStore.swift in Sources */,
 				215839A463DC27CA04A3ADB6 /* HotkeyService.swift in Sources */,
+				4280DE0F1C2A26D74F71120D /* IssueReportForm.swift in Sources */,
 				83681464B14AD92EBCFCD908 /* IssueReportService.swift in Sources */,
 				4579E5C220D90608E10AB26A /* IssueReportView.swift in Sources */,
 				775525A23D0120E0D562F6DE /* IssueReportWindowController.swift in Sources */,

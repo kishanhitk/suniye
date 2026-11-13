@@ -49,6 +49,10 @@ final class AppLogger {
         }
     }
 
+    var rotatedLogFileURL: URL {
+        logFileURL.deletingLastPathComponent().appendingPathComponent("app.log.1")
+    }
+
     private func rotateIfNeeded() {
         guard
             let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
@@ -58,9 +62,8 @@ final class AppLogger {
             return
         }
 
-        let rotated = logFileURL.deletingLastPathComponent().appendingPathComponent("app.log.1")
-        try? FileManager.default.removeItem(at: rotated)
-        try? FileManager.default.moveItem(at: logFileURL, to: rotated)
+        try? FileManager.default.removeItem(at: rotatedLogFileURL)
+        try? FileManager.default.moveItem(at: logFileURL, to: rotatedLogFileURL)
         FileManager.default.createFile(atPath: logFileURL.path, contents: nil)
     }
 }

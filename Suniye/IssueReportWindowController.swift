@@ -6,13 +6,13 @@ final class IssueReportWindowController: NSObject, NSWindowDelegate {
     static let shared = IssueReportWindowController()
 
     private var window: NSWindow?
-    private weak var appState: AppState?
+    private weak var form: IssueReportForm?
 
     private override init() {}
 
-    func show(appState: AppState) {
+    func show(form: IssueReportForm) {
         NSApp.setActivationPolicy(.regular)
-        self.appState = appState
+        self.form = form
 
         if let window {
             NSApp.activate(ignoringOtherApps: true)
@@ -21,7 +21,7 @@ final class IssueReportWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let content = IssueReportView(appState: appState) { [weak self] in
+        let content = IssueReportView(form: form) { [weak self] in
             self?.window?.performClose(nil)
         }
             .frame(minWidth: 560, minHeight: 580)
@@ -48,8 +48,8 @@ final class IssueReportWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        appState?.issueReportWindowDidClose()
-        appState = nil
+        form?.windowDidClose()
+        form = nil
         window = nil
     }
 }

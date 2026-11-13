@@ -12,46 +12,46 @@ final class AppStateCoverageMiscTests: XCTestCase {
 
     func testPrepareIssueReportWindowPresentationClearsMessageOnly() {
         let appState = makeTestAppState()
-        appState.issueReportDiagnosticsMessage = "old message"
-        appState.issueReportTitle = "My bug"
+        appState.issueReport.diagnosticsMessage = "old message"
+        appState.issueReport.title = "My bug"
 
-        appState.prepareIssueReportWindowPresentation()
+        appState.issueReport.windowWillOpen()
 
-        XCTAssertNil(appState.issueReportDiagnosticsMessage)
-        XCTAssertEqual(appState.issueReportTitle, "My bug")
+        XCTAssertNil(appState.issueReport.diagnosticsMessage)
+        XCTAssertEqual(appState.issueReport.title, "My bug")
     }
 
     func testWindowClosedDuringSubmissionResetsFailedDraftOnNextClose() {
         let appState = makeTestAppState()
-        appState.issueReportTitle = "My bug"
-        appState.issueReportStatus = .preparing
+        appState.issueReport.title = "My bug"
+        appState.issueReport.status = .preparing
 
         // Closing mid-submission arms the deferred reset.
-        appState.issueReportWindowDidClose()
+        appState.issueReport.windowDidClose()
 
-        appState.issueReportStatus = .failed("upload broke")
-        appState.issueReportWindowDidClose()
+        appState.issueReport.status = .failed("upload broke")
+        appState.issueReport.windowDidClose()
 
-        XCTAssertEqual(appState.issueReportStatus, .idle)
-        XCTAssertEqual(appState.issueReportTitle, "")
+        XCTAssertEqual(appState.issueReport.status, .idle)
+        XCTAssertEqual(appState.issueReport.title, "")
     }
 
     func testPreparePresentationDisarmsDeferredResetWhenSubmissionRecovered() {
         let appState = makeTestAppState()
-        appState.issueReportTitle = "My bug"
-        appState.issueReportStatus = .sending
-        appState.issueReportWindowDidClose()
+        appState.issueReport.title = "My bug"
+        appState.issueReport.status = .sending
+        appState.issueReport.windowDidClose()
 
         // Submission finished idle in the meantime; reopening must disarm the flag.
-        appState.issueReportStatus = .idle
-        appState.prepareIssueReportWindowPresentation()
+        appState.issueReport.status = .idle
+        appState.issueReport.windowWillOpen()
 
-        appState.issueReportStatus = .failed("later failure")
-        appState.issueReportWindowDidClose()
+        appState.issueReport.status = .failed("later failure")
+        appState.issueReport.windowDidClose()
 
         // Without the armed flag a failed close keeps the draft.
-        XCTAssertEqual(appState.issueReportStatus, .failed("later failure"))
-        XCTAssertEqual(appState.issueReportTitle, "My bug")
+        XCTAssertEqual(appState.issueReport.status, .failed("later failure"))
+        XCTAssertEqual(appState.issueReport.title, "My bug")
     }
 
     // MARK: - Issue report submission failures
@@ -65,24 +65,24 @@ final class AppStateCoverageMiscTests: XCTestCase {
             ))
         )
         let appState = makeTestAppState(issueReportUploadService: upload)
-        appState.issueReportTitle = "Bug title"
-        appState.issueReportDescription = "A long enough description."
-        appState.issueReportIncludesDiagnostics = false
+        appState.issueReport.title = "Bug title"
+        appState.issueReport.description = "A long enough description."
+        appState.issueReport.includesDiagnostics = false
 
-        await appState.submitIssueReport()
+        await appState.issueReport.submit()
 
-        XCTAssertEqual(appState.issueReportStatus, .failed("plain failure"))
+        XCTAssertEqual(appState.issueReport.status, .failed("plain failure"))
     }
 
     func testSubmitIssueReportRejectsShortDescription() async {
         let appState = makeTestAppState()
-        appState.issueReportTitle = "Bug title"
-        appState.issueReportDescription = "short"
+        appState.issueReport.title = "Bug title"
+        appState.issueReport.description = "short"
 
-        await appState.submitIssueReport()
+        await appState.issueReport.submit()
 
         XCTAssertEqual(
-            appState.issueReportStatus,
+            appState.issueReport.status,
             .failed("Describe what happened in a little more detail.")
         )
     }
@@ -91,9 +91,9 @@ final class AppStateCoverageMiscTests: XCTestCase {
         let diagnostics = StubDiagnosticBundleService(result: .failure(FakeError(message: "bundle broke")))
         let appState = makeTestAppState(diagnosticBundleService: diagnostics)
 
-        await appState.reviewIssueReportDiagnostics()
+        await appState.issueReport.reviewDiagnostics()
 
-        XCTAssertEqual(appState.issueReportStatus, .failed("bundle broke"))
+        XCTAssertEqual(appState.issueReport.status, .failed("bundle broke"))
     }
 
     func testExportIssueReportDiagnosticsOverwritesExistingDestination() async throws {
@@ -111,10 +111,10 @@ final class AppStateCoverageMiscTests: XCTestCase {
             issueReportDiagnosticsDestinationPicker: { _ in destinationURL }
         )
 
-        await appState.exportIssueReportDiagnostics()
+        await appState.issueReport.exportDiagnostics()
 
-        XCTAssertEqual(appState.issueReportStatus, .idle)
-        XCTAssertEqual(appState.issueReportDiagnosticsMessage, "Diagnostics exported.")
+        XCTAssertEqual(appState.issueReport.status, .idle)
+        XCTAssertEqual(appState.issueReport.diagnosticsMessage, "Diagnostics exported.")
         XCTAssertEqual(
             try String(contentsOf: destinationURL, encoding: .utf8),
             "fresh diagnostics"
@@ -125,9 +125,9 @@ final class AppStateCoverageMiscTests: XCTestCase {
         let diagnostics = StubDiagnosticBundleService(result: .failure(FakeError(message: "no bundle")))
         let appState = makeTestAppState(diagnosticBundleService: diagnostics)
 
-        await appState.exportIssueReportDiagnostics()
+        await appState.issueReport.exportDiagnostics()
 
-        XCTAssertEqual(appState.issueReportStatus, .failed("no bundle"))
+        XCTAssertEqual(appState.issueReport.status, .failed("no bundle"))
     }
 
     // MARK: - System settings deep links
