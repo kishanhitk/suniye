@@ -811,18 +811,18 @@ struct SidebarInputDeviceRow: View {
     var body: some View {
         Menu {
             Button {
-                appState.selectedInputDeviceID = nil
+                appState.microphone.selectedInputDeviceID = nil
             } label: {
-                Label("System Default", systemImage: appState.selectedInputDeviceID == nil ? "checkmark" : "")
+                Label("System Default", systemImage: appState.microphone.selectedInputDeviceID == nil ? "checkmark" : "")
             }
 
-            if !appState.availableInputDevices.isEmpty {
+            if !appState.microphone.availableInputDevices.isEmpty {
                 Divider()
             }
 
-            ForEach(appState.availableInputDevices) { device in
+            ForEach(appState.microphone.availableInputDevices) { device in
                 Button {
-                    appState.selectedInputDeviceID = device.id
+                    appState.microphone.selectedInputDeviceID = device.id
                 } label: {
                     Text(device.availability == .notConnected ? "\(device.name) — Unavailable" : device.name)
                 }
@@ -844,7 +844,7 @@ struct SidebarInputDeviceRow: View {
                 // push the chevron off the edge and hide that this is a picker.
                 // A footer control, not a destination: it sits a step below the
                 // navigation rows above it.
-                Text(appState.activeInputDeviceName)
+                Text(appState.microphone.activeInputDeviceName)
                     .font(AppTypography.subheadline)
                     .foregroundStyle(Color.primary)
                     .lineLimit(1)
@@ -870,10 +870,10 @@ struct SidebarInputDeviceRow: View {
         )
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
-        .help(appState.effectiveInputDeviceStatusText)
+        .help(appState.microphone.effectiveInputDeviceStatusText)
     }
 
     private var hasProblem: Bool {
-        appState.audioRouteSnapshot == nil
+        appState.microphone.audioRouteSnapshot == nil
     }
 }

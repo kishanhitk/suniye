@@ -77,7 +77,7 @@ struct GeneralPage: View {
         .animation(motion, value: appState.hasMicPermission)
         .animation(motion, value: appState.hasAccessibilityPermission)
         .animation(motion, value: inputWarning)
-        .animation(motion, value: appState.inputStandInNote)
+        .animation(motion, value: appState.microphone.inputStandInNote)
         .animation(motion, value: appState.hotkeyValidationMessage)
         .animation(motion, value: appState.globeDoubleTapConflict)
         .animation(motion, value: appState.launchAtLoginError ?? appState.launchAtLoginWarningText)
@@ -142,7 +142,7 @@ struct GeneralPage: View {
         SettingsGroup(heading: "Microphone") {
             ControlSettingRow(
                 title: "Input device",
-                info: appState.inputDeviceInfoText
+                info: appState.microphone.inputDeviceInfoText
             ) {
                 NativePopupPicker(
                     items: inputDeviceChoices,
@@ -152,15 +152,15 @@ struct GeneralPage: View {
                 .frame(maxWidth: 260)
             }
 
-            if let note = appState.inputStandInNote {
+            if let note = appState.microphone.inputStandInNote {
                 inputStandInRow(note)
             }
 
             if let warning = inputWarning {
                 warningRow(warning) {
-                    if let recommended = appState.recommendedInputDevice {
+                    if let recommended = appState.microphone.recommendedInputDevice {
                         Button("Use \(recommended.name)") {
-                            appState.useRecommendedInputDevice()
+                            appState.microphone.useRecommendedInputDevice()
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -186,10 +186,10 @@ struct GeneralPage: View {
     /// A microphone problem is worth interrupting the list for; a working
     /// microphone is not.
     private var inputWarning: String? {
-        if appState.audioRouteSnapshot == nil {
-            return appState.audioRouteWarningText ?? appState.effectiveInputDeviceStatusText
+        if appState.microphone.audioRouteSnapshot == nil {
+            return appState.microphone.audioRouteWarningText ?? appState.microphone.effectiveInputDeviceStatusText
         }
-        return appState.audioRouteWarningText
+        return appState.microphone.audioRouteWarningText
     }
 
     private static func globeDoubleTapNotice(_ conflict: SystemGlobeKeyAction) -> String? {
@@ -488,7 +488,7 @@ struct GeneralPage: View {
     }
 
     private var inputDeviceChoices: [InputDeviceChoice] {
-        let devices = appState.availableInputDevices.map {
+        let devices = appState.microphone.availableInputDevices.map {
             let availability = $0.isAvailable ? "" : " - Unavailable"
             let defaultLabel = $0.isDefault ? " - Default" : ""
             return InputDeviceChoice(
@@ -502,10 +502,10 @@ struct GeneralPage: View {
     private var inputDeviceSelection: Binding<InputDeviceChoice> {
         Binding(
             get: {
-                inputDeviceChoices.first(where: { $0.id == appState.selectedInputDeviceID })
-                    ?? InputDeviceChoice(id: appState.selectedInputDeviceID, title: "System Default")
+                inputDeviceChoices.first(where: { $0.id == appState.microphone.selectedInputDeviceID })
+                    ?? InputDeviceChoice(id: appState.microphone.selectedInputDeviceID, title: "System Default")
             },
-            set: { appState.selectedInputDeviceID = $0.id }
+            set: { appState.microphone.selectedInputDeviceID = $0.id }
         )
     }
 }

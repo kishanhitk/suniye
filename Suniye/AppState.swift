@@ -53,11 +53,6 @@ final class AppState {
     /// applies its effects in `generalSettingsDidChange(from:)`.
     private(set) var generalSettings = GeneralSettings()
 
-    var selectedInputDeviceID: String? {
-        get { generalSettings.preferredInputDeviceID }
-        set { selectInputDevice(id: newValue) }
-    }
-    var preferredInputDeviceName: String? { generalSettings.preferredInputDeviceName }
     var autoSubmitEnabled: Bool {
         get { generalSettings.autoSubmitEnabled }
         set { updateGeneralSettings { $0.autoSubmitEnabled = newValue } }
@@ -151,16 +146,13 @@ final class AppState {
     }
     var dictationStats: DictationStats { library.stats }
 
-    var availableInputDevices: [AudioInputDevice] = []
-    private(set) var audioRouteSnapshot: AudioRouteSnapshot? {
-        didSet {
-            if audioRouteSnapshot != nil {
-                audioRouteErrorText = nil
-            }
-        }
-    }
-    /// Why no microphone can record, while `audioRouteSnapshot` is nil.
-    private(set) var audioRouteErrorText: String?
+    @ObservationIgnored private(set) lazy var microphone = MicrophoneChoice(
+        audioCaptureService: audioCaptureService,
+        settings: { [unowned self] in generalSettings },
+        updateSettings: { [unowned self] change in updateGeneralSettings(change) },
+        echoCancellationEnabled: { [unowned self] in echoCancellationEnabled },
+        isDictating: { [unowned self] in activeDictationSession != nil }
+    )
 
 
     var activeOnboardingStep: OnboardingStep? {
@@ -887,82 +879,6 @@ final class AppState {
         launchAtLoginStatus.isEnabledForUI
     }
 
-    /// The microphone Suniye records from, which can be a stand-in for the
-    /// saved one.
-    var activeInputDeviceName: String {
-        if let route = audioRouteSnapshot {
-            return route.effectiveInputName
-        }
-        if let selectedInputDeviceID {
-            return availableInputDevices.first(where: { $0.id == selectedInputDeviceID })?.name
-                ?? preferredInputDeviceName
-                ?? "Selected Microphone"
-        }
-        return availableInputDevices.first(where: \.isDefault)?.name ?? "System Default"
-    }
-
-    var effectiveInputDeviceStatusText: String {
-        guard let route = audioRouteSnapshot else {
-            return audioRouteErrorText ?? AudioCaptureServiceError.noInputDevice.localizedDescription
-        }
-        return inputStandInNote ?? "Using \(route.effectiveInputName) - \(route.inputTransport.title)"
-    }
-
-    /// Names the microphone Suniye uses in place of the chosen one, and why.
-    var inputStandInNote: String? {
-        guard let route = audioRouteSnapshot, let standIn = route.standIn else {
-            return nil
-        }
-        let skipped: String
-        switch standIn {
-        case .preferredMissing:
-            skipped = "\(preferredInputDeviceName ?? "The selected microphone") isn't connected"
-        case let .offWithLidClosed(name):
-            skipped = "\(name) is off while the lid is closed"
-        case let .bluetoothDefault(name):
-            skipped = "\(name) is Bluetooth"
-        }
-        return "\(skipped), so \(AppIdentity.current.displayName) uses \(route.effectiveInputName)."
-    }
-
-    /// The info tip of the input picker: only while it says "System Default" and
-    /// so hides the device, and no stand-in note or warning row already says it.
-    var inputDeviceInfoText: String? {
-        guard selectedInputDeviceID == nil, audioRouteSnapshot != nil, inputStandInNote == nil else {
-            return nil
-        }
-        return effectiveInputDeviceStatusText
-    }
-
-    var audioRouteWarningText: String? {
-        guard let route = audioRouteSnapshot else {
-            return nil
-        }
-        if route.inputTransport.isBluetooth {
-            return "Bluetooth microphones put headphones into call-quality audio while dictating."
-        }
-        if route.requestedEchoCancellation, !route.effectiveEchoCancellation {
-            return "Echo cancellation is unavailable for the current audio route."
-        }
-        return nil
-    }
-
-    var recommendedInputDevice: AudioInputDevice? {
-        let effectiveID = audioRouteSnapshot?.effectiveInputDeviceID
-        return availableInputDevices
-            .filter { $0.isAvailable && $0.transport.isRecommendedPhysicalInput && $0.id != effectiveID }
-            .sorted {
-                if $0.isDefault != $1.isDefault {
-                    return $0.isDefault
-                }
-                if $0.transport != $1.transport {
-                    return $0.transport == .builtIn
-                }
-                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
-            .first
-    }
-
     var isOnboardingPracticeRecording: Bool {
         activeOnboardingStep == .speak && phase == .recording
     }
@@ -1404,12 +1320,12 @@ final class AppState {
                     guard activeAudioCaptureSessionID == sessionID else { return }
                     handleAudioLevelsUpdate(levels)
                 case let .devicesChanged(devices):
-                    applyInputDevices(devices)
-                    refreshAudioRouteSnapshot()
+                    microphone.applyInputDevices(devices)
+                    microphone.refreshAudioRouteSnapshot()
                 case let .routeChanged(sessionID, route):
                     guard activeAudioCaptureSessionID == sessionID else { return }
                     activeDictationSession?.route = route
-                    audioRouteSnapshot = route
+                    microphone.adoptSessionRoute(route)
                     // Mid-session (async) descent down the capture ladder — record
                     // the re-resolved backend too, else a session that starts on
                     // rung 0 and drops to rung 1 would only ever report rung 0.
@@ -1425,7 +1341,7 @@ final class AppState {
         loadLLMSettings()
         analytics.setEnabled(shareAnalyticsEnabled)
         refreshUpdateControllerState()
-        refreshInputDevices()
+        microphone.refreshInputDevices()
         refreshLaunchAtLoginStatus()
         refreshLLMKeyStatus()
         refreshLocalGemmaInstallState()
@@ -1989,65 +1905,13 @@ final class AppState {
         ])
     }
 
-    func refreshInputDevices() {
-        applyInputDevices(audioCaptureService.availableInputDevices())
-        refreshAudioRouteSnapshot()
-    }
-
-    private func applyInputDevices(_ devices: [AudioInputDevice]) {
-        var visibleDevices = devices
-        if let selectedInputDeviceID,
-           let selected = devices.first(where: { $0.id == selectedInputDeviceID }),
-           preferredInputDeviceName != selected.name {
-            updateGeneralSettings { $0.preferredInputDeviceName = selected.name }
-        }
-        if let selectedInputDeviceID,
-           !devices.contains(where: { $0.id == selectedInputDeviceID }) {
-            visibleDevices.append(
-                AudioInputDevice(
-                    id: selectedInputDeviceID,
-                    name: preferredInputDeviceName ?? "Selected Microphone",
-                    isDefault: false,
-                    transport: .other,
-                    availability: .notConnected
-                )
-            )
-        }
-        availableInputDevices = visibleDevices
-    }
-
-    /// While a dictation runs, the route stays the one it records from; device
-    /// changes apply to the next dictation, so the route refreshes when this one
-    /// ends.
-    func refreshAudioRouteSnapshot() {
-        guard activeDictationSession == nil else {
-            return
-        }
-        do {
-            audioRouteSnapshot = try audioCaptureService.routeSnapshot(
-                preferredInputDeviceID: selectedInputDeviceID,
-                echoCancellationEnabled: echoCancellationEnabled
-            )
-        } catch {
-            audioRouteSnapshot = nil
-            audioRouteErrorText = error.localizedDescription
-        }
-    }
-
-    func useRecommendedInputDevice() {
-        guard let recommendedInputDevice else {
-            return
-        }
-        selectedInputDeviceID = recommendedInputDevice.id
-    }
-
     func handleSystemWillSleep() async {
         await audioCaptureService.handleSystemSleep()
     }
 
     func handleSystemDidWake() {
         audioCaptureService.handleSystemWake()
-        refreshInputDevices()
+        microphone.refreshInputDevices()
     }
 
     func refreshLaunchAtLoginStatus() {
@@ -3618,7 +3482,7 @@ final class AppState {
         do {
             let session = try await audioCaptureService.startCapture(
                 sessionID: sessionID,
-                preferredInputDeviceID: selectedInputDeviceID,
+                preferredInputDeviceID: microphone.selectedInputDeviceID,
                 echoCancellationEnabled: echoCancellationEnabled
             )
             guard activeAudioCaptureSessionID == sessionID else {
@@ -3629,7 +3493,7 @@ final class AppState {
                 activeDictationSession?.stage = .recording
             }
             activeDictationSession?.route = session.route
-            audioRouteSnapshot = session.route
+            microphone.adoptSessionRoute(session.route)
             emitAudioBackendUsed(session.route)
             activeDictationSession?.timing.captureStarted = .now()
             startLivePreview(sessionID: sessionID)
@@ -4220,7 +4084,7 @@ final class AppState {
         }
         if new.preferredInputDeviceID != old.preferredInputDeviceID
             || new.echoCancellationEnabled != old.echoCancellationEnabled {
-            refreshAudioRouteSnapshot()
+            microphone.refreshAudioRouteSnapshot()
         }
         if new.hotkeys != old.hotkeys {
             if runtimeServicesEnabled {
@@ -4233,17 +4097,6 @@ final class AppState {
         }
         if new.updateChannel != old.updateChannel {
             applyUpdateChannelToController()
-        }
-    }
-
-    private func selectInputDevice(id: String?) {
-        updateGeneralSettings { settings in
-            settings.preferredInputDeviceID = id
-            if let id, let selected = availableInputDevices.first(where: { $0.id == id && $0.availability != .notConnected }) {
-                settings.preferredInputDeviceName = selected.name
-            } else if id == nil {
-                settings.preferredInputDeviceName = nil
-            }
         }
     }
 
@@ -4558,7 +4411,7 @@ final class AppState {
         }
         activeDictationSession = nil
         stopLivePreview()
-        refreshAudioRouteSnapshot()
+        microphone.refreshAudioRouteSnapshot()
     }
 
     private func startLivePreview(sessionID: UUID) {

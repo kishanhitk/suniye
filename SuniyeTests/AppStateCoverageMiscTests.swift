@@ -180,25 +180,25 @@ final class AppStateCoverageMiscTests: XCTestCase {
             audioCaptureService: audioCapture,
             generalSettingsStore: settingsStore
         )
-        appState.refreshInputDevices()
+        appState.microphone.refreshInputDevices()
 
-        XCTAssertEqual(appState.preferredInputDeviceName, "New Name")
+        XCTAssertEqual(appState.microphone.preferredInputDeviceName, "New Name")
         XCTAssertEqual(settingsStore.latest.preferredInputDeviceName, "New Name")
     }
 
     func testUseRecommendedInputDeviceNoOpWithoutCandidates() {
         let appState = makeTestAppState()
 
-        appState.useRecommendedInputDevice()
+        appState.microphone.useRecommendedInputDevice()
 
-        XCTAssertNil(appState.selectedInputDeviceID)
+        XCTAssertNil(appState.microphone.selectedInputDeviceID)
     }
 
     func testSelectedInputDeviceNameFallbacks() {
         // A route names the microphone in use, whatever the selection.
         let routed = makeTestAppState()
-        routed.selectedInputDeviceID = "ghost-device"
-        XCTAssertEqual(routed.activeInputDeviceName, "System Microphone")
+        routed.microphone.selectedInputDeviceID = "ghost-device"
+        XCTAssertEqual(routed.microphone.activeInputDeviceName, "System Microphone")
 
         // No route: fall back to the default device, then to "System Default".
         let unrouted = StubAudioCaptureService()
@@ -207,15 +207,15 @@ final class AppStateCoverageMiscTests: XCTestCase {
             AudioInputDevice(id: "mac-mic", name: "Mac Microphone", isDefault: true, transport: .builtIn),
         ]
         let fallbackState = makeTestAppState(audioCaptureService: unrouted)
-        XCTAssertEqual(fallbackState.activeInputDeviceName, "Mac Microphone")
+        XCTAssertEqual(fallbackState.microphone.activeInputDeviceName, "Mac Microphone")
 
-        fallbackState.availableInputDevices = []
-        XCTAssertEqual(fallbackState.activeInputDeviceName, "System Default")
-        XCTAssertEqual(fallbackState.effectiveInputDeviceStatusText, "No microphone is available.")
+        fallbackState.microphone.availableInputDevices = []
+        XCTAssertEqual(fallbackState.microphone.activeInputDeviceName, "System Default")
+        XCTAssertEqual(fallbackState.microphone.effectiveInputDeviceStatusText, "No microphone is available.")
 
         // Selection points at a vanished device with no remembered name.
-        fallbackState.selectedInputDeviceID = "ghost-device"
-        XCTAssertEqual(fallbackState.activeInputDeviceName, "Selected Microphone")
+        fallbackState.microphone.selectedInputDeviceID = "ghost-device"
+        XCTAssertEqual(fallbackState.microphone.activeInputDeviceName, "Selected Microphone")
     }
 
     func testAudioRouteWarningTextEchoCancellationMismatch() {
@@ -237,14 +237,14 @@ final class AppStateCoverageMiscTests: XCTestCase {
         let appState = makeTestAppState(audioCaptureService: audioCapture)
 
         XCTAssertEqual(
-            appState.audioRouteWarningText,
+            appState.microphone.audioRouteWarningText,
             "Echo cancellation is unavailable for the current audio route."
         )
     }
 
     func testAudioRouteWarningTextNilForHealthyRoute() {
         let appState = makeTestAppState()
-        XCTAssertNil(appState.audioRouteWarningText)
+        XCTAssertNil(appState.microphone.audioRouteWarningText)
     }
 
     func testRecommendedInputDeviceOrderingPrefersDefaultThenBuiltInThenName() {
@@ -271,15 +271,15 @@ final class AppStateCoverageMiscTests: XCTestCase {
         let appState = makeTestAppState(audioCaptureService: audioCapture)
 
         // Built-in beats USB; ties break alphabetically.
-        XCTAssertEqual(appState.recommendedInputDevice?.id, "built-a")
+        XCTAssertEqual(appState.microphone.recommendedInputDevice?.id, "built-a")
 
         audioCapture.availableDevices.append(
             AudioInputDevice(id: "usb-default", name: "Default USB", isDefault: true, transport: .usb)
         )
-        appState.refreshInputDevices()
+        appState.microphone.refreshInputDevices()
 
         // A default device wins over everything else.
-        XCTAssertEqual(appState.recommendedInputDevice?.id, "usb-default")
+        XCTAssertEqual(appState.microphone.recommendedInputDevice?.id, "usb-default")
     }
 
     // MARK: - Attention items

@@ -66,7 +66,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
         let started = expectation(description: "capture started")
         audioCapture.onStartCapture = { _ in started.fulfill() }
         let appState = readyAppState(audioCapture: audioCapture)
-        appState.selectedInputDeviceID = "usb-mic"
+        appState.microphone.selectedInputDeviceID = "usb-mic"
 
         appState.startRecordingFromUI()
         await fulfillment(of: [started], timeout: 1)
@@ -93,18 +93,18 @@ final class AppStateAudioCaptureTests: XCTestCase {
             generalSettingsStore: settingsStore
         )
 
-        XCTAssertEqual(appState.selectedInputDeviceID, "studio-mic")
+        XCTAssertEqual(appState.microphone.selectedInputDeviceID, "studio-mic")
         XCTAssertEqual(
-            appState.availableInputDevices.first(where: { $0.id == "studio-mic" })?.availability,
+            appState.microphone.availableInputDevices.first(where: { $0.id == "studio-mic" })?.availability,
             .notConnected
         )
-        XCTAssertEqual(appState.activeInputDeviceName, "MacBook Pro Microphone")
+        XCTAssertEqual(appState.microphone.activeInputDeviceName, "MacBook Pro Microphone")
         XCTAssertEqual(
-            appState.inputStandInNote,
+            appState.microphone.inputStandInNote,
             "Studio Microphone isn't connected, so Suniye uses MacBook Pro Microphone."
         )
-        XCTAssertEqual(appState.effectiveInputDeviceStatusText, appState.inputStandInNote)
-        XCTAssertNil(appState.audioRouteWarningText)
+        XCTAssertEqual(appState.microphone.effectiveInputDeviceStatusText, appState.microphone.inputStandInNote)
+        XCTAssertNil(appState.microphone.audioRouteWarningText)
     }
 
     func testStandInNoteNamesTheSkippedMicrophone() {
@@ -116,7 +116,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
         )
         let appState = makeTestAppState(audioCaptureService: audioCapture)
         XCTAssertEqual(
-            appState.inputStandInNote,
+            appState.microphone.inputStandInNote,
             "AirPods Pro is Bluetooth, so Suniye uses MacBook Pro Microphone."
         )
 
@@ -126,16 +126,16 @@ final class AppStateAudioCaptureTests: XCTestCase {
             transport: .usb,
             standIn: .offWithLidClosed(name: "MacBook Pro Microphone")
         )
-        appState.refreshInputDevices()
+        appState.microphone.refreshInputDevices()
         XCTAssertEqual(
-            appState.inputStandInNote,
+            appState.microphone.inputStandInNote,
             "MacBook Pro Microphone is off while the lid is closed, so Suniye uses Studio Display Microphone."
         )
 
         audioCapture.route = makeRoute(id: "built-in", name: "MacBook Pro Microphone", standIn: nil)
-        appState.refreshInputDevices()
-        XCTAssertNil(appState.inputStandInNote)
-        XCTAssertEqual(appState.effectiveInputDeviceStatusText, "Using MacBook Pro Microphone - Built-in")
+        appState.microphone.refreshInputDevices()
+        XCTAssertNil(appState.microphone.inputStandInNote)
+        XCTAssertEqual(appState.microphone.effectiveInputDeviceStatusText, "Using MacBook Pro Microphone - Built-in")
     }
 
     func testSettingsSayWhyNoMicrophoneCanRecord() {
@@ -153,12 +153,12 @@ final class AppStateAudioCaptureTests: XCTestCase {
 
         let appState = makeTestAppState(audioCaptureService: audioCapture)
 
-        XCTAssertNil(appState.audioRouteSnapshot)
+        XCTAssertNil(appState.microphone.audioRouteSnapshot)
         XCTAssertEqual(
-            appState.effectiveInputDeviceStatusText,
+            appState.microphone.effectiveInputDeviceStatusText,
             "The built-in microphone is off while the lid is closed."
         )
-        XCTAssertNil(appState.recommendedInputDevice)
+        XCTAssertNil(appState.microphone.recommendedInputDevice)
     }
 
     func testRecommendationSkipsTheMicrophoneTheLidSwitchedOff() {
@@ -182,8 +182,8 @@ final class AppStateAudioCaptureTests: XCTestCase {
 
         let appState = makeTestAppState(audioCaptureService: audioCapture)
 
-        XCTAssertNotNil(appState.audioRouteWarningText)
-        XCTAssertNil(appState.recommendedInputDevice)
+        XCTAssertNotNil(appState.microphone.audioRouteWarningText)
+        XCTAssertNil(appState.microphone.recommendedInputDevice)
     }
 
     func testDeviceChangeDuringDictationKeepsTheRouteItRecordsFrom() async throws {
@@ -202,12 +202,12 @@ final class AppStateAudioCaptureTests: XCTestCase {
         audioCapture.route = makeRoute(id: "studio-mic", name: "Studio Microphone", transport: .usb, standIn: nil)
         audioCapture.onEvent?(.devicesChanged(audioCapture.availableDevices))
         await drainScheduledTasks()
-        XCTAssertEqual(appState.activeInputDeviceName, "System Microphone")
+        XCTAssertEqual(appState.microphone.activeInputDeviceName, "System Microphone")
 
         audioCapture.onEvent?(.interrupted(sessionID: sessionID, reason: .inputMuted))
         await fulfillment(of: [canceled], timeout: 1)
         await drainScheduledTasks()
-        XCTAssertEqual(appState.activeInputDeviceName, "Studio Microphone")
+        XCTAssertEqual(appState.microphone.activeInputDeviceName, "Studio Microphone")
     }
 
     func testRecommendedInputDeviceActionPersistsActualDeviceName() {
@@ -246,11 +246,11 @@ final class AppStateAudioCaptureTests: XCTestCase {
             generalSettingsStore: settingsStore
         )
 
-        appState.useRecommendedInputDevice()
+        appState.microphone.useRecommendedInputDevice()
 
-        XCTAssertEqual(appState.selectedInputDeviceID, "built-in")
+        XCTAssertEqual(appState.microphone.selectedInputDeviceID, "built-in")
         XCTAssertEqual(settingsStore.latest.preferredInputDeviceName, "Built-in Microphone")
-        XCTAssertTrue(appState.audioRouteWarningText?.contains("call-quality") == true)
+        XCTAssertTrue(appState.microphone.audioRouteWarningText?.contains("call-quality") == true)
     }
 
     func testQuickReleaseDuringCaptureStartStopsTheSameSession() async {

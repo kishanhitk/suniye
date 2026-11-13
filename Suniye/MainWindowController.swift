@@ -129,7 +129,7 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
     func applicationDidBecomeActive(_ notification: Notification) {
         AppLogger.shared.log(.info, "applicationDidBecomeActive; refreshing permission status")
         sharedAppState.refreshPermissionStatus()
-        sharedAppState.refreshInputDevices()
+        sharedAppState.microphone.refreshInputDevices()
         sharedAppState.refreshSystemGlobeKeyAction()
     }
 

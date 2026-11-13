@@ -183,11 +183,11 @@ final class AppStateCoverageRecordingTests: XCTestCase {
 
         audioCapture.onEvent?(.routeChanged(sessionID: UUID(), route: newRoute))
         await drainScheduledTasks()
-        XCTAssertNotEqual(appState.audioRouteSnapshot?.effectiveInputName, "BT Headset")
+        XCTAssertNotEqual(appState.microphone.audioRouteSnapshot?.effectiveInputName, "BT Headset")
 
         audioCapture.onEvent?(.routeChanged(sessionID: sessionID, route: newRoute))
         await drainScheduledTasks()
-        XCTAssertEqual(appState.audioRouteSnapshot?.effectiveInputName, "BT Headset")
+        XCTAssertEqual(appState.microphone.audioRouteSnapshot?.effectiveInputName, "BT Headset")
     }
 
     func testAudioLevelsIgnoredWhenIndicatorIsNotListening() async throws {
