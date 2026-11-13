@@ -55,7 +55,7 @@ struct MeetingsPage: View {
                 }
             }
 
-            if !finished.isEmpty {
+            if !listed.isEmpty {
                 TranscriptSearchBar(searchText: $searchText, isSearchFocused: $isSearchFocused, placeholder: "Search meetings")
             }
 
@@ -64,7 +64,7 @@ struct MeetingsPage: View {
         .meetingActionDialogs(actions, meetings: meetings)
         .task(id: searchText) {
             guard !query.isEmpty else { return }
-            for record in finished where texts[record.id] == nil {
+            for record in listed where texts[record.id] == nil {
                 texts[record.id] = await meetings.listText(for: record.id)
             }
         }
@@ -72,7 +72,7 @@ struct MeetingsPage: View {
 
     @ViewBuilder
     private var list: some View {
-        if finished.isEmpty, meetings.live == nil {
+        if listed.isEmpty, meetings.live == nil {
             VStack(spacing: 12) {
                 EmptyStateCard(
                     icon: "person.2",
@@ -133,10 +133,9 @@ struct MeetingsPage: View {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Finished meetings: everything but the live one and the ones whose
-    /// transcript did not finish (they have their own banner above).
-    private var finished: [MeetingRecord] {
-        meetings.meetings.filter { $0.id != meetings.live?.id && $0.status != .interrupted }
+    /// Every meeting but the live one, which has its own row above.
+    private var listed: [MeetingRecord] {
+        meetings.meetings.filter { $0.id != meetings.live?.id }
     }
 
     private var unfinished: [MeetingRecord] {
@@ -144,8 +143,8 @@ struct MeetingsPage: View {
     }
 
     private var visible: [MeetingRecord] {
-        guard !query.isEmpty else { return finished }
-        return finished.filter { record in
+        guard !query.isEmpty else { return listed }
+        return listed.filter { record in
             record.title.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
                 || texts[record.id]?.line(matching: query) != nil
         }
