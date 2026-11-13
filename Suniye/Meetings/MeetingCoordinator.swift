@@ -138,7 +138,7 @@ final class MeetingSession {
     var visibleSegments: [MeetingSegment] {
         MeetingTranscript.live(
             segments,
-            callDecodedThrough: hasCallTrack ? decodedThrough[.them] ?? 0 : nil,
+            callDecodedThrough: workingTracks.contains(.them) ? decodedThrough[.them] ?? 0 : nil,
             callPlayedOnSpeakers: record.callPlayedOnSpeakers
         )
     }
