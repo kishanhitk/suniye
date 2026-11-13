@@ -369,6 +369,7 @@ final class AppStateMagicFormatTests: XCTestCase {
         // carries a measured latency, which is not deterministic in a test.
         XCTAssertEqual(appState.magicFormatSetupTestResult?.message, "Connection works.")
         XCTAssertEqual(appState.magicFormatSetupTestResult?.severity, .success)
+        XCTAssertFalse(appState.isAPIMagicFormatSetupVerified)
     }
 
     func testTestMagicFormatSetupUsesSavedKeyWhenDraftIsEmpty() async {
@@ -418,6 +419,7 @@ final class AppStateMagicFormatTests: XCTestCase {
         // carries a measured latency, which is not deterministic in a test.
         XCTAssertEqual(appState.magicFormatSetupTestResult?.message, "Connection works.")
         XCTAssertEqual(appState.magicFormatSetupTestResult?.severity, .success)
+        XCTAssertTrue(appState.isAPIMagicFormatSetupVerified)
     }
 
     func testTestMagicFormatSetupIgnoresStaleResultAfterSettingsChange() async {
