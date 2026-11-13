@@ -832,11 +832,17 @@ final class MeetingCoordinator {
         environment.now().timeIntervalSince(session.record.startedAt)
     }
 
+    /// A change that the store cannot write still holds in memory, so the
+    /// live meeting's state matches the recorder.
     private func update(_ id: UUID, _ change: @escaping (inout MeetingRecord) -> Void) async {
         do {
             apply(try await store.update(id, change))
         } catch {
             AppLogger.shared.log(.error, "meeting not saved id=\(id.uuidString) error=\(error.localizedDescription)")
+            if var record = live?.id == id ? live?.record : record(id) {
+                change(&record)
+                apply(record)
+            }
         }
     }
 
