@@ -360,8 +360,6 @@ final class AppState {
     @ObservationIgnored private var dictationShortcutGesture = DictationShortcutGesture()
     @ObservationIgnored private var secondTapWindowTask: Task<Void, Never>?
     @ObservationIgnored private var previousTapWithDoubleTapOff: Date?
-    /// The session that a double tap locked, for the source label of its analytics event.
-    @ObservationIgnored private var lockedDictationSessionID: UUID?
     private(set) var systemGlobeKeyAction: SystemGlobeKeyAction = .doNothing
     @ObservationIgnored private var hasTrackedMagicFormatNudgeShown = false
 
@@ -1348,9 +1346,6 @@ final class AppState {
     private let diagnosticBundleService: DiagnosticBundleServiceProtocol
     private let issueReportUploadService: IssueReportUploadServiceProtocol
     private let analytics: Analytics
-    /// Per-dictation monotonic latency marks. Safe as a single instance because
-    /// the phase machine serializes dictations. Not observed UI state.
-    @ObservationIgnored private var dictationTiming = DictationTiming()
     private let editLearningService: EditLearningServiceProtocol
     private let learningToastPresenter: LearningToastPresenting
     private let currentAppVersionProvider: () -> AppVersion?
@@ -1377,32 +1372,41 @@ final class AppState {
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
 
-    private struct DictationSessionContext {
+    /// One dictation, from the shortcut press to the end of its text. Its
+    /// stage and `phase` change together, in `startRecording`,
+    /// `stopRecordingAndTranscribe` and `endSession` only.
+    private struct DictationSession {
+        enum Stage {
+            case starting
+            case recording
+            case transcribing
+        }
+
         let id: UUID
         let source: RecordingSource
         let startedAt: Date
         let destination: DictationDestination
-        /// Bundle ID of the app the user was in when recording started, for per-app prompt routing.
+        /// The app the user was in when recording started, for per-app prompts.
         let frontmostAppBundleID: String?
+        var stage: Stage = .starting
+        /// The route this dictation records from. The settings preview route is
+        /// not refreshed while a session runs.
+        var route: AudioRouteSnapshot?
+        var timing = DictationTiming()
+        var lockedByDoubleTap = false
     }
 
-    private enum ActiveDictationSession {
-        case starting(DictationSessionContext)
-        case recording(DictationSessionContext)
-        case transcribing(DictationSessionContext)
-
-        var context: DictationSessionContext {
-            switch self {
-            case let .starting(context), let .recording(context), let .transcribing(context):
-                return context
-            }
-        }
+    /// How a session ends. Every end goes through `endSession`.
+    private enum SessionEnd {
+        case completed(playSound: Bool)
+        /// A nil `lastError` keeps the current one.
+        case failed(lastError: String?, notice: String)
+        case discarded(notice: String?)
     }
 
-    private var activeDictationSession: ActiveDictationSession?
-    private var activeAudioCaptureSessionID: UUID? { activeDictationSession?.context.id }
-    private var activeRecordingSource: RecordingSource? { activeDictationSession?.context.source }
-    private var recordingStart: Date? { activeDictationSession?.context.startedAt }
+    private var activeDictationSession: DictationSession?
+    private var activeAudioCaptureSessionID: UUID? { activeDictationSession?.id }
+    private var activeRecordingSource: RecordingSource? { activeDictationSession?.source }
     private var overlayErrorResetTask: Task<Void, Never>?
     private var isShowingInsertionRecoveryWarning = false
     /// A dictation without Accessibility still runs, to the clipboard only. The
@@ -1594,6 +1598,7 @@ final class AppState {
                     refreshAudioRouteSnapshot()
                 case let .routeChanged(sessionID, route):
                     guard activeAudioCaptureSessionID == sessionID else { return }
+                    activeDictationSession?.route = route
                     audioRouteSnapshot = route
                     // Mid-session (async) descent down the capture ladder — record
                     // the re-resolved backend too, else a session that starts on
@@ -3228,7 +3233,7 @@ final class AppState {
                 await beginRecordingFlow(trigger: .manual)
             case .recording where activeRecordingSource == .manual:
                 await stopRecordingAndTranscribe(trigger: .manual)
-            case .recording where activeRecordingSource == .hotkey && dictationShortcutGesture.isLocked:
+            case .recording where activeRecordingSource == .hotkey && activeDictationSession?.lockedByDoubleTap == true:
                 resetDictationShortcutGesture()
                 await stopRecordingAndTranscribe(trigger: .hotkey)
             default:
@@ -3679,7 +3684,7 @@ final class AppState {
     /// pill takes the same look and a click on it finishes the recording.
     private func lockDictationRecording() {
         AppLogger.shared.log(.info, "recording locked by double tap")
-        lockedDictationSessionID = activeAudioCaptureSessionID
+        activeDictationSession?.lockedByDoubleTap = true
         if case let .listening(levels, _, preview) = floatingIndicatorState {
             setFloatingIndicatorState(.listening(levels: levels, source: .manual, preview: preview))
         }
@@ -3712,7 +3717,7 @@ final class AppState {
     /// Onboarding practice still tells a new user to hold the key, as it did
     /// when such a press was rejected as too short.
     private func discardShortPress() async {
-        if activeDictationSession?.context.destination == .onboardingPractice,
+        if activeDictationSession?.destination == .onboardingPractice,
            let message = AudioCaptureOutcome.tooShort.userMessage {
             onboardingPracticeText = ""
             onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
@@ -3738,14 +3743,7 @@ final class AppState {
             return false
         }
         resetDictationShortcutGesture()
-        clearActiveDictationSession(sessionID: sessionID)
-        phase = .ready
-        statusText = "Ready"
-        if let message {
-            showTransientIndicatorError(message, duration: 1.2)
-        } else {
-            setFloatingIndicatorState(.idle)
-        }
+        endSession(sessionID, .discarded(notice: message))
         await audioCaptureService.cancelCapture(sessionID: sessionID, reason: nil)
         return true
     }
@@ -3860,25 +3858,25 @@ final class AppState {
         }
 
         let sessionID = UUID()
-        dictationTiming = DictationTiming()
-        dictationTiming.recordStart = .now()
+        let recordStart = DispatchTime.now()
         // Capture the target app before any Suniye UI can steal focus.
         if destination.needsAccessibility {
             textInsertionService.warmTargetAppAccessibility()
         }
-        let context = DictationSessionContext(
+        var session = DictationSession(
             id: sessionID,
             source: trigger,
             startedAt: Date(),
             destination: destination,
             frontmostAppBundleID: frontmostAppBundleIDProvider()
         )
-        activeDictationSession = .starting(context)
+        session.timing.recordStart = recordStart
+        activeDictationSession = session
         phase = .recording
         statusText = "Recording"
         overlayErrorResetTask?.cancel()
         overlayErrorResetTask = nil
-        if context.destination == .onboardingPractice {
+        if destination == .onboardingPractice {
             onboardingPracticeText = ""
             onboardingPracticeResult = nil
         }
@@ -3894,12 +3892,13 @@ final class AppState {
                 await audioCaptureService.cancelCapture(sessionID: sessionID, reason: nil)
                 return
             }
-            if case .some(.starting) = activeDictationSession {
-                activeDictationSession = .recording(context)
+            if activeDictationSession?.stage == .starting {
+                activeDictationSession?.stage = .recording
             }
+            activeDictationSession?.route = session.route
             audioRouteSnapshot = session.route
             emitAudioBackendUsed(session.route)
-            dictationTiming.captureStarted = .now()
+            activeDictationSession?.timing.captureStarted = .now()
             startLivePreview(sessionID: sessionID)
             AppLogger.shared.log(.info, "recording started session=\(sessionID.uuidString) \(session.route.privacySafeLogValue)")
         } catch {
@@ -3907,11 +3906,10 @@ final class AppState {
                 return
             }
             AppLogger.shared.log(.error, "audio start failed: \(error.localizedDescription)")
-            failDictationSession(
-                sessionID: sessionID,
-                lastErrorMessage: "Audio start failed: \(error.localizedDescription)",
-                indicatorMessage: error.localizedDescription
-            )
+            endSession(sessionID, .failed(
+                lastError: "Audio start failed: \(error.localizedDescription)",
+                notice: error.localizedDescription
+            ))
         }
     }
 
@@ -3923,21 +3921,21 @@ final class AppState {
         guard phase == .recording else {
             return
         }
-        guard let context = activeDictationSession?.context, context.source == trigger else {
+        guard let context = activeDictationSession, context.source == trigger else {
             return
         }
         let sessionID = context.id
 
         stopLivePreview()
-        activeDictationSession = .transcribing(context)
+        activeDictationSession?.stage = .transcribing
         phase = .transcribing
         statusText = "Transcribing..."
         setFloatingIndicatorState(Self.transcribingIndicatorState)
         let duration = Date().timeIntervalSince(context.startedAt)
-        dictationTiming.stopped = .now()
+        activeDictationSession?.timing.stopped = .now()
 
         let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
-        guard let context = activeDictationSession?.context, context.id == sessionID else {
+        guard let context = activeDictationSession, context.id == sessionID else {
             return
         }
         let samples = captured.samples
@@ -3946,12 +3944,12 @@ final class AppState {
         AppLogger.shared.log(.info, "dictation stop samples=\(samples.count) sr=\(sampleRate) duration=\(String(format: "%.2f", duration))")
 
         guard captured.outcome == .complete else {
-            handleAudioCaptureFailure(captured.outcome, destination: destination)
+            handleAudioCaptureFailure(captured.outcome, sessionID: sessionID, destination: destination)
             return
         }
 
         do {
-            dictationTiming.asrStart = .now()
+            activeDictationSession?.timing.asrStart = .now()
             let text: String
             var emptyReason = DictationEmptyReason.emptyTranscript
             do {
@@ -3964,7 +3962,7 @@ final class AppState {
                 text = ""
                 emptyReason = .noSpeech
             }
-            dictationTiming.asrEnd = .now()
+            activeDictationSession?.timing.asrEnd = .now()
             let rawText = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 
             switch destination {
@@ -4006,11 +4004,10 @@ final class AppState {
             }
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
             analytics.track(.error(type: .transcription, code: .unknown))
-            failDictationSession(
-                sessionID: sessionID,
-                lastErrorMessage: "Transcription failed: \(error.localizedDescription)",
-                indicatorMessage: "Transcription failed"
-            )
+            endSession(sessionID, .failed(
+                lastError: "Transcription failed: \(error.localizedDescription)",
+                notice: "Transcription failed"
+            ))
         }
     }
 
@@ -4030,9 +4027,9 @@ final class AppState {
         var llmOutcome: MagicFormatPolishOutcome?
 
         if !rawText.isEmpty {
-            dictationTiming.llmStart = .now()
+            activeDictationSession?.timing.llmStart = .now()
             let outcome = await polishOutcome(rawText, frontmostAppBundleID: frontmostAppBundleID)
-            dictationTiming.llmEnd = .now()
+            activeDictationSession?.timing.llmEnd = .now()
             llmOutcome = outcome
             finalText = outcome.text
         }
@@ -4085,7 +4082,7 @@ final class AppState {
                     // element hydrates, so anything captured earlier can name
                     // the app the user has since left.
                     library.attribute(result.id, to: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
-                    dictationTiming.inserted = .now()
+                    activeDictationSession?.timing.inserted = .now()
                     beginEditLearningTracking(insertedText: insertionText)
                     AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
                     didCompleteDictation = true
@@ -4102,7 +4099,7 @@ final class AppState {
                 }
             } else {
                 try textInsertionService.copyTextToClipboard(finalText)
-                dictationTiming.inserted = .now()
+                activeDictationSession?.timing.inserted = .now()
                 library.insert(result)
                 AppLogger.shared.log(.info, "transcription copied to clipboard words=\(wordCount)")
                 didCompleteDictation = true
@@ -4151,7 +4148,7 @@ final class AppState {
                 duration: duration,
                 llmOutcome: llmOutcome,
                 source: source,
-                lockedByDoubleTap: sessionID == lockedDictationSessionID,
+                lockedByDoubleTap: activeDictationSession?.lockedByDoubleTap ?? false,
                 frontmostAppBundleID: frontmostAppBundleID,
                 destination: destination.analyticsDestination
             )
@@ -4160,7 +4157,7 @@ final class AppState {
         // A clipboard-only session did its job, but the user held the hotkey to
         // paste; a success chime and an idle pill would hide that nothing landed.
         let copiedWithoutPaste = destination == .clipboardOnly && didCompleteDictation && !finalText.isEmpty
-        completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation && !copiedWithoutPaste)
+        endSession(sessionID, .completed(playSound: didCompleteDictation && !copiedWithoutPaste))
         if didFailInsertion {
             showInsertionRecoveryWarning()
         } else {
@@ -4227,8 +4224,8 @@ final class AppState {
             cleanupFallbackReason: llmOutcome?.fallbackReason,
             insertionMethod: .clipboard, // insertion is always clipboard+paste
             targetCategory: TargetCategoryMapper.category(for: frontmostAppBundleID),
-            latency: dictationTiming.latency(),
-            audio: audioRouteSnapshot.map { route in
+            latency: (activeDictationSession?.timing ?? DictationTiming()).latency(),
+            audio: activeDictationSession?.route.map { route in
                 DictationMetrics.AudioQuality(
                     backend: SafeLabel(route.backend.rawValue),
                     fallbackReason: route.fallbackReason.map { SafeLabel($0.rawValue) },
@@ -4252,9 +4249,9 @@ final class AppState {
         var finalText = rawText
         var llmOutcome: MagicFormatPolishOutcome?
         if !finalText.isEmpty {
-            dictationTiming.llmStart = .now()
+            activeDictationSession?.timing.llmStart = .now()
             let outcome = await polishOutcome(rawText)
-            dictationTiming.llmEnd = .now()
+            activeDictationSession?.timing.llmEnd = .now()
             llmOutcome = outcome
             finalText = outcome.text.trimmingCharacters(in: .whitespacesAndNewlines)
         }
@@ -4286,14 +4283,14 @@ final class AppState {
                 duration: duration,
                 llmOutcome: llmOutcome,
                 source: source,
-                lockedByDoubleTap: sessionID == lockedDictationSessionID,
+                lockedByDoubleTap: activeDictationSession?.lockedByDoubleTap ?? false,
                 frontmostAppBundleID: nil,
                 destination: .onboardingPractice
             )
             AppLogger.shared.log(.info, "onboarding practice transcription complete words=\(wordCount)")
             didCompleteDictation = true
         }
-        completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation)
+        endSession(sessionID, .completed(playSound: didCompleteDictation))
     }
 
     private func recordOnboardingPracticeAttempt(outcome: PracticeOutcome) {
@@ -4310,7 +4307,7 @@ final class AppState {
     ) async {
         guard !instruction.isEmpty else {
             AppLogger.shared.log(.warning, "edit mode produced empty instruction")
-            failDictationSession(sessionID: sessionID, lastErrorMessage: nil, indicatorMessage: "No instruction heard")
+            endSession(sessionID, .failed(lastError: nil, notice: "No instruction heard"))
             return
         }
 
@@ -4330,7 +4327,7 @@ final class AppState {
             // the service retries while a focused element hydrates, so the
             // session's app — or anything read before the call — can be stale.
             let destinationApp = frontmostAppBundleIDProvider()
-                ?? activeDictationSession?.context.frontmostAppBundleID
+                ?? activeDictationSession?.frontmostAppBundleID
             library.insert(
                 RecentResult(
                     id: UUID(),
@@ -4342,39 +4339,42 @@ final class AppState {
                 )
             )
             AppLogger.shared.log(.info, "edit mode complete words=\(rewritten.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count)")
-            completeDictationSession(sessionID: sessionID, playSuccessSound: true)
+            endSession(sessionID, .completed(playSound: true))
         } catch {
             AppLogger.shared.log(.error, "edit mode failed: \(error.localizedDescription)")
-            failDictationSession(
-                sessionID: sessionID,
-                lastErrorMessage: "Edit Mode failed: \(error.localizedDescription)",
-                indicatorMessage: "Rewrite failed"
-            )
+            endSession(sessionID, .failed(
+                lastError: "Edit Mode failed: \(error.localizedDescription)",
+                notice: "Rewrite failed"
+            ))
         }
     }
 
-    /// Shared success epilogue for every dictation/edit session.
-    private func completeDictationSession(sessionID: UUID, playSuccessSound: Bool) {
-        if playSuccessSound {
+    private func endSession(_ sessionID: UUID, _ end: SessionEnd) {
+        if case .completed(playSound: true) = end {
             playSoundFeedback(.transcriptionSucceeded)
         }
         clearActiveDictationSession(sessionID: sessionID)
-        lastError = nil
-        phase = .ready
-        statusText = "Ready"
-        setFloatingIndicatorState(.idle)
-    }
-
-    /// Shared failure epilogue; pass nil to leave the current lastError untouched.
-    private func failDictationSession(sessionID: UUID?, lastErrorMessage: String?, indicatorMessage: String) {
-        clearActiveDictationSession(sessionID: sessionID)
-        if let lastErrorMessage {
-            lastError = lastErrorMessage
+        switch end {
+        case .completed:
+            lastError = nil
+        case let .failed(lastError?, _):
+            self.lastError = lastError
+        case .failed, .discarded:
+            break
         }
         phase = .ready
         statusText = "Ready"
-        playSoundFeedback(.error)
-        showTransientIndicatorError(indicatorMessage)
+        switch end {
+        case .completed:
+            setFloatingIndicatorState(.idle)
+        case let .failed(_, notice):
+            playSoundFeedback(.error)
+            showTransientIndicatorError(notice)
+        case let .discarded(notice?):
+            showTransientIndicatorError(notice, duration: 1.2)
+        case .discarded(nil):
+            setFloatingIndicatorState(.idle)
+        }
     }
 
     private func requireAccessibilityForInsertion() async throws {
@@ -4392,7 +4392,7 @@ final class AppState {
         sessionID: UUID,
         reason: AudioCaptureInterruption
     ) async {
-        guard let context = activeDictationSession?.context, context.id == sessionID else {
+        guard let context = activeDictationSession, context.id == sessionID else {
             return
         }
         if reason == .maximumDurationReached {
@@ -4404,11 +4404,12 @@ final class AppState {
         guard activeAudioCaptureSessionID == sessionID else {
             return
         }
-        handleAudioCaptureFailure(.interrupted(reason), destination: context.destination)
+        handleAudioCaptureFailure(.interrupted(reason), sessionID: sessionID, destination: context.destination)
     }
 
     private func handleAudioCaptureFailure(
         _ outcome: AudioCaptureOutcome,
+        sessionID: UUID,
         destination: DictationDestination
     ) {
         let message = outcome.userMessage ?? "Audio capture was interrupted. Try again."
@@ -4422,11 +4423,7 @@ final class AppState {
         }
         AppLogger.shared.log(.warning, "audio capture rejected outcome=\(String(describing: outcome))")
         analytics.track(.audioCaptureFailed(outcome: AnalyticsMapping.audioOutcome(outcome)))
-        failDictationSession(
-            sessionID: nil,
-            lastErrorMessage: "Audio capture failed: \(message)",
-            indicatorMessage: message
-        )
+        endSession(sessionID, .failed(lastError: "Audio capture failed: \(message)", notice: message))
     }
 
     /// Called on termination: see `DictationStatsStore.flush()`.
@@ -4828,8 +4825,8 @@ final class AppState {
         return hasAccessibilityPermission ? .systemInsertion : .clipboardOnly
     }
 
-    private func clearActiveDictationSession(sessionID: UUID? = nil) {
-        guard sessionID == nil || activeAudioCaptureSessionID == sessionID else {
+    private func clearActiveDictationSession(sessionID: UUID) {
+        guard activeAudioCaptureSessionID == sessionID else {
             return
         }
         activeDictationSession = nil
@@ -4975,7 +4972,7 @@ final class AppState {
     private func showTranscriptionProgress(_ progress: TranscriptionProgress, sessionID: UUID) {
         guard progress.totalChunks > 1,
               phase == .transcribing,
-              activeDictationSession?.context.id == sessionID else {
+              activeDictationSession?.id == sessionID else {
             return
         }
         let message = "Transcribing \(progress.chunk) of \(progress.totalChunks)..."
