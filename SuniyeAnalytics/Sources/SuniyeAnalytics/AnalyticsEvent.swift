@@ -91,10 +91,10 @@ public enum AnalyticsEvent: Sendable {
     case meetingEnded(durationMs: Int, tracks: MeetingTracks, reason: MeetingStopReason)
     /// `durationMs` runs from the stop, or from the launch that finishes a
     /// recording that a quit or a crash left, to the final transcript.
-    case meetingTranscribed(outcome: MeetingTranscriptOutcome, model: SafeLabel, segments: Int, durationMs: Int)
+    case meetingTranscribed(outcome: MeetingOutcome, model: SafeLabel, segments: Int, durationMs: Int)
     /// `parts` is the number of transcript parts that got notes of their own;
     /// 1 when the transcript fit in one request, nil when no summary was written.
-    case meetingSummarized(provider: MeetingSummaryEngine, outcome: MeetingSummaryOutcome, parts: Int?, durationMs: Int)
+    case meetingSummarized(provider: MeetingSummaryEngine, outcome: MeetingOutcome, parts: Int?, durationMs: Int)
     /// How a call card closed. A card that a recording's start or stop closed
     /// sends nothing.
     case meetingCallCard(card: MeetingCallCardKind, action: MeetingCallCardAction)

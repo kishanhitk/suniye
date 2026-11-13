@@ -41,12 +41,6 @@ enum MeetingStatus: String, Codable, Sendable {
     }
 }
 
-enum MeetingStartSource: String, Codable, Sendable {
-    case manual
-    case offer
-    case automatic
-}
-
 enum MeetingTitleSource: String, Codable, Sendable {
     case placeholder
     case generated

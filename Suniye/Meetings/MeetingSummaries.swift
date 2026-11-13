@@ -12,7 +12,7 @@ final class MeetingSummaries {
     @ObservationIgnored private let store: MeetingStore
     @ObservationIgnored private let templates: MeetingTemplateStore
     @ObservationIgnored private let availability: () -> MeetingSummaryAvailability
-    @ObservationIgnored private let makeModel: (MeetingSummaryProvider) -> MeetingSummaryModel?
+    @ObservationIgnored private let makeModel: (MeetingSummaryEngine) -> MeetingSummaryModel?
     @ObservationIgnored private let analytics: Analytics
     /// Gets the record once its summary state is final.
     @ObservationIgnored var onFinished: ((MeetingRecord) -> Void)?
@@ -20,7 +20,7 @@ final class MeetingSummaries {
     /// own prompt into the model's cache again.
     @ObservationIgnored var onModelIdle: (() -> Void)?
     @ObservationIgnored private var queue: [UUID] = []
-    @ObservationIgnored private var writers: [UUID: (provider: MeetingSummaryProvider, writer: MeetingSummaryWriter)] = [:]
+    @ObservationIgnored private var writers: [UUID: (engine: MeetingSummaryEngine, writer: MeetingSummaryWriter)] = [:]
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var held = false
 
@@ -28,7 +28,7 @@ final class MeetingSummaries {
         store: MeetingStore,
         templates: MeetingTemplateStore,
         availability: @escaping () -> MeetingSummaryAvailability,
-        makeModel: @escaping (MeetingSummaryProvider) -> MeetingSummaryModel?,
+        makeModel: @escaping (MeetingSummaryEngine) -> MeetingSummaryModel?,
         analytics: Analytics
     ) {
         self.store = store
@@ -71,14 +71,14 @@ final class MeetingSummaries {
 
     private func runNext() {
         guard task == nil, !held, let id = queue.first,
-              case let .ready(provider) = availability(),
-              let writer = writer(for: id, provider: provider) else { return }
+              case let .ready(engine) = availability(),
+              let writer = writer(for: id, engine: engine) else { return }
         task = Task { [weak self] in
-            await self?.summarize(id, with: writer, provider: provider)
+            await self?.summarize(id, with: writer, engine: engine)
         }
     }
 
-    private func summarize(_ id: UUID, with writer: MeetingSummaryWriter, provider: MeetingSummaryProvider) async {
+    private func summarize(_ id: UUID, with writer: MeetingSummaryWriter, engine: MeetingSummaryEngine) async {
         writing = id
         defer {
             writing = nil
@@ -99,7 +99,7 @@ final class MeetingSummaries {
             speakerLabels: segments.contains { $0.track == .them }
         )
         let change: (inout MeetingRecord) -> Void
-        let outcome: MeetingSummaryOutcome
+        let outcome: MeetingOutcome
         var parts: Int?
         do {
             let summary = try await writer.write(input)
@@ -117,7 +117,7 @@ final class MeetingSummaries {
             change = { $0.status = .noSpeech }
             outcome = .noSpeech
         } catch {
-            AppLogger.shared.log(.error, "meeting summary failed id=\(id.uuidString) provider=\(provider.rawValue) error=\(error.localizedDescription)")
+            AppLogger.shared.log(.error, "meeting summary failed id=\(id.uuidString) engine=\(engine.rawValue) error=\(error.localizedDescription)")
             let cause = error.localizedDescription
             change = {
                 $0.status = .summaryFailed
@@ -126,7 +126,7 @@ final class MeetingSummaries {
             outcome = .failed
         }
         analytics.track(.meetingSummarized(
-            provider: provider.analyticsEngine,
+            provider: engine,
             outcome: outcome,
             parts: parts,
             durationMs: Int((ContinuousClock.now - started) / .milliseconds(1))
@@ -141,13 +141,13 @@ final class MeetingSummaries {
 
     /// One writer per meeting and model, so a stopped summary reuses the
     /// answers that it already has.
-    private func writer(for id: UUID, provider: MeetingSummaryProvider) -> MeetingSummaryWriter? {
-        if let existing = writers[id], existing.provider == provider {
+    private func writer(for id: UUID, engine: MeetingSummaryEngine) -> MeetingSummaryWriter? {
+        if let existing = writers[id], existing.engine == engine {
             return existing.writer
         }
-        guard let model = makeModel(provider) else { return nil }
+        guard let model = makeModel(engine) else { return nil }
         let writer = MeetingSummaryWriter(model: model)
-        writers[id] = (provider, writer)
+        writers[id] = (engine, writer)
         return writer
     }
 }

@@ -681,7 +681,6 @@ private actor WordEngine: TranscriptionServiceProtocol {
 /// Answers one summary; while closed, a request waits until it opens or its
 /// task is canceled.
 private actor GatedSummaryModel: MeetingSummaryModel {
-    nonisolated let provider = MeetingSummaryProvider.localModel
     private(set) var requests = 0
     private(set) var waiting = false
     private var isOpen = true

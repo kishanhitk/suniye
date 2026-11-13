@@ -40,18 +40,6 @@ enum MeetingStartError: LocalizedError, Equatable {
     }
 }
 
-/// Why a recording stopped.
-enum MeetingStopCause: String, Sendable {
-    case user
-    case callEnded
-    case sleep
-    case timeLimit
-    case noSpeech
-    case diskFull
-    case writeFailed
-    case quit
-}
-
 /// A write error that stopped a recording, for the meeting page's banner.
 struct MeetingWriteFailure: Equatable {
     let meetingID: UUID
@@ -218,7 +206,7 @@ final class MeetingCoordinator {
         environment: MeetingEnvironment,
         canRecordCallAudio: Bool,
         summaryAvailability: @escaping () -> MeetingSummaryAvailability,
-        makeSummaryModel: @escaping (MeetingSummaryProvider) -> MeetingSummaryModel?,
+        makeSummaryModel: @escaping (MeetingSummaryEngine) -> MeetingSummaryModel?,
         analytics: Analytics
     ) {
         self.store = store
@@ -312,7 +300,7 @@ final class MeetingCoordinator {
 
     // MARK: - Recording
 
-    func startMeeting(source: MeetingStartSource, callApp: MeetingCallApp? = nil) async throws {
+    func startMeeting(source: MeetingSource, callApp: MeetingCallApp? = nil) async throws {
         guard live == nil, !isStarting else { throw MeetingStartError.alreadyRecording }
         isStarting = true
         defer { isStarting = false }
@@ -364,7 +352,7 @@ final class MeetingCoordinator {
         closeCallCard()
         detector.recordingStarted(call: callApp)
         checkLive(session)
-        analytics.track(.meetingStarted(source: source.analyticsSource))
+        analytics.track(.meetingStarted(source: source))
         AppLogger.shared.log(.info, "meeting started id=\(record.id.uuidString) source=\(source.rawValue) tracks=\(recorder.tracks.map(\.rawValue).joined(separator: ","))")
     }
 
@@ -390,13 +378,13 @@ final class MeetingCoordinator {
     }
 
     /// Stops the recording, then finishes the transcript and queues the summary.
-    func stop(_ cause: MeetingStopCause = .user) async {
-        await stop(cause, endingAt: nil)
+    func stop(_ reason: MeetingStopReason = .user) async {
+        await stop(reason, endingAt: nil)
     }
 
     /// `cut` ends the meeting before now: the transcript keeps no line that
     /// starts after it.
-    private func stop(_ cause: MeetingStopCause, endingAt cut: Date?) async {
+    private func stop(_ reason: MeetingStopReason, endingAt cut: Date?) async {
         guard let session = beginStop() else { return }
         let now = wallSeconds(of: session)
         let end = cut.map { min(now, $0.timeIntervalSince(session.record.startedAt)) } ?? now
@@ -408,9 +396,9 @@ final class MeetingCoordinator {
             $0.status = .finishing
         }
         live = nil
-        AppLogger.shared.log(.info, "meeting stopped id=\(session.id.uuidString) cause=\(cause.rawValue)")
-        trackEnd(of: session, atWallSeconds: end, cause: cause)
-        switch cause {
+        AppLogger.shared.log(.info, "meeting stopped id=\(session.id.uuidString) reason=\(reason.rawValue)")
+        trackEnd(of: session, atWallSeconds: end, reason: reason)
+        switch reason {
         case .timeLimit:
             onNotice?(.stoppedAtTimeLimit(session.id))
         case .noSpeech:
@@ -438,7 +426,7 @@ final class MeetingCoordinator {
         await update(session.id) { $0.end(atWallSeconds: end) }
         live = nil
         AppLogger.shared.log(.info, "meeting stopped for quit id=\(session.id.uuidString)")
-        trackEnd(of: session, atWallSeconds: end, cause: .quit)
+        trackEnd(of: session, atWallSeconds: end, reason: .quit)
     }
 
     /// Finishes the transcript of a meeting from its audio files: after a
@@ -556,7 +544,7 @@ final class MeetingCoordinator {
         showCard(.startedAutomatically(app, cancelEndsAt: environment.now().addingTimeInterval(window)), for: window)
     }
 
-    private func startForCall(_ app: MeetingCallApp, source: MeetingStartSource) async {
+    private func startForCall(_ app: MeetingCallApp, source: MeetingSource) async {
         do {
             try await startMeeting(source: source, callApp: app)
         } catch {
@@ -694,12 +682,12 @@ final class MeetingCoordinator {
         return session
     }
 
-    private func trackEnd(of session: MeetingSession, atWallSeconds end: Double, cause: MeetingStopCause) {
+    private func trackEnd(of session: MeetingSession, atWallSeconds end: Double, reason: MeetingStopReason) {
         let recorded = MeetingTimeline(pauses: session.record.pauses).audioSeconds(forWallSeconds: end)
         analytics.track(.meetingEnded(
             durationMs: Int(recorded / 60) * 60_000,
             tracks: MeetingTracks(session.workingTracks),
-            reason: cause.analyticsReason
+            reason: reason
         ))
     }
 
@@ -729,7 +717,7 @@ final class MeetingCoordinator {
             finishing.remove(id)
             transcribers[id] = nil
         }
-        let outcome: MeetingTranscriptOutcome
+        let outcome: MeetingOutcome
         var segments = 0
         do {
             segments = try await run(transcriber).count

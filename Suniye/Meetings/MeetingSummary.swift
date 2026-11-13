@@ -1,15 +1,10 @@
 import Foundation
-
-/// The on-device model that wrote a meeting's summary.
-enum MeetingSummaryProvider: String, Codable, Sendable {
-    case appleIntelligence
-    case localModel
-}
+import SuniyeAnalytics
 
 /// Which on-device model can write summaries on this Mac now. A remote
 /// provider is never a choice: a meeting stays on the Mac.
 enum MeetingSummaryAvailability: Equatable, Sendable {
-    case ready(MeetingSummaryProvider)
+    case ready(MeetingSummaryEngine)
     /// The local model runs on this Mac once it is downloaded.
     case needsDownload
     /// No on-device model runs on this Mac.
