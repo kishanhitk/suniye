@@ -8,7 +8,7 @@ extension MeetingEnvironment {
     static func live(canRecordCallAudio: Bool) -> MeetingEnvironment {
         MeetingEnvironment(
             makeSources: { includeCallAudio, preferred in
-                var sources: [MeetingTrack: MeetingAudioSource] = [.you: MeetingMicCapture { preferred }]
+                var sources: [MeetingTrack: MeetingAudioSource] = [.you: MeetingMicCapture(preferredInputDeviceID: preferred)]
                 if includeCallAudio, #available(macOS 14.2, *) {
                     sources[.them] = SystemAudioTap()
                 }
