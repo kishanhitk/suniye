@@ -349,15 +349,18 @@ final class MeetingCoordinator {
         recorder.onEvent = { [weak self] event in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.handle(event, from: session) } }
         }
+        recorder.setMicrophoneMuted(dictationCaptures)
+        await transcriber.start()
         do {
             try recorder.start()
         } catch {
             transcribers[record.id] = nil
+            await transcriber.cancel()
             try? await store.delete(record.id)
             throw MeetingStartError.couldNotStart(error.localizedDescription)
         }
-        await transcriber.start()
-        recorder.setMicrophoneMuted(dictationCaptures)
+        // No await between the start and `live`: `handle` drops the events of
+        // a session that is not live, and the recorder sends some at once.
         live = session
         meetings.insert(record, at: 0)
         closeCallCard()
