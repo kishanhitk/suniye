@@ -34,6 +34,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     private var analytics: SpyAnalytics!
     private var uptime: TimeInterval = 1000
     private var cardDurations = MeetingCallCard.Durations()
+    private var summaryAvailability = MeetingSummaryAvailability.ready(.localModel)
 
     override func setUp() async throws {
         try await super.setUp()
@@ -80,7 +81,7 @@ final class MeetingCoordinatorTests: XCTestCase {
             engine: engine,
             environment: environment,
             canRecordCallAudio: true,
-            summaryAvailability: { .ready(.localModel) },
+            summaryAvailability: { [unowned self] in summaryAvailability },
             makeSummaryModel: { [unowned self] _ in summaryModel },
             analytics: analytics
         )
@@ -509,6 +510,30 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertFalse(microphone.listening)
         XCTAssertEqual(microphone.reads, 0)
         XCTAssertNil(coordinator.callCard)
+    }
+
+    func testTooLittleSpeechNeedsNoSummaryModel() async throws {
+        summaryAvailability = .unavailable
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+
+        them.push(tone(2.5, level: 0.5) + silence(0.5))
+        await coordinator.stop()
+
+        XCTAssertEqual(coordinator.record(id)?.status, .noSpeech)
+    }
+
+    func testRegenerateNeedsAFinalTranscript() async throws {
+        let left = MeetingRecord(title: "Meeting", startedAt: clock, tracks: [.you], status: .interrupted, templateID: "general")
+        try await store.create(left)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        await coordinator.regenerate(left.id)
+
+        XCTAssertEqual(coordinator.record(left.id)?.status, .interrupted)
     }
 
     func testATrackThatStartsAgainNoLongerShowsAsFailed() async throws {

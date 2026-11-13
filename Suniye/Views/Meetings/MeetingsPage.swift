@@ -44,7 +44,7 @@ struct MeetingsPage: View {
                     tint: .orange,
                     title: MeetingStatus.interruptedTitle,
                     detail: unfinishedDetail(record),
-                    actionTitle: meetings.finishing.contains(record.id) ? nil : "Finish Transcript",
+                    actionTitle: "Finish Transcript",
                     action: { meetings.finishTranscript(record.id) }
                 )
             }

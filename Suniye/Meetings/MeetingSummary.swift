@@ -119,12 +119,17 @@ actor MeetingSummaryWriter {
         self.model = model
     }
 
+    /// A summary needs `minimumWords` spoken words, or notes.
+    static func hasEnoughSpeech(_ segments: [MeetingSegment], notes: String) -> Bool {
+        let spokenWords = segments.reduce(0) { $0 + MeetingTranscript.words(in: $1.text).count }
+        return spokenWords >= minimumWords || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func write(_ input: MeetingSummaryInput) async throws -> MeetingSummary {
-        let notes = input.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let spokenWords = input.segments.reduce(0) { $0 + MeetingTranscript.words(in: $1.text).count }
-        guard spokenWords >= Self.minimumWords || !notes.isEmpty else {
+        guard Self.hasEnoughSpeech(input.segments, notes: input.notes) else {
             throw MeetingSummaryError.tooLittleSpeech
         }
+        let notes = input.notes.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let context = await model.contextTokens()
         let summaryBudget = budget(context: context, output: Self.summaryOutputTokens)

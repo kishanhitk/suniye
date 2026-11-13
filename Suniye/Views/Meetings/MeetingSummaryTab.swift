@@ -20,7 +20,7 @@ struct MeetingSummaryTab: View {
 
     @ViewBuilder
     private var state: some View {
-        if meetings.finishing.contains(record.id) || record.status == .finishing {
+        if record.status == .finishing {
             progress("Finishing the transcript...")
         } else {
             switch record.status {
@@ -159,7 +159,7 @@ struct MeetingRegenerateMenu: View {
             Task { await meetings.regenerate(record.id) }
         }
         .fixedSize()
-        .disabled(record.status == .summarizing || meetings.finishing.contains(record.id))
+        .disabled(!record.status.canRegenerate)
         .task(id: actions.editingTemplates) {
             templates = await meetings.templates.templates()
         }

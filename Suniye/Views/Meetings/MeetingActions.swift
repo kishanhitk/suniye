@@ -150,7 +150,7 @@ struct MeetingMenuItems: View {
             Divider()
             Button("Delete Meeting…") { actions.confirmDelete(record) }
                 .keyboardShortcut(.delete, modifiers: .command)
-                .disabled(meetings.finishing.contains(record.id))
+                .disabled(record.status == .finishing)
         }
     }
 }

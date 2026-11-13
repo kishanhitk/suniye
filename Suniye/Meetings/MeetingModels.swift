@@ -35,6 +35,17 @@ enum MeetingStatus: String, Codable, Sendable {
     static let noSpeechTitle = "Too little speech to summarize"
     static let interruptedTitle = "A transcript did not finish"
 
+    /// A summary can be written again: the transcript is final and no
+    /// summary runs.
+    var canRegenerate: Bool {
+        switch self {
+        case .done, .summaryFailed, .noSpeech:
+            return true
+        case .recording, .paused, .finishing, .summarizing, .interrupted:
+            return false
+        }
+    }
+
     /// States that only a running session can be in. A record found in one of
     /// them at launch belongs to a session that ended without saving.
     var needsRecovery: Bool {

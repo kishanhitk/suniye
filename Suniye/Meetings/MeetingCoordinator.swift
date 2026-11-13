@@ -154,7 +154,6 @@ final class MeetingCoordinator {
             }
         }
     }
-    private(set) var finishing: Set<UUID> = []
     /// A meeting that a disk write error stopped, for its banner.
     private(set) var writeFailure: MeetingWriteFailure?
     /// The meeting that the Meetings section shows; nil shows the list.
@@ -445,6 +444,7 @@ final class MeetingCoordinator {
         guard transcribers[id] == nil else { return }
         let transcriber = makeTranscriber(for: id, tracks: store.audioTracks(of: id))
         Task {
+            await update(id) { $0.status = .finishing }
             await finish(id, transcriber: transcriber) { try await $0.recover() }
         }
     }
@@ -614,22 +614,25 @@ final class MeetingCoordinator {
     }
 
     func regenerate(_ id: UUID, templateID: String? = nil) async {
-        guard live?.id != id, !finishing.contains(id), record(id)?.status != .summarizing else { return }
+        guard record(id)?.status.canRegenerate == true else { return }
         if let templateID {
             updateSettings { $0.templateID = templateID }
         }
+        let enough = await hasEnoughSpeech(id, segments: transcript(of: id))
         await update(id) {
             if let templateID {
                 $0.templateID = templateID
             }
-            $0.status = .summarizing
+            $0.status = enough ? .summarizing : .noSpeech
             $0.summaryFailure = nil
         }
-        summaries.enqueue(id)
+        if enough {
+            summaries.enqueue(id)
+        }
     }
 
     func delete(_ id: UUID) async throws {
-        guard live?.id != id, !finishing.contains(id) else { return }
+        guard live?.id != id, record(id)?.status != .finishing else { return }
         summaries.remove(id)
         try await store.delete(id)
         meetings.removeAll { $0.id == id }
@@ -720,23 +723,25 @@ final class MeetingCoordinator {
         transcriber: MeetingTranscriber,
         run: (MeetingTranscriber) async throws -> [MeetingSegment]
     ) async {
-        finishing.insert(id)
         let started = ContinuousClock.now
         defer {
-            finishing.remove(id)
             transcribers[id] = nil
         }
         let outcome: MeetingOutcome
         var segments = 0
         do {
-            segments = try await run(transcriber).count
+            let transcript = try await run(transcriber)
+            segments = transcript.count
             outcome = segments == 0 ? .noSpeech : .done
             await store.deleteAudio(of: id)
+            let enough = await hasEnoughSpeech(id, segments: transcript)
             await update(id) {
-                $0.status = .summarizing
+                $0.status = enough ? .summarizing : .noSpeech
                 $0.transcriptFailure = nil
             }
-            summaries.enqueue(id)
+            if enough {
+                summaries.enqueue(id)
+            }
         } catch {
             AppLogger.shared.log(.error, "meeting transcript not finished id=\(id.uuidString) error=\(error.localizedDescription)")
             outcome = .failed
@@ -845,6 +850,10 @@ final class MeetingCoordinator {
         } catch {
             AppLogger.shared.log(.error, "meeting not saved id=\(id.uuidString) error=\(error.localizedDescription)")
         }
+    }
+
+    private func hasEnoughSpeech(_ id: UUID, segments: [MeetingSegment]) async -> Bool {
+        MeetingSummaryWriter.hasEnoughSpeech(segments, notes: await store.notes(of: id))
     }
 
     private func apply(_ record: MeetingRecord) {
