@@ -622,11 +622,11 @@ struct HotkeyBindings: Equatable {
         let candidates = [pasteLastTranscript] + fallbackModifiers.map {
             HotkeyConfiguration.keyCombo(keyCode: UInt32(kVK_ANSI_V), carbonModifiers: $0)
         }
-        let pasteLastTranscript = candidates.first { candidate in
+        let freePasteLastTranscript = candidates.first { candidate in
             candidate.isModifiedKeyCombo && candidate != dictation && candidate != editMode
         } ?? .pasteLastTranscriptDefault
-        let editMode = editMode == dictation || editMode == pasteLastTranscript ? nil : editMode
-        return HotkeyBindings(dictation: dictation, pasteLastTranscript: pasteLastTranscript, editMode: editMode)
+        let distinctEditMode = editMode == dictation || editMode == freePasteLastTranscript ? nil : editMode
+        return HotkeyBindings(dictation: dictation, pasteLastTranscript: freePasteLastTranscript, editMode: distinctEditMode)
     }
 }
 
