@@ -77,6 +77,9 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     /// The call played on speakers at some point, so the microphone may have
     /// heard it and the transcript needs the echo filter.
     var callPlayedOnSpeakers: Bool
+    /// The audio position where the call that the meeting followed ended: the
+    /// transcript keeps no line that starts at or after it.
+    var transcriptEnd: Int?
     /// The model that wrote the summary on disk.
     var summaryProvider: MeetingSummaryProvider?
     /// Why the last summary failed, for the meeting page.
@@ -135,6 +138,10 @@ struct MeetingTimeline: Equatable, Sendable {
 
     func wallSeconds(forSample position: Int) -> Double {
         wallSeconds(forAudioSeconds: Double(position) / Double(MeetingAudioFormat.sampleRate))
+    }
+
+    func audioPosition(forWallSeconds wall: Double) -> Int {
+        Int(audioSeconds(forWallSeconds: wall) * Double(MeetingAudioFormat.sampleRate))
     }
 
     /// The audio position, in seconds, of a moment on the wall clock: the

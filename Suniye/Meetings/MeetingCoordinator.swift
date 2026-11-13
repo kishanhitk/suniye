@@ -404,6 +404,9 @@ final class MeetingCoordinator {
         let end = cut.map { min(now, $0.timeIntervalSince(session.record.startedAt)) } ?? now
         await update(session.id) {
             $0.end(atWallSeconds: end)
+            if cut != nil {
+                $0.transcriptEnd = MeetingTimeline(pauses: $0.pauses).audioPosition(forWallSeconds: end)
+            }
             $0.status = .finishing
         }
         live = nil
@@ -421,10 +424,7 @@ final class MeetingCoordinator {
         case .user, .callEnded, .sleep, .quit:
             break
         }
-        let keptAudio = cut.map { _ in
-            Int(MeetingTimeline(pauses: session.record.pauses).audioSeconds(forWallSeconds: end) * Double(MeetingAudioFormat.sampleRate))
-        }
-        await finish(session.id, transcriber: session.transcriber) { try await $0.finish(keepingAudioBefore: keptAudio) }
+        await finish(session.id, transcriber: session.transcriber) { try await $0.finish() }
     }
 
     /// A call track that cannot start again shows as a failed track.

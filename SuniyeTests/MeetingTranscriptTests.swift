@@ -87,6 +87,15 @@ final class MeetingTranscriptRulesTests: XCTestCase {
         XCTAssertEqual(MeetingTranscript.final([echo, call], callPlayedOnSpeakers: false), [call, echo])
     }
 
+    func testNoLineAfterTheEndOfTheFollowedCallIsKept() {
+        let during = segment(.you, 0, 3, "See you on Friday.")
+        let after = segment(.you, 5, 7, "That went well.")
+        var record = MeetingRecord(title: "Call", startedAt: Date(), startSource: .offer, templateID: "general")
+        record.transcriptEnd = 4 * MeetingAudioFormat.sampleRate
+
+        XCTAssertEqual(MeetingTranscript.final([after, during], of: record), [during])
+    }
+
     func testOwnWordsDuringTheCallAreKept() {
         let call = segment(.them, 0, 3, "We ship the release on Friday.")
         let reply = segment(.you, 1, 3, "I can take the docs.")

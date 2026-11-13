@@ -107,14 +107,13 @@ actor MeetingTranscriber {
     }
 
     /// Decodes the rest after the meeting stopped and returns the final
-    /// transcript, which is also stored. With `end`, a line that starts at or
-    /// after that sample position goes.
-    func finish(keepingAudioBefore end: Int? = nil) async throws -> [MeetingSegment] {
+    /// transcript, which is also stored.
+    func finish() async throws -> [MeetingSegment] {
         inputContinuation.finish()
         await consumer?.value
         flushSegmenters()
         await waitUntilDecoded()
-        return try await finalize(keepingAudioBefore: end)
+        return try await finalize()
     }
 
     /// For a meeting that the app did not finish: decodes the audio after the
@@ -148,7 +147,7 @@ actor MeetingTranscriber {
         }
         flushSegmenters()
         await waitUntilDecoded()
-        return try await finalize(keepingAudioBefore: nil)
+        return try await finalize()
     }
 
     // MARK: - Chunks
@@ -274,17 +273,18 @@ actor MeetingTranscriber {
         waiters.forEach { $0.resume() }
     }
 
-    private func finalize(keepingAudioBefore end: Int?) async throws -> [MeetingSegment] {
+    private func finalize() async throws -> [MeetingSegment] {
+        guard let record = await store.record(meetingID) else {
+            throw MeetingStore.StoreError.unknownMeeting(meetingID)
+        }
         let stored = await store.segments(of: meetingID)
-        let kept = end.map { end in stored.filter { $0.audioStart < end } } ?? stored
-        let callPlayedOnSpeakers = await store.record(meetingID)?.callPlayedOnSpeakers ?? false
-        let transcript = MeetingTranscript.final(kept, callPlayedOnSpeakers: callPlayedOnSpeakers)
+        let transcript = MeetingTranscript.final(stored, of: record)
         if transcript.count != stored.count {
             try await store.replaceSegments(transcript, of: meetingID)
         }
         AppLogger.shared.log(
             .info,
-            "meeting transcript finished id=\(meetingID.uuidString) chunks=\(stats.chunks) silent=\(stats.silent) segments=\(stats.segments) cut=\(stored.count - kept.count) echoes=\(kept.count - transcript.count) retries=\(stats.retries) failed=\(stats.failed) decodeSeconds=\(String(format: "%.1f", stats.decodeSeconds))"
+            "meeting transcript finished id=\(meetingID.uuidString) chunks=\(stats.chunks) silent=\(stats.silent) segments=\(stats.segments) dropped=\(stored.count - transcript.count) retries=\(stats.retries) failed=\(stats.failed) decodeSeconds=\(String(format: "%.1f", stats.decodeSeconds))"
         )
         return transcript
     }
