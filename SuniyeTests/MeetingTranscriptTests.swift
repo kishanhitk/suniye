@@ -101,6 +101,18 @@ final class MeetingTranscriptRulesTests: XCTestCase {
         XCTAssertEqual(MeetingTranscript.final([repeated, call], callPlayedOnSpeakers: true), [repeated, call])
     }
 
+    func testTurnsJoinOneSpeakersLinesAndShowTheWallClock() {
+        let segments = [
+            segment(.you, 0, 2, "Morning."),
+            segment(.you, 2, 4, "Ready?"),
+            segment(.them, 70, 72, "Yes."),
+        ]
+        let timeline = MeetingTimeline(pauses: [MeetingPause(start: 30, end: 90)])
+
+        XCTAssertEqual(MeetingTranscript.turns(segments, timeline: timeline, speakerLabels: true), ["[0:00] You: Morning. Ready?", "[2:10] Them: Yes."])
+        XCTAssertEqual(MeetingTranscript.turns(segments, timeline: nil, speakerLabels: false), ["Morning. Ready?", "Yes."])
+    }
+
     func testTheLiveViewHoldsAMicrophoneLineUntilTheCallIsDecodedPastIt() {
         let mine = segment(.you, 0, 2, "Morning, everyone.")
         let theirs = segment(.them, 2, 4, "Hi.")

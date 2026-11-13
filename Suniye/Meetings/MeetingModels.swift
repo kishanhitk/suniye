@@ -77,6 +77,8 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     /// The call played on speakers at some point, so the microphone may have
     /// heard it and the transcript needs the echo filter.
     var callPlayedOnSpeakers: Bool
+    /// The model that wrote the summary on disk.
+    var summaryProvider: MeetingSummaryProvider?
 
     init(
         id: UUID = UUID(),
@@ -90,7 +92,8 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         status: MeetingStatus = .recording,
         templateID: String,
         pauses: [MeetingPause] = [],
-        callPlayedOnSpeakers: Bool = false
+        callPlayedOnSpeakers: Bool = false,
+        summaryProvider: MeetingSummaryProvider? = nil
     ) {
         self.id = id
         self.title = title
@@ -104,6 +107,7 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         self.templateID = templateID
         self.pauses = pauses
         self.callPlayedOnSpeakers = callPlayedOnSpeakers
+        self.summaryProvider = summaryProvider
     }
 
     var duration: TimeInterval? {

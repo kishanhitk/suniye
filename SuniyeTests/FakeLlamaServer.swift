@@ -72,6 +72,20 @@ enum FakeLlamaServer {
 
             def do_POST(self):
                 global requests
+                if self.path == "/tokenize":
+                    body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                    if not self._authorized():
+                        self.send_response(401)
+                        self.end_headers()
+                        return
+                    words = json.loads(body).get("content", "").split()
+                    payload = json.dumps({"tokens": list(range(len(words)))}).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
                 if self.path != "/v1/chat/completions":
                     self.send_response(404)
                     self.end_headers()

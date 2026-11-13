@@ -39,6 +39,45 @@ enum MeetingTranscript {
         return final(ready, callPlayedOnSpeakers: callPlayedOnSpeakers)
     }
 
+    /// One line per turn: segments of one track in a row join into one turn.
+    /// `timeline` adds the wall-clock time of each turn; `speakerLabels`
+    /// adds "You" or "Them", and is false when the meeting had no call track.
+    static func turns(
+        _ segments: [MeetingSegment],
+        timeline: MeetingTimeline?,
+        speakerLabels: Bool
+    ) -> [String] {
+        var turns: [(track: MeetingTrack, start: Int, text: String)] = []
+        for segment in ordered(segments) {
+            if let last = turns.last, last.track == segment.track {
+                turns[turns.count - 1].text += " " + segment.text
+            } else {
+                turns.append((segment.track, segment.audioStart, segment.text))
+            }
+        }
+        return turns.map { turn in
+            var line = ""
+            if let timeline {
+                line += "[\(clock(timeline.wallSeconds(forSample: turn.start)))] "
+            }
+            if speakerLabels {
+                line += turn.track == .you ? "You: " : "Them: "
+            }
+            return line + turn.text
+        }
+    }
+
+    /// "4:05" under an hour, "1:04:05" from an hour on.
+    static func clock(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded(.down))
+        let hours = total / 3600
+        let minutes = total % 3600 / 60
+        let rest = total % 60
+        return hours > 0
+            ? String(format: "%d:%02d:%02d", hours, minutes, rest)
+            : String(format: "%d:%02d", minutes, rest)
+    }
+
     static func isEcho(_ segment: MeetingSegment, call: [MeetingSegment]) -> Bool {
         let spoken = words(in: segment.text)
         guard !spoken.isEmpty else { return false }
