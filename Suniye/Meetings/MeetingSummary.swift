@@ -306,13 +306,10 @@ enum MeetingSummaryPrompt {
             </transcript>
 
             Fill in these four lines from this part of the meeting:
-            Decisions:
-            Tasks:
-            Dates and numbers:
-            Open questions:
+            \(noteLines)
 
             Rules:
-            - After each label, write the items on the same line, separated by "; ". Write "none" when there is none.
+            \(noteItemRule)
             - Write each item in your own short words. Do not copy lines of the transcript.
             - Keep names, numbers and dates as the transcript says them.
             - For a task, say who does it and by when.
@@ -331,13 +328,10 @@ enum MeetingSummaryPrompt {
 
 
             Join these notes into the same four lines:
-            Decisions:
-            Tasks:
-            Dates and numbers:
-            Open questions:
+            \(noteLines)
 
             Rules:
-            - After each label, write the items on the same line, separated by "; ". Write "none" when there is none.
+            \(noteItemRule)
             - Keep every decision, every task with who does it, every date and number, and every open question.
             - Remove repeats.
             - Write in the language of the notes.
@@ -365,6 +359,16 @@ enum MeetingSummaryPrompt {
         - Write in the language of the meeting.
         """
     }
+
+    /// The lines of part notes: the part and the join prompts ask for the
+    /// same ones.
+    private static let noteLines = """
+        Decisions:
+        Tasks:
+        Dates and numbers:
+        Open questions:
+        """
+    private static let noteItemRule = "- After each label, write the items on the same line, separated by \"; \". Write \"none\" when there is none."
 
     private static func speakerRule(_ speakerLabels: Bool) -> String {
         speakerLabels
