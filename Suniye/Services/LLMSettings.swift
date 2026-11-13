@@ -1,5 +1,59 @@
 import Foundation
 
+/// The engine that runs Magic Format. `MagicFormatProvider` is the user's
+/// choice, which can also be "automatic".
+enum MagicFormatEngine: CaseIterable, Equatable {
+    case appleFoundationModels
+    case localGemma
+    case openAICompatible
+
+    /// The prompt file in Application Support/Suniye/prompts.
+    var promptFilename: String {
+        switch self {
+        case .appleFoundationModels:
+            return "apple.md"
+        case .localGemma:
+            return "local-gemma.md"
+        case .openAICompatible:
+            return "api.md"
+        }
+    }
+
+    var defaultPrompt: String {
+        switch self {
+        case .appleFoundationModels:
+            return LLMDefaults.defaultAppleMagicFormatPrompt
+        case .localGemma:
+            return LLMDefaults.defaultGemmaMagicFormatPrompt
+        case .openAICompatible:
+            return LLMDefaults.defaultBaseSystemPrompt
+        }
+    }
+
+    /// The stored settings field that holds this engine's prompt.
+    var promptKeyPath: WritableKeyPath<LLMSettings, String> {
+        switch self {
+        case .appleFoundationModels:
+            return \.appleSystemPrompt
+        case .localGemma:
+            return \.gemmaSystemPrompt
+        case .openAICompatible:
+            return \.baseSystemPrompt
+        }
+    }
+
+    func isAvailable(appleAvailable: Bool, localGemmaAvailable: Bool) -> Bool {
+        switch self {
+        case .appleFoundationModels:
+            return appleAvailable
+        case .localGemma:
+            return localGemmaAvailable
+        case .openAICompatible:
+            return true
+        }
+    }
+}
+
 enum MagicFormatProvider: String, CaseIterable, Codable {
     case automatic
     case appleFoundationModels
@@ -29,6 +83,27 @@ enum MagicFormatProvider: String, CaseIterable, Codable {
             return "Local formatting with an on-device LLM."
         case .openAICompatible:
             return "Use your OpenAI-compatible endpoint and API key."
+        }
+    }
+}
+
+extension MagicFormatProvider {
+    /// The engine whose settings apply. "Automatic" takes Apple Intelligence,
+    /// then the local model, then the API endpoint. A chosen engine applies
+    /// even while it cannot run.
+    func engine(appleAvailable: Bool, localGemmaAvailable: Bool) -> MagicFormatEngine {
+        switch self {
+        case .automatic:
+            if appleAvailable {
+                return .appleFoundationModels
+            }
+            return localGemmaAvailable ? .localGemma : .openAICompatible
+        case .appleFoundationModels:
+            return .appleFoundationModels
+        case .localGemma:
+            return .localGemma
+        case .openAICompatible:
+            return .openAICompatible
         }
     }
 }
@@ -284,6 +359,17 @@ struct LLMSettings: Codable, Equatable {
         return sections.joined(separator: "\n\n")
     }
 
+    func composedPrompt(for engine: MagicFormatEngine) -> String {
+        switch engine {
+        case .appleFoundationModels:
+            return composedAppleSystemPrompt
+        case .localGemma:
+            return composedGemmaSystemPrompt
+        case .openAICompatible:
+            return composedSystemPrompt
+        }
+    }
+
     /// Copy of these settings with app-specific instructions appended to every provider prompt.
     func appendingAppInstructions(_ instructions: String) -> LLMSettings {
         let normalizedInstructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -293,9 +379,9 @@ struct LLMSettings: Codable, Equatable {
 
         let appSection = "App-specific instructions:\n\(normalizedInstructions)"
         var copy = self
-        copy.baseSystemPrompt = [composedSystemPrompt, appSection].joined(separator: "\n\n")
-        copy.appleSystemPrompt = [composedAppleSystemPrompt, appSection].joined(separator: "\n\n")
-        copy.gemmaSystemPrompt = [composedGemmaSystemPrompt, appSection].joined(separator: "\n\n")
+        for engine in MagicFormatEngine.allCases {
+            copy[keyPath: engine.promptKeyPath] = [composedPrompt(for: engine), appSection].joined(separator: "\n\n")
+        }
         copy.systemPrompt = ""
         return copy
     }

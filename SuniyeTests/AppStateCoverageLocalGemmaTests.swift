@@ -359,7 +359,7 @@ final class AppStateCoverageLocalGemmaTests: XCTestCase {
             magicFormatPromptFileStore: promptStore
         )
         appleState.llmProvider = .appleFoundationModels
-        XCTAssertEqual(appleState.currentMagicFormatPromptURL, promptStore.providerPromptURL(.apple))
+        XCTAssertEqual(appleState.currentMagicFormatPromptURL, promptStore.providerPromptURL(.appleFoundationModels))
 
         let gemmaState = makeTestAppState(
             localGemmaMagicFormatPostProcessor: NoopLocalGemmaMagicFormatPostProcessor(availability: .available),
@@ -371,7 +371,7 @@ final class AppStateCoverageLocalGemmaTests: XCTestCase {
 
         let apiState = makeTestAppState(magicFormatPromptFileStore: promptStore)
         apiState.llmProvider = .openAICompatible
-        XCTAssertEqual(apiState.currentMagicFormatPromptURL, promptStore.providerPromptURL(.api))
+        XCTAssertEqual(apiState.currentMagicFormatPromptURL, promptStore.providerPromptURL(.openAICompatible))
     }
 
     func testLocalGemmaModelEntryComesFromCatalog() {

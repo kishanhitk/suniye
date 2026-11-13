@@ -1,12 +1,6 @@
 import Foundation
 import SuniyeAnalytics
 
-enum EffectiveMagicFormatProvider: Equatable {
-    case appleFoundationModels
-    case localGemma
-    case openAICompatible
-}
-
 /// The result of a Magic Format polish attempt: the text to insert, plus which
 /// provider was involved and why it fell back (closed vocabulary — never a log
 /// string). Construct only via the factories, which make the states coherent:
@@ -15,7 +9,7 @@ struct MagicFormatPolishOutcome {
     let text: String
     /// The provider that ran or was attempted; nil when no polish was attempted
     /// (Magic Format off, empty input).
-    let provider: EffectiveMagicFormatProvider?
+    let provider: MagicFormatEngine?
     let model: String?
     let fallbackReason: CleanupFallbackReason?
 
@@ -28,11 +22,11 @@ struct MagicFormatPolishOutcome {
         MagicFormatPolishOutcome(text: text, provider: nil, model: nil, fallbackReason: nil)
     }
 
-    static func polished(_ text: String, provider: EffectiveMagicFormatProvider, model: String?) -> MagicFormatPolishOutcome {
+    static func polished(_ text: String, provider: MagicFormatEngine, model: String?) -> MagicFormatPolishOutcome {
         MagicFormatPolishOutcome(text: text, provider: provider, model: model, fallbackReason: nil)
     }
 
-    static func fellBack(_ text: String, provider: EffectiveMagicFormatProvider?, model: String? = nil, reason: CleanupFallbackReason) -> MagicFormatPolishOutcome {
+    static func fellBack(_ text: String, provider: MagicFormatEngine?, model: String? = nil, reason: CleanupFallbackReason) -> MagicFormatPolishOutcome {
         MagicFormatPolishOutcome(text: text, provider: provider, model: model, fallbackReason: reason)
     }
 }
@@ -102,71 +96,21 @@ final class MagicFormatCoordinator {
         self.localGemmaPostProcessor = localGemmaPostProcessor
     }
 
+    /// The engine that would run now, or nil when the chosen engine cannot run.
     static func resolvedProvider(
         requestedProvider: MagicFormatProvider,
         appleAvailability: AppleFoundationModelsAvailability,
         localGemmaAvailability: LocalGemmaAvailability
-    ) -> EffectiveMagicFormatProvider? {
-        switch requestedProvider {
-        case .automatic:
-            if appleAvailability.isAvailable {
-                return .appleFoundationModels
-            }
-            if localGemmaAvailability.isAvailable {
-                return .localGemma
-            }
-            return .openAICompatible
-        case .appleFoundationModels:
-            return appleAvailability.isAvailable ? .appleFoundationModels : nil
-        case .localGemma:
-            return localGemmaAvailability.isAvailable ? .localGemma : nil
-        case .openAICompatible:
-            return .openAICompatible
-        }
-    }
-
-    static func usesAppleSettings(
-        requestedProvider: MagicFormatProvider,
-        appleAvailability: AppleFoundationModelsAvailability
-    ) -> Bool {
-        switch requestedProvider {
-        case .automatic:
-            return appleAvailability.isAvailable
-        case .appleFoundationModels:
-            return true
-        case .localGemma, .openAICompatible:
-            return false
-        }
-    }
-
-    static func usesLocalGemmaSettings(
-        requestedProvider: MagicFormatProvider,
-        appleAvailability: AppleFoundationModelsAvailability,
-        localGemmaAvailability: LocalGemmaAvailability
-    ) -> Bool {
-        switch requestedProvider {
-        case .automatic:
-            return !appleAvailability.isAvailable && localGemmaAvailability.isAvailable
-        case .localGemma:
-            return true
-        case .appleFoundationModels, .openAICompatible:
-            return false
-        }
-    }
-
-    static func needsAPIConfiguration(
-        requestedProvider: MagicFormatProvider,
-        appleAvailability: AppleFoundationModelsAvailability,
-        localGemmaAvailability: LocalGemmaAvailability
-    ) -> Bool {
-        switch requestedProvider {
-        case .automatic:
-            return !appleAvailability.isAvailable && !localGemmaAvailability.isAvailable
-        case .appleFoundationModels, .localGemma:
-            return false
-        case .openAICompatible:
-            return true
-        }
+    ) -> MagicFormatEngine? {
+        let engine = requestedProvider.engine(
+            appleAvailable: appleAvailability.isAvailable,
+            localGemmaAvailable: localGemmaAvailability.isAvailable
+        )
+        let isAvailable = engine.isAvailable(
+            appleAvailable: appleAvailability.isAvailable,
+            localGemmaAvailable: localGemmaAvailability.isAvailable
+        )
+        return isAvailable ? engine : nil
     }
 
     /// In-flight speculative warm-up. Canceled when a real polish request arrives so
@@ -214,14 +158,10 @@ final class MagicFormatCoordinator {
             localGemmaAvailability: request.localGemmaAvailability
         ) else {
             AppLogger.shared.log(.warning, "llm fallback raw reason=local_provider_unavailable apple_availability=\(request.appleAvailability.logValue) gemma_availability=\(request.localGemmaAvailability.logValue)")
-            // resolvedProvider is nil only when a SPECIFIC local provider was
-            // requested but is unavailable (.automatic/.openAICompatible always
-            // resolve) — record which one was attempted.
-            let attempted: EffectiveMagicFormatProvider? = switch request.requestedProvider {
-            case .appleFoundationModels: .appleFoundationModels
-            case .localGemma: .localGemma
-            case .automatic, .openAICompatible: nil // unreachable: these always resolve
-            }
+            let attempted = request.requestedProvider.engine(
+                appleAvailable: request.appleAvailability.isAvailable,
+                localGemmaAvailable: request.localGemmaAvailability.isAvailable
+            )
             return .fellBack(rawText, provider: attempted, reason: .providerUnavailable)
         }
 
@@ -324,7 +264,7 @@ final class MagicFormatCoordinator {
     /// The shared polish epilogue: run the provider, trim, guard empty output,
     /// log, and shape the outcome. One drift point instead of three.
     private func runPolish(
-        provider: EffectiveMagicFormatProvider,
+        provider: MagicFormatEngine,
         model: String?,
         logName: String,
         rawText: String,
@@ -423,7 +363,7 @@ final class MagicFormatCoordinator {
         LLMConfig(
             modelId: modelId,
             endpointURL: endpointURL,
-            systemPrompt: settings.composedSystemPrompt,
+            systemPrompt: settings.composedPrompt(for: .openAICompatible),
             keywords: settings.keywords,
             timeoutSeconds: settings.timeoutSeconds,
             apiKey: apiKey
@@ -432,7 +372,7 @@ final class MagicFormatCoordinator {
 
     static func makeAppleConfig(settings: LLMSettings) -> AppleMagicFormatConfig {
         AppleMagicFormatConfig(
-            systemPrompt: settings.composedAppleSystemPrompt,
+            systemPrompt: settings.composedPrompt(for: .appleFoundationModels),
             keywords: settings.keywords,
             timeoutSeconds: settings.timeoutSeconds
         )
@@ -440,7 +380,7 @@ final class MagicFormatCoordinator {
 
     static func makeLocalGemmaConfig(settings: LLMSettings) -> LocalGemmaMagicFormatConfig {
         LocalGemmaMagicFormatConfig(
-            systemPrompt: settings.composedGemmaSystemPrompt,
+            systemPrompt: settings.composedPrompt(for: .localGemma),
             keywords: settings.keywords,
             startupTimeoutSeconds: LocalGemmaDefaults.startupTimeoutSeconds,
             generationTimeoutSeconds: LocalGemmaDefaults.generationTimeoutSeconds,

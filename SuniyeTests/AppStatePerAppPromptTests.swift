@@ -114,7 +114,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: promptStoreBaseURL) }
         let promptStore = MagicFormatPromptFileStore(promptsDirectoryURL: promptStoreBaseURL)
         try FileManager.default.createDirectory(at: promptStoreBaseURL, withIntermediateDirectories: true)
-        try "file API prompt".write(to: promptStore.providerPromptURL(.api), atomically: true, encoding: .utf8)
+        try "file API prompt".write(to: promptStore.providerPromptURL(.openAICompatible), atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(at: promptStoreBaseURL.appendingPathComponent("apps", isDirectory: true), withIntermediateDirectories: true)
         try "file Slack prompt".write(to: promptStore.appPromptURL(bundleID: slackBundleID)!, atomically: true, encoding: .utf8)
 
@@ -148,10 +148,10 @@ final class AppStatePerAppPromptTests: XCTestCase {
             magicFormatPromptFileStore: promptStore
         )
 
-        try "external API prompt".write(to: promptStore.providerPromptURL(.api), atomically: true, encoding: .utf8)
+        try "external API prompt".write(to: promptStore.providerPromptURL(.openAICompatible), atomically: true, encoding: .utf8)
         appState.llmEnabled = true
 
-        XCTAssertEqual(try String(contentsOf: promptStore.providerPromptURL(.api), encoding: .utf8), "external API prompt")
+        XCTAssertEqual(try String(contentsOf: promptStore.providerPromptURL(.openAICompatible), encoding: .utf8), "external API prompt")
         XCTAssertEqual(settingsStore.latest.baseSystemPrompt, "settings API prompt")
     }
 

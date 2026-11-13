@@ -29,8 +29,8 @@ final class MagicFormatPromptFileStoreTests: XCTestCase {
         let synced = store.syncPrompts(settings: settings)
 
         XCTAssertEqual(synced, settings)
-        XCTAssertEqual(try String(contentsOf: store.providerPromptURL(.api), encoding: .utf8), "API prompt")
-        XCTAssertEqual(try String(contentsOf: store.providerPromptURL(.apple), encoding: .utf8), "Apple prompt")
+        XCTAssertEqual(try String(contentsOf: store.providerPromptURL(.openAICompatible), encoding: .utf8), "API prompt")
+        XCTAssertEqual(try String(contentsOf: store.providerPromptURL(.appleFoundationModels), encoding: .utf8), "Apple prompt")
         XCTAssertEqual(try String(contentsOf: store.providerPromptURL(.localGemma), encoding: .utf8), "Gemma prompt")
         XCTAssertEqual(try String(contentsOf: store.appPromptURL(bundleID: "com.example.notes")!, encoding: .utf8), "Notes prompt")
     }
@@ -44,7 +44,7 @@ final class MagicFormatPromptFileStoreTests: XCTestCase {
         ]
 
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
-        try "file API".write(to: store.providerPromptURL(.api), atomically: true, encoding: .utf8)
+        try "file API".write(to: store.providerPromptURL(.openAICompatible), atomically: true, encoding: .utf8)
         try FileManager.default.createDirectory(at: temporaryDirectory.appendingPathComponent("apps", isDirectory: true), withIntermediateDirectories: true)
         try "file app".write(to: store.appPromptURL(bundleID: "com.example.notes")!, atomically: true, encoding: .utf8)
 
@@ -60,12 +60,12 @@ final class MagicFormatPromptFileStoreTests: XCTestCase {
         settings.baseSystemPrompt = "restored API"
 
         _ = store.syncPrompts(settings: settings)
-        try FileManager.default.removeItem(at: store.providerPromptURL(.api))
+        try FileManager.default.removeItem(at: store.providerPromptURL(.openAICompatible))
 
         let synced = store.syncPrompts(settings: settings)
 
         XCTAssertEqual(synced.baseSystemPrompt, "restored API")
-        XCTAssertEqual(try String(contentsOf: store.providerPromptURL(.api), encoding: .utf8), "restored API")
+        XCTAssertEqual(try String(contentsOf: store.providerPromptURL(.openAICompatible), encoding: .utf8), "restored API")
     }
 
     func testPerAppPromptPathUsesBundleIDUnderAppsDirectory() {

@@ -283,13 +283,7 @@ struct StylePage: View {
     }
 
     private var isPromptAtDefault: Bool {
-        if appState.usesAppleMagicFormatSettings {
-            return appState.llmAppleSystemPrompt == LLMDefaults.defaultAppleMagicFormatPrompt
-        }
-        if appState.usesLocalGemmaMagicFormatSettings {
-            return appState.llmGemmaSystemPrompt == LLMDefaults.defaultGemmaMagicFormatPrompt
-        }
-        return appState.llmBaseSystemPrompt == LLMDefaults.defaultBaseSystemPrompt
+        appState.activeMagicFormatPrompt == appState.activeMagicFormatEngine.defaultPrompt
     }
 
     private var appPromptSummary: String {

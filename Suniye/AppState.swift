@@ -696,31 +696,37 @@ final class AppState {
         localGemmaInstallState.isInstalled && !localGemmaInstallState.isActive
     }
 
-    var usesAppleMagicFormatSettings: Bool {
-        MagicFormatCoordinator.usesAppleSettings(
-            requestedProvider: llmProvider,
-            appleAvailability: appleMagicFormatAvailability
+    /// The engine whose settings the Magic Format page shows and edits.
+    var activeMagicFormatEngine: MagicFormatEngine {
+        llmProvider.engine(
+            appleAvailable: appleMagicFormatAvailability.isAvailable,
+            localGemmaAvailable: localGemmaMagicFormatAvailability.isAvailable
         )
+    }
+
+    var usesAppleMagicFormatSettings: Bool {
+        activeMagicFormatEngine == .appleFoundationModels
     }
 
     var usesLocalGemmaMagicFormatSettings: Bool {
-        MagicFormatCoordinator.usesLocalGemmaSettings(
-            requestedProvider: llmProvider,
-            appleAvailability: appleMagicFormatAvailability,
-            localGemmaAvailability: localGemmaMagicFormatAvailability
-        )
+        activeMagicFormatEngine == .localGemma
     }
 
     var usesLocalMagicFormatSettings: Bool {
-        usesAppleMagicFormatSettings || usesLocalGemmaMagicFormatSettings
+        activeMagicFormatEngine != .openAICompatible
     }
 
     var needsAPIConfigurationForMagicFormat: Bool {
-        MagicFormatCoordinator.needsAPIConfiguration(
-            requestedProvider: llmProvider,
-            appleAvailability: appleMagicFormatAvailability,
-            localGemmaAvailability: localGemmaMagicFormatAvailability
-        )
+        activeMagicFormatEngine == .openAICompatible
+    }
+
+    /// The prompt of the active engine, for the instructions editor.
+    var activeMagicFormatPrompt: String {
+        get { llmSettings[keyPath: activeMagicFormatEngine.promptKeyPath] }
+        set {
+            let keyPath = activeMagicFormatEngine.promptKeyPath
+            updateLLMSettings { $0[keyPath: keyPath] = newValue }
+        }
     }
 
     var magicFormatProviderDetailText: String {
@@ -2537,13 +2543,7 @@ final class AppState {
     }
 
     var currentMagicFormatPromptURL: URL {
-        if usesAppleMagicFormatSettings {
-            return magicFormatPromptFileStore.providerPromptURL(.apple)
-        }
-        if usesLocalGemmaMagicFormatSettings {
-            return magicFormatPromptFileStore.providerPromptURL(.localGemma)
-        }
-        return magicFormatPromptFileStore.providerPromptURL(.api)
+        magicFormatPromptFileStore.providerPromptURL(activeMagicFormatEngine)
     }
 
     func refreshLocalGemmaInstallState() {
@@ -4572,14 +4572,8 @@ final class AppState {
         if new.isEnabled != old.isEnabled {
             analytics.track(.featureToggled(feature: .magicFormat, enabled: new.isEnabled))
         }
-        if new.baseSystemPrompt != old.baseSystemPrompt {
-            magicFormatPromptFileStore.saveProviderPrompt(.api, content: new.baseSystemPrompt)
-        }
-        if new.appleSystemPrompt != old.appleSystemPrompt {
-            magicFormatPromptFileStore.saveProviderPrompt(.apple, content: new.appleSystemPrompt)
-        }
-        if new.gemmaSystemPrompt != old.gemmaSystemPrompt {
-            magicFormatPromptFileStore.saveProviderPrompt(.localGemma, content: new.gemmaSystemPrompt)
+        for engine in MagicFormatEngine.allCases where new[keyPath: engine.promptKeyPath] != old[keyPath: engine.promptKeyPath] {
+            magicFormatPromptFileStore.saveProviderPrompt(engine, content: new[keyPath: engine.promptKeyPath])
         }
     }
 

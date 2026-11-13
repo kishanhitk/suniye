@@ -3,27 +3,10 @@ import Foundation
 protocol MagicFormatPromptFileStoreProtocol {
     func syncPrompts(settings: LLMSettings) -> LLMSettings
     func syncAppPrompt(bundleID: String, fallback: String) -> String
-    func saveProviderPrompt(_ prompt: MagicFormatProviderPromptFile, content: String)
+    func saveProviderPrompt(_ prompt: MagicFormatEngine, content: String)
     func saveAppPrompt(bundleID: String, content: String)
-    func providerPromptURL(_ prompt: MagicFormatProviderPromptFile) -> URL
+    func providerPromptURL(_ prompt: MagicFormatEngine) -> URL
     func appPromptURL(bundleID: String) -> URL?
-}
-
-enum MagicFormatProviderPromptFile: CaseIterable {
-    case api
-    case apple
-    case localGemma
-
-    var filename: String {
-        switch self {
-        case .api:
-            return "api.md"
-        case .apple:
-            return "apple.md"
-        case .localGemma:
-            return "local-gemma.md"
-        }
-    }
 }
 
 final class MagicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol {
@@ -39,9 +22,9 @@ final class MagicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol {
         createPromptDirectoriesIfNeeded()
 
         var synced = settings
-        synced.baseSystemPrompt = readOrCreateProviderPrompt(.api, fallback: settings.baseSystemPrompt)
-        synced.appleSystemPrompt = readOrCreateProviderPrompt(.apple, fallback: settings.appleSystemPrompt)
-        synced.gemmaSystemPrompt = readOrCreateProviderPrompt(.localGemma, fallback: settings.gemmaSystemPrompt)
+        for engine in MagicFormatEngine.allCases {
+            synced[keyPath: engine.promptKeyPath] = readOrCreateProviderPrompt(engine, fallback: settings[keyPath: engine.promptKeyPath])
+        }
         synced.appPromptBindings = settings.appPromptBindings.map { binding in
             var copy = binding
             copy.prompt = readOrCreateAppPrompt(bundleID: binding.bundleID, fallback: binding.prompt)
@@ -55,7 +38,7 @@ final class MagicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol {
         return readOrCreateAppPrompt(bundleID: bundleID, fallback: fallback)
     }
 
-    func saveProviderPrompt(_ prompt: MagicFormatProviderPromptFile, content: String) {
+    func saveProviderPrompt(_ prompt: MagicFormatEngine, content: String) {
         write(content, to: providerPromptURL(prompt))
     }
 
@@ -66,8 +49,8 @@ final class MagicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol {
         write(content, to: url)
     }
 
-    func providerPromptURL(_ prompt: MagicFormatProviderPromptFile) -> URL {
-        promptsDirectoryURL.appendingPathComponent(prompt.filename, isDirectory: false)
+    func providerPromptURL(_ prompt: MagicFormatEngine) -> URL {
+        promptsDirectoryURL.appendingPathComponent(prompt.promptFilename, isDirectory: false)
     }
 
     func appPromptURL(bundleID: String) -> URL? {
@@ -81,7 +64,7 @@ final class MagicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol {
         promptsDirectoryURL.appendingPathComponent("apps", isDirectory: true)
     }
 
-    private func readOrCreateProviderPrompt(_ prompt: MagicFormatProviderPromptFile, fallback: String) -> String {
+    private func readOrCreateProviderPrompt(_ prompt: MagicFormatEngine, fallback: String) -> String {
         readOrCreate(url: providerPromptURL(prompt), fallback: fallback)
     }
 

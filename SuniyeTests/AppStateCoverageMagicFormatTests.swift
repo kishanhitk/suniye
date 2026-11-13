@@ -252,7 +252,7 @@ final class AppStateCoverageMagicFormatTests: XCTestCase {
 
         appState.llmBaseSystemPrompt = "rewritten base prompt"
 
-        let content = try String(contentsOf: promptStore.providerPromptURL(.api), encoding: .utf8)
+        let content = try String(contentsOf: promptStore.providerPromptURL(.openAICompatible), encoding: .utf8)
         XCTAssertEqual(content, "rewritten base prompt")
     }
 

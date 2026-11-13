@@ -19,10 +19,10 @@ final class MagicFormatPromptFileStoreMoreTests: XCTestCase {
     func testSaveProviderPromptWritesFile() throws {
         let store = MagicFormatPromptFileStore(promptsDirectoryURL: temporaryDirectory)
 
-        store.saveProviderPrompt(.apple, content: "edited apple prompt")
+        store.saveProviderPrompt(.appleFoundationModels, content: "edited apple prompt")
 
         XCTAssertEqual(
-            try String(contentsOf: store.providerPromptURL(.apple), encoding: .utf8),
+            try String(contentsOf: store.providerPromptURL(.appleFoundationModels), encoding: .utf8),
             "edited apple prompt"
         )
     }
@@ -77,10 +77,10 @@ final class MagicFormatPromptFileStoreMoreTests: XCTestCase {
         ]
 
         let synced = store.syncPrompts(settings: settings)
-        store.saveProviderPrompt(.api, content: "ignored")
+        store.saveProviderPrompt(.openAICompatible, content: "ignored")
 
         // Prompts stay as-configured; no files could be created.
         XCTAssertEqual(synced, settings)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.providerPromptURL(.api).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.providerPromptURL(.openAICompatible).path))
     }
 }

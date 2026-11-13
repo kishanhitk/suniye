@@ -17,13 +17,14 @@ struct MagicFormatProviderPresenter {
         guard appState.llmProvider == .automatic else {
             return appState.llmProvider
         }
-        if appState.usesAppleMagicFormatSettings {
+        switch appState.activeMagicFormatEngine {
+        case .appleFoundationModels:
             return .appleFoundationModels
-        }
-        if appState.usesLocalGemmaMagicFormatSettings {
+        case .localGemma:
             return .localGemma
+        case .openAICompatible:
+            return .openAICompatible
         }
-        return .openAICompatible
     }
 
     var topStatusText: String {
@@ -52,15 +53,17 @@ struct MagicFormatProviderPresenter {
     }
 
     var setupStatusText: String {
-        if appState.usesAppleMagicFormatSettings {
+        switch appState.activeMagicFormatEngine {
+        case .appleFoundationModels:
             return appState.appleMagicFormatAvailability.isAvailable
                 ? "Apple Intelligence ready"
                 : appState.appleMagicFormatAvailability.statusText
-        }
-        if appState.usesLocalGemmaMagicFormatSettings {
+        case .localGemma:
             return appState.localGemmaMagicFormatAvailability.isAvailable
                 ? "Local model ready"
                 : appState.localGemmaInstallStatusText
+        case .openAICompatible:
+            break
         }
         if appState.isAPIMagicFormatSetupVerified {
             return "Connected and ready"
@@ -203,12 +206,13 @@ struct MagicFormatProviderPresenter {
     }
 
     private var activeFormatterName: String {
-        if appState.usesAppleMagicFormatSettings {
+        switch appState.activeMagicFormatEngine {
+        case .appleFoundationModels:
             return "Apple Intelligence"
-        }
-        if appState.usesLocalGemmaMagicFormatSettings {
+        case .localGemma:
             return "Local Model"
+        case .openAICompatible:
+            return "API Endpoint"
         }
-        return "API Endpoint"
     }
 }

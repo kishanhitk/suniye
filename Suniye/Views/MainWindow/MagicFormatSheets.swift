@@ -304,33 +304,22 @@ struct InstructionsSheet: View {
     }
 
     private var detail: String {
-        if appState.usesAppleMagicFormatSettings {
+        switch appState.activeMagicFormatEngine {
+        case .appleFoundationModels:
             return "Sent to Apple Intelligence with every dictation. The default is tested against a suite of real recordings."
-        }
-        if appState.usesLocalGemmaMagicFormatSettings {
+        case .localGemma:
             return "Sent to the local model with every dictation. The default is tested against a suite of real recordings."
+        case .openAICompatible:
+            return "Sent to your API endpoint with every dictation. The default is tested against a suite of real recordings."
         }
-        return "Sent to your API endpoint with every dictation. The default is tested against a suite of real recordings."
     }
 
     private var binding: Binding<String> {
-        if appState.usesAppleMagicFormatSettings {
-            return $appState.llmAppleSystemPrompt
-        }
-        if appState.usesLocalGemmaMagicFormatSettings {
-            return $appState.llmGemmaSystemPrompt
-        }
-        return $appState.llmBaseSystemPrompt
+        $appState.activeMagicFormatPrompt
     }
 
     private var defaultPrompt: String {
-        if appState.usesAppleMagicFormatSettings {
-            return LLMDefaults.defaultAppleMagicFormatPrompt
-        }
-        if appState.usesLocalGemmaMagicFormatSettings {
-            return LLMDefaults.defaultGemmaMagicFormatPrompt
-        }
-        return LLMDefaults.defaultBaseSystemPrompt
+        appState.activeMagicFormatEngine.defaultPrompt
     }
 }
 
