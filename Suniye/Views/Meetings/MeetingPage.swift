@@ -205,7 +205,7 @@ struct MeetingPage: View {
             MeetingTranscriptLine(
                 id: segment.id,
                 time: MeetingTranscript.clock(timeline.wallSeconds(forSample: segment.audioStart)),
-                speaker: record.hasCallTrack ? (segment.track == .you ? "You" : "Them") : nil,
+                speaker: record.hasCallTrack ? segment.track.speakerLabel : nil,
                 text: segment.text
             )
         }
@@ -298,7 +298,7 @@ private struct MeetingLiveMeta: View {
                 }
                 MeetingTimer(session: session)
             }
-            track(session.changedInput ?? "You", level: session.youLevel, problem: session.failedTracks[.you])
+            track(session.changedInput ?? MeetingTrack.you.speakerLabel, level: session.youLevel, problem: session.failedTracks[.you])
             if session.hasCallTrack {
                 if let problem = session.callAudioProblem {
                     Button {
@@ -312,7 +312,7 @@ private struct MeetingLiveMeta: View {
                         CallProblemPopover(problem: problem, meetings: meetings)
                     }
                 } else {
-                    track("Them", level: session.themLevel, problem: session.failedTracks[.them])
+                    track(MeetingTrack.them.speakerLabel, level: session.themLevel, problem: session.failedTracks[.them])
                 }
             }
         }

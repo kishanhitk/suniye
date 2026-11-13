@@ -14,10 +14,9 @@ enum MeetingTranscript {
     static let echoShare = 0.6
 
     static func ordered(_ segments: [MeetingSegment]) -> [MeetingSegment] {
-        segments.sorted { ($0.audioStart, $0.track.rawValue) < ($1.audioStart, $1.track.rawValue) }
+        segments.sorted { ($0.audioStart, $0.track) < ($1.audioStart, $1.track) }
     }
 
-    /// Every segment in time order, without the echo segments.
     /// The transcript that a reader sees: no echo of the call, and no line
     /// after the end of the call that the meeting followed.
     static func final(_ segments: [MeetingSegment], of record: MeetingRecord) -> [MeetingSegment] {
@@ -25,6 +24,7 @@ enum MeetingTranscript {
         return final(kept, callPlayedOnSpeakers: record.callPlayedOnSpeakers)
     }
 
+    /// Every segment in time order, without the echo segments.
     static func final(_ segments: [MeetingSegment], callPlayedOnSpeakers: Bool) -> [MeetingSegment] {
         guard callPlayedOnSpeakers else { return ordered(segments) }
         let call = segments.filter { $0.track == .them }
@@ -68,7 +68,7 @@ enum MeetingTranscript {
                 line += "[\(clock(timeline.wallSeconds(forSample: turn.start)))] "
             }
             if speakerLabels {
-                line += turn.track == .you ? "You: " : "Them: "
+                line += "\(turn.track.speakerLabel): "
             }
             return line + turn.text
         }

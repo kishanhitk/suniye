@@ -184,9 +184,10 @@ actor MeetingSummaryWriter {
         var parts: [[MeetingSegment]] = []
         var current: [MeetingSegment] = []
         var used = 0.0
+        // A segment costs its text, a speaker label with ": ", and a line break.
+        let labelCost = (MeetingTrack.allCases.map(\.speakerLabel.count).max() ?? 0) + 3
         for segment in segments {
-            // A segment costs its text, a label and a line break.
-            let cost = Double(segment.text.count + 7) * tokensPerCharacter
+            let cost = Double(segment.text.count + labelCost) * tokensPerCharacter
             if !current.isEmpty, used + cost > room {
                 parts.append(current)
                 current = []
@@ -367,7 +368,7 @@ enum MeetingSummaryPrompt {
 
     private static func speakerRule(_ speakerLabels: Bool) -> String {
         speakerLabels
-            ? "- \"You\" is the user. \"Them\" is the other people on the call."
+            ? "- \"\(MeetingTrack.you.speakerLabel)\" is the user. \"\(MeetingTrack.them.speakerLabel)\" is the other people on the call."
             : "- The transcript does not say who speaks."
     }
 

@@ -221,10 +221,8 @@ actor MeetingTranscriber {
         }
     }
 
-    /// The call track first when two chunks start together: a "You" line
-    /// waits for the call track anyway.
     private func earliestPendingIndex() -> Int? {
-        pending.indices.min { (pending[$0].start, pending[$0].track.rawValue) < (pending[$1].start, pending[$1].track.rawValue) }
+        pending.indices.min { (pending[$0].start, pending[$0].track) < (pending[$1].start, pending[$1].track) }
     }
 
     /// Returns false when the chunk should be tried again.

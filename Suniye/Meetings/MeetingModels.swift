@@ -1,9 +1,25 @@
 import Foundation
 
 /// The microphone is "You"; the audio of every other app (the call) is "Them".
-enum MeetingTrack: String, Codable, CaseIterable, Sendable {
+enum MeetingTrack: String, Codable, CaseIterable, Comparable, Sendable {
     case you
     case them
+
+    /// The call track sorts first: a "You" line that starts with a call line
+    /// waits for the call track anyway, so lines and chunks with one start
+    /// come in the same order everywhere.
+    static func < (lhs: MeetingTrack, rhs: MeetingTrack) -> Bool {
+        lhs == .them && rhs == .you
+    }
+
+    var speakerLabel: String {
+        switch self {
+        case .you:
+            return "You"
+        case .them:
+            return "Them"
+        }
+    }
 }
 
 struct MeetingSegment: Codable, Equatable, Identifiable, Sendable {
