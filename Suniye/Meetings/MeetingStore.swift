@@ -23,22 +23,23 @@ actor MeetingStore {
         }
     }
 
-    static func defaultRootDirectory(fileManager: FileManager = .default) -> URL {
-        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? fileManager.temporaryDirectory
-        return base
-            .appendingPathComponent("Suniye", isDirectory: true)
-            .appendingPathComponent("meetings", isDirectory: true)
+    static let supportDirectory: URL = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        ?? FileManager.default.temporaryDirectory)
+        .appendingPathComponent("Suniye", isDirectory: true)
+
+    /// One folder per app: Stable and Preview run side by side, and each one
+    /// recovers the recordings that it finds at launch.
+    static func defaultRootDirectory(identity: AppIdentity = .current) -> URL {
+        supportDirectory.appendingPathComponent(identity.isPreview ? "meetings-preview" : "meetings", isDirectory: true)
     }
 
     nonisolated let rootDirectory: URL
-    private let fileManager: FileManager
+    private let fileManager = FileManager.default
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    init(rootDirectory: URL = MeetingStore.defaultRootDirectory(), fileManager: FileManager = .default) {
+    init(rootDirectory: URL = MeetingStore.defaultRootDirectory()) {
         self.rootDirectory = rootDirectory
-        self.fileManager = fileManager
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()

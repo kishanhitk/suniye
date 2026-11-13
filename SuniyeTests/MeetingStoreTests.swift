@@ -34,6 +34,14 @@ final class MeetingStoreTests: XCTestCase {
         XCTAssertEqual(loaded.first, newer)
     }
 
+    func testStableAndPreviewKeepTheirMeetingsApart() {
+        let stable = AppIdentity(displayName: "Suniye", isPreview: false)
+        let preview = AppIdentity(displayName: "Suniye Preview", isPreview: true)
+
+        XCTAssertNotEqual(MeetingStore.defaultRootDirectory(identity: stable), MeetingStore.defaultRootDirectory(identity: preview))
+        XCTAssertNotEqual(MeetingTemplateStore.defaultFileURL(identity: stable), MeetingTemplateStore.defaultFileURL(identity: preview))
+    }
+
     func testSaveOfUnknownMeetingFails() async {
         do {
             try await store.save(makeRecord())
@@ -157,14 +165,6 @@ final class MeetingStoreTests: XCTestCase {
 final class MeetingAudioFileTests: XCTestCase {
     private var url: URL!
 
-    override func setUp() {
-        super.setUp()
-        url = FileManager.default.temporaryDirectory.appendingPathComponent("meeting-audio-\(UUID().uuidString).wav")
-    }
-
-    override func tearDown() {
-        try? FileManager.default.removeItem(at: url)
-        super.tearDown()
     func testOnlyAFullVolumeCountsAsOutOfSpace() {
         let full = NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))
         let wrapped = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError, userInfo: [NSUnderlyingErrorKey: full])
@@ -175,6 +175,14 @@ final class MeetingAudioFileTests: XCTestCase {
         XCTAssertFalse(MeetingAudioFileWriter.isOutOfSpace(NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))))
     }
 
+    override func setUp() {
+        super.setUp()
+        url = FileManager.default.temporaryDirectory.appendingPathComponent("meeting-audio-\(UUID().uuidString).wav")
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: url)
+        super.tearDown()
     }
 
     func testWrittenSamplesReadBackAsSixteenBitWithClipping() throws {
