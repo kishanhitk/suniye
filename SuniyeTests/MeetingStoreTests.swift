@@ -161,7 +161,7 @@ final class MeetingStoreTests: XCTestCase {
         try await store.create(done)
 
         let audio = store.audioURL(.them, for: paused.id)
-        let writer = try MeetingAudioFileWriter(url: audio, headerRefreshSeconds: 3600)
+        let writer = try MeetingAudioFileWriter(url: audio)
         try writer.append(Array(repeating: 0.25, count: 16_000))
         // No close: the header still says zero samples, as after a crash.
         let samplesBeforeRepair = try MeetingAudioFileReader.samples(at: audio).count
@@ -229,17 +229,6 @@ final class MeetingAudioFileTests: XCTestCase {
         XCTAssertEqual(middle.count, 3)
         XCTAssertEqual(middle[0], 0.010, accuracy: 0.0002)
         XCTAssertEqual(pastEnd.count, 5)
-    }
-
-    func testHeaderIsRefreshedWhileWritingSoACrashLosesLittleAudio() throws {
-        let writer = try MeetingAudioFileWriter(url: url, headerRefreshSeconds: 1)
-        try writer.append(Array(repeating: 0.1, count: 16_000))
-        try writer.append(Array(repeating: 0.1, count: 8_000))
-
-        let header = try Data(contentsOf: url).subdata(in: 40 ..< 44)
-        let dataBytes = header.withUnsafeBytes { $0.load(as: UInt32.self) }.littleEndian
-
-        XCTAssertEqual(dataBytes, 32_000, "the header covers the first full second; the last half second waits for the next refresh")
     }
 
     func testReaderRejectsAFileThatIsNotAWave() throws {

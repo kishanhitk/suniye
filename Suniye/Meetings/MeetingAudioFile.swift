@@ -1,9 +1,8 @@
 import Foundation
 
 /// One meeting track on disk: 16 kHz, mono, 16-bit PCM WAV. The writer
-/// appends as audio arrives and rewrites the two size fields of the header
-/// every few seconds, so a file cut by a crash loses at most that much audio
-/// and `repairHeader(at:)` makes the rest readable.
+/// appends as audio arrives and writes the sizes in the header when it
+/// closes; the reader and crash recovery use the file length instead.
 enum MeetingAudioFormat {
     static let sampleRate = 16_000
     static let headerSize = 44
@@ -45,16 +44,10 @@ final class MeetingAudioFileWriter {
         }
     }
 
-    let url: URL
     private let handle: FileHandle
-    private let headerRefreshSamples: Int
     private var samplesWritten = 0
-    private var samplesSinceHeaderRefresh = 0
 
-    /// `headerRefreshSeconds` bounds how much audio a crash can cost.
-    init(url: URL, headerRefreshSeconds: Double = 5) throws {
-        self.url = url
-        headerRefreshSamples = max(1, Int(headerRefreshSeconds * Double(MeetingAudioFormat.sampleRate)))
+    init(url: URL) throws {
         FileManager.default.createFile(atPath: url.path, contents: Self.header(dataBytes: 0))
         handle = try FileHandle(forWritingTo: url)
         try handle.seekToEnd()
@@ -77,24 +70,13 @@ final class MeetingAudioFileWriter {
         }
         try handle.write(contentsOf: data)
         samplesWritten += samples.count
-        samplesSinceHeaderRefresh += samples.count
-        if samplesSinceHeaderRefresh >= headerRefreshSamples {
-            try refreshHeader()
-        }
     }
 
     func close() throws {
-        try refreshHeader()
-        try handle.synchronize()
-        try handle.close()
-    }
-
-    private func refreshHeader() throws {
-        let end = try handle.offset()
         try handle.seek(toOffset: 0)
         try handle.write(contentsOf: Self.header(dataBytes: samplesWritten * MeetingAudioFormat.bytesPerSample))
-        try handle.seek(toOffset: end)
-        samplesSinceHeaderRefresh = 0
+        try handle.synchronize()
+        try handle.close()
     }
 
     static func header(dataBytes: Int) -> Data {
