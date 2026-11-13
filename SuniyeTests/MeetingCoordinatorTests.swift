@@ -271,6 +271,21 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.stop()
     }
 
+    func testRecordAutomaticallyNeedsTheNoticeAndCancelKeepsAsk() async {
+        let coordinator = makeCoordinator()
+        noticeAnswer = false
+
+        await coordinator.chooseCallStartAction(.recordAutomatically)
+        let afterCancel = coordinator.settings
+        noticeAnswer = true
+        await coordinator.chooseCallStartAction(.recordAutomatically)
+
+        XCTAssertEqual(afterCancel.callStartAction, .ask)
+        XCTAssertEqual(coordinator.settings.callStartAction, .recordAutomatically)
+        XCTAssertTrue(coordinator.settings.noticeAccepted)
+        XCTAssertEqual(noticeCount, 2)
+    }
+
     private func waitUntil(_ condition: @MainActor () async -> Bool) async -> Bool {
         for _ in 0 ..< 500 {
             if await condition() {

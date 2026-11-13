@@ -40,7 +40,7 @@ enum MeetingNoticeAlert {
         alert.messageText = "Before you record"
         alert.informativeText = includesCallAudio
             ? "Suniye records your microphone and the sound of the call. Let everyone in the call know.\n\nAudio and transcripts stay on this Mac."
-            : "Suniye records your microphone. Recording the sound of a call needs macOS 14.4 or later. Let everyone in the call know.\n\nAudio and transcripts stay on this Mac."
+            : "Suniye records your microphone. Let everyone in the call know.\n\nAudio and transcripts stay on this Mac.\n\nRecording a call needs macOS 14.4 or later."
         alert.addButton(withTitle: "Continue")
         alert.addButton(withTitle: "Cancel")
         let copier = SentenceCopier(sentence: sentence)

@@ -114,6 +114,17 @@ final class MeetingStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.folder(for: record.id).path))
     }
 
+    func testDiskUsageCountsEveryMeetingFile() async throws {
+        let record = makeRecord()
+        try await store.create(record)
+        try await store.saveNotes(String(repeating: "a", count: 1_000), for: record.id)
+
+        let usage = await store.diskUsage()
+        let recordBytes = try FileManager.default.attributesOfItem(atPath: store.folder(for: record.id).appendingPathComponent("meeting.json").path)[.size] as? Int ?? 0
+
+        XCTAssertEqual(usage, Int64(1_000 + recordBytes))
+    }
+
     func testRecoveryFinishesARecordingMeetingButLeavesAFailedFinishToTheUser() async throws {
         var paused = makeRecord(status: .paused)
         paused.pauses = [MeetingPause(start: 0.5, end: 10.5), MeetingPause(start: 90, end: nil)]

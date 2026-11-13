@@ -176,6 +176,16 @@ actor MeetingStore {
         try text.write(to: summaryURL(id), atomically: true, encoding: .utf8)
     }
 
+    /// Bytes that all meetings take on disk.
+    func diskUsage() -> Int64 {
+        guard let files = fileManager.enumerator(at: rootDirectory, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in files {
+            total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+        }
+        return total
+    }
+
     func hasAudio(of id: UUID) -> Bool {
         MeetingTrack.allCases.contains { fileManager.fileExists(atPath: audioURL($0, for: id).path) }
     }

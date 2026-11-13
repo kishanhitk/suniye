@@ -228,6 +228,16 @@ final class MeetingCoordinator {
         settingsStore.save(settings)
     }
 
+    /// Record Automatically shows the recording notice first, because no
+    /// later recording asks; Cancel keeps the earlier choice.
+    func chooseCallStartAction(_ action: MeetingCallStartAction) async {
+        if action == .recordAutomatically, settings.callStartAction != .recordAutomatically {
+            guard await environment.confirmNotice() else { return }
+            updateSettings { $0.noticeAccepted = true }
+        }
+        updateSettings { $0.callStartAction = action }
+    }
+
     // MARK: - Recording
 
     func startMeeting(source: MeetingStartSource, callApp: MeetingCallApp? = nil) async throws {
