@@ -216,7 +216,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc
     private func pauseOrResumeMeeting() {
         AppLogger.shared.log(.info, "menu action: pause or resume meeting")
-        appState.handleMeetingPillAction(appState.meetings.live?.isPaused == true ? .resume : .pause)
+        appState.pauseOrResumeMeeting()
     }
 
     @objc

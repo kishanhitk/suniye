@@ -5862,6 +5862,11 @@ extension AppState: MeetingHost {
         alert.runModal()
     }
 
+    func pauseOrResumeMeeting() {
+        guard let live = meetings.live else { return }
+        handleMeetingPillAction(live.isPaused ? .resume : .pause)
+    }
+
     func handleMeetingPillAction(_ action: MeetingPillAction) {
         guard let live = meetings.live else { return }
         switch action {
