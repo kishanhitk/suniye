@@ -5963,19 +5963,13 @@ extension AppState: MeetingHost {
         localGemmaClient: LocalGemmaClient,
         analytics: Analytics
     ) -> MeetingCoordinator {
-        let canRecordCallAudio: Bool
-        if #available(macOS 14.4, *) {
-            canRecordCallAudio = true
-        } else {
-            canRecordCallAudio = false
-        }
-        return MeetingCoordinator(
+        MeetingCoordinator(
             store: MeetingStore(),
             templates: MeetingTemplateStore(),
             settingsStore: MeetingSettingsStore(),
             engine: transcriptionService,
-            environment: .live(canRecordCallAudio: canRecordCallAudio),
-            canRecordCallAudio: canRecordCallAudio,
+            environment: .live(),
+            canRecordCallAudio: MeetingEnvironment.canRecordCallAudio,
             summaryAvailability: {
                 MeetingSummaryAvailability(apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
             },

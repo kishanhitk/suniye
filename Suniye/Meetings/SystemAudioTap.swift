@@ -14,7 +14,7 @@ import Foundation
 /// - macOS asks for the system audio permission on the first start. No public
 ///   API reports the answer: a denied tap delivers silence, which the recorder
 ///   reports after a while without sound.
-@available(macOS 14.2, *)
+@available(macOS 14.4, *)
 final class SystemAudioTap: MeetingAudioSource, @unchecked Sendable {
     enum TapError: LocalizedError {
         case coreAudio(String, OSStatus)
