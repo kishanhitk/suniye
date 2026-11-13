@@ -52,8 +52,9 @@ enum MeetingNotice: Equatable {
     case callAudioStopped(since: TimeInterval)
     case microphoneChanged(String)
     case trackFailed(MeetingTrack)
-    case stoppedAtTimeLimit(UUID)
-    case stoppedWithoutSpeech(UUID)
+    /// `after` is the limit that stopped the recording.
+    case stoppedAtTimeLimit(UUID, after: TimeInterval)
+    case stoppedWithoutSpeech(UUID, after: TimeInterval)
     case stoppedByDiskFull(UUID)
     case stoppedByWriteError(UUID)
     case summaryReady(UUID)
@@ -405,9 +406,9 @@ final class MeetingCoordinator {
         trackEnd(of: session, atWallSeconds: end, reason: reason)
         switch reason {
         case .timeLimit:
-            onNotice?(.stoppedAtTimeLimit(session.id))
+            onNotice?(.stoppedAtTimeLimit(session.id, after: Self.recordingLimit))
         case .noSpeech:
-            onNotice?(.stoppedWithoutSpeech(session.id))
+            onNotice?(.stoppedWithoutSpeech(session.id, after: environment.speechlessLimit))
         case .diskFull:
             onNotice?(.stoppedByDiskFull(session.id))
         case .writeFailed:

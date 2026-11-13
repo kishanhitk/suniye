@@ -27,6 +27,8 @@ final class MeetingListTextTests: XCTestCase {
         XCTAssertEqual(MeetingDurationText.text(38 * 60), "38 min")
         XCTAssertEqual(MeetingDurationText.text(112 * 60), "1 h 52 min")
         XCTAssertEqual(MeetingDurationText.text(7_200), "2 h")
+        XCTAssertEqual(MeetingDurationText.spelledOut(4 * 60 * 60), "4 hours")
+        XCTAssertEqual(MeetingDurationText.spelledOut(15 * 60), "15 minutes")
     }
 }
 

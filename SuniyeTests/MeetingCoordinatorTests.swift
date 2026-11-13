@@ -291,7 +291,7 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(stopped)
         XCTAssertEqual(coordinator.record(id)?.endedAt, clock)
-        XCTAssertEqual(notices.first, .stoppedAtTimeLimit(id))
+        XCTAssertEqual(notices.first, .stoppedAtTimeLimit(id, after: 4 * 60 * 60))
         XCTAssertEqual(event("meeting_ended")?["reason"], .label("time_limit"))
         XCTAssertEqual(event("meeting_ended")?["duration_ms"], .int(240 * 60_000))
     }
@@ -316,7 +316,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(decoded)
         XCTAssertTrue(recordingAfterThreeQuietSeconds)
         XCTAssertTrue(stopped)
-        XCTAssertEqual(notices.first, .stoppedWithoutSpeech(session.id))
+        XCTAssertEqual(notices.first, .stoppedWithoutSpeech(session.id, after: 6))
         XCTAssertEqual(session.segments.map(\.text), [longSentence])
     }
 

@@ -5916,10 +5916,10 @@ extension AppState: MeetingHost {
             ) { [weak self] in
                 self?.openMeeting(live.id)
             }
-        case let .stoppedAtTimeLimit(id):
-            showMeetingStopped(id, message: "Recording stopped after 4 hours")
-        case let .stoppedWithoutSpeech(id):
-            showMeetingStopped(id, message: "Recording stopped after 15 minutes without speech")
+        case let .stoppedAtTimeLimit(id, limit):
+            showMeetingStopped(id, message: "Recording stopped after \(MeetingDurationText.spelledOut(limit))")
+        case let .stoppedWithoutSpeech(id, limit):
+            showMeetingStopped(id, message: "Recording stopped after \(MeetingDurationText.spelledOut(limit)) without speech")
         case let .stoppedByDiskFull(id):
             // The meeting page shows its own banner for it.
             guard id != pageOnScreen else { return }
