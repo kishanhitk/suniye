@@ -349,7 +349,6 @@ final class MeetingCoordinator {
             startedAt: environment.now(),
             callAppName: callApp?.name,
             callAppBundleID: callApp?.bundleID,
-            startSource: source,
             templateID: settings.templateID,
             callPlayedOnSpeakers: environment.callPlaysOnSpeakers()
         )
@@ -463,8 +462,7 @@ final class MeetingCoordinator {
     /// quit or a crash, or when the user asks again after a failed finish.
     func finishTranscript(_ id: UUID) {
         guard transcribers[id] == nil else { return }
-        let tracks = MeetingTrack.allCases.filter { FileManager.default.fileExists(atPath: store.audioURL($0, for: id).path) }
-        let transcriber = makeTranscriber(for: id, tracks: tracks)
+        let transcriber = makeTranscriber(for: id, tracks: store.audioTracks(of: id))
         Task {
             await finish(id, transcriber: transcriber) { try await $0.recover() }
         }
@@ -728,7 +726,6 @@ final class MeetingCoordinator {
             tracks: tracks,
             store: store,
             engine: engine,
-            engineName: { [weak self] in await self?.loadedModel?.rawValue ?? "" },
             mayDecode: { [weak self] in await self?.speechEngineFree ?? false },
             onEvent: { [weak self] event in
                 DispatchQueue.main.async { MainActor.assumeIsolated { self?.handle(event, of: id) } }

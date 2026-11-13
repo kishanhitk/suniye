@@ -117,10 +117,6 @@ actor MeetingTemplateStore {
         try write(saved)
     }
 
-    func restoreDefault(id: String) throws {
-        try write(load().filter { $0.id != id })
-    }
-
     func delete(id: String) throws {
         guard !MeetingTemplate.builtIn.contains(where: { $0.id == id }) else {
             throw StoreError.builtInTemplate

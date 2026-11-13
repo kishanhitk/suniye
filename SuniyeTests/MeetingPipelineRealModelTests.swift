@@ -102,14 +102,13 @@ final class MeetingPipelineRealModelTests: XCTestCase {
 
         let tracks = try await Self.synthesizeCall(echo: echo)
         let store = MeetingStore(rootDirectory: root)
-        let record = MeetingRecord(title: "Call", startedAt: Date(), startSource: .manual, templateID: MeetingTemplate.general.id, callPlayedOnSpeakers: echo)
+        let record = MeetingRecord(title: "Call", startedAt: Date(), templateID: MeetingTemplate.general.id, callPlayedOnSpeakers: echo)
         try await store.create(record)
         let transcriber = MeetingTranscriber(
             meetingID: record.id,
             tracks: MeetingTrack.allCases,
             store: store,
             engine: engine,
-            engineName: { "parakeetV3" },
             mayDecode: { true },
             onEvent: { _ in }
         )
@@ -198,7 +197,7 @@ final class MeetingPipelineRealModelTests: XCTestCase {
         let text = ((summary.title ?? "") + "\n" + summary.body).lowercased()
         let kept = Self.facts.filter { $0.found(text) }
         let words = segments.reduce(0) { $0 + MeetingTranscript.words(in: $1.text).count }
-        print("meeting summary \(model.provider) \(minutes) min: \(words) words, parts \(summary.parts), \(String(format: "%.0f", seconds)) s, facts \(kept.count)/\(Self.facts.count), missing \(Self.facts.filter { !$0.found(text) }.map(\.line))")
+        print("meeting summary \(type(of: model)) \(minutes) min: \(words) words, parts \(summary.parts), \(String(format: "%.0f", seconds)) s, facts \(kept.count)/\(Self.facts.count), missing \(Self.facts.filter { !$0.found(text) }.map(\.line))")
         print(summary.title ?? "(no title)")
         print(summary.body)
         XCTAssertNotNil(summary.title)
@@ -254,8 +253,7 @@ final class MeetingPipelineRealModelTests: XCTestCase {
                 track: index.isMultiple(of: 2) ? .them : .you,
                 audioStart: position,
                 audioEnd: position + length,
-                text: text,
-                engine: "parakeetV3"
+                text: text
             )
         }
     }

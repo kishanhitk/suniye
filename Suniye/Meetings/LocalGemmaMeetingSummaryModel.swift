@@ -9,10 +9,6 @@ struct LocalGemmaMeetingSummaryModel: MeetingSummaryModel {
 
     let client: LocalGemmaClient
 
-    var provider: MeetingSummaryProvider {
-        .localModel
-    }
-
     func contextTokens() async -> Int {
         LocalGemmaDefaults.contextSize
     }

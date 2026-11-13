@@ -69,7 +69,7 @@ actor MeetingStore {
         try save(record)
     }
 
-    func save(_ record: MeetingRecord) throws {
+    private func save(_ record: MeetingRecord) throws {
         guard fileManager.fileExists(atPath: folder(for: record.id).path) else {
             throw StoreError.unknownMeeting(record.id)
         }
@@ -196,8 +196,9 @@ actor MeetingStore {
         return total
     }
 
-    func hasAudio(of id: UUID) -> Bool {
-        MeetingTrack.allCases.contains { fileManager.fileExists(atPath: audioURL($0, for: id).path) }
+    /// The tracks whose audio file is still on disk.
+    nonisolated func audioTracks(of id: UUID) -> [MeetingTrack] {
+        MeetingTrack.allCases.filter { FileManager.default.fileExists(atPath: audioURL($0, for: id).path) }
     }
 
     func deleteAudio(of id: UUID) {

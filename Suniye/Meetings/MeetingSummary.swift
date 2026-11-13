@@ -56,7 +56,6 @@ struct MeetingSummaryRequest: Hashable, Sendable {
 
 /// One on-device model, as the summary writer uses it.
 protocol MeetingSummaryModel {
-    var provider: MeetingSummaryProvider { get }
     /// Tokens that one request holds: the prompt and the answer together.
     func contextTokens() async -> Int
     /// Tokens in `text` by the model's own tokenizer, or nil when the model
@@ -79,7 +78,6 @@ struct MeetingSummary: Equatable, Sendable {
     let title: String?
     /// Markdown: "## " headings, "- " list lines and plain lines.
     let body: String
-    let provider: MeetingSummaryProvider
     /// The transcript parts that got notes of their own; 1 when the
     /// transcript fit in one request.
     let parts: Int
@@ -171,7 +169,7 @@ actor MeetingSummaryWriter {
         guard !parsed.body.isEmpty else {
             throw MeetingSummaryError.failed(Self.cause(of: LLMPostProcessorError.emptyOutput))
         }
-        return MeetingSummary(title: parsed.title, body: parsed.body, provider: model.provider, parts: parts)
+        return MeetingSummary(title: parsed.title, body: parsed.body, parts: parts)
     }
 
     // MARK: - Parts

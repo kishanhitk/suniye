@@ -102,9 +102,8 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(finished)
         XCTAssertEqual(noticeCount, 1, "the notice shows before the first recording only")
         XCTAssertEqual(coordinator.record(id)?.title, "Release plan")
-        XCTAssertEqual(coordinator.record(id)?.summaryProvider, .localModel)
         let summary = await store.summary(of: id)
-        let audioLeft = await store.hasAudio(of: id)
+        let audioLeft = !store.audioTracks(of: id).isEmpty
         let segments = await store.segments(of: id)
         XCTAssertEqual(summary, "## Overview\nShip on Friday.")
         XCTAssertFalse(audioLeft, "the audio goes once the transcript is final")
@@ -118,6 +117,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(event("meeting_transcribed")?["outcome"], .label("done"))
         XCTAssertEqual(event("meeting_transcribed")?["segments"], .int(1))
         XCTAssertEqual(event("meeting_summarized")?["parts"], .int(1))
+        XCTAssertEqual(event("meeting_summarized")?["provider"], .label("local_model"))
         await coordinator.stop()
     }
 
@@ -184,7 +184,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     }
 
     func testAtLaunchARecordingThatAQuitLeftIsFinishedWithNoClick() async throws {
-        let left = MeetingRecord(title: "Meeting", startedAt: clock, startSource: .manual, status: .recording, templateID: "general")
+        let left = MeetingRecord(title: "Meeting", startedAt: clock, status: .recording, templateID: "general")
         try await store.create(left)
         let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: left.id))
         try writer.append(tone(2.5, level: 0.3) + silence(0.5))
@@ -336,7 +336,6 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(event("meeting_started")?["source"], .label("offer"))
         XCTAssertEqual(record?.title, "Zoom call")
         XCTAssertEqual(record?.callAppBundleID, zoom.bundleID)
-        XCTAssertEqual(record?.startSource, .offer)
         await coordinator.stop()
     }
 
@@ -377,12 +376,11 @@ final class MeetingCoordinatorTests: XCTestCase {
             return false
         }
         let id = try XCTUnwrap(coordinator.live?.id)
-        let source = coordinator.live?.record.startSource
         await coordinator.cancelAutomaticRecording()
         let stored = await store.loadAll()
 
         XCTAssertTrue(started)
-        XCTAssertEqual(source, .automatic)
+        XCTAssertEqual(event("meeting_started")?["source"], .label("automatic"))
         XCTAssertNil(coordinator.live)
         XCTAssertNil(coordinator.record(id))
         XCTAssertTrue(stored.isEmpty)

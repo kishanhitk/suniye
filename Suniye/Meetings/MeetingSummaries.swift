@@ -7,8 +7,7 @@ import SuniyeAnalytics
 @MainActor
 @Observable
 final class MeetingSummaries {
-    /// The meeting whose summary is being written now.
-    private(set) var writing: UUID?
+    @ObservationIgnored private var writing: UUID?
 
     @ObservationIgnored private let store: MeetingStore
     @ObservationIgnored private let templates: MeetingTemplateStore
@@ -37,10 +36,6 @@ final class MeetingSummaries {
         self.availability = availability
         self.makeModel = makeModel
         self.analytics = analytics
-    }
-
-    func isQueued(_ id: UUID) -> Bool {
-        queue.contains(id)
     }
 
     func enqueue(_ id: UUID) {
@@ -112,7 +107,6 @@ final class MeetingSummaries {
             change = {
                 $0.adoptGeneratedTitle(summary.title)
                 $0.status = .done
-                $0.summaryProvider = provider
                 $0.summaryFailure = nil
             }
             outcome = .done

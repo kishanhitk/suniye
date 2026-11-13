@@ -18,7 +18,7 @@ final class MeetingStoreTests: XCTestCase {
     }
 
     private func makeRecord(startedAt: Date = Date(timeIntervalSince1970: 1_800_000_000), status: MeetingStatus = .recording) -> MeetingRecord {
-        MeetingRecord(title: "Zoom call", startedAt: startedAt, startSource: .manual, status: status, templateID: "general")
+        MeetingRecord(title: "Zoom call", startedAt: startedAt, status: status, templateID: "general")
     }
 
     func testRecordsRoundTripNewestFirst() async throws {
@@ -42,9 +42,9 @@ final class MeetingStoreTests: XCTestCase {
         XCTAssertNotEqual(MeetingTemplateStore.defaultFileURL(identity: stable), MeetingTemplateStore.defaultFileURL(identity: preview))
     }
 
-    func testSaveOfUnknownMeetingFails() async {
+    func testAWriteToAnUnknownMeetingFails() async {
         do {
-            try await store.save(makeRecord())
+            _ = try await store.update(UUID()) { $0.title = "Lost" }
             XCTFail("expected unknownMeeting")
         } catch {
             XCTAssertTrue(error is MeetingStore.StoreError)
@@ -54,8 +54,8 @@ final class MeetingStoreTests: XCTestCase {
     func testSegmentsAppendInTimeOrderAndSkipATornLine() async throws {
         let record = makeRecord()
         try await store.create(record)
-        let later = MeetingSegment(id: UUID(), track: .them, audioStart: 176_000, audioEnd: 243_200, text: "QA found one crash.", engine: "parakeetV3")
-        let earlier = MeetingSegment(id: UUID(), track: .you, audioStart: 64_000, audioEnd: 144_000, text: "The build is ready.", engine: "parakeetV3")
+        let later = MeetingSegment(id: UUID(), track: .them, audioStart: 176_000, audioEnd: 243_200, text: "QA found one crash.")
+        let earlier = MeetingSegment(id: UUID(), track: .you, audioStart: 64_000, audioEnd: 144_000, text: "The build is ready.")
         try await store.appendSegment(later, to: record.id)
         try await store.appendSegment(earlier, to: record.id)
 
@@ -73,7 +73,7 @@ final class MeetingStoreTests: XCTestCase {
     func testALineWrittenAfterRecoveryIsNotLostBehindATornOne() async throws {
         let record = makeRecord(status: .recording)
         try await store.create(record)
-        let before = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 16_000, text: "Before the crash.", engine: "e")
+        let before = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 16_000, text: "Before the crash.")
         try await store.appendSegment(before, to: record.id)
         let handle = try FileHandle(forWritingTo: store.folder(for: record.id).appendingPathComponent("segments.jsonl"))
         try handle.seekToEnd()
@@ -81,7 +81,7 @@ final class MeetingStoreTests: XCTestCase {
         try handle.close()
 
         _ = await store.recoverInterruptedMeetings()
-        let after = MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 32_000, text: "After the launch.", engine: "e")
+        let after = MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 32_000, text: "After the launch.")
         try await store.appendSegment(after, to: record.id)
         let segments = await store.segments(of: record.id)
 
@@ -91,8 +91,8 @@ final class MeetingStoreTests: XCTestCase {
     func testReplaceSegmentsRewritesTheTranscript() async throws {
         let record = makeRecord()
         try await store.create(record)
-        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 32_000, text: "echo", engine: "e"), to: record.id)
-        let kept = MeetingSegment(id: UUID(), track: .them, audioStart: 16_000, audioEnd: 32_000, text: "Hello.", engine: "e")
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 32_000, text: "echo"), to: record.id)
+        let kept = MeetingSegment(id: UUID(), track: .them, audioStart: 16_000, audioEnd: 32_000, text: "Hello.")
 
         try await store.replaceSegments([kept], of: record.id)
 
@@ -126,12 +126,12 @@ final class MeetingStoreTests: XCTestCase {
         try writer.close()
         try await store.saveNotes("notes", for: record.id)
 
-        let hadAudio = await store.hasAudio(of: record.id)
+        let tracksBefore = store.audioTracks(of: record.id)
         await store.deleteAudio(of: record.id)
-        let hasAudio = await store.hasAudio(of: record.id)
+        let tracksAfter = store.audioTracks(of: record.id)
         let notes = await store.notes(of: record.id)
-        XCTAssertTrue(hadAudio)
-        XCTAssertFalse(hasAudio)
+        XCTAssertEqual(tracksBefore, [.you])
+        XCTAssertEqual(tracksAfter, [])
         XCTAssertEqual(notes, "notes")
 
         try await store.delete(record.id)

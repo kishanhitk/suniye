@@ -76,7 +76,7 @@ final class MeetingSegmenterTests: XCTestCase {
 
 final class MeetingTranscriptRulesTests: XCTestCase {
     private func segment(_ track: MeetingTrack, _ start: Double, _ end: Double, _ text: String) -> MeetingSegment {
-        MeetingSegment(id: UUID(), track: track, audioStart: samples(start), audioEnd: samples(end), text: text, engine: "parakeetV3")
+        MeetingSegment(id: UUID(), track: track, audioStart: samples(start), audioEnd: samples(end), text: text)
     }
 
     func testAMicrophoneLineThatRepeatsTheCallIsDroppedOnlyWhenTheCallPlayedOnSpeakers() {
@@ -90,7 +90,7 @@ final class MeetingTranscriptRulesTests: XCTestCase {
     func testNoLineAfterTheEndOfTheFollowedCallIsKept() {
         let during = segment(.you, 0, 3, "See you on Friday.")
         let after = segment(.you, 5, 7, "That went well.")
-        var record = MeetingRecord(title: "Call", startedAt: Date(), startSource: .offer, templateID: "general")
+        var record = MeetingRecord(title: "Call", startedAt: Date(), templateID: "general")
         record.transcriptEnd = 4 * MeetingAudioFormat.sampleRate
 
         XCTAssertEqual(MeetingTranscript.final([after, during], of: record), [during])
@@ -145,7 +145,7 @@ final class MeetingTranscriberTests: XCTestCase {
         try await super.setUp()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("MeetingTranscriberTests-\(UUID().uuidString)", isDirectory: true)
         store = MeetingStore(rootDirectory: root)
-        record = MeetingRecord(title: "Zoom call", startedAt: Date(timeIntervalSince1970: 1_800_000_000), startSource: .manual, templateID: "general")
+        record = MeetingRecord(title: "Zoom call", startedAt: Date(timeIntervalSince1970: 1_800_000_000), templateID: "general")
         try await store.create(record)
     }
 
@@ -165,7 +165,6 @@ final class MeetingTranscriberTests: XCTestCase {
             tracks: tracks,
             store: store,
             engine: engine,
-            engineName: { "parakeetV3" },
             mayDecode: { await gate.isOpen },
             retryDelay: .milliseconds(5),
             onEvent: { events.append($0) }
@@ -179,8 +178,7 @@ final class MeetingTranscriberTests: XCTestCase {
     }
 
     func testRecoveryDecodesBothTracksInTimeOrderAndDropsTheEcho() async throws {
-        record.callPlayedOnSpeakers = true
-        try await store.save(record)
+        _ = try await store.update(record.id) { $0.callPlayedOnSpeakers = true }
         // Them speaks first; the microphone hears it, then the user answers.
         try writeAudio(silence(0.5) + tone(2.5, level: 0.05) + silence(0.5) + tone(2.5, level: 0.4) + silence(0.5), track: .you)
         try writeAudio(tone(2.5, level: 0.2) + silence(4), track: .them)
@@ -199,7 +197,7 @@ final class MeetingTranscriberTests: XCTestCase {
 
     func testRecoveryDecodesOnlyTheAudioAfterTheLastStoredSegment() async throws {
         try writeAudio(tone(2.5, level: 0.2) + silence(0.5) + tone(2.5, level: 0.4) + silence(0.5), track: .you)
-        let first = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: samples(2.8), text: "Alpha.", engine: "parakeetV3")
+        let first = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: samples(2.8), text: "Alpha.")
         try await store.appendSegment(first, to: record.id)
         let engine = FakeMeetingEngine(words: [0.2: "Alpha.", 0.4: "Bravo."])
 

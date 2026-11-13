@@ -7,7 +7,7 @@ private let rate = MeetingAudioFormat.sampleRate
 private func conversation(turns: Int, words: Int, track: (Int) -> MeetingTrack = { $0.isMultiple(of: 2) ? .you : .them }) -> [MeetingSegment] {
     (0 ..< turns).map { index in
         let text = (0 ..< words).map { "word\($0)" }.joined(separator: " ") + "."
-        return MeetingSegment(id: UUID(), track: track(index), audioStart: index * 5 * rate, audioEnd: (index * 5 + 4) * rate, text: text, engine: "parakeetV3")
+        return MeetingSegment(id: UUID(), track: track(index), audioStart: index * 5 * rate, audioEnd: (index * 5 + 4) * rate, text: text)
     }
 }
 
@@ -52,7 +52,6 @@ final class MeetingSummaryWriterTests: XCTestCase {
         XCTAssertTrue(requests[0].input.contains(MeetingTemplate.general.sections))
         XCTAssertEqual(summary.title, "Weekly sync")
         XCTAssertEqual(summary.body, "## Overview\nWe agreed to ship on Friday.\n\n## Decisions\n- Ship on Friday.")
-        XCTAssertEqual(summary.provider, .localModel)
     }
 
     func testALongMeetingIsSummarizedFromNotesOnItsParts() async throws {
@@ -182,7 +181,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
     }
 
     func testAGeneratedTitleReplacesOnlyThePlaceholder() {
-        var placeholder = MeetingRecord(title: "Zoom call", startedAt: Date(), startSource: .manual, templateID: "general")
+        var placeholder = MeetingRecord(title: "Zoom call", startedAt: Date(), templateID: "general")
         var named = placeholder
         named.title = "Hiring sync"
         named.titleSource = .user
@@ -256,7 +255,7 @@ final class MeetingTemplateStoreTests: XCTestCase {
         try await store.save(general)
         try await store.save(retro)
         let reloaded = await MeetingTemplateStore(fileURL: fileURL).templates()
-        try await store.restoreDefault(id: "general")
+        try await store.save(.general)
         let restored = await store.template(id: "general")
 
         XCTAssertEqual(reloaded.map(\.id), ["general", "one-on-one", "stand-up", "interview", "retro"])
@@ -286,7 +285,6 @@ final class MeetingTemplateStoreTests: XCTestCase {
 /// Counts one token per word. Answers notes for parts and joins, and a
 /// summary otherwise, unless `answer` says something else.
 private actor FakeSummaryModel: MeetingSummaryModel {
-    nonisolated let provider = MeetingSummaryProvider.localModel
     private let context: Int
     private let counts: Bool
     private let answer: ((MeetingSummaryRequest) throws -> String)?

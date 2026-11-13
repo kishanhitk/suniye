@@ -15,8 +15,6 @@ struct MeetingSegment: Codable, Equatable, Identifiable, Sendable {
     let audioStart: Int
     let audioEnd: Int
     let text: String
-    /// The speech model that wrote the text, for example "parakeetV3".
-    let engine: String
 }
 
 enum MeetingStatus: String, Codable, Sendable {
@@ -70,7 +68,6 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     var endedAt: Date?
     var callAppName: String?
     var callAppBundleID: String?
-    let startSource: MeetingStartSource
     var status: MeetingStatus
     var templateID: String
     var pauses: [MeetingPause]
@@ -80,8 +77,6 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     /// The audio position where the call that the meeting followed ended: the
     /// transcript keeps no line that starts at or after it.
     var transcriptEnd: Int?
-    /// The model that wrote the summary on disk.
-    var summaryProvider: MeetingSummaryProvider?
     /// Why the last summary failed, for the meeting page.
     var summaryFailure: String?
 
@@ -93,12 +88,10 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         endedAt: Date? = nil,
         callAppName: String? = nil,
         callAppBundleID: String? = nil,
-        startSource: MeetingStartSource,
         status: MeetingStatus = .recording,
         templateID: String,
         pauses: [MeetingPause] = [],
-        callPlayedOnSpeakers: Bool = false,
-        summaryProvider: MeetingSummaryProvider? = nil
+        callPlayedOnSpeakers: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -107,12 +100,10 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         self.endedAt = endedAt
         self.callAppName = callAppName
         self.callAppBundleID = callAppBundleID
-        self.startSource = startSource
         self.status = status
         self.templateID = templateID
         self.pauses = pauses
         self.callPlayedOnSpeakers = callPlayedOnSpeakers
-        self.summaryProvider = summaryProvider
     }
 
     var duration: TimeInterval? {

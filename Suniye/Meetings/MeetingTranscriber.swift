@@ -38,7 +38,6 @@ actor MeetingTranscriber {
     nonisolated let tracks: [MeetingTrack]
     private let store: MeetingStore
     private let engine: TranscriptionServiceProtocol
-    private let engineName: @Sendable () async -> String
     private let mayDecode: @Sendable () async -> Bool
     private let retryDelay: Duration
     private let onEvent: @Sendable (Event) -> Void
@@ -59,7 +58,6 @@ actor MeetingTranscriber {
         tracks: [MeetingTrack],
         store: MeetingStore,
         engine: TranscriptionServiceProtocol,
-        engineName: @escaping @Sendable () async -> String,
         mayDecode: @escaping @Sendable () async -> Bool,
         retryDelay: Duration = .seconds(1),
         onEvent: @escaping @Sendable (Event) -> Void
@@ -68,7 +66,6 @@ actor MeetingTranscriber {
         self.tracks = tracks
         self.store = store
         self.engine = engine
-        self.engineName = engineName
         self.mayDecode = mayDecode
         self.retryDelay = retryDelay
         self.onEvent = onEvent
@@ -213,13 +210,12 @@ actor MeetingTranscriber {
             return true
         }
         let id = ChunkID(track: chunk.track, start: chunk.start)
-        let name = await engineName()
         let started = ContinuousClock.now
         do {
             let text = try await engine.transcribe(samples: chunk.samples, sampleRate: MeetingAudioFormat.sampleRate, purpose: .meeting)
             stats.decodeSeconds += (ContinuousClock.now - started) / .seconds(1)
             attempts[id] = nil
-            await save(text, of: chunk, engine: name)
+            await save(text, of: chunk)
             finished(chunk)
             return true
         } catch {
@@ -237,7 +233,7 @@ actor MeetingTranscriber {
         }
     }
 
-    private func save(_ text: String, of chunk: MeetingAudioChunk, engine name: String) async {
+    private func save(_ text: String, of chunk: MeetingAudioChunk) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let segment = MeetingSegment(
@@ -245,8 +241,7 @@ actor MeetingTranscriber {
             track: chunk.track,
             audioStart: chunk.start,
             audioEnd: chunk.end,
-            text: trimmed,
-            engine: name
+            text: trimmed
         )
         do {
             try await store.appendSegment(segment, to: meetingID)

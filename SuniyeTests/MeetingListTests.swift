@@ -32,10 +32,10 @@ final class MeetingListTextTests: XCTestCase {
 
 final class MeetingExportTests: XCTestCase {
     func testMarkdownHoldsTheSummaryNotesAndTimedTranscript() {
-        let record = MeetingRecord(title: "Release plan", startedAt: Date(), startSource: .manual, templateID: "general", pauses: [MeetingPause(start: 30, end: 90)])
+        let record = MeetingRecord(title: "Release plan", startedAt: Date(), templateID: "general", pauses: [MeetingPause(start: 30, end: 90)])
         let segments = [
-            MeetingSegment(id: UUID(), track: .them, audioStart: 0, audioEnd: 32_000, text: "Ship Thursday?", engine: "e"),
-            MeetingSegment(id: UUID(), track: .you, audioStart: 640_000, audioEnd: 672_000, text: "Yes.", engine: "e"),
+            MeetingSegment(id: UUID(), track: .them, audioStart: 0, audioEnd: 32_000, text: "Ship Thursday?"),
+            MeetingSegment(id: UUID(), track: .you, audioStart: 640_000, audioEnd: 672_000, text: "Yes."),
         ]
 
         let markdown = MeetingExport.markdown(record: record, summary: "## Overview\nShip Thursday.", notes: "Ask legal.\n", segments: segments)
