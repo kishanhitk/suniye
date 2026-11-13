@@ -42,7 +42,7 @@ Suniye finds a call from the apps that hold the microphone:
 
 - **Ask** (default): a card asks "Record this Zoom call?". It closes after 20 s. Its ··· menu has **Never Ask for Zoom** and **Meeting Settings…**.
 - **Record Automatically**: the recording starts, and the card shows **Cancel** for 5 s. Cancel deletes the recording.
-- **Do Nothing**: call detection is off.
+- **Do Nothing**: no offer and no automatic start. A meeting that records still follows its call: the call-ended card and the no-sound warning work as with the other choices.
 
 **Never ask for** lists the apps that get no offer.
 

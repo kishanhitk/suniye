@@ -151,6 +151,7 @@ final class MeetingCoordinator {
         didSet {
             if oldValue !== live {
                 onLiveChange?(live)
+                updateCallDetection()
             }
         }
     }
@@ -502,9 +503,11 @@ final class MeetingCoordinator {
         answerCallCard(.keepRecording)
     }
 
+    /// Do Nothing turns call detection off, except while a meeting records:
+    /// the recording follows its call.
     private func updateCallDetection() {
         guard launched else { return }
-        if settings.callStartAction == .doNothing {
+        if settings.callStartAction == .doNothing, live == nil {
             detector.stop()
         } else {
             detector.start()

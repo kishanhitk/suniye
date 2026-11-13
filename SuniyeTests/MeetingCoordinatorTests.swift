@@ -512,6 +512,21 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.callCard)
     }
 
+    func testWithDoNothingARecordingStillFollowsItsCall() async throws {
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        await coordinator.chooseCallStartAction(.doNothing)
+
+        try await coordinator.startMeeting(source: .manual)
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        let followed = await waitUntil { coordinator.live?.record.callAppBundleID == zoom.bundleID }
+        await coordinator.stop()
+
+        XCTAssertTrue(followed, "the no-call-audio warning needs the call app")
+        XCTAssertFalse(microphone.listening, "detection stops again with the recording")
+    }
+
     func testTooLittleSpeechNeedsNoSummaryModel() async throws {
         summaryAvailability = .unavailable
         let coordinator = makeCoordinator()
