@@ -28,6 +28,11 @@ struct MainWindowView: View {
         .onChange(of: selection) { _, _ in
             logRenderedSection()
         }
+        .onChange(of: appState.meetings.pendingShow, initial: true) { _, _ in
+            if appState.meetings.takeShowRequest() {
+                selection = .meetings
+            }
+        }
         .subtleScrollers()
     }
 
@@ -49,7 +54,8 @@ struct MainWindowView: View {
                 ForEach(MainWindowSection.allCases, id: \.self) { section in
                     SidebarNavigationRow(
                         section: section,
-                        isSelected: selection == section
+                        isSelected: selection == section,
+                        showsRecordingDot: section == .meetings && appState.meetings.live != nil
                     ) {
                         selection = section
                     }
@@ -80,6 +86,8 @@ struct MainWindowView: View {
             switch selection {
             case .dashboard:
                 TranscriptsPage(appState: appState) { selection = $0 }
+            case .meetings:
+                MeetingsSection(meetings: appState.meetings, appState: appState)
             case .model:
                 SpeechModelPage(appState: appState)
             case .style:

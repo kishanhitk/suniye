@@ -114,7 +114,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
             _ = try await writer.write(input(conversation(turns: 4, words: 10)))
             XCTFail("expected a failure")
         } catch {
-            XCTAssertEqual(error as? MeetingSummaryError, .failed("The summary was longer than the model can write."))
+            XCTAssertEqual(error as? MeetingSummaryError, .failed("The model stopped before it finished."))
         }
     }
 

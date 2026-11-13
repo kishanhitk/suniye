@@ -51,6 +51,7 @@ enum MeetingNoticeAlert {
         }
     }
 
+    @MainActor
     private final class SentenceCopier: NSObject {
         let view: NSView
         private let sentence: String

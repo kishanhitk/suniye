@@ -109,7 +109,7 @@ final class MeetingTranscriptRulesTests: XCTestCase {
         ]
         let timeline = MeetingTimeline(pauses: [MeetingPause(start: 30, end: 90)])
 
-        XCTAssertEqual(MeetingTranscript.turns(segments, timeline: timeline, speakerLabels: true), ["[0:00] You: Morning. Ready?", "[2:10] Them: Yes."])
+        XCTAssertEqual(MeetingTranscript.turns(segments, timeline: timeline, speakerLabels: true), ["[00:00] You: Morning. Ready?", "[02:10] Them: Yes."])
         XCTAssertEqual(MeetingTranscript.turns(segments, timeline: nil, speakerLabels: false), ["Morning. Ready?", "Yes."])
     }
 

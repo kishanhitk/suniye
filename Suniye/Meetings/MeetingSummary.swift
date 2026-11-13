@@ -243,7 +243,7 @@ actor MeetingSummaryWriter {
     static func cause(of error: Error) -> String {
         switch error as? LLMPostProcessorError {
         case .outputTruncated:
-            return "The summary was longer than the model can write."
+            return "The model stopped before it finished."
         case .timeout:
             return "The model took too long."
         case .invalidConfiguration:

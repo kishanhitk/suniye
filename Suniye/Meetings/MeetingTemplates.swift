@@ -1,6 +1,8 @@
 import Foundation
 
-/// The sections of a meeting summary, as text that the user can edit.
+/// How to write a meeting's summary: its sections and what goes in them, as
+/// text that the user can edit. The title line and the heading format are
+/// fixed rules in `MeetingSummaryPrompt`, so an edit cannot break the parser.
 struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
     let id: String
     var name: String
@@ -16,59 +18,56 @@ struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
     }
 
     static let general = MeetingTemplate(id: "general", name: "General", sections: """
+    Write a summary of the meeting.
+    Use these sections, in this order:
     ## Overview
-    Two or three sentences: what the meeting was about and what it decided.
-
     ## Decisions
-    One line for each decision.
-
     ## Action items
-    One line for each task: who does it, and by when if the transcript says.
-
     ## Open questions
-    One line for each question that the meeting did not answer.
+    Under Overview, write two or three sentences: what the meeting was about and what it decided.
+    Write one line for each decision, task and open question. For a task, say who does it, and by when if the transcript says.
+    Leave out a section with nothing in it.
+    Use only what the transcript and my notes say.
     """)
 
     static let oneOnOne = MeetingTemplate(id: "one-on-one", name: "1:1", sections: """
+    Write a summary of a one-on-one meeting.
+    Use these sections, in this order:
     ## Overview
-    Two or three sentences on what the two people talked about.
-
     ## Updates
-    One line for each update.
-
     ## Feedback
-    One line for each piece of feedback, and who gave it.
-
     ## Action items
-    One line for each task: who does it, and by when if the transcript says.
+    Under Overview, write two or three sentences on what the two people talked about.
+    Write one line for each update, piece of feedback and task. Say who gave the feedback and who does each task.
+    Leave out a section with nothing in it.
+    Use only what the transcript and my notes say.
     """)
 
     static let standUp = MeetingTemplate(id: "stand-up", name: "Stand-up", sections: """
-    ## Updates
-    One line for each update. Start with the person's name only when the transcript says it.
-
+    Write a short stand-up summary.
+    Use these sections, in this order:
+    ## Done
+    ## Next
     ## Blockers
-    One line for each blocker, and who has it.
-
-    ## Action items
-    One line for each task: who does it, and by when if the transcript says.
+    Write one line for each update.
+    Add a name only when the transcript says it.
+    Leave out a section with nothing in it.
+    Use only what the transcript and my notes say.
+    Keep each line under 15 words.
     """)
 
     static let interview = MeetingTemplate(id: "interview", name: "Interview", sections: """
+    Write a summary of an interview.
+    Use these sections, in this order:
     ## Overview
-    Two or three sentences: the role, and how the interview went.
-
     ## Questions and answers
-    One line for each question, with the short answer.
-
     ## Strengths
-    One line for each strength that the answers showed.
-
     ## Concerns
-    One line for each concern that the answers raised.
-
     ## Next steps
-    One line for each next step.
+    Under Overview, write two or three sentences: the role, and how the interview went.
+    Write one line for each question with its short answer, and one line for each strength, concern and next step.
+    Leave out a section with nothing in it.
+    Use only what the transcript and my notes say.
     """)
 
     static let builtIn = [general, oneOnOne, standUp, interview]

@@ -5767,6 +5767,12 @@ enum AppStateError: LocalizedError {
 }
 
 extension AppState: MeetingHost {
+    /// Opens the main window at a meeting's page, or at the list for nil.
+    func openMeeting(_ id: UUID?) {
+        meetings.show(id)
+        MainWindowController.shared.show(appState: self)
+    }
+
     var meetingInputDeviceID: String? {
         selectedInputDeviceID
     }

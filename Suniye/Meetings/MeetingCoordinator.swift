@@ -46,6 +46,8 @@ final class MeetingSession {
     /// Every call chunk before this sample position is decoded.
     fileprivate(set) var callDecodedThrough = 0
     fileprivate(set) var callAudioProblem: CallAudioProblem?
+    /// Recorded time when the call went silent, for "No sound since 16:30".
+    fileprivate(set) var callSilentSince: TimeInterval?
     fileprivate(set) var failedTracks: [MeetingTrack: String] = [:]
     /// The new microphone, for a few seconds after the device changed.
     fileprivate(set) var changedInput: String?
@@ -104,6 +106,10 @@ final class MeetingCoordinator {
     private(set) var finishing: Set<UUID> = []
     /// A meeting that a disk write error stopped, for its banner.
     private(set) var stoppedByWriteError: UUID?
+    /// The meeting that the Meetings section shows; nil shows the list.
+    var openMeetingID: UUID?
+    /// Set when something outside the window asks to show a meeting.
+    private(set) var pendingShow = false
     private(set) var settings: MeetingSettings
     let canRecordCallAudio: Bool
     @ObservationIgnored weak var host: MeetingHost?
@@ -117,6 +123,7 @@ final class MeetingCoordinator {
     @ObservationIgnored private var transcribers: [UUID: MeetingTranscriber] = [:]
     @ObservationIgnored private var dictating = false
     @ObservationIgnored private var loadedModel: ASRModelID?
+    @ObservationIgnored private var listTexts: [UUID: MeetingListText] = [:]
     @ObservationIgnored private var outputCheck: Task<Void, Never>?
     @ObservationIgnored private var changedInputReset: Task<Void, Never>?
 
@@ -143,7 +150,7 @@ final class MeetingCoordinator {
             availability: summaryAvailability,
             makeModel: makeSummaryModel
         )
-        summaries.onFinished = { [weak self] record in self?.show(record) }
+        summaries.onFinished = { [weak self] record in self?.apply(record) }
         summaries.onModelIdle = { [weak self] in self?.host?.meetingSummaryModelIsIdle() }
     }
 
@@ -158,6 +165,34 @@ final class MeetingCoordinator {
         for record in meetings where record.status == .summarizing {
             summaries.enqueue(record.id)
         }
+    }
+
+    // MARK: - Navigation
+
+    /// Shows a meeting's page, or the list for nil, in the main window.
+    func show(_ id: UUID?) {
+        openMeetingID = id
+        pendingShow = true
+    }
+
+    /// True once for each `show(_:)`, so the window switches to Meetings then.
+    func takeShowRequest() -> Bool {
+        defer { pendingShow = false }
+        return pendingShow
+    }
+
+    /// The summary, notes and transcript of a meeting, read from disk once.
+    func listText(for id: UUID) async -> MeetingListText {
+        if let cached = listTexts[id] {
+            return cached
+        }
+        let text = MeetingListText(
+            summary: await store.summary(of: id),
+            notes: await store.notes(of: id),
+            transcript: await store.segments(of: id).map(\.text)
+        )
+        listTexts[id] = text
+        return text
     }
 
     // MARK: - Settings
@@ -258,10 +293,17 @@ final class MeetingCoordinator {
         await finish(session.id, transcriber: session.transcriber) { try await $0.finish() }
     }
 
-    func restartCallAudio() throws {
+    /// A call track that cannot start again shows as a failed track.
+    func restartCallAudio() {
         guard let session = live else { return }
-        try session.recorder.restartCallAudio()
-        session.callAudioProblem = nil
+        do {
+            try session.recorder.restartCallAudio()
+            session.callAudioProblem = nil
+            session.callSilentSince = nil
+        } catch {
+            AppLogger.shared.log(.error, "meeting call audio restart failed id=\(session.id.uuidString) error=\(error.localizedDescription)")
+            session.failedTracks[.them] = error.localizedDescription
+        }
     }
 
     /// Finishes the transcript of a meeting from its audio files: after a
@@ -287,6 +329,7 @@ final class MeetingCoordinator {
     }
 
     func saveNotes(_ notes: String, for id: UUID) async {
+        listTexts[id] = nil
         do {
             try await store.saveNotes(notes, for: id)
         } catch {
@@ -398,8 +441,10 @@ final class MeetingCoordinator {
             session.themLevel = them
         case let .callAudioSilent(heardBefore):
             session.callAudioProblem = heardBefore ? .stopped : .neverHeard
+            session.callSilentSince = max(0, session.elapsed(at: environment.now()) - MeetingRecorder.callSilenceLimit)
         case .callAudioReturned:
             session.callAudioProblem = nil
+            session.callSilentSince = nil
         case let .inputChanged(name):
             session.changedInput = name
             changedInputReset?.cancel()
@@ -450,13 +495,15 @@ final class MeetingCoordinator {
 
     private func update(_ id: UUID, _ change: @escaping (inout MeetingRecord) -> Void) async {
         do {
-            show(try await store.update(id, change))
+            apply(try await store.update(id, change))
         } catch {
             AppLogger.shared.log(.error, "meeting not saved id=\(id.uuidString) error=\(error.localizedDescription)")
         }
     }
 
-    private func show(_ record: MeetingRecord) {
+    /// Puts a saved record into the list and the live meeting.
+    private func apply(_ record: MeetingRecord) {
+        listTexts[record.id] = nil
         if let index = meetings.firstIndex(where: { $0.id == record.id }) {
             meetings[index] = record
         }

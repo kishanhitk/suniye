@@ -67,7 +67,7 @@ enum MeetingTranscript {
         }
     }
 
-    /// "4:05" under an hour, "1:04:05" from an hour on.
+    /// "04:05" under an hour, "1:04:05" from an hour on.
     static func clock(_ seconds: Double) -> String {
         let total = Int(seconds.rounded(.down))
         let hours = total / 3600
@@ -75,7 +75,7 @@ enum MeetingTranscript {
         let rest = total % 60
         return hours > 0
             ? String(format: "%d:%02d:%02d", hours, minutes, rest)
-            : String(format: "%d:%02d", minutes, rest)
+            : String(format: "%02d:%02d", minutes, rest)
     }
 
     static func isEcho(_ segment: MeetingSegment, call: [MeetingSegment]) -> Bool {
