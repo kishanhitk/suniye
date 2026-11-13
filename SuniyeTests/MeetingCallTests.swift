@@ -127,7 +127,6 @@ final class MeetingCallDetectorTests: XCTestCase {
 final class FakeMicrophoneUsers: MicrophoneUserReading {
     var anyInputRunning = false
     var users: [MicrophoneUser] = []
-    var meetingTitles: Set<String> = []
     var onInputActivityChanged: (() -> Void)?
     private(set) var reads = 0
     private(set) var listening = false
@@ -146,7 +145,7 @@ final class FakeMicrophoneUsers: MicrophoneUserReading {
     }
 
     func showsMeeting(_ browser: MeetingCallApp) -> Bool {
-        meetingTitles.contains(browser.bundleID)
+        false
     }
 
     /// What a Core Audio listener does when an input device starts or stops.

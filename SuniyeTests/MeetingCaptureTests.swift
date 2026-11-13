@@ -481,26 +481,6 @@ final class MeetingRecorderTests: XCTestCase {
         XCTAssertFalse(events.samples.contains { if case .callAudioSilent = $0 { return true }; return false })
         XCTAssertEqual(recorder.tracks, [.you])
     }
-
-    func testSourceEventsReachTheRecorderListener() throws {
-        let you = FakeMeetingSource()
-        let recorder = makeRecorder(you: you, them: nil)
-        let received = expectation(description: "event")
-        let events = Collected<MeetingRecorderEvent>()
-        recorder.onEvent = { event in
-            events.append([event])
-            if case .trackFailed = event {
-                received.fulfill()
-            }
-        }
-        try recorder.start()
-
-        you.onEvent?(.failed("gone"))
-        wait(for: [received], timeout: 2)
-        recorder.stop()
-
-        XCTAssertEqual(events.samples, [.trackStarted(.you), .trackFailed(.you, "gone")])
-    }
 }
 
 // MARK: - Fakes

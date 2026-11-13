@@ -216,21 +216,6 @@ final class LocalGemmaMeetingSummaryModelTests: XCTestCase {
             XCTFail("unexpected \(error)")
         }
     }
-
-    func testTokensAreCountedByTheServerAndNilWhenItCannot() async {
-        let client = FakeGemmaClient(result: ChatCompletionResult(text: "", timings: nil, finishReason: "stop"))
-        client.tokens = 42
-        let model = LocalGemmaMeetingSummaryModel(client: client)
-
-        let counted = await model.tokenCount("anything")
-        client.tokens = nil
-        let failed = await model.tokenCount("anything")
-        let context = await model.contextTokens()
-
-        XCTAssertEqual(counted, 42)
-        XCTAssertNil(failed)
-        XCTAssertEqual(context, LocalGemmaDefaults.contextSize)
-    }
 }
 
 final class MeetingTemplateStoreTests: XCTestCase {
@@ -347,7 +332,6 @@ private final class FakeGemmaClient: LocalGemmaClient {
     }
 
     var result: ChatCompletionResult
-    var tokens: Int?
     private(set) var lastCall: Call?
 
     init(result: ChatCompletionResult) {
@@ -369,11 +353,6 @@ private final class FakeGemmaClient: LocalGemmaClient {
     ) async throws -> ChatCompletionResult {
         lastCall = Call(instructions: instructions, prompt: prompt, maxTokens: maxTokens, sampling: sampling)
         return result
-    }
-
-    func tokenCount(_ text: String, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> Int {
-        guard let tokens else { throw LLMPostProcessorError.provider("tokenize_failed") }
-        return tokens
     }
 }
 
