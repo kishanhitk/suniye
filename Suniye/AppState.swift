@@ -2249,10 +2249,6 @@ final class AppState {
         deleteASRModel(selectedASRModelID)
     }
 
-    func openModelFolder() {
-        openModelFolder(for: selectedASRModelID)
-    }
-
     func performPrimaryASRAction(for modelID: ASRModelID) {
         guard asrModelCanPerformPrimaryAction(for: modelID) else {
             return
