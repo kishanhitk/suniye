@@ -343,8 +343,8 @@ final class MeetingCoordinator {
                 }
             }
         }
-        recorder.setMicrophoneMuted(dictationCaptures)
         await transcriber.start()
+        recorder.setMicrophoneMuted(dictationCaptures)
         do {
             try recorder.start()
         } catch {
