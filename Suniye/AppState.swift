@@ -2001,7 +2001,6 @@ final class AppState {
         askSurface: PermissionAskSurface = .settings
     ) async {
         let priorMic = hasMicPermission
-        let priorAccessibility = hasAccessibilityPermission
 
         var micStatus = micAuthorizationStatusProvider()
         if requestMicrophone, micStatus == .notDetermined {
@@ -2021,20 +2020,12 @@ final class AppState {
         }
         hasMicPermission = micStatus == .authorized
         hasMicPermissionBeenDenied = micStatus == .denied || micStatus == .restricted
-
-        if promptAccessibility {
-            hasAccessibilityPermission = accessibilityTrustPrompter()
-        } else {
-            hasAccessibilityPermission = accessibilityTrustProvider()
-        }
+        let accessibilityGranted = promptAccessibility ? accessibilityTrustPrompter() : accessibilityTrustProvider()
 
         if !priorMic, hasMicPermission {
             analytics.track(.permissionTransition(kind: .microphone, granted: true))
         }
-        if !priorAccessibility, hasAccessibilityPermission {
-            analytics.track(.permissionTransition(kind: .accessibility, granted: true))
-        }
-        updateLastKnownAccessibilityGranted()
+        setAccessibilityPermission(accessibilityGranted)
 
         AppLogger.shared.log(.info, "permissions: mic=\(hasMicPermission) ax=\(hasAccessibilityPermission)")
     }
@@ -2042,19 +2033,27 @@ final class AppState {
     /// Re-reads Accessibility without changing microphone state. This matters when
     /// the user grants access in System Settings while Suniye is not active.
     private func refreshAccessibilityPermission() {
-        let wasGranted = hasAccessibilityPermission
-        hasAccessibilityPermission = accessibilityTrustProvider()
-        if !wasGranted, hasAccessibilityPermission {
-            analytics.track(.permissionTransition(kind: .accessibility, granted: true))
-        }
-        updateLastKnownAccessibilityGranted()
+        setAccessibilityPermission(accessibilityTrustProvider())
     }
 
-    /// Records the last observed Accessibility trust so a later `false` reading
-    /// can be recognized as a stale grant (app update / TCC reset) rather than a
-    /// never-granted state — the two need different recovery UI.
-    private func updateLastKnownAccessibilityGranted() {
-        if hasAccessibilityPermission {
+    private enum AccessibilityGrantSource {
+        case trustCheck
+        /// The overlay grant does not send `permission_transition` today. The
+        /// gap is kept so that the analytics data does not change in a refactor.
+        case permisoOverlay
+    }
+
+    /// The one writer of `hasAccessibilityPermission`. It also records the last
+    /// observed trust, so that a later `false` reads as a stale grant (app
+    /// update, TCC reset) and not as a grant that never happened: the two need
+    /// different recovery text.
+    private func setAccessibilityPermission(_ granted: Bool, source: AccessibilityGrantSource = .trustCheck) {
+        let wasGranted = hasAccessibilityPermission
+        hasAccessibilityPermission = granted
+        if source == .trustCheck, !wasGranted, granted {
+            analytics.track(.permissionTransition(kind: .accessibility, granted: true))
+        }
+        if granted {
             accessibilityGrantLikelyStale = false
             accessibilityAssistTimedOut = false
             updateGeneralSettings { $0.lastKnownAccessibilityGranted = true }
@@ -2089,8 +2088,7 @@ final class AppState {
                 guard let self else {
                     return
                 }
-                self.hasAccessibilityPermission = true
-                self.updateLastKnownAccessibilityGranted()
+                self.setAccessibilityPermission(true, source: .permisoOverlay)
                 // Authoritative re-read of all permission state.
                 Task {
                     await self.refreshPermissions()
@@ -4386,7 +4384,7 @@ final class AppState {
             await refreshPermissions(promptAccessibility: !accessibilityOnboarding.isPresenting)
         }
         guard hasAccessibilityPermission else {
-            throw NSError(domain: "Suniye", code: 1, userInfo: [NSLocalizedDescriptionKey: "Accessibility permission not granted"])
+            throw AppStateError.accessibilityNotGranted
         }
     }
 
@@ -5034,9 +5032,12 @@ final class AppState {
 enum AppStateError: LocalizedError {
     case modelValidationFailed
     case insufficientDiskSpace(String)
+    case accessibilityNotGranted
 
     var errorDescription: String? {
         switch self {
+        case .accessibilityNotGranted:
+            return "Accessibility permission not granted"
         case .modelValidationFailed:
             return "Model files are missing after extraction."
         case let .insufficientDiskSpace(message):
