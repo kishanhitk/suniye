@@ -259,6 +259,22 @@ final class MeetingTemplateStoreTests: XCTestCase {
         XCTAssertEqual(after, MeetingTemplate.builtIn)
         XCTAssertEqual(retro, .general, "a deleted template falls back to General")
     }
+
+    func testAFileThatCannotBeReadIsNotWrittenOver() async throws {
+        try Data("{ not json".utf8).write(to: fileURL)
+        let store = MeetingTemplateStore(fileURL: fileURL)
+
+        let shown = await store.templates()
+        do {
+            try await store.replace(with: shown)
+            XCTFail("saving over an unreadable file loses the templates in it")
+        } catch {
+            XCTAssertEqual(error as? MeetingTemplateStore.StoreError, .unreadable)
+        }
+
+        XCTAssertEqual(shown, MeetingTemplate.builtIn)
+        XCTAssertEqual(try String(contentsOf: fileURL, encoding: .utf8), "{ not json")
+    }
 }
 
 // MARK: - Fakes

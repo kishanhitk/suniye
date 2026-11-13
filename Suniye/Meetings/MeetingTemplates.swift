@@ -77,6 +77,14 @@ struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
 /// ones the user added. Only edits and additions are on disk, so a changed
 /// shipped template reaches every user who did not edit it.
 actor MeetingTemplateStore {
+    enum StoreError: LocalizedError {
+        case unreadable
+
+        var errorDescription: String? {
+            "The saved templates could not be read, so Suniye did not write over them."
+        }
+    }
+
     nonisolated let fileURL: URL
 
     init(fileURL: URL = MeetingTemplateStore.defaultFileURL()) {
@@ -88,7 +96,7 @@ actor MeetingTemplateStore {
     }
 
     func templates() -> [MeetingTemplate] {
-        let saved = load()
+        let saved = load() ?? []
         let builtIn = MeetingTemplate.builtIn.map { template in
             saved.first { $0.id == template.id } ?? template
         }
@@ -105,16 +113,18 @@ actor MeetingTemplateStore {
     /// built-in template is stored only while its text differs from the
     /// shipped text; one that is not in the list keeps the shipped text.
     func replace(with templates: [MeetingTemplate]) throws {
+        guard load() != nil else { throw StoreError.unreadable }
         try write(templates.filter { $0.sections != $0.defaultSections })
     }
 
-    private func load() -> [MeetingTemplate] {
-        guard let data = try? Data(contentsOf: fileURL) else { return [] }
+    /// The stored templates; nil when the file is there but cannot be read.
+    private func load() -> [MeetingTemplate]? {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
         do {
-            return try JSONDecoder().decode([MeetingTemplate].self, from: data)
+            return try JSONDecoder().decode([MeetingTemplate].self, from: Data(contentsOf: fileURL))
         } catch {
             AppLogger.shared.log(.error, "meeting templates unreadable error=\(error.localizedDescription)")
-            return []
+            return nil
         }
     }
 
