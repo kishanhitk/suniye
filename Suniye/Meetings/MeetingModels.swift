@@ -1,9 +1,25 @@
 import Foundation
 
 /// The microphone is "You"; the audio of every other app (the call) is "Them".
-enum MeetingTrack: String, Codable, CaseIterable, Sendable {
+enum MeetingTrack: String, Codable, CaseIterable, Comparable, Sendable {
     case you
     case them
+
+    /// The call track sorts first: a "You" line that starts with a call line
+    /// waits for the call track anyway, so lines and chunks with one start
+    /// come in the same order everywhere.
+    static func < (lhs: MeetingTrack, rhs: MeetingTrack) -> Bool {
+        lhs == .them && rhs == .you
+    }
+
+    var speakerLabel: String {
+        switch self {
+        case .you:
+            return "You"
+        case .them:
+            return "Them"
+        }
+    }
 }
 
 struct MeetingSegment: Codable, Equatable, Identifiable, Sendable {
@@ -25,8 +41,9 @@ enum MeetingStatus: String, Codable, Sendable {
     case done
     case summaryFailed
     case noSpeech
-    /// The app ended while it finished the transcript. The user starts the
-    /// finish again, because the finish itself may have ended the app.
+    /// The transcript did not finish: the app ended while it finished, or
+    /// part of the audio got no text. The user starts the finish again,
+    /// because the finish itself may have ended the app.
     case interrupted
 
     /// Titles of the states without a summary, for the meeting page and the
@@ -34,6 +51,17 @@ enum MeetingStatus: String, Codable, Sendable {
     static let summaryFailedTitle = "Couldn’t write the summary"
     static let noSpeechTitle = "Too little speech to summarize"
     static let interruptedTitle = "A transcript did not finish"
+
+    /// A summary can be written again: the transcript is final and no
+    /// summary runs.
+    var canRegenerate: Bool {
+        switch self {
+        case .done, .summaryFailed, .noSpeech:
+            return true
+        case .recording, .paused, .finishing, .summarizing, .interrupted:
+            return false
+        }
+    }
 
     /// States that only a running session can be in. A record found in one of
     /// them at launch belongs to a session that ended without saving.
@@ -80,6 +108,9 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     /// The audio position where the call that the meeting followed ended: the
     /// transcript keeps no line that starts at or after it.
     var transcriptEnd: Int?
+    /// Why the last finish of the transcript failed; nil when the app closed
+    /// while it finished.
+    var transcriptFailure: String?
     /// Why the last summary failed, for the meeting page.
     var summaryFailure: String?
 

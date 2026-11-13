@@ -65,3 +65,21 @@ final class MeetingExportTests: XCTestCase {
         )
     }
 }
+
+final class MeetingNotesDraftTests: XCTestCase {
+    func testOnlyAnEditIsSavedAndEachEditOnce() {
+        var draft = MeetingNotesDraft(saved: "Ask legal.")
+
+        let unchanged = draft.takeUnsaved()
+        draft.text = "Ask legal.\nShip Thursday."
+        let edited = draft.takeUnsaved()
+        let again = draft.takeUnsaved()
+        draft.text = "Ask legal."
+        let undone = draft.takeUnsaved()
+
+        XCTAssertNil(unchanged, "notes that only loaded are never written over")
+        XCTAssertEqual(edited, "Ask legal.\nShip Thursday.")
+        XCTAssertNil(again)
+        XCTAssertEqual(undone, "Ask legal.", "the loaded text saves again after an edit was saved")
+    }
+}

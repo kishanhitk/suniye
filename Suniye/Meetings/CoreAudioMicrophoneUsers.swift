@@ -73,7 +73,7 @@ final class CoreAudioMicrophoneUsers: MicrophoneUserReading {
             }
         }
         return input.sorted().compactMap { id in
-            apps[id].map { MicrophoneUser(app: $0, playsOutput: output.contains(id)) }
+            apps[id].map { MicrophoneUser(app: $0, runsOutput: output.contains(id)) }
         }
     }
 

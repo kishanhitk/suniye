@@ -57,7 +57,7 @@ final class MeetingCallDetector {
     }
 
     func recordingStarted(call: MeetingCallApp?) {
-        send(watch.recordingStarted(call: call))
+        send(watch.recordingStarted(call: call, at: uptime()))
     }
 
     func recordingStopped() {

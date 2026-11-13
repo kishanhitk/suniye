@@ -15,7 +15,9 @@ protocol MeetingHost: AnyObject {
 
 /// What the coordinator needs from the Mac, so that tests can replace it.
 struct MeetingEnvironment {
-    var makeSources: @MainActor (_ includeCallAudio: Bool, _ preferredInputDeviceID: String?) -> [MeetingTrack: MeetingAudioSource]
+    /// The Mac can record the sound of the other apps.
+    var canRecordCallAudio: Bool
+    var makeSources: @MainActor (_ preferredInputDeviceID: String?) -> [MeetingTrack: MeetingAudioSource]
     var confirmNotice: @MainActor () async -> Bool
     var freeDiskBytes: () -> Int64?
     var callPlaysOnSpeakers: () -> Bool

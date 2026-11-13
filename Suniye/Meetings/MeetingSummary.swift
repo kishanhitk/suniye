@@ -119,12 +119,17 @@ actor MeetingSummaryWriter {
         self.model = model
     }
 
+    /// A summary needs `minimumWords` spoken words, or notes.
+    static func hasEnoughSpeech(_ segments: [MeetingSegment], notes: String) -> Bool {
+        let spokenWords = segments.reduce(0) { $0 + MeetingTranscript.words(in: $1.text).count }
+        return spokenWords >= minimumWords || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func write(_ input: MeetingSummaryInput) async throws -> MeetingSummary {
-        let notes = input.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        let spokenWords = input.segments.reduce(0) { $0 + MeetingTranscript.words(in: $1.text).count }
-        guard spokenWords >= Self.minimumWords || !notes.isEmpty else {
+        guard Self.hasEnoughSpeech(input.segments, notes: input.notes) else {
             throw MeetingSummaryError.tooLittleSpeech
         }
+        let notes = input.notes.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let context = await model.contextTokens()
         let summaryBudget = budget(context: context, output: Self.summaryOutputTokens)
@@ -179,9 +184,10 @@ actor MeetingSummaryWriter {
         var parts: [[MeetingSegment]] = []
         var current: [MeetingSegment] = []
         var used = 0.0
+        // A segment costs its text, a speaker label with ": ", and a line break.
+        let labelCost = (MeetingTrack.allCases.map(\.speakerLabel.count).max() ?? 0) + 3
         for segment in segments {
-            // A segment costs its text, a label and a line break.
-            let cost = Double(segment.text.count + 7) * tokensPerCharacter
+            let cost = Double(segment.text.count + labelCost) * tokensPerCharacter
             if !current.isEmpty, used + cost > room {
                 parts.append(current)
                 current = []
@@ -300,13 +306,10 @@ enum MeetingSummaryPrompt {
             </transcript>
 
             Fill in these four lines from this part of the meeting:
-            Decisions:
-            Tasks:
-            Dates and numbers:
-            Open questions:
+            \(noteLines)
 
             Rules:
-            - After each label, write the items on the same line, separated by "; ". Write "none" when there is none.
+            \(noteItemRule)
             - Write each item in your own short words. Do not copy lines of the transcript.
             - Keep names, numbers and dates as the transcript says them.
             - For a task, say who does it and by when.
@@ -325,13 +328,10 @@ enum MeetingSummaryPrompt {
 
 
             Join these notes into the same four lines:
-            Decisions:
-            Tasks:
-            Dates and numbers:
-            Open questions:
+            \(noteLines)
 
             Rules:
-            - After each label, write the items on the same line, separated by "; ". Write "none" when there is none.
+            \(noteItemRule)
             - Keep every decision, every task with who does it, every date and number, and every open question.
             - Remove repeats.
             - Write in the language of the notes.
@@ -360,9 +360,19 @@ enum MeetingSummaryPrompt {
         """
     }
 
+    /// The lines of part notes: the part and the join prompts ask for the
+    /// same ones.
+    private static let noteLines = """
+        Decisions:
+        Tasks:
+        Dates and numbers:
+        Open questions:
+        """
+    private static let noteItemRule = "- After each label, write the items on the same line, separated by \"; \". Write \"none\" when there is none."
+
     private static func speakerRule(_ speakerLabels: Bool) -> String {
         speakerLabels
-            ? "- \"You\" is the user. \"Them\" is the other people on the call."
+            ? "- \"\(MeetingTrack.you.speakerLabel)\" is the user. \"\(MeetingTrack.them.speakerLabel)\" is the other people on the call."
             : "- The transcript does not say who speaks."
     }
 
@@ -464,7 +474,8 @@ enum MeetingSummaryText {
 
 extension MeetingRecord {
     /// Takes a summary's title only while the meeting has the placeholder
-    /// title, so a name that the user typed stays.
+    /// title: a name that the user typed, or that an earlier summary gave,
+    /// stays.
     mutating func adoptGeneratedTitle(_ generated: String?) {
         guard titleSource == .placeholder, let generated, !generated.isEmpty else { return }
         title = generated

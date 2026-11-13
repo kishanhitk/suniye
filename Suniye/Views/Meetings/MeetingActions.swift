@@ -43,7 +43,7 @@ final class MeetingActions {
             let markdown = MeetingExport.markdown(
                 record: record,
                 summary: await meetings.summary(of: record.id),
-                notes: await meetings.notes(of: record.id),
+                notes: await meetings.notes(of: record.id) ?? "",
                 segments: await meetings.transcript(of: record.id)
             )
             let panel = NSSavePanel()
@@ -54,6 +54,7 @@ final class MeetingActions {
                 try markdown.write(to: url, atomically: true, encoding: .utf8)
             } catch {
                 AppLogger.shared.log(.error, "meeting export failed error=\(error.localizedDescription)")
+                failure = MeetingActionFailure(title: "Couldn’t export the meeting", message: error.localizedDescription)
             }
         }
     }
@@ -89,6 +90,7 @@ private struct MeetingActionDialogs: ViewModifier {
                             }
                         } catch {
                             AppLogger.shared.log(.error, "meeting delete failed id=\(record.id.uuidString) error=\(error.localizedDescription)")
+                            actions.failure = MeetingActionFailure(title: "Couldn’t delete the meeting", message: error.localizedDescription)
                         }
                     }
                 }
@@ -150,7 +152,7 @@ struct MeetingMenuItems: View {
             Divider()
             Button("Delete Meeting…") { actions.confirmDelete(record) }
                 .keyboardShortcut(.delete, modifiers: .command)
-                .disabled(meetings.finishing.contains(record.id))
+                .disabled(record.status == .finishing)
         }
     }
 }

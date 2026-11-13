@@ -233,14 +233,14 @@ final class MeetingTemplateStoreTests: XCTestCase {
 
     func testEditsAndAdditionsPersistAndABuiltInTemplateRestores() async throws {
         let store = MeetingTemplateStore(fileURL: fileURL)
-        var general = MeetingTemplate.general
-        general.sections = "## Overview\nOne sentence."
-        let retro = MeetingTemplate(id: "retro", name: "Retro", sections: "## Went well\nOne line each.")
+        var edited = await store.templates()
+        edited[0].sections = "## Overview\nOne sentence."
+        edited.append(MeetingTemplate(id: "retro", name: "Retro", sections: "## Went well\nOne line each."))
 
-        try await store.save(general)
-        try await store.save(retro)
+        try await store.replace(with: edited)
         let reloaded = await MeetingTemplateStore(fileURL: fileURL).templates()
-        try await store.save(.general)
+        edited[0] = .general
+        try await store.replace(with: edited)
         let restored = await store.template(id: "general")
 
         XCTAssertEqual(reloaded.map(\.id), ["general", "one-on-one", "stand-up", "interview", "retro"])
@@ -248,20 +248,32 @@ final class MeetingTemplateStoreTests: XCTestCase {
         XCTAssertEqual(restored, .general)
     }
 
-    func testOnlyAddedTemplatesCanBeDeleted() async throws {
+    func testATemplateLeftOutOfTheListGoesUnlessItIsBuiltIn() async throws {
         let store = MeetingTemplateStore(fileURL: fileURL)
-        try await store.save(MeetingTemplate(id: "retro", name: "Retro", sections: "## Went well"))
+        try await store.replace(with: MeetingTemplate.builtIn + [MeetingTemplate(id: "retro", name: "Retro", sections: "## Went well")])
 
-        try await store.delete(id: "retro")
-        let afterDelete = await store.template(id: "retro")
+        try await store.replace(with: [.general])
+        let after = await store.templates()
+        let retro = await store.template(id: "retro")
 
-        XCTAssertEqual(afterDelete, .general, "a deleted template falls back to General")
+        XCTAssertEqual(after, MeetingTemplate.builtIn)
+        XCTAssertEqual(retro, .general, "a deleted template falls back to General")
+    }
+
+    func testAFileThatCannotBeReadIsNotWrittenOver() async throws {
+        try Data("{ not json".utf8).write(to: fileURL)
+        let store = MeetingTemplateStore(fileURL: fileURL)
+
+        let shown = await store.templates()
         do {
-            try await store.delete(id: "stand-up")
-            XCTFail("a built-in template cannot be deleted")
+            try await store.replace(with: shown)
+            XCTFail("saving over an unreadable file loses the templates in it")
         } catch {
-            XCTAssertEqual(error as? MeetingTemplateStore.StoreError, .builtInTemplate)
+            XCTAssertEqual(error as? MeetingTemplateStore.StoreError, .unreadable)
         }
+
+        XCTAssertEqual(shown, MeetingTemplate.builtIn)
+        XCTAssertEqual(try String(contentsOf: fileURL, encoding: .utf8), "{ not json")
     }
 }
 

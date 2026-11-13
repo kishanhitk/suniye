@@ -104,6 +104,11 @@ final class MeetingPipelineRealModelTests: XCTestCase {
         let store = MeetingStore(rootDirectory: root)
         let record = MeetingRecord(title: "Call", startedAt: Date(), tracks: [.you, .them], templateID: MeetingTemplate.general.id, callPlayedOnSpeakers: echo)
         try await store.create(record)
+        for track in MeetingTrack.allCases {
+            let writer = try MeetingAudioFileWriter(url: store.audioURL(track, for: record.id))
+            try writer.append(tracks[track]!)
+            try writer.close()
+        }
         let transcriber = MeetingTranscriber(
             meetingID: record.id,
             tracks: MeetingTrack.allCases,

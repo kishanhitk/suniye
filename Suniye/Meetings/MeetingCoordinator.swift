@@ -49,7 +49,7 @@ struct MeetingWriteFailure: Equatable {
 /// Something that happened to a meeting, for a toast.
 enum MeetingNotice: Equatable {
     case callAudioNeverHeard
-    case callAudioStopped(since: TimeInterval)
+    case callAudioStopped
     case microphoneChanged(String)
     case trackFailed(MeetingTrack)
     /// `after` is the limit that stopped the recording.
@@ -68,8 +68,8 @@ final class MeetingSession {
         /// No sound came from the call yet, which often means that the system
         /// audio permission is off.
         case neverHeard
-        /// The call had sound, then went silent.
-        case stopped
+        /// The call had sound, then went silent at `since`, in recorded time.
+        case stopped(since: TimeInterval)
     }
 
     fileprivate(set) var record: MeetingRecord
@@ -79,8 +79,6 @@ final class MeetingSession {
     /// For each track: every chunk before this sample position is decoded.
     fileprivate(set) var decodedThrough: [MeetingTrack: Int] = [:]
     fileprivate(set) var callAudioProblem: CallAudioProblem?
-    /// Recorded time when the call went silent, for "No sound since 16:30".
-    fileprivate(set) var callSilentSince: TimeInterval?
     fileprivate(set) var failedTracks: [MeetingTrack: String] = [:]
     /// The new microphone, for a few seconds after the device changed.
     fileprivate(set) var changedInput: String?
@@ -151,10 +149,10 @@ final class MeetingCoordinator {
         didSet {
             if oldValue !== live {
                 onLiveChange?(live)
+                updateCallDetection()
             }
         }
     }
-    private(set) var finishing: Set<UUID> = []
     /// A meeting that a disk write error stopped, for its banner.
     private(set) var writeFailure: MeetingWriteFailure?
     /// The meeting that the Meetings section shows; nil shows the list.
@@ -162,7 +160,6 @@ final class MeetingCoordinator {
     /// The meeting whose page is on screen, so a notice does not repeat it.
     var pageOnScreen: UUID?
     private(set) var settings: MeetingSettings
-    let canRecordCallAudio: Bool
     @ObservationIgnored private(set) var callCard: MeetingCallCard? {
         didSet {
             if oldValue != callCard {
@@ -204,7 +201,6 @@ final class MeetingCoordinator {
         settingsStore: MeetingSettingsStore,
         engine: TranscriptionServiceProtocol,
         environment: MeetingEnvironment,
-        canRecordCallAudio: Bool,
         summaryAvailability: @escaping () -> MeetingSummaryAvailability,
         makeSummaryModel: @escaping (MeetingSummaryEngine) -> MeetingSummaryModel?,
         analytics: Analytics
@@ -214,7 +210,6 @@ final class MeetingCoordinator {
         self.settingsStore = settingsStore
         self.engine = engine
         self.environment = environment
-        self.canRecordCallAudio = canRecordCallAudio
         self.analytics = analytics
         settings = settingsStore.load()
         detector = MeetingCallDetector(reader: environment.makeMicrophoneUsers(), uptime: environment.uptime)
@@ -233,6 +228,10 @@ final class MeetingCoordinator {
         }
         summaries.onModelIdle = { [weak self] in self?.host?.meetingSummaryModelIsIdle() }
         detector.onEvent = { [weak self] in self?.handle($0) }
+    }
+
+    var canRecordCallAudio: Bool {
+        environment.canRecordCallAudio
     }
 
     /// At launch: finish the transcripts that a quit or a crash left, and
@@ -257,7 +256,7 @@ final class MeetingCoordinator {
         }
         let text = MeetingListText(
             summary: await store.summary(of: id),
-            notes: await store.notes(of: id),
+            notes: await store.notes(of: id) ?? "",
             transcript: await transcript(of: id).map(\.text)
         )
         listTexts[id] = text
@@ -276,7 +275,8 @@ final class MeetingCoordinator {
         await store.summary(of: id)
     }
 
-    func notes(of id: UUID) async -> String {
+    /// nil when the notes cannot be read.
+    func notes(of id: UUID) async -> String? {
         await store.notes(of: id)
     }
 
@@ -317,8 +317,8 @@ final class MeetingCoordinator {
 
         let id = UUID()
         let recorder = MeetingRecorder(
-            sources: environment.makeSources(canRecordCallAudio, host?.meetingInputDeviceID),
-            fileURLs: Dictionary(uniqueKeysWithValues: MeetingTrack.allCases.map { ($0, store.audioURL($0, for: id)) })
+            sources: environment.makeSources(host?.meetingInputDeviceID),
+            audioURL: { [store] in store.audioURL($0, for: id) }
         )
         let record = MeetingRecord(
             id: id,
@@ -335,11 +335,16 @@ final class MeetingCoordinator {
         let session = MeetingSession(record: record, recorder: recorder, transcriber: transcriber)
         // The recorder's queue keeps its events in order, and so does the main queue.
         recorder.onOutput = { transcriber.enqueue($0) }
-        recorder.onEvent = { [weak self] event in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.handle(event, from: session) } }
+        recorder.onEvent = { [weak self, weak session] event in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let session else { return }
+                    self?.handle(event, from: session)
+                }
+            }
         }
-        recorder.setMicrophoneMuted(dictationCaptures)
         await transcriber.start()
+        recorder.setMicrophoneMuted(dictationCaptures)
         do {
             try recorder.start()
         } catch {
@@ -375,7 +380,9 @@ final class MeetingCoordinator {
         try session.recorder.resume()
         let now = wallSeconds(of: session)
         await update(session.id) {
-            $0.pauses[$0.pauses.count - 1].end = now
+            if let last = $0.pauses.indices.last, $0.pauses[last].end == nil {
+                $0.pauses[last].end = now
+            }
             $0.status = .recording
         }
     }
@@ -390,7 +397,7 @@ final class MeetingCoordinator {
     private func stop(_ reason: MeetingStopReason, endingAt cut: Date?) async {
         guard let session = beginStop() else { return }
         let now = wallSeconds(of: session)
-        let end = cut.map { min(now, $0.timeIntervalSince(session.record.startedAt)) } ?? now
+        let end = cut.map { min(now, max(0, $0.timeIntervalSince(session.record.startedAt))) } ?? now
         await update(session.id) {
             $0.end(atWallSeconds: end)
             if cut != nil {
@@ -438,6 +445,7 @@ final class MeetingCoordinator {
         guard transcribers[id] == nil else { return }
         let transcriber = makeTranscriber(for: id, tracks: store.audioTracks(of: id))
         Task {
+            await update(id) { $0.status = .finishing }
             await finish(id, transcriber: transcriber) { try await $0.recover() }
         }
     }
@@ -495,9 +503,11 @@ final class MeetingCoordinator {
         answerCallCard(.keepRecording)
     }
 
+    /// Do Nothing turns call detection off, except while a meeting records:
+    /// the recording follows its call.
     private func updateCallDetection() {
         guard launched else { return }
-        if settings.callStartAction == .doNothing {
+        if settings.callStartAction == .doNothing, live == nil {
             detector.stop()
         } else {
             detector.start()
@@ -524,6 +534,8 @@ final class MeetingCoordinator {
                         $0.callAppName = app.name
                         $0.callAppBundleID = app.bundleID
                     }
+                    // A silence that the recorder reported before is a problem now.
+                    session.recorder.rearmCallSilence()
                 }
             }
         case let .callEnded(app):
@@ -536,6 +548,10 @@ final class MeetingCoordinator {
             let ended = now.addingTimeInterval(endedAt - environment.uptime())
             let delay = environment.callCardDurations.stop
             showCard(.callEnded(app, silent: silent, endedAt: ended, stopsAt: now.addingTimeInterval(delay)), for: delay)
+        case .recordedCallResumed:
+            if case .callEnded(_, silent: true, _, _) = callCard {
+                closeCallCard()
+            }
         }
     }
 
@@ -603,22 +619,25 @@ final class MeetingCoordinator {
     }
 
     func regenerate(_ id: UUID, templateID: String? = nil) async {
-        guard live?.id != id, !finishing.contains(id), record(id)?.status != .summarizing else { return }
+        guard record(id)?.status.canRegenerate == true else { return }
         if let templateID {
             updateSettings { $0.templateID = templateID }
         }
+        let enough = await hasEnoughSpeech(id, segments: transcript(of: id))
         await update(id) {
             if let templateID {
                 $0.templateID = templateID
             }
-            $0.status = .summarizing
+            $0.status = enough ? .summarizing : .noSpeech
             $0.summaryFailure = nil
         }
-        summaries.enqueue(id)
+        if enough {
+            summaries.enqueue(id)
+        }
     }
 
     func delete(_ id: UUID) async throws {
-        guard live?.id != id, !finishing.contains(id) else { return }
+        guard live?.id != id, record(id)?.status != .finishing else { return }
         summaries.remove(id)
         try await store.delete(id)
         meetings.removeAll { $0.id == id }
@@ -709,24 +728,33 @@ final class MeetingCoordinator {
         transcriber: MeetingTranscriber,
         run: (MeetingTranscriber) async throws -> [MeetingSegment]
     ) async {
-        finishing.insert(id)
         let started = ContinuousClock.now
         defer {
-            finishing.remove(id)
             transcribers[id] = nil
         }
         let outcome: MeetingOutcome
         var segments = 0
         do {
-            segments = try await run(transcriber).count
+            let transcript = try await run(transcriber)
+            segments = transcript.count
             outcome = segments == 0 ? .noSpeech : .done
             await store.deleteAudio(of: id)
-            await update(id) { $0.status = .summarizing }
-            summaries.enqueue(id)
+            let enough = await hasEnoughSpeech(id, segments: transcript)
+            await update(id) {
+                $0.status = enough ? .summarizing : .noSpeech
+                $0.transcriptFailure = nil
+            }
+            if enough {
+                summaries.enqueue(id)
+            }
         } catch {
             AppLogger.shared.log(.error, "meeting transcript not finished id=\(id.uuidString) error=\(error.localizedDescription)")
             outcome = .failed
-            await update(id) { $0.status = .interrupted }
+            let cause = error.localizedDescription
+            await update(id) {
+                $0.status = .interrupted
+                $0.transcriptFailure = cause
+            }
         }
         analytics.track(.meetingTranscribed(
             outcome: outcome,
@@ -742,17 +770,14 @@ final class MeetingCoordinator {
         case let .levels(you, them):
             session.youLevel = you
             session.themLevel = them
-        case let .callAudioSilent(heardBefore):
+        case let .callAudioSilent(heardBefore, since):
             // A meeting in the room has no call, so its silent call track is
             // no problem.
             guard session.record.callAppBundleID != nil else { return }
-            let since = max(0, session.elapsed(at: environment.now()) - MeetingRecorder.callSilenceLimit)
-            session.callAudioProblem = heardBefore ? .stopped : .neverHeard
-            session.callSilentSince = since
-            onNotice?(heardBefore ? .callAudioStopped(since: since) : .callAudioNeverHeard)
+            session.callAudioProblem = heardBefore ? .stopped(since: since) : .neverHeard
+            onNotice?(heardBefore ? .callAudioStopped : .callAudioNeverHeard)
         case .callAudioReturned:
             session.callAudioProblem = nil
-            session.callSilentSince = nil
         case let .inputChanged(name):
             session.changedInput = name
             onNotice?(.microphoneChanged(name))
@@ -766,7 +791,6 @@ final class MeetingCoordinator {
             session.failedTracks[track] = nil
             if track == .them {
                 session.callAudioProblem = nil
-                session.callSilentSince = nil
             }
         case let .trackFailed(track, message):
             session.failedTracks[track] = message
@@ -814,18 +838,23 @@ final class MeetingCoordinator {
         environment.now().timeIntervalSince(session.record.startedAt)
     }
 
-    /// A change that the store cannot write still holds in memory, so the
-    /// live meeting's state matches the recorder.
+    /// Memory holds the change at once, so the next action sees it, and also
+    /// when the write fails. The store's copy does not replace it: an update
+    /// that started later may not be on disk yet.
     private func update(_ id: UUID, _ change: @escaping (inout MeetingRecord) -> Void) async {
+        if var record = live?.id == id ? live?.record : record(id) {
+            change(&record)
+            apply(record)
+        }
         do {
-            apply(try await store.update(id, change))
+            _ = try await store.update(id, change)
         } catch {
             AppLogger.shared.log(.error, "meeting not saved id=\(id.uuidString) error=\(error.localizedDescription)")
-            if var record = live?.id == id ? live?.record : record(id) {
-                change(&record)
-                apply(record)
-            }
         }
+    }
+
+    private func hasEnoughSpeech(_ id: UUID, segments: [MeetingSegment]) async -> Bool {
+        MeetingSummaryWriter.hasEnoughSpeech(segments, notes: await store.notes(of: id) ?? "")
     }
 
     private func apply(_ record: MeetingRecord) {

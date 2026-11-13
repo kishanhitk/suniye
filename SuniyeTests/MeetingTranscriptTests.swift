@@ -134,6 +134,13 @@ final class MeetingTranscriptRulesTests: XCTestCase {
         XCTAssertEqual(later, [mine, theirs])
         XCTAssertEqual(noCall, [mine])
     }
+
+    func testTheLiveViewDropsTheEchoAlsoAfterTheCallTrackFailed() {
+        let call = segment(.them, 0, 3, "We ship the release on Friday.")
+        let echo = segment(.you, 0.5, 2.5, "ship the release on friday")
+
+        XCTAssertEqual(MeetingTranscript.live([echo, call], callDecodedThrough: nil, callPlayedOnSpeakers: true), [call])
+    }
 }
 
 final class MeetingTranscriberTests: XCTestCase {
@@ -215,6 +222,7 @@ final class MeetingTranscriberTests: XCTestCase {
         await transcriber.start()
 
         let audio = tone(2.5) + silence(0.5)
+        try writeAudio(audio, track: .you)
         transcriber.enqueue(.samples(.you, Array(audio[..<samples(1)]), position: 0))
         transcriber.enqueue(.samples(.you, Array(audio[samples(1)...]), position: samples(1)))
         let transcript = try await transcriber.finish()
@@ -232,6 +240,7 @@ final class MeetingTranscriberTests: XCTestCase {
         let transcriber = makeTranscriber(engine: engine, tracks: [.you], gate: gate)
         await transcriber.start()
 
+        try writeAudio(tone(2.5) + silence(0.5), track: .you)
         transcriber.enqueue(.samples(.you, tone(2.5) + silence(0.5), position: 0))
         try await Task.sleep(for: .milliseconds(200))
         let callsWhileHeld = await engine.decodedPeaks.count
@@ -248,6 +257,7 @@ final class MeetingTranscriberTests: XCTestCase {
         let transcriber = makeTranscriber(engine: engine, tracks: [.you])
         await transcriber.start()
 
+        try writeAudio(tone(1, level: 0.2) + tone(1, level: 0.4), track: .you)
         transcriber.enqueue(.samples(.you, tone(1, level: 0.2), position: 0))
         transcriber.enqueue(.paused)
         transcriber.enqueue(.samples(.you, tone(1, level: 0.4), position: samples(1)))
@@ -256,18 +266,39 @@ final class MeetingTranscriberTests: XCTestCase {
         XCTAssertEqual(transcript.map(\.text), ["Before the break.", "After the break."])
     }
 
-    func testAFailedDecodeIsTriedAgainAndAChunkThatKeepsFailingIsSkipped() async throws {
-        try writeAudio(tone(2.5, level: 0.2) + silence(0.5) + tone(2.5, level: 0.4) + silence(0.5), track: .you)
-        let engine = FakeMeetingEngine(words: [0.2: "Alpha.", 0.4: "Bravo."])
-        await engine.fail(level: 0.2, times: 2)
-        await engine.fail(level: 0.4, times: 100)
+    func testRecoveryEndsAChunkWhereTheMeetingPaused() async throws {
+        _ = try await store.update(record.id) { $0.pauses = [MeetingPause(start: 1, end: 61)] }
+        try writeAudio(tone(1, level: 0.2) + tone(1, level: 0.4), track: .you)
+        let engine = FakeMeetingEngine(words: [0.2: "Before the break.", 0.4: "After the break."])
 
+        let transcript = try await makeTranscriber(engine: engine, tracks: [.you]).recover()
+
+        XCTAssertEqual(transcript.map(\.text), ["Before the break.", "After the break."])
+    }
+
+    func testAChunkThatKeepsFailingFailsTheFinishAndTheNextFinishDecodesIt() async throws {
+        try writeAudio(
+            tone(2.5, level: 0.2) + silence(0.5) + tone(2.5, level: 0.4) + silence(0.5) + tone(2.5, level: 0.6) + silence(0.5),
+            track: .you
+        )
+        let engine = FakeMeetingEngine(words: [0.2: "Alpha.", 0.4: "Bravo.", 0.6: "Charlie."])
+        await engine.fail(level: 0.2, times: 2)
+        await engine.fail(level: 0.4, times: MeetingTranscriber.maximumAttempts)
+
+        do {
+            _ = try await makeTranscriber(engine: engine, tracks: [.you]).recover()
+            XCTFail("audio with no text fails the finish")
+        } catch {
+            XCTAssertEqual(error as? MeetingTranscriber.TranscriptError, .incomplete)
+        }
+        let kept = await store.segments(of: record.id)
         let transcript = try await makeTranscriber(engine: engine, tracks: [.you]).recover()
         let decoded = await engine.decodedPeaks.map { ($0 * 10).rounded() / 10 }
 
-        XCTAssertEqual(transcript.map(\.text), ["Alpha."])
-        XCTAssertEqual(decoded.filter { $0 == 0.2 }.count, 3)
-        XCTAssertEqual(decoded.filter { $0 == 0.4 }.count, MeetingTranscriber.maximumAttempts)
+        XCTAssertEqual(kept.map(\.text), ["Alpha."], "no line after the failed chunk stays, so the next finish starts there")
+        XCTAssertEqual(transcript.map(\.text), ["Alpha.", "Bravo.", "Charlie."])
+        XCTAssertEqual(decoded.filter { $0 == 0.2 }.count, 3, "a failed decode is tried again")
+        XCTAssertEqual(decoded.filter { $0 == 0.4 }.count, MeetingTranscriber.maximumAttempts + 1)
     }
 }
 

@@ -34,6 +34,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     private var analytics: SpyAnalytics!
     private var uptime: TimeInterval = 1000
     private var cardDurations = MeetingCallCard.Durations()
+    private var summaryAvailability = MeetingSummaryAvailability.ready(.localModel)
 
     override func setUp() async throws {
         try await super.setUp()
@@ -59,7 +60,8 @@ final class MeetingCoordinatorTests: XCTestCase {
 
     private func makeCoordinator(speechlessLimit: TimeInterval = 15 * 60) -> MeetingCoordinator {
         let environment = MeetingEnvironment(
-            makeSources: { [unowned self] _, _ in [.you: you, .them: them] },
+            canRecordCallAudio: true,
+            makeSources: { [unowned self] _ in [.you: you, .them: them] },
             confirmNotice: { [unowned self] in
                 noticeCount += 1
                 return noticeAnswer
@@ -79,8 +81,7 @@ final class MeetingCoordinatorTests: XCTestCase {
             settingsStore: MeetingSettingsStore(userDefaults: defaults),
             engine: engine,
             environment: environment,
-            canRecordCallAudio: true,
-            summaryAvailability: { .ready(.localModel) },
+            summaryAvailability: { [unowned self] in summaryAvailability },
             makeSummaryModel: { [unowned self] _ in summaryModel },
             analytics: analytics
         )
@@ -180,6 +181,22 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(session.elapsed(at: clock), 11)
         XCTAssertEqual(you.stopCount, 1)
         XCTAssertEqual(you.startCount, 2)
+        await coordinator.stop()
+    }
+
+    func testTwoPausesAtOnceOpenOnePause() async throws {
+        let coordinator = makeCoordinator()
+        try await coordinator.startMeeting(source: .manual)
+        let session = try XCTUnwrap(coordinator.live)
+
+        clock += 10
+        async let first: Void = coordinator.pause()
+        async let second: Void = coordinator.pause()
+        _ = await (first, second)
+        clock += 5
+        try await coordinator.resume()
+
+        XCTAssertEqual(session.record.pauses, [MeetingPause(start: 10, end: 15)])
         await coordinator.stop()
     }
 
@@ -459,6 +476,27 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(cardAnswers, ["offer not_now", "call_ended keep_recording", "call_ended timeout"])
     }
 
+    func testTheCallEndedCardClosesWhenTheCallPlaysSoundAgain() async throws {
+        cardDurations.stop = 0.05
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        await coordinator.recordOfferedCall()
+
+        hold(holding(zoom, output: false), after: MeetingCallWatch.silentCallLimit + 1)
+        let silentCard = coordinator.callCard
+        hold(holding(zoom), after: 1)
+        try await Task.sleep(for: .milliseconds(150))
+
+        guard case .callEnded(zoom, silent: true, _, _) = silentCard else {
+            return XCTFail("expected the silent call-ended card, got \(String(describing: silentCard))")
+        }
+        XCTAssertNil(coordinator.callCard)
+        XCTAssertNotNil(coordinator.live, "the recording goes on")
+        await coordinator.stop()
+    }
+
     func testDoNothingStopsCallDetection() async {
         let coordinator = makeCoordinator()
         await coordinator.start()
@@ -472,6 +510,45 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertFalse(microphone.listening)
         XCTAssertEqual(microphone.reads, 0)
         XCTAssertNil(coordinator.callCard)
+    }
+
+    func testWithDoNothingARecordingStillFollowsItsCall() async throws {
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        await coordinator.chooseCallStartAction(.doNothing)
+
+        try await coordinator.startMeeting(source: .manual)
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        let followed = await waitUntil { coordinator.live?.record.callAppBundleID == zoom.bundleID }
+        await coordinator.stop()
+
+        XCTAssertTrue(followed, "the no-call-audio warning needs the call app")
+        XCTAssertFalse(microphone.listening, "detection stops again with the recording")
+    }
+
+    func testTooLittleSpeechNeedsNoSummaryModel() async throws {
+        summaryAvailability = .unavailable
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+
+        them.push(tone(2.5, level: 0.5) + silence(0.5))
+        await coordinator.stop()
+
+        XCTAssertEqual(coordinator.record(id)?.status, .noSpeech)
+    }
+
+    func testRegenerateNeedsAFinalTranscript() async throws {
+        let left = MeetingRecord(title: "Meeting", startedAt: clock, tracks: [.you], status: .interrupted, templateID: "general")
+        try await store.create(left)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        await coordinator.regenerate(left.id)
+
+        XCTAssertEqual(coordinator.record(left.id)?.status, .interrupted)
     }
 
     func testATrackThatStartsAgainNoLongerShowsAsFailed() async throws {

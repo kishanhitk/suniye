@@ -1,27 +1,24 @@
 import Foundation
 
+/// Samples `start ..< end` of one track's audio file.
 struct MeetingAudioChunk: Equatable, Sendable {
     let track: MeetingTrack
-    /// Sample position of the first sample in the track's audio file.
     let start: Int
-    let samples: [Float]
-    /// False when no 100 ms window rose above `MeetingAudioFormat.silenceLevel`:
-    /// the chunk is silence and is not decoded.
+    let end: Int
+    /// False when no 100 ms window rose above `MeetingAudioFormat.silenceLevel`.
     let hasSound: Bool
-
-    var end: Int {
-        start + samples.count
-    }
 }
 
 /// Cuts one track into chunks while the meeting records. A chunk ends at the
 /// first pause after `minimumSamples`, or, at `maximumSamples`, at the
-/// quietest 100 ms of its last 5 s (`AudioChunker`), so a cut rarely splits a
+/// quietest window of its last `cutSearchSamples`, so a cut rarely splits a
 /// word. Chunks follow each other with no gap and no overlap.
 struct MeetingSegmenter {
     static let minimumSamples = 2 * MeetingAudioFormat.sampleRate
     static let maximumSamples = 12 * MeetingAudioFormat.sampleRate
-    static let windowSamples = AudioChunker.energyWindowSamples
+    /// 100 ms.
+    static let windowSamples = MeetingAudioFormat.sampleRate / 10
+    static let cutSearchSamples = 5 * MeetingAudioFormat.sampleRate
     /// Three quiet windows in a row (300 ms) make a pause.
     static let pauseWindows = 3
     /// A window is quiet below a tenth (-20 dB) of the chunk's loudest window,
@@ -32,6 +29,8 @@ struct MeetingSegmenter {
     private var pending: [Float] = []
     private var pendingStart: Int
     private var analyzedWindows = 0
+    /// The level of each analyzed window of the chunk in progress.
+    private var levels: [Float] = []
     private var loudest: Float = 0
     private var quietRun = 0
 
@@ -50,9 +49,12 @@ struct MeetingSegmenter {
             }
             pendingStart = position
         }
-        pending += samples
-        while let chunk = nextChunk() {
-            chunks.append(chunk)
+        // In steps, so a long block of silence does not make `pending` long.
+        for start in stride(from: 0, to: samples.count, by: Self.maximumSamples) {
+            pending += samples[start ..< min(start + Self.maximumSamples, samples.count)]
+            while let chunk = nextChunk() {
+                chunks.append(chunk)
+            }
         }
         return chunks
     }
@@ -68,6 +70,7 @@ struct MeetingSegmenter {
             let window = analyzedWindows * Self.windowSamples ..< (analyzedWindows + 1) * Self.windowSamples
             analyzedWindows += 1
             let level = MeetingAudioFormat.rms(pending[window])
+            levels.append(level)
             loudest = max(loudest, level)
             let quiet = level < max(MeetingAudioFormat.silenceLevel, loudest * Self.quietRatio)
             quietRun = quiet ? quietRun + 1 : 0
@@ -77,30 +80,31 @@ struct MeetingSegmenter {
                 return cut(at: window.upperBound)
             }
             if window.upperBound >= Self.maximumSamples {
-                let searched = (Self.maximumSamples - AudioChunker.boundarySearchSamples) ..< Self.maximumSamples
-                let quietest = AudioChunker.quietestPoint(in: searched) { MeetingAudioFormat.rms(pending[$0]) }
-                return cut(at: quietest)
+                return cut(at: quietestCut())
             }
         }
         return nil
     }
 
+    /// The start of the quietest window in the last `cutSearchSamples` of a
+    /// full chunk, the final window left out.
+    private func quietestCut() -> Int {
+        let first = (Self.maximumSamples - Self.cutSearchSamples) / Self.windowSamples
+        let quietest = (first ..< levels.count - 1).min { levels[$0] < levels[$1] } ?? first
+        return quietest * Self.windowSamples
+    }
+
     /// Returns `pending[..<position]` as a chunk and analyzes the rest again
     /// as the start of the next chunk.
     private mutating func cut(at position: Int) -> MeetingAudioChunk {
-        let samples = Array(pending[..<position])
-        var hasSound = false
-        for start in stride(from: 0, to: samples.count, by: Self.windowSamples) {
-            let end = min(start + Self.windowSamples, samples.count)
-            if MeetingAudioFormat.rms(samples[start ..< end]) >= MeetingAudioFormat.silenceLevel {
-                hasSound = true
-                break
-            }
+        let hasSound = stride(from: 0, to: position, by: Self.windowSamples).contains { start in
+            MeetingAudioFormat.rms(pending[start ..< min(start + Self.windowSamples, position)]) >= MeetingAudioFormat.silenceLevel
         }
-        let chunk = MeetingAudioChunk(track: track, start: pendingStart, samples: samples, hasSound: hasSound)
+        let chunk = MeetingAudioChunk(track: track, start: pendingStart, end: pendingStart + position, hasSound: hasSound)
         pending.removeFirst(position)
         pendingStart += position
         analyzedWindows = 0
+        levels = []
         loudest = 0
         quietRun = 0
         return chunk

@@ -26,7 +26,8 @@ struct MeetingPage: View {
     @State private var segments: [MeetingSegment] = []
     @State private var summary: String?
     /// Nil until the notes are read, so the editor never saves over them.
-    @State private var notes: String?
+    @State private var notes: MeetingNotesDraft?
+    @State private var notesUnreadable = false
 
     init(meetings: MeetingCoordinator, appState: AppState, id: UUID) {
         self.meetings = meetings
@@ -67,7 +68,9 @@ struct MeetingPage: View {
                 summary = await meetings.summary(of: id)
             }
             .task(id: id) {
-                notes = await meetings.notes(of: id)
+                let saved = await meetings.notes(of: id)
+                notes = saved.map(MeetingNotesDraft.init(saved:))
+                notesUnreadable = saved == nil
             }
             .onAppear { meetings.pageOnScreen = id }
             .onDisappear {
@@ -76,7 +79,7 @@ struct MeetingPage: View {
                 }
             }
             .onChange(of: live == nil) { _, finished in
-                if finished, tab == .notes, notes?.isEmpty ?? true {
+                if finished, tab == .notes, notes?.text.isEmpty ?? true {
                     tab = .summary
                 }
             }
@@ -168,7 +171,7 @@ struct MeetingPage: View {
         case .summary:
             text = summary ?? ""
         case .notes:
-            text = notes ?? ""
+            text = notes?.text ?? ""
         case .transcript:
             text = MeetingExport.transcript(record: record, segments: segments)
         }
@@ -184,13 +187,13 @@ struct MeetingPage: View {
             MeetingSummaryTab(meetings: meetings, appState: appState, actions: actions, record: record, summary: summary)
         case .notes:
             VStack(alignment: .leading, spacing: 12) {
-                if let loaded = notes {
-                    MeetingNotesEditor(
-                        text: Binding(get: { notes ?? loaded }, set: { notes = $0 }),
-                        saved: loaded
-                    ) { text in
+                if let draft = Binding($notes) {
+                    MeetingNotesEditor(draft: draft) { text in
                         Task { await meetings.saveNotes(text, for: id) }
                     }
+                } else if notesUnreadable {
+                    Text("Couldn’t read the notes.")
+                        .foregroundStyle(MainWindowPalette.secondaryText)
                 }
                 if live == nil {
                     MeetingRegenerateMenu(title: "Regenerate Summary", meetings: meetings, actions: actions, record: record)
@@ -208,7 +211,7 @@ struct MeetingPage: View {
             MeetingTranscriptLine(
                 id: segment.id,
                 time: MeetingTranscript.clock(timeline.wallSeconds(forSample: segment.audioStart)),
-                speaker: record.hasCallTrack ? (segment.track == .you ? "You" : "Them") : nil,
+                speaker: record.hasCallTrack ? segment.track.speakerLabel : nil,
                 text: segment.text
             )
         }
@@ -301,7 +304,7 @@ private struct MeetingLiveMeta: View {
                 }
                 MeetingTimer(session: session)
             }
-            track(session.changedInput ?? "You", level: session.youLevel, problem: session.failedTracks[.you])
+            track(session.changedInput ?? MeetingTrack.you.speakerLabel, level: session.youLevel, problem: session.failedTracks[.you])
             if session.hasCallTrack {
                 if let problem = session.callAudioProblem {
                     Button {
@@ -312,10 +315,10 @@ private struct MeetingLiveMeta: View {
                     }
                     .buttonStyle(.borderless)
                     .popover(isPresented: $showsCallProblem, arrowEdge: .bottom) {
-                        CallProblemPopover(problem: problem, session: session, meetings: meetings)
+                        CallProblemPopover(problem: problem, meetings: meetings)
                     }
                 } else {
-                    track("Them", level: session.themLevel, problem: session.failedTracks[.them])
+                    track(MeetingTrack.them.speakerLabel, level: session.themLevel, problem: session.failedTracks[.them])
                 }
             }
         }
@@ -341,26 +344,23 @@ private struct MeetingLiveMeta: View {
 
 private struct CallProblemPopover: View {
     let problem: MeetingSession.CallAudioProblem
-    let session: MeetingSession
     let meetings: MeetingCoordinator
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             switch problem {
             case .neverHeard:
-                Text("No sound from the call for 2 minutes")
+                Text("No sound from the call for \(MeetingDurationText.spelledOut(MeetingRecorder.callSilenceLimit))")
                     .font(AppTypography.bodyMedium)
                 Text("If people are talking, Suniye may need permission to record system audio.")
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Open System Settings") {
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
                 }
-            case .stopped:
+            case let .stopped(since):
                 Text("Call audio stopped")
                     .font(AppTypography.bodyMedium)
-                if let since = session.callSilentSince {
-                    Text("No sound from the call since \(MeetingTranscript.clock(since)).")
-                }
+                Text("No sound from the call since \(MeetingTranscript.clock(since)).")
                 Button("Restart Call Audio") {
                     meetings.restartCallAudio()
                 }

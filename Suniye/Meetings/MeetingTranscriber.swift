@@ -3,17 +3,29 @@ import Foundation
 /// Turns the audio of one meeting into stored transcript segments: while the
 /// meeting records, and later for a meeting that the app did not finish.
 ///
-/// - The recorder's output arrives in order through `enqueue`.
+/// - The recorder's output arrives in order through `enqueue`, after the
+///   recorder wrote it to the track's file. A chunk's audio is read from the
+///   file when it decodes, so chunks that wait hold no audio.
 /// - One chunk decodes at a time, the earliest first across both tracks,
 ///   through the speech engine that dictation uses.
 /// - A chunk whose decode fails is tried again after `retryDelay`: a decode
 ///   that arrives while the router unloads the old engine of a model switch
 ///   fails once.
+/// - A chunk whose text is not stored (its decode kept failing, or the store
+///   could not save its line) makes the finish fail.
 actor MeetingTranscriber {
     enum Event: Equatable, Sendable {
         case segment(MeetingSegment)
         /// Every chunk of the track before this sample position is decoded.
         case decodedThrough(MeetingTrack, Int)
+    }
+
+    enum TranscriptError: LocalizedError, Equatable {
+        case incomplete
+
+        var errorDescription: String? {
+            "Part of the audio has no transcript yet."
+        }
     }
 
     static let maximumAttempts = 5
@@ -47,6 +59,9 @@ actor MeetingTranscriber {
     private var segmenters: [MeetingTrack: MeetingSegmenter]
     private var pending: [MeetingAudioChunk] = []
     private var attempts: [ChunkID: Int] = [:]
+    /// For each track, the start of the earliest chunk whose text is not
+    /// stored.
+    private var holes: [MeetingTrack: Int] = [:]
     private var consumer: Task<Void, Never>?
     private var decoder: Task<Void, Never>?
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
@@ -110,6 +125,7 @@ actor MeetingTranscriber {
         await consumer?.value
         flushSegmenters()
         await waitUntilDecoded()
+        try await requireComplete()
         return try await finalize()
     }
 
@@ -118,6 +134,10 @@ actor MeetingTranscriber {
     /// and returns the final transcript.
     func recover() async throws -> [MeetingSegment] {
         let stored = await store.segments(of: meetingID)
+        // The files hold no pause; a pause ended the chunk in progress there.
+        let pauses = await store.record(meetingID)?.pauses ?? []
+        let timeline = MeetingTimeline(pauses: pauses)
+        let pauseCuts = pauses.map { timeline.audioPosition(forWallSeconds: $0.start) }
         var resumeAt: [MeetingTrack: Int] = [:]
         var end = 0
         for track in tracks {
@@ -130,7 +150,8 @@ actor MeetingTranscriber {
         }
         var position = resumeAt.values.min() ?? end
         while position < end {
-            let stepEnd = position + Self.replayStepSamples
+            let nextCut = pauseCuts.filter { $0 > position }.min()
+            let stepEnd = min(position + Self.replayStepSamples, nextCut ?? .max)
             for (track, from) in resumeAt {
                 let lower = max(position, from)
                 guard lower < stepEnd else { continue }
@@ -139,11 +160,15 @@ actor MeetingTranscriber {
                     process(.samples(track, samples, position: lower))
                 }
             }
+            if stepEnd == nextCut {
+                flushSegmenters()
+            }
             await waitUntilDecoded()
             position = stepEnd
         }
         flushSegmenters()
         await waitUntilDecoded()
+        try await requireComplete()
         return try await finalize()
     }
 
@@ -196,10 +221,8 @@ actor MeetingTranscriber {
         }
     }
 
-    /// The call track first when two chunks start together: a "You" line
-    /// waits for the call track anyway.
     private func earliestPendingIndex() -> Int? {
-        pending.indices.min { (pending[$0].start, pending[$0].track.rawValue) < (pending[$1].start, pending[$1].track.rawValue) }
+        pending.indices.min { (pending[$0].start, pending[$0].track) < (pending[$1].start, pending[$1].track) }
     }
 
     /// Returns false when the chunk should be tried again.
@@ -212,7 +235,8 @@ actor MeetingTranscriber {
         let id = ChunkID(track: chunk.track, start: chunk.start)
         let started = ContinuousClock.now
         do {
-            let text = try await engine.transcribe(samples: chunk.samples, sampleRate: MeetingAudioFormat.sampleRate, purpose: .meeting)
+            let samples = try MeetingAudioFileReader.samples(at: store.audioURL(chunk.track, for: meetingID), range: chunk.start ..< chunk.end)
+            let text = try await engine.transcribe(samples: samples, sampleRate: MeetingAudioFormat.sampleRate, purpose: .meeting)
             stats.decodeSeconds += (ContinuousClock.now - started) / .seconds(1)
             attempts[id] = nil
             await save(text, of: chunk)
@@ -224,6 +248,7 @@ actor MeetingTranscriber {
                 attempts[id] = nil
                 stats.failed += 1
                 AppLogger.shared.log(.error, "meeting transcript gave up on a chunk id=\(meetingID.uuidString) track=\(chunk.track.rawValue) start=\(chunk.start) error=\(error.localizedDescription)")
+                markHole(at: chunk)
                 finished(chunk)
                 return true
             }
@@ -249,7 +274,26 @@ actor MeetingTranscriber {
             onEvent(.segment(segment))
         } catch {
             AppLogger.shared.log(.error, "meeting transcript could not save a segment id=\(meetingID.uuidString) error=\(error.localizedDescription)")
+            markHole(at: chunk)
         }
+    }
+
+    private func markHole(at chunk: MeetingAudioChunk) {
+        holes[chunk.track] = min(holes[chunk.track] ?? chunk.start, chunk.start)
+    }
+
+    /// A track with a hole keeps no line from the hole on, so `recover()`
+    /// decodes it again from there.
+    private func requireComplete() async throws {
+        guard !holes.isEmpty else { return }
+        let stored = await store.segments(of: meetingID)
+        let kept = stored.filter { segment in
+            holes[segment.track].map { segment.audioEnd <= $0 } ?? true
+        }
+        if kept.count != stored.count {
+            try await store.replaceSegments(kept, of: meetingID)
+        }
+        throw TranscriptError.incomplete
     }
 
     private func finished(_ chunk: MeetingAudioChunk) {

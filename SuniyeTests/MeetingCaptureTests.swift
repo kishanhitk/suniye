@@ -282,7 +282,7 @@ final class MeetingRecorderTests: XCTestCase {
         sources[.them] = them
         return MeetingRecorder(
             sources: sources,
-            fileURLs: [.you: url(.you), .them: url(.them)],
+            audioURL: { [unowned self] in url($0) },
             uptime: { [unowned self] in self.now },
             silenceCheckInterval: silenceCheck
         )
@@ -436,7 +436,7 @@ final class MeetingRecorderTests: XCTestCase {
         let silent = expectation(description: "silent")
         let returned = expectation(description: "returned")
         recorder.onEvent = { event in
-            if event == .callAudioSilent(heardBefore: false) { silent.fulfill() }
+            if case .callAudioSilent(heardBefore: false, _) = event { silent.fulfill() }
             if event == .callAudioReturned { returned.fulfill() }
         }
         try recorder.start()
@@ -453,7 +453,7 @@ final class MeetingRecorderTests: XCTestCase {
         let you = FakeMeetingSource(), them = FakeMeetingSource()
         let recorder = makeRecorder(you: you, them: them, silenceCheck: .milliseconds(20))
         let stopped = expectation(description: "stopped")
-        recorder.onEvent = { if $0 == .callAudioSilent(heardBefore: true) { stopped.fulfill() } }
+        recorder.onEvent = { if case .callAudioSilent(heardBefore: true, _) = $0 { stopped.fulfill() } }
         try recorder.start()
 
         them.push(Array(repeating: 0.2, count: 320))
@@ -465,6 +465,46 @@ final class MeetingRecorderTests: XCTestCase {
         XCTAssertEqual(them.startCount, 2)
         XCTAssertEqual(them.stopCount, 2)
         XCTAssertEqual(you.startCount, 1)
+    }
+
+    func testARearmedSilenceIsReportedAgainFromTheLastSound() throws {
+        let you = FakeMeetingSource(), them = FakeMeetingSource()
+        let recorder = makeRecorder(you: you, them: them, silenceCheck: .milliseconds(20))
+        let reports = Collected<MeetingRecorderEvent>()
+        let first = expectation(description: "first report")
+        let second = expectation(description: "second report")
+        recorder.onEvent = { event in
+            guard case .callAudioSilent = event else { return }
+            reports.append([event])
+            reports.samples.count == 1 ? first.fulfill() : second.fulfill()
+        }
+        try recorder.start()
+
+        now += 10
+        them.push(Array(repeating: 0.2, count: 320))
+        now += MeetingRecorder.callSilenceLimit + 1
+        wait(for: [first], timeout: 2)
+        recorder.rearmCallSilence()
+        wait(for: [second], timeout: 2)
+        recorder.stop()
+
+        XCTAssertEqual(reports.samples, [.callAudioSilent(heardBefore: true, since: 10), .callAudioSilent(heardBefore: true, since: 10)])
+    }
+
+    func testAFailedCallTrackReportsNoSilence() throws {
+        let you = FakeMeetingSource(), them = FakeMeetingSource()
+        them.startError = FakeStartError()
+        let recorder = makeRecorder(you: you, them: them, silenceCheck: .milliseconds(10))
+        let events = Collected<MeetingRecorderEvent>()
+        recorder.onEvent = { events.append([$0]) }
+        try recorder.start()
+
+        now += MeetingRecorder.callSilenceLimit * 2
+        Thread.sleep(forTimeInterval: 0.1)
+        recorder.stop()
+
+        XCTAssertTrue(events.samples.contains(.trackFailed(.them, "tap refused")))
+        XCTAssertFalse(events.samples.contains { if case .callAudioSilent = $0 { return true }; return false }, "the failed track already shows; its silence says nothing about the permission")
     }
 
     func testMicrophoneOnlyRecordingNeverReportsCallSilence() throws {

@@ -107,16 +107,9 @@ struct MeetingTemplateEditor: View {
     }
 
     private func save() {
-        let removed = saved.filter { old in !drafts.contains { $0.id == old.id } }
-        let changed = drafts.filter { !saved.contains($0) }
         Task {
             do {
-                for template in removed {
-                    try await templates.delete(id: template.id)
-                }
-                for template in changed {
-                    try await templates.save(template)
-                }
+                try await templates.replace(with: drafts)
                 dismiss()
             } catch {
                 saveError = error.localizedDescription

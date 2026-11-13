@@ -11,19 +11,17 @@ struct MeetingsSection: View {
             MeetingPage(meetings: meetings, appState: appState, id: id)
                 .id(id)
         } else {
-            MeetingsPage(meetings: meetings, appState: appState)
+            MeetingsPage(meetings: meetings)
         }
     }
 }
 
 struct MeetingsPage: View {
     @Bindable var meetings: MeetingCoordinator
-    let appState: AppState
 
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     @State private var texts: [UUID: MeetingListText] = [:]
-    @State private var selectedID: UUID?
     @State private var actions = MeetingActions()
 
     var body: some View {
@@ -43,8 +41,8 @@ struct MeetingsPage: View {
                     icon: "exclamationmark.triangle.fill",
                     tint: .orange,
                     title: MeetingStatus.interruptedTitle,
-                    detail: "Suniye closed while it wrote the transcript of the \(record.startedAt.formatted(date: .omitted, time: .shortened)) meeting. The audio is saved.",
-                    actionTitle: meetings.finishing.contains(record.id) ? nil : "Finish Transcript",
+                    detail: unfinishedDetail(record),
+                    actionTitle: "Finish Transcript",
                     action: { meetings.finishTranscript(record.id) }
                 )
             }
@@ -55,7 +53,7 @@ struct MeetingsPage: View {
                 }
             }
 
-            if !finished.isEmpty {
+            if !listed.isEmpty {
                 TranscriptSearchBar(searchText: $searchText, isSearchFocused: $isSearchFocused, placeholder: "Search meetings")
             }
 
@@ -64,7 +62,7 @@ struct MeetingsPage: View {
         .meetingActionDialogs(actions, meetings: meetings)
         .task(id: searchText) {
             guard !query.isEmpty else { return }
-            for record in finished where texts[record.id] == nil {
+            for record in listed where texts[record.id] == nil {
                 texts[record.id] = await meetings.listText(for: record.id)
             }
         }
@@ -72,7 +70,7 @@ struct MeetingsPage: View {
 
     @ViewBuilder
     private var list: some View {
-        if finished.isEmpty, meetings.live == nil {
+        if listed.isEmpty, meetings.live == nil {
             VStack(spacing: 12) {
                 EmptyStateCard(
                     icon: "person.2",
@@ -94,13 +92,7 @@ struct MeetingsPage: View {
                 ForEach(groups, id: \.day) { group in
                     Section {
                         ForEach(group.records) { record in
-                            MeetingRow(
-                                record: record,
-                                snippet: snippet(for: record),
-                                query: query,
-                                isSelected: selectedID == record.id
-                            ) {
-                                selectedID = record.id
+                            MeetingRow(record: record, snippet: snippet(for: record), query: query) {
                                 meetings.openMeetingID = record.id
                             }
                             .task(id: record) {
@@ -119,13 +111,6 @@ struct MeetingsPage: View {
                     }
                 }
             }
-            .focusable()
-            .focusEffectDisabled()
-            .onDeleteCommand {
-                if let selectedID, let record = meetings.record(selectedID) {
-                    actions.confirmDelete(record)
-                }
-            }
         }
     }
 
@@ -133,10 +118,17 @@ struct MeetingsPage: View {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Finished meetings: everything but the live one and the ones whose
-    /// transcript did not finish (they have their own banner above).
-    private var finished: [MeetingRecord] {
-        meetings.meetings.filter { $0.id != meetings.live?.id && $0.status != .interrupted }
+    /// Every meeting but the live one, which has its own row above.
+    private var listed: [MeetingRecord] {
+        meetings.meetings.filter { $0.id != meetings.live?.id }
+    }
+
+    private func unfinishedDetail(_ record: MeetingRecord) -> String {
+        let time = record.startedAt.formatted(date: .omitted, time: .shortened)
+        guard let failure = record.transcriptFailure else {
+            return "Suniye closed while it wrote the transcript of the \(time) meeting. The audio is saved."
+        }
+        return "\(failure) The audio of the \(time) meeting is saved."
     }
 
     private var unfinished: [MeetingRecord] {
@@ -144,8 +136,8 @@ struct MeetingsPage: View {
     }
 
     private var visible: [MeetingRecord] {
-        guard !query.isEmpty else { return finished }
-        return finished.filter { record in
+        guard !query.isEmpty else { return listed }
+        return listed.filter { record in
             record.title.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
                 || texts[record.id]?.line(matching: query) != nil
         }
@@ -202,7 +194,6 @@ private struct MeetingRow: View {
     let record: MeetingRecord
     let snippet: String?
     let query: String
-    let isSelected: Bool
     let open: () -> Void
 
     var body: some View {
@@ -232,10 +223,6 @@ private struct MeetingRow: View {
             }
             .padding(.vertical, AppMetrics.listRowVerticalPadding)
             .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                    .fill(isSelected ? MainWindowPalette.selectedFill : Color.clear)
-            )
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle(pressedScale: 0.995))

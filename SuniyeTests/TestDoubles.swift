@@ -686,14 +686,14 @@ func makeTestMeetingCoordinator(engine: TranscriptionServiceProtocol, analytics:
         settingsStore: MeetingSettingsStore(userDefaults: UserDefaults(suiteName: "suniye-meeting-tests-\(UUID().uuidString)")!),
         engine: engine,
         environment: MeetingEnvironment(
-            makeSources: { _, _ in [:] },
+            canRecordCallAudio: false,
+            makeSources: { _ in [:] },
             confirmNotice: { false },
             freeDiskBytes: { nil },
             callPlaysOnSpeakers: { false },
             makeMicrophoneUsers: { FakeMicrophoneUsers() },
             now: Date.init
         ),
-        canRecordCallAudio: false,
         summaryAvailability: { .unavailable },
         makeSummaryModel: { _ in nil },
         analytics: analytics

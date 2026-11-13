@@ -23,22 +23,25 @@ struct MeetingListText: Equatable, Sendable {
 
     /// The first summary, notes or transcript line that contains `query`.
     func line(matching query: String) -> String? {
-        let summaryLines = (summary ?? "")
-            .components(separatedBy: .newlines)
-            .filter { !$0.hasPrefix("## ") }
-            .map { $0.hasPrefix("- ") ? String($0.dropFirst(2)) : $0 }
-        let lines = summaryLines + notes.components(separatedBy: .newlines) + transcript
+        let lines = Self.contentLines(of: summary ?? "") + notes.components(separatedBy: .newlines) + transcript
         return lines.first { $0.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+    }
+
+    /// A summary's list items and plain lines, without its headings.
+    private static func contentLines(of summary: String) -> [String] {
+        MeetingSummaryBlock.parse(summary).compactMap { block in
+            switch block {
+            case .heading:
+                return nil
+            case let .item(text), let .paragraph(text):
+                return text
+            }
+        }
     }
 
     /// The first sentence of the first plain line of a summary body.
     static func firstSentence(of summary: String) -> String? {
-        guard let line = summary
-            .components(separatedBy: .newlines)
-            .map({ $0.trimmingCharacters(in: .whitespaces) })
-            .first(where: { !$0.isEmpty && !$0.hasPrefix("## ") })
-        else { return nil }
-        let text = line.hasPrefix("- ") ? String(line.dropFirst(2)) : line
+        guard let text = contentLines(of: summary).first else { return nil }
         var sentence = text
         text.enumerateSubstrings(in: text.startIndex ..< text.endIndex, options: .bySentences) { substring, _, _, stop in
             if let substring {

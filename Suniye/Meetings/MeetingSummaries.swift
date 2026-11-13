@@ -93,7 +93,7 @@ final class MeetingSummaries {
         let segments = await store.segments(of: id)
         let input = MeetingSummaryInput(
             segments: segments,
-            notes: await store.notes(of: id),
+            notes: await store.notes(of: id) ?? "",
             template: await templates.template(id: record.templateID),
             speakerLabels: record.hasCallTrack
         )

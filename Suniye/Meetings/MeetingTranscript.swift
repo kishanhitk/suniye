@@ -14,10 +14,9 @@ enum MeetingTranscript {
     static let echoShare = 0.6
 
     static func ordered(_ segments: [MeetingSegment]) -> [MeetingSegment] {
-        segments.sorted { ($0.audioStart, $0.track.rawValue) < ($1.audioStart, $1.track.rawValue) }
+        segments.sorted { ($0.audioStart, $0.track) < ($1.audioStart, $1.track) }
     }
 
-    /// Every segment in time order, without the echo segments.
     /// The transcript that a reader sees: no echo of the call, and no line
     /// after the end of the call that the meeting followed.
     static func final(_ segments: [MeetingSegment], of record: MeetingRecord) -> [MeetingSegment] {
@@ -25,6 +24,7 @@ enum MeetingTranscript {
         return final(kept, callPlayedOnSpeakers: record.callPlayedOnSpeakers)
     }
 
+    /// Every segment in time order, without the echo segments.
     static func final(_ segments: [MeetingSegment], callPlayedOnSpeakers: Bool) -> [MeetingSegment] {
         guard callPlayedOnSpeakers else { return ordered(segments) }
         let call = segments.filter { $0.track == .them }
@@ -34,14 +34,14 @@ enum MeetingTranscript {
     /// What the live view shows. A "You" segment waits until the call track
     /// is decoded past its end plus the echo window. Then the echo check sees
     /// every call segment that can be its source, and no earlier call line
-    /// arrives after it. `callDecodedThrough` is nil when the meeting has no
-    /// call track.
+    /// arrives after it. `callDecodedThrough` is nil when no call track
+    /// records.
     static func live(
         _ segments: [MeetingSegment],
         callDecodedThrough: Int?,
         callPlayedOnSpeakers: Bool
     ) -> [MeetingSegment] {
-        guard let callDecodedThrough else { return ordered(segments) }
+        guard let callDecodedThrough else { return final(segments, callPlayedOnSpeakers: callPlayedOnSpeakers) }
         let ready = segments.filter { $0.track == .them || $0.audioEnd + echoWindowSamples <= callDecodedThrough }
         return final(ready, callPlayedOnSpeakers: callPlayedOnSpeakers)
     }
@@ -68,7 +68,7 @@ enum MeetingTranscript {
                 line += "[\(clock(timeline.wallSeconds(forSample: turn.start)))] "
             }
             if speakerLabels {
-                line += turn.track == .you ? "You: " : "Them: "
+                line += "\(turn.track.speakerLabel): "
             }
             return line + turn.text
         }

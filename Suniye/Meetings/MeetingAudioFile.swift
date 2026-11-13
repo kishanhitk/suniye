@@ -7,8 +7,13 @@ enum MeetingAudioFormat {
     static let sampleRate = 16_000
     static let headerSize = 44
     static let bytesPerSample = 2
-    /// RMS below this (about -60 dBFS) is silence: the call track has no
-    /// sound, and a chunk is not decoded.
+
+    /// Whole samples after the header of a file `fileLength` bytes long.
+    static func sampleCount(fileLength: Int) -> Int {
+        max(0, fileLength - headerSize) / bytesPerSample
+    }
+
+    /// RMS below this (about -60 dBFS) is silence.
     static let silenceLevel: Float = 0.001
 
     static func rms<Samples: Collection>(_ samples: Samples) -> Float where Samples.Element == Float {
@@ -108,7 +113,7 @@ final class MeetingAudioFileWriter {
         guard length >= MeetingAudioFormat.headerSize else {
             throw MeetingAudioFileError.notAWaveFile(url.lastPathComponent)
         }
-        let dataBytes = (length - MeetingAudioFormat.headerSize) / MeetingAudioFormat.bytesPerSample * MeetingAudioFormat.bytesPerSample
+        let dataBytes = MeetingAudioFormat.sampleCount(fileLength: length) * MeetingAudioFormat.bytesPerSample
         try handle.seek(toOffset: 0)
         try handle.write(contentsOf: header(dataBytes: dataBytes))
     }
@@ -124,7 +129,7 @@ enum MeetingAudioFileReader {
             throw MeetingAudioFileError.notAWaveFile(url.lastPathComponent)
         }
         let fileLength = Int(try handle.seekToEnd())
-        let totalSamples = (fileLength - MeetingAudioFormat.headerSize) / MeetingAudioFormat.bytesPerSample
+        let totalSamples = MeetingAudioFormat.sampleCount(fileLength: fileLength)
         let wanted = range ?? 0 ..< totalSamples
         let lower = min(max(0, wanted.lowerBound), totalSamples)
         let upper = min(max(lower, wanted.upperBound), totalSamples)
@@ -139,6 +144,6 @@ enum MeetingAudioFileReader {
     static func sampleCount(at url: URL) throws -> Int {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
-        return max(0, size - MeetingAudioFormat.headerSize) / MeetingAudioFormat.bytesPerSample
+        return MeetingAudioFormat.sampleCount(fileLength: size)
     }
 }

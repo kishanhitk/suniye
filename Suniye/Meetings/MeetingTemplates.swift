@@ -77,11 +77,11 @@ struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
 /// ones the user added. Only edits and additions are on disk, so a changed
 /// shipped template reaches every user who did not edit it.
 actor MeetingTemplateStore {
-    enum StoreError: LocalizedError, Equatable {
-        case builtInTemplate
+    enum StoreError: LocalizedError {
+        case unreadable
 
         var errorDescription: String? {
-            "A built-in template can only be restored, not deleted."
+            "The saved templates could not be read, so Suniye did not write over them."
         }
     }
 
@@ -96,7 +96,7 @@ actor MeetingTemplateStore {
     }
 
     func templates() -> [MeetingTemplate] {
-        let saved = load()
+        let saved = load() ?? []
         let builtIn = MeetingTemplate.builtIn.map { template in
             saved.first { $0.id == template.id } ?? template
         }
@@ -106,31 +106,25 @@ actor MeetingTemplateStore {
     /// The template with `id`, or General when it was deleted.
     func template(id: String) -> MeetingTemplate {
         let all = templates()
-        return all.first { $0.id == id } ?? all[0]
+        return all.first { $0.id == id } ?? all.first { $0.id == MeetingTemplate.general.id } ?? .general
     }
 
-    func save(_ template: MeetingTemplate) throws {
-        var saved = load().filter { $0.id != template.id }
-        if template.sections != template.defaultSections || !template.isBuiltIn {
-            saved.append(template)
-        }
-        try write(saved)
+    /// Saves the list that the template editor shows, in one write. A
+    /// built-in template is stored only while its text differs from the
+    /// shipped text; one that is not in the list keeps the shipped text.
+    func replace(with templates: [MeetingTemplate]) throws {
+        guard load() != nil else { throw StoreError.unreadable }
+        try write(templates.filter { $0.sections != $0.defaultSections })
     }
 
-    func delete(id: String) throws {
-        guard !MeetingTemplate.builtIn.contains(where: { $0.id == id }) else {
-            throw StoreError.builtInTemplate
-        }
-        try write(load().filter { $0.id != id })
-    }
-
-    private func load() -> [MeetingTemplate] {
-        guard let data = try? Data(contentsOf: fileURL) else { return [] }
+    /// The stored templates; nil when the file is there but cannot be read.
+    private func load() -> [MeetingTemplate]? {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
         do {
-            return try JSONDecoder().decode([MeetingTemplate].self, from: data)
+            return try JSONDecoder().decode([MeetingTemplate].self, from: Data(contentsOf: fileURL))
         } catch {
             AppLogger.shared.log(.error, "meeting templates unreadable error=\(error.localizedDescription)")
-            return []
+            return nil
         }
     }
 

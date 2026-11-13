@@ -10,33 +10,29 @@ struct MeetingTranscriptLine: Equatable {
 }
 
 /// The notes that the user types, saved a moment after each edit and when
-/// the editor goes away. Only an edit saves: notes that failed to load are
-/// never written over.
+/// the editor goes away.
 struct MeetingNotesEditor: View {
-    @Binding var text: String
-    /// The notes on disk when the editor appears.
-    let saved: String
+    @Binding var draft: MeetingNotesDraft
     let save: (String) -> Void
-    @State private var lastSaved: String?
 
     var body: some View {
-        TextEditor(text: $text)
+        TextEditor(text: $draft.text)
             .font(AppTypography.body)
             .scrollContentBackground(.hidden)
-            .task(id: text) {
+            .task(id: draft.text) {
                 try? await Task.sleep(for: .milliseconds(750))
                 guard !Task.isCancelled else { return }
-                saveIfEdited()
+                saveUnsaved()
             }
             .onDisappear {
-                saveIfEdited()
+                saveUnsaved()
             }
     }
 
-    private func saveIfEdited() {
-        guard text != (lastSaved ?? saved) else { return }
-        lastSaved = text
-        save(text)
+    private func saveUnsaved() {
+        if let text = draft.takeUnsaved() {
+            save(text)
+        }
     }
 }
 
