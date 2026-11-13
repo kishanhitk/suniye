@@ -335,8 +335,13 @@ final class MeetingCoordinator {
         let session = MeetingSession(record: record, recorder: recorder, transcriber: transcriber)
         // The recorder's queue keeps its events in order, and so does the main queue.
         recorder.onOutput = { transcriber.enqueue($0) }
-        recorder.onEvent = { [weak self] event in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.handle(event, from: session) } }
+        recorder.onEvent = { [weak self, weak session] event in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let session else { return }
+                    self?.handle(event, from: session)
+                }
+            }
         }
         recorder.setMicrophoneMuted(dictationCaptures)
         await transcriber.start()
