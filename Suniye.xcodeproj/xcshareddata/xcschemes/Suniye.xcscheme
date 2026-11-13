@@ -50,6 +50,17 @@
                ReferencedContainer = "container:Suniye.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "SuniyeAnalyticsTests"
+               BuildableName = "SuniyeAnalyticsTests"
+               BlueprintName = "SuniyeAnalyticsTests"
+               ReferencedContainer = "container:SuniyeAnalytics">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>
