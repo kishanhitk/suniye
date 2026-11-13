@@ -124,8 +124,6 @@ final class MeetingCoordinator {
     private(set) var stoppedByWriteError: UUID?
     /// The meeting that the Meetings section shows; nil shows the list.
     var openMeetingID: UUID?
-    /// Set when something outside the window asks to show a meeting.
-    private(set) var pendingShow = false
     /// The meeting whose page is on screen, so a notice does not repeat it.
     var pageOnScreen: UUID?
     private(set) var settings: MeetingSettings
@@ -191,20 +189,6 @@ final class MeetingCoordinator {
         for record in meetings where record.status == .summarizing {
             summaries.enqueue(record.id)
         }
-    }
-
-    // MARK: - Navigation
-
-    /// Shows a meeting's page, or the list for nil, in the main window.
-    func show(_ id: UUID?) {
-        openMeetingID = id
-        pendingShow = true
-    }
-
-    /// True once for each `show(_:)`, so the window switches to Meetings then.
-    func takeShowRequest() -> Bool {
-        defer { pendingShow = false }
-        return pendingShow
     }
 
     /// The summary, notes and transcript of a meeting, read from disk once.

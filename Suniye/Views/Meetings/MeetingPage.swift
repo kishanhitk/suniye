@@ -92,7 +92,7 @@ struct MeetingPage: View {
     private func header(_ record: MeetingRecord) -> some View {
         HStack(alignment: .center, spacing: 10) {
             Button {
-                meetings.show(nil)
+                meetings.openMeetingID = nil
             } label: {
                 Image(systemName: "chevron.backward")
                     .font(AppTypography.bodyMedium)

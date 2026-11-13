@@ -28,10 +28,10 @@ struct MainWindowView: View {
         .onChange(of: selection) { _, _ in
             logRenderedSection()
         }
-        .onChange(of: appState.meetings.pendingShow, initial: true) { _, _ in
-            if appState.meetings.takeShowRequest() {
-                selection = .meetings
-            }
+        .onChange(of: appState.requestedSection, initial: true) { _, section in
+            guard let section else { return }
+            selection = section
+            appState.requestedSection = nil
         }
         .subtleScrollers()
     }

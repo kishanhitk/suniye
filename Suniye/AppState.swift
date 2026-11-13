@@ -1723,6 +1723,9 @@ final class AppState {
     private let localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor
     private let magicFormatCoordinator: MagicFormatCoordinator
     let meetings: MeetingCoordinator
+    /// A section that code outside the main window asked to show. The window
+    /// shows it and clears the request.
+    var requestedSection: MainWindowSection?
     private let localLLMModelManager: LocalLLMModelManagerProtocol
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol
@@ -3641,7 +3644,10 @@ final class AppState {
         }
     }
 
-    func openMainWindow() {
+    func openMainWindow(at section: MainWindowSection? = nil) {
+        if let section {
+            requestedSection = section
+        }
         MainWindowController.shared.show(appState: self)
     }
 
@@ -5778,8 +5784,8 @@ enum AppStateError: LocalizedError {
 extension AppState: MeetingHost {
     /// Opens the main window at a meeting's page, or at the list for nil.
     func openMeeting(_ id: UUID?) {
-        meetings.show(id)
-        MainWindowController.shared.show(appState: self)
+        meetings.openMeetingID = id
+        openMainWindow(at: .meetings)
     }
 
     var meetingInputDeviceID: String? {

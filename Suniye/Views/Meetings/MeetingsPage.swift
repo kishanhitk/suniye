@@ -51,7 +51,7 @@ struct MeetingsPage: View {
 
             if let live = meetings.live {
                 LiveMeetingRow(session: live) {
-                    meetings.show(live.id)
+                    meetings.openMeetingID = live.id
                 }
             }
 
@@ -101,7 +101,7 @@ struct MeetingsPage: View {
                                 isSelected: selectedID == record.id
                             ) {
                                 selectedID = record.id
-                                meetings.show(record.id)
+                                meetings.openMeetingID = record.id
                             }
                             .task(id: record) {
                                 texts[record.id] = await meetings.listText(for: record.id)

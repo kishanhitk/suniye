@@ -16,7 +16,7 @@ final class MeetingActions {
             do {
                 try await meetings.startMeeting(source: .manual)
                 if let live = meetings.live {
-                    meetings.show(live.id)
+                    meetings.openMeetingID = live.id
                 }
             } catch {
                 startError = error.localizedDescription
@@ -80,7 +80,7 @@ private struct MeetingActionDialogs: ViewModifier {
                         do {
                             try await meetings.delete(record.id)
                             if meetings.openMeetingID == record.id {
-                                meetings.show(nil)
+                                meetings.openMeetingID = nil
                             }
                         } catch {
                             AppLogger.shared.log(.error, "meeting delete failed id=\(record.id.uuidString) error=\(error.localizedDescription)")
@@ -128,7 +128,7 @@ struct MeetingMenuItems: View {
 
     var body: some View {
         if includesOpen {
-            Button("Open Meeting") { meetings.show(record.id) }
+            Button("Open Meeting") { meetings.openMeetingID = record.id }
             Divider()
         }
         if isLive {
