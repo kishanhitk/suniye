@@ -180,4 +180,43 @@ final class EditLearningServiceTests: XCTestCase {
 
         XCTAssertEqual(learnedBatches, [])
     }
+
+    func testStopsLearningOnceSessionCapacityIsReached() {
+        let insertedText = "Aleks Borys Cyrus Dmitri"
+        beginTracking(insertedText: insertedText, fieldValueAfterInsertion: insertedText)
+
+        fieldValue = "Alekz Boris Cyros Dmitri"
+        timerSpy.fire(delay: 10)
+        XCTAssertEqual(learnedBatches, [["Alekz", "Boris", "Cyros"]])
+
+        fieldValue = "Alekz Boris Cyros Dmitry"
+        timerSpy.fire(delay: 30)
+        XCTAssertEqual(learnedBatches, [["Alekz", "Boris", "Cyros"]])
+    }
+
+    func testSpellCheckerKnowsCommonWordsAndRejectsGibberish() {
+        XCTAssertTrue(EditLearningService.spellCheckerKnowsWord("hello"))
+        XCTAssertFalse(EditLearningService.spellCheckerKnowsWord("xqzjvvw"))
+    }
+
+    func testScheduleMainRunLoopTimerFiresHandler() {
+        let fired = expectation(description: "timer fired")
+        let cancel = EditLearningService.scheduleMainRunLoopTimer(after: 0.01) {
+            fired.fulfill()
+        }
+
+        wait(for: [fired], timeout: 2)
+        cancel()
+    }
+
+    func testScheduleMainRunLoopTimerCancelPreventsFiring() {
+        var didFire = false
+        let cancel = EditLearningService.scheduleMainRunLoopTimer(after: 0.05) {
+            didFire = true
+        }
+        cancel()
+
+        RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+        XCTAssertFalse(didFire)
+    }
 }

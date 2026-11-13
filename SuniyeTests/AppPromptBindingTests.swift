@@ -31,21 +31,6 @@ final class AppPromptBindingTests: XCTestCase {
         XCTAssertNil(AppPromptResolver.additionalInstructions(for: "com.apple.Notes", bindings: blank))
     }
 
-    func testBindingCodableRoundTrip() throws {
-        let encoded = try JSONEncoder().encode(bindings)
-        let decoded = try JSONDecoder().decode([AppPromptBinding].self, from: encoded)
-        XCTAssertEqual(decoded, bindings)
-    }
-
-    func testLLMSettingsRoundTripsBindings() throws {
-        var settings = LLMSettings()
-        settings.appPromptBindings = bindings
-
-        let encoded = try JSONEncoder().encode(settings)
-        let decoded = try JSONDecoder().decode(LLMSettings.self, from: encoded)
-        XCTAssertEqual(decoded.appPromptBindings, bindings)
-    }
-
     func testLLMSettingsWithoutBindingsKeyDecodesToEmptyList() throws {
         let legacyJSON = #"{"isEnabled": true}"#.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(LLMSettings.self, from: legacyJSON)

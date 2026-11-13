@@ -1,7 +1,17 @@
 import XCTest
 @testable import Suniye
 
-final class LLMSettingsPromptMigrationMoreTests: XCTestCase {
+final class LLMSettingsTests: XCTestCase {
+    func testAppendingBlankAppInstructionsReturnsUnchangedSettings() {
+        let settings = LLMSettings(systemPrompt: "user extra")
+
+        XCTAssertEqual(settings.appendingAppInstructions("   \n "), settings)
+    }
+
+    func testEndpointProviderForNilURLDefaultsToOpenRouter() {
+        XCTAssertEqual(LLMDefaults.endpointProvider(for: nil), .openRouter)
+    }
+
     func testWhitespaceBasePromptFallsBackToDefaultDuringMerge() {
         var settings = LLMSettings()
         settings.baseSystemPrompt = "   \n "

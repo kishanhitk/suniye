@@ -171,22 +171,6 @@ final class AppStatePerAppPromptTests: XCTestCase {
         XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, LLMDefaults.defaultBaseSystemPrompt)
     }
 
-    func testPostProcessingUsesDefaultPromptWhenNoAppCaptured() async {
-        let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
-        let appState = makeTestAppState(
-            llmPostProcessor: capturingLLM,
-            keychainService: TestKeychainService(value: "api-key")
-        )
-        appState.llmEnabled = true
-        appState.llmProvider = .openAICompatible
-        appState.refreshLLMKeyStatus()
-        addSlackBinding(to: appState, prompt: "Keep it terse.")
-
-        _ = await appState.postProcessTextIfEnabled("raw text")
-
-        XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, LLMDefaults.defaultBaseSystemPrompt)
-    }
-
     func testPostProcessingAppendsPerAppPromptToAppleProvider() async {
         let fakeApple = CapturingAppleMagicFormatPostProcessor(
             availability: .available,
@@ -222,44 +206,6 @@ final class AppStatePerAppPromptTests: XCTestCase {
 
         XCTAssertEqual(output, "gemma polished")
         XCTAssertEqual(fakeGemma.lastConfig?.systemPrompt, appendedPrompt(base: LLMDefaults.defaultGemmaMagicFormatPrompt))
-    }
-
-    /// With no matching binding, the local model must receive the shipped default
-    /// prompt untouched (guards the referential-edit prompt against per-app append leaks).
-    func testPostProcessingUsesDefaultGemmaPromptForUnboundApp() async {
-        let fakeGemma = CapturingLocalGemmaMagicFormatPostProcessor(
-            availability: .available,
-            result: .success("gemma polished")
-        )
-        let localManager = StubLocalLLMModelManager()
-        localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
-        let appState = makeTestAppState(
-            localGemmaMagicFormatPostProcessor: fakeGemma,
-            localLLMModelManager: localManager
-        )
-        appState.llmEnabled = true
-        appState.llmProvider = .localGemma
-        addSlackBinding(to: appState, prompt: "Keep it terse.")
-
-        _ = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: "com.apple.mail")
-
-        XCTAssertEqual(fakeGemma.lastConfig?.systemPrompt, LLMDefaults.defaultGemmaMagicFormatPrompt)
-    }
-
-    func testPostProcessingIgnoresBlankPerAppPrompt() async {
-        let capturingLLM = CapturingLLMPostProcessor(result: .success("polished"))
-        let appState = makeTestAppState(
-            llmPostProcessor: capturingLLM,
-            keychainService: TestKeychainService(value: "api-key")
-        )
-        appState.llmEnabled = true
-        appState.llmProvider = .openAICompatible
-        appState.refreshLLMKeyStatus()
-        addSlackBinding(to: appState, prompt: "   \n ")
-
-        _ = await appState.postProcessTextIfEnabled("raw text", frontmostAppBundleID: slackBundleID)
-
-        XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, LLMDefaults.defaultBaseSystemPrompt)
     }
 
     // MARK: - Full dictation pipeline

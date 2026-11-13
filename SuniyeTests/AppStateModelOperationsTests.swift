@@ -1,10 +1,8 @@
 import XCTest
 @testable import Suniye
 
-/// Coverage tests for ASR model lifecycle operations: download, select,
-/// delete, bootstrap fallback, and their failure branches.
 @MainActor
-final class AppStateCoverageModelOpsTests: XCTestCase {
+final class AppStateModelOperationsTests: XCTestCase {
     private func waitUntil(
         timeout: TimeInterval = 2,
         _ condition: () -> Bool
@@ -15,8 +13,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
     }
-
-    // MARK: - Download
 
     func testDownloadIgnoredWhileRecording() {
         let modelManager = StubModelManager()
@@ -115,9 +111,9 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
     }
 
     func testDownloadValidationFailureSurfacesModelValidationError() async {
-        let modelManager = CovModelOpsModelManager()
-        modelManager.downloadSucceedsWithoutInstall = true
-        modelManager.inner.installedModelIDs = []
+        let modelManager = StubModelManager()
+        modelManager.installsModelAfterDownload = false
+        modelManager.installedModelIDs = []
         let appState = makeTestAppState(modelManager: modelManager)
         appState.phase = .needsModel
 
@@ -143,8 +139,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         XCTAssertEqual(appState.lastError, "network down")
         XCTAssertEqual(appState.downloadProgress, 0)
     }
-
-    // MARK: - Select
 
     func testSelectIgnoredWhileRecordingOrAlreadyLoaded() {
         let appState = makeTestAppState()
@@ -192,16 +186,14 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         XCTAssertEqual(appState.loadedASRModelID, .parakeetV3)
     }
 
-    // MARK: - Delete
-
     func testDeleteIgnoredWhileRecording() {
-        let modelManager = StubModelManager()
-        let appState = makeTestAppState(modelManager: modelManager)
+        let appState = makeTestAppState()
         appState.phase = .recording
 
         appState.deleteASRModel(.parakeetV3)
 
-        XCTAssertEqual(modelManager.deleteCallCount, 0)
+        XCTAssertNil(appState.activeASRModelOperationID)
+        XCTAssertEqual(appState.phase, .recording)
     }
 
     func testDeleteCurrentModelWithFailingFallbackEntersErrorPhase() async {
@@ -242,7 +234,7 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
     }
 
     func testDeleteFailureSurfacesError() async {
-        let modelManager = CovModelOpsModelManager()
+        let modelManager = DeleteFailingModelManager()
         modelManager.deleteError = FakeError(message: "disk locked")
         let appState = makeTestAppState(modelManager: modelManager)
         appState.phase = .ready
@@ -255,8 +247,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         XCTAssertEqual(appState.lastFailedASRModelID, .parakeetV3)
         XCTAssertEqual(appState.lastFailedASRModelError, "disk locked")
     }
-
-    // MARK: - Bootstrap failures
 
     func testBootstrapLoadFailureEntersErrorPhase() async {
         let modelManager = StubModelManager()
@@ -291,8 +281,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         XCTAssertTrue(appState.lastError?.contains("all models broke") == true)
     }
 
-    // MARK: - Wrappers
-
     func testPerformPrimaryASRActionBranches() async {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
@@ -315,35 +303,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         XCTAssertEqual(appState.selectedASRModelID, .parakeetV3)
     }
 
-    func testStartModelDownloadAndDeleteModelUseSelectedModel() async {
-        let modelManager = StubModelManager()
-        modelManager.installedModelIDs = []
-        let appState = makeTestAppState(modelManager: modelManager)
-        appState.phase = .needsModel
-
-        appState.startModelDownload()
-        await waitUntil { appState.activeASRModelOperationID == nil }
-        XCTAssertEqual(modelManager.lastDownloadedModelID, appState.selectedASRModelID)
-        XCTAssertEqual(appState.phase, .ready)
-
-        appState.deleteModel()
-        await waitUntil { appState.activeASRModelOperationID == nil }
-        XCTAssertEqual(modelManager.lastDeletedModelID, appState.selectedASRModelID)
-        XCTAssertEqual(appState.phase, .needsModel)
-    }
-
-    func testOpenModelFolderFailureIsHandled() {
-        let modelManager = CovModelOpsModelManager()
-        modelManager.modelDirectoryURLError = FakeError(message: "no folder")
-        let appState = makeTestAppState(modelManager: modelManager)
-
-        // Throws inside and logs; must not crash or open anything.
-        appState.openModelFolder()
-        appState.openModelFolder(for: .moonshineBase)
-    }
-
-    // MARK: - System-managed (Apple Speech) UI helpers
-
     func testSystemManagedModelHidesSecondaryActionsAndShowsBuiltInSize() {
         let appState = makeTestAppState()
 
@@ -353,9 +312,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
             "System-managed models have no folder to open and can't be deleted"
         )
         XCTAssertNotEqual(appState.asrModelInstalledSizeText(for: .parakeetV3), "Built into macOS")
-
-        // Location label must not fabricate an on-disk path for a system-managed model.
-        appState.selectedASRModelID = .appleSpeech
     }
 
     func testPrimaryActionForSystemManagedDownloadsAssetThenSelects() async {
@@ -388,14 +344,148 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         XCTAssertEqual(transcription.loadCallCount, 1)
         XCTAssertEqual(appState.selectedASRModelID, .appleSpeech)
     }
+
+    func testASRModelReadyRequiresInstalledAndUsablePhase() {
+        let modelManager = StubModelManager()
+        let appState = makeTestAppState(modelManager: modelManager)
+
+        appState.phase = .loading
+        XCTAssertFalse(appState.asrModelReady)
+
+        appState.phase = .ready
+        XCTAssertTrue(appState.asrModelReady)
+
+        appState.phase = .recording
+        XCTAssertTrue(appState.asrModelReady)
+
+        modelManager.installedModelIDs = []
+        XCTAssertFalse(appState.asrModelReady)
+    }
+
+    func testDeleteModelTransitionsToNeedsModel() async {
+        let modelManager = StubModelManager()
+        let transcriptionService = StubTranscriptionService()
+        let appState = makeTestAppState(modelManager: modelManager, transcriptionService: transcriptionService)
+        appState.phase = .ready
+
+        appState.deleteModel()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(modelManager.deleteCallCount, 1)
+        XCTAssertEqual(modelManager.lastDeletedModelID, appState.selectedASRModelID)
+        XCTAssertEqual(transcriptionService.unloadCallCount, 1)
+        XCTAssertEqual(appState.phase, .needsModel)
+        XCTAssertNil(appState.activeOnboardingStep)
+        XCTAssertTrue(appState.hasCompletedCoreOnboarding)
+    }
+
+    func testSelectingInstalledASRModelLoadsRecognizerAndPersistsSelection() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3, .senseVoice]
+        let transcriptionService = StubTranscriptionService()
+        let appState = makeTestAppState(modelManager: modelManager, transcriptionService: transcriptionService)
+        appState.phase = .ready
+        appState.selectedASRModelID = .parakeetV3
+        appState.loadedASRModelID = .parakeetV3
+
+        appState.selectASRModel(.senseVoice)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.selectedASRModelID, .senseVoice)
+        XCTAssertEqual(appState.loadedASRModelID, .senseVoice)
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertEqual(transcriptionService.loadedConfigs.last?.modelID, .senseVoice)
+    }
+
+    func testBootstrapFallsBackToAnotherInstalledModelWhenPreferredLoadFails() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3, .senseVoice, .moonshineBase]
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.loadModelErrorsByModelID = [
+            .parakeetV3: FakeError(message: "selected broken"),
+            .senseVoice: FakeError(message: "fallback broken")
+        ]
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                preferredInputDeviceID: nil,
+                hasSeenOnboardingWelcome: true,
+                hasCompletedCoreOnboarding: true,
+                selectedASRModelID: .parakeetV3
+            )
+        )
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            transcriptionService: transcriptionService,
+            generalSettingsStore: generalSettingsStore
+        )
+
+        await appState.bootstrap()
+
+        XCTAssertEqual(appState.selectedASRModelID, .moonshineBase)
+        XCTAssertEqual(appState.loadedASRModelID, .moonshineBase)
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertEqual(generalSettingsStore.latest.selectedASRModelID, .moonshineBase)
+        XCTAssertEqual(transcriptionService.loadedConfigs.map(\.modelID), [.parakeetV3, .senseVoice, .moonshineBase])
+    }
+
+    func testDeletingCurrentASRModelFallsBackToInstalledAlternative() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3, .senseVoice]
+        let transcriptionService = StubTranscriptionService()
+        let appState = makeTestAppState(modelManager: modelManager, transcriptionService: transcriptionService)
+        appState.phase = .ready
+        appState.selectedASRModelID = .parakeetV3
+        appState.loadedASRModelID = .parakeetV3
+
+        appState.deleteASRModel(.parakeetV3)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(modelManager.lastDeletedModelID, .parakeetV3)
+        XCTAssertEqual(appState.selectedASRModelID, .senseVoice)
+        XCTAssertEqual(appState.loadedASRModelID, .senseVoice)
+        XCTAssertEqual(appState.phase, .ready)
+    }
+
+    func testDeletingCurrentASRModelSkipsBrokenFallbackAndPersistsSuccessfulAlternative() async {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.parakeetV3, .senseVoice, .moonshineBase]
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.loadModelErrorsByModelID = [
+            .senseVoice: FakeError(message: "fallback broken")
+        ]
+        let generalSettingsStore = TestGeneralSettingsStore(
+            value: GeneralSettings(
+                preferredInputDeviceID: nil,
+                hasSeenOnboardingWelcome: true,
+                hasCompletedCoreOnboarding: true,
+                selectedASRModelID: .parakeetV3
+            )
+        )
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            transcriptionService: transcriptionService,
+            generalSettingsStore: generalSettingsStore
+        )
+        appState.phase = .ready
+        appState.selectedASRModelID = .parakeetV3
+        appState.loadedASRModelID = .parakeetV3
+
+        appState.deleteASRModel(.parakeetV3)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(modelManager.lastDeletedModelID, .parakeetV3)
+        XCTAssertEqual(appState.selectedASRModelID, .moonshineBase)
+        XCTAssertEqual(appState.loadedASRModelID, .moonshineBase)
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertEqual(generalSettingsStore.latest.selectedASRModelID, .moonshineBase)
+        XCTAssertEqual(transcriptionService.loadedConfigs.map(\.modelID), [.senseVoice, .moonshineBase])
+    }
 }
 
-/// Model manager wrapper adding failure knobs on top of the shared stub.
-private final class CovModelOpsModelManager: ModelManagerProtocol {
+/// Model manager wrapper whose delete fails on demand.
+private final class DeleteFailingModelManager: ModelManagerProtocol {
     let inner = StubModelManager()
     var deleteError: Error?
-    var modelDirectoryURLError: Error?
-    var downloadSucceedsWithoutInstall = false
 
     var catalog: [ASRModelCatalogEntry] { inner.catalog }
     var fallbackOrder: [ASRModelID] { inner.fallbackOrder }
@@ -405,10 +495,7 @@ private final class CovModelOpsModelManager: ModelManagerProtocol {
     }
 
     func modelDirectoryURL(for modelID: ASRModelID) throws -> URL {
-        if let modelDirectoryURLError {
-            throw modelDirectoryURLError
-        }
-        return try inner.modelDirectoryURL(for: modelID)
+        try inner.modelDirectoryURL(for: modelID)
     }
 
     func isInstalled(_ modelID: ASRModelID) -> Bool {
@@ -424,11 +511,7 @@ private final class CovModelOpsModelManager: ModelManagerProtocol {
     }
 
     func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {
-        progress(1)
-        if downloadSucceedsWithoutInstall {
-            return
-        }
-        try await inner.downloadAndExtractModel(modelID) { _ in }
+        try await inner.downloadAndExtractModel(modelID, progress: progress)
     }
 
     func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64 {

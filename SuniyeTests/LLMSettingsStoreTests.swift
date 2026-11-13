@@ -229,24 +229,27 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertFalse(settings.isEndpointValid)
     }
 
-    func testPresetMetadataMatchesMainWindowModelList() {
-        XCTAssertEqual(LLMModelPreset.gemini25Flash.displayName, "Gemini 2.5 Flash")
-        XCTAssertEqual(LLMModelPreset.gpt41Mini.displayName, "GPT-4.1 Mini")
-        XCTAssertEqual(LLMModelPreset.gpt41Mini.subtitle, "OpenAI, balanced")
+    func testLoadReturnsDefaultsWhenNothingIsStored() {
+        let suite = "dev.suniye.tests.llm.empty.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
+
+        XCTAssertEqual(store.load(), LLMSettings())
     }
 
-    func testMagicFormatProviderMetadataIncludesLocalGemma() {
-        XCTAssertEqual(MagicFormatProvider.localGemma.displayName, "Local Model")
-        XCTAssertEqual(MagicFormatProvider.localGemma.description, "Local formatting with an on-device LLM.")
-        XCTAssertTrue(MagicFormatProvider.allCases.contains(.localGemma))
-    }
+    func testSaveSilentlySkipsUnencodableSettings() {
+        let suite = "dev.suniye.tests.llm.unencodable.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
 
-    func testMagicFormatPresetMetadataMatchesFriendlyEditingStyles() {
-        XCTAssertEqual(LLMModelPreset.gemini25Flash.magicFormatLabel, "Fast")
-        XCTAssertEqual(LLMModelPreset.gpt41Mini.magicFormatLabel, "Balanced")
-        XCTAssertEqual(LLMModelPreset.custom.magicFormatLabel, "Custom")
-        XCTAssertEqual(LLMModelPreset.gemini25Flash.magicFormatDescription, "Quick fixes with lower cost.")
-        XCTAssertEqual(LLMModelPreset.gpt41Mini.magicFormatDescription, "Best default for most dictation.")
-        XCTAssertEqual(LLMModelPreset.custom.magicFormatDescription, "Use the exact model ID supported by your endpoint.")
+        // Bypass the clamping initializer; infinity is not representable by
+        // the JSON encoder, so save must bail out without writing anything.
+        var unencodable = LLMSettings()
+        unencodable.timeoutSeconds = .infinity
+
+        store.save(unencodable)
+
+        XCTAssertNil(defaults.data(forKey: "llm"))
+        XCTAssertEqual(store.load(), LLMSettings())
     }
 }

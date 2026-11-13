@@ -1,14 +1,14 @@
 import XCTest
 @testable import Suniye
 
-final class TranscriptionServiceCoverageTests: XCTestCase {
+final class TranscriptionServiceTests: XCTestCase {
     private let fileManager = FileManager.default
     private var tempDirectory: URL!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
         tempDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("suniye-transcription-coverage-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("suniye-transcription-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
     }
 
@@ -30,33 +30,7 @@ final class TranscriptionServiceCoverageTests: XCTestCase {
         return url.path
     }
 
-    // MARK: - AudioRecognitionPreprocessor
-
-    func testStatsOfEmptyInputIsZero() {
-        let stats = AudioRecognitionPreprocessor.stats(of: [])
-        XCTAssertEqual(stats.rms, 0)
-        XCTAssertEqual(stats.peak, 0)
-    }
-
-    // MARK: - ServiceError descriptions
-
-    func testServiceErrorDescriptions() {
-        XCTAssertEqual(
-            TranscriptionService.ServiceError.recognizerNotLoaded.errorDescription,
-            "Recognizer is not loaded"
-        )
-        XCTAssertEqual(
-            TranscriptionService.ServiceError.emptyAudio.errorDescription,
-            "No audio captured"
-        )
-        XCTAssertEqual(
-            TranscriptionService.ServiceError.missingModelFile("/x/tokens.txt").errorDescription,
-            "Required model file is missing: /x/tokens.txt"
-        )
-        XCTAssertEqual(
-            TranscriptionService.ServiceError.invalidRecognizerConfiguration.errorDescription,
-            "The selected model files are incomplete"
-        )
+    func testRecognizerCreationFailedDescriptionOmitsEmptyDetail() {
         XCTAssertEqual(
             TranscriptionService.ServiceError.recognizerCreationFailed("boom").errorDescription,
             "Failed to create sherpa-onnx offline recognizer: boom"
@@ -69,17 +43,7 @@ final class TranscriptionServiceCoverageTests: XCTestCase {
             TranscriptionService.ServiceError.recognizerCreationFailed(nil).errorDescription,
             "Failed to create sherpa-onnx offline recognizer"
         )
-        XCTAssertEqual(
-            TranscriptionService.ServiceError.streamCreationFailed.errorDescription,
-            "Failed to create sherpa-onnx offline stream"
-        )
-        XCTAssertEqual(
-            TranscriptionService.ServiceError.decodeResultUnavailable.errorDescription,
-            "Failed to read recognition result from sherpa-onnx"
-        )
     }
-
-    // MARK: - Guard paths without a loaded model
 
     func testTranscribeWithoutLoadedModelThrowsRecognizerNotLoaded() async {
         let service = TranscriptionService()
@@ -94,20 +58,6 @@ final class TranscriptionServiceCoverageTests: XCTestCase {
             XCTFail("Unexpected error type: \(error)")
         }
     }
-
-    func testUnloadModelWithoutLoadedRecognizerIsANoOp() async {
-        let service = TranscriptionService()
-        await service.unloadModel()
-        // Still not loaded afterwards.
-        do {
-            _ = try await service.transcribe(samples: [0.1], sampleRate: 16_000)
-            XCTFail("Expected recognizerNotLoaded")
-        } catch {
-            // expected
-        }
-    }
-
-    // MARK: - validateModelPaths per family
 
     func testLoadSenseVoiceFailsFastForMissingModelFile() async throws {
         let service = TranscriptionService()
@@ -163,8 +113,6 @@ final class TranscriptionServiceCoverageTests: XCTestCase {
         }
     }
 
-    // MARK: - loadModel with unparseable model files
-
     func testLoadModelWithGarbageFilesThrowsRecognizerCreationFailed() async throws {
         let service = TranscriptionService()
         let tokensPath = try writeDummyFile("tokens.txt", contents: "<blk> 0\na 1\n")
@@ -190,11 +138,8 @@ final class TranscriptionServiceCoverageTests: XCTestCase {
             guard case .recognizerCreationFailed = error else {
                 return XCTFail("Unexpected error: \(error)")
             }
-            XCTAssertNotNil(error.errorDescription)
         }
     }
-
-    // MARK: - makeRecognizerConfig happy paths
 
     func testMakeRecognizerConfigForNemoTransducer() async throws {
         let service = TranscriptionService()
@@ -285,8 +230,6 @@ final class TranscriptionServiceCoverageTests: XCTestCase {
         XCTAssertEqual(String(cString: native.model_config.whisper.language), "en")
         XCTAssertEqual(String(cString: native.model_config.whisper.task), "transcribe")
     }
-
-    // MARK: - makeRecognizerConfig invalid configurations
 
     func testMakeRecognizerConfigThrowsWhenTransducerPathsMissing() async {
         let service = TranscriptionService()

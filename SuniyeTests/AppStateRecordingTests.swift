@@ -1,11 +1,8 @@
 import XCTest
 @testable import Suniye
 
-/// Coverage tests for dictation edge branches: blocked starts, stale session
-/// events, edit-mode hotkey wiring, onboarding practice capture failures, and
-/// auto-submit.
 @MainActor
-final class AppStateCoverageRecordingTests: XCTestCase {
+final class AppStateRecordingTests: XCTestCase {
     private func waitUntil(
         timeout: TimeInterval = 2,
         _ condition: () -> Bool
@@ -57,8 +54,6 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         XCTAssertEqual(insertion.warmTargetAppAccessibilityCallCount, 1)
     }
 
-    // MARK: - Stop guards
-
     func testFinishEditModeRecordingNoOpWhenNotRecording() async {
         let audioCapture = StubAudioCaptureService()
         let appState = readyAppState(audioCapture: audioCapture)
@@ -81,8 +76,6 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         XCTAssertEqual(audioCapture.stopCaptureCallCount, 0)
     }
 
-    // MARK: - Blocked starts
-
     /// A shortcut press while a pill recording runs starts nothing.
     func testShortcutPressWhileRecordingShowsAlreadyListening() async {
         let audioCapture = StubAudioCaptureService()
@@ -94,18 +87,6 @@ final class AppStateCoverageRecordingTests: XCTestCase {
 
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Already listening"))
         XCTAssertEqual(appState.phase, .recording)
-    }
-
-    func testShortcutPressWhileRecordingWithNonListeningIndicatorComputesFallbackRestore() async {
-        let audioCapture = StubAudioCaptureService()
-        let hotkey = StubHotkeyService()
-        let appState = await recordingFromThePill(audioCapture: audioCapture, hotkey: hotkey)
-
-        appState.floatingIndicatorState = .idle
-        hotkey.onHotkeyDown?()
-        await drainScheduledTasks()
-
-        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Already listening"))
     }
 
     private func recordingFromThePill(audioCapture: StubAudioCaptureService, hotkey: StubHotkeyService) async -> AppState {
@@ -150,8 +131,6 @@ final class AppStateCoverageRecordingTests: XCTestCase {
 
         XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "busy elsewhere"))
     }
-
-    // MARK: - Stale audio events
 
     func testInterruptionForUnknownSessionIsIgnored() async {
         let audioCapture = StubAudioCaptureService()
@@ -211,8 +190,6 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         XCTAssertEqual(appState.floatingIndicatorState, .idle)
     }
 
-    // MARK: - Onboarding practice failure epilogue
-
     func testOnboardingPracticeCaptureFailureShowsPracticeError() async {
         let audioCapture = StubAudioCaptureService()
         audioCapture.stopCaptureResult = CapturedAudio(
@@ -234,8 +211,6 @@ final class AppStateCoverageRecordingTests: XCTestCase {
             "No speech was detected from the selected microphone."
         )
     }
-
-    // MARK: - Auto submit
 
     func testAutoSubmitSubmitsAfterInsertingText() async {
         let audioCapture = StubAudioCaptureService()
@@ -306,8 +281,6 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         XCTAssertEqual(appState.recentResults.first?.text, "hello there")
     }
 
-    // MARK: - Edit mode hotkey wiring
-
     func testEditModeHotkeyCallbacksAreWiredWhenServicesStart() async {
         let hotkeyService = StubHotkeyService()
         let appState = makeTestAppState(
@@ -328,5 +301,123 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         hotkeyService.onEditModeHotkeyUp?()
         await drainScheduledTasks()
         XCTAssertNotEqual(appState.phase, .transcribing)
+    }
+
+    func testSoundFeedbackEnabledDoesNotPlayAudioThatWouldBeCapturedAtRecordingStart() async {
+        let audioCapture = StubAudioCaptureService()
+        let soundFeedback = SpySoundFeedbackService()
+        let appState = makeTestAppState(
+            audioCaptureService: audioCapture,
+            soundFeedbackService: soundFeedback
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.soundFeedbackEnabled = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
+        XCTAssertTrue(soundFeedback.playedEvents.isEmpty)
+    }
+
+    func testSoundFeedbackEnabledDoesNotPlayRecordingStartWhenCaptureFails() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.startCaptureError = FakeError(message: "mic unavailable")
+        let soundFeedback = SpySoundFeedbackService()
+        let appState = makeTestAppState(
+            audioCaptureService: audioCapture,
+            soundFeedbackService: soundFeedback
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        appState.soundFeedbackEnabled = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
+        XCTAssertEqual(soundFeedback.playedEvents, [.error])
+    }
+
+    func testManualIndicatorToggleStartsRecordingFromReady() async {
+        let appState = makeTestAppState()
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.phase, .recording)
+        XCTAssertEqual(
+            appState.floatingIndicatorState,
+            .listening(levels: Array(repeating: 0, count: AudioLevelMeter.bandCount), source: .manual, preview: .off)
+        )
+    }
+
+    func testManualIndicatorToggleStopsRecordingAndReturnsIndicatorToIdle() async {
+        let audioCapture = StubAudioCaptureService()
+        audioCapture.stopCaptureResult = makeValidCapturedAudio()
+        let transcriptionService = StubTranscriptionService()
+        transcriptionService.transcribeResult = .success("")
+        let appState = makeTestAppState(
+            transcriptionService: transcriptionService,
+            audioCaptureService: audioCapture
+        )
+        appState.phase = .ready
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.phase, .ready)
+        XCTAssertEqual(appState.floatingIndicatorState, .idle)
+    }
+
+    func testBlockedIndicatorToggleShowsInlineErrorWhenModelMissing() async {
+        let appState = makeTestAppState()
+        appState.phase = .needsModel
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Download model first"))
+        try? await Task.sleep(nanoseconds: 1_300_000_000)
+        XCTAssertEqual(appState.floatingIndicatorState, .idle)
+    }
+
+    func testBlockedIndicatorToggleDuringTranscribingRestoresProcessingState() async {
+        let appState = makeTestAppState()
+        appState.phase = .transcribing
+        appState.floatingIndicatorState = .processing(message: "Transcribing...")
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Still processing previous clip"))
+        try? await Task.sleep(nanoseconds: 1_300_000_000)
+        // Restore path now matches the transcribe transition's labeled pill.
+        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Transcribing..."))
+    }
+
+    func testBlockedIndicatorToggleDuringPolishingPreservesStageLabel() async {
+        let appState = makeTestAppState()
+        appState.phase = .transcribing
+        // The pill has already advanced past "Transcribing..." to a polish stage.
+        appState.floatingIndicatorState = .processing(message: "Polishing...")
+
+        appState.toggleFloatingIndicatorRecording()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Still processing previous clip"))
+        try? await Task.sleep(nanoseconds: 1_300_000_000)
+        // Restore must not regress the stage back to "Transcribing...".
+        XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Polishing..."))
     }
 }

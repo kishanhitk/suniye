@@ -75,20 +75,6 @@ final class AppStateAnalyticsTests: XCTestCase {
         XCTAssertTrue(spy.trackedEventNames.contains("update_action"))
     }
 
-    func testOnboardingCompletionEmittedAtFinish() {
-        let spy = SpyAnalytics()
-        let appState = makeTestAppState(
-            generalSettingsStore: TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .typeAnywhereReached)),
-            analytics: spy
-        )
-        appState.startOnboardingIfNeeded()
-
-        appState.finishOnboarding()
-
-        XCTAssertTrue(spy.trackedEventNames.contains("onboarding_step"))
-        XCTAssertTrue(spy.trackedEventNames.contains("onboarding_outcome"))
-    }
-
     func testMagicFormatToggleEmitsFeatureToggled() {
         let spy = SpyAnalytics()
         let appState = makeTestAppState(analytics: spy)

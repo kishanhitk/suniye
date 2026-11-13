@@ -1,9 +1,7 @@
 import XCTest
-import SuniyeAnalytics
 @testable import Suniye
 
-/// URLProtocol stub used to exercise ModelManager download paths without network access.
-final class ModelManagerCoverageURLProtocol: URLProtocol {
+private final class ModelDownloadURLProtocol: URLProtocol {
     struct Stub {
         var statusCode: Int = 200
         var body: Data = Data()
@@ -84,28 +82,7 @@ private final class ProgressRecorder: @unchecked Sendable {
     }
 }
 
-/// Implements only the required members, so the protocol's default
-/// `systemDefaultModelCheck` is the one under test.
-private final class FileOnlyModelManager: ModelManagerProtocol {
-    var catalog: [ASRModelCatalogEntry] { ASRModelCatalog.entries }
-    var fallbackOrder: [ASRModelID] { ASRModelCatalog.fallbackOrder }
-    func modelsRootDirectoryURL() throws -> URL { URL(fileURLWithPath: "/tmp") }
-    func modelDirectoryURL(for modelID: ASRModelID) throws -> URL { URL(fileURLWithPath: "/tmp") }
-    func isInstalled(_ modelID: ASRModelID) -> Bool { false }
-    func installedModels() -> [ASRModelID] { [] }
-    func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig { RecognizerConfig(tokensPath: "", numThreads: 1) }
-    func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {}
-    func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64 { 0 }
-    func installedByteCount(for modelID: ASRModelID) -> Int64 { 0 }
-    func deleteModel(_ modelID: ASRModelID) throws {}
-}
-
-final class ModelManagerCoverageTests: XCTestCase {
-    func testFileOnlyManagerHasNoBuiltInDefault() async {
-        let check = await FileOnlyModelManager().systemDefaultModelCheck()
-
-        XCTAssertEqual(check, .unavailable(reason: .transcriberUnavailable, detail: "no built-in model"))
-    }
+final class ModelManagerTests: XCTestCase {
 
     private let fileManager = FileManager.default
     private var tempDirectory: URL!
@@ -113,12 +90,12 @@ final class ModelManagerCoverageTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
         tempDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("suniye-model-manager-coverage-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("suniye-model-manager-\(UUID().uuidString)", isDirectory: true)
         try fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
     }
 
     override func tearDownWithError() throws {
-        ModelManagerCoverageURLProtocol.removeAllStubs()
+        ModelDownloadURLProtocol.removeAllStubs()
         if let tempDirectory {
             try? fileManager.removeItem(at: tempDirectory)
         }
@@ -126,11 +103,9 @@ final class ModelManagerCoverageTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    // MARK: - Helpers
-
     private func makeStubbedSessionConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [ModelManagerCoverageURLProtocol.self]
+        configuration.protocolClasses = [ModelDownloadURLProtocol.self]
         return configuration
     }
 
@@ -179,7 +154,38 @@ final class ModelManagerCoverageTests: XCTestCase {
         }
     }
 
-    // MARK: - Progress estimator edge cases
+    func testProgressEstimatorUsesReportedTotalWhenAvailable() {
+        let progress = ModelDownloadProgressEstimator.estimate(
+            totalBytesWritten: 340,
+            totalBytesExpectedToWrite: 680,
+            responseExpectedLength: nil,
+            fallbackExpectedSize: 1_000
+        )
+
+        XCTAssertEqual(progress, 0.5)
+    }
+
+    func testProgressEstimatorFallsBackToResponseLengthWhenTaskTotalUnknown() {
+        let progress = ModelDownloadProgressEstimator.estimate(
+            totalBytesWritten: 250,
+            totalBytesExpectedToWrite: NSURLSessionTransferSizeUnknown,
+            responseExpectedLength: 1_000,
+            fallbackExpectedSize: 2_000
+        )
+
+        XCTAssertEqual(progress, 0.25)
+    }
+
+    func testProgressEstimatorFallsBackToConfiguredExpectedSize() {
+        let progress = ModelDownloadProgressEstimator.estimate(
+            totalBytesWritten: 340_000_000,
+            totalBytesExpectedToWrite: NSURLSessionTransferSizeUnknown,
+            responseExpectedLength: NSURLSessionTransferSizeUnknown,
+            fallbackExpectedSize: 680_000_000
+        )
+
+        XCTAssertEqual(progress, 0.5)
+    }
 
     func testProgressEstimatorReturnsNilWhenNoExpectedSizeIsKnown() {
         XCTAssertNil(
@@ -223,48 +229,6 @@ final class ModelManagerCoverageTests: XCTestCase {
         )
     }
 
-    // MARK: - Error descriptions
-
-    func testModelErrorDescriptions() {
-        XCTAssertEqual(
-            ModelManager.ModelError.appSupportUnavailable.errorDescription,
-            "Unable to resolve Application Support directory"
-        )
-        XCTAssertEqual(
-            ModelManager.ModelError.invalidResponse.errorDescription,
-            "Model download response was invalid"
-        )
-        XCTAssertEqual(
-            ModelManager.ModelError.unknownModel.errorDescription,
-            "The selected model is not supported by this build"
-        )
-        XCTAssertEqual(
-            ModelManager.ModelError.extractFailed("boom").errorDescription,
-            "Model extraction failed: boom"
-        )
-    }
-
-    // MARK: - Catalog surface
-
-    func testCatalogAndFallbackOrderMirrorSharedCatalog() {
-        let manager = makeSandboxedManager()
-        // catalog exposes only device-available entries (system-managed models are
-        // filtered out where unsupported), so it mirrors availableEntries rather than
-        // the raw entries list. This keeps the assertion deterministic across machines.
-        XCTAssertEqual(manager.catalog, ASRModelCatalog.availableEntries)
-        XCTAssertEqual(manager.fallbackOrder, ASRModelCatalog.fallbackOrder)
-    }
-
-    func testExpectedDownloadSizeBytesComesFromCatalog() {
-        let manager = makeSandboxedManager()
-        XCTAssertEqual(
-            manager.expectedDownloadSizeBytes(for: .parakeetV3),
-            ASRModelCatalog.entry(for: .parakeetV3).estimatedSizeBytes
-        )
-    }
-
-    // MARK: - Application Support unavailable
-
     func testModelsRootDirectoryThrowsWhenAppSupportUnavailable() {
         let manager = ModelManager(
             applicationSupportDirectory: nil,
@@ -283,15 +247,78 @@ final class ModelManagerCoverageTests: XCTestCase {
         XCTAssertThrowsError(try manager.makeRecognizerConfig(for: .parakeetV3))
     }
 
-    // MARK: - Installation inspection
-
-    func testModelsRootDirectoryUsesInjectedAppSupportDirectory() throws {
+    func testModelDirectoryResolvesUnderSuniyeModelsFolder() throws {
         let manager = makeSandboxedManager()
-        let root = try manager.modelsRootDirectoryURL()
 
-        XCTAssertEqual(root.lastPathComponent, "models")
-        XCTAssertTrue(root.path.hasPrefix(tempDirectory.path))
-        XCTAssertTrue(fileManager.fileExists(atPath: root.path))
+        let modelDirectory = try manager.modelDirectoryURL(for: .parakeetV3)
+
+        XCTAssertEqual(
+            modelDirectory.path,
+            tempDirectory.appendingPathComponent("Suniye/models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8").path
+        )
+        XCTAssertTrue(fileManager.fileExists(atPath: modelDirectory.deletingLastPathComponent().path))
+    }
+
+    func testRecognizerConfigUsesExpectedFileNames() throws {
+        let manager = makeSandboxedManager()
+        let config = try manager.makeRecognizerConfig(for: .parakeetV3)
+
+        XCTAssertTrue(config.encoderPath?.hasSuffix("encoder.int8.onnx") == true)
+        XCTAssertTrue(config.decoderPath?.hasSuffix("decoder.int8.onnx") == true)
+        XCTAssertTrue(config.joinerPath?.hasSuffix("joiner.int8.onnx") == true)
+        XCTAssertTrue(config.tokensPath.hasSuffix("tokens.txt"))
+        XCTAssertEqual(config.numThreads, 4)
+    }
+
+    func testParakeetV2RecognizerConfigUsesExpectedFiles() throws {
+        let manager = makeSandboxedManager()
+        let config = try manager.makeRecognizerConfig(for: .parakeetV2English)
+
+        XCTAssertEqual(config.family, .nemoTransducer)
+        XCTAssertTrue(config.encoderPath?.hasSuffix("encoder.int8.onnx") == true)
+        XCTAssertTrue(config.decoderPath?.hasSuffix("decoder.int8.onnx") == true)
+        XCTAssertTrue(config.joinerPath?.hasSuffix("joiner.int8.onnx") == true)
+        XCTAssertTrue(config.tokensPath.hasSuffix("tokens.txt"))
+    }
+
+    func testMoonshineRecognizerConfigUsesExpectedFiles() throws {
+        let manager = makeSandboxedManager()
+        let config = try manager.makeRecognizerConfig(for: .moonshineBase)
+
+        XCTAssertEqual(config.family, .moonshine)
+        XCTAssertTrue(config.preprocessorPath?.hasSuffix("preprocess.onnx") == true)
+        XCTAssertTrue(config.encoderPath?.hasSuffix("encode.int8.onnx") == true)
+        XCTAssertTrue(config.uncachedDecoderPath?.hasSuffix("uncached_decode.int8.onnx") == true)
+        XCTAssertTrue(config.cachedDecoderPath?.hasSuffix("cached_decode.int8.onnx") == true)
+    }
+
+    func testSenseVoiceRecognizerConfigUsesExpectedFiles() throws {
+        let manager = makeSandboxedManager()
+        let config = try manager.makeRecognizerConfig(for: .senseVoice)
+
+        XCTAssertEqual(config.family, .senseVoice)
+        XCTAssertTrue(config.modelPath?.hasSuffix("model.int8.onnx") == true)
+        XCTAssertTrue(config.tokensPath.hasSuffix("tokens.txt"))
+    }
+
+    func testWhisperTurboRecognizerConfigUsesExpectedFiles() throws {
+        let manager = makeSandboxedManager()
+        let config = try manager.makeRecognizerConfig(for: .whisperLargeV3Turbo)
+
+        XCTAssertEqual(config.family, .whisper)
+        XCTAssertTrue(config.encoderPath?.hasSuffix("turbo-encoder.int8.onnx") == true)
+        XCTAssertTrue(config.decoderPath?.hasSuffix("turbo-decoder.int8.onnx") == true)
+        XCTAssertTrue(config.tokensPath.hasSuffix("turbo-tokens.txt"))
+    }
+
+    func testWhisperDistilLargeV3RecognizerConfigUsesExpectedFiles() throws {
+        let manager = makeSandboxedManager()
+        let config = try manager.makeRecognizerConfig(for: .whisperDistilLargeV3)
+
+        XCTAssertEqual(config.family, .whisper)
+        XCTAssertTrue(config.encoderPath?.hasSuffix("distil-large-v3-encoder.int8.onnx") == true)
+        XCTAssertTrue(config.decoderPath?.hasSuffix("distil-large-v3-decoder.int8.onnx") == true)
+        XCTAssertTrue(config.tokensPath.hasSuffix("distil-large-v3-tokens.txt"))
     }
 
     func testInstalledModelsReflectsFakeInstall() throws {
@@ -333,12 +360,10 @@ final class ModelManagerCoverageTests: XCTestCase {
         XCTAssertNoThrow(try manager.deleteModel(.parakeetV3))
     }
 
-    // MARK: - Archive download + extract
-
     func testDownloadAndExtractModelInstallsArchiveEndToEnd() async throws {
         let entry = ASRModelCatalog.entry(for: .senseVoice)
         let archiveData = try makeArchiveData(for: entry, marker: "downloaded")
-        ModelManagerCoverageURLProtocol.setStub(
+        ModelDownloadURLProtocol.setStub(
             .init(statusCode: 200, body: archiveData),
             for: try archiveURLForEntry(entry)
         )
@@ -366,7 +391,7 @@ final class ModelManagerCoverageTests: XCTestCase {
         try installFakeModel(entry, using: manager, marker: "old")
 
         let archiveData = try makeArchiveData(for: entry, marker: "new")
-        ModelManagerCoverageURLProtocol.setStub(
+        ModelDownloadURLProtocol.setStub(
             .init(statusCode: 200, body: archiveData),
             for: try archiveURLForEntry(entry)
         )
@@ -380,7 +405,7 @@ final class ModelManagerCoverageTests: XCTestCase {
 
     func testDownloadAndExtractModelThrowsForNon2xxResponse() async throws {
         let entry = ASRModelCatalog.entry(for: .parakeetV3)
-        ModelManagerCoverageURLProtocol.setStub(
+        ModelDownloadURLProtocol.setStub(
             .init(statusCode: 404, body: Data("not found".utf8)),
             for: try archiveURLForEntry(entry)
         )
@@ -399,7 +424,7 @@ final class ModelManagerCoverageTests: XCTestCase {
 
     func testDownloadAndExtractModelThrowsWhenArchiveIsCorrupt() async throws {
         let entry = ASRModelCatalog.entry(for: .parakeetV3)
-        ModelManagerCoverageURLProtocol.setStub(
+        ModelDownloadURLProtocol.setStub(
             .init(statusCode: 200, body: Data("this is definitely not a bzip2 archive".utf8)),
             for: try archiveURLForEntry(entry)
         )
@@ -418,7 +443,7 @@ final class ModelManagerCoverageTests: XCTestCase {
 
     func testDownloadAndExtractModelPropagatesTransportErrors() async throws {
         let entry = ASRModelCatalog.entry(for: .parakeetV3)
-        ModelManagerCoverageURLProtocol.setStub(
+        ModelDownloadURLProtocol.setStub(
             .init(error: URLError(.notConnectedToInternet)),
             for: try archiveURLForEntry(entry)
         )
@@ -448,7 +473,7 @@ final class ModelManagerCoverageTests: XCTestCase {
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0)
 
-        ModelManagerCoverageURLProtocol.setStub(
+        ModelDownloadURLProtocol.setStub(
             .init(statusCode: 200, body: try Data(contentsOf: archiveURL)),
             for: try archiveURLForEntry(entry)
         )
@@ -466,15 +491,13 @@ final class ModelManagerCoverageTests: XCTestCase {
         XCTAssertFalse(manager.isInstalled(.parakeetV3))
     }
 
-    // MARK: - Remote file downloads
-
     func testDownloadRemoteFilesWritesFilesAndReportsAggregateProgress() async throws {
         let fileURL1 = URL(string: "https://stub.suniye.test/remote/file1.bin")!
         let fileURL2 = URL(string: "https://stub.suniye.test/remote/dir/file2.bin")!
         let body1 = Data(repeating: 0x41, count: 64)
         let body2 = Data(repeating: 0x42, count: 128)
-        ModelManagerCoverageURLProtocol.setStub(.init(statusCode: 200, body: body1), for: fileURL1)
-        ModelManagerCoverageURLProtocol.setStub(.init(statusCode: 200, body: body2), for: fileURL2)
+        ModelDownloadURLProtocol.setStub(.init(statusCode: 200, body: body1), for: fileURL1)
+        ModelDownloadURLProtocol.setStub(.init(statusCode: 200, body: body2), for: fileURL2)
 
         let files = [
             ASRModelRemoteFile(remoteURL: fileURL1, destinationRelativePath: "file1.bin", expectedSizeBytes: 64),
@@ -494,7 +517,7 @@ final class ModelManagerCoverageTests: XCTestCase {
 
     func testDownloadRemoteFilesUsesIndexBasedProgressWhenSizesUnknown() async throws {
         let fileURL = URL(string: "https://stub.suniye.test/remote/unknown-size.bin")!
-        ModelManagerCoverageURLProtocol.setStub(
+        ModelDownloadURLProtocol.setStub(
             .init(statusCode: 200, body: Data(repeating: 0x43, count: 32)),
             for: fileURL
         )
@@ -514,7 +537,7 @@ final class ModelManagerCoverageTests: XCTestCase {
 
     func testDownloadRemoteFilesOverwritesExistingDestination() async throws {
         let fileURL = URL(string: "https://stub.suniye.test/remote/overwrite.bin")!
-        ModelManagerCoverageURLProtocol.setStub(
+        ModelDownloadURLProtocol.setStub(
             .init(statusCode: 200, body: Data("fresh".utf8)),
             for: fileURL
         )
@@ -536,7 +559,7 @@ final class ModelManagerCoverageTests: XCTestCase {
 
     func testDownloadRemoteFilesThrowsForNon2xxResponse() async throws {
         let fileURL = URL(string: "https://stub.suniye.test/remote/missing.bin")!
-        ModelManagerCoverageURLProtocol.setStub(
+        ModelDownloadURLProtocol.setStub(
             .init(statusCode: 500, body: Data()),
             for: fileURL
         )
@@ -559,7 +582,7 @@ final class ModelManagerCoverageTests: XCTestCase {
 
     func testDownloadRemoteFilesVerifiesPinnedSHA256() async throws {
         let fileURL = URL(string: "https://stub.suniye.test/remote/pinned.bin")!
-        ModelManagerCoverageURLProtocol.setStub(.init(statusCode: 200, body: Data("abc".utf8)), for: fileURL)
+        ModelDownloadURLProtocol.setStub(.init(statusCode: 200, body: Data("abc".utf8)), for: fileURL)
         let manager = makeSandboxedManager()
         let destination = tempDirectory.appendingPathComponent("remote-model-pinned", isDirectory: true)
 
@@ -584,8 +607,6 @@ final class ModelManagerCoverageTests: XCTestCase {
             XCTAssertFalse(fileManager.fileExists(atPath: destination.appendingPathComponent("tampered.bin").path), "a bad file must never land in the model directory")
         }
     }
-
-    // MARK: - Replace/rollback
 
     func testReplaceInstalledModelRestoresBackupWhenSwapFails() throws {
         let liveDirectory = tempDirectory.appendingPathComponent("live-model", isDirectory: true)

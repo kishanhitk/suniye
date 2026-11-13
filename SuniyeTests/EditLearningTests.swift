@@ -148,6 +148,11 @@ final class PhoneticSimilarityTests: XCTestCase {
     func testIdenticalWordsAreFullySimilar() {
         XCTAssertEqual(CorrectionClassifier.phoneticSimilarity("Suniye", "Suniye"), 1.0)
     }
+
+    func testLetterlessTokensCompareLiterally() {
+        XCTAssertEqual(CorrectionClassifier.phoneticSimilarity("123", "123"), 1.0)
+        XCTAssertEqual(CorrectionClassifier.phoneticSimilarity("42", "7"), 0.0)
+    }
 }
 
 final class CorrectionClassifierTests: XCTestCase {
@@ -216,6 +221,14 @@ final class CorrectionClassifierTests: XCTestCase {
         let terms = learnable(substitutions)
         XCTAssertEqual(terms.count, 3)
         XCTAssertEqual(terms, ["Kishan", "Ananya", "Suniye"])
+    }
+
+    func testLearnsKnownWordWhenReplacementContainsDigits() {
+        let terms = learnable(
+            [WordSubstitution(original: "covid", replacement: "covid19")],
+            knownWords: ["covid19"]
+        )
+        XCTAssertEqual(terms, ["covid19"])
     }
 
     func testDeduplicatesRepeatedCorrections() {

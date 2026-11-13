@@ -1,7 +1,12 @@
 import XCTest
 @testable import Suniye
 
-final class AppLoggerMoreTests: XCTestCase {
+final class AppLoggerTests: XCTestCase {
+    func testLogFileIsIsolatedUnderTests() {
+        XCTAssertTrue(AppLogger.shared.logFileURL.path.contains("SuniyeTests-"))
+        XCTAssertFalse(AppLogger.shared.logFileURL.path.contains("Application Support/Suniye/logs"))
+    }
+
     func testLogRotatesFileOnceItExceedsSizeLimit() throws {
         let logger = AppLogger.shared
         let logURL = logger.logFileURL

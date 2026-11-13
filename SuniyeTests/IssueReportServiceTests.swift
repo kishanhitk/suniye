@@ -7,10 +7,7 @@ final class IssueReportServiceTests: XCTestCase {
         MockIssueReportURLProtocol.handler = nil
     }
 
-    func testAppLoggerUsesIsolatedPathUnderTests() {
-        XCTAssertTrue(AppLogger.shared.logFileURL.path.contains("SuniyeTests-"))
-        XCTAssertFalse(AppLogger.shared.logFileURL.path.contains("Application Support/Suniye/logs"))
-    }
+    private static let endpointURL = URL(string: "https://suniye.test/api/issue-reports")!
 
     func testRedactorRemovesSecretsAndSensitivePayloads() {
         let redactor = DiagnosticRedactor(homeDirectory: "/Users/kishan")
@@ -94,6 +91,64 @@ final class IssueReportServiceTests: XCTestCase {
         XCTAssertFalse(rotatedLog.contains("secret-token"))
     }
 
+    func testBundleSucceedsWithMissingLogFileByWritingEmptyLog() async throws {
+        let service = DiagnosticBundleService()
+        let missingLog = FileManager.default.temporaryDirectory
+            .appendingPathComponent("suniye-missing-\(UUID().uuidString).log")
+
+        let archiveURL = try await service.makeBundle(request: makeRequest(logFileURL: missingLog))
+        defer { try? FileManager.default.removeItem(at: archiveURL) }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archiveURL.path))
+    }
+
+    func testBundleThrowsFileIOWhenStagingDirectoryCannotBeWritten() async throws {
+        let service = DiagnosticBundleService(fileManager: NoopCreateDirectoryFileManager())
+
+        do {
+            _ = try await service.makeBundle(request: makeRequest(logFileURL: makeLogFile()))
+            XCTFail("Expected fileIO error")
+        } catch let error as IssueReportError {
+            guard case .fileIO = error else {
+                return XCTFail("Expected fileIO, got \(error)")
+            }
+        }
+    }
+
+    func testBundleThrowsFileIOWhenRedactedLogCannotBeWritten() async throws {
+        let service = DiagnosticBundleService(fileManager: LogBlockingFileManager())
+
+        do {
+            _ = try await service.makeBundle(request: makeRequest(logFileURL: makeLogFile()))
+            XCTFail("Expected fileIO error")
+        } catch let error as IssueReportError {
+            guard case .fileIO = error else {
+                return XCTFail("Expected fileIO, got \(error)")
+            }
+        }
+    }
+
+    func testBundleThrowsZipFailedWhenArchiveCannotBeWritten() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("suniye-zip-fail-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let service = DiagnosticBundleService(fileManager: ReadOnlyAfterStagingFileManager(root: root))
+
+        do {
+            _ = try await service.makeBundle(request: makeRequest(logFileURL: makeLogFile()))
+            XCTFail("Expected zipFailed error")
+        } catch let error as IssueReportError {
+            guard case let .zipFailed(message) = error else {
+                return XCTFail("Expected zipFailed, got \(error)")
+            }
+            XCTAssertFalse(message.isEmpty)
+        }
+    }
+
     func testUploadServiceSendsMultipartAndDecodesSuccess() async throws {
         let endpointURL = URL(string: "https://suniye.test/api/issue-reports")!
         let diagnosticsURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).zip")
@@ -158,6 +213,120 @@ final class IssueReportServiceTests: XCTestCase {
         }
     }
 
+    func testSubmitThrowsMissingEndpointWhenBundleHasNoEndpointConfigured() async throws {
+        let bundleURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SuniyeIssueReportTests-\(UUID().uuidString).bundle")
+        try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: bundleURL)
+        }
+        let info: [String: Any] = [
+            "CFBundleIdentifier": "dev.suniye.tests.report.\(UUID().uuidString)",
+            "CFBundlePackageType": "BNDL",
+        ]
+        let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        try data.write(to: bundleURL.appendingPathComponent("Info.plist"))
+        let service = IssueReportUploadService(session: makeSession(), bundle: try XCTUnwrap(Bundle(url: bundleURL)))
+
+        do {
+            _ = try await service.submit(payload: makePayload(), diagnosticsURL: nil)
+            XCTFail("Expected missingEndpoint error")
+        } catch let error as IssueReportError {
+            XCTAssertEqual(error, .missingEndpoint)
+        }
+    }
+
+    func testSubmitMapsTransportFailureToServerMessage() async {
+        MockIssueReportURLProtocol.handler = { _ in
+            throw URLError(.notConnectedToInternet)
+        }
+        let service = IssueReportUploadService(session: makeSession(), endpointURL: Self.endpointURL)
+
+        do {
+            _ = try await service.submit(payload: makePayload(), diagnosticsURL: nil)
+            XCTFail("Expected serverMessage error")
+        } catch let error as IssueReportError {
+            XCTAssertEqual(error, .serverMessage("Could not reach issue reporting server."))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testSubmitThrowsInvalidResponseForNonHTTPResponse() async {
+        MockIssueReportURLProtocol.handler = { _ in
+            let response = URLResponse(
+                url: Self.endpointURL,
+                mimeType: "application/json",
+                expectedContentLength: 2,
+                textEncodingName: nil
+            )
+            return (response, Data("{}".utf8))
+        }
+        let service = IssueReportUploadService(session: makeSession(), endpointURL: Self.endpointURL)
+
+        do {
+            _ = try await service.submit(payload: makePayload(), diagnosticsURL: nil)
+            XCTFail("Expected invalidResponse error")
+        } catch let error as IssueReportError {
+            XCTAssertEqual(error, .invalidResponse)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testSubmitThrowsInvalidResponseWhenSuccessEnvelopeIsIncomplete() async {
+        MockIssueReportURLProtocol.handler = { _ in
+            let response = HTTPURLResponse(url: Self.endpointURL, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(#"{"success": false}"#.utf8))
+        }
+        let service = IssueReportUploadService(session: makeSession(), endpointURL: Self.endpointURL)
+
+        do {
+            _ = try await service.submit(payload: makePayload(), diagnosticsURL: nil)
+            XCTFail("Expected invalidResponse error")
+        } catch let error as IssueReportError {
+            XCTAssertEqual(error, .invalidResponse)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testSubmitThrowsFileIOWhenDiagnosticsFileIsMissing() async {
+        let service = IssueReportUploadService(session: makeSession(), endpointURL: Self.endpointURL)
+        let missingDiagnostics = FileManager.default.temporaryDirectory
+            .appendingPathComponent("suniye-missing-\(UUID().uuidString).zip")
+
+        do {
+            _ = try await service.submit(payload: makePayload(), diagnosticsURL: missingDiagnostics)
+            XCTFail("Expected fileIO error")
+        } catch let error as IssueReportError {
+            guard case .fileIO = error else {
+                return XCTFail("Expected fileIO, got \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    private func makeLogFile() throws -> URL {
+        let logURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("suniye-log-\(UUID().uuidString).log")
+        try "2026-07-04 [INFO] hello".write(to: logURL, atomically: true, encoding: .utf8)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: logURL)
+        }
+        return logURL
+    }
+
+    private func makeRequest(logFileURL: URL) -> DiagnosticBundleRequest {
+        DiagnosticBundleRequest(
+            payload: makePayload(),
+            createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+            logFileURL: logFileURL,
+            rotatedLogFileURL: nil
+        )
+    }
+
     private func makePayload() -> IssueReportPayload {
         IssueReportPayload(
             schemaVersion: 1,
@@ -216,8 +385,59 @@ final class IssueReportServiceTests: XCTestCase {
     }
 }
 
+/// Pretends directory creation succeeded without creating anything, so the
+/// first staged file write fails.
+private final class NoopCreateDirectoryFileManager: FileManager, @unchecked Sendable {
+    override func createDirectory(
+        at url: URL,
+        withIntermediateDirectories createIntermediates: Bool,
+        attributes: [FileAttributeKey: Any]? = nil
+    ) throws {}
+}
+
+/// Plants a directory named "app.log" in each directory it creates, so the
+/// redacted log cannot be written there.
+private final class LogBlockingFileManager: FileManager, @unchecked Sendable {
+    override func createDirectory(
+        at url: URL,
+        withIntermediateDirectories createIntermediates: Bool,
+        attributes: [FileAttributeKey: Any]? = nil
+    ) throws {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: createIntermediates, attributes: attributes)
+        try FileManager.default.createDirectory(
+            at: url.appendingPathComponent("app.log", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+    }
+}
+
+/// Uses `root` as the temporary directory and makes it read-only once the
+/// staging directory exists, so the staged files can be written but the
+/// archive next to them cannot.
+private final class ReadOnlyAfterStagingFileManager: FileManager, @unchecked Sendable {
+    private let root: URL
+
+    init(root: URL) {
+        self.root = root
+        super.init()
+    }
+
+    override var temporaryDirectory: URL {
+        root
+    }
+
+    override func createDirectory(
+        at url: URL,
+        withIntermediateDirectories createIntermediates: Bool,
+        attributes: [FileAttributeKey: Any]? = nil
+    ) throws {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: createIntermediates, attributes: attributes)
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: root.path)
+    }
+}
+
 private final class MockIssueReportURLProtocol: URLProtocol {
-    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+    static var handler: ((URLRequest) throws -> (URLResponse, Data))?
 
     static func requestBodyData(from request: URLRequest) -> Data? {
         if let body = request.httpBody {

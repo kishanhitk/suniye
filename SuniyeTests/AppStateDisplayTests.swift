@@ -2,83 +2,24 @@ import SwiftUI
 import XCTest
 @testable import Suniye
 
-/// Coverage tests for AppState display-oriented enums and computed status
-/// properties (model status text/color/icon, banners, download ETA, launch
-/// at login, app version).
 @MainActor
-final class AppStateCoverageDisplayTests: XCTestCase {
-    // MARK: - Small display enums
-
-    func testLLME2EModeLogValues() {
-        XCTAssertEqual(LLME2EMode.none.logValue, "none")
-        XCTAssertEqual(LLME2EMode.forceSuccess.logValue, "success")
-        XCTAssertEqual(LLME2EMode.forceFailure.logValue, "fallback")
-    }
-
-    func testMagicFormatSetupStateDisplayProperties() {
-        XCTAssertEqual(MagicFormatSetupState.off.title, "Off")
-        XCTAssertEqual(MagicFormatSetupState.needsAPIKey.title, "Needs API key")
-        XCTAssertEqual(MagicFormatSetupState.needsServiceSetup.title, "Needs service setup")
-        XCTAssertEqual(MagicFormatSetupState.ready.title, "Ready")
-
-        XCTAssertTrue(MagicFormatSetupState.off.detail.contains("Turn it on"))
-        XCTAssertTrue(MagicFormatSetupState.needsAPIKey.detail.contains("API key"))
-        XCTAssertTrue(MagicFormatSetupState.needsServiceSetup.detail.contains("service setup"))
-        XCTAssertTrue(MagicFormatSetupState.ready.detail.contains("ready"))
-
-        XCTAssertEqual(MagicFormatSetupState.off.icon, "pause.circle")
-        XCTAssertEqual(MagicFormatSetupState.needsAPIKey.icon, "exclamationmark.circle")
-        XCTAssertEqual(MagicFormatSetupState.needsServiceSetup.icon, "exclamationmark.circle")
-        XCTAssertEqual(MagicFormatSetupState.ready.icon, "checkmark.circle.fill")
-
-        XCTAssertEqual(MagicFormatSetupState.off.color, MainWindowPalette.secondaryText)
-        XCTAssertEqual(MagicFormatSetupState.needsAPIKey.color, .orange)
-        XCTAssertEqual(MagicFormatSetupState.needsServiceSetup.color, .orange)
-        XCTAssertEqual(MagicFormatSetupState.ready.color, .green)
-    }
-
-    func testMagicFormatSetupTestResultSeverityColors() {
-        XCTAssertEqual(MagicFormatSetupTestResult.Severity.success.color, .green)
-        XCTAssertEqual(MagicFormatSetupTestResult.Severity.error.color, .red)
-    }
-
-    func testASRModelBannerToneDisplayProperties() {
-        XCTAssertEqual(ASRModelBannerState.Tone.info.color, .accentColor)
-        XCTAssertEqual(ASRModelBannerState.Tone.error.color, .red)
-        XCTAssertEqual(ASRModelBannerState.Tone.info.icon, "arrow.triangle.2.circlepath.circle.fill")
-        XCTAssertEqual(ASRModelBannerState.Tone.error.icon, "exclamationmark.triangle.fill")
-    }
-
-    func testAppStateErrorDescription() {
-        XCTAssertEqual(
-            AppStateError.modelValidationFailed.errorDescription,
-            "Model files are missing after extraction."
-        )
-    }
-
+final class AppStateDisplayTests: XCTestCase {
     func testAppVersionText() {
         let appState = makeTestAppState()
-        XCTAssertTrue(appState.appVersionText.contains("0.0.1"))
+        XCTAssertEqual(appState.appVersionText, "v0.0.1 (1)")
 
         let unknownVersion = makeTestAppState(currentAppVersionProvider: { nil })
         XCTAssertEqual(unknownVersion.appVersionText, "Unknown")
     }
 
-    // MARK: - Catalog helpers
+    func testAvailableModelEntriesExcludeTheSelectedModel() {
+        let appState = makeTestAppState()
 
-    func testCatalogDerivedProperties() {
-        let modelManager = StubModelManager()
-        modelManager.installedModelIDs = []
-        let appState = makeTestAppState(modelManager: modelManager)
+        let availableIDs = appState.availableASRModelEntries.map(\.id)
 
-        XCTAssertEqual(appState.asrModelCatalog.map(\.id), modelManager.catalog.map(\.id))
-        XCTAssertFalse(appState.availableASRModelEntries.map(\.id).contains(appState.selectedASRModelID))
-        XCTAssertFalse(appState.isModelInstalled)
-
-        modelManager.installedModelIDs = [.parakeetV3]
+        XCTAssertFalse(availableIDs.contains(appState.selectedASRModelID))
+        XCTAssertEqual(availableIDs.count, appState.asrModelCatalog.count - 1)
     }
-
-    // MARK: - Model status value / color / icon
 
     func testModelStatusValueBranches() {
         let modelManager = StubModelManager()
@@ -159,8 +100,6 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         XCTAssertEqual(appState.modelStatusColor, .orange)
     }
 
-    // MARK: - Primary action title / detail
-
     func testModelPrimaryActionTitleBranches() {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
@@ -182,17 +121,6 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         modelManager.installedModelIDs = []
         XCTAssertEqual(appState.modelPrimaryActionTitle, "Download Model")
     }
-
-    func testModelLocationAndSizeTexts() {
-        let appState = makeTestAppState()
-        XCTAssertTrue(appState.modelExpectedSizeText.hasPrefix("~"))
-        XCTAssertGreaterThan(appState.modelExpectedByteCount, 0)
-
-        let failingManager = CovDisplayFailingModelManager()
-        let fallbackState = makeTestAppState(modelManager: failingManager)
-    }
-
-    // MARK: - Banner
 
     func testASRModelBannerBranches() {
         let appState = makeTestAppState()
@@ -234,8 +162,6 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         XCTAssertEqual(errored?.detail, "runtime broke")
     }
 
-    // MARK: - Per-model status helpers
-
     func testASRModelStatusColorBranches() {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
@@ -261,8 +187,6 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         let appState = makeTestAppState(modelManager: modelManager)
 
         appState.activeASRModelOperationID = .parakeetV3
-        appState.phase = .loading
-
         appState.phase = .downloadingModel
         // Operations are serialised: nothing else can start while one runs.
         XCTAssertFalse(appState.asrModelCanPerformPrimaryAction(for: .parakeetV3))
@@ -300,43 +224,23 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         XCTAssertNil(appState.asrModelProgressLabel(for: .parakeetV3))
     }
 
-    func testASRModelInstalledSizeText() {
-        let appState = makeTestAppState()
-        XCTAssertFalse(appState.asrModelInstalledSizeText(for: .parakeetV3).isEmpty)
-    }
-
-    // MARK: - Operation status / progress labels
-
-    func testModelDownloadProgressLabelAndETA() {
+    func testModelDownloadProgressLabelWaitsOneSecondBeforeETA() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let appState = makeTestAppState(nowProvider: { now })
 
-        // Not downloading: label is empty, ETA falls back to the estimating text.
         XCTAssertEqual(appState.modelDownloadProgressLabel, "")
 
         appState.phase = .downloadingModel
         appState.activeASRModelOperationID = appState.selectedASRModelID
         appState.downloadProgress = 0.5
 
-        // Elapsed under a second: still estimating.
         appState.modelDownloadStartedAt = now.addingTimeInterval(-0.5)
-        XCTAssertTrue(appState.modelDownloadProgressLabel.contains("Estimating time remaining"))
+        XCTAssertTrue(appState.modelDownloadProgressLabel.hasSuffix("\nEstimating time remaining"))
 
-        // Normal minutes/seconds ETA.
         appState.modelDownloadStartedAt = now.addingTimeInterval(-100)
-        XCTAssertTrue(appState.modelDownloadProgressLabel.contains("50% downloaded"))
-        XCTAssertTrue(appState.modelDownloadProgressLabel.contains("About"))
-
-        // Hour-scale ETA takes the hour/minute formatter branch.
-        appState.modelDownloadStartedAt = now.addingTimeInterval(-3600)
-        appState.downloadProgress = 0.4
-
-        // Nearly done.
-        appState.downloadProgress = 0.999
-        appState.modelDownloadStartedAt = now.addingTimeInterval(-100)
+        XCTAssertTrue(appState.modelDownloadProgressLabel.hasPrefix("50% downloaded"))
+        XCTAssertTrue(appState.modelDownloadProgressLabel.contains("\nAbout"))
     }
-
-    // MARK: - Launch at login
 
     func testLaunchAtLoginDisplayProperties() {
         let appState = makeTestAppState()
@@ -347,49 +251,114 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         appState.launchAtLoginStatus = .enabled
         XCTAssertTrue(appState.launchAtLoginEnabledForUI)
 
+        appState.launchAtLoginStatus = .requiresApproval
+        XCTAssertTrue(appState.launchAtLoginEnabledForUI)
+
         appState.launchAtLoginStatus = .unsupported("Not supported here")
         XCTAssertFalse(appState.launchAtLoginEnabledForUI)
     }
+
+    func testModelDownloadDerivedUIStateWhileDownloading() {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = []
+        let now = Date(timeIntervalSince1970: 600)
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            nowProvider: { now }
+        )
+        appState.phase = .downloadingModel
+        appState.activeASRModelOperationID = .parakeetV3
+        appState.downloadProgress = 0.25
+        appState.modelDownloadStartedAt = Date(timeIntervalSince1970: 540)
+
+        XCTAssertEqual(appState.modelStatusValue, "Downloading 25%")
+        XCTAssertEqual(appState.modelPrimaryActionTitle, "Downloading…")
+        XCTAssertEqual(appState.modelDownloadProgressLabel, "25% downloaded • 170 MB of ~680 MB\nAbout 3m left")
+    }
+
+    func testCurrentModelStaysCurrentWhileAnotherModelDownloads() {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.senseVoice]
+        let appState = makeTestAppState(modelManager: modelManager)
+        appState.selectedASRModelID = .senseVoice
+        appState.loadedASRModelID = .senseVoice
+        appState.phase = .downloadingModel
+        appState.activeASRModelOperationID = .moonshineBase
+        appState.downloadProgress = 0.2
+
+        XCTAssertEqual(appState.modelStatusValue, "Current")
+        XCTAssertEqual(appState.modelPrimaryActionTitle, "Current")
+    }
+
+    func testModelDownloadProgressLabelShowsEstimatingBeforeETAIsKnown() {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = []
+        let appState = makeTestAppState(modelManager: modelManager)
+        appState.phase = .downloadingModel
+        appState.activeASRModelOperationID = .parakeetV3
+        appState.downloadProgress = 0
+
+        XCTAssertEqual(appState.modelDownloadProgressLabel, "0% downloaded • Zero KB of ~680 MB\nEstimating time remaining")
+    }
+
+    func testModelDownloadDerivedUIStateAfterFailure() {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = []
+        let appState = makeTestAppState(modelManager: modelManager)
+        appState.phase = .error
+        appState.lastFailedASRModelID = .parakeetV3
+        appState.lastFailedASRModelError = "network timeout"
+
+        XCTAssertEqual(appState.modelStatusValue, "Download failed")
+    }
+
+    func testAttentionItemsIncludeRuntimeErrorAndMissingModel() {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = []
+        let appState = makeTestAppState(modelManager: modelManager)
+        appState.phase = .error
+        appState.lastError = "engine failure"
+
+        let ids = appState.attentionItems.map(\.id)
+
+        XCTAssertTrue(ids.contains("runtime-error"))
+        XCTAssertTrue(ids.contains("model-missing"))
+        XCTAssertEqual(
+            appState.attentionItems.first(where: { $0.id == "runtime-error" })?.detail,
+            "engine failure"
+        )
+    }
+
+    func testAttentionItemsIncludeAppleMagicFormatUnavailable() {
+        let appState = makeTestAppState()
+        appState.llmEnabled = true
+        appState.llmProvider = .appleFoundationModels
+
+        let items = appState.attentionItems
+
+        XCTAssertTrue(items.map(\.id).contains("apple-magic-format-unavailable"))
+        XCTAssertEqual(
+            items.first(where: { $0.id == "mic-permission-missing" })?.fixTitle,
+            "Grant Access"
+        )
+    }
+
+    func testAttentionItemsExposeMicrophonePermissionFixAction() throws {
+        let appState = makeTestAppState()
+        appState.hasMicPermission = false
+
+        let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "mic-permission-missing" })
+        XCTAssertEqual(item.fixAction, .requestMicrophonePermission)
+        XCTAssertEqual(item.fixTitle, "Grant Access")
+    }
+
+    func testAttentionItemsExposeAccessibilityPermissionFixAction() throws {
+        let appState = makeTestAppState()
+        appState.hasAccessibilityPermission = false
+
+        let item = try XCTUnwrap(appState.attentionItems.first { $0.id == "accessibility-permission-missing" })
+        XCTAssertEqual(item.fixAction, .requestAccessibilityPermission)
+        XCTAssertEqual(item.fixTitle, "Grant Access")
+    }
 }
 
-/// Model manager whose directory lookups throw, to exercise location fallbacks.
-private final class CovDisplayFailingModelManager: ModelManagerProtocol {
-    var catalog: [ASRModelCatalogEntry] = ASRModelCatalog.entries
-    var fallbackOrder: [ASRModelID] = ASRModelCatalog.fallbackOrder
-
-    func modelsRootDirectoryURL() throws -> URL {
-        throw FakeError(message: "no root")
-    }
-
-    func modelDirectoryURL(for modelID: ASRModelID) throws -> URL {
-        throw FakeError(message: "no directory")
-    }
-
-    func isInstalled(_ modelID: ASRModelID) -> Bool {
-        false
-    }
-
-    func installedModels() -> [ASRModelID] {
-        []
-    }
-
-    func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig {
-        throw FakeError(message: "no config")
-    }
-
-    func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {
-        throw FakeError(message: "no download")
-    }
-
-    func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64 {
-        0
-    }
-
-    func installedByteCount(for modelID: ASRModelID) -> Int64 {
-        0
-    }
-
-    func deleteModel(_ modelID: ASRModelID) throws {
-        throw FakeError(message: "no delete")
-    }
-}

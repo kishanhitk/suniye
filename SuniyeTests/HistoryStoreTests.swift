@@ -73,4 +73,33 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(loadedResult.wasLLMPolished, result.wasLLMPolished)
         XCTAssertEqual(loadedResult.createdAt.timeIntervalSince1970, result.createdAt.timeIntervalSince1970, accuracy: 0.001)
     }
+
+    func testLoadReturnsEmptyWhenNothingIsStored() {
+        let suite = "dev.suniye.tests.history.empty.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = HistoryStore(userDefaults: defaults, storageKey: "history")
+
+        XCTAssertEqual(store.load(), [])
+    }
+
+    func testSaveSilentlySkipsUnencodableResults() {
+        let suite = "dev.suniye.tests.history.unencodable.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = HistoryStore(userDefaults: defaults, storageKey: "history")
+
+        // Infinity is not representable by the JSON encoder, so save must
+        // bail out without writing anything.
+        let unencodable = RecentResult(
+            id: UUID(),
+            text: "bad duration",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            durationSeconds: .infinity,
+            wasLLMPolished: false
+        )
+
+        store.save([unencodable])
+
+        XCTAssertNil(defaults.data(forKey: "history"))
+        XCTAssertEqual(store.load(), [])
+    }
 }

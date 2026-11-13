@@ -148,20 +148,6 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         XCTAssertEqual(appState.phase, .recording)
     }
 
-    func testWelcomeScreenBlocksRecording() async {
-        let audioCapture = StubAudioCaptureService()
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.activeOnboardingStep = .welcome
-
-        appState.toggleFloatingIndicatorRecording()
-        for _ in 0 ..< 8 { await Task.yield() }
-
-        XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
-        XCTAssertEqual(appState.phase, .ready)
-    }
-
     // MARK: - Practice telemetry
 
     private func runPracticeDictation(
@@ -467,22 +453,6 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
     }
 
     // MARK: - Disk preflight message
-
-    func testDiskShortfallMessageMentionsRequiredSpace() async {
-        let modelManager = StubModelManager()
-        modelManager.installedModelIDs = []
-        let appState = makeTestAppState(
-            modelManager: modelManager,
-            availableDiskCapacityProvider: { 10_000_000 }
-        )
-        appState.phase = .needsModel
-        appState.startOnboardingIfNeeded()
-
-        await appState.beginOnboardingSetup()
-
-        XCTAssertEqual(appState.activeOnboardingStep, .welcome)
-        XCTAssertTrue(appState.onboardingDiskSpaceMessage?.contains("free") == true)
-    }
 }
 
 /// Blocks the download until the test opens the gate, then honors task

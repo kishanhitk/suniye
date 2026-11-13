@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import Suniye
 
-final class SuniyeAppMoreTests: XCTestCase {
+final class SuniyeAppTests: XCTestCase {
     /// ProcessInfo whose environment hides the XCTest marker so the
     /// non-test branches of the runtime-service gates are exercised.
     private final class EmptyEnvironmentProcessInfo: ProcessInfo, @unchecked Sendable {
