@@ -266,6 +266,16 @@ final class MeetingTranscriberTests: XCTestCase {
         XCTAssertEqual(transcript.map(\.text), ["Before the break.", "After the break."])
     }
 
+    func testRecoveryEndsAChunkWhereTheMeetingPaused() async throws {
+        _ = try await store.update(record.id) { $0.pauses = [MeetingPause(start: 1, end: 61)] }
+        try writeAudio(tone(1, level: 0.2) + tone(1, level: 0.4), track: .you)
+        let engine = FakeMeetingEngine(words: [0.2: "Before the break.", 0.4: "After the break."])
+
+        let transcript = try await makeTranscriber(engine: engine, tracks: [.you]).recover()
+
+        XCTAssertEqual(transcript.map(\.text), ["Before the break.", "After the break."])
+    }
+
     func testAChunkThatKeepsFailingFailsTheFinishAndTheNextFinishDecodesIt() async throws {
         try writeAudio(
             tone(2.5, level: 0.2) + silence(0.5) + tone(2.5, level: 0.4) + silence(0.5) + tone(2.5, level: 0.6) + silence(0.5),

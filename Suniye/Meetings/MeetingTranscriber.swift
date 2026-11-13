@@ -134,6 +134,10 @@ actor MeetingTranscriber {
     /// and returns the final transcript.
     func recover() async throws -> [MeetingSegment] {
         let stored = await store.segments(of: meetingID)
+        // The files hold no pause; a pause ended the chunk in progress there.
+        let pauses = await store.record(meetingID)?.pauses ?? []
+        let timeline = MeetingTimeline(pauses: pauses)
+        let pauseCuts = pauses.map { timeline.audioPosition(forWallSeconds: $0.start) }
         var resumeAt: [MeetingTrack: Int] = [:]
         var end = 0
         for track in tracks {
@@ -146,7 +150,8 @@ actor MeetingTranscriber {
         }
         var position = resumeAt.values.min() ?? end
         while position < end {
-            let stepEnd = position + Self.replayStepSamples
+            let nextCut = pauseCuts.filter { $0 > position }.min()
+            let stepEnd = min(position + Self.replayStepSamples, nextCut ?? .max)
             for (track, from) in resumeAt {
                 let lower = max(position, from)
                 guard lower < stepEnd else { continue }
@@ -154,6 +159,9 @@ actor MeetingTranscriber {
                 if !samples.isEmpty {
                     process(.samples(track, samples, position: lower))
                 }
+            }
+            if stepEnd == nextCut {
+                flushSegmenters()
             }
             await waitUntilDecoded()
             position = stepEnd
