@@ -68,9 +68,9 @@ struct MeetingSettingsGroup: View {
         return names.isEmpty ? "None" : names.joined(separator: ", ")
     }
 
+    /// The name that the call card used for the app.
     static func appName(_ bundleID: String) -> String {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
-        return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+        MeetingCallApps.app(forProcess: bundleID)?.name ?? bundleID
     }
 }
 
