@@ -199,7 +199,6 @@ final class AppState {
     var phase: Phase = .loading {
         didSet {
             if oldValue != phase {
-                onStateChange?()
                 AppLogger.shared.log(.info, "phase changed: \(oldValue.rawValue) -> \(phase.rawValue)")
             }
             if (oldValue == .recording) != (phase == .recording) {
@@ -207,39 +206,15 @@ final class AppState {
             }
         }
     }
-    var statusText = "Initializing..." {
-        didSet {
-            if oldValue != statusText {
-                onStateChange?()
-            }
-        }
-    }
+    var statusText = "Initializing..."
     var lastError: String?
 
-    var canCheckForUpdates = false {
-        didSet {
-            if oldValue != canCheckForUpdates {
-                onStateChange?()
-            }
-        }
-    }
-    var isUpdateReadyToInstall = false {
-        didSet {
-            if oldValue != isUpdateReadyToInstall {
-                onStateChange?()
-            }
-        }
-    }
+    var canCheckForUpdates = false
+    var isUpdateReadyToInstall = false
     var canRestartToUpdate: Bool {
         isUpdateReadyToInstall && !isCapturing
     }
-    var automaticallyChecksForUpdates = false {
-        didSet {
-            if oldValue != automaticallyChecksForUpdates {
-                onStateChange?()
-            }
-        }
-    }
+    var automaticallyChecksForUpdates = false
     var updateChannel: UpdateChannel = .stable {
         didSet {
             guard !isHydratingGeneralSettings, oldValue != updateChannel else {
@@ -248,20 +223,13 @@ final class AppState {
 
             persistGeneralSettings()
             applyUpdateChannelToController()
-            onStateChange?()
         }
     }
     var appVersionText: String {
         currentAppVersionProvider()?.displayString ?? "Unknown"
     }
 
-    var downloadProgress: Double = 0 {
-        didSet {
-            if oldValue != downloadProgress {
-                onStateChange?()
-            }
-        }
-    }
+    var downloadProgress: Double = 0
     var modelDownloadStartedAt: Date?
     /// One model operation at a time. Downloads and loads were split into
     /// separate slots so an installed model could be selected mid-download; the
@@ -269,35 +237,11 @@ final class AppState {
     /// (stranded captures, progress reset by unrelated operations, deferrals
     /// reported as failures), so operations are serialised again. Reintroducing
     /// concurrency needs a real per-operation model, not a second slot.
-    var activeASRModelOperationID: ASRModelID? {
-        didSet {
-            if oldValue != activeASRModelOperationID {
-                onStateChange?()
-            }
-        }
-    }
+    var activeASRModelOperationID: ASRModelID?
 
-    var loadedASRModelID: ASRModelID? {
-        didSet {
-            if oldValue != loadedASRModelID {
-                onStateChange?()
-            }
-        }
-    }
-    var lastFailedASRModelID: ASRModelID? {
-        didSet {
-            if oldValue != lastFailedASRModelID {
-                onStateChange?()
-            }
-        }
-    }
-    var lastFailedASRModelError: String? {
-        didSet {
-            if oldValue != lastFailedASRModelError {
-                onStateChange?()
-            }
-        }
-    }
+    var loadedASRModelID: ASRModelID?
+    var lastFailedASRModelID: ASRModelID?
+    var lastFailedASRModelError: String?
     /// Durable dictation totals. Mirrored from `statsStore` so the dashboard
     /// never sums buckets during a SwiftUI body evaluation.
     var dictationStats = DictationStats.empty
@@ -313,13 +257,7 @@ final class AppState {
         }
     }
 
-    var availableInputDevices: [AudioInputDevice] = [] {
-        didSet {
-            if oldValue != availableInputDevices {
-                onStateChange?()
-            }
-        }
-    }
+    var availableInputDevices: [AudioInputDevice] = []
     private(set) var preferredInputDeviceName: String?
     var selectedInputDeviceID: String? {
         didSet {
@@ -334,16 +272,12 @@ final class AppState {
             }
             persistGeneralSettings()
             refreshAudioRouteSnapshot()
-            onStateChange?()
         }
     }
     private(set) var audioRouteSnapshot: AudioRouteSnapshot? {
         didSet {
             if audioRouteSnapshot != nil {
                 audioRouteErrorText = nil
-            }
-            if oldValue != audioRouteSnapshot {
-                onStateChange?()
             }
         }
     }
@@ -356,7 +290,6 @@ final class AppState {
             }
             persistGeneralSettings()
             analytics.track(.featureToggled(feature: .autoSubmit, enabled: autoSubmitEnabled))
-            onStateChange?()
         }
     }
     var echoCancellationEnabled = false {
@@ -367,7 +300,6 @@ final class AppState {
             persistGeneralSettings()
             analytics.track(.featureToggled(feature: .echoCancellation, enabled: echoCancellationEnabled))
             refreshAudioRouteSnapshot()
-            onStateChange?()
         }
     }
     var soundFeedbackEnabled = false {
@@ -377,7 +309,6 @@ final class AppState {
             }
             persistGeneralSettings()
             analytics.track(.featureToggled(feature: .soundFeedback, enabled: soundFeedbackEnabled))
-            onStateChange?()
         }
     }
     /// Opt-out toggle for anonymous usage analytics (default on).
@@ -391,7 +322,6 @@ final class AppState {
             }
             persistGeneralSettings()
             analytics.setEnabled(shareAnalyticsEnabled)
-            onStateChange?()
         }
     }
     var hideFloatingIndicatorWhenIdle = false {
@@ -404,7 +334,6 @@ final class AppState {
             }
             persistGeneralSettings()
             syncFloatingIndicatorPreferences()
-            onStateChange?()
         }
     }
     var liveTranscriptionPreviewEnabled = false {
@@ -421,7 +350,6 @@ final class AppState {
                 stopLivePreview()
             }
             persistGeneralSettings()
-            onStateChange?()
         }
     }
     /// Kill switch for the Permiso drag-to-grant Accessibility overlay.
@@ -435,7 +363,6 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
-            onStateChange?()
         }
     }
     var floatingIndicatorPlacement: FloatingIndicatorPlacement? {
@@ -448,7 +375,6 @@ final class AppState {
             }
             persistGeneralSettings()
             syncFloatingIndicatorPreferences()
-            onStateChange?()
         }
     }
     var hotkeyConfiguration: HotkeyConfiguration = .globe {
@@ -462,7 +388,6 @@ final class AppState {
             guard hotkeyConfiguration != pasteLastTranscriptHotkeyConfiguration else {
                 hotkeyConfiguration = oldValue
                 hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
-                onStateChange?()
                 return
             }
             hotkeyValidationMessage = nil
@@ -476,7 +401,6 @@ final class AppState {
             if runtimeServicesEnabled {
                 wireHotkey()
             }
-            onStateChange?()
         }
     }
     private(set) var pasteLastTranscriptHotkeyConfiguration: HotkeyConfiguration = .pasteLastTranscriptDefault {
@@ -487,19 +411,16 @@ final class AppState {
             guard pasteLastTranscriptHotkeyConfiguration.isModifiedKeyCombo else {
                 pasteLastTranscriptHotkeyConfiguration = oldValue
                 hotkeyValidationMessage = "Paste Last Transcript requires at least one modifier key."
-                onStateChange?()
                 return
             }
             guard pasteLastTranscriptHotkeyConfiguration != hotkeyConfiguration else {
                 pasteLastTranscriptHotkeyConfiguration = oldValue
                 hotkeyValidationMessage = "Hold to Dictate and Paste Last Transcript must use different shortcuts."
-                onStateChange?()
                 return
             }
             guard pasteLastTranscriptHotkeyConfiguration != editModeHotkeyConfiguration else {
                 pasteLastTranscriptHotkeyConfiguration = oldValue
                 hotkeyValidationMessage = "Paste Last Transcript and Edit Mode must use different shortcuts."
-                onStateChange?()
                 return
             }
             hotkeyValidationMessage = nil
@@ -510,7 +431,6 @@ final class AppState {
             if isShowingInsertionRecoveryWarning {
                 showInsertionRecoveryWarning()
             }
-            onStateChange?()
         }
     }
     var hotkeyValidationMessage: String?
@@ -539,7 +459,6 @@ final class AppState {
             if runtimeServicesEnabled {
                 wireHotkey()
             }
-            onStateChange?()
         }
     }
     var selectedASRModelID: ASRModelID = .parakeetV3 {
@@ -551,7 +470,6 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
-            onStateChange?()
         }
     }
     /// Single persisted onboarding position. Private setter: every transition
@@ -563,7 +481,6 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
-            onStateChange?()
         }
     }
 
@@ -580,23 +497,10 @@ final class AppState {
                 onboardingPracticeResult = nil
             }
             trackOnboardingStepShownIfNeeded()
-            onStateChange?()
         }
     }
-    var onboardingPracticeText = "" {
-        didSet {
-            if oldValue != onboardingPracticeText {
-                onStateChange?()
-            }
-        }
-    }
-    var onboardingPracticeResult: OnboardingPracticeResult? {
-        didSet {
-            if oldValue != onboardingPracticeResult {
-                onStateChange?()
-            }
-        }
-    }
+    var onboardingPracticeText = ""
+    var onboardingPracticeResult: OnboardingPracticeResult?
     /// The user has completed at least one successful practice dictation this
     /// onboarding run (gates the Speak screen's Continue button).
     private(set) var onboardingPracticeSucceeded = false
@@ -648,7 +552,6 @@ final class AppState {
                 return
             }
             persistGeneralSettings()
-            onStateChange?()
         }
     }
 
@@ -782,13 +685,7 @@ final class AppState {
         }
     }
 
-    var hasLLMAPIKey = false {
-        didSet {
-            if oldValue != hasLLMAPIKey {
-                onStateChange?()
-            }
-        }
-    }
+    var hasLLMAPIKey = false
     var llmKeyOperationError: String?
     var isMagicFormatSetupTestInProgress = false
     /// Which engine the running test belongs to. The engine chooser lets you test
@@ -811,13 +708,7 @@ final class AppState {
         }
     }
     private var magicFormatSetupTestRequestID = 0
-    var localGemmaInstallState: LocalLLMInstallState = .notInstalled {
-        didSet {
-            if oldValue != localGemmaInstallState {
-                onStateChange?()
-            }
-        }
-    }
+    var localGemmaInstallState: LocalLLMInstallState = .notInstalled
 
     var launchAtLoginStatus: LaunchAtLoginStatus = .disabled
     var launchAtLoginError: String?
@@ -1692,7 +1583,6 @@ final class AppState {
         return items
     }
 
-    var onStateChange: (() -> Void)?
     var floatingIndicatorState: FloatingIndicatorState = .idle
     /// Tail of the in-progress transcript shown in the floating indicator while
     /// recording. Cleared on stop, insert, and every error path.
@@ -2238,7 +2128,6 @@ final class AppState {
         onboardingDiskSpaceMessage = nil
         if !isModelInstalled, let message = await modelDownloadDiskSpaceMessage() {
             onboardingDiskSpaceMessage = message
-            onStateChange?()
             return
         }
         setOnboardingProgress(.speakReached)
@@ -2267,7 +2156,6 @@ final class AppState {
                 return
             }
             onboardingDiskSpaceMessage = message
-            onStateChange?()
         }
     }
 
@@ -2429,7 +2317,6 @@ final class AppState {
         updateLastKnownAccessibilityGranted()
 
         AppLogger.shared.log(.info, "permissions: mic=\(hasMicPermission) ax=\(hasAccessibilityPermission)")
-        onStateChange?()
     }
 
     /// Re-reads Accessibility without changing microphone state. This matters when
@@ -2441,7 +2328,6 @@ final class AppState {
             analytics.track(.permissionTransition(kind: .accessibility, granted: true))
         }
         updateLastKnownAccessibilityGranted()
-        onStateChange?()
     }
 
     /// Records the last observed Accessibility trust so a later `false` reading
@@ -2472,7 +2358,6 @@ final class AppState {
         // instruction would mislead; deep-link with remove-and-re-add copy instead.
         if lastKnownAccessibilityGranted, !hasAccessibilityPermission {
             accessibilityGrantLikelyStale = true
-            onStateChange?()
             openAccessibilityPrivacySettings()
             return
         }
@@ -2489,7 +2374,6 @@ final class AppState {
                 }
                 self.hasAccessibilityPermission = true
                 self.updateLastKnownAccessibilityGranted()
-                self.onStateChange?()
                 // Authoritative re-read of all permission state.
                 Task {
                     await self.refreshPermissions()
@@ -2506,7 +2390,6 @@ final class AppState {
                     self.analytics.track(.permissionRequest(kind: .accessibility, surface: askSurface, outcome: .overlayDismissed))
                 case .timedOut:
                     self.accessibilityAssistTimedOut = true
-                    self.onStateChange?()
                     self.analytics.track(.permissionRequest(kind: .accessibility, surface: askSurface, outcome: .overlayTimeout))
                 }
             }
@@ -2654,7 +2537,6 @@ final class AppState {
             launchAtLoginError = error.localizedDescription
             AppLogger.shared.log(.error, "launch at login update failed: \(error.localizedDescription)")
         }
-        onStateChange?()
     }
 
     func refreshLLMKeyStatus() {
@@ -2686,7 +2568,6 @@ final class AppState {
         let normalized = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else {
             llmKeyOperationError = "API key can't be empty."
-            onStateChange?()
             return
         }
 
@@ -2699,7 +2580,6 @@ final class AppState {
         } catch {
             llmKeyOperationError = "Couldn't save the API key."
             AppLogger.shared.log(.error, "llm api key save failed")
-            onStateChange?()
         }
     }
 
@@ -2713,7 +2593,6 @@ final class AppState {
         } catch {
             llmKeyOperationError = "Couldn't clear the API key."
             AppLogger.shared.log(.error, "llm api key clear failed")
-            onStateChange?()
         }
     }
 
@@ -4992,7 +4871,6 @@ final class AppState {
     private func persistHistory() {
         historyStore.save(recentResults)
         refreshTopDictationApps()
-        onStateChange?()
     }
 
     /// Counts are a floor, not a share: the source app was only recorded from a
@@ -5181,7 +5059,6 @@ final class AppState {
         clearMagicFormatSetupTestResult()
         let settings = currentLLMSettings()
         llmSettingsStore.save(settings)
-        onStateChange?()
     }
 
     private func saveProviderPromptFile(_ prompt: MagicFormatProviderPromptFile, content: String) {
@@ -5334,7 +5211,6 @@ final class AppState {
 
         lastError = "Unable to open System Settings."
         AppLogger.shared.log(.error, "failed to open system settings")
-        onStateChange?()
     }
 
     private func effectiveMagicFormatTestAPIKey(apiKeyDraft: String) -> String? {

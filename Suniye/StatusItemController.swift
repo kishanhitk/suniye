@@ -1,9 +1,10 @@
 import AppKit
 import Foundation
+import Observation
 import SwiftUI
 
 @MainActor
-final class StatusItemController: NSObject, NSMenuDelegate {
+final class StatusItemController: NSObject {
     private let appState: AppState
     private let appIdentity = AppIdentity.current
     private let statusItem: NSStatusItem
@@ -23,12 +24,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         configureMenu()
-        refresh()
-        appState.onStateChange = { [weak self] in
-            Task { @MainActor in
-                self?.refresh()
-            }
-        }
+        refreshWhileObserved()
         onboardingFinishObserver = NotificationCenter.default.addObserver(
             forName: .suniyeOnboardingDidFinish,
             object: nil,
@@ -69,7 +65,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private func configureMenu() {
         let menu = NSMenu()
-        menu.delegate = self
 
         finishSetupItem.target = self
         openSettingsItem.target = self
@@ -99,8 +94,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         statusItem.menu = menu
     }
 
-    func menuWillOpen(_ menu: NSMenu) {
-        refresh()
+    private func refreshWhileObserved() {
+        withObservationTracking {
+            refresh()
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.refreshWhileObserved()
+            }
+        }
     }
 
     private func refresh() {
