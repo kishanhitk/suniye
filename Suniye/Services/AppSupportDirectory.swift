@@ -11,6 +11,14 @@ enum AppSupportDirectory {
             .appendingPathComponent(name, isDirectory: true)
     }
 
+    /// The usual path, also when macOS reports no Application Support folder.
+    static func urlOrHomeLibrary(fileManager: FileManager = .default) -> URL {
+        url(fileManager: fileManager)
+            ?? fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support", isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true)
+    }
+
     /// For data that may live in a temporary folder when Application Support is missing.
     static func urlOrTemporary(fileManager: FileManager = .default) -> URL {
         url(fileManager: fileManager)

@@ -86,7 +86,8 @@ enum MagicFormatSetupState: Equatable {
 struct MagicFormatSetupTestResult: Equatable {
     enum Severity: Equatable {
         case success
-        case error    }
+        case error
+    }
 
     let message: String
     let severity: Severity
@@ -111,6 +112,7 @@ struct ASRModelBannerState: Equatable {
     enum Tone: Equatable {
         case info
         case error
+
         var icon: String {
             switch self {
             case .info:

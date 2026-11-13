@@ -40,10 +40,7 @@ final class KeychainService: KeychainServiceProtocol {
             return
         }
 
-        let defaultBaseDirectory = (AppSupportDirectory.url(fileManager: fileManager)
-            ?? fileManager.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support", isDirectory: true)
-            .appendingPathComponent(AppSupportDirectory.name, isDirectory: true))
+        let defaultBaseDirectory = AppSupportDirectory.urlOrHomeLibrary(fileManager: fileManager)
             .appendingPathComponent("config", isDirectory: true)
         self.keyFileURL = defaultBaseDirectory.appendingPathComponent(filename, isDirectory: false)
         self.legacyKeyFileURL = defaultBaseDirectory.appendingPathComponent("openrouter_api_key.txt", isDirectory: false)

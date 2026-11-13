@@ -211,6 +211,8 @@ final class HotkeyService: HotkeyServiceProtocol {
             if registerStatus == noErr, let hotKeyRef {
                 carbonHotKeyRefs[slot] = hotKeyRef
             } else {
+                // The other slots stay registered: one combo taken by another
+                // app must not stop the other shortcuts.
                 AppLogger.shared.log(.error, "hotkey registration failed slot=\(slot.rawValue) status=\(registerStatus)")
             }
         }

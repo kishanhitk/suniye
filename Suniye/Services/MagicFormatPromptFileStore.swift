@@ -101,10 +101,7 @@ final class MagicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol {
     }
 
     private static func defaultPromptsDirectoryURL(fileManager: FileManager) -> URL {
-        let supportURL = AppSupportDirectory.url(fileManager: fileManager)
-            ?? URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent("Library/Application Support", isDirectory: true)
-            .appendingPathComponent(AppSupportDirectory.name, isDirectory: true)
-        return supportURL.appendingPathComponent("prompts", isDirectory: true)
+        AppSupportDirectory.urlOrHomeLibrary(fileManager: fileManager)
+            .appendingPathComponent("prompts", isDirectory: true)
     }
 }

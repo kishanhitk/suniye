@@ -93,6 +93,13 @@ final class MicrophoneChoice {
         }
     }
 
+    func settingsDidChange(from old: GeneralSettings, to new: GeneralSettings) {
+        if new.preferredInputDeviceID != old.preferredInputDeviceID
+            || new.echoCancellationEnabled != old.echoCancellationEnabled {
+            refreshAudioRouteSnapshot()
+        }
+    }
+
     /// The running dictation's route, from its capture start and its route changes.
     func adoptSessionRoute(_ route: AudioRouteSnapshot) {
         audioRouteSnapshot = route

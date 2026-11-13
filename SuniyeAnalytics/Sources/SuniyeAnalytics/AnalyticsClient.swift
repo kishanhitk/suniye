@@ -109,6 +109,7 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         )
         lock.unlock()
 
+        // The append fsyncs, and `track` runs on the main actor during dictation.
         persist { [self] in
             queue.append(encoded, now: current)
             if queue.count >= config.flushThreshold {
@@ -175,6 +176,7 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         timerTask = nil
     }
 
+    /// Persists `session_end` at once and does not flush; safe at termination.
     public func recordSessionEnd(cleanExit: Bool) {
         let (duration, eventCount) = sessionSummary()
         track(.sessionEnd(durationMs: duration, eventCount: eventCount, cleanExit: cleanExit))

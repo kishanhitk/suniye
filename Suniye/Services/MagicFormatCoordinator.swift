@@ -287,6 +287,7 @@ final class MagicFormatCoordinator {
     /// Edit Mode: run a freeform instruction + user text through the selected provider.
     /// Unlike `polish`, failures throw instead of falling back to raw text.
     func rewrite(instructions: String, userText: String, request: PolishRequest) async throws -> String {
+        // The warm-up probe must not hold the server's one generation slot ahead of real work.
         prewarmTask?.cancel()
         prewarmTask = nil
 

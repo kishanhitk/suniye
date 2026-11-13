@@ -212,7 +212,8 @@ final class AppState {
     )
 
     /// Every change goes through `updateLLMSettings`, which saves it and
-    /// applies its effects in `llmSettingsDidChange(from:)`.
+    /// applies its effects in `llmSettingsDidChange(from:)`. The one exception
+    /// is a reload from the prompt files, which must not write them back.
     private(set) var llmSettings = LLMSettings()
 
     var llmEnabled: Bool {
@@ -1098,26 +1099,15 @@ final class AppState {
     private let runtimeServicesEnabled: Bool
     private let floatingIndicatorEnabled: Bool
 
-    /// One dictation, from the shortcut press to the end of its text. Its
-    /// stage and `phase` change together, in `startRecording`,
-    /// `stopRecordingAndTranscribe` and `endSession` only.
+    /// One dictation, from the start of capture to the end of its text. While
+    /// it runs, `microphone.audioRouteSnapshot` is the route it records from.
     private struct DictationSession {
-        enum Stage {
-            case starting
-            case recording
-            case transcribing
-        }
-
         let id: UUID
         let source: RecordingSource
         let startedAt: Date
         let destination: DictationDestination
         /// The app the user was in when recording started, for per-app prompts.
         let frontmostAppBundleID: String?
-        var stage: Stage = .starting
-        /// The route this dictation records from. The settings preview route is
-        /// not refreshed while a session runs.
-        var route: AudioRouteSnapshot?
         var timing = DictationTiming()
         var lockedByDoubleTap = false
     }
@@ -1324,7 +1314,6 @@ final class AppState {
                     microphone.refreshAudioRouteSnapshot()
                 case let .routeChanged(sessionID, route):
                     guard activeAudioCaptureSessionID == sessionID else { return }
-                    activeDictationSession?.route = route
                     microphone.adoptSessionRoute(route)
                     // Mid-session (async) descent down the capture ladder — record
                     // the re-resolved backend too, else a session that starts on
@@ -2018,11 +2007,11 @@ final class AppState {
             logDetail: " model=\(config.modelId)",
             successMessage: "Connection works.",
             testedAPIFingerprint: fingerprint,
-            failure: { [weak self] error in
+            failure: { error in
                 guard let error = error as? LLMPostProcessorError else {
                     return ("Couldn't reach that service URL.", " reason=unknown")
                 }
-                return (self?.magicFormatSetupTestMessage(for: error) ?? "", " reason=\(error.logValue)")
+                return (magicFormatSetupTestMessage(for: error), " reason=\(error.logValue)")
             }
         ) { [llmPostProcessor] in
             try await llmPostProcessor.testSetup(config: config)
@@ -2362,8 +2351,8 @@ final class AppState {
             .localGemma,
             logName: "local gemma",
             successMessage: "Local model works.",
-            failure: { [weak self] error in
-                (self?.localGemmaSetupTestMessage(for: error) ?? "", " error=\(error.localizedDescription)")
+            failure: { error in
+                (localGemmaSetupTestMessage(for: error), " error=\(error.localizedDescription)")
             }
         ) { [localGemmaMagicFormatPostProcessor] in
             try await localGemmaMagicFormatPostProcessor.testSetup(config: config)
@@ -3473,7 +3462,7 @@ final class AppState {
         setFloatingIndicatorState(.listening(levels: Self.defaultIndicatorLevels(level: 0), source: trigger))
 
         do {
-            let session = try await audioCaptureService.startCapture(
+            let capture = try await audioCaptureService.startCapture(
                 sessionID: sessionID,
                 preferredInputDeviceID: microphone.selectedInputDeviceID,
                 echoCancellationEnabled: echoCancellationEnabled
@@ -3482,15 +3471,11 @@ final class AppState {
                 await audioCaptureService.cancelCapture(sessionID: sessionID, reason: nil)
                 return
             }
-            if activeDictationSession?.stage == .starting {
-                activeDictationSession?.stage = .recording
-            }
-            activeDictationSession?.route = session.route
-            microphone.adoptSessionRoute(session.route)
-            emitAudioBackendUsed(session.route)
+            microphone.adoptSessionRoute(capture.route)
+            emitAudioBackendUsed(capture.route)
             activeDictationSession?.timing.captureStarted = .now()
             startLivePreview(sessionID: sessionID)
-            AppLogger.shared.log(.info, "recording started session=\(sessionID.uuidString) \(session.route.privacySafeLogValue)")
+            AppLogger.shared.log(.info, "recording started session=\(sessionID.uuidString) \(capture.route.privacySafeLogValue)")
         } catch {
             guard activeAudioCaptureSessionID == sessionID else {
                 return
@@ -3517,7 +3502,6 @@ final class AppState {
         let sessionID = context.id
 
         stopLivePreview()
-        activeDictationSession?.stage = .transcribing
         phase = .transcribing
         statusText = "Transcribing..."
         setFloatingIndicatorState(Self.transcribingIndicatorState)
@@ -3815,7 +3799,7 @@ final class AppState {
             insertionMethod: .clipboard, // insertion is always clipboard+paste
             targetCategory: TargetCategoryMapper.category(for: frontmostAppBundleID),
             latency: (activeDictationSession?.timing ?? DictationTiming()).latency(),
-            audio: activeDictationSession?.route.map { route in
+            audio: microphone.audioRouteSnapshot.map { route in
                 DictationMetrics.AudioQuality(
                     backend: SafeLabel(route.backend.rawValue),
                     fallbackReason: route.fallbackReason.map { SafeLabel($0.rawValue) },
@@ -4075,10 +4059,7 @@ final class AppState {
             || new.floatingIndicatorPlacement != old.floatingIndicatorPlacement {
             syncFloatingIndicatorPreferences()
         }
-        if new.preferredInputDeviceID != old.preferredInputDeviceID
-            || new.echoCancellationEnabled != old.echoCancellationEnabled {
-            microphone.refreshAudioRouteSnapshot()
-        }
+        microphone.settingsDidChange(from: old, to: new)
         if new.hotkeys != old.hotkeys {
             if runtimeServicesEnabled {
                 wireHotkey()
