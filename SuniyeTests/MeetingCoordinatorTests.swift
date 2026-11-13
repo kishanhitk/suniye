@@ -476,6 +476,23 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.callCard)
     }
 
+    func testATrackThatStartsAgainNoLongerShowsAsFailed() async throws {
+        let coordinator = makeCoordinator()
+        them.failsToStart = true
+        try await coordinator.startMeeting(source: .manual)
+        let session = try XCTUnwrap(coordinator.live)
+        let failed = await waitUntil { session.failedTracks[.them] != nil }
+
+        await coordinator.pause()
+        them.failsToStart = false
+        try await coordinator.resume()
+        let cleared = await waitUntil { session.failedTracks.isEmpty }
+
+        XCTAssertTrue(failed)
+        XCTAssertTrue(cleared)
+        await coordinator.stop()
+    }
+
     func testSourceProblemsShowOnTheLiveMeeting() async throws {
         let coordinator = makeCoordinator()
         try await coordinator.startMeeting(source: .manual)
@@ -601,9 +618,13 @@ private final class PushSource: MeetingAudioSource, @unchecked Sendable {
     var onEvent: ((MeetingAudioSourceEvent) -> Void)?
     private(set) var startCount = 0
     private(set) var stopCount = 0
+    var failsToStart = false
 
     func start() throws {
         startCount += 1
+        if failsToStart {
+            throw CocoaError(.fileWriteUnknown)
+        }
     }
 
     func stop() {

@@ -16,6 +16,9 @@ enum MeetingRecorderEvent: Equatable, Sendable {
     case callAudioSilent(heardBefore: Bool)
     case callAudioReturned
     case inputChanged(deviceName: String)
+    /// A track's source started: at the start, at a resume, or after
+    /// Restart Call Audio.
+    case trackStarted(MeetingTrack)
     case trackFailed(MeetingTrack, String)
     /// `outOfSpace` tells a full disk from any other write error.
     case storageFailed(String, outOfSpace: Bool)
@@ -147,16 +150,24 @@ final class MeetingRecorder: @unchecked Sendable {
     }
 
     /// Builds the call track again from nothing: a broken tap can keep
-    /// delivering silence until it is destroyed and created again.
-    func restartCallAudio() throws {
+    /// delivering silence until it is destroyed and created again. Reports
+    /// `trackStarted` or `trackFailed`.
+    func restartCallAudio() {
         guard let source = sources[.them] else { return }
         let isRecording: Bool = queue.sync { running && pausedSince == nil }
         guard isRecording else { return }
         source.stop()
-        try source.start()
+        do {
+            try source.start()
+        } catch {
+            AppLogger.shared.log(.error, "meeting recorder could not restart the call track error=\(error.localizedDescription)")
+            queue.async { self.onEvent?(.trackFailed(.them, error.localizedDescription)) }
+            return
+        }
         queue.sync {
             lastCallSound = uptime()
             reportedCallSilence = false
+            onEvent?(.trackStarted(.them))
         }
         AppLogger.shared.log(.info, "meeting recorder restarted the call track")
     }
@@ -183,6 +194,7 @@ final class MeetingRecorder: @unchecked Sendable {
             do {
                 try source.start()
                 startedAny = true
+                queue.async { self.onEvent?(.trackStarted(track)) }
             } catch {
                 AppLogger.shared.log(.error, "meeting recorder could not start track=\(track.rawValue) error=\(error.localizedDescription)")
                 failures.append((track, error))

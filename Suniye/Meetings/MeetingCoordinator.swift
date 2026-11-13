@@ -429,15 +429,7 @@ final class MeetingCoordinator {
 
     /// A call track that cannot start again shows as a failed track.
     func restartCallAudio() {
-        guard let session = live else { return }
-        do {
-            try session.recorder.restartCallAudio()
-            session.callAudioProblem = nil
-            session.callSilentSince = nil
-        } catch {
-            AppLogger.shared.log(.error, "meeting call audio restart failed id=\(session.id.uuidString) error=\(error.localizedDescription)")
-            session.failedTracks[.them] = error.localizedDescription
-        }
+        live?.recorder.restartCallAudio()
     }
 
     /// Before the app quits: stops the recording and saves it, and leaves the
@@ -787,6 +779,12 @@ final class MeetingCoordinator {
                 try? await Task.sleep(for: Self.changedInputSeconds)
                 guard !Task.isCancelled else { return }
                 session?.changedInput = nil
+            }
+        case let .trackStarted(track):
+            session.failedTracks[track] = nil
+            if track == .them {
+                session.callAudioProblem = nil
+                session.callSilentSince = nil
             }
         case let .trackFailed(track, message):
             session.failedTracks[track] = message

@@ -459,7 +459,7 @@ final class MeetingRecorderTests: XCTestCase {
         them.push(Array(repeating: 0.2, count: 320))
         now += MeetingRecorder.callSilenceLimit + 1
         wait(for: [stopped], timeout: 2)
-        try recorder.restartCallAudio()
+        recorder.restartCallAudio()
         recorder.stop()
 
         XCTAssertEqual(them.startCount, 2)
