@@ -3358,9 +3358,7 @@ final class AppState {
     private func discardShortPress() async {
         if activeDictationSession?.destination == .onboardingPractice,
            let message = AudioCaptureOutcome.tooShort.userMessage {
-            onboardingPracticeText = ""
-            onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
-            recordOnboardingPracticeAttempt(outcome: .emptyAudio)
+            reportFailedPractice(message: message, outcome: Self.practiceOutcome(for: .tooShort))
         }
         await discardRecording(message: nil)
     }
@@ -3629,12 +3627,7 @@ final class AppState {
             }
         } catch {
             if destination == .onboardingPractice {
-                onboardingPracticeText = ""
-                onboardingPracticeResult = OnboardingPracticeResult(
-                    message: error.localizedDescription,
-                    severity: .error
-                )
-                recordOnboardingPracticeAttempt(outcome: .error)
+                reportFailedPractice(message: error.localizedDescription, outcome: .error)
             }
             AppLogger.shared.log(.error, "transcription failed: \(error.localizedDescription)")
             analytics.track(.error(type: .transcription, code: .unknown))
@@ -3643,6 +3636,15 @@ final class AppState {
                 notice: "Transcription failed"
             ))
         }
+    }
+
+    /// What happened to the text of a finished dictation.
+    private enum DictationDelivery {
+        case empty(DictationEmptyReason)
+        case inserted(submitFailed: Bool)
+        /// The text stays in the history, so Paste Last Transcript recovers it.
+        case insertionFailed
+        case copiedWithoutPaste
     }
 
     private func completeDictation(
@@ -3656,10 +3658,8 @@ final class AppState {
         destination: DictationDestination,
         emptyReason: DictationEmptyReason
     ) async throws {
-        let usesSystemInsertion = destination == .systemInsertion
         var finalText = rawText
         var llmOutcome: MagicFormatPolishOutcome?
-
         if !rawText.isEmpty {
             activeDictationSession?.timing.llmStart = .now()
             let outcome = await polishOutcome(rawText, frontmostAppBundleID: frontmostAppBundleID)
@@ -3668,17 +3668,8 @@ final class AppState {
             finalText = outcome.text
         }
 
-        let wordCount = finalText.dictationWordCount
-        // "Polished" = a provider actually ran (not "the text changed") — the
-        // honest Magic Format adoption signal.
-        let wasLLMPolished = llmOutcome?.ran ?? false
-        var didCompleteDictation = false
-        var didFailInsertion = false
-        var submitKeyFailed = false
-        var insertionWasVerified = false
-
-        // Attribution is applied after insertion succeeds, not here: the record
-        // is stored before insertion is attempted so a failure is still
+        // Attribution is applied after insertion succeeds: the record is
+        // stored before insertion is attempted so a failure is still
         // recoverable, and a clipboard-only or failed session never reached the
         // app the ranking would otherwise credit.
         let result = RecentResult(
@@ -3686,96 +3677,34 @@ final class AppState {
             text: finalText,
             createdAt: Date(),
             durationSeconds: duration,
-            wasLLMPolished: wasLLMPolished,
+            wasLLMPolished: llmOutcome?.ran ?? false,
             appBundleID: nil,
             rawText: finalText == rawText ? nil : rawText
         )
-
-        if !finalText.isEmpty {
-            if usesSystemInsertion {
-                // A completed system transcript must be recoverable even if insertion
-                // fails because focus moved before transcription finished.
-                library.insert(result)
-                try await requireAccessibilityForInsertion()
-                editLearningService.finalizeActiveSession()
-                let insertionText = DictationInsertionTextFormatter.textForInsertion(
-                    finalText,
-                    insertionContext: textInsertionService.captureInsertionContext()
-                )
-                do {
-                    let outcome = try await textInsertionService.insertText(insertionText)
-                    insertionWasVerified = outcome == .intoFocusedElement
-                    if !insertionWasVerified {
-                        AppLogger.shared.log(
-                            .info,
-                            "text inserted without a visible focus target app=\(frontmostAppBundleIDProvider() ?? "unknown")"
-                        )
-                    }
-                    // Read after the insertion returns, not before it: the
-                    // service retries for around a second while a focused
-                    // element hydrates, so anything captured earlier can name
-                    // the app the user has since left.
-                    library.attribute(result.id, to: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
-                    activeDictationSession?.timing.inserted = .now()
-                    beginEditLearningTracking(insertedText: insertionText)
-                    AppLogger.shared.log(.info, "transcription complete words=\(wordCount)")
-                    didCompleteDictation = true
-                    if insertionWasVerified {
-                        advanceOnboardingAfterFirstInsertionIfNeeded(appBundleID: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
-                    }
-                } catch {
-                    didFailInsertion = true
-                    AppLogger.shared.log(
-                        .warning,
-                        "text insertion failed app=\(frontmostAppBundleIDProvider() ?? "unknown") error=\(error.localizedDescription)"
-                    )
-                    playSoundFeedback(.error)
-                }
-            } else {
-                try textInsertionService.copyTextToClipboard(finalText)
-                activeDictationSession?.timing.inserted = .now()
-                library.insert(result)
-                AppLogger.shared.log(.info, "transcription copied to clipboard words=\(wordCount)")
-                didCompleteDictation = true
-            }
-        }
-
-        // A failed Enter must not cost the user the session: the text is
-        // already inserted and already in history, so throwing straight out of
-        // here skipped the accounting below and the numbers silently drifted.
-        // It is logged and tracked, but not surfaced as an insertion problem —
-        // the insertion succeeded.
-        // An unverified paste went out without any idea of what holds focus, so
-        // Return could land anywhere; withhold it rather than guess (KIS-205).
-        if autoSubmitEnabled && insertionWasVerified {
-            try? await Task.sleep(nanoseconds: 120_000_000)
-            do {
-                try textInsertionService.submitActiveInput()
-                AppLogger.shared.log(.info, "submit key posted")
-            } catch {
-                // Not rethrown: the transcript was produced and inserted, so
-                // letting this reach the transcription catch reported
-                // "Transcription failed" for a dictation that in fact
-                // succeeded — only the Enter key did not land. The user is
-                // told exactly that, not that the text is missing.
-                AppLogger.shared.log(.error, "submit key failed error=\(error.localizedDescription)")
-                analytics.track(.error(type: .insertion, code: .unknown))
-                submitKeyFailed = true
-            }
-        }
-
+        let delivery: DictationDelivery
         if finalText.isEmpty {
+            delivery = .empty(emptyReason)
+        } else if destination == .systemInsertion {
+            delivery = try await insertDictation(result, frontmostAppBundleID: frontmostAppBundleID)
+        } else {
+            try textInsertionService.copyTextToClipboard(finalText)
+            activeDictationSession?.timing.inserted = .now()
+            library.insert(result)
+            AppLogger.shared.log(.info, "transcription copied to clipboard words=\(finalText.dictationWordCount)")
+            delivery = .copiedWithoutPaste
+        }
+
+        switch delivery {
+        case let .empty(reason):
             AppLogger.shared.log(.warning, "transcription returned empty text samples=\(sampleCount) sr=\(sampleRate)")
             playSoundFeedback(.error)
-            analytics.track(.dictationEmpty(reason: emptyReason))
-        }
-
-        if didCompleteDictation {
+            analytics.track(.dictationEmpty(reason: reason))
+        case .inserted, .copiedWithoutPaste:
             // Audio length, not hold time: the seconds the user actually spoke
             // is the honest denominator for pace and time saved.
             let audioSeconds = sampleRate > 0 ? Double(sampleCount) / Double(sampleRate) : duration
+            let wordCount = finalText.dictationWordCount
             library.recordDictation(words: wordCount, seconds: audioSeconds, at: Date())
-
             emitDictationCompleted(
                 finalText: finalText,
                 wordCount: wordCount,
@@ -3786,27 +3715,88 @@ final class AppState {
                 frontmostAppBundleID: frontmostAppBundleID,
                 destination: destination.analyticsDestination
             )
+        case .insertionFailed:
+            break
         }
 
         // A clipboard-only session did its job, but the user held the hotkey to
         // paste; a success chime and an idle pill would hide that nothing landed.
-        let copiedWithoutPaste = destination == .clipboardOnly && didCompleteDictation && !finalText.isEmpty
-        endSession(sessionID, .completed(playSound: didCompleteDictation && !copiedWithoutPaste))
-        if didFailInsertion {
-            showInsertionRecoveryWarning()
+        if case .inserted = delivery {
+            endSession(sessionID, .completed(playSound: true))
         } else {
+            endSession(sessionID, .completed(playSound: false))
+        }
+        switch delivery {
+        case .insertionFailed:
+            showInsertionRecoveryWarning()
+        case .inserted(submitFailed: true):
             isShowingInsertionRecoveryWarning = false
-            if submitKeyFailed {
-                showSubmitKeyFailureNotice()
-            } else if copiedWithoutPaste {
-                showClipboardOnlyNotice()
-            }
+            showSubmitKeyFailureNotice()
+        case .copiedWithoutPaste:
+            isShowingInsertionRecoveryWarning = false
+            showClipboardOnlyNotice()
+        case .inserted(submitFailed: false), .empty:
+            isShowingInsertionRecoveryWarning = false
         }
     }
 
-    /// Records which audio-capture backend a session resolved to, whether it
-    /// descended the fallback ladder, and how far (rung). Called once at capture
-    /// start and again on any mid-session (async) descent.
+    /// Inserts into the focused field of the app the user is in. Throws only
+    /// when Accessibility is missing.
+    private func insertDictation(_ result: RecentResult, frontmostAppBundleID: String?) async throws -> DictationDelivery {
+        // A completed transcript must be recoverable even if insertion fails
+        // because focus moved before transcription finished.
+        library.insert(result)
+        try await requireAccessibilityForInsertion()
+        editLearningService.finalizeActiveSession()
+        let insertionText = DictationInsertionTextFormatter.textForInsertion(
+            result.text,
+            insertionContext: textInsertionService.captureInsertionContext()
+        )
+        let insertion: InsertionOutcome
+        do {
+            insertion = try await textInsertionService.insertText(insertionText)
+        } catch {
+            AppLogger.shared.log(
+                .warning,
+                "text insertion failed app=\(frontmostAppBundleIDProvider() ?? "unknown") error=\(error.localizedDescription)"
+            )
+            playSoundFeedback(.error)
+            return .insertionFailed
+        }
+        let insertionWasVerified = insertion == .intoFocusedElement
+        if !insertionWasVerified {
+            AppLogger.shared.log(.info, "text inserted without a visible focus target app=\(frontmostAppBundleIDProvider() ?? "unknown")")
+        }
+        // Read after the insertion returns: the service retries for around a
+        // second while a focused element hydrates, so anything captured earlier
+        // can name the app the user has since left.
+        library.attribute(result.id, to: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
+        activeDictationSession?.timing.inserted = .now()
+        beginEditLearningTracking(insertedText: insertionText)
+        AppLogger.shared.log(.info, "transcription complete words=\(result.text.dictationWordCount)")
+        if insertionWasVerified {
+            advanceOnboardingAfterFirstInsertionIfNeeded(appBundleID: frontmostAppBundleIDProvider() ?? frontmostAppBundleID)
+        }
+
+        // An unverified paste went out without any idea of what holds focus, so
+        // Return could land anywhere; it is withheld rather than guessed.
+        guard autoSubmitEnabled, insertionWasVerified else {
+            return .inserted(submitFailed: false)
+        }
+        try? await Task.sleep(nanoseconds: 120_000_000)
+        do {
+            try textInsertionService.submitActiveInput()
+            AppLogger.shared.log(.info, "submit key posted")
+            return .inserted(submitFailed: false)
+        } catch {
+            // The text is in and in history; only Return did not land, and the
+            // notice says exactly that.
+            AppLogger.shared.log(.error, "submit key failed error=\(error.localizedDescription)")
+            analytics.track(.error(type: .insertion, code: .unknown))
+            return .inserted(submitFailed: true)
+        }
+    }
+
     private func emitAudioBackendUsed(_ route: AudioRouteSnapshot) {
         analytics.track(Self.audioBackendUsedEvent(for: route))
     }
@@ -3890,17 +3880,18 @@ final class AppState {
             finalText = outcome.text.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        onboardingPracticeText = finalText
         var didCompleteDictation = false
         if finalText.isEmpty {
-            let message = rawText.isEmpty
-                ? "No speech detected. Try a short phrase."
-                : "Practice mode captured audio, but there was no text to preview."
-            onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
-            recordOnboardingPracticeAttempt(outcome: rawText.isEmpty ? .emptyAudio : .error)
+            reportFailedPractice(
+                message: rawText.isEmpty
+                    ? "No speech detected. Try a short phrase."
+                    : "Practice mode captured audio, but there was no text to preview.",
+                outcome: rawText.isEmpty ? .emptyAudio : .error
+            )
             AppLogger.shared.log(.warning, "onboarding practice produced empty text")
             playSoundFeedback(.error)
         } else {
+            onboardingPracticeText = finalText
             onboardingRun.practiceDidSucceed(transcript: finalText)
             onboardingPracticeResult = OnboardingPracticeResult(
                 message: "That's it — this works in any app.",
@@ -3929,6 +3920,18 @@ final class AppState {
 
     private func recordOnboardingPracticeAttempt(outcome: PracticeOutcome) {
         analytics.track(.onboardingPracticeResult(outcome: outcome, attempt: onboardingRun.countPracticeAttempt()))
+    }
+
+    private func reportFailedPractice(message: String, outcome: PracticeOutcome) {
+        onboardingPracticeText = ""
+        onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
+        recordOnboardingPracticeAttempt(outcome: outcome)
+    }
+
+    /// No usable audio counts as an empty attempt; anything else as an error.
+    private static func practiceOutcome(for capture: AudioCaptureOutcome) -> PracticeOutcome {
+        let audioOutcome = AnalyticsMapping.audioOutcome(capture)
+        return audioOutcome == .silent || audioOutcome == .tooShort ? .emptyAudio : .error
     }
 
     /// Runs the Edit Mode LLM step: rewrite the selection per the spoken instruction,
@@ -4048,12 +4051,7 @@ final class AppState {
     ) {
         let message = outcome.userMessage ?? "Audio capture was interrupted. Try again."
         if destination == .onboardingPractice {
-            onboardingPracticeText = ""
-            onboardingPracticeResult = OnboardingPracticeResult(message: message, severity: .error)
-            let audioOutcome = AnalyticsMapping.audioOutcome(outcome)
-            recordOnboardingPracticeAttempt(
-                outcome: audioOutcome == .silent || audioOutcome == .tooShort ? .emptyAudio : .error
-            )
+            reportFailedPractice(message: message, outcome: Self.practiceOutcome(for: outcome))
         }
         AppLogger.shared.log(.warning, "audio capture rejected outcome=\(String(describing: outcome))")
         analytics.track(.audioCaptureFailed(outcome: AnalyticsMapping.audioOutcome(outcome)))
