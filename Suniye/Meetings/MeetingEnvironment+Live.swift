@@ -4,7 +4,7 @@ import Foundation
 extension MeetingEnvironment {
     /// The tap API exists from macOS 14.2, but 14.2 and 14.3 ask for a
     /// different permission, so call audio needs 14.4.
-    static var canRecordCallAudio: Bool {
+    private static var canRecordCallAudio: Bool {
         if #available(macOS 14.4, *) {
             return true
         }
@@ -14,9 +14,10 @@ extension MeetingEnvironment {
     @MainActor
     static func live() -> MeetingEnvironment {
         MeetingEnvironment(
-            makeSources: { includeCallAudio, preferred in
+            canRecordCallAudio: canRecordCallAudio,
+            makeSources: { preferred in
                 var sources: [MeetingTrack: MeetingAudioSource] = [.you: MeetingMicCapture(preferredInputDeviceID: preferred)]
-                if includeCallAudio, #available(macOS 14.4, *) {
+                if #available(macOS 14.4, *) {
                     sources[.them] = SystemAudioTap()
                 }
                 return sources

@@ -5969,7 +5969,6 @@ extension AppState: MeetingHost {
             settingsStore: MeetingSettingsStore(),
             engine: transcriptionService,
             environment: .live(),
-            canRecordCallAudio: MeetingEnvironment.canRecordCallAudio,
             summaryAvailability: {
                 MeetingSummaryAvailability(apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
             },

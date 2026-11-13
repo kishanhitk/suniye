@@ -60,7 +60,8 @@ final class MeetingCoordinatorTests: XCTestCase {
 
     private func makeCoordinator(speechlessLimit: TimeInterval = 15 * 60) -> MeetingCoordinator {
         let environment = MeetingEnvironment(
-            makeSources: { [unowned self] _, _ in [.you: you, .them: them] },
+            canRecordCallAudio: true,
+            makeSources: { [unowned self] _ in [.you: you, .them: them] },
             confirmNotice: { [unowned self] in
                 noticeCount += 1
                 return noticeAnswer
@@ -80,7 +81,6 @@ final class MeetingCoordinatorTests: XCTestCase {
             settingsStore: MeetingSettingsStore(userDefaults: defaults),
             engine: engine,
             environment: environment,
-            canRecordCallAudio: true,
             summaryAvailability: { [unowned self] in summaryAvailability },
             makeSummaryModel: { [unowned self] _ in summaryModel },
             analytics: analytics

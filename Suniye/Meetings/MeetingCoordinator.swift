@@ -160,7 +160,6 @@ final class MeetingCoordinator {
     /// The meeting whose page is on screen, so a notice does not repeat it.
     var pageOnScreen: UUID?
     private(set) var settings: MeetingSettings
-    let canRecordCallAudio: Bool
     @ObservationIgnored private(set) var callCard: MeetingCallCard? {
         didSet {
             if oldValue != callCard {
@@ -202,7 +201,6 @@ final class MeetingCoordinator {
         settingsStore: MeetingSettingsStore,
         engine: TranscriptionServiceProtocol,
         environment: MeetingEnvironment,
-        canRecordCallAudio: Bool,
         summaryAvailability: @escaping () -> MeetingSummaryAvailability,
         makeSummaryModel: @escaping (MeetingSummaryEngine) -> MeetingSummaryModel?,
         analytics: Analytics
@@ -212,7 +210,6 @@ final class MeetingCoordinator {
         self.settingsStore = settingsStore
         self.engine = engine
         self.environment = environment
-        self.canRecordCallAudio = canRecordCallAudio
         self.analytics = analytics
         settings = settingsStore.load()
         detector = MeetingCallDetector(reader: environment.makeMicrophoneUsers(), uptime: environment.uptime)
@@ -231,6 +228,10 @@ final class MeetingCoordinator {
         }
         summaries.onModelIdle = { [weak self] in self?.host?.meetingSummaryModelIsIdle() }
         detector.onEvent = { [weak self] in self?.handle($0) }
+    }
+
+    var canRecordCallAudio: Bool {
+        environment.canRecordCallAudio
     }
 
     /// At launch: finish the transcripts that a quit or a crash left, and
@@ -315,7 +316,7 @@ final class MeetingCoordinator {
 
         let id = UUID()
         let recorder = MeetingRecorder(
-            sources: environment.makeSources(canRecordCallAudio, host?.meetingInputDeviceID),
+            sources: environment.makeSources(host?.meetingInputDeviceID),
             audioURL: { [store] in store.audioURL($0, for: id) }
         )
         let record = MeetingRecord(
