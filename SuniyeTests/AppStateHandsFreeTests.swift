@@ -110,13 +110,14 @@ final class AppStateHandsFreeTests: XCTestCase {
         }
     }
 
-    /// The main window pages and the status menu observe the settings value,
-    /// so a dictation must not write it.
+    /// The main window pages and the status menu observe the settings values,
+    /// so a dictation must not write them.
     func testHeldDictationDoesNotWriteTheSettings() async {
         let appState = await readyState()
         var settingsChanged = false
         withObservationTracking {
             _ = appState.generalSettings
+            _ = appState.llmSettings
         } onChange: {
             settingsChanged = true
         }

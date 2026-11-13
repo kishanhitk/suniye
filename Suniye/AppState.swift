@@ -449,72 +449,69 @@ final class AppState {
         return nil
     }
 
-    var llmEnabled = false {
-        didSet {
-            persistLLMSettings()
-            // Adoption signal for the flagship feature: fires on any real toggle
-            // (settings page, nudge CTA) but never during settings hydration.
-            if !isHydratingLLMSettings, oldValue != llmEnabled {
-                analytics.track(.featureToggled(feature: .magicFormat, enabled: llmEnabled))
-            }
-        }
+    /// Every change goes through `updateLLMSettings`, which saves it and
+    /// applies its effects in `llmSettingsDidChange(from:)`.
+    private(set) var llmSettings = LLMSettings()
+
+    var llmEnabled: Bool {
+        get { llmSettings.isEnabled }
+        set { updateLLMSettings { $0.isEnabled = newValue } }
     }
-    var llmProvider: MagicFormatProvider = .automatic {
-        didSet { persistLLMSettings() }
+    var llmProvider: MagicFormatProvider {
+        get { llmSettings.provider }
+        set { updateLLMSettings { $0.provider = newValue } }
     }
-    var llmSelectedModelPreset: LLMModelPreset = .gemini25Flash {
-        didSet { persistLLMSettings() }
+    var llmSelectedModelPreset: LLMModelPreset {
+        get { llmSettings.selectedModelPreset }
+        set { updateLLMSettings { $0.selectedModelPreset = newValue } }
     }
-    var localModelKeepAlive: LocalLLMKeepAlive = .tenMinutes {
-        didSet { persistLLMSettings() }
+    var localModelKeepAlive: LocalLLMKeepAlive {
+        get { llmSettings.localModelKeepAlive }
+        set { updateLLMSettings { $0.localModelKeepAlive = newValue } }
     }
-    var llmCustomModelId = "" {
-        didSet { persistLLMSettings() }
+    var llmCustomModelId: String {
+        get { llmSettings.customModelId }
+        set { updateLLMSettings { $0.customModelId = newValue } }
     }
-    var llmEndpointURLString = LLMDefaults.defaultEndpointURLString {
-        didSet { persistLLMSettings() }
+    var llmEndpointURLString: String {
+        get { llmSettings.endpointURLString }
+        set { updateLLMSettings { $0.endpointURLString = newValue } }
     }
-    var llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt {
-        didSet {
-            persistLLMSettings()
-            saveProviderPromptFile(.api, content: llmBaseSystemPrompt)
-        }
+    var llmBaseSystemPrompt: String {
+        get { llmSettings.baseSystemPrompt }
+        set { updateLLMSettings { $0.baseSystemPrompt = newValue } }
     }
-    var llmAppleSystemPrompt = LLMDefaults.defaultAppleMagicFormatPrompt {
-        didSet {
-            persistLLMSettings()
-            saveProviderPromptFile(.apple, content: llmAppleSystemPrompt)
-        }
+    var llmAppleSystemPrompt: String {
+        get { llmSettings.appleSystemPrompt }
+        set { updateLLMSettings { $0.appleSystemPrompt = newValue } }
     }
-    var llmGemmaSystemPrompt = LLMDefaults.defaultGemmaMagicFormatPrompt {
-        didSet {
-            persistLLMSettings()
-            saveProviderPromptFile(.localGemma, content: llmGemmaSystemPrompt)
-        }
+    var llmGemmaSystemPrompt: String {
+        get { llmSettings.gemmaSystemPrompt }
+        set { updateLLMSettings { $0.gemmaSystemPrompt = newValue } }
     }
-    var llmSystemPrompt = "" {
-        didSet { persistLLMSettings() }
+    var llmKeywordsRaw: String {
+        get { llmSettings.keywordsRaw }
+        set { updateLLMSettings { $0.keywordsRaw = newValue } }
     }
-    var llmKeywordsRaw = "" {
-        didSet { persistLLMSettings() }
+    var llmAutoLearnedKeywordsRaw: String {
+        get { llmSettings.autoLearnedKeywordsRaw }
+        set { updateLLMSettings { $0.autoLearnedKeywordsRaw = newValue } }
     }
-    var llmAutoLearnedKeywordsRaw = "" {
-        didSet { persistLLMSettings() }
+    var learnFromEditsEnabled: Bool {
+        get { llmSettings.learnFromEditsEnabled }
+        set { updateLLMSettings { $0.learnFromEditsEnabled = newValue } }
     }
-    var learnFromEditsEnabled = true {
-        didSet { persistLLMSettings() }
+    var llmAppPromptBindings: [AppPromptBinding] {
+        get { llmSettings.appPromptBindings }
+        set { updateLLMSettings { $0.appPromptBindings = newValue } }
     }
-    var llmAppPromptBindings: [AppPromptBinding] = [] {
-        didSet { persistLLMSettings() }
-    }
+    var llmSystemPrompt = ""
     var llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds {
         didSet {
             let clamped = LLMDefaults.clampTimeout(llmTimeoutSeconds)
             if llmTimeoutSeconds != clamped {
                 llmTimeoutSeconds = clamped
-                return
             }
-            persistLLMSettings()
         }
     }
 
@@ -609,7 +606,7 @@ final class AppState {
         }
         return testedFingerprint == Self.apiConfigurationFingerprint(
             keyFingerprint: keyFingerprint,
-            settings: currentLLMSettings()
+            settings: llmSettings
         )
     }
 
@@ -661,7 +658,7 @@ final class AppState {
         guard needsAPIConfigurationForMagicFormat else {
             return nil
         }
-        return currentLLMSettings().endpointValidationError
+        return llmSettings.endpointValidationError
     }
 
     /// Validity of the API settings themselves, whatever engine is active. The
@@ -669,18 +666,18 @@ final class AppState {
     /// these answer "is this endpoint usable", which is what the set-up sheet
     /// and its Test button need before the API engine is ever selected.
     var apiEndpointDraftValidationError: String? {
-        currentLLMSettings().endpointValidationError
+        llmSettings.endpointValidationError
     }
 
     var apiModelDraftValidationError: String? {
-        currentLLMSettings().modelValidationError
+        llmSettings.modelValidationError
     }
 
     var llmModelValidationError: String? {
         guard needsAPIConfigurationForMagicFormat else {
             return nil
         }
-        return currentLLMSettings().modelValidationError
+        return llmSettings.modelValidationError
     }
 
     var llmStatusHint: String? {
@@ -688,15 +685,15 @@ final class AppState {
     }
 
     var llmSelectedModelIdPreview: String {
-        currentLLMSettings().validatedModelId ?? ""
+        llmSettings.validatedModelId ?? ""
     }
 
     func llmDisplayModelId(for preset: LLMModelPreset) -> String {
-        currentLLMSettings().displayModelId(for: preset)
+        llmSettings.displayModelId(for: preset)
     }
 
     var vocabularyTerms: [String] {
-        currentLLMSettings().keywords
+        llmSettings.keywords
     }
 
     var appleMagicFormatAvailability: AppleFoundationModelsAvailability {
@@ -1514,7 +1511,6 @@ final class AppState {
     private var localGemmaDownloadTask: Task<Void, Never>?
     private var localGemmaDownloadID: UUID?
     private var localGemmaDownloadStartedAt: Date?
-    private var isHydratingLLMSettings = false
     private var isHydratingHistory = false
     private let llmE2EMode: LLME2EMode
     private enum DictationDestination: Equatable {
@@ -2426,10 +2422,10 @@ final class AppState {
         guard llmEnabled else {
             return
         }
-        guard let endpointURL = currentLLMSettings().validatedEndpointURL else {
+        guard let endpointURL = llmSettings.validatedEndpointURL else {
             return
         }
-        guard let modelId = currentLLMSettings().validatedModelId else {
+        guard let modelId = llmSettings.validatedModelId else {
             return
         }
         guard let apiKey = effectiveMagicFormatTestAPIKey(apiKeyDraft: apiKeyDraft) else {
@@ -2445,10 +2441,10 @@ final class AppState {
         // edited, cannot certify what is stored now.
         magicFormatLastTestedAPIFingerprint = Self.apiConfigurationFingerprint(
             keyFingerprint: apiKey.hashValue,
-            settings: currentLLMSettings()
+            settings: llmSettings
         )
         let config = MagicFormatCoordinator.makeAPIConfig(
-            settings: currentLLMSettings(),
+            settings: llmSettings,
             apiKey: apiKey,
             endpointURL: endpointURL,
             modelId: modelId
@@ -2552,7 +2548,7 @@ final class AppState {
     }
 
     var autoLearnedVocabularyTerms: [String] {
-        currentLLMSettings().autoLearnedKeywords
+        llmSettings.autoLearnedKeywords
     }
 
     func isAutoLearnedVocabularyTerm(_ term: String) -> Bool {
@@ -2621,9 +2617,11 @@ final class AppState {
         _ = fileOpener(currentMagicFormatPromptURL)
     }
 
+    /// The prompts come from the files, so they are not written back to them.
     func reloadMagicFormatPromptsFromFiles() {
-        applyLLMSettings(magicFormatPromptFileStore.syncPrompts(settings: currentLLMSettings()))
-        persistLLMSettings()
+        llmSettings = magicFormatPromptFileStore.syncPrompts(settings: llmSettings)
+        llmSettingsStore.save(llmSettings)
+        clearMagicFormatSetupTestResult()
     }
 
     func openAppPromptInEditor(id: UUID) {
@@ -2779,7 +2777,7 @@ final class AppState {
         magicFormatTestingProvider = .appleFoundationModels
         magicFormatLastTestedProvider = .appleFoundationModels
         let startTime = Date()
-        let config = MagicFormatCoordinator.makeAppleConfig(settings: currentLLMSettings())
+        let config = MagicFormatCoordinator.makeAppleConfig(settings: llmSettings)
 
         defer {
             if requestID == magicFormatSetupTestRequestID {
@@ -2835,7 +2833,7 @@ final class AppState {
         magicFormatTestingProvider = .localGemma
         magicFormatLastTestedProvider = .localGemma
         let startTime = Date()
-        let config = MagicFormatCoordinator.makeLocalGemmaConfig(settings: currentLLMSettings())
+        let config = MagicFormatCoordinator.makeLocalGemmaConfig(settings: llmSettings)
 
         defer {
             if requestID == magicFormatSetupTestRequestID {
@@ -3578,7 +3576,7 @@ final class AppState {
             return .notRun(rawText)
         }
 
-        var settings = currentLLMSettings()
+        var settings = llmSettings
         if let appInstructions = AppPromptResolver.additionalInstructions(for: frontmostAppBundleID, bindings: llmAppPromptBindings) {
             settings = settings.appendingAppInstructions(appInstructions)
             // No bundle ID here: app.log ships in diagnostic reports.
@@ -3597,7 +3595,7 @@ final class AppState {
     private func makeMagicFormatRequest(settings: LLMSettings? = nil) -> MagicFormatCoordinator.PolishRequest {
         MagicFormatCoordinator.PolishRequest(
             requestedProvider: llmProvider,
-            settings: settings ?? currentLLMSettings(),
+            settings: settings ?? llmSettings,
             hasAPIKey: hasLLMAPIKey,
             appleAvailability: appleMagicFormatAvailability,
             localGemmaAvailability: localGemmaMagicFormatAvailability,
@@ -4085,7 +4083,7 @@ final class AppState {
         }
         return magicFormatCoordinator.prewarmLocalIfEligible(
             requestedProvider: llmProvider,
-            settings: currentLLMSettings(),
+            settings: llmSettings,
             appleAvailability: appleMagicFormatAvailability,
             localGemmaAvailability: localGemmaMagicFormatAvailability
         )
@@ -4853,70 +4851,43 @@ final class AppState {
     }
 
     private func loadLLMSettings() {
-        let settings = llmSettingsStore.load()
-        let migration = settings.normalizedForCurrentPromptSchema()
-        let syncedSettings = magicFormatPromptFileStore.syncPrompts(settings: migration.settings)
-        applyLLMSettings(syncedSettings)
-
-        if migration.shouldPersist || syncedSettings != settings {
-            persistLLMSettings()
+        let stored = llmSettingsStore.load()
+        let migration = stored.normalizedForCurrentPromptSchema()
+        let settings = magicFormatPromptFileStore.syncPrompts(settings: migration.settings)
+        llmSettings = settings
+        if migration.shouldPersist || settings != stored {
+            llmSettingsStore.save(settings)
         }
     }
 
-    private func persistLLMSettings() {
-        guard !isHydratingLLMSettings else {
+    /// A call that changes nothing does not save and does not notify observers.
+    private func updateLLMSettings(_ change: (inout LLMSettings) -> Void) {
+        var updated = llmSettings
+        change(&updated)
+        guard updated != llmSettings else {
             return
         }
+        let previous = llmSettings
+        llmSettings = updated
+        llmSettingsStore.save(updated)
+        llmSettingsDidChange(from: previous)
+    }
+
+    private func llmSettingsDidChange(from old: LLMSettings) {
+        let new = llmSettings
         clearMagicFormatSetupTestResult()
-        let settings = currentLLMSettings()
-        llmSettingsStore.save(settings)
-    }
-
-    private func saveProviderPromptFile(_ prompt: MagicFormatProviderPromptFile, content: String) {
-        guard !isHydratingLLMSettings else {
-            return
+        if new.isEnabled != old.isEnabled {
+            analytics.track(.featureToggled(feature: .magicFormat, enabled: new.isEnabled))
         }
-        magicFormatPromptFileStore.saveProviderPrompt(prompt, content: content)
-    }
-
-    private func applyLLMSettings(_ settings: LLMSettings) {
-        isHydratingLLMSettings = true
-        llmEnabled = settings.isEnabled
-        llmProvider = settings.provider
-        llmSelectedModelPreset = settings.selectedModelPreset
-        localModelKeepAlive = settings.localModelKeepAlive
-        llmCustomModelId = settings.customModelId
-        llmEndpointURLString = settings.endpointURLString
-        llmBaseSystemPrompt = settings.baseSystemPrompt
-        llmAppleSystemPrompt = settings.appleSystemPrompt
-        llmGemmaSystemPrompt = settings.gemmaSystemPrompt
-        llmSystemPrompt = ""
-        llmKeywordsRaw = settings.keywordsRaw
-        llmAutoLearnedKeywordsRaw = settings.autoLearnedKeywordsRaw
-        learnFromEditsEnabled = settings.learnFromEditsEnabled
-        llmAppPromptBindings = settings.appPromptBindings
-        llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds
-        isHydratingLLMSettings = false
-    }
-
-    private func currentLLMSettings() -> LLMSettings {
-        LLMSettings(
-            isEnabled: llmEnabled,
-            provider: llmProvider,
-            selectedModelPreset: llmSelectedModelPreset,
-            customModelId: llmCustomModelId,
-            endpointURLString: llmEndpointURLString,
-            baseSystemPrompt: llmBaseSystemPrompt,
-            appleSystemPrompt: llmAppleSystemPrompt,
-            gemmaSystemPrompt: llmGemmaSystemPrompt,
-            systemPrompt: "",
-            keywordsRaw: llmKeywordsRaw,
-            autoLearnedKeywordsRaw: llmAutoLearnedKeywordsRaw,
-            learnFromEditsEnabled: learnFromEditsEnabled,
-            timeoutSeconds: LLMDefaults.defaultTimeoutSeconds,
-            localModelKeepAlive: localModelKeepAlive,
-            appPromptBindings: llmAppPromptBindings
-        )
+        if new.baseSystemPrompt != old.baseSystemPrompt {
+            magicFormatPromptFileStore.saveProviderPrompt(.api, content: new.baseSystemPrompt)
+        }
+        if new.appleSystemPrompt != old.appleSystemPrompt {
+            magicFormatPromptFileStore.saveProviderPrompt(.apple, content: new.appleSystemPrompt)
+        }
+        if new.gemmaSystemPrompt != old.gemmaSystemPrompt {
+            magicFormatPromptFileStore.saveProviderPrompt(.localGemma, content: new.gemmaSystemPrompt)
+        }
     }
 
     private func localGemmaCatalogEntry(for modelID: LocalLLMModelID) -> LocalLLMModelCatalogEntry {
