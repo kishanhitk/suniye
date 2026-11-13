@@ -251,6 +251,22 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(generalSettingsStore.latest.hasCompletedCoreOnboarding, true)
     }
 
+    /// An install from before the onboarding flags counts as a user when the
+    /// model it chose is installed, even if that is not the default model.
+    func testLegacyInstallWithTheChosenNonDefaultModelInstalledMarksOnboardingComplete() {
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = [.moonshineBase]
+        let generalSettingsStore = TestGeneralSettingsStore(value: GeneralSettings(selectedASRModelID: .moonshineBase))
+
+        let appState = makeTestAppState(
+            modelManager: modelManager,
+            generalSettingsStore: generalSettingsStore
+        )
+
+        XCTAssertEqual(appState.onboardingProgress, .finished)
+        XCTAssertEqual(generalSettingsStore.latest.firstLaunchRecorded, true)
+    }
+
     func testFreshInstallStartsAtWelcome() {
         let modelManager = StubModelManager()
         modelManager.installedModelIDs = []

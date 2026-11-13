@@ -4034,7 +4034,7 @@ final class AppState {
     /// The legacy auto-complete heuristic for installs that predate the
     /// onboarding flags: only real usage signals count.
     private func legacyUserShowsUsage(settings: GeneralSettings) -> Bool {
-        isModelInstalled
+        modelManager.isInstalled(settings.selectedASRModelID)
             || !recentResults.isEmpty
             || settings.preferredInputDeviceID != nil
             || settings.hotkeyConfiguration != .globe
