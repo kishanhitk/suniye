@@ -43,7 +43,7 @@ struct MeetingsPage: View {
                     icon: "exclamationmark.triangle.fill",
                     tint: .orange,
                     title: MeetingStatus.interruptedTitle,
-                    detail: "Suniye closed while it wrote the transcript of the \(record.startedAt.formatted(date: .omitted, time: .shortened)) meeting. The audio is saved.",
+                    detail: unfinishedDetail(record),
                     actionTitle: meetings.finishing.contains(record.id) ? nil : "Finish Transcript",
                     action: { meetings.finishTranscript(record.id) }
                 )
@@ -136,6 +136,14 @@ struct MeetingsPage: View {
     /// Every meeting but the live one, which has its own row above.
     private var listed: [MeetingRecord] {
         meetings.meetings.filter { $0.id != meetings.live?.id }
+    }
+
+    private func unfinishedDetail(_ record: MeetingRecord) -> String {
+        let time = record.startedAt.formatted(date: .omitted, time: .shortened)
+        guard let failure = record.transcriptFailure else {
+            return "Suniye closed while it wrote the transcript of the \(time) meeting. The audio is saved."
+        }
+        return "\(failure) The audio of the \(time) meeting is saved."
     }
 
     private var unfinished: [MeetingRecord] {

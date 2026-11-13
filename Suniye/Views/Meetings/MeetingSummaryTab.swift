@@ -53,7 +53,7 @@ struct MeetingSummaryTab: View {
                 stateCard(
                     icon: "exclamationmark.triangle",
                     title: MeetingStatus.interruptedTitle,
-                    detail: "The audio is saved."
+                    detail: [record.transcriptFailure, "The audio is saved."].compactMap { $0 }.joined(separator: " ")
                 ) {
                     Button("Finish Transcript") { meetings.finishTranscript(record.id) }
                 }

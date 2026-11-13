@@ -259,18 +259,29 @@ final class MeetingTranscriberTests: XCTestCase {
         XCTAssertEqual(transcript.map(\.text), ["Before the break.", "After the break."])
     }
 
-    func testAFailedDecodeIsTriedAgainAndAChunkThatKeepsFailingIsSkipped() async throws {
-        try writeAudio(tone(2.5, level: 0.2) + silence(0.5) + tone(2.5, level: 0.4) + silence(0.5), track: .you)
-        let engine = FakeMeetingEngine(words: [0.2: "Alpha.", 0.4: "Bravo."])
+    func testAChunkThatKeepsFailingFailsTheFinishAndTheNextFinishDecodesIt() async throws {
+        try writeAudio(
+            tone(2.5, level: 0.2) + silence(0.5) + tone(2.5, level: 0.4) + silence(0.5) + tone(2.5, level: 0.6) + silence(0.5),
+            track: .you
+        )
+        let engine = FakeMeetingEngine(words: [0.2: "Alpha.", 0.4: "Bravo.", 0.6: "Charlie."])
         await engine.fail(level: 0.2, times: 2)
-        await engine.fail(level: 0.4, times: 100)
+        await engine.fail(level: 0.4, times: MeetingTranscriber.maximumAttempts)
 
+        do {
+            _ = try await makeTranscriber(engine: engine, tracks: [.you]).recover()
+            XCTFail("audio with no text fails the finish")
+        } catch {
+            XCTAssertEqual(error as? MeetingTranscriber.TranscriptError, .incomplete)
+        }
+        let kept = await store.segments(of: record.id)
         let transcript = try await makeTranscriber(engine: engine, tracks: [.you]).recover()
         let decoded = await engine.decodedPeaks.map { ($0 * 10).rounded() / 10 }
 
-        XCTAssertEqual(transcript.map(\.text), ["Alpha."])
-        XCTAssertEqual(decoded.filter { $0 == 0.2 }.count, 3)
-        XCTAssertEqual(decoded.filter { $0 == 0.4 }.count, MeetingTranscriber.maximumAttempts)
+        XCTAssertEqual(kept.map(\.text), ["Alpha."], "no line after the failed chunk stays, so the next finish starts there")
+        XCTAssertEqual(transcript.map(\.text), ["Alpha.", "Bravo.", "Charlie."])
+        XCTAssertEqual(decoded.filter { $0 == 0.2 }.count, 3, "a failed decode is tried again")
+        XCTAssertEqual(decoded.filter { $0 == 0.4 }.count, MeetingTranscriber.maximumAttempts + 1)
     }
 }
 

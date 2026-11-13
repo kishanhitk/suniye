@@ -728,12 +728,19 @@ final class MeetingCoordinator {
             segments = try await run(transcriber).count
             outcome = segments == 0 ? .noSpeech : .done
             await store.deleteAudio(of: id)
-            await update(id) { $0.status = .summarizing }
+            await update(id) {
+                $0.status = .summarizing
+                $0.transcriptFailure = nil
+            }
             summaries.enqueue(id)
         } catch {
             AppLogger.shared.log(.error, "meeting transcript not finished id=\(id.uuidString) error=\(error.localizedDescription)")
             outcome = .failed
-            await update(id) { $0.status = .interrupted }
+            let cause = error.localizedDescription
+            await update(id) {
+                $0.status = .interrupted
+                $0.transcriptFailure = cause
+            }
         }
         analytics.track(.meetingTranscribed(
             outcome: outcome,

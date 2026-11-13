@@ -80,6 +80,9 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     /// The audio position where the call that the meeting followed ended: the
     /// transcript keeps no line that starts at or after it.
     var transcriptEnd: Int?
+    /// Why the last finish of the transcript failed; nil when the app closed
+    /// while it finished.
+    var transcriptFailure: String?
     /// Why the last summary failed, for the meeting page.
     var summaryFailure: String?
 
