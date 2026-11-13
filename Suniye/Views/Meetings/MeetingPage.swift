@@ -119,7 +119,7 @@ struct MeetingPage: View {
                             do {
                                 try await meetings.resume()
                             } catch {
-                                actions.startError = error.localizedDescription
+                                actions.failure = MeetingActionFailure(title: "Couldn’t resume the recording", message: error.localizedDescription)
                             }
                         } else {
                             await meetings.pause()
