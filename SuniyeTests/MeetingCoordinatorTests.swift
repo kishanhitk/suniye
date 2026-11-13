@@ -152,12 +152,14 @@ final class MeetingCoordinatorTests: XCTestCase {
         them.push(tone(2.5, level: 0.5) + silence(0.5))
         try await Task.sleep(for: .milliseconds(200))
         let decodesDuringDictation = await engine.calls
+        coordinator.dictationCaptureEnded()
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
         coordinator.dictationChanged(active: false)
         await coordinator.stop()
         let segments = await store.segments(of: id)
 
         XCTAssertEqual(decodesDuringDictation, 0)
-        XCTAssertEqual(segments.map(\.track), [.them], "the dictated words are not meeting talk")
+        XCTAssertEqual(segments.map(\.track), [.them, .you], "the dictated words are not meeting talk; talk after the capture ends is")
     }
 
     func testPausesAreKeptInTheRecordAndLeftOutOfTheTimer() async throws {

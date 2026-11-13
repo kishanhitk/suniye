@@ -210,6 +210,10 @@ final class MeetingCoordinator {
     @ObservationIgnored private var cardTimer: Task<Void, Never>?
     @ObservationIgnored private var transcribers: [UUID: MeetingTranscriber] = [:]
     @ObservationIgnored private var dictating = false
+    /// The dictation's audio capture runs: the microphone track gets silence.
+    @ObservationIgnored private var dictationCaptures = false {
+        didSet { live?.recorder.setMicrophoneMuted(dictationCaptures) }
+    }
     @ObservationIgnored private var loadedModel: ASRModelID?
     @ObservationIgnored private var listTexts: [UUID: MeetingListText] = [:]
     @ObservationIgnored private var liveCheck: Task<Void, Never>?
@@ -345,7 +349,7 @@ final class MeetingCoordinator {
             throw MeetingStartError.couldNotStart(error.localizedDescription)
         }
         await transcriber.start()
-        recorder.setMicrophoneMuted(dictating)
+        recorder.setMicrophoneMuted(dictationCaptures)
         live = session
         meetings.insert(record, at: 0)
         closeCallCard()
@@ -638,15 +642,22 @@ final class MeetingCoordinator {
 
     // MARK: - Dictation and the speech model
 
-    /// From the start of a dictation to its end, the meeting's microphone
-    /// track gets silence (the dictated words are not meeting talk), no
-    /// meeting chunk starts decoding, and the summary waits.
+    /// From the start of a dictation to its end, no meeting chunk starts
+    /// decoding and the summary waits. The microphone track gets silence from
+    /// the start until `dictationCaptureEnded()`: the dictated words are not
+    /// meeting talk.
     func dictationChanged(active: Bool) {
         dictating = active
-        live?.recorder.setMicrophoneMuted(active)
+        dictationCaptures = active
         summaries.hold(active)
         detector.dictationChanged(active: active)
         wakeTranscribers()
+    }
+
+    /// The dictation's capture ended, its release tail included. Talk during
+    /// the rest of the dictation (transcription, Magic Format) is meeting talk.
+    func dictationCaptureEnded() {
+        dictationCaptures = false
     }
 
     /// Meeting chunks decode only while a speech model is loaded.

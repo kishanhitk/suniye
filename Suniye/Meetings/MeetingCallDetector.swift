@@ -17,7 +17,7 @@ protocol MicrophoneUserReading: AnyObject {
 /// Runs `MeetingCallWatch` on reads of the apps that hold the microphone.
 ///
 /// It reads nothing while no input device runs and no app holds the
-/// microphone, and nothing while a Suniye dictation records. It reads when
+/// microphone, and nothing during a Suniye dictation. It reads when
 /// an input device starts or stops, every second while an app's use of the
 /// microphone waits for its delay, and every 5 s otherwise.
 @MainActor
