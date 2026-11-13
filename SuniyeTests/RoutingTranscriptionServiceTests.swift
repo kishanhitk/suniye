@@ -130,11 +130,13 @@ final class RoutingTranscriptionServiceTests: XCTestCase {
             XCTAssertTrue(error is NoSpeechDetected, "\(error)")
         }
         let partial = try await router.transcribe(samples: samples, sampleRate: 48_000, purpose: .partial)
+        let meeting = try await router.transcribe(samples: samples, sampleRate: 48_000, purpose: .meeting)
 
         XCTAssertEqual(partial, "")
+        XCTAssertEqual(meeting, "", "a meeting chunk without speech is empty text, not an error")
         XCTAssertEqual(sherpa.transcribeCallCount, 0)
         let resampled = try AudioResampler.resample(samples, from: 48_000, to: 16_000).count
-        XCTAssertEqual(detector.clipLengths, [resampled, resampled], "the detector hears the clip at 16 kHz")
+        XCTAssertEqual(detector.clipLengths, [resampled, resampled, resampled], "the detector hears the clip at 16 kHz")
     }
 
     func testClipWithSpeechReachesTheEngineAtItsOwnRate() async throws {

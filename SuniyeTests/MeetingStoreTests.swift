@@ -46,8 +46,8 @@ final class MeetingStoreTests: XCTestCase {
     func testSegmentsAppendInTimeOrderAndSkipATornLine() async throws {
         let record = makeRecord()
         try await store.create(record)
-        let later = MeetingSegment(id: UUID(), track: .them, start: 11, end: 15.2, text: "QA found one crash.", engine: "parakeetV3")
-        let earlier = MeetingSegment(id: UUID(), track: .you, start: 4, end: 9, text: "The build is ready.", engine: "parakeetV3")
+        let later = MeetingSegment(id: UUID(), track: .them, audioStart: 176_000, audioEnd: 243_200, text: "QA found one crash.", engine: "parakeetV3")
+        let earlier = MeetingSegment(id: UUID(), track: .you, audioStart: 64_000, audioEnd: 144_000, text: "The build is ready.", engine: "parakeetV3")
         try await store.appendSegment(later, to: record.id)
         try await store.appendSegment(earlier, to: record.id)
 
@@ -65,8 +65,8 @@ final class MeetingStoreTests: XCTestCase {
     func testReplaceSegmentsRewritesTheTranscript() async throws {
         let record = makeRecord()
         try await store.create(record)
-        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, start: 1, end: 2, text: "echo", engine: "e"), to: record.id)
-        let kept = MeetingSegment(id: UUID(), track: .them, start: 1, end: 2, text: "Hello.", engine: "e")
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 32_000, text: "echo", engine: "e"), to: record.id)
+        let kept = MeetingSegment(id: UUID(), track: .them, audioStart: 16_000, audioEnd: 32_000, text: "Hello.", engine: "e")
 
         try await store.replaceSegments([kept], of: record.id)
 
@@ -114,11 +114,13 @@ final class MeetingStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.folder(for: record.id).path))
     }
 
-    func testRecoveryMarksUnfinishedMeetingsAndRepairsTheirAudio() async throws {
+    func testRecoveryFinishesARecordingMeetingButLeavesAFailedFinishToTheUser() async throws {
         var paused = makeRecord(status: .paused)
-        paused.pauses = [MeetingPause(start: 30, end: 40), MeetingPause(start: 90, end: nil)]
+        paused.pauses = [MeetingPause(start: 0.5, end: 10.5), MeetingPause(start: 90, end: nil)]
+        let finishing = makeRecord(startedAt: Date(timeIntervalSince1970: 1_750_000_000), status: .finishing)
         let done = makeRecord(startedAt: Date(timeIntervalSince1970: 1_700_000_000), status: .done)
         try await store.create(paused)
+        try await store.create(finishing)
         try await store.create(done)
 
         let audio = store.audioURL(.them, for: paused.id)
@@ -129,9 +131,10 @@ final class MeetingStoreTests: XCTestCase {
 
         let recovered = await store.recoverInterruptedMeetings()
 
-        XCTAssertEqual(recovered.map(\.id), [paused.id])
-        XCTAssertEqual(recovered.first?.status, .interrupted)
-        XCTAssertEqual(recovered.first?.pauses, [MeetingPause(start: 30, end: 40)])
+        XCTAssertEqual(recovered.map(\.id), [paused.id, finishing.id])
+        XCTAssertEqual(recovered.map(\.status), [.finishing, .interrupted])
+        XCTAssertEqual(recovered.first?.pauses, [MeetingPause(start: 0.5, end: 10.5)])
+        XCTAssertEqual(recovered.first?.endedAt, paused.startedAt.addingTimeInterval(11), "1 s of audio and the 10 s pause inside it")
         let reloaded = await store.record(done.id)
         XCTAssertEqual(reloaded?.status, .done)
         XCTAssertEqual(samplesBeforeRepair, 16_000, "the reader uses the file length, not the header")

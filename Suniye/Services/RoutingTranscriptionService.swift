@@ -11,7 +11,8 @@ import Foundation
 /// service mockable in tests.
 ///
 /// A clip without speech never reaches an engine: engines write text for noise.
-/// A final clip then throws `NoSpeechDetected`; a partial one gives no text.
+/// A final clip then throws `NoSpeechDetected`; a partial or meeting one gives
+/// no text.
 /// Only a `.probe` skips that check.
 actor RoutingTranscriptionService: TranscriptionServiceProtocol {
     enum RoutingError: LocalizedError {

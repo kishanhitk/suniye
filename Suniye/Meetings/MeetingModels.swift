@@ -9,9 +9,11 @@ enum MeetingTrack: String, Codable, CaseIterable, Sendable {
 struct MeetingSegment: Codable, Equatable, Identifiable, Sendable {
     let id: UUID
     let track: MeetingTrack
-    /// Seconds from the meeting start on the wall clock, so paused time counts.
-    let start: Double
-    let end: Double
+    /// Sample positions in the track's audio file. Both files hold the same
+    /// moment at the same position; `MeetingTimeline` maps a position to the
+    /// wall clock.
+    let audioStart: Int
+    let audioEnd: Int
     let text: String
     /// The speech model that wrote the text, for example "parakeetV3".
     let engine: String
@@ -25,7 +27,8 @@ enum MeetingStatus: String, Codable, Sendable {
     case done
     case summaryFailed
     case noSpeech
-    /// The app quit or crashed while the meeting was recording or finishing.
+    /// The app ended while it finished the transcript. The user starts the
+    /// finish again, because the finish itself may have ended the app.
     case interrupted
 
     /// States that only a running session can be in. A record found in one of
@@ -71,6 +74,9 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     var status: MeetingStatus
     var templateID: String
     var pauses: [MeetingPause]
+    /// The call played on speakers at some point, so the microphone may have
+    /// heard it and the transcript needs the echo filter.
+    var callPlayedOnSpeakers: Bool
 
     init(
         id: UUID = UUID(),
@@ -83,7 +89,8 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         startSource: MeetingStartSource,
         status: MeetingStatus = .recording,
         templateID: String,
-        pauses: [MeetingPause] = []
+        pauses: [MeetingPause] = [],
+        callPlayedOnSpeakers: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -96,6 +103,7 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         self.status = status
         self.templateID = templateID
         self.pauses = pauses
+        self.callPlayedOnSpeakers = callPlayedOnSpeakers
     }
 
     var duration: TimeInterval? {
@@ -108,6 +116,10 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
 /// position shifts it later by the pause length.
 struct MeetingTimeline: Equatable, Sendable {
     let pauses: [MeetingPause]
+
+    func wallSeconds(forSample position: Int) -> Double {
+        wallSeconds(forAudioSeconds: Double(position) / Double(MeetingAudioFormat.sampleRate))
+    }
 
     func wallSeconds(forAudioSeconds audio: Double) -> Double {
         var wall = audio

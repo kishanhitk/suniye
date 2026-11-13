@@ -39,7 +39,7 @@ struct AudioChunker {
         }
     }
 
-    private static func quietestPoint(in range: Range<Int>, energy: (Range<Int>) -> Float) -> Int {
+    static func quietestPoint(in range: Range<Int>, energy: (Range<Int>) -> Float) -> Int {
         var quietest = range.lowerBound
         var minimum = Float.infinity
         for offset in stride(from: 0, to: range.count - energyWindowSamples, by: energyWindowSamples) {

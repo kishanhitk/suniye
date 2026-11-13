@@ -139,7 +139,7 @@ actor MeetingStore {
         if skipped > 0 {
             AppLogger.shared.log(.warning, "meeting store skipped unreadable segments id=\(id.uuidString) count=\(skipped)")
         }
-        return segments.sorted { ($0.start, $0.track.rawValue) < ($1.start, $1.track.rawValue) }
+        return MeetingTranscript.ordered(segments)
     }
 
     func notes(of id: UUID) -> String {
@@ -180,23 +180,32 @@ actor MeetingStore {
         try fileManager.removeItem(at: url)
     }
 
-    /// Marks every meeting that a quit or crash left mid-session as
-    /// interrupted, repairs its audio headers, and returns them.
+    /// Repairs the audio headers of every meeting that a quit or crash left
+    /// mid-session, and returns them. A meeting that was recording or paused
+    /// moves to `.finishing`, and the app finishes its transcript; one that
+    /// was finishing moves to `.interrupted`.
     func recoverInterruptedMeetings() -> [MeetingRecord] {
         var recovered: [MeetingRecord] = []
         for var record in loadAll() where record.status.needsRecovery {
+            var audioSamples = 0
             for track in MeetingTrack.allCases where fileManager.fileExists(atPath: audioURL(track, for: record.id).path) {
                 do {
                     try MeetingAudioFileWriter.repairHeader(at: audioURL(track, for: record.id))
+                    audioSamples = max(audioSamples, try MeetingAudioFileReader.sampleCount(at: audioURL(track, for: record.id)))
                 } catch {
                     AppLogger.shared.log(.warning, "meeting recovery could not repair audio id=\(record.id.uuidString) track=\(track.rawValue) error=\(error.localizedDescription)")
                 }
             }
-            record.status = .interrupted
+            record.status = record.status == .finishing ? .interrupted : .finishing
             // A pause that never ended has no audio after it, so it moves no
             // audio position and only blurs the meeting length.
             if let lastPause = record.pauses.last, lastPause.end == nil {
                 record.pauses.removeLast()
+            }
+            if record.endedAt == nil {
+                let audioSeconds = Double(audioSamples) / Double(MeetingAudioFormat.sampleRate)
+                let wallSeconds = MeetingTimeline(pauses: record.pauses).wallSeconds(forAudioSeconds: audioSeconds)
+                record.endedAt = record.startedAt.addingTimeInterval(wallSeconds)
             }
             do {
                 try save(record)
