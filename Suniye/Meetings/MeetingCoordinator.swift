@@ -635,7 +635,7 @@ final class MeetingCoordinator {
 
     /// Writes the summary again, with `templateID` when it is given.
     func regenerate(_ id: UUID, templateID: String? = nil) async {
-        guard live?.id != id, !finishing.contains(id) else { return }
+        guard live?.id != id, !finishing.contains(id), record(id)?.status != .summarizing else { return }
         if let templateID {
             updateSettings { $0.templateID = templateID }
         }
