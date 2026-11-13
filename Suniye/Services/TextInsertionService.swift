@@ -79,7 +79,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         NSWorkspace.shared.frontmostApplication?.processIdentifier
     }
     var manualAccessibilitySetter: ((pid_t) -> Void)?
-    var focusedElementRetryCount = 8
+    private let focusedElementRetryCount = 8
     var focusedElementRetryIntervalNanoseconds: UInt64 = 150_000_000
 
     func captureInsertionContext() -> TextInsertionContext? {
@@ -185,7 +185,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     /// it last reported, which is how a Chromium browser ends up `unavailable`.
     private func focusedTextElementAwaitingHydration() async -> FocusedElementLookup {
         var lastLookup = FocusedElementLookup.unavailable
-        for attempt in 0 ..< max(focusedElementRetryCount, 1) {
+        for attempt in 0 ..< focusedElementRetryCount {
             lastLookup = lookUpFocusedElement()
             if case .found = lastLookup {
                 return lastLookup
