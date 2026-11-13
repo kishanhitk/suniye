@@ -67,9 +67,9 @@ xcodebuild \
 ```
 
 ## Coverage policy
-- CI enforces a 95% line-coverage floor on the app target via `scripts/coverage_report.sh`
-  (current level ~95.3%; the residue is documented-unreachable code: permission
-  prompts, real-model decode, OS-state-dependent branches, race guards).
+- CI enforces a 90% line-coverage floor on the app target via `scripts/coverage_report.sh`
+  (the floor is the script default). The residue is documented-unreachable code:
+  permission prompts, real-model decode, OS-state-dependent branches, race guards.
 - Files that genuinely cannot run headless in CI (live AppKit/window-server,
   hardware audio, vendored code) are listed in `scripts/coverage_exclusions.txt`
   with a reason comment. Do not add a file there to dodge writing tests;
