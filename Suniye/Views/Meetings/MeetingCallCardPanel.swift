@@ -123,7 +123,7 @@ struct MeetingCallCardView: View {
                     Label("Record", systemImage: "record.circle")
                 }
                 .buttonStyle(.borderedProminent)
-                Button("Not Now") { meetings.dismissCallCard() }
+                Button("Not Now") { meetings.declineOffer() }
             }
             .controlSize(.large)
         }
@@ -166,7 +166,7 @@ struct MeetingCallCardView: View {
                     Task { await meetings.stopEndedCall() }
                 }
                 .buttonStyle(.borderedProminent)
-                Button("Keep Recording") { meetings.dismissCallCard() }
+                Button("Keep Recording") { meetings.keepRecording() }
             }
             .controlSize(.large)
         }

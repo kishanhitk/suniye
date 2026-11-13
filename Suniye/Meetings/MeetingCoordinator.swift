@@ -1,4 +1,5 @@
 import Foundation
+import SuniyeAnalytics
 
 /// A call app or browser that holds the microphone, as call detection
 /// reports it.
@@ -64,6 +65,7 @@ enum MeetingStopCause: String, Sendable {
     case timeLimit
     case noSpeech
     case diskFull
+    case quit
 }
 
 /// Something the user should see while the meeting page is not on screen.
@@ -133,10 +135,14 @@ final class MeetingSession {
         )
     }
 
+    /// The tracks that started and did not fail since.
+    fileprivate var workingTracks: [MeetingTrack] {
+        recorder.tracks.filter { failedTracks[$0] == nil }
+    }
+
     /// Transcribed audio after the last words, on every track that records.
     fileprivate var secondsWithoutSpeech: Double {
-        let tracks = recorder.tracks.filter { failedTracks[$0] == nil }
-        let decoded = tracks.map { decodedThrough[$0] ?? 0 }.min() ?? 0
+        let decoded = workingTracks.map { decodedThrough[$0] ?? 0 }.min() ?? 0
         let lastWords = segments.map(\.audioEnd).max() ?? 0
         return Double(max(0, decoded - lastWords)) / Double(MeetingAudioFormat.sampleRate)
     }
@@ -197,6 +203,7 @@ final class MeetingCoordinator {
     @ObservationIgnored private let settingsStore: MeetingSettingsStore
     @ObservationIgnored private let engine: TranscriptionServiceProtocol
     @ObservationIgnored private let environment: MeetingEnvironment
+    @ObservationIgnored private let analytics: Analytics
     @ObservationIgnored private let detector: MeetingCallDetector
     @ObservationIgnored private var launched = false
     @ObservationIgnored private var isStarting = false
@@ -216,7 +223,8 @@ final class MeetingCoordinator {
         environment: MeetingEnvironment,
         canRecordCallAudio: Bool,
         summaryAvailability: @escaping () -> MeetingSummaryAvailability,
-        makeSummaryModel: @escaping (MeetingSummaryProvider) -> MeetingSummaryModel?
+        makeSummaryModel: @escaping (MeetingSummaryProvider) -> MeetingSummaryModel?,
+        analytics: Analytics
     ) {
         self.store = store
         self.templates = templates
@@ -224,13 +232,15 @@ final class MeetingCoordinator {
         self.engine = engine
         self.environment = environment
         self.canRecordCallAudio = canRecordCallAudio
+        self.analytics = analytics
         settings = settingsStore.load()
         detector = MeetingCallDetector(reader: environment.makeMicrophoneUsers(), uptime: environment.uptime)
         summaries = MeetingSummaries(
             store: store,
             templates: templates,
             availability: summaryAvailability,
-            makeModel: makeSummaryModel
+            makeModel: makeSummaryModel,
+            analytics: analytics
         )
         summaries.onFinished = { [weak self] record in
             self?.apply(record)
@@ -338,9 +348,10 @@ final class MeetingCoordinator {
         recorder.setMicrophoneMuted(dictating)
         live = session
         meetings.insert(record, at: 0)
-        dismissCallCard()
+        closeCallCard()
         detector.recordingStarted(call: callApp)
         checkLive(session)
+        analytics.track(.meetingStarted(source: source.analyticsSource))
         AppLogger.shared.log(.info, "meeting started id=\(record.id.uuidString) source=\(source.rawValue) tracks=\(recorder.tracks.map(\.rawValue).joined(separator: ","))")
     }
 
@@ -382,6 +393,7 @@ final class MeetingCoordinator {
         }
         live = nil
         AppLogger.shared.log(.info, "meeting stopped id=\(session.id.uuidString) cause=\(cause.rawValue)")
+        trackEnd(of: session, atWallSeconds: end, cause: cause)
         switch cause {
         case .timeLimit:
             onNotice?(.stoppedAtTimeLimit(session.id))
@@ -389,7 +401,7 @@ final class MeetingCoordinator {
             onNotice?(.stoppedWithoutSpeech(session.id))
         case .diskFull:
             onNotice?(.stoppedByDiskFull(session.id))
-        case .user, .callEnded, .sleep:
+        case .user, .callEnded, .sleep, .quit:
             break
         }
         let keptAudio = cut.map { _ in
@@ -419,6 +431,7 @@ final class MeetingCoordinator {
         await update(session.id) { $0.end(atWallSeconds: end) }
         live = nil
         AppLogger.shared.log(.info, "meeting stopped for quit id=\(session.id.uuidString)")
+        trackEnd(of: session, atWallSeconds: end, cause: .quit)
     }
 
     /// Finishes the transcript of a meeting from its audio files: after a
@@ -437,19 +450,19 @@ final class MeetingCoordinator {
     /// Record on the offer card.
     func recordOfferedCall() async {
         guard case let .offer(app) = callCard else { return }
-        dismissCallCard()
+        answerCallCard(.record)
         await startForCall(app, source: .offer)
     }
 
-    /// Not Now on the offer card, and Keep Recording on the call-ended card.
-    func dismissCallCard() {
-        cardTimer?.cancel()
-        cardTimer = nil
-        callCard = nil
+    /// Not Now on the offer card.
+    func declineOffer() {
+        guard case .offer = callCard else { return }
+        answerCallCard(.notNow)
     }
 
     func neverAsk(for app: MeetingCallApp) {
-        dismissCallCard()
+        guard callCard == .offer(app) else { return }
+        answerCallCard(.never)
         guard !settings.neverAskBundleIDs.contains(app.bundleID) else { return }
         updateSettings { $0.neverAskBundleIDs.append(app.bundleID) }
     }
@@ -457,7 +470,9 @@ final class MeetingCoordinator {
     /// Cancel on the card of a recording that started by itself: the
     /// recording and its files go.
     func cancelAutomaticRecording() async {
-        guard case .startedAutomatically = callCard, let session = beginStop() else { return }
+        guard case .startedAutomatically = callCard else { return }
+        answerCallCard(.cancel)
+        guard let session = beginStop() else { return }
         live = nil
         meetings.removeAll { $0.id == session.id }
         transcribers[session.id] = nil
@@ -473,7 +488,14 @@ final class MeetingCoordinator {
     /// Stop Now on the call-ended card: the meeting ends when the call did.
     func stopEndedCall() async {
         guard case let .callEnded(_, _, endedAt, _) = callCard else { return }
+        answerCallCard(.stopNow)
         await stop(.callEnded, endingAt: endedAt)
+    }
+
+    /// Keep Recording on the call-ended card.
+    func keepRecording() {
+        guard case .callEnded = callCard else { return }
+        answerCallCard(.keepRecording)
     }
 
     /// Call detection runs from launch, unless the user chose Do Nothing.
@@ -493,12 +515,12 @@ final class MeetingCoordinator {
             if settings.callStartAction == .recordAutomatically, confirmed {
                 Task { await startAutomatically(app) }
             } else {
-                showCard(.offer(app), for: environment.callCardDurations.offer) {}
+                showCard(.offer(app), for: environment.callCardDurations.offer)
             }
         case let .followed(app):
             guard let session = live else { return }
             if case .callEnded = callCard {
-                dismissCallCard()
+                closeCallCard()
             }
             if session.record.callAppBundleID == nil {
                 Task {
@@ -510,16 +532,14 @@ final class MeetingCoordinator {
             }
         case let .callEnded(app):
             if callCard == .offer(app) {
-                dismissCallCard()
+                answerCallCard(.callEnded)
             }
         case let .recordedCallEnded(app, endedAt, silent):
             guard live != nil else { return }
             let now = environment.now()
             let ended = now.addingTimeInterval(endedAt - environment.uptime())
             let delay = environment.callCardDurations.stop
-            showCard(.callEnded(app, silent: silent, endedAt: ended, stopsAt: now.addingTimeInterval(delay)), for: delay) { [weak self] in
-                await self?.stop(.callEnded, endingAt: ended)
-            }
+            showCard(.callEnded(app, silent: silent, endedAt: ended, stopsAt: now.addingTimeInterval(delay)), for: delay)
         }
     }
 
@@ -527,7 +547,7 @@ final class MeetingCoordinator {
         await startForCall(app, source: .automatic)
         guard live != nil else { return }
         let window = environment.callCardDurations.cancel
-        showCard(.startedAutomatically(app, cancelEndsAt: environment.now().addingTimeInterval(window)), for: window) {}
+        showCard(.startedAutomatically(app, cancelEndsAt: environment.now().addingTimeInterval(window)), for: window)
     }
 
     private func startForCall(_ app: MeetingCallApp, source: MeetingStartSource) async {
@@ -538,18 +558,34 @@ final class MeetingCoordinator {
         }
     }
 
-    /// Shows `card`, and runs `expire` when it was on screen for `seconds`
-    /// with no answer.
-    private func showCard(_ card: MeetingCallCard, for seconds: TimeInterval, expire: @escaping @MainActor () async -> Void) {
+    /// Shows `card` until an answer, or for `seconds`: then the card closes
+    /// by itself, and the call-ended card stops the recording.
+    private func showCard(_ card: MeetingCallCard, for seconds: TimeInterval) {
         cardTimer?.cancel()
         callCard = card
         cardTimer = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled, let self, self.callCard == card else { return }
             self.cardTimer = nil
-            self.callCard = nil
-            await expire()
+            self.answerCallCard(.timeout)
+            if case let .callEnded(_, _, endedAt, _) = card {
+                await self.stop(.callEnded, endingAt: endedAt)
+            }
         }
+    }
+
+    /// Closes the card that the user answered, or that closed by itself, and
+    /// counts how it closed.
+    private func answerCallCard(_ action: MeetingCallCardAction) {
+        guard let card = callCard else { return }
+        analytics.track(.meetingCallCard(card: card.analyticsKind, action: action))
+        closeCallCard()
+    }
+
+    private func closeCallCard() {
+        cardTimer?.cancel()
+        cardTimer = nil
+        callCard = nil
     }
 
     // MARK: - The finished meeting
@@ -640,9 +676,18 @@ final class MeetingCoordinator {
         session.recorder.stop()
         liveCheck?.cancel()
         liveCheck = nil
-        dismissCallCard()
+        closeCallCard()
         detector.recordingStopped()
         return session
+    }
+
+    private func trackEnd(of session: MeetingSession, atWallSeconds end: Double, cause: MeetingStopCause) {
+        let recorded = MeetingTimeline(pauses: session.record.pauses).audioSeconds(forWallSeconds: end)
+        analytics.track(.meetingEnded(
+            durationMs: Int(recorded / 60) * 60_000,
+            tracks: MeetingTracks(session.workingTracks),
+            reason: cause.analyticsReason
+        ))
     }
 
     private func makeTranscriber(for id: UUID, tracks: [MeetingTrack]) -> MeetingTranscriber {
@@ -667,19 +712,30 @@ final class MeetingCoordinator {
         run: (MeetingTranscriber) async throws -> [MeetingSegment]
     ) async {
         finishing.insert(id)
+        let started = ContinuousClock.now
         defer {
             finishing.remove(id)
             transcribers[id] = nil
         }
+        let outcome: MeetingTranscriptOutcome
+        var segments = 0
         do {
-            _ = try await run(transcriber)
+            segments = try await run(transcriber).count
+            outcome = segments == 0 ? .noSpeech : .done
             await store.deleteAudio(of: id)
             await update(id) { $0.status = .summarizing }
             summaries.enqueue(id)
         } catch {
             AppLogger.shared.log(.error, "meeting transcript not finished id=\(id.uuidString) error=\(error.localizedDescription)")
+            outcome = .failed
             await update(id) { $0.status = .interrupted }
         }
+        analytics.track(.meetingTranscribed(
+            outcome: outcome,
+            model: SafeLabel(loadedModel?.rawValue ?? ""),
+            segments: segments,
+            durationMs: Int((ContinuousClock.now - started) / .milliseconds(1))
+        ))
     }
 
     private func handle(_ event: MeetingRecorderEvent, from session: MeetingSession) {

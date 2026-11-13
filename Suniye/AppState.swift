@@ -1949,7 +1949,8 @@ final class AppState {
             transcriptionService: transcriptionService,
             appleSummaryAvailability: { appleMagicFormatPostProcessor.availability },
             localSummaryAvailability: { resolvedLocalGemmaPostProcessor.availability },
-            localGemmaClient: localGemmaClient
+            localGemmaClient: localGemmaClient,
+            analytics: analytics
         )
         self.llmSettingsStore = llmSettingsStore
         self.magicFormatPromptFileStore = magicFormatPromptFileStore
@@ -5950,7 +5951,8 @@ extension AppState: MeetingHost {
         transcriptionService: TranscriptionServiceProtocol,
         appleSummaryAvailability: @escaping () -> AppleFoundationModelsAvailability,
         localSummaryAvailability: @escaping () -> LocalGemmaAvailability,
-        localGemmaClient: LocalGemmaClient
+        localGemmaClient: LocalGemmaClient,
+        analytics: Analytics
     ) -> MeetingCoordinator {
         let canRecordCallAudio: Bool
         if #available(macOS 14.4, *) {
@@ -5980,7 +5982,8 @@ extension AppState: MeetingHost {
                     #endif
                     return nil
                 }
-            }
+            },
+            analytics: analytics
         )
     }
 }

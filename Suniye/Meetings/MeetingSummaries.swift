@@ -1,4 +1,5 @@
 import Foundation
+import SuniyeAnalytics
 
 /// Writes the summaries of finished meetings, one at a time and only while no
 /// dictation runs: a dictation stops the summary in progress, and it goes on
@@ -13,6 +14,7 @@ final class MeetingSummaries {
     @ObservationIgnored private let templates: MeetingTemplateStore
     @ObservationIgnored private let availability: () -> MeetingSummaryAvailability
     @ObservationIgnored private let makeModel: (MeetingSummaryProvider) -> MeetingSummaryModel?
+    @ObservationIgnored private let analytics: Analytics
     /// Gets the record once its summary state is final.
     @ObservationIgnored var onFinished: ((MeetingRecord) -> Void)?
     /// Runs after each run of the model, so that Magic Format can load its
@@ -27,12 +29,14 @@ final class MeetingSummaries {
         store: MeetingStore,
         templates: MeetingTemplateStore,
         availability: @escaping () -> MeetingSummaryAvailability,
-        makeModel: @escaping (MeetingSummaryProvider) -> MeetingSummaryModel?
+        makeModel: @escaping (MeetingSummaryProvider) -> MeetingSummaryModel?,
+        analytics: Analytics
     ) {
         self.store = store
         self.templates = templates
         self.availability = availability
         self.makeModel = makeModel
+        self.analytics = analytics
     }
 
     func isQueued(_ id: UUID) -> Bool {
@@ -91,6 +95,7 @@ final class MeetingSummaries {
             queue.removeAll { $0 == id }
             return
         }
+        let started = ContinuousClock.now
         let segments = await store.segments(of: id)
         let input = MeetingSummaryInput(
             segments: segments,
@@ -99,6 +104,8 @@ final class MeetingSummaries {
             speakerLabels: segments.contains { $0.track == .them }
         )
         let change: (inout MeetingRecord) -> Void
+        let outcome: MeetingSummaryOutcome
+        var parts: Int?
         do {
             let summary = try await writer.write(input)
             try await store.saveSummary(summary.body, for: id)
@@ -108,10 +115,13 @@ final class MeetingSummaries {
                 $0.summaryProvider = provider
                 $0.summaryFailure = nil
             }
+            outcome = .done
+            parts = summary.parts
         } catch is CancellationError {
             return
         } catch MeetingSummaryError.tooLittleSpeech {
             change = { $0.status = .noSpeech }
+            outcome = .noSpeech
         } catch {
             AppLogger.shared.log(.error, "meeting summary failed id=\(id.uuidString) provider=\(provider.rawValue) error=\(error.localizedDescription)")
             let cause = error.localizedDescription
@@ -119,7 +129,14 @@ final class MeetingSummaries {
                 $0.status = .summaryFailed
                 $0.summaryFailure = cause
             }
+            outcome = .failed
         }
+        analytics.track(.meetingSummarized(
+            provider: provider.analyticsEngine,
+            outcome: outcome,
+            parts: parts,
+            durationMs: Int((ContinuousClock.now - started) / .milliseconds(1))
+        ))
         queue.removeAll { $0 == id }
         do {
             onFinished?(try await store.update(id, change))

@@ -1,3 +1,4 @@
+import SuniyeAnalytics
 import XCTest
 @testable import Suniye
 
@@ -30,6 +31,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     private var noticeCount = 0
     private var freeBytes: Int64 = 10_000_000_000
     private var microphone: FakeMicrophoneUsers!
+    private var analytics: SpyAnalytics!
     private var uptime: TimeInterval = 1000
     private var cardDurations = MeetingCallCard.Durations()
 
@@ -46,6 +48,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         summaryModel = GatedSummaryModel()
         clock = Date(timeIntervalSince1970: 1_800_000_000)
         microphone = FakeMicrophoneUsers()
+        analytics = SpyAnalytics()
     }
 
     override func tearDown() async throws {
@@ -78,7 +81,8 @@ final class MeetingCoordinatorTests: XCTestCase {
             environment: environment,
             canRecordCallAudio: true,
             summaryAvailability: { .ready(.localModel) },
-            makeSummaryModel: { [unowned self] _ in summaryModel }
+            makeSummaryModel: { [unowned self] _ in summaryModel },
+            analytics: analytics
         )
         coordinator.host = host
         return coordinator
@@ -106,6 +110,14 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertFalse(audioLeft, "the audio goes once the transcript is final")
         XCTAssertEqual(segments.map(\.text), [longSentence])
         XCTAssertGreaterThanOrEqual(host.idleCount, 1, "Magic Format can warm its prompt after the summary")
+        XCTAssertEqual(
+            analytics.trackedEvents.map(\.name),
+            ["meeting_started", "meeting_ended", "meeting_transcribed", "meeting_summarized", "meeting_started"]
+        )
+        XCTAssertEqual(event("meeting_ended")?["tracks"], .label("you_them"))
+        XCTAssertEqual(event("meeting_transcribed")?["outcome"], .label("done"))
+        XCTAssertEqual(event("meeting_transcribed")?["segments"], .int(1))
+        XCTAssertEqual(event("meeting_summarized")?["parts"], .int(1))
         await coordinator.stop()
     }
 
@@ -278,6 +290,8 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(stopped)
         XCTAssertEqual(coordinator.record(id)?.endedAt, clock)
         XCTAssertEqual(notices.first, .stoppedAtTimeLimit(id))
+        XCTAssertEqual(event("meeting_ended")?["reason"], .label("time_limit"))
+        XCTAssertEqual(event("meeting_ended")?["duration_ms"], .int(240 * 60_000))
     }
 
     func testARecordingStopsWhenNobodySpeaksForTheLimit() async throws {
@@ -316,6 +330,8 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(offered, .offer(zoom))
         XCTAssertNil(coordinator.callCard)
+        XCTAssertEqual(cardAnswers, ["offer record"])
+        XCTAssertEqual(event("meeting_started")?["source"], .label("offer"))
         XCTAssertEqual(record?.title, "Zoom call")
         XCTAssertEqual(record?.callAppBundleID, zoom.bundleID)
         XCTAssertEqual(record?.startSource, .offer)
@@ -342,6 +358,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertNil(afterTheCall)
         XCTAssertEqual(coordinator.settings.neverAskBundleIDs, [zoom.bundleID])
         XCTAssertNil(coordinator.callCard)
+        XCTAssertEqual(cardAnswers, ["offer call_ended", "offer never"])
     }
 
     func testRecordAutomaticallyStartsTheRecordingAndCancelDeletesIt() async throws {
@@ -367,6 +384,8 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.live)
         XCTAssertNil(coordinator.record(id))
         XCTAssertTrue(stored.isEmpty)
+        XCTAssertEqual(cardAnswers, ["started cancel"])
+        XCTAssertNil(event("meeting_ended"), "a canceled recording is no meeting")
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.folder(for: id).path))
     }
 
@@ -409,6 +428,8 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(card, .callEnded(zoom, silent: false, endedAt: start + 4.5, stopsAt: start + 4.5 + 30))
         XCTAssertTrue(heardAfterTheCall)
+        XCTAssertEqual(cardAnswers, ["offer record", "call_ended stop_now"])
+        XCTAssertEqual(event("meeting_ended")?["reason"], .label("call_ended"))
         XCTAssertEqual(try XCTUnwrap(coordinator.record(id)?.endedAt).timeIntervalSince(start), 4.5, accuracy: 0.001)
         XCTAssertEqual(segments.map(\.text), [longSentence], "the words after the call ended go")
     }
@@ -419,12 +440,12 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.start()
         hold(holding(zoom))
         hold(holding(zoom), after: 2)
-        coordinator.dismissCallCard()
+        coordinator.declineOffer()
         try await coordinator.startMeeting(source: .manual)
         let followed = await waitUntil { coordinator.live?.record.callAppBundleID == zoom.bundleID }
 
         hold([], after: 5)
-        coordinator.dismissCallCard()
+        coordinator.keepRecording()
         try await Task.sleep(for: .milliseconds(150))
         let keptRecording = coordinator.live != nil
         hold(holding(zoom), after: 1)
@@ -435,6 +456,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(followed, "a meeting that starts during a call follows it")
         XCTAssertTrue(keptRecording)
         XCTAssertTrue(stopped, "the call-ended card stops the recording by itself")
+        XCTAssertEqual(cardAnswers, ["offer not_now", "call_ended keep_recording", "call_ended timeout"])
     }
 
     func testDoNothingStopsCallDetection() async {
@@ -501,6 +523,23 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(saved?.status, .recording, "the next launch finishes it")
         XCTAssertEqual(saved?.endedAt, saved?.startedAt.addingTimeInterval(3))
         XCTAssertTrue(finished)
+    }
+
+    /// The props of the last event with this name.
+    private func event(_ name: String) -> [String: AnalyticsValue]? {
+        analytics.trackedEvents.last { $0.name == name }?.props
+    }
+
+    /// "card action" for each call card that closed.
+    private var cardAnswers: [String] {
+        analytics.trackedEvents.filter { $0.name == "meeting_call_card" }.map { event in
+            [event.props["kind"], event.props["action"]].map { value in
+                if case let .label(text) = value {
+                    return text
+                }
+                return "?"
+            }.joined(separator: " ")
+        }
     }
 
     /// The call apps that hold the microphone from now on, `seconds` later,

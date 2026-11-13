@@ -68,6 +68,9 @@ struct MeetingSummary: Equatable, Sendable {
     /// Markdown: "## " headings, "- " list lines and plain lines.
     let body: String
     let provider: MeetingSummaryProvider
+    /// The transcript parts that got notes of their own; 1 when the
+    /// transcript fit in one request.
+    let parts: Int
 }
 
 enum MeetingSummaryError: LocalizedError, Equatable {
@@ -128,10 +131,12 @@ actor MeetingSummaryWriter {
             speakerLabels: input.speakerLabels
         )
         let answer: String
+        var parts = 1
         if await tokens(in: whole.text) <= summaryBudget {
             answer = try await run(whole)
         } else {
             var partNotes = try await notesOnParts(input, context: context)
+            parts = partNotes.count
             while true {
                 let combine = MeetingSummaryPrompt.summary(
                     template: input.template,
@@ -151,7 +156,7 @@ actor MeetingSummaryWriter {
             }
         }
         let parsed = MeetingSummaryText.parse(answer)
-        return MeetingSummary(title: parsed.title, body: parsed.body, provider: model.provider)
+        return MeetingSummary(title: parsed.title, body: parsed.body, provider: model.provider, parts: parts)
     }
 
     // MARK: - Parts

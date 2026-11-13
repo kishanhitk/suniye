@@ -34,6 +34,12 @@
 //                                            holds the device arch on older rows)
 //   raw_transcript      action              (also fills blob15 on mf_nudge)
 //   app_launch          setting_double_tap  (double tap available, or the Globe conflict)
+//
+// MEETINGS (appended aliases, no slot moved; `source`, `reason`, `outcome`,
+// `action`, `kind`, `asr_model` and `duration_ms` use their existing slots):
+//   meeting_ended       tracks→blob15
+//   meeting_summarized  provider→blob16 (before the device chip), parts→double15
+//   meeting_transcribed segments→double15
 
 import type { PropValue, WireBatch, WireEvent } from "./types";
 
@@ -81,8 +87,8 @@ const BLOB_FIELDS: StrPick[] = [
   str("insertion_method"),                        // blob12
   str("source"),                                  // blob13
   firstStr("reason", "stage", "step", "type", "backend", "arch"),   // blob14 - categorical detail A (+ device arch)
-  firstStr("code", "outcome", "advanced_by", "ended_by", "input_stand_in", "empty_reason", "action", "setting_double_tap"), // blob15 - categorical detail B (+ onboarding_step advanced_by, onboarding_outcome ended_by, feature use)
-  firstStr("kind", "feature", "chip"),            // blob16 (+ device chip)
+  firstStr("code", "outcome", "advanced_by", "ended_by", "input_stand_in", "empty_reason", "action", "setting_double_tap", "tracks"), // blob15 - categorical detail B (+ onboarding_step advanced_by, onboarding_outcome ended_by, feature use, meeting tracks)
+  firstStr("kind", "feature", "provider", "chip"), // blob16 (+ meeting_summarized provider, device chip)
   firstStr("model", "mac_model"),                 // blob17 (+ device mac_model)
   firstStr("from_version", "to_version", "os_version"),   // blob18 (+ device os_version)
 ];
@@ -106,7 +112,7 @@ const DOUBLE_FIELDS: NumPick[] = [
   // two numbers the dashboard reads for the prompt-cache panel. prompt/predicted
   // tokens and decode_ms ride the blob20 props backstop only.
   firstNum("load_ms", "duration_ms", "prefill_ms", "elapsed_ms"), // double14 - generic value_ms (+ llm_generation prefill_ms, onboarding elapsed_ms)
-  firstNum("count", "event_count", "queue_depth", "upload_failures", "evicted_by_ttl", "attempt", "cached_tokens"), // double15 (+ onboarding_practice_result attempt, llm_generation cached_tokens)
+  firstNum("count", "event_count", "queue_depth", "upload_failures", "evicted_by_ttl", "attempt", "cached_tokens", "segments", "parts"), // double15 (+ onboarding_practice_result attempt, llm_generation cached_tokens, meeting segments and parts)
   boolNum("was_llm_polished"),                    // double16
   // `resumed` (onboarding_step) and `practiced` (onboarding_outcome) are appended:
   // neither event carries an earlier alias of this slot, so they surface here;
