@@ -165,6 +165,8 @@ enum AppMetrics {
 struct SidebarNavigationRow: View {
     let section: MainWindowSection
     let isSelected: Bool
+    /// A red dot that shows a recording from any page.
+    var showsRecordingDot = false
     let action: () -> Void
     @State private var isHovered = false
 
@@ -179,6 +181,12 @@ struct SidebarNavigationRow: View {
                     .font(isSelected ? AppTypography.sidebarLabelSelected : AppTypography.sidebarLabel)
                     .foregroundStyle(Color.primary)
                 Spacer(minLength: 0)
+                if showsRecordingDot {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 7, height: 7)
+                        .accessibilityLabel("Recording")
+                }
             }
             .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)
             .padding(.vertical, 6)

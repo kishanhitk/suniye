@@ -27,6 +27,15 @@ enum FloatingIndicatorMetrics {
         source == .editHotkey ? editModeListeningPillSize : listeningPillSize
     }
 
+    /// The meeting pill: the dot and the timer at rest; meters and buttons
+    /// on hover.
+    static func meetingPillSize(expanded: Bool) -> CGSize {
+        expanded ? CGSize(width: 236, height: 40) : CGSize(width: 96, height: 30)
+    }
+
+    /// Room for the meeting's dot and timer in a listening pill.
+    static let meetingTimerWidth: CGFloat = 66
+
     /// Combined panel size. The panel is bottom-anchored and its content is
     /// bottom-aligned, so extra height for the bubble grows upward only and the
     /// pill stays put on screen. Bubble space is reserved as soon as previews
@@ -35,9 +44,13 @@ enum FloatingIndicatorMetrics {
     /// SwiftUI bubble transition.
     static func listeningPanelSize(
         preview: FloatingIndicatorState.PreviewState,
-        source: FloatingIndicatorState.Source = .hotkey
+        source: FloatingIndicatorState.Source = .hotkey,
+        showsMeetingTimer: Bool = false
     ) -> CGSize {
-        let pillSize = pillSize(source: source)
+        var pillSize = pillSize(source: source)
+        if showsMeetingTimer {
+            pillSize.width += meetingTimerWidth
+        }
         guard preview.reservesBubbleSpace else {
             return pillSize
         }

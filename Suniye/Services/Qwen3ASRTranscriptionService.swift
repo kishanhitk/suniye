@@ -94,7 +94,7 @@ actor Qwen3ASRTranscriptionService: TranscriptionServiceProtocol {
         )
     }
 
-    // `purpose` is always `.final`: this family opts out of the live preview.
+    // `purpose` is `.final` or `.meeting`: this family opts out of the live preview.
     func transcribe(
         samples: [Float],
         sampleRate: Int,
@@ -113,15 +113,17 @@ actor Qwen3ASRTranscriptionService: TranscriptionServiceProtocol {
         let duration = Double(audio.count) / Double(Qwen3ASR.sampleRate)
         let allChunks = Qwen3ASR.chunker.split(audio)
         let chunks = allChunks.filter { model.speechDetector.containsSpeech(Array(audio[$0])) }
-        AppLogger.shared.log(
-            .info,
-            String(
-                format: "qwen3-asr transcribe start duration=%.2fs chunks=%d skipped=%d",
-                duration,
-                chunks.count,
-                allChunks.count - chunks.count
+        if purpose.writesDecodeLog {
+            AppLogger.shared.log(
+                .info,
+                String(
+                    format: "qwen3-asr transcribe start duration=%.2fs chunks=%d skipped=%d",
+                    duration,
+                    chunks.count,
+                    allChunks.count - chunks.count
+                )
             )
-        )
+        }
         var replies: [Qwen3ASR.Reply] = []
         for (index, chunk) in chunks.enumerated() {
             onProgress(TranscriptionProgress(chunk: index + 1, totalChunks: chunks.count))
@@ -129,7 +131,9 @@ actor Qwen3ASRTranscriptionService: TranscriptionServiceProtocol {
         }
 
         let text = Qwen3ASR.joinReplies(replies)
-        AppLogger.shared.log(.info, "qwen3-asr transcribe done chars=\(text.count)")
+        if purpose.writesDecodeLog {
+            AppLogger.shared.log(.info, "qwen3-asr transcribe done chars=\(text.count)")
+        }
         return text
     }
 

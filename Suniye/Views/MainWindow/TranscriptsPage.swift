@@ -392,6 +392,7 @@ struct TranscriptsHeaderView: View {
 struct TranscriptSearchBar: View {
     @Binding var searchText: String
     @FocusState.Binding var isSearchFocused: Bool
+    var placeholder = "Search transcripts"
 
     var body: some View {
         HStack(spacing: 8) {
@@ -399,7 +400,7 @@ struct TranscriptSearchBar: View {
                 .font(AppTypography.body)
                 .foregroundStyle(isSearchFocused ? Color.accentColor : MainWindowPalette.tertiaryText)
 
-            TextField("Search transcripts", text: $searchText)
+            TextField(placeholder, text: $searchText)
                 .textFieldStyle(.plain)
                 .font(AppTypography.body)
                 .focused($isSearchFocused)

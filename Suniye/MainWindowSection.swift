@@ -5,6 +5,7 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
     /// value stays `dashboard` so stored selections and `--open-dashboard` keep
     /// working.
     case dashboard
+    case meetings
     case model
     case style
     case general
@@ -13,6 +14,8 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
         switch self {
         case .dashboard:
             return "Transcripts"
+        case .meetings:
+            return "Meetings"
         case .model:
             return "Speech Model"
         case .style:
@@ -26,6 +29,8 @@ enum MainWindowSection: String, CaseIterable, Hashable, Codable {
         switch self {
         case .dashboard:
             return "text.alignleft"
+        case .meetings:
+            return "person.2"
         case .model:
             return "cpu"
         case .style:

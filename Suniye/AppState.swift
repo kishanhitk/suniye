@@ -136,7 +136,13 @@ final class AppState {
     /// concurrency needs a real per-operation model, not a second slot.
     var activeASRModelOperationID: ASRModelID?
 
-    var loadedASRModelID: ASRModelID?
+    var loadedASRModelID: ASRModelID? {
+        didSet {
+            if oldValue != loadedASRModelID {
+                meetings.speechModelChanged(loadedASRModelID)
+            }
+        }
+    }
     var lastFailedASRModelID: ASRModelID?
     var lastFailedASRModelError: String?
     let library: DictationLibrary
@@ -150,9 +156,14 @@ final class AppState {
         audioCaptureService: audioCaptureService,
         settings: { [unowned self] in generalSettings },
         updateSettings: { [unowned self] change in updateGeneralSettings(change) },
-        echoCancellationEnabled: { [unowned self] in echoCancellationEnabled },
+        echoCancellationEnabled: { [unowned self] in dictationEchoCancellationEnabled },
         isDictating: { [unowned self] in activeDictationSession != nil }
     )
+    /// Echo cancellation (voice processing) lowers the volume of other audio
+    /// while it runs; during a meeting that would lower the call.
+    private var dictationEchoCancellationEnabled: Bool {
+        echoCancellationEnabled && meetings.live == nil
+    }
 
 
     var activeOnboardingStep: OnboardingStep? {
@@ -301,7 +312,13 @@ final class AppState {
         }
     }
     private var magicFormatSetupTestRequestID = 0
-    var localGemmaInstallState: LocalLLMInstallState = .notInstalled
+    var localGemmaInstallState: LocalLLMInstallState = .notInstalled {
+        didSet {
+            if oldValue != localGemmaInstallState {
+                meetings.summaries.availabilityChanged()
+            }
+        }
+    }
 
     var launchAtLoginStatus: LaunchAtLoginStatus = .disabled
     var launchAtLoginError: String?
@@ -1063,6 +1080,11 @@ final class AppState {
     private let appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
     private let localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor
     private let magicFormatCoordinator: MagicFormatCoordinator
+    let meetings: MeetingCoordinator
+    /// A section that code outside the main window asked to show. The window
+    /// shows it and clears the request.
+    var requestedSection: MainWindowSection?
+    @ObservationIgnored private var callCardPresenter: MeetingCallCardPresenter?
     private let localLLMModelManager: LocalLLMModelManagerProtocol
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol
@@ -1120,7 +1142,13 @@ final class AppState {
         case discarded(notice: String?)
     }
 
-    private var activeDictationSession: DictationSession?
+    private var activeDictationSession: DictationSession? {
+        didSet {
+            if (oldValue == nil) != (activeDictationSession == nil) {
+                meetings.dictationChanged(active: activeDictationSession != nil)
+            }
+        }
+    }
     private var activeAudioCaptureSessionID: UUID? { activeDictationSession?.id }
     private var activeRecordingSource: RecordingSource? { activeDictationSession?.source }
     private var overlayErrorResetTask: Task<Void, Never>?
@@ -1213,6 +1241,7 @@ final class AppState {
             }
         },
         magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
+        meetingCoordinator: MeetingCoordinator? = nil,
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
     ) {
@@ -1227,16 +1256,18 @@ final class AppState {
         self.llmPostProcessor = llmPostProcessor
         self.appleMagicFormatPostProcessor = appleMagicFormatPostProcessor
         self.localLLMModelManager = localLLMModelManager
+        // One client, so Magic Format and meeting summaries share one llama-server.
+        let localGemmaClient = LocalGemmaLlamaCppClient(
+            locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager),
+            onModelLoad: { model, loadMs in
+                analytics.track(.modelLoad(model: SafeLabel(model), loadMs: loadMs, evictedByKeepAlive: false))
+            },
+            onKeepAliveEvicted: { model in
+                analytics.track(.modelLoad(model: SafeLabel(model), loadMs: 0, evictedByKeepAlive: true))
+            }
+        )
         let resolvedLocalGemmaPostProcessor = localGemmaMagicFormatPostProcessor ?? LocalGemmaPostProcessor(
-            client: LocalGemmaLlamaCppClient(
-                locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager),
-                onModelLoad: { model, loadMs in
-                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: loadMs, evictedByKeepAlive: false))
-                },
-                onKeepAliveEvicted: { model in
-                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: 0, evictedByKeepAlive: true))
-                }
-            ),
+            client: localGemmaClient,
             onGeneration: { timings in
                 analytics.track(.llmGeneration(
                     model: SafeLabel(LocalGemmaDefaults.modelDisplayName),
@@ -1253,6 +1284,13 @@ final class AppState {
             apiPostProcessor: llmPostProcessor,
             applePostProcessor: appleMagicFormatPostProcessor,
             localGemmaPostProcessor: resolvedLocalGemmaPostProcessor
+        )
+        self.meetings = meetingCoordinator ?? AppState.makeMeetingCoordinator(
+            transcriptionService: transcriptionService,
+            appleSummaryAvailability: { appleMagicFormatPostProcessor.availability },
+            localSummaryAvailability: { resolvedLocalGemmaPostProcessor.availability },
+            localGemmaClient: localGemmaClient,
+            analytics: analytics
         )
         self.llmSettingsStore = llmSettingsStore
         self.magicFormatPromptFileStore = magicFormatPromptFileStore
@@ -1295,6 +1333,10 @@ final class AppState {
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
         self.appUpdateController.onStateChange = { [weak self] in
             self?.refreshUpdateControllerState()
+        }
+        self.meetings.host = self
+        self.meetings.onNotice = { [weak self] notice in
+            self?.showMeetingNotice(notice)
         }
         self.editLearningService.onLearnedTerms = { [weak self] terms in
             self?.handleLearnedVocabularyTerms(terms)
@@ -1340,6 +1382,19 @@ final class AppState {
             floatingIndicatorController.onAction = { [weak self] in
                 self?.toggleFloatingIndicatorRecording()
             }
+            floatingIndicatorController.onMeetingAction = { [weak self] action in
+                self?.handleMeetingPillAction(action)
+            }
+            meetings.onLiveChange = { [weak self] session in
+                self?.floatingIndicatorController.updateMeeting(session)
+            }
+            let callCardPresenter = MeetingCallCardPresenter(meetings: meetings) { [weak self] in
+                self?.openMainWindow(at: .general)
+            }
+            self.callCardPresenter = callCardPresenter
+            meetings.onCallCardChange = { card in
+                callCardPresenter.show(card)
+            }
             floatingIndicatorController.onPlacementChanged = { [weak self] placement in
                 self?.handleFloatingIndicatorPlacementChanged(placement)
             }
@@ -1348,6 +1403,7 @@ final class AppState {
 
         if startServices {
             analytics.start()
+            stopMeetingAtSleep()
             emitAppLaunchEvent()
             presentOnboardingIfNeeded()
             wireHotkey()
@@ -1406,6 +1462,7 @@ final class AppState {
         if floatingIndicatorEnabled {
             floatingIndicatorController.start()
         }
+        await meetings.start()
         statusText = "Checking permissions..."
         await refreshPermissions()
 
@@ -2783,7 +2840,10 @@ final class AppState {
         }
     }
 
-    func openMainWindow() {
+    func openMainWindow(at section: MainWindowSection? = nil) {
+        if let section {
+            requestedSection = section
+        }
         MainWindowController.shared.show(appState: self)
     }
 
@@ -3465,7 +3525,7 @@ final class AppState {
             let capture = try await audioCaptureService.startCapture(
                 sessionID: sessionID,
                 preferredInputDeviceID: microphone.selectedInputDeviceID,
-                echoCancellationEnabled: echoCancellationEnabled
+                echoCancellationEnabled: dictationEchoCancellationEnabled
             )
             guard activeAudioCaptureSessionID == sessionID else {
                 await audioCaptureService.cancelCapture(sessionID: sessionID, reason: nil)
@@ -4594,5 +4654,202 @@ enum AppStateError: LocalizedError {
         case let .insufficientDiskSpace(message):
             return message
         }
+    }
+}
+
+extension AppState: MeetingHost {
+    /// Opens the main window at a meeting's page, or at the list for nil.
+    func openMeeting(_ id: UUID?) {
+        meetings.openMeetingID = id
+        openMainWindow(at: .meetings)
+    }
+
+    var meetingInputDeviceID: String? {
+        microphone.selectedInputDeviceID
+    }
+
+    func requestMeetingMicrophoneAccess() async -> Bool {
+        if !hasMicPermission {
+            await refreshPermissions(requestMicrophone: true, askSurface: .meetingStart)
+        }
+        return hasMicPermission
+    }
+
+    func meetingSummaryModelIsIdle() {
+        prewarmLocalLLMIfEligible()
+    }
+
+    /// A recording meeting stops and saves before the app quits, and its
+    /// transcript finishes at the next launch. A quit from the user asks
+    /// first; a logout, restart or shutdown does not, so it never blocks one.
+    func terminateReplyForMeeting() -> NSApplication.TerminateReply {
+        guard meetings.live != nil else { return .terminateNow }
+        if !Self.systemIsQuittingApps() {
+            let alert = NSAlert()
+            alert.messageText = "A meeting is recording"
+            alert.informativeText = "Quitting stops the recording. Suniye finishes the transcript when it opens again."
+            alert.addButton(withTitle: "Keep Recording")
+            alert.addButton(withTitle: "Stop and Quit")
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+        }
+        Task {
+            await meetings.stopForQuit()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
+    private static func systemIsQuittingApps() -> Bool {
+        guard let reason = NSAppleEventManager.shared().currentAppleEvent?
+            .attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason))?
+            .typeCodeValue
+        else { return false }
+        let systemReasons = [kAELogOut, kAEReallyLogOut, kAEShowRestartDialog, kAERestart, kAEShowShutdownDialog, kAEShutDown]
+        return systemReasons.map { OSType($0) }.contains(reason)
+    }
+
+    func startMeetingFromMenu() {
+        Task {
+            do {
+                try await meetings.startMeeting(source: .manual)
+            } catch {
+                meetingCouldNotStart(error)
+            }
+        }
+    }
+
+    func meetingCouldNotStart(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "Couldn’t start the recording"
+        alert.informativeText = error.localizedDescription
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    func handleMeetingPillAction(_ action: MeetingPillAction) {
+        guard let live = meetings.live else { return }
+        switch action {
+        case .open:
+            openMeeting(live.id)
+        case .pause:
+            Task { await meetings.pause() }
+        case .resume:
+            Task {
+                do {
+                    try await meetings.resume()
+                } catch {
+                    learningToastPresenter.show(message: "Couldn’t resume the recording", detail: nil, actionTitle: nil, action: nil)
+                }
+            }
+        case .stop:
+            Task { await meetings.stop() }
+        }
+    }
+
+    /// A meeting notice becomes a toast unless the meeting's page is on
+    /// screen in the active app, where the page already shows it.
+    func showMeetingNotice(_ notice: MeetingNotice) {
+        let pageOnScreen = NSApp.isActive ? meetings.pageOnScreen : nil
+        let live = meetings.live.flatMap { $0.id == pageOnScreen ? nil : $0 }
+        let time = live.map { MeetingTranscript.clock($0.elapsed(at: Date())) }
+        switch notice {
+        case .callAudioStopped:
+            guard live != nil else { return }
+            learningToastPresenter.show(message: "Call audio stopped", detail: time, actionTitle: "Restart Call Audio") { [weak self] in
+                self?.meetings.restartCallAudio()
+            }
+        case .callAudioNeverHeard:
+            guard let live else { return }
+            learningToastPresenter.show(message: "No sound from the call", detail: time, actionTitle: "Open Meeting") { [weak self] in
+                self?.openMeeting(live.id)
+            }
+        case let .microphoneChanged(name):
+            guard live != nil else { return }
+            learningToastPresenter.show(message: "Recording with \(name)", detail: time, actionTitle: nil, action: nil)
+        case let .trackFailed(track):
+            guard let live else { return }
+            learningToastPresenter.show(
+                message: track == .you ? "The microphone stopped" : "Call audio stopped",
+                detail: time,
+                actionTitle: "Open Meeting"
+            ) { [weak self] in
+                self?.openMeeting(live.id)
+            }
+        case let .stoppedAtTimeLimit(id):
+            showMeetingStopped(id, message: "Recording stopped after 4 hours")
+        case let .stoppedWithoutSpeech(id):
+            showMeetingStopped(id, message: "Recording stopped after 15 minutes without speech")
+        case let .stoppedByDiskFull(id):
+            // The meeting page shows its own banner for it.
+            guard id != pageOnScreen else { return }
+            showMeetingStopped(id, message: "Recording stopped because the disk is full")
+        case let .summaryReady(id):
+            guard id != pageOnScreen else { return }
+            learningToastPresenter.show(message: "Summary ready", detail: nil, actionTitle: "Open") { [weak self] in
+                self?.openMeeting(id)
+            }
+        }
+    }
+
+    private func showMeetingStopped(_ id: UUID, message: String) {
+        learningToastPresenter.show(message: message, detail: nil, actionTitle: "Open Meeting") { [weak self] in
+            self?.openMeeting(id)
+        }
+    }
+
+    /// Capture stops while the Mac sleeps, so sleep, and a closed lid that
+    /// puts the Mac to sleep, stop the recording and save it.
+    fileprivate func stopMeetingAtSleep() {
+        _ = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                Task { await self.meetings.stop(.sleep) }
+            }
+        }
+    }
+
+    fileprivate static func makeMeetingCoordinator(
+        transcriptionService: TranscriptionServiceProtocol,
+        appleSummaryAvailability: @escaping () -> AppleFoundationModelsAvailability,
+        localSummaryAvailability: @escaping () -> LocalGemmaAvailability,
+        localGemmaClient: LocalGemmaClient,
+        analytics: Analytics
+    ) -> MeetingCoordinator {
+        let canRecordCallAudio: Bool
+        if #available(macOS 14.4, *) {
+            canRecordCallAudio = true
+        } else {
+            canRecordCallAudio = false
+        }
+        return MeetingCoordinator(
+            store: MeetingStore(),
+            templates: MeetingTemplateStore(),
+            settingsStore: MeetingSettingsStore(),
+            engine: transcriptionService,
+            environment: .live(canRecordCallAudio: canRecordCallAudio),
+            canRecordCallAudio: canRecordCallAudio,
+            summaryAvailability: {
+                MeetingSummaryAvailability(apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
+            },
+            makeSummaryModel: { provider in
+                switch provider {
+                case .localModel:
+                    return LocalGemmaMeetingSummaryModel(client: localGemmaClient)
+                case .appleIntelligence:
+                    #if canImport(FoundationModels)
+                    if #available(macOS 26.0, *) {
+                        return AppleMeetingSummaryModel()
+                    }
+                    #endif
+                    return nil
+                }
+            },
+            analytics: analytics
+        )
     }
 }

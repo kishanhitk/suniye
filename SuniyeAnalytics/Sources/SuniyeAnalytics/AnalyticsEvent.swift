@@ -86,6 +86,19 @@ public enum AnalyticsEvent: Sendable {
     case updateAction(kind: UpdateActionKind, fromVersion: SafeLabel?, toVersion: SafeLabel?)
     case error(type: AnalyticsErrorType, code: AnalyticsErrorCode)
 
+    case meetingStarted(source: MeetingSource)
+    /// `durationMs` is the recorded time, without pauses, in whole minutes.
+    case meetingEnded(durationMs: Int, tracks: MeetingTracks, reason: MeetingStopReason)
+    /// `durationMs` runs from the stop, or from the launch that finishes a
+    /// recording that a quit or a crash left, to the final transcript.
+    case meetingTranscribed(outcome: MeetingTranscriptOutcome, model: SafeLabel, segments: Int, durationMs: Int)
+    /// `parts` is the number of transcript parts that got notes of their own;
+    /// 1 when the transcript fit in one request, nil when no summary was written.
+    case meetingSummarized(provider: MeetingSummaryEngine, outcome: MeetingSummaryOutcome, parts: Int?, durationMs: Int)
+    /// How a call card closed. A card that a recording's start or stop closed
+    /// sends nothing.
+    case meetingCallCard(card: MeetingCallCardKind, action: MeetingCallCardAction)
+
     /// Self-observability of the analytics pipeline itself.
     case analyticsHealth(queueDepth: Int, uploadFailures: Int, evictedByTTL: Int, evictedBySize: Int)
 
@@ -119,6 +132,11 @@ public enum AnalyticsEvent: Sendable {
         case .rawTranscript: return "raw_transcript"
         case .updateAction: return "update_action"
         case .error: return "error"
+        case .meetingStarted: return "meeting_started"
+        case .meetingEnded: return "meeting_ended"
+        case .meetingTranscribed: return "meeting_transcribed"
+        case .meetingSummarized: return "meeting_summarized"
+        case .meetingCallCard: return "meeting_call_card"
         case .analyticsHealth: return "analytics_health"
         }
     }
@@ -220,6 +238,18 @@ public enum AnalyticsEvent: Sendable {
             return out
         case let .error(type, code):
             return ["type": .label(type), "code": .label(code)]
+        case let .meetingStarted(source):
+            return ["source": .label(source)]
+        case let .meetingEnded(durationMs, tracks, reason):
+            return ["duration_ms": .int(durationMs), "tracks": .label(tracks), "reason": .label(reason)]
+        case let .meetingTranscribed(outcome, model, segments, durationMs):
+            return ["outcome": .label(outcome), "asr_model": .label(model), "segments": .int(segments), "duration_ms": .int(durationMs)]
+        case let .meetingSummarized(provider, outcome, parts, durationMs):
+            var out: [String: AnalyticsValue] = ["provider": .label(provider), "outcome": .label(outcome), "duration_ms": .int(durationMs)]
+            if let parts { out["parts"] = .int(parts) }
+            return out
+        case let .meetingCallCard(card, action):
+            return ["kind": .label(card), "action": .label(action)]
         case let .analyticsHealth(queueDepth, uploadFailures, evictedByTTL, evictedBySize):
             return [
                 "queue_depth": .int(queueDepth),

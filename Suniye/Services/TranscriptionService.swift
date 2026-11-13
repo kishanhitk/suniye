@@ -63,6 +63,15 @@ enum TranscriptionPurpose: String {
     /// engine without the speech check, even when it holds only silence. Only
     /// Apple Speech gets a probe; Cohere and Qwen3 still check their chunks.
     case probe
+    /// One chunk of a meeting transcript: decoded like `.final`, but a chunk
+    /// with no speech gives empty text.
+    case meeting
+
+    /// Partial and meeting decodes run hundreds of times in one session, so
+    /// they write no per-decode log line.
+    var writesDecodeLog: Bool {
+        self == .final || self == .probe
+    }
 }
 
 /// A final clip held no speech, so no engine ran. Not a failure: the caller
@@ -255,7 +264,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         let effectiveSampleRate = max(8_000, sampleRate)
         let inputDuration = Double(samples.count) / Double(effectiveSampleRate)
         let preparedAudio = AudioRecognitionPreprocessor.prepareForRecognition(samples)
-        if purpose == .final {
+        if purpose.writesDecodeLog {
             AppLogger.shared.log(
                 .info,
                 String(
@@ -288,7 +297,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         }
 
         var decoderInput = preparedAudio.samples
-        if purpose == .final, loadedConfig?.family == .nemoTransducer {
+        if purpose == .final || purpose == .meeting, loadedConfig?.family == .nemoTransducer {
             decoderInput += repeatElement(0, count: Int(Self.parakeetTrailingSilenceSeconds * Double(effectiveSampleRate)))
         }
         decoderInput.withUnsafeBufferPointer { buffer in
@@ -312,7 +321,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
             return ""
         }
         let text = String(cString: cText).trimmingCharacters(in: .whitespacesAndNewlines)
-        if purpose == .final {
+        if purpose.writesDecodeLog {
             AppLogger.shared.log(.info, "transcribe done chars=\(text.count)")
         }
         return text

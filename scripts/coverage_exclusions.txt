@@ -16,6 +16,9 @@ Suniye/Vendor/Permiso/SettingsWindowLocator.swift     # vendored; inspects live 
 # --- Hardware / OS-permission bound ---
 Suniye/Services/AudioCaptureDrivers.swift             # AVAudioEngine/HAL AudioUnit render callbacks; needs microphone
 Suniye/Services/CoreAudioDeviceMonitor.swift          # CoreAudio HAL property listeners; needs audio hardware
+Suniye/Meetings/SystemAudioTap.swift                  # Core Audio process tap + private aggregate device; needs the system audio permission and real output (recorder logic is tested with fake sources in MeetingCaptureTests)
+Suniye/Meetings/MeetingEnvironment+Live.swift          # wires the live microphone, the call audio tap, the NSAlert notice and Core Audio reads; the coordinator is tested with a fake environment
+Suniye/Meetings/CoreAudioMicrophoneUsers.swift         # Core Audio process list, device listeners and browser window titles through Accessibility; call detection is tested with a fake reader in MeetingCallTests
 Suniye/Services/HotkeyService.swift                   # Carbon hotkey registration + global NSEvent taps; needs input-monitoring
 Suniye/Services/AccessibilityOnboarding.swift         # drives live AXIsProcessTrusted permission flow
 Suniye/Services/SoundFeedbackService.swift            # NSSound playback wrapper
@@ -24,6 +27,7 @@ Suniye/Services/AppleSpeechTranscriptionService.swift # SpeechAnalyzer/SpeechTra
 Suniye/Services/OrtSession.swift                      # ONNX Runtime session create/run; needs a real model (opt-in CohereTranscriptionServiceRealModelTests). Env + tensor helpers stay gated in OnnxRuntime.swift
 Suniye/Services/CohereTranscriptionService.swift      # encoder/decoder sessions over the 2.9 GB Cohere model; decode logic is extracted to CohereTranscribeDecoding.swift (covered), guards to CohereProviderTests
 Suniye/Services/AppleFoundationModelsPostProcessor.swift # Apple Intelligence FoundationModels API; its on-device paths compile on the macOS 26 SDK but can't run on a headless CI runner (no provisioned model), so they count as uncovered. Exercised locally where the model is available.
+Suniye/Meetings/AppleMeetingSummaryModel.swift         # Apple Intelligence FoundationModels session for meeting summaries; same limit as the line above. The summary writer is tested with a fake model.
 
 # --- Window-server bound UI shells (logic lives in state/services) ---
 Suniye/Services/LearningToastPresenter.swift          # transient NSPanel toast
@@ -53,4 +57,12 @@ Suniye/Views/MainWindow/SpeechModelPage.swift          # SwiftUI render only
 Suniye/Views/MainWindow/TranscriptRows.swift           # SwiftUI render only (highlighting moved to TranscriptBrowsing.swift, covered)
 Suniye/Views/MainWindow/MainWindowPages.swift         # SwiftUI render only
 Suniye/Views/MainWindow/MainWindowView.swift          # SwiftUI render only
+Suniye/Views/Meetings/MeetingsPage.swift              # SwiftUI render only (list text in MeetingListText.swift, covered)
+Suniye/Views/Meetings/MeetingPage.swift               # SwiftUI render only (copy and export text in MeetingExport.swift, covered)
+Suniye/Views/Meetings/MeetingSummaryTab.swift         # SwiftUI render only (summary blocks in MeetingExport.swift, covered)
+Suniye/Views/Meetings/MeetingTranscriptView.swift     # SwiftUI and NSTextView render only
+Suniye/Views/Meetings/MeetingTemplateEditor.swift     # SwiftUI render only (template rules in MeetingTemplates.swift, covered)
+Suniye/Views/Meetings/MeetingActions.swift            # dialog state and AppKit panels; each action calls the covered MeetingCoordinator
+Suniye/Views/Meetings/MeetingSettingsGroup.swift      # SwiftUI render only (the choices call the covered MeetingCoordinator)
+Suniye/Views/Meetings/MeetingCallCardPanel.swift      # NSPanel and SwiftUI render only (each button calls the covered MeetingCoordinator)
 Suniye/Views/MainWindow/MagicFormatProviderPresentation.swift  # SwiftUI render only

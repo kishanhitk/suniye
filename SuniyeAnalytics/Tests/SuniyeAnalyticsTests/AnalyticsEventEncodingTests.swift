@@ -20,6 +20,19 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         XCTAssertNil(props["lat_asr_to_llm"])
     }
 
+    func testMeetingEventsUseTheIngestKeys() {
+        let ended = AnalyticsEvent.meetingEnded(durationMs: 2_280_000, tracks: .youThem, reason: .callEnded)
+        XCTAssertEqual(ended.name, "meeting_ended")
+        XCTAssertEqual(ended.props, ["duration_ms": .int(2_280_000), "tracks": .label("you_them"), "reason": .label("call_ended")])
+
+        let failed = AnalyticsEvent.meetingSummarized(provider: .localModel, outcome: .failed, parts: nil, durationMs: 900)
+        XCTAssertEqual(failed.props, ["provider": .label("local_model"), "outcome": .label("failed"), "duration_ms": .int(900)])
+
+        let card = AnalyticsEvent.meetingCallCard(card: .callEnded, action: .keepRecording)
+        XCTAssertEqual(card.name, "meeting_call_card")
+        XCTAssertEqual(card.props, ["kind": .label("call_ended"), "action": .label("keep_recording")])
+    }
+
     func testModelLoadEvent() {
         let load = AnalyticsEvent.modelLoad(model: SafeLabel("gemma-3-4b"), loadMs: 1200, evictedByKeepAlive: false)
         XCTAssertEqual(load.name, "model_load")

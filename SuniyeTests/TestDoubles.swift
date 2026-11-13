@@ -769,6 +769,12 @@ final class SpyLearningToastPresenter: LearningToastPresenting {
         shownTermBatches.append(terms)
         lastUndo = onUndo
     }
+
+    private(set) var shownMessages: [String] = []
+
+    func show(message: String, detail: String?, actionTitle: String?, action: (() -> Void)?) {
+        shownMessages.append(message)
+    }
 }
 
 @MainActor

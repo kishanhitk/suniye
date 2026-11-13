@@ -1,0 +1,163 @@
+import AppKit
+import SwiftUI
+
+/// The dialogs that meeting commands open, shared by the list and the page.
+@MainActor
+@Observable
+final class MeetingActions {
+    var deleting: MeetingRecord?
+    var renaming: MeetingRecord?
+    var renameText = ""
+    var startError: String?
+    var editingTemplates = false
+
+    func startMeeting(_ meetings: MeetingCoordinator) {
+        Task {
+            do {
+                try await meetings.startMeeting(source: .manual)
+                if let live = meetings.live {
+                    meetings.openMeetingID = live.id
+                }
+            } catch {
+                startError = error.localizedDescription
+            }
+        }
+    }
+
+    func confirmDelete(_ record: MeetingRecord) {
+        deleting = record
+    }
+
+    func rename(_ record: MeetingRecord) {
+        renameText = record.title
+        renaming = record
+    }
+
+    func export(_ record: MeetingRecord, meetings: MeetingCoordinator) {
+        Task {
+            let markdown = MeetingExport.markdown(
+                record: record,
+                summary: await meetings.store.summary(of: record.id),
+                notes: await meetings.store.notes(of: record.id),
+                segments: await meetings.store.segments(of: record.id)
+            )
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = "\(record.title).md"
+            panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            do {
+                try markdown.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                AppLogger.shared.log(.error, "meeting export failed error=\(error.localizedDescription)")
+            }
+        }
+    }
+
+    func revealInFinder(_ record: MeetingRecord, meetings: MeetingCoordinator) {
+        NSWorkspace.shared.activateFileViewerSelecting([meetings.store.folder(for: record.id)])
+    }
+}
+
+extension View {
+    func meetingActionDialogs(_ actions: MeetingActions, meetings: MeetingCoordinator) -> some View {
+        modifier(MeetingActionDialogs(actions: actions, meetings: meetings))
+    }
+}
+
+private struct MeetingActionDialogs: ViewModifier {
+    @Bindable var actions: MeetingActions
+    let meetings: MeetingCoordinator
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog(
+                "Delete this meeting?",
+                isPresented: Binding(get: { actions.deleting != nil }, set: { if !$0 { actions.deleting = nil } }),
+                presenting: actions.deleting
+            ) { record in
+                Button("Delete", role: .destructive) {
+                    Task {
+                        do {
+                            try await meetings.delete(record.id)
+                            if meetings.openMeetingID == record.id {
+                                meetings.openMeetingID = nil
+                            }
+                        } catch {
+                            AppLogger.shared.log(.error, "meeting delete failed id=\(record.id.uuidString) error=\(error.localizedDescription)")
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("This deletes the summary, notes and transcript. You can’t undo it.")
+            }
+            .alert(
+                "Rename Meeting",
+                isPresented: Binding(get: { actions.renaming != nil }, set: { if !$0 { actions.renaming = nil } }),
+                presenting: actions.renaming
+            ) { record in
+                TextField("Title", text: $actions.renameText)
+                Button("Rename") {
+                    let title = actions.renameText
+                    Task { await meetings.rename(record.id, to: title) }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .alert(
+                "Couldn’t start the recording",
+                isPresented: Binding(get: { actions.startError != nil }, set: { if !$0 { actions.startError = nil } }),
+                presenting: actions.startError
+            ) { _ in
+                Button("OK") {}
+            } message: { message in
+                Text(message)
+            }
+            .sheet(isPresented: $actions.editingTemplates) {
+                MeetingTemplateEditor(templates: meetings.templates)
+            }
+    }
+}
+
+/// The More menu of a meeting, and the context menu of its row.
+struct MeetingMenuItems: View {
+    let record: MeetingRecord
+    let meetings: MeetingCoordinator
+    let actions: MeetingActions
+    let isLive: Bool
+    var includesOpen = false
+
+    var body: some View {
+        if includesOpen {
+            Button("Open Meeting") { meetings.openMeetingID = record.id }
+            Divider()
+        }
+        if isLive {
+            Button("Copy Notice") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(MeetingNoticeAlert.sentence, forType: .string)
+            }
+        } else {
+            Button("Export as Markdown…") { actions.export(record, meetings: meetings) }
+        }
+        Button("Rename…") { actions.rename(record) }
+        Button("Reveal in Finder") { actions.revealInFinder(record, meetings: meetings) }
+        if !isLive {
+            Divider()
+            Button("Delete Meeting…") { actions.confirmDelete(record) }
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(meetings.finishing.contains(record.id))
+        }
+    }
+}
+
+/// Recorded time, without the pauses: "12:04", or "1:02:31".
+struct MeetingTimer: View {
+    let session: MeetingSession
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            Text(MeetingTranscript.clock(session.elapsed(at: context.date)))
+                .font(AppTypography.body.monospacedDigit())
+        }
+    }
+}

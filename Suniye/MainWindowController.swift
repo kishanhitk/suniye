@@ -133,6 +133,10 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
         sharedAppState.refreshSystemGlobeKeyAction()
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        sharedAppState.terminateReplyForMeeting()
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         // Durably enqueue session_end. We do NOT await a flush here — the process
         // may exit first; the atomic on-disk queue means the event (and any
