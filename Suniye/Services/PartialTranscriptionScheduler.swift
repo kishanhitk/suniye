@@ -4,7 +4,7 @@ import Foundation
 /// snapshots the accumulated audio, and decodes it into a partial transcript.
 /// A tick is skipped (never queued) while a decode for the same session is in flight.
 /// `stop()` suppresses the *result* of any decode still running — the decode work
-/// itself is not cancelled, so on the TranscriptionService actor a final decode
+/// itself is not cancelled, so on the transcription service a final decode
 /// requested right after stop can queue behind at most one partial decode. AppState
 /// bounds that cost by only enabling partials for model families whose decode time
 /// scales with input length (see `ASRModelFamily.supportsLivePreview`).

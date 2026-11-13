@@ -463,7 +463,7 @@ enum LLMDefaults {
 Fix transcription errors, misspellings, and misheard words. Preserve the original meaning and tone. Return only the corrected text, nothing else.
 """
 
-    // Tuned for the Apple on-device model via evals/apple-magic-eval (KIS-165):
+    // Tuned for the Apple on-device model via evals/apple-magic-eval:
     // 36/39 on the shared 39-case suite, prompt-injection-safe. Sent as a SINGLE
     // user turn (see MagicFormatPipeline.polish singleTurn / AppleFoundationModelsPostProcessor).
     // Keep under ~2500 tokens: every token here is prefilled on each polish.

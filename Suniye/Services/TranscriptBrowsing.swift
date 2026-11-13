@@ -9,7 +9,7 @@ struct TranscriptDayGroup: Identifiable, Equatable {
 }
 
 enum TranscriptBrowser {
-    /// Filter by window, then by free text, preserving the newest-first order the
+    /// Filter by free text, preserving the newest-first order the
     /// history already has. Search matches transcript text only — the meta line
     /// (time, app, duration) is chrome, not content the user is looking for.
     static func filter(

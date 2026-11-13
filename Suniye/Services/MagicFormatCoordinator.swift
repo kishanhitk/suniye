@@ -57,7 +57,7 @@ enum MagicFormatRewriteError: LocalizedError, Equatable {
 @MainActor
 final class MagicFormatCoordinator {
     /// User-facing labels for each polish stage, shown in the status text and the
-    /// floating pill. Kept in one place so the two sinks never drift.
+    /// floating pill.
     enum Stage {
         static let polishing = "Polishing..."
         static let startingLocalModel = "Starting local model..."

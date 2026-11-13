@@ -19,7 +19,7 @@ enum InsertionOutcome: Equatable {
     /// A focused text element was visible and received the text.
     case intoFocusedElement
     /// The target app exposes no focused element at all, so the paste was
-    /// posted without confirming what has focus (KIS-205).
+    /// posted without confirming what has focus.
     case unverified
 }
 
@@ -63,7 +63,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
         /// The app reports no focused element whatsoever. Chromium browsers
         /// keep their renderer accessibility tree switched off until a real
         /// assistive technology enables it, and answer `kAXErrorNoValue` for
-        /// every focus query until then (KIS-205).
+        /// every focus query until then.
         case unavailable
     }
 
@@ -160,7 +160,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
     ///
     /// Fire-and-forget by design: post-paste AX observation cannot tell a
     /// failed paste from a lazy accessibility surface (Electron composers read
-    /// as nil, terminals read stale — KIS-178), so a posted paste is reported
+    /// as nil, terminals read stale), so a posted paste is reported
     /// as success.
     @MainActor
     private func pasteViaClipboard(_ text: String) throws {
@@ -177,7 +177,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
 
     /// Electron hydrates its accessibility tree asynchronously after
     /// warmTargetAppAccessibility; a cold Electron app needs up to ~1s before
-    /// the focused composer exists (KIS-181). Covers the paste-last path,
+    /// the focused composer exists. Covers the paste-last path,
     /// which warms and inserts back to back.
     ///
     /// Retries cover both misses, because a hydrating app reports `unavailable`
@@ -199,7 +199,7 @@ final class TextInsertionService: TextInsertionServiceProtocol {
 
     /// Electron/Chromium apps leave their accessibility tree unbuilt until a
     /// client opts in via AXManualAccessibility; a cold tree makes the focused
-    /// composer invisible to getFocusedTextElement (KIS-181). Called when
+    /// composer invisible to getFocusedTextElement. Called when
     /// recording starts so the tree hydrates while the user speaks. Apps that
     /// do not support the attribute reject the write harmlessly.
     func warmTargetAppAccessibility() {
