@@ -287,10 +287,26 @@ final class MeetingCoordinator {
         let text = MeetingListText(
             summary: await store.summary(of: id),
             notes: await store.notes(of: id),
-            transcript: await store.segments(of: id).map(\.text)
+            transcript: await transcript(of: id).map(\.text)
         )
         listTexts[id] = text
         return text
+    }
+
+    /// The transcript as a reader sees it, also while the app still finishes
+    /// it: see `MeetingTranscript.final(_:of:)`.
+    func transcript(of id: UUID) async -> [MeetingSegment] {
+        let segments = await store.segments(of: id)
+        guard let record = record(id) else { return segments }
+        return MeetingTranscript.final(segments, of: record)
+    }
+
+    func summary(of id: UUID) async -> String? {
+        await store.summary(of: id)
+    }
+
+    func notes(of id: UUID) async -> String {
+        await store.notes(of: id)
     }
 
     // MARK: - Settings

@@ -42,9 +42,9 @@ final class MeetingActions {
         Task {
             let markdown = MeetingExport.markdown(
                 record: record,
-                summary: await meetings.store.summary(of: record.id),
-                notes: await meetings.store.notes(of: record.id),
-                segments: await meetings.store.segments(of: record.id)
+                summary: await meetings.summary(of: record.id),
+                notes: await meetings.notes(of: record.id),
+                segments: await meetings.transcript(of: record.id)
             )
             let panel = NSSavePanel()
             panel.nameFieldStringValue = "\(record.title).md"

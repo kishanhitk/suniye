@@ -62,11 +62,11 @@ struct MeetingPage: View {
             .padding(.bottom, AppMetrics.detailPaddingBottom)
             .meetingActionDialogs(actions, meetings: meetings)
             .task(id: record) {
-                segments = await meetings.store.segments(of: id)
-                summary = await meetings.store.summary(of: id)
+                segments = await meetings.transcript(of: id)
+                summary = await meetings.summary(of: id)
             }
             .task(id: id) {
-                notes = await meetings.store.notes(of: id)
+                notes = await meetings.notes(of: id)
             }
             .onAppear { meetings.pageOnScreen = id }
             .onDisappear {
