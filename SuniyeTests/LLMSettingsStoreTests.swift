@@ -33,6 +33,25 @@ final class LLMSettingsStoreTests: XCTestCase {
         XCTAssertEqual(settings.modelValidationError, "Enter a valid custom model name.")
     }
 
+    /// The stored JSON is a contract with every installed copy: a blob that a
+    /// released build wrote must load and save back with the same keys and values.
+    func testStoredBlobOfAReleasedBuildSavesBackUnchanged() throws {
+        let stored = #"{"isEnabled":true,"provider":"localGemma","selectedModelPreset":"custom","customModelId":"my/model","endpointURLString":"https://example.com/v1/chat/completions","baseSystemPrompt":"API prompt","appleSystemPrompt":"Apple prompt","gemmaSystemPrompt":"Gemma prompt","systemPrompt":"","keywordsRaw":"Suniye, Kishan","autoLearnedKeywordsRaw":"Zed","learnFromEditsEnabled":false,"timeoutSeconds":12,"localModelKeepAlive":"oneHour","appPromptBindings":[{"id":"A1B2C3D4-0000-0000-0000-000000000001","bundleID":"com.tinyspeck.slackmacgap","appDisplayName":"Slack","prompt":"casual"}]}"#
+        let suite = "dev.suniye.tests.llm.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(Data(stored.utf8), forKey: "llm")
+        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
+
+        store.save(store.load())
+
+        let saved = try XCTUnwrap(defaults.data(forKey: "llm"))
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: saved) as? NSDictionary,
+            try JSONSerialization.jsonObject(with: Data(stored.utf8)) as? NSDictionary
+        )
+    }
+
     func testStoreRoundTrip() {
         let suite = "dev.suniye.tests.llmsettings.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

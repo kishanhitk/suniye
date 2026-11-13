@@ -3,6 +3,25 @@ import XCTest
 @testable import Suniye
 
 final class GeneralSettingsStoreTests: XCTestCase {
+    /// The stored JSON is a contract with every installed copy: a blob that a
+    /// released build wrote must load and save back with the same keys and values.
+    func testStoredBlobOfAReleasedBuildSavesBackUnchanged() throws {
+        let stored = #"{"preferredInputDeviceID":"usb-mic","preferredInputDeviceName":"USB Mic","autoSubmitEnabled":true,"hotkeyConfiguration":{"kind":"globe","keyCode":63,"carbonModifiers":0},"pasteLastTranscriptHotkeyConfiguration":{"kind":"keyCombo","keyCode":9,"carbonModifiers":4352},"editModeHotkeyConfiguration":{"kind":"keyCombo","keyCode":2,"carbonModifiers":6144},"echoCancellationEnabled":true,"soundFeedbackEnabled":true,"hideFloatingIndicatorWhenIdle":true,"liveTranscriptionPreviewEnabled":true,"floatingIndicatorPlacement":{"centerXRatio":0.3,"bottomYRatio":0.2},"hasSeenOnboardingWelcome":true,"hasCompletedCoreOnboarding":true,"onboardingProgress":"finished","firstLaunchRecorded":true,"lastKnownAccessibilityGranted":true,"magicFormatNudgeDismissed":true,"localGemmaDownloadCancelled":true,"selectedASRModelID":"whisperBaseEnglish","updateChannel":"tip","accessibilityDragHelperEnabled":false,"shareAnalyticsEnabled":false}"#
+        let suite = "dev.suniye.tests.general.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(Data(stored.utf8), forKey: "general")
+        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+
+        store.save(store.load())
+
+        let saved = try XCTUnwrap(defaults.data(forKey: "general"))
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: saved) as? NSDictionary,
+            try JSONSerialization.jsonObject(with: Data(stored.utf8)) as? NSDictionary
+        )
+    }
+
     func testStoreRoundTrip() {
         let suite = "dev.suniye.tests.general.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
