@@ -1,5 +1,22 @@
 import Foundation
 
+/// A call app or browser that holds the microphone, as call detection
+/// reports it.
+struct MeetingCallApp: Equatable, Sendable {
+    let name: String
+    let bundleID: String
+    let isBrowser: Bool
+
+    /// "Zoom call", or "call in Chrome" for a browser.
+    var callName: String {
+        isBrowser ? "call in \(name)" : "\(name) call"
+    }
+
+    var title: String {
+        callName.prefix(1).uppercased() + callName.dropFirst()
+    }
+}
+
 /// The apps whose microphone use means a call.
 enum MeetingCallApps {
     static let callApps: [String: String] = [

@@ -1,23 +1,6 @@
 import Foundation
 import SuniyeAnalytics
 
-/// A call app or browser that holds the microphone, as call detection
-/// reports it.
-struct MeetingCallApp: Equatable, Sendable {
-    let name: String
-    let bundleID: String
-    let isBrowser: Bool
-
-    /// "Zoom call", or "call in Chrome" for a browser.
-    var callName: String {
-        isBrowser ? "call in \(name)" : "\(name) call"
-    }
-
-    var title: String {
-        callName.prefix(1).uppercased() + callName.dropFirst()
-    }
-}
-
 /// The card about a call at the top right of the screen.
 enum MeetingCallCard: Equatable {
     /// Asks to record the call. It closes by itself after a while.
