@@ -77,14 +77,6 @@ struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
 /// ones the user added. Only edits and additions are on disk, so a changed
 /// shipped template reaches every user who did not edit it.
 actor MeetingTemplateStore {
-    enum StoreError: LocalizedError, Equatable {
-        case builtInTemplate
-
-        var errorDescription: String? {
-            "A built-in template can only be restored, not deleted."
-        }
-    }
-
     nonisolated let fileURL: URL
 
     init(fileURL: URL = MeetingTemplateStore.defaultFileURL()) {
@@ -109,19 +101,11 @@ actor MeetingTemplateStore {
         return all.first { $0.id == id } ?? all[0]
     }
 
-    func save(_ template: MeetingTemplate) throws {
-        var saved = load().filter { $0.id != template.id }
-        if template.sections != template.defaultSections || !template.isBuiltIn {
-            saved.append(template)
-        }
-        try write(saved)
-    }
-
-    func delete(id: String) throws {
-        guard !MeetingTemplate.builtIn.contains(where: { $0.id == id }) else {
-            throw StoreError.builtInTemplate
-        }
-        try write(load().filter { $0.id != id })
+    /// Saves the list that the template editor shows, in one write. A
+    /// built-in template is stored only while its text differs from the
+    /// shipped text; one that is not in the list keeps the shipped text.
+    func replace(with templates: [MeetingTemplate]) throws {
+        try write(templates.filter { $0.sections != $0.defaultSections })
     }
 
     private func load() -> [MeetingTemplate] {
