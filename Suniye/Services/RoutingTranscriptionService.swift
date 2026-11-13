@@ -89,11 +89,11 @@ actor RoutingTranscriptionService: TranscriptionServiceProtocol {
         guard let active, let service = service(for: active.engine) else {
             throw TranscriptionService.ServiceError.recognizerNotLoaded
         }
-        if purpose != .probe {
+        if purpose.checksSpeech {
             let rate = max(8_000, sampleRate)
             let audio = try AudioResampler.resample(samples, from: rate, to: SpeechDetector.sampleRate)
             guard active.speechDetector.containsSpeech(audio) else {
-                guard purpose == .final else {
+                guard purpose.throwsWhenNoSpeech else {
                     return ""
                 }
                 AppLogger.shared.log(

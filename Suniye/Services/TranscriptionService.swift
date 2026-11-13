@@ -72,6 +72,21 @@ enum TranscriptionPurpose: String {
     var writesDecodeLog: Bool {
         self == .final || self == .probe
     }
+
+    /// A probe must decode even silence, to prove the engine runs.
+    var checksSpeech: Bool {
+        self != .probe
+    }
+
+    /// A dictation with no speech is an empty dictation, not an empty decode.
+    var throwsWhenNoSpeech: Bool {
+        self == .final
+    }
+
+    /// A partial has more audio coming, so it gets no trailing silence.
+    var padsTrailingSilence: Bool {
+        self == .final || self == .meeting
+    }
 }
 
 /// A final clip held no speech, so no engine ran. Not a failure: the caller
@@ -297,7 +312,7 @@ actor TranscriptionService: TranscriptionServiceProtocol {
         }
 
         var decoderInput = preparedAudio.samples
-        if purpose == .final || purpose == .meeting, loadedConfig?.family == .nemoTransducer {
+        if purpose.padsTrailingSilence, loadedConfig?.family == .nemoTransducer {
             decoderInput += repeatElement(0, count: Int(Self.parakeetTrailingSilenceSeconds * Double(effectiveSampleRate)))
         }
         decoderInput.withUnsafeBufferPointer { buffer in
