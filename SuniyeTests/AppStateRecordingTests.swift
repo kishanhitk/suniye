@@ -3,39 +3,6 @@ import XCTest
 
 @MainActor
 final class AppStateRecordingTests: XCTestCase {
-    private func waitUntil(
-        timeout: TimeInterval = 2,
-        _ condition: () -> Bool
-    ) async {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition(), Date() < deadline {
-            await Task.yield()
-            try? await Task.sleep(nanoseconds: 10_000_000)
-        }
-    }
-
-    private func drainScheduledTasks() async {
-        for _ in 0 ..< 8 {
-            await Task.yield()
-        }
-    }
-
-    private func readyAppState(
-        audioCapture: StubAudioCaptureService = StubAudioCaptureService(),
-        transcriptionService: StubTranscriptionService = StubTranscriptionService(),
-        textInsertionService: SpyTextInsertionService = SpyTextInsertionService()
-    ) -> AppState {
-        let appState = makeTestAppState(
-            transcriptionService: transcriptionService,
-            audioCaptureService: audioCapture,
-            textInsertionService: textInsertionService
-        )
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-        return appState
-    }
-
     private func startRecording(_ appState: AppState, audioCapture: StubAudioCaptureService) async {
         let started = expectation(description: "capture started")
         audioCapture.onStartCapture = { _ in started.fulfill() }
@@ -47,7 +14,7 @@ final class AppStateRecordingTests: XCTestCase {
     func testRecordingStartWarmsTargetAppAccessibility() async {
         let audioCapture = StubAudioCaptureService()
         let insertion = SpyTextInsertionService()
-        let appState = readyAppState(audioCapture: audioCapture, textInsertionService: insertion)
+        let appState = makeReadyTestAppState(audioCaptureService: audioCapture, textInsertionService: insertion)
 
         await startRecording(appState, audioCapture: audioCapture)
 
@@ -56,7 +23,7 @@ final class AppStateRecordingTests: XCTestCase {
 
     func testFinishEditModeRecordingNoOpWhenNotRecording() async {
         let audioCapture = StubAudioCaptureService()
-        let appState = readyAppState(audioCapture: audioCapture)
+        let appState = makeReadyTestAppState(audioCaptureService: audioCapture)
 
         await appState.finishEditModeRecording()
 
@@ -66,7 +33,7 @@ final class AppStateRecordingTests: XCTestCase {
 
     func testFinishEditModeRecordingIgnoresManualRecordingSession() async {
         let audioCapture = StubAudioCaptureService()
-        let appState = readyAppState(audioCapture: audioCapture)
+        let appState = makeReadyTestAppState(audioCaptureService: audioCapture)
         await startRecording(appState, audioCapture: audioCapture)
 
         await appState.finishEditModeRecording()
@@ -104,7 +71,7 @@ final class AppStateRecordingTests: XCTestCase {
     }
 
     func testBlockedStartMessagesForModelPhases() async {
-        let appState = readyAppState()
+        let appState = makeReadyTestAppState()
 
         appState.phase = .downloadingModel
         appState.toggleFloatingIndicatorRecording()
@@ -118,7 +85,7 @@ final class AppStateRecordingTests: XCTestCase {
     }
 
     func testTransientErrorResetLeavesForeignIndicatorStateAlone() async {
-        let appState = readyAppState()
+        let appState = makeReadyTestAppState()
         appState.phase = .loading
 
         appState.toggleFloatingIndicatorRecording()
@@ -134,7 +101,7 @@ final class AppStateRecordingTests: XCTestCase {
 
     func testInterruptionForUnknownSessionIsIgnored() async {
         let audioCapture = StubAudioCaptureService()
-        let appState = readyAppState(audioCapture: audioCapture)
+        let appState = makeReadyTestAppState(audioCaptureService: audioCapture)
         await startRecording(appState, audioCapture: audioCapture)
 
         audioCapture.onEvent?(.interrupted(sessionID: UUID(), reason: .inputMuted))
@@ -146,7 +113,7 @@ final class AppStateRecordingTests: XCTestCase {
 
     func testRouteChangedEventUpdatesSnapshotOnlyForActiveSession() async throws {
         let audioCapture = StubAudioCaptureService()
-        let appState = readyAppState(audioCapture: audioCapture)
+        let appState = makeReadyTestAppState(audioCaptureService: audioCapture)
         await startRecording(appState, audioCapture: audioCapture)
         let sessionID = try XCTUnwrap(audioCapture.lastStartedSessionID)
 
@@ -176,7 +143,7 @@ final class AppStateRecordingTests: XCTestCase {
 
     func testAudioLevelsIgnoredWhenIndicatorIsNotListening() async throws {
         let audioCapture = StubAudioCaptureService()
-        let appState = readyAppState(audioCapture: audioCapture)
+        let appState = makeReadyTestAppState(audioCaptureService: audioCapture)
         await startRecording(appState, audioCapture: audioCapture)
         let sessionID = try XCTUnwrap(audioCapture.lastStartedSessionID)
 
@@ -196,7 +163,7 @@ final class AppStateRecordingTests: XCTestCase {
             samples: Array(repeating: 0, count: 16_000),
             sampleRate: 16_000
         )
-        let appState = readyAppState(audioCapture: audioCapture)
+        let appState = makeReadyTestAppState(audioCaptureService: audioCapture)
         appState.activeOnboardingStep = .speak
         await startRecording(appState, audioCapture: audioCapture)
 
@@ -218,9 +185,9 @@ final class AppStateRecordingTests: XCTestCase {
         let transcription = StubTranscriptionService()
         transcription.transcribeResult = .success("hello there")
         let insertion = SpyTextInsertionService()
-        let appState = readyAppState(
-            audioCapture: audioCapture,
+        let appState = makeReadyTestAppState(
             transcriptionService: transcription,
+            audioCaptureService: audioCapture,
             textInsertionService: insertion
         )
         appState.autoSubmitEnabled = true
@@ -240,9 +207,9 @@ final class AppStateRecordingTests: XCTestCase {
         let transcription = StubTranscriptionService()
         transcription.transcribeResult = .success("Tell me when you are ready to send.")
         let insertion = SpyTextInsertionService()
-        let appState = readyAppState(
-            audioCapture: audioCapture,
+        let appState = makeReadyTestAppState(
             transcriptionService: transcription,
+            audioCaptureService: audioCapture,
             textInsertionService: insertion
         )
         await startRecording(appState, audioCapture: audioCapture)
@@ -265,9 +232,9 @@ final class AppStateRecordingTests: XCTestCase {
         transcription.transcribeResult = .success("hello there")
         let insertion = SpyTextInsertionService()
         insertion.insertOutcome = .unverified
-        let appState = readyAppState(
-            audioCapture: audioCapture,
+        let appState = makeReadyTestAppState(
             transcriptionService: transcription,
+            audioCaptureService: audioCapture,
             textInsertionService: insertion
         )
         appState.autoSubmitEnabled = true

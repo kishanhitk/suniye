@@ -1,70 +1,6 @@
 import XCTest
 @testable import Suniye
 
-private final class ModelDownloadURLProtocol: URLProtocol {
-    struct Stub {
-        var statusCode: Int = 200
-        var body: Data = Data()
-        var error: Error?
-    }
-
-    private static let lock = NSLock()
-    private static var stubs: [URL: Stub] = [:]
-
-    static func setStub(_ stub: Stub, for url: URL) {
-        lock.lock()
-        defer { lock.unlock() }
-        stubs[url] = stub
-    }
-
-    static func removeAllStubs() {
-        lock.lock()
-        defer { lock.unlock() }
-        stubs.removeAll()
-    }
-
-    private static func stub(for url: URL?) -> Stub? {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let url else {
-            return nil
-        }
-        return stubs[url]
-    }
-
-    override class func canInit(with request: URLRequest) -> Bool {
-        true
-    }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        guard let url = request.url, let stub = Self.stub(for: url) else {
-            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
-            return
-        }
-
-        if let error = stub.error {
-            client?.urlProtocol(self, didFailWithError: error)
-            return
-        }
-
-        let response = HTTPURLResponse(
-            url: url,
-            statusCode: stub.statusCode,
-            httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Length": "\(stub.body.count)"]
-        )!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: stub.body)
-        client?.urlProtocolDidFinishLoading(self)
-    }
-
-    override func stopLoading() {}
-}
-
 private final class ProgressRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var storage: [Double] = []
@@ -95,7 +31,7 @@ final class ModelManagerTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        ModelDownloadURLProtocol.removeAllStubs()
+        StubURLProtocol.handler = nil
         if let tempDirectory {
             try? fileManager.removeItem(at: tempDirectory)
         }
@@ -103,16 +39,10 @@ final class ModelManagerTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    private func makeStubbedSessionConfiguration() -> URLSessionConfiguration {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [ModelDownloadURLProtocol.self]
-        return configuration
-    }
-
     private func makeSandboxedManager() -> ModelManager {
         ModelManager(
             applicationSupportDirectory: tempDirectory,
-            urlSessionConfiguration: makeStubbedSessionConfiguration()
+            urlSessionConfiguration: StubURLProtocol.sessionConfiguration()
         )
     }
 
@@ -232,7 +162,7 @@ final class ModelManagerTests: XCTestCase {
     func testModelsRootDirectoryThrowsWhenAppSupportUnavailable() {
         let manager = ModelManager(
             applicationSupportDirectory: nil,
-            urlSessionConfiguration: makeStubbedSessionConfiguration()
+            urlSessionConfiguration: StubURLProtocol.sessionConfiguration()
         )
 
         XCTAssertThrowsError(try manager.modelsRootDirectoryURL()) { error in
@@ -363,10 +293,9 @@ final class ModelManagerTests: XCTestCase {
     func testDownloadAndExtractModelInstallsArchiveEndToEnd() async throws {
         let entry = ASRModelCatalog.entry(for: .senseVoice)
         let archiveData = try makeArchiveData(for: entry, marker: "downloaded")
-        ModelDownloadURLProtocol.setStub(
-            .init(statusCode: 200, body: archiveData),
-            for: try archiveURLForEntry(entry)
-        )
+        try StubURLProtocol.serve([
+            archiveURLForEntry(entry): .init(statusCode: 200, body: archiveData)
+        ])
 
         let manager = makeSandboxedManager()
         let recorder = ProgressRecorder()
@@ -391,10 +320,9 @@ final class ModelManagerTests: XCTestCase {
         try installFakeModel(entry, using: manager, marker: "old")
 
         let archiveData = try makeArchiveData(for: entry, marker: "new")
-        ModelDownloadURLProtocol.setStub(
-            .init(statusCode: 200, body: archiveData),
-            for: try archiveURLForEntry(entry)
-        )
+        try StubURLProtocol.serve([
+            archiveURLForEntry(entry): .init(statusCode: 200, body: archiveData)
+        ])
 
         try await manager.downloadAndExtractModel(.senseVoice) { _ in }
 
@@ -405,10 +333,9 @@ final class ModelManagerTests: XCTestCase {
 
     func testDownloadAndExtractModelThrowsForNon2xxResponse() async throws {
         let entry = ASRModelCatalog.entry(for: .parakeetV3)
-        ModelDownloadURLProtocol.setStub(
-            .init(statusCode: 404, body: Data("not found".utf8)),
-            for: try archiveURLForEntry(entry)
-        )
+        try StubURLProtocol.serve([
+            archiveURLForEntry(entry): .init(statusCode: 404, body: Data("not found".utf8))
+        ])
 
         let manager = makeSandboxedManager()
         do {
@@ -424,10 +351,9 @@ final class ModelManagerTests: XCTestCase {
 
     func testDownloadAndExtractModelThrowsWhenArchiveIsCorrupt() async throws {
         let entry = ASRModelCatalog.entry(for: .parakeetV3)
-        ModelDownloadURLProtocol.setStub(
-            .init(statusCode: 200, body: Data("this is definitely not a bzip2 archive".utf8)),
-            for: try archiveURLForEntry(entry)
-        )
+        try StubURLProtocol.serve([
+            archiveURLForEntry(entry): .init(statusCode: 200, body: Data("this is definitely not a bzip2 archive".utf8))
+        ])
 
         let manager = makeSandboxedManager()
         do {
@@ -443,10 +369,9 @@ final class ModelManagerTests: XCTestCase {
 
     func testDownloadAndExtractModelPropagatesTransportErrors() async throws {
         let entry = ASRModelCatalog.entry(for: .parakeetV3)
-        ModelDownloadURLProtocol.setStub(
-            .init(error: URLError(.notConnectedToInternet)),
-            for: try archiveURLForEntry(entry)
-        )
+        try StubURLProtocol.serve([
+            archiveURLForEntry(entry): .init(error: URLError(.notConnectedToInternet))
+        ])
 
         let manager = makeSandboxedManager()
         do {
@@ -473,10 +398,9 @@ final class ModelManagerTests: XCTestCase {
         process.waitUntilExit()
         XCTAssertEqual(process.terminationStatus, 0)
 
-        ModelDownloadURLProtocol.setStub(
-            .init(statusCode: 200, body: try Data(contentsOf: archiveURL)),
-            for: try archiveURLForEntry(entry)
-        )
+        try StubURLProtocol.serve([
+            archiveURLForEntry(entry): .init(statusCode: 200, body: Data(contentsOf: archiveURL))
+        ])
 
         let manager = makeSandboxedManager()
         do {
@@ -496,8 +420,10 @@ final class ModelManagerTests: XCTestCase {
         let fileURL2 = URL(string: "https://stub.suniye.test/remote/dir/file2.bin")!
         let body1 = Data(repeating: 0x41, count: 64)
         let body2 = Data(repeating: 0x42, count: 128)
-        ModelDownloadURLProtocol.setStub(.init(statusCode: 200, body: body1), for: fileURL1)
-        ModelDownloadURLProtocol.setStub(.init(statusCode: 200, body: body2), for: fileURL2)
+        StubURLProtocol.serve([
+            fileURL1: .init(statusCode: 200, body: body1),
+            fileURL2: .init(statusCode: 200, body: body2)
+        ])
 
         let files = [
             ASRModelRemoteFile(remoteURL: fileURL1, destinationRelativePath: "file1.bin", expectedSizeBytes: 64),
@@ -517,10 +443,9 @@ final class ModelManagerTests: XCTestCase {
 
     func testDownloadRemoteFilesUsesIndexBasedProgressWhenSizesUnknown() async throws {
         let fileURL = URL(string: "https://stub.suniye.test/remote/unknown-size.bin")!
-        ModelDownloadURLProtocol.setStub(
-            .init(statusCode: 200, body: Data(repeating: 0x43, count: 32)),
-            for: fileURL
-        )
+        StubURLProtocol.serve([
+            fileURL: .init(statusCode: 200, body: Data(repeating: 0x43, count: 32))
+        ])
 
         let files = [
             ASRModelRemoteFile(remoteURL: fileURL, destinationRelativePath: "unknown-size.bin", expectedSizeBytes: nil)
@@ -537,10 +462,9 @@ final class ModelManagerTests: XCTestCase {
 
     func testDownloadRemoteFilesOverwritesExistingDestination() async throws {
         let fileURL = URL(string: "https://stub.suniye.test/remote/overwrite.bin")!
-        ModelDownloadURLProtocol.setStub(
-            .init(statusCode: 200, body: Data("fresh".utf8)),
-            for: fileURL
-        )
+        StubURLProtocol.serve([
+            fileURL: .init(statusCode: 200, body: Data("fresh".utf8))
+        ])
 
         let manager = makeSandboxedManager()
         let destination = tempDirectory.appendingPathComponent("remote-model-overwrite", isDirectory: true)
@@ -559,10 +483,9 @@ final class ModelManagerTests: XCTestCase {
 
     func testDownloadRemoteFilesThrowsForNon2xxResponse() async throws {
         let fileURL = URL(string: "https://stub.suniye.test/remote/missing.bin")!
-        ModelDownloadURLProtocol.setStub(
-            .init(statusCode: 500, body: Data()),
-            for: fileURL
-        )
+        StubURLProtocol.serve([
+            fileURL: .init(statusCode: 500, body: Data())
+        ])
 
         let manager = makeSandboxedManager()
         let destination = tempDirectory.appendingPathComponent("remote-model-error", isDirectory: true)
@@ -582,7 +505,7 @@ final class ModelManagerTests: XCTestCase {
 
     func testDownloadRemoteFilesVerifiesPinnedSHA256() async throws {
         let fileURL = URL(string: "https://stub.suniye.test/remote/pinned.bin")!
-        ModelDownloadURLProtocol.setStub(.init(statusCode: 200, body: Data("abc".utf8)), for: fileURL)
+        StubURLProtocol.serve([fileURL: .init(statusCode: 200, body: Data("abc".utf8))])
         let manager = makeSandboxedManager()
         let destination = tempDirectory.appendingPathComponent("remote-model-pinned", isDirectory: true)
 

@@ -3,19 +3,6 @@ import XCTest
 
 @MainActor
 final class AppStateLocalModelTests: XCTestCase {
-    private func waitUntil(
-        timeoutSeconds: TimeInterval = 2,
-        condition: @escaping @MainActor () -> Bool,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) async {
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        while !condition(), Date() < deadline {
-            try? await Task.sleep(nanoseconds: 10_000_000)
-        }
-        XCTAssertTrue(condition(), file: file, line: line)
-    }
-
     func testLocalGemmaInstallStatusTextBranches() {
         let manager = StubLocalLLMModelManager()
         manager.installedModelIDs = [manager.preferredModelID]
@@ -107,7 +94,9 @@ final class AppStateLocalModelTests: XCTestCase {
     }
 
     func testLocalGemmaDownloadReportsIntermediateProgress() async {
-        let manager = SuspendingLocalLLMModelManager()
+        let gate = AsyncGate()
+        let manager = StubLocalLLMModelManager()
+        manager.downloadGate = gate
         let appState = makeTestAppState(localLLMModelManager: manager)
         appState.localGemmaInstallState = .notInstalled
 
@@ -124,7 +113,7 @@ final class AppStateLocalModelTests: XCTestCase {
             XCTFail("expected mid-download state, got \(appState.localGemmaInstallState)")
         }
 
-        manager.finishDownload()
+        gate.open()
         await waitUntil { appState.localGemmaInstallState.isInstalled }
         XCTAssertTrue(appState.localGemmaInstallState.isInstalled)
     }
@@ -184,7 +173,7 @@ final class AppStateLocalModelTests: XCTestCase {
     }
 
     func testDeleteLocalGemmaModelFailureShowsError() async {
-        let manager = SuspendingLocalLLMModelManager()
+        let manager = StubLocalLLMModelManager()
         manager.deleteError = FakeError(message: "model file busy")
         manager.installedModelIDs = [manager.preferredModelID]
         let appState = makeTestAppState(localLLMModelManager: manager)
@@ -330,9 +319,7 @@ final class AppStateLocalModelTests: XCTestCase {
         appState.llmProvider = .localGemma
 
         await appState.bootstrap()
-        for _ in 0 ..< 20 {
-            await Task.yield()
-        }
+        await drainScheduledTasks(yields: 20)
 
         XCTAssertEqual(localManager.downloadCallCount, 1)
     }
@@ -495,7 +482,7 @@ final class AppStateLocalModelTests: XCTestCase {
 
         let prewarm = appState.prewarmLocalLLMIfEligible()
         XCTAssertNotNil(prewarm)
-        await waitUntil(timeoutSeconds: 2) { fakeGemma.prewarmCallCount == 1 }
+        await waitUntil(timeout: 2) { fakeGemma.prewarmCallCount == 1 }
 
         let output = await appState.postProcessTextIfEnabled("raw text")
         await prewarm?.value
@@ -522,13 +509,13 @@ final class AppStateLocalModelTests: XCTestCase {
         // First dictation is abandoned (no polish ever runs); its probe must not
         // survive into the next dictation's prewarm.
         let first = appState.prewarmLocalLLMIfEligible()
-        await waitUntil(timeoutSeconds: 2) { fakeGemma.prewarmCallCount == 1 }
+        await waitUntil(timeout: 2) { fakeGemma.prewarmCallCount == 1 }
 
         let second = appState.prewarmLocalLLMIfEligible()
         await first?.value
         XCTAssertTrue(fakeGemma.prewarmWasCanceled)
 
-        await waitUntil(timeoutSeconds: 2) { fakeGemma.prewarmCallCount == 2 }
+        await waitUntil(timeout: 2) { fakeGemma.prewarmCallCount == 2 }
         second?.cancel()
         await second?.value
     }
@@ -592,7 +579,7 @@ final class AppStateLocalModelTests: XCTestCase {
         appState.llmProvider = .localGemma
         appState.startLocalGemmaDownload()
         await fulfillment(of: [downloadFinished], timeout: 1)
-        await waitUntil(timeoutSeconds: 1) {
+        await waitUntil(timeout: 1) {
             appState.localGemmaInstallState.isInstalled
         }
 
@@ -613,7 +600,7 @@ final class AppStateLocalModelTests: XCTestCase {
         appState.llmProvider = .localGemma
         appState.startLocalGemmaDownload()
         await fulfillment(of: [downloadFinished], timeout: 1)
-        await waitUntil(timeoutSeconds: 1) {
+        await waitUntil(timeout: 1) {
             appState.localGemmaInstallState.isInstalled
         }
 
@@ -692,61 +679,6 @@ final class AppStateLocalModelTests: XCTestCase {
         XCTAssertNotNil(fakeGemma.lastConfig)
         XCTAssertEqual(appState.magicFormatSetupTestResult?.message, "Local model works.")
         XCTAssertEqual(appState.magicFormatSetupTestResult?.severity, .success)
-    }
-}
-
-/// Local LLM manager that suspends downloads mid-flight and supports delete failures.
-private final class SuspendingLocalLLMModelManager: LocalLLMModelManagerProtocol {
-    var catalog: [LocalLLMModelCatalogEntry] = LocalLLMModelCatalog.entries
-    var preferredModelID: LocalLLMModelID = LocalLLMModelCatalog.preferredModelID
-    var isHardwareSupported = true
-    var installedModelIDs: Set<LocalLLMModelID> = []
-    var deleteError: Error?
-    private var downloadContinuation: CheckedContinuation<Void, Never>?
-
-    func modelsRootDirectoryURL() throws -> URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent("suniye-llm", isDirectory: true)
-    }
-
-    func modelFileURL(for modelID: LocalLLMModelID) throws -> URL {
-        try modelsRootDirectoryURL().appendingPathComponent(modelID.rawValue)
-    }
-
-    func isInstalled(_ modelID: LocalLLMModelID) -> Bool {
-        isHardwareSupported && installedModelIDs.contains(modelID)
-    }
-
-    func installedByteCount(for modelID: LocalLLMModelID) -> Int64 {
-        isInstalled(modelID) ? 1_000_000 : 0
-    }
-
-    func installState(for modelID: LocalLLMModelID) -> LocalLLMInstallState {
-        guard isHardwareSupported else {
-            return .unavailable("Requires Apple Silicon.")
-        }
-        return isInstalled(modelID) ? .installed(installedByteCount(for: modelID)) : .notInstalled
-    }
-
-    func downloadModel(_ modelID: LocalLLMModelID, progress: @escaping @Sendable (LocalLLMDownloadProgress) -> Void) async throws {
-        progress(LocalLLMDownloadProgress(fractionCompleted: 0.5, downloadedBytes: 500, expectedBytes: 1000))
-        await withCheckedContinuation { continuation in
-            downloadContinuation = continuation
-        }
-        installedModelIDs.insert(modelID)
-    }
-
-    func finishDownload() {
-        downloadContinuation?.resume()
-        downloadContinuation = nil
-    }
-
-    func cancelDownload() {}
-
-    func deleteModel(_ modelID: LocalLLMModelID) throws {
-        if let deleteError {
-            throw deleteError
-        }
-        installedModelIDs.remove(modelID)
     }
 }
 

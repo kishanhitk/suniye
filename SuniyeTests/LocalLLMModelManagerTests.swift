@@ -387,10 +387,10 @@ final class LocalLLMModelManagerTests: XCTestCase {
     }
 
     private func makeCompletedStubDownloadTask(contentLength: Int) async throws -> URLSessionDownloadTask {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [FixedLengthURLProtocol.self]
-        let session = URLSession(configuration: config)
-        let task = session.downloadTask(with: URL(string: "https://stub.invalid/model.bin")!)
+        let url = URL(string: "https://stub.invalid/model.bin")!
+        StubURLProtocol.serve([url: .init(body: Data(repeating: 0, count: contentLength))])
+        let session = URLSession(configuration: StubURLProtocol.sessionConfiguration())
+        let task = session.downloadTask(with: url)
         task.resume()
         let deadline = Date().addingTimeInterval(5)
         while task.response == nil, Date() < deadline {
@@ -517,28 +517,4 @@ private final class ProgressRecorder: @unchecked Sendable {
         defer { lock.unlock() }
         return values
     }
-}
-
-private final class FixedLengthURLProtocol: URLProtocol {
-    override class func canInit(with request: URLRequest) -> Bool {
-        true
-    }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        let response = HTTPURLResponse(
-            url: request.url!,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: ["Content-Length": "100"]
-        )!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(repeating: 0, count: 100))
-        client?.urlProtocolDidFinishLoading(self)
-    }
-
-    override func stopLoading() {}
 }

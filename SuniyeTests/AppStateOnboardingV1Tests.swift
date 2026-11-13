@@ -8,18 +8,6 @@ import SuniyeAnalytics
 /// closing "more" step, and the analytics each of those emits.
 @MainActor
 final class AppStateOnboardingV1Tests: XCTestCase {
-    private func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) async {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition(), Date() < deadline {
-            await Task.yield()
-            try? await Task.sleep(nanoseconds: 10_000_000)
-        }
-    }
-
-    private func drain() async {
-        for _ in 0 ..< 8 { await Task.yield() }
-    }
-
     private func systemDefaultEvents(_ spy: SpyAnalytics) -> [(outcome: SystemDefaultModelOutcome, reason: SystemDefaultModelReason?, model: SafeLabel?, durationMs: Int)] {
         spy.trackedEvents.compactMap {
             if case let .systemDefaultModel(outcome, reason, model, durationMs) = $0 {
@@ -152,7 +140,7 @@ final class AppStateOnboardingV1Tests: XCTestCase {
         modelManager.installedModelIDs = []
 
         await appState.bootstrap()
-        await drain()
+        await drainScheduledTasks()
 
         XCTAssertEqual(appState.phase, .needsModel)
         XCTAssertEqual(systemDefaultEvents(spy).first?.reason, .osTooOld)
@@ -371,9 +359,9 @@ final class AppStateOnboardingV1Tests: XCTestCase {
         XCTAssertEqual(appState.phase, .ready)
 
         hotkey.onHotkeyDown?()
-        await drain()
+        await drainScheduledTasks()
         hotkey.onHotkeyUp?()
-        await drain()
+        await drainScheduledTasks()
         gate.open()
         await waitUntil { blockedReasons(spy).contains(.releasedDuringPrompt) }
 
@@ -392,7 +380,7 @@ final class AppStateOnboardingV1Tests: XCTestCase {
         let appState = await hotkeyDrivenState(spy: spy, hotkey: hotkey, audio: audio, gate: gate)
 
         hotkey.onHotkeyDown?()
-        await drain()
+        await drainScheduledTasks()
         gate.open()
         await waitUntil { appState.phase == .recording }
 
@@ -462,7 +450,7 @@ final class AppStateOnboardingV1Tests: XCTestCase {
         await fulfillment(of: [started], timeout: 1)
         appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [transcribed], timeout: 1)
-        await drain()
+        await drainScheduledTasks()
     }
 
     func testFirstInsertionIntoAnotherAppAdvancesToMore() async {

@@ -4,7 +4,7 @@ import XCTest
 final class IssueReportServiceTests: XCTestCase {
     override func setUp() {
         super.setUp()
-        MockIssueReportURLProtocol.handler = nil
+        StubURLProtocol.handler = nil
     }
 
     private static let endpointURL = URL(string: "https://suniye.test/api/issue-reports")!
@@ -157,9 +157,9 @@ final class IssueReportServiceTests: XCTestCase {
 
         var capturedRequest: URLRequest?
         var capturedBody: Data?
-        MockIssueReportURLProtocol.handler = { request in
+        StubURLProtocol.handler = { request in
             capturedRequest = request
-            capturedBody = MockIssueReportURLProtocol.requestBodyData(from: request)
+            capturedBody = StubURLProtocol.requestBody(of: request)
             let response = HTTPURLResponse(url: endpointURL, statusCode: 200, httpVersion: nil, headerFields: nil)!
             let data = """
             {
@@ -187,7 +187,7 @@ final class IssueReportServiceTests: XCTestCase {
 
     func testUploadServiceSurfacesServerErrorMessage() async {
         let endpointURL = URL(string: "https://suniye.test/api/issue-reports")!
-        MockIssueReportURLProtocol.handler = { _ in
+        StubURLProtocol.handler = { _ in
             let response = HTTPURLResponse(url: endpointURL, statusCode: 400, httpVersion: nil, headerFields: nil)!
             let data = """
             {
@@ -237,7 +237,7 @@ final class IssueReportServiceTests: XCTestCase {
     }
 
     func testSubmitMapsTransportFailureToServerMessage() async {
-        MockIssueReportURLProtocol.handler = { _ in
+        StubURLProtocol.handler = { _ in
             throw URLError(.notConnectedToInternet)
         }
         let service = IssueReportUploadService(session: makeSession(), endpointURL: Self.endpointURL)
@@ -253,7 +253,7 @@ final class IssueReportServiceTests: XCTestCase {
     }
 
     func testSubmitThrowsInvalidResponseForNonHTTPResponse() async {
-        MockIssueReportURLProtocol.handler = { _ in
+        StubURLProtocol.handler = { _ in
             let response = URLResponse(
                 url: Self.endpointURL,
                 mimeType: "application/json",
@@ -275,7 +275,7 @@ final class IssueReportServiceTests: XCTestCase {
     }
 
     func testSubmitThrowsInvalidResponseWhenSuccessEnvelopeIsIncomplete() async {
-        MockIssueReportURLProtocol.handler = { _ in
+        StubURLProtocol.handler = { _ in
             let response = HTTPURLResponse(url: Self.endpointURL, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (response, Data(#"{"success": false}"#.utf8))
         }
@@ -369,9 +369,7 @@ final class IssueReportServiceTests: XCTestCase {
     }
 
     private func makeSession() -> URLSession {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [MockIssueReportURLProtocol.self]
-        return URLSession(configuration: config)
+        URLSession(configuration: StubURLProtocol.sessionConfiguration())
     }
 
     private func unzip(_ archiveURL: URL, to destinationURL: URL) throws {
@@ -434,60 +432,4 @@ private final class ReadOnlyAfterStagingFileManager: FileManager, @unchecked Sen
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: createIntermediates, attributes: attributes)
         try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: root.path)
     }
-}
-
-private final class MockIssueReportURLProtocol: URLProtocol {
-    static var handler: ((URLRequest) throws -> (URLResponse, Data))?
-
-    static func requestBodyData(from request: URLRequest) -> Data? {
-        if let body = request.httpBody {
-            return body
-        }
-
-        guard let stream = request.httpBodyStream else {
-            return nil
-        }
-
-        stream.open()
-        defer { stream.close() }
-
-        var data = Data()
-        var buffer = [UInt8](repeating: 0, count: 4096)
-        while stream.hasBytesAvailable {
-            let count = stream.read(&buffer, maxLength: buffer.count)
-            if count < 0 {
-                return nil
-            }
-            if count == 0 {
-                break
-            }
-            data.append(buffer, count: count)
-        }
-        return data
-    }
-
-    override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == "suniye.test"
-    }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        guard let handler = Self.handler else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
-            return
-        }
-        do {
-            let (response, data) = try handler(request)
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
-        } catch {
-            client?.urlProtocol(self, didFailWithError: error)
-        }
-    }
-
-    override func stopLoading() {}
 }

@@ -240,9 +240,7 @@ final class AppStatePerAppPromptTests: XCTestCase {
         appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         appState.toggleFloatingIndicatorRecording()
-        for _ in 0 ..< 500 where appState.phase != .ready {
-            await Task.yield()
-        }
+        await waitUntil { appState.phase == .ready }
 
         XCTAssertEqual(capturingLLM.lastConfig?.systemPrompt, appendedPrompt(base: LLMDefaults.defaultBaseSystemPrompt))
         XCTAssertEqual(insertion.insertedTexts, ["polished"])

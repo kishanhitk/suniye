@@ -598,20 +598,7 @@ final class AppStateLLMTests: XCTestCase {
         appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         appState.toggleFloatingIndicatorRecording()
-        await waitUntil(timeoutSeconds: 2) { !appState.recentResults.isEmpty && appState.phase == .ready }
+        await waitUntil(timeout: 2) { !appState.recentResults.isEmpty && appState.phase == .ready }
         return appState.recentResults.first
-    }
-
-    private func waitUntil(
-        timeoutSeconds: TimeInterval,
-        condition: @escaping @MainActor () -> Bool,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) async {
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        while !condition(), Date() < deadline {
-            try? await Task.sleep(nanoseconds: 10_000_000)
-        }
-        XCTAssertTrue(condition(), file: file, line: line)
     }
 }

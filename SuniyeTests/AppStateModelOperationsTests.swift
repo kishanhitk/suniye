@@ -3,17 +3,6 @@ import XCTest
 
 @MainActor
 final class AppStateModelOperationsTests: XCTestCase {
-    private func waitUntil(
-        timeout: TimeInterval = 2,
-        _ condition: () -> Bool
-    ) async {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition(), Date() < deadline {
-            await Task.yield()
-            try? await Task.sleep(nanoseconds: 10_000_000)
-        }
-    }
-
     func testDownloadIgnoredWhileRecording() {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
@@ -234,7 +223,7 @@ final class AppStateModelOperationsTests: XCTestCase {
     }
 
     func testDeleteFailureSurfacesError() async {
-        let modelManager = DeleteFailingModelManager()
+        let modelManager = StubModelManager()
         modelManager.deleteError = FakeError(message: "disk locked")
         let appState = makeTestAppState(modelManager: modelManager)
         appState.phase = .ready
@@ -479,53 +468,5 @@ final class AppStateModelOperationsTests: XCTestCase {
         XCTAssertEqual(appState.phase, .ready)
         XCTAssertEqual(generalSettingsStore.latest.selectedASRModelID, .moonshineBase)
         XCTAssertEqual(transcriptionService.loadedConfigs.map(\.modelID), [.senseVoice, .moonshineBase])
-    }
-}
-
-/// Model manager wrapper whose delete fails on demand.
-private final class DeleteFailingModelManager: ModelManagerProtocol {
-    let inner = StubModelManager()
-    var deleteError: Error?
-
-    var catalog: [ASRModelCatalogEntry] { inner.catalog }
-    var fallbackOrder: [ASRModelID] { inner.fallbackOrder }
-
-    func modelsRootDirectoryURL() throws -> URL {
-        try inner.modelsRootDirectoryURL()
-    }
-
-    func modelDirectoryURL(for modelID: ASRModelID) throws -> URL {
-        try inner.modelDirectoryURL(for: modelID)
-    }
-
-    func isInstalled(_ modelID: ASRModelID) -> Bool {
-        inner.isInstalled(modelID)
-    }
-
-    func installedModels() -> [ASRModelID] {
-        inner.installedModels()
-    }
-
-    func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig {
-        try inner.makeRecognizerConfig(for: modelID)
-    }
-
-    func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {
-        try await inner.downloadAndExtractModel(modelID, progress: progress)
-    }
-
-    func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64 {
-        inner.expectedDownloadSizeBytes(for: modelID)
-    }
-
-    func installedByteCount(for modelID: ASRModelID) -> Int64 {
-        inner.installedByteCount(for: modelID)
-    }
-
-    func deleteModel(_ modelID: ASRModelID) throws {
-        if let deleteError {
-            throw deleteError
-        }
-        try inner.deleteModel(modelID)
     }
 }
