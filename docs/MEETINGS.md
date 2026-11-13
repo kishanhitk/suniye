@@ -82,7 +82,7 @@ After a quit or a crash during a recording, the next launch finishes the transcr
 
 ## Files
 
-`~/Library/Application Support/Suniye/meetings/<meeting id>/`
+`~/Library/Application Support/Suniye/meetings/<meeting id>/` (`meetings-preview` for Suniye Preview)
 
 | File | Content |
 |---|---|
