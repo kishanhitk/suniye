@@ -5,24 +5,23 @@ import SuniyeAnalytics
 /// dictation runs: a dictation stops the summary in progress, and it goes on
 /// where it stopped once the dictation ends.
 @MainActor
-@Observable
 final class MeetingSummaries {
-    @ObservationIgnored private var writing: UUID?
+    private var writing: UUID?
 
-    @ObservationIgnored private let store: MeetingStore
-    @ObservationIgnored private let templates: MeetingTemplateStore
-    @ObservationIgnored private let availability: () -> MeetingSummaryAvailability
-    @ObservationIgnored private let makeModel: (MeetingSummaryEngine) -> MeetingSummaryModel?
-    @ObservationIgnored private let analytics: Analytics
+    private let store: MeetingStore
+    private let templates: MeetingTemplateStore
+    private let availability: () -> MeetingSummaryAvailability
+    private let makeModel: (MeetingSummaryEngine) -> MeetingSummaryModel?
+    private let analytics: Analytics
     /// Gets the record once its summary state is final.
-    @ObservationIgnored var onFinished: ((MeetingRecord) -> Void)?
+    var onFinished: ((MeetingRecord) -> Void)?
     /// Runs after each run of the model, so that Magic Format can load its
     /// own prompt into the model's cache again.
-    @ObservationIgnored var onModelIdle: (() -> Void)?
-    @ObservationIgnored private var queue: [UUID] = []
-    @ObservationIgnored private var writers: [UUID: (engine: MeetingSummaryEngine, writer: MeetingSummaryWriter)] = [:]
-    @ObservationIgnored private var task: Task<Void, Never>?
-    @ObservationIgnored private var held = false
+    var onModelIdle: (() -> Void)?
+    private var queue: [UUID] = []
+    private var writers: [UUID: (engine: MeetingSummaryEngine, writer: MeetingSummaryWriter)] = [:]
+    private var task: Task<Void, Never>?
+    private var held = false
 
     init(
         store: MeetingStore,
