@@ -244,29 +244,6 @@ final class ChatCompletionClient {
             throw LLMPostProcessorError.network(error.localizedDescription)
         }
     }
-
-    private struct TimeoutError: Error {}
-
-    /// Races the operation against a deadline inside a task group, so the caller's
-    /// cancellation propagates structurally into the URLSession request (aborting it)
-    /// and a timeout deterministically surfaces as TimeoutError — never as the
-    /// URLError(.cancelled) that canceling the losing child produces.
-    private func withTimeout<T: Sendable>(seconds: Double, operation: @escaping @Sendable () async throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask {
-                try await operation()
-            }
-            group.addTask {
-                let nanoseconds = UInt64(max(0, seconds) * 1_000_000_000)
-                try await Task.sleep(nanoseconds: nanoseconds)
-                throw TimeoutError()
-            }
-            defer {
-                group.cancelAll()
-            }
-            return try await group.next()!
-        }
-    }
 }
 
 private struct ChatCompletionResponse: Decodable {

@@ -44,22 +44,6 @@ enum AppleSpeechDefaultCheck {
         }
         return .ready(.appleSpeech)
     }
-
-    private struct TimeoutError: LocalizedError {
-        var errorDescription: String? { "timed out" }
-    }
-
-    private static func withTimeout(seconds: Double, _ operation: @escaping @Sendable () async throws -> Void) async throws {
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-                throw TimeoutError()
-            }
-            defer { group.cancelAll() }
-            try await group.next()
-        }
-    }
 }
 
 /// Manages the on-device model asset for Apple's `SpeechTranscriber`: presence checks,
