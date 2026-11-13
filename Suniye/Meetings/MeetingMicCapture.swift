@@ -292,6 +292,8 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
         }
         if now - since >= Self.digitalSilenceLimit {
             digitalSilenceSince = nil
+            // Later on the queue: a reopen closes the ring that the drain loop
+            // reads now.
             queue.async { [weak self] in self?.reopenIfTheDeviceChoiceChanged(reason: "digital silence") }
         }
     }

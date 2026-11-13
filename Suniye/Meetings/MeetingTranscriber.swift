@@ -12,7 +12,7 @@ import Foundation
 ///   that arrives while the router unloads the old engine of a model switch
 ///   fails once.
 /// - A chunk whose text is not stored (its decode kept failing, or the store
-///   could not save its line) makes the finish fail, so its audio stays.
+///   could not save its line) makes the finish fail.
 actor MeetingTranscriber {
     enum Event: Equatable, Sendable {
         case segment(MeetingSegment)
@@ -283,7 +283,7 @@ actor MeetingTranscriber {
     }
 
     /// A track with a hole keeps no line from the hole on, so `recover()`
-    /// decodes it again from there. The finish fails, so the audio stays.
+    /// decodes it again from there.
     private func requireComplete() async throws {
         guard !holes.isEmpty else { return }
         let stored = await store.segments(of: meetingID)

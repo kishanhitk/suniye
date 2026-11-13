@@ -41,8 +41,9 @@ enum MeetingStatus: String, Codable, Sendable {
     case done
     case summaryFailed
     case noSpeech
-    /// The app ended while it finished the transcript. The user starts the
-    /// finish again, because the finish itself may have ended the app.
+    /// The transcript did not finish: the app ended while it finished, or
+    /// part of the audio got no text. The user starts the finish again,
+    /// because the finish itself may have ended the app.
     case interrupted
 
     /// Titles of the states without a summary, for the meeting page and the

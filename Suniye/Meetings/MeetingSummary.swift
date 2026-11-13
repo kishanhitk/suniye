@@ -474,7 +474,8 @@ enum MeetingSummaryText {
 
 extension MeetingRecord {
     /// Takes a summary's title only while the meeting has the placeholder
-    /// title, so a name that the user typed stays.
+    /// title: a name that the user typed, or that an earlier summary gave,
+    /// stays.
     mutating func adoptGeneratedTitle(_ generated: String?) {
         guard titleSource == .placeholder, let generated, !generated.isEmpty else { return }
         title = generated

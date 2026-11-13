@@ -235,6 +235,8 @@ final class MeetingRecorder: @unchecked Sendable {
                 onOutput?(.samples(track, silence, position: position))
                 position += missing
             }
+            // Written before it is handed on: the transcriber reads chunks
+            // back from the file.
             try writer.append(samples)
         } catch {
             AppLogger.shared.log(.error, "meeting recorder could not write track=\(track.rawValue) error=\(error.localizedDescription)")
