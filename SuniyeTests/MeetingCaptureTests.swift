@@ -282,7 +282,7 @@ final class MeetingRecorderTests: XCTestCase {
         sources[.them] = them
         return MeetingRecorder(
             sources: sources,
-            fileURLs: [.you: url(.you), .them: url(.them)],
+            audioURL: { [unowned self] in url($0) },
             uptime: { [unowned self] in self.now },
             silenceCheckInterval: silenceCheck
         )

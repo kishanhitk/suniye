@@ -318,7 +318,7 @@ final class MeetingCoordinator {
         let id = UUID()
         let recorder = MeetingRecorder(
             sources: environment.makeSources(canRecordCallAudio, host?.meetingInputDeviceID),
-            fileURLs: Dictionary(uniqueKeysWithValues: MeetingTrack.allCases.map { ($0, store.audioURL($0, for: id)) })
+            audioURL: { [store] in store.audioURL($0, for: id) }
         )
         let record = MeetingRecord(
             id: id,

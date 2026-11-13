@@ -45,7 +45,7 @@ final class MeetingRecorder: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "dev.suniye.meeting.recorder", qos: .userInitiated)
     private let sources: [MeetingTrack: MeetingAudioSource]
-    private let fileURLs: [MeetingTrack: URL]
+    private let audioURL: (MeetingTrack) -> URL
     private let uptime: () -> TimeInterval
     private let silenceCheckInterval: DispatchTimeInterval
     private var writers: [MeetingTrack: MeetingAudioFileWriter] = [:]
@@ -65,12 +65,12 @@ final class MeetingRecorder: @unchecked Sendable {
     /// `sources` without `.them` records the microphone only.
     init(
         sources: [MeetingTrack: MeetingAudioSource],
-        fileURLs: [MeetingTrack: URL],
+        audioURL: @escaping (MeetingTrack) -> URL,
         uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
         silenceCheckInterval: DispatchTimeInterval = .seconds(1)
     ) {
         self.sources = sources
-        self.fileURLs = fileURLs
+        self.audioURL = audioURL
         self.uptime = uptime
         self.silenceCheckInterval = silenceCheckInterval
     }
@@ -85,8 +85,7 @@ final class MeetingRecorder: @unchecked Sendable {
         try queue.sync {
             do {
                 for track in tracks {
-                    guard let url = fileURLs[track] else { continue }
-                    writers[track] = try MeetingAudioFileWriter(url: url)
+                    writers[track] = try MeetingAudioFileWriter(url: audioURL(track))
                     samplesWritten[track] = 0
                 }
             } catch {
