@@ -2370,14 +2370,10 @@ final class AppState {
         }
     }
 
-    /// Reports whether the pasteboard actually took the text. `clearContents`
-    /// has already run by the time `setString` can fail, so a caller that
-    /// confirms unconditionally would promise a copy that left the clipboard
-    /// empty.
+    /// Reports whether the pasteboard took the text, so that a caller does not
+    /// confirm a copy that left the clipboard empty.
     func copyText(_ text: String) -> Bool {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        return pasteboard.setString(text, forType: .string)
+        (try? textInsertionService.copyTextToClipboard(text)) != nil
     }
 
     func copyOriginalTranscript(_ text: String) -> Bool {
@@ -2397,10 +2393,7 @@ final class AppState {
         guard let text = lastTranscriptText else {
             return false
         }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        return true
+        return copyText(text)
     }
 
     @discardableResult

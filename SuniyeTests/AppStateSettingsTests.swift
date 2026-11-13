@@ -42,27 +42,23 @@ final class AppStateSettingsTests: XCTestCase {
         let second = RecentResult(id: UUID(), text: "older transcript", createdAt: .now.addingTimeInterval(-60), durationSeconds: 2.5, wasLLMPolished: true)
         let historyStore = TestHistoryStore()
         historyStore.value = [first, second]
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString("previous clipboard", forType: .string)
+        let insertion = SpyTextInsertionService()
 
-        let appState = makeTestAppState(historyStore: historyStore)
+        let appState = makeTestAppState(textInsertionService: insertion, historyStore: historyStore)
         let didCopy = appState.copyLastTranscript()
 
         XCTAssertTrue(didCopy)
-        XCTAssertEqual(pasteboard.string(forType: .string), "latest transcript")
+        XCTAssertEqual(insertion.copiedTexts, ["latest transcript"])
     }
 
     func testCopyLastTranscriptReturnsFalseWhenHistoryIsEmpty() {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString("previous clipboard", forType: .string)
-        let appState = makeTestAppState()
+        let insertion = SpyTextInsertionService()
+        let appState = makeTestAppState(textInsertionService: insertion)
 
         let didCopy = appState.copyLastTranscript()
 
         XCTAssertFalse(didCopy)
-        XCTAssertEqual(pasteboard.string(forType: .string), "previous clipboard")
+        XCTAssertEqual(insertion.copiedTexts, [])
     }
 
     func testPasteLastTranscriptWorksWhileBusyWithoutChangingHistoryOrSubmitting() async {
