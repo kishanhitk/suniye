@@ -125,6 +125,30 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         }
     }
 
+    func testGenerateReportsRequestFailuresAsPostProcessorErrors() async throws {
+        let tempDir = try makeTemporaryDirectory()
+        let logURL = tempDir.appendingPathComponent("starts.log")
+        overrideHelperPath(try FakeLlamaServer.make(in: tempDir, logURL: logURL, completionStatus: 500))
+        let server = LlamaServer()
+        let client = makeClient(rootDirectory: tempDir, server: server)
+
+        do {
+            _ = try await client.generate(
+                instructions: "Reply with OK.",
+                prompt: "Connection test.",
+                maxTokens: 8,
+                sampling: .greedy,
+                startupTimeoutSeconds: 8,
+                idleTimeoutSeconds: 600,
+                timeoutSeconds: 5
+            )
+            XCTFail("Expected the helper's 500 to fail the generation")
+        } catch let error as LLMPostProcessorError {
+            XCTAssertEqual(error.errorDescription, LLMPostProcessorError.provider("http_500").errorDescription)
+        }
+        await server.stop()
+    }
+
     // MARK: - Helpers
 
     private func makeClient(rootDirectory: URL, server: LlamaServer = LlamaServer()) -> LocalGemmaLlamaCppClient {
