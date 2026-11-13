@@ -23,8 +23,7 @@ final class AppLogger {
                 .appendingPathComponent("SuniyeTests-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
                 .appendingPathComponent("logs", isDirectory: true)
         } else {
-            base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-                .appendingPathComponent("Suniye", isDirectory: true)
+            base = AppSupportDirectory.url()!
                 .appendingPathComponent("logs", isDirectory: true)
         }
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)

@@ -219,7 +219,7 @@ final class CohereProviderTests: XCTestCase {
         try Data("abc".utf8).write(to: url)
 
         XCTAssertEqual(
-            try ModelManager.sha256Hex(of: url),
+            try ModelDownloadSupport.sha256Hex(of: url),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         )
         XCTAssertEqual(ModelManager.ModelError.checksumMismatch("f").errorDescription, "Downloaded model file failed verification: f")

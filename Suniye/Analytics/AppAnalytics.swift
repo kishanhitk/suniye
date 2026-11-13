@@ -38,11 +38,7 @@ enum AppAnalytics {
 
     /// Durable queue lives alongside the app's other config in Application Support.
     static func queueURL() -> URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? FileManager.default.temporaryDirectory
-        return base
-            .appendingPathComponent("Suniye", isDirectory: true)
+        AppSupportDirectory.urlOrTemporary()
             .appendingPathComponent("analytics", isDirectory: true)
             .appendingPathComponent("queue.jsonl")
     }

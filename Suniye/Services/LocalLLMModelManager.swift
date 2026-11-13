@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 enum LocalLLMModelID: String, CaseIterable, Codable, Identifiable {
@@ -189,12 +188,10 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
         self.isHardwareSupported = isHardwareSupported
         self.downloader = downloader
         self.rootDirectoryProvider = rootDirectoryProvider ?? {
-            guard let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            guard let appSupport = AppSupportDirectory.url(fileManager: fileManager) else {
                 throw ModelError.appSupportUnavailable
             }
-            return appSupport
-                .appendingPathComponent("Suniye", isDirectory: true)
-                .appendingPathComponent("llm", isDirectory: true)
+            return appSupport.appendingPathComponent("llm", isDirectory: true)
         }
     }
 
@@ -277,7 +274,7 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
             throw ModelError.invalidSize(expected: entry.expectedSizeBytes, actual: actualSize)
         }
 
-        let actualSHA = try sha256Hex(for: downloadedURL)
+        let actualSHA = try ModelDownloadSupport.sha256Hex(of: downloadedURL)
         guard actualSHA == entry.expectedSHA256 else {
             throw ModelError.checksumMismatch(expected: entry.expectedSHA256, actual: actualSHA)
         }
@@ -343,24 +340,6 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
         return size.int64Value
     }
 
-    private func sha256Hex(for url: URL) throws -> String {
-        let handle = try FileHandle(forReadingFrom: url)
-        defer {
-            try? handle.close()
-        }
-
-        var hasher = SHA256()
-        while autoreleasepool(invoking: {
-            let data = handle.readData(ofLength: 1024 * 1024)
-            guard !data.isEmpty else {
-                return false
-            }
-            hasher.update(data: data)
-            return true
-        }) {}
-
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
-    }
 }
 
 final class URLSessionLocalLLMDownloader: NSObject, LocalLLMDownloading, URLSessionDownloadDelegate {

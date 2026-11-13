@@ -253,10 +253,7 @@ final class DictationStatsStore: DictationStatsStoring {
     }
 
     private static func statsDirectory() -> URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? FileManager.default.temporaryDirectory
-        return base.appendingPathComponent("Suniye", isDirectory: true)
+        AppSupportDirectory.urlOrTemporary()
     }
 
     func record(words: Int, seconds: TimeInterval, at date: Date = Date()) {
