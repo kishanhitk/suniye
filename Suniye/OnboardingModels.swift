@@ -37,6 +37,80 @@ enum OnboardingStep: Int, CaseIterable {
     }
 }
 
+extension OnboardingStep {
+    /// Closing the window on the last two screens finishes onboarding. Without
+    /// Accessibility that is the quiet skip, and dictations are copied.
+    var closingTheWindowFinishesOnboarding: Bool {
+        switch self {
+        case .typeAnywhere, .more:
+            return true
+        case .welcome, .speak:
+            return false
+        }
+    }
+}
+
+/// What one onboarding run in this launch has seen, for the onboarding events.
+struct OnboardingRun {
+    private(set) var startedAt: Date?
+    private var shownSteps: Set<OnboardingStep> = []
+    private var resumed = false
+    /// What is about to move onboarding to its next step.
+    var pendingAdvance: OnboardingAdvance?
+    /// Gates the Continue button of the Speak screen.
+    private(set) var practiceSucceeded = false
+    /// Drives the "Continue anyway" button and the practice analytics. Capped,
+    /// so that a retry loop cannot inflate the metric.
+    private(set) var practiceAttempts = 0
+    /// The practice dictation as transcribed, to tell whether the user edited it.
+    private var practiceTranscript: String?
+    private(set) var practiceEdited = false
+
+    mutating func begin(at date: Date, resumed: Bool) {
+        if resumed {
+            self.resumed = true
+        }
+        if startedAt == nil {
+            startedAt = date
+        }
+    }
+
+    mutating func end() {
+        startedAt = nil
+    }
+
+    func elapsedMs(at date: Date) -> Int? {
+        startedAt.map { Int(date.timeIntervalSince($0) * 1000) }
+    }
+
+    /// The first showing of `step` in this run, with whether a relaunch resumed
+    /// it and what moved onboarding there; nil when the step was shown before.
+    mutating func stepShown(_ step: OnboardingStep?) -> (resumed: Bool, advancedBy: OnboardingAdvance?)? {
+        defer { resumed = false }
+        guard let step, !shownSteps.contains(step) else {
+            return nil
+        }
+        shownSteps.insert(step)
+        let advancedBy = pendingAdvance
+        pendingAdvance = nil
+        return (resumed, advancedBy)
+    }
+
+    mutating func practiceDidSucceed(transcript: String) {
+        practiceSucceeded = true
+        practiceTranscript = transcript
+    }
+
+    mutating func countPracticeAttempt() -> Int {
+        practiceAttempts = min(practiceAttempts + 1, 10)
+        return practiceAttempts
+    }
+
+    mutating func leaveSpeak(withText text: String) {
+        practiceEdited = practiceTranscript.map { $0 != text } ?? false
+    }
+}
+
 /// Persisted onboarding position — the single source of truth that replaces the
 /// legacy `hasSeenOnboardingWelcome`/`hasCompletedCoreOnboarding` Bool pair
 /// (whose illegal combinations needed a repair pass on every launch).

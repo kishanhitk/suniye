@@ -199,8 +199,8 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         let spy = SpyAnalytics()
         let appState = await runPracticeDictation(transcript: .success("hello onboarding world"), spy: spy)
 
-        XCTAssertTrue(appState.onboardingPracticeSucceeded)
-        XCTAssertEqual(appState.onboardingPracticeAttempts, 1)
+        XCTAssertTrue(appState.onboardingRun.practiceSucceeded)
+        XCTAssertEqual(appState.onboardingRun.practiceAttempts, 1)
         XCTAssertEqual(appState.onboardingPracticeResult?.severity, .success)
 
         let results = practiceResults(spy)
@@ -219,8 +219,8 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         let spy = SpyAnalytics()
         let appState = await runPracticeDictation(transcript: .success(""), spy: spy)
 
-        XCTAssertFalse(appState.onboardingPracticeSucceeded)
-        XCTAssertEqual(appState.onboardingPracticeAttempts, 1)
+        XCTAssertFalse(appState.onboardingRun.practiceSucceeded)
+        XCTAssertEqual(appState.onboardingRun.practiceAttempts, 1)
         XCTAssertEqual(appState.onboardingPracticeResult?.severity, .error)
         XCTAssertEqual(practiceResults(spy).last?.outcome, .emptyAudio)
     }

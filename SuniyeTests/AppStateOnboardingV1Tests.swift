@@ -525,7 +525,7 @@ final class AppStateOnboardingV1Tests: XCTestCase {
         appState.hasAccessibilityPermission = true
 
         await dictate(appState, audio: audio, transcription: transcription)
-        await waitUntil { appState.onboardingPracticeSucceeded }
+        await waitUntil { appState.onboardingRun.practiceSucceeded }
         XCTAssertEqual(appState.onboardingPracticeText, "on my way")
         if let editedText {
             appState.onboardingPracticeText = editedText

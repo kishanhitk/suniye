@@ -358,7 +358,7 @@ struct OnboardingView: View {
                 capsule("Open Settings") {
                     appState.openMicrophonePrivacySettings()
                 }
-            } else if appState.onboardingPracticeSucceeded {
+            } else if appState.onboardingRun.practiceSucceeded {
                 capsule("Continue") {
                     appState.advanceOnboardingFromSpeak()
                 }
@@ -398,7 +398,7 @@ struct OnboardingView: View {
                 OnboardingLink("Skip for now") {
                     appState.advanceOnboardingFromSpeak()
                 }
-            } else if appState.onboardingPracticeSucceeded {
+            } else if appState.onboardingRun.practiceSucceeded {
                 EmptyView()
             } else if appState.phase == .downloadingModel, appState.canCancelASRModelDownload {
                 OnboardingLink("Cancel download") {
@@ -408,7 +408,7 @@ struct OnboardingView: View {
                 OnboardingLink("Retry download") {
                     appState.startModelDownload()
                 }
-            } else if appState.onboardingPracticeAttempts >= 1 {
+            } else if appState.onboardingRun.practiceAttempts >= 1 {
                 OnboardingLink("Skip for now") {
                     appState.advanceOnboardingFromSpeak()
                 }
@@ -440,7 +440,7 @@ struct OnboardingView: View {
     private var actionsKey: String {
         [
             "\(step)",
-            "\(appState.onboardingPracticeSucceeded)",
+            "\(appState.onboardingRun.practiceSucceeded)",
             "\(appState.hasMicPermissionBeenDenied)",
             "\(appState.hasAccessibilityPermission)",
             "\(appState.phase)",

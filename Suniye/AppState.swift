@@ -336,12 +336,7 @@ final class AppState {
     }
     var onboardingPracticeText = ""
     var onboardingPracticeResult: OnboardingPracticeResult?
-    /// The user has completed at least one successful practice dictation this
-    /// onboarding run (gates the Speak screen's Continue button).
-    private(set) var onboardingPracticeSucceeded = false
-    /// 1-based practice attempt counter for this onboarding run; drives the
-    /// "Continue anyway" escape hatch and the practice-result analytics.
-    private(set) var onboardingPracticeAttempts = 0
+    private(set) var onboardingRun = OnboardingRun()
     /// User-facing reason the Get Started preflight refused to start (disk space).
     var onboardingDiskSpaceMessage: String?
     /// The Permiso overlay timed out with no grant — surface a visible hint
@@ -360,11 +355,6 @@ final class AppState {
         return "macOS reset this permission after an update. In the Accessibility list, select \(name), remove it with −, then add it back with +."
     }
 
-    /// Per-run dedupe of onboarding_step emissions (relaunch resume re-fires
-    /// once per run with resumed=true; navigation within a run fires once per step).
-    @ObservationIgnored private var onboardingStepsTracked: Set<OnboardingStep> = []
-    @ObservationIgnored private var onboardingResumedPending = false
-    @ObservationIgnored private var onboardingStartedAt: Date?
     /// A start still waiting on a permission prompt; a key release clears it.
     @ObservationIgnored private var pendingRecordingStart: RecordingSource?
     @ObservationIgnored private var dictationShortcutGesture = DictationShortcutGesture()
@@ -373,11 +363,6 @@ final class AppState {
     /// The session that a double tap locked, for the source label of its analytics event.
     @ObservationIgnored private var lockedDictationSessionID: UUID?
     private(set) var systemGlobeKeyAction: SystemGlobeKeyAction = .doNothing
-    /// What is about to move onboarding to its next step (read by step tracking).
-    @ObservationIgnored private var pendingOnboardingAdvance: OnboardingAdvance?
-    /// The practice dictation as transcribed, to tell whether the user edited it.
-    @ObservationIgnored private var onboardingPracticeTranscript: String?
-    @ObservationIgnored private var onboardingPracticeEdited = false
     @ObservationIgnored private var hasTrackedMagicFormatNudgeShown = false
 
     var hasMicPermission = false
@@ -1826,12 +1811,7 @@ final class AppState {
         guard activeOnboardingStep == nil else {
             return
         }
-        if onboardingProgress != .notStarted {
-            onboardingResumedPending = true
-        }
-        if onboardingStartedAt == nil {
-            onboardingStartedAt = nowProvider()
-        }
+        onboardingRun.begin(at: nowProvider(), resumed: onboardingProgress != .notStarted)
         activeOnboardingStep = step
     }
 
@@ -1864,7 +1844,7 @@ final class AppState {
             return
         }
         setOnboardingProgress(.speakReached)
-        pendingOnboardingAdvance = .button
+        onboardingRun.pendingAdvance = .button
         activeOnboardingStep = .speak
         if !isModelInstalled, activeASRModelOperationID == nil {
             startModelDownload()
@@ -1899,7 +1879,7 @@ final class AppState {
         guard activeOnboardingStep == .typeAnywhere else {
             return
         }
-        pendingOnboardingAdvance = advance
+        onboardingRun.pendingAdvance = advance
         activeOnboardingStep = .more
     }
 
@@ -1907,8 +1887,8 @@ final class AppState {
         guard activeOnboardingStep == .speak else {
             return
         }
-        onboardingPracticeEdited = onboardingPracticeTranscript.map { $0 != onboardingPracticeText } ?? false
-        pendingOnboardingAdvance = .button
+        onboardingRun.leaveSpeak(withText: onboardingPracticeText)
+        onboardingRun.pendingAdvance = .button
         setOnboardingProgress(.typeAnywhereReached)
         activeOnboardingStep = .typeAnywhere
     }
@@ -1925,19 +1905,32 @@ final class AppState {
         analytics.track(.onboardingStep(step: .completed, granted: nil, resumed: nil, elapsedMs: durationMs))
         analytics.track(.onboardingOutcome(
             durationMs: durationMs,
-            practiced: onboardingPracticeSucceeded,
+            practiced: onboardingRun.practiceSucceeded,
             micGranted: hasMicPermission,
             axGranted: hasAccessibilityPermission,
             modelReady: asrModelReady,
             endedBy: endedBy,
-            practiceEdited: onboardingPracticeSucceeded ? onboardingPracticeEdited : nil
+            practiceEdited: onboardingRun.practiceSucceeded ? onboardingRun.practiceEdited : nil
         ))
         setOnboardingProgress(.finished)
         onboardingPracticeText = ""
         onboardingPracticeResult = nil
-        onboardingStartedAt = nil
+        onboardingRun.end()
         activeOnboardingStep = nil
         NotificationCenter.default.post(name: .suniyeOnboardingDidFinish, object: self)
+    }
+
+    /// Returns true when the app goes back to a menu-bar app. The Dock icon
+    /// stays while onboarding is unfinished, as a second way back to it.
+    func mainWindowWillClose() -> Bool {
+        if let step = activeOnboardingStep {
+            if step.closingTheWindowFinishesOnboarding {
+                finishOnboarding(endedBy: .windowClosed)
+            } else {
+                recordOnboardingWindowClosed()
+            }
+        }
+        return onboardingProgress.isFinished
     }
 
     /// The window was closed on a step that does not finish onboarding (Welcome
@@ -1950,7 +1943,7 @@ final class AppState {
     }
 
     private var onboardingElapsedMs: Int? {
-        onboardingStartedAt.map { Int(nowProvider().timeIntervalSince($0) * 1000) }
+        onboardingRun.elapsedMs(at: nowProvider())
     }
 
     /// A dictation that really lands in another app proves the Accessibility
@@ -1969,24 +1962,18 @@ final class AppState {
         updateGeneralSettings { $0.setOnboardingProgress(progress) }
     }
 
-    /// One emission point for onboarding_step, deduped per run so launch-resume
-    /// and navigation can never double-count a step.
+    /// The one emission point for onboarding_step, once per step and run, so
+    /// that a resume and navigation cannot count a step twice.
     private func trackOnboardingStepShownIfNeeded() {
-        guard let step = activeOnboardingStep, !onboardingStepsTracked.contains(step) else {
-            onboardingResumedPending = false
+        guard let shown = onboardingRun.stepShown(activeOnboardingStep), let step = activeOnboardingStep else {
             return
         }
-        onboardingStepsTracked.insert(step)
-        let resumed = onboardingResumedPending
-        onboardingResumedPending = false
-        let advancedBy = pendingOnboardingAdvance
-        pendingOnboardingAdvance = nil
         analytics.track(.onboardingStep(
             step: step.analyticsName,
             granted: nil,
-            resumed: resumed ? true : nil,
+            resumed: shown.resumed ? true : nil,
             elapsedMs: onboardingElapsedMs,
-            advancedBy: advancedBy
+            advancedBy: shown.advancedBy
         ))
     }
 
@@ -4285,8 +4272,7 @@ final class AppState {
             AppLogger.shared.log(.warning, "onboarding practice produced empty text")
             playSoundFeedback(.error)
         } else {
-            onboardingPracticeSucceeded = true
-            onboardingPracticeTranscript = finalText
+            onboardingRun.practiceDidSucceed(transcript: finalText)
             onboardingPracticeResult = OnboardingPracticeResult(
                 message: "That's it — this works in any app.",
                 severity: .success
@@ -4312,11 +4298,8 @@ final class AppState {
         completeDictationSession(sessionID: sessionID, playSuccessSound: didCompleteDictation)
     }
 
-    /// Counts a practice attempt and reports its outcome. Attempt numbers are
-    /// capped so a pathological retry loop cannot inflate the metric.
     private func recordOnboardingPracticeAttempt(outcome: PracticeOutcome) {
-        onboardingPracticeAttempts = min(onboardingPracticeAttempts + 1, 10)
-        analytics.track(.onboardingPracticeResult(outcome: outcome, attempt: onboardingPracticeAttempts))
+        analytics.track(.onboardingPracticeResult(outcome: outcome, attempt: onboardingRun.countPracticeAttempt()))
     }
 
     /// Runs the Edit Mode LLM step: rewrite the selection per the spoken instruction,
