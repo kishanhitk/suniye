@@ -39,6 +39,7 @@ actor MeetingTranscriber {
     private let store: MeetingStore
     private let engine: TranscriptionServiceProtocol
     private let engineName: @Sendable () async -> String
+    private let mayDecode: @Sendable () async -> Bool
     private let retryDelay: Duration
     private let onEvent: @Sendable (Event) -> Void
     private let input: AsyncStream<MeetingRecorderOutput>
@@ -47,7 +48,6 @@ actor MeetingTranscriber {
     private var segmenters: [MeetingTrack: MeetingSegmenter]
     private var pending: [MeetingAudioChunk] = []
     private var attempts: [ChunkID: Int] = [:]
-    private var decodingHeld = false
     private var consumer: Task<Void, Never>?
     private var decoder: Task<Void, Never>?
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
@@ -59,6 +59,7 @@ actor MeetingTranscriber {
         store: MeetingStore,
         engine: TranscriptionServiceProtocol,
         engineName: @escaping @Sendable () async -> String,
+        mayDecode: @escaping @Sendable () async -> Bool,
         retryDelay: Duration = .seconds(1),
         onEvent: @escaping @Sendable (Event) -> Void
     ) {
@@ -67,6 +68,7 @@ actor MeetingTranscriber {
         self.store = store
         self.engine = engine
         self.engineName = engineName
+        self.mayDecode = mayDecode
         self.retryDelay = retryDelay
         self.onEvent = onEvent
         (input, inputContinuation) = AsyncStream.makeStream(of: MeetingRecorderOutput.self)
@@ -87,11 +89,9 @@ actor MeetingTranscriber {
         inputContinuation.yield(output)
     }
 
-    /// While held, no chunk starts decoding, because the shared speech engine
-    /// is busy with a dictation or has no model loaded. Audio keeps arriving
-    /// and waits.
-    func holdDecoding(_ held: Bool) {
-        decodingHeld = held
+    /// Asks `mayDecode` again. Call it when its answer can have changed to
+    /// yes. Audio that arrived while the answer was no waits until then.
+    func wake() {
         decodeIfIdle()
     }
 
@@ -168,12 +168,13 @@ actor MeetingTranscriber {
             resumeIdleWaiters()
             return
         }
-        guard !decodingHeld else { return }
         decoder = Task { await decodePending() }
     }
 
+    /// Stops when nothing is pending or `mayDecode` says no; `wake()` or the
+    /// next chunk starts it again.
     private func decodePending() async {
-        while !decodingHeld, let index = earliestPendingIndex() {
+        while earliestPendingIndex() != nil, await mayDecode(), let index = earliestPendingIndex() {
             let chunk = pending.remove(at: index)
             if await !decode(chunk) {
                 pending.append(chunk)
@@ -181,7 +182,9 @@ actor MeetingTranscriber {
             }
         }
         decoder = nil
-        decodeIfIdle()
+        if pending.isEmpty {
+            resumeIdleWaiters()
+        }
     }
 
     /// The call track first when two chunks start together: a "You" line

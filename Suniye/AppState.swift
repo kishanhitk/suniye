@@ -281,6 +281,7 @@ final class AppState {
         didSet {
             if oldValue != loadedASRModelID {
                 onStateChange?()
+                meetings.speechModelChanged(loadedASRModelID)
             }
         }
     }
@@ -359,6 +360,12 @@ final class AppState {
             onStateChange?()
         }
     }
+    /// Echo cancellation (voice processing) lowers the volume of other audio
+    /// while it runs; during a meeting that would lower the call.
+    private var dictationEchoCancellationEnabled: Bool {
+        echoCancellationEnabled && meetings.live == nil
+    }
+
     var echoCancellationEnabled = false {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -815,6 +822,7 @@ final class AppState {
         didSet {
             if oldValue != localGemmaInstallState {
                 onStateChange?()
+                meetings.summaries.availabilityChanged()
             }
         }
     }
@@ -1714,6 +1722,7 @@ final class AppState {
     private let appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
     private let localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor
     private let magicFormatCoordinator: MagicFormatCoordinator
+    let meetings: MeetingCoordinator
     private let localLLMModelManager: LocalLLMModelManagerProtocol
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol
@@ -1777,7 +1786,13 @@ final class AppState {
         }
     }
 
-    private var activeDictationSession: ActiveDictationSession?
+    private var activeDictationSession: ActiveDictationSession? {
+        didSet {
+            if (oldValue == nil) != (activeDictationSession == nil) {
+                meetings.dictationChanged(active: activeDictationSession != nil)
+            }
+        }
+    }
     private var activeAudioCaptureSessionID: UUID? { activeDictationSession?.context.id }
     private var activeRecordingSource: RecordingSource? { activeDictationSession?.context.source }
     private var recordingStart: Date? { activeDictationSession?.context.startedAt }
@@ -1882,6 +1897,7 @@ final class AppState {
             }
         },
         magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
+        meetingCoordinator: MeetingCoordinator? = nil,
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
     ) {
@@ -1896,16 +1912,18 @@ final class AppState {
         self.llmPostProcessor = llmPostProcessor
         self.appleMagicFormatPostProcessor = appleMagicFormatPostProcessor
         self.localLLMModelManager = localLLMModelManager
+        // One client, so Magic Format and meeting summaries share one llama-server.
+        let localGemmaClient = LocalGemmaLlamaCppClient(
+            locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager),
+            onModelLoad: { model, loadMs in
+                analytics.track(.modelLoad(model: SafeLabel(model), loadMs: loadMs, evictedByKeepAlive: false))
+            },
+            onKeepAliveEvicted: { model in
+                analytics.track(.modelLoad(model: SafeLabel(model), loadMs: 0, evictedByKeepAlive: true))
+            }
+        )
         let resolvedLocalGemmaPostProcessor = localGemmaMagicFormatPostProcessor ?? LocalGemmaPostProcessor(
-            client: LocalGemmaLlamaCppClient(
-                locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager),
-                onModelLoad: { model, loadMs in
-                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: loadMs, evictedByKeepAlive: false))
-                },
-                onKeepAliveEvicted: { model in
-                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: 0, evictedByKeepAlive: true))
-                }
-            ),
+            client: localGemmaClient,
             onGeneration: { timings in
                 analytics.track(.llmGeneration(
                     model: SafeLabel(LocalGemmaDefaults.modelDisplayName),
@@ -1922,6 +1940,12 @@ final class AppState {
             apiPostProcessor: llmPostProcessor,
             applePostProcessor: appleMagicFormatPostProcessor,
             localGemmaPostProcessor: resolvedLocalGemmaPostProcessor
+        )
+        self.meetings = meetingCoordinator ?? AppState.makeMeetingCoordinator(
+            transcriptionService: transcriptionService,
+            appleSummaryAvailability: { appleMagicFormatPostProcessor.availability },
+            localSummaryAvailability: { resolvedLocalGemmaPostProcessor.availability },
+            localGemmaClient: localGemmaClient
         )
         self.llmSettingsStore = llmSettingsStore
         self.magicFormatPromptFileStore = magicFormatPromptFileStore
@@ -1966,6 +1990,7 @@ final class AppState {
         self.appUpdateController.onStateChange = { [weak self] in
             self?.refreshUpdateControllerState()
         }
+        self.meetings.host = self
         self.editLearningService.onLearnedTerms = { [weak self] terms in
             self?.handleLearnedVocabularyTerms(terms)
         }
@@ -2078,6 +2103,7 @@ final class AppState {
         if floatingIndicatorEnabled {
             floatingIndicatorController.start()
         }
+        await meetings.start()
         statusText = "Checking permissions..."
         await refreshPermissions()
 
@@ -2616,7 +2642,7 @@ final class AppState {
         do {
             audioRouteSnapshot = try audioCaptureService.routeSnapshot(
                 preferredInputDeviceID: selectedInputDeviceID,
-                echoCancellationEnabled: echoCancellationEnabled
+                echoCancellationEnabled: dictationEchoCancellationEnabled
             )
         } catch {
             audioRouteSnapshot = nil
@@ -4429,7 +4455,7 @@ final class AppState {
             let session = try await audioCaptureService.startCapture(
                 sessionID: sessionID,
                 preferredInputDeviceID: selectedInputDeviceID,
-                echoCancellationEnabled: echoCancellationEnabled
+                echoCancellationEnabled: dictationEchoCancellationEnabled
             )
             guard activeAudioCaptureSessionID == sessionID else {
                 await audioCaptureService.cancelCapture(sessionID: sessionID, reason: nil)
@@ -5737,5 +5763,60 @@ enum AppStateError: LocalizedError {
         case let .insufficientDiskSpace(message):
             return message
         }
+    }
+}
+
+extension AppState: MeetingHost {
+    var meetingInputDeviceID: String? {
+        selectedInputDeviceID
+    }
+
+    func requestMeetingMicrophoneAccess() async -> Bool {
+        if !hasMicPermission {
+            await refreshPermissions(requestMicrophone: true, askSurface: .meetingStart)
+        }
+        return hasMicPermission
+    }
+
+    func meetingSummaryModelIsIdle() {
+        prewarmLocalLLMIfEligible()
+    }
+
+    fileprivate static func makeMeetingCoordinator(
+        transcriptionService: TranscriptionServiceProtocol,
+        appleSummaryAvailability: @escaping () -> AppleFoundationModelsAvailability,
+        localSummaryAvailability: @escaping () -> LocalGemmaAvailability,
+        localGemmaClient: LocalGemmaClient
+    ) -> MeetingCoordinator {
+        let canRecordCallAudio: Bool
+        if #available(macOS 14.4, *) {
+            canRecordCallAudio = true
+        } else {
+            canRecordCallAudio = false
+        }
+        return MeetingCoordinator(
+            store: MeetingStore(),
+            templates: MeetingTemplateStore(),
+            settingsStore: MeetingSettingsStore(),
+            engine: transcriptionService,
+            environment: .live(canRecordCallAudio: canRecordCallAudio),
+            canRecordCallAudio: canRecordCallAudio,
+            summaryAvailability: {
+                MeetingSummaryAvailability(apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
+            },
+            makeSummaryModel: { provider in
+                switch provider {
+                case .localModel:
+                    return LocalGemmaMeetingSummaryModel(client: localGemmaClient)
+                case .appleIntelligence:
+                    #if canImport(FoundationModels)
+                    if #available(macOS 26.0, *) {
+                        return AppleMeetingSummaryModel()
+                    }
+                    #endif
+                    return nil
+                }
+            }
+        )
     }
 }

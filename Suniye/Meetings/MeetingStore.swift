@@ -66,6 +66,18 @@ actor MeetingStore {
         try encoder.encode(record).write(to: recordURL(record.id), options: .atomic)
     }
 
+    /// Reads, changes and writes the record in one step, so two writers
+    /// cannot lose each other's change.
+    @discardableResult
+    func update(_ id: UUID, _ change: (inout MeetingRecord) -> Void) throws -> MeetingRecord {
+        guard var record = record(id) else {
+            throw StoreError.unknownMeeting(id)
+        }
+        change(&record)
+        try save(record)
+        return record
+    }
+
     func record(_ id: UUID) -> MeetingRecord? {
         guard let data = try? Data(contentsOf: recordURL(id)) else { return nil }
         return try? decoder.decode(MeetingRecord.self, from: data)

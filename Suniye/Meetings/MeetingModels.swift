@@ -79,6 +79,8 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     var callPlayedOnSpeakers: Bool
     /// The model that wrote the summary on disk.
     var summaryProvider: MeetingSummaryProvider?
+    /// Why the last summary failed, for the meeting page.
+    var summaryFailure: String?
 
     init(
         id: UUID = UUID(),

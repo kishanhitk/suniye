@@ -153,6 +153,7 @@ public enum PermissionAskSurface: String, Sendable, CaseIterable {
     case onboarding, settings, dashboard
     case dictationAttempt = "dictation_attempt"
     case insertion
+    case meetingStart = "meeting_start"
 }
 
 /// How an explicit permission ask ended. Overlay cases are Permiso-specific:

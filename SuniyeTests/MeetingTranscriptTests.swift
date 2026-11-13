@@ -148,6 +148,7 @@ final class MeetingTranscriberTests: XCTestCase {
     private func makeTranscriber(
         engine: FakeMeetingEngine,
         tracks: [MeetingTrack] = [.you, .them],
+        gate: DecodeGate = DecodeGate(),
         events: Collected<MeetingTranscriber.Event> = Collected()
     ) -> MeetingTranscriber {
         MeetingTranscriber(
@@ -156,6 +157,7 @@ final class MeetingTranscriberTests: XCTestCase {
             store: store,
             engine: engine,
             engineName: { "parakeetV3" },
+            mayDecode: { await gate.isOpen },
             retryDelay: .milliseconds(5),
             onEvent: { events.append($0) }
         )
@@ -216,16 +218,18 @@ final class MeetingTranscriberTests: XCTestCase {
         XCTAssertEqual(events.items, [.segment(segment), .decodedThrough(.you, samples(2.8)), .decodedThrough(.you, samples(3))])
     }
 
-    func testNoChunkDecodesWhileDecodingIsHeld() async throws {
+    func testNoChunkDecodesUntilDecodingIsAllowedAgain() async throws {
         let engine = FakeMeetingEngine(words: [0.3: "Hello."])
-        let transcriber = makeTranscriber(engine: engine, tracks: [.you])
+        let gate = DecodeGate()
+        await gate.set(open: false)
+        let transcriber = makeTranscriber(engine: engine, tracks: [.you], gate: gate)
         await transcriber.start()
-        await transcriber.holdDecoding(true)
 
         transcriber.enqueue(.samples(.you, tone(2.5) + silence(0.5), position: 0))
         try await Task.sleep(for: .milliseconds(200))
         let callsWhileHeld = await engine.decodedPeaks.count
-        await transcriber.holdDecoding(false)
+        await gate.set(open: true)
+        await transcriber.wake()
         let transcript = try await transcriber.finish()
 
         XCTAssertEqual(callsWhileHeld, 0)
@@ -261,6 +265,14 @@ final class MeetingTranscriberTests: XCTestCase {
 }
 
 // MARK: - Fakes
+
+private actor DecodeGate {
+    private(set) var isOpen = true
+
+    func set(open: Bool) {
+        isOpen = open
+    }
+}
 
 private struct FakeDecodeError: Error {}
 
