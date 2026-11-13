@@ -54,6 +54,7 @@ final class MeetingActions {
                 try markdown.write(to: url, atomically: true, encoding: .utf8)
             } catch {
                 AppLogger.shared.log(.error, "meeting export failed error=\(error.localizedDescription)")
+                failure = MeetingActionFailure(title: "Couldn’t export the meeting", message: error.localizedDescription)
             }
         }
     }
@@ -89,6 +90,7 @@ private struct MeetingActionDialogs: ViewModifier {
                             }
                         } catch {
                             AppLogger.shared.log(.error, "meeting delete failed id=\(record.id.uuidString) error=\(error.localizedDescription)")
+                            actions.failure = MeetingActionFailure(title: "Couldn’t delete the meeting", message: error.localizedDescription)
                         }
                     }
                 }
