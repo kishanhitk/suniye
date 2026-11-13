@@ -1,0 +1,120 @@
+import Foundation
+
+/// The microphone is "You"; the audio of every other app (the call) is "Them".
+enum MeetingTrack: String, Codable, CaseIterable, Sendable {
+    case you
+    case them
+}
+
+struct MeetingSegment: Codable, Equatable, Identifiable, Sendable {
+    let id: UUID
+    let track: MeetingTrack
+    /// Seconds from the meeting start on the wall clock, so paused time counts.
+    let start: Double
+    let end: Double
+    let text: String
+    /// The speech model that wrote the text, for example "parakeetV3".
+    let engine: String
+}
+
+enum MeetingStatus: String, Codable, Sendable {
+    case recording
+    case paused
+    case finishing
+    case summarizing
+    case done
+    case summaryFailed
+    case noSpeech
+    /// The app quit or crashed while the meeting was recording or finishing.
+    case interrupted
+
+    /// States that only a running session can be in. A record found in one of
+    /// them at launch belongs to a session that ended without saving.
+    var needsRecovery: Bool {
+        switch self {
+        case .recording, .paused, .finishing:
+            return true
+        case .summarizing, .done, .summaryFailed, .noSpeech, .interrupted:
+            return false
+        }
+    }
+}
+
+enum MeetingStartSource: String, Codable, Sendable {
+    case manual
+    case offer
+    case automatic
+}
+
+enum MeetingTitleSource: String, Codable, Sendable {
+    case placeholder
+    case generated
+    case user
+}
+
+/// A pause on the wall clock, in seconds from the meeting start. The audio
+/// files hold no samples for it.
+struct MeetingPause: Codable, Equatable, Sendable {
+    let start: Double
+    var end: Double?
+}
+
+struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
+    let id: UUID
+    var title: String
+    var titleSource: MeetingTitleSource
+    let startedAt: Date
+    var endedAt: Date?
+    var callAppName: String?
+    var callAppBundleID: String?
+    let startSource: MeetingStartSource
+    var status: MeetingStatus
+    var templateID: String
+    var pauses: [MeetingPause]
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        titleSource: MeetingTitleSource = .placeholder,
+        startedAt: Date,
+        endedAt: Date? = nil,
+        callAppName: String? = nil,
+        callAppBundleID: String? = nil,
+        startSource: MeetingStartSource,
+        status: MeetingStatus = .recording,
+        templateID: String,
+        pauses: [MeetingPause] = []
+    ) {
+        self.id = id
+        self.title = title
+        self.titleSource = titleSource
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.callAppName = callAppName
+        self.callAppBundleID = callAppBundleID
+        self.startSource = startSource
+        self.status = status
+        self.templateID = templateID
+        self.pauses = pauses
+    }
+
+    var duration: TimeInterval? {
+        endedAt.map { $0.timeIntervalSince(startedAt) }
+    }
+}
+
+/// Maps a position in a track's audio file to the meeting's wall clock. The
+/// files skip paused time, so every pause that ends at or before an audio
+/// position shifts it later by the pause length.
+struct MeetingTimeline: Equatable, Sendable {
+    let pauses: [MeetingPause]
+
+    func wallSeconds(forAudioSeconds audio: Double) -> Double {
+        var wall = audio
+        for pause in pauses.sorted(by: { $0.start < $1.start }) {
+            guard let end = pause.end, pause.start <= wall else { break }
+            wall += end - pause.start
+        }
+        return wall
+    }
+}
