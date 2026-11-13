@@ -9,7 +9,6 @@ final class AppIconCache {
 
     private let resolve: (String) -> NSImage?
     private var icons: [String: NSImage?] = [:]
-    private(set) var resolveCount = 0
 
     init(resolve: @escaping (String) -> NSImage? = AppIconCache.launchServicesIcon) {
         self.resolve = resolve
@@ -19,7 +18,6 @@ final class AppIconCache {
         if let cached = icons[bundleID] {
             return cached
         }
-        resolveCount += 1
         let icon = resolve(bundleID)
         icons[bundleID] = icon
         return icon
