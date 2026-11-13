@@ -17,7 +17,8 @@ enum MeetingRecorderEvent: Equatable, Sendable {
     case callAudioReturned
     case inputChanged(deviceName: String)
     case trackFailed(MeetingTrack, String)
-    case storageFailed(String)
+    /// `outOfSpace` tells a full disk from any other write error.
+    case storageFailed(String, outOfSpace: Bool)
 }
 
 /// Writes the two tracks of one meeting to disk, in step with the wall clock.
@@ -222,7 +223,7 @@ final class MeetingRecorder: @unchecked Sendable {
             try writer.append(samples)
         } catch {
             AppLogger.shared.log(.error, "meeting recorder could not write track=\(track.rawValue) error=\(error.localizedDescription)")
-            onEvent?(.storageFailed(error.localizedDescription))
+            onEvent?(.storageFailed(error.localizedDescription, outOfSpace: MeetingAudioFileWriter.isOutOfSpace(error)))
             running = false
             return
         }

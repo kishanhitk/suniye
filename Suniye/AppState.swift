@@ -5919,6 +5919,9 @@ extension AppState: MeetingHost {
             // The meeting page shows its own banner for it.
             guard id != pageOnScreen else { return }
             showMeetingStopped(id, message: "Recording stopped because the disk is full")
+        case let .stoppedByWriteError(id):
+            guard id != pageOnScreen else { return }
+            showMeetingStopped(id, message: "Recording stopped because the audio could not be saved")
         case let .summaryReady(id):
             guard id != pageOnScreen else { return }
             learningToastPresenter.show(message: "Summary ready", detail: nil, actionTitle: "Open") { [weak self] in

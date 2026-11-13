@@ -65,7 +65,14 @@ enum MeetingStopCause: String, Sendable {
     case timeLimit
     case noSpeech
     case diskFull
+    case writeFailed
     case quit
+}
+
+/// A write error that stopped a recording, for the meeting page's banner.
+struct MeetingWriteFailure: Equatable {
+    let meetingID: UUID
+    let outOfSpace: Bool
 }
 
 /// Something the user should see while the meeting page is not on screen.
@@ -77,6 +84,7 @@ enum MeetingNotice: Equatable {
     case stoppedAtTimeLimit(UUID)
     case stoppedWithoutSpeech(UUID)
     case stoppedByDiskFull(UUID)
+    case stoppedByWriteError(UUID)
     case summaryReady(UUID)
 }
 
@@ -177,7 +185,7 @@ final class MeetingCoordinator {
     /// Meetings whose transcript is being finished now.
     private(set) var finishing: Set<UUID> = []
     /// A meeting that a disk write error stopped, for its banner.
-    private(set) var stoppedByWriteError: UUID?
+    private(set) var writeFailure: MeetingWriteFailure?
     /// The meeting that the Meetings section shows; nil shows the list.
     var openMeetingID: UUID?
     /// The meeting whose page is on screen, so a notice does not repeat it.
@@ -405,6 +413,8 @@ final class MeetingCoordinator {
             onNotice?(.stoppedWithoutSpeech(session.id))
         case .diskFull:
             onNotice?(.stoppedByDiskFull(session.id))
+        case .writeFailed:
+            onNotice?(.stoppedByWriteError(session.id))
         case .user, .callEnded, .sleep, .quit:
             break
         }
@@ -778,10 +788,10 @@ final class MeetingCoordinator {
         case let .trackFailed(track, message):
             session.failedTracks[track] = message
             onNotice?(.trackFailed(track))
-        case let .storageFailed(message):
+        case let .storageFailed(message, outOfSpace):
             AppLogger.shared.log(.error, "meeting stopped by a write error id=\(session.id.uuidString) error=\(message)")
-            stoppedByWriteError = session.id
-            Task { await stop(.diskFull) }
+            writeFailure = MeetingWriteFailure(meetingID: session.id, outOfSpace: outOfSpace)
+            Task { await stop(outOfSpace ? .diskFull : .writeFailed) }
         }
     }
 

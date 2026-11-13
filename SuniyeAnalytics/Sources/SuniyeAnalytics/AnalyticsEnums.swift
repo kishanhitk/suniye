@@ -225,6 +225,7 @@ public enum MeetingStopReason: String, Sendable, CaseIterable {
     case timeLimit = "time_limit"
     case noSpeech = "no_speech"
     case diskFull = "disk_full"
+    case writeFailed = "write_failed"
     case quit
 }
 

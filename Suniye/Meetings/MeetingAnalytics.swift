@@ -28,6 +28,8 @@ extension MeetingStopCause {
             return .noSpeech
         case .diskFull:
             return .diskFull
+        case .writeFailed:
+            return .writeFailed
         case .quit:
             return .quit
         }

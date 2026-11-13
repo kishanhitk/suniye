@@ -165,6 +165,16 @@ final class MeetingAudioFileTests: XCTestCase {
     override func tearDown() {
         try? FileManager.default.removeItem(at: url)
         super.tearDown()
+    func testOnlyAFullVolumeCountsAsOutOfSpace() {
+        let full = NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))
+        let wrapped = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError, userInfo: [NSUnderlyingErrorKey: full])
+
+        XCTAssertTrue(MeetingAudioFileWriter.isOutOfSpace(full))
+        XCTAssertTrue(MeetingAudioFileWriter.isOutOfSpace(wrapped))
+        XCTAssertTrue(MeetingAudioFileWriter.isOutOfSpace(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError)))
+        XCTAssertFalse(MeetingAudioFileWriter.isOutOfSpace(NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))))
+    }
+
     }
 
     func testWrittenSamplesReadBackAsSixteenBitWithClipping() throws {

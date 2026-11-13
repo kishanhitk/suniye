@@ -25,6 +25,17 @@ enum MeetingAudioFileError: LocalizedError, Equatable {
 }
 
 final class MeetingAudioFileWriter {
+    /// True for a write that failed because the volume is full.
+    static func isOutOfSpace(_ error: Error) -> Bool {
+        let error = error as NSError
+        switch (error.domain, error.code) {
+        case (NSCocoaErrorDomain, NSFileWriteOutOfSpaceError), (NSPOSIXErrorDomain, Int(ENOSPC)):
+            return true
+        default:
+            return (error.userInfo[NSUnderlyingErrorKey] as? Error).map(isOutOfSpace) ?? false
+        }
+    }
+
     let url: URL
     private let handle: FileHandle
     private let headerRefreshSamples: Int

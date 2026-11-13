@@ -45,12 +45,12 @@ struct MeetingPage: View {
                         .font(AppTypography.body)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                 }
-                if meetings.stoppedByWriteError == id, let duration = record.duration {
+                if let failure = meetings.writeFailure, failure.meetingID == id, let duration = record.duration {
                     InlineStatusBanner(
                         icon: "exclamationmark.triangle.fill",
                         tint: .orange,
-                        title: "Recording stopped because the disk is full",
-                        detail: "Everything up to \(MeetingTranscript.clock(duration)) is saved. Free up space to record again."
+                        title: failure.outOfSpace ? "Recording stopped because the disk is full" : "Recording stopped because the audio could not be saved",
+                        detail: "Everything up to \(MeetingTranscript.clock(duration)) is saved." + (failure.outOfSpace ? " Free up space to record again." : "")
                     )
                 }
                 MeetingTabs(selection: $tab, summaryEnabled: live == nil)
