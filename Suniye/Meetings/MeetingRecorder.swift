@@ -1,5 +1,13 @@
 import Foundation
 
+/// What the recorder hands on, in order, on its queue.
+enum MeetingRecorderOutput: Equatable, Sendable {
+    /// 16 kHz samples of a track and the position of the first one in its file.
+    case samples(MeetingTrack, [Float], position: Int)
+    /// The meeting paused: the next samples come later on the wall clock.
+    case paused
+}
+
 enum MeetingRecorderEvent: Equatable, Sendable {
     case levels(you: Float, them: Float)
     /// The call track had no sound for `MeetingRecorder.callSilenceLimit`.
@@ -23,14 +31,11 @@ enum MeetingRecorderEvent: Equatable, Sendable {
 final class MeetingRecorder: @unchecked Sendable {
     /// After this much silence on the call track, the recorder reports it.
     static let callSilenceLimit: TimeInterval = 120
-    /// Below this RMS a call block counts as silence (about -66 dBFS).
-    static let soundThreshold: Float = 0.0005
     /// Smaller gaps are timing jitter between blocks, not lost audio.
     static let gapThreshold: TimeInterval = 0.25
     static let levelInterval: TimeInterval = 1.0 / 15
 
-    /// 16 kHz samples of a track and the position in its file of the first one.
-    var onBlock: ((MeetingTrack, [Float], Int) -> Void)?
+    var onOutput: ((MeetingRecorderOutput) -> Void)?
     var onEvent: ((MeetingRecorderEvent) -> Void)?
 
     private let queue = DispatchQueue(label: "dev.suniye.meeting.recorder", qos: .userInitiated)
@@ -115,7 +120,10 @@ final class MeetingRecorder: @unchecked Sendable {
         let isRecording: Bool = queue.sync { running && pausedSince == nil }
         guard isRecording else { return }
         stopSources()
-        queue.sync { pausedSince = uptime() }
+        queue.sync {
+            pausedSince = uptime()
+            onOutput?(.paused)
+        }
     }
 
     /// Stays paused and throws when no track starts again.
@@ -208,7 +216,7 @@ final class MeetingRecorder: @unchecked Sendable {
             if Double(missing) > Self.gapThreshold * Double(MeetingAudioFormat.sampleRate) {
                 let silence = [Float](repeating: 0, count: missing)
                 try writer.append(silence)
-                onBlock?(track, silence, position)
+                onOutput?(.samples(track, silence, position: position))
                 position += missing
             }
             try writer.append(samples)
@@ -218,11 +226,11 @@ final class MeetingRecorder: @unchecked Sendable {
             running = false
             return
         }
-        onBlock?(track, samples, position)
+        onOutput?(.samples(track, samples, position: position))
         samplesWritten[track] = position + samples.count
 
         let level = Self.rms(samples)
-        if track == .them, level >= Self.soundThreshold {
+        if track == .them, level >= MeetingAudioFormat.silenceLevel {
             lastCallSound = arrival
             callTrackHeardSound = true
             if reportedCallSilence {

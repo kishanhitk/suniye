@@ -6,7 +6,7 @@ struct MeetingAudioChunk: Equatable, Sendable {
     /// Sample position of the first sample in the track's audio file.
     let start: Int
     let samples: [Float]
-    /// False when no 100 ms window rose above `MeetingSegmenter.quietFloor`:
+    /// False when no 100 ms window rose above `MeetingAudioFormat.silenceLevel`:
     /// the chunk is silence and is not decoded.
     let hasSound: Bool
 
@@ -26,9 +26,8 @@ struct MeetingSegmenter {
     /// Three quiet windows in a row (300 ms) make a pause.
     static let pauseWindows = 3
     /// A window is quiet below a tenth (-20 dB) of the chunk's loudest window,
-    /// and always below `quietFloor` (about -60 dBFS).
+    /// and always below `MeetingAudioFormat.silenceLevel`.
     static let quietRatio: Float = 0.1
-    static let quietFloor: Float = 0.001
 
     let track: MeetingTrack
     private var pending: [Float] = []
@@ -71,7 +70,7 @@ struct MeetingSegmenter {
             analyzedWindows += 1
             let level = Self.rms(pending[window])
             loudest = max(loudest, level)
-            let quiet = level < max(Self.quietFloor, loudest * Self.quietRatio)
+            let quiet = level < max(MeetingAudioFormat.silenceLevel, loudest * Self.quietRatio)
             quietRun = quiet ? quietRun + 1 : 0
             // Silence counts as one long pause, so a silent track still moves
             // forward in 2 s steps.
@@ -94,7 +93,7 @@ struct MeetingSegmenter {
         var hasSound = false
         for start in stride(from: 0, to: samples.count, by: Self.windowSamples) {
             let end = min(start + Self.windowSamples, samples.count)
-            if Self.rms(samples[start ..< end]) >= Self.quietFloor {
+            if Self.rms(samples[start ..< end]) >= MeetingAudioFormat.silenceLevel {
                 hasSound = true
                 break
             }

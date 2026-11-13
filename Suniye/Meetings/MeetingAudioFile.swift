@@ -8,6 +8,9 @@ enum MeetingAudioFormat {
     static let sampleRate = 16_000
     static let headerSize = 44
     static let bytesPerSample = 2
+    /// RMS below this (about -60 dBFS) is silence: the call track has no
+    /// sound, and a chunk is not decoded.
+    static let silenceLevel: Float = 0.001
 }
 
 enum MeetingAudioFileError: LocalizedError, Equatable {
@@ -39,10 +42,6 @@ final class MeetingAudioFileWriter {
 
     deinit {
         try? handle.close()
-    }
-
-    var durationSeconds: Double {
-        Double(samplesWritten) / Double(MeetingAudioFormat.sampleRate)
     }
 
     /// `samples` are 16 kHz floats in -1...1; values outside are clipped.

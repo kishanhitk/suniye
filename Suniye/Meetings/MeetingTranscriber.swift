@@ -3,12 +3,12 @@ import Foundation
 /// Turns the audio of one meeting into stored transcript segments: while the
 /// meeting records, and later for a meeting that the app did not finish.
 ///
-/// - Audio blocks arrive in order through `append`, from the recorder's queue.
+/// - The recorder's output arrives in order through `enqueue`.
 /// - One chunk decodes at a time, the earliest first across both tracks,
 ///   through the speech engine that dictation uses.
-/// - No chunk starts while a dictation records.
-/// - A chunk whose decode fails is tried again after `retryDelay`, for example
-///   while the user changes the speech model.
+/// - A chunk whose decode fails is tried again after `retryDelay`: a decode
+///   that arrives while the router unloads the old engine of a model switch
+///   fails once.
 actor MeetingTranscriber {
     enum Event: Equatable, Sendable {
         case segment(MeetingSegment)
@@ -19,11 +19,6 @@ actor MeetingTranscriber {
     static let maximumAttempts = 5
     /// Audio read per step when the app finishes a meeting from its files.
     static let replayStepSamples = 60 * MeetingAudioFormat.sampleRate
-
-    private enum Input {
-        case block(MeetingTrack, [Float], Int)
-        case cut
-    }
 
     private struct ChunkID: Hashable {
         let track: MeetingTrack
@@ -46,13 +41,13 @@ actor MeetingTranscriber {
     private let engineName: @Sendable () async -> String
     private let retryDelay: Duration
     private let onEvent: @Sendable (Event) -> Void
-    private let input: AsyncStream<Input>
-    private nonisolated let inputContinuation: AsyncStream<Input>.Continuation
+    private let input: AsyncStream<MeetingRecorderOutput>
+    private nonisolated let inputContinuation: AsyncStream<MeetingRecorderOutput>.Continuation
 
     private var segmenters: [MeetingTrack: MeetingSegmenter]
     private var pending: [MeetingAudioChunk] = []
     private var attempts: [ChunkID: Int] = [:]
-    private var dictationActive = false
+    private var decodingHeld = false
     private var consumer: Task<Void, Never>?
     private var decoder: Task<Void, Never>?
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
@@ -74,7 +69,7 @@ actor MeetingTranscriber {
         self.engineName = engineName
         self.retryDelay = retryDelay
         self.onEvent = onEvent
-        (input, inputContinuation) = AsyncStream.makeStream(of: Input.self)
+        (input, inputContinuation) = AsyncStream.makeStream(of: MeetingRecorderOutput.self)
         segmenters = Dictionary(uniqueKeysWithValues: tracks.map { ($0, MeetingSegmenter(track: $0)) })
     }
 
@@ -82,41 +77,38 @@ actor MeetingTranscriber {
     func start() {
         guard consumer == nil else { return }
         consumer = Task { [input] in
-            for await item in input {
-                receive(item)
+            for await output in input {
+                process(output)
             }
         }
     }
 
-    /// `position` is where `samples` start in the track's audio file.
-    nonisolated func append(_ samples: [Float], track: MeetingTrack, at position: Int) {
-        inputContinuation.yield(.block(track, samples, position))
+    nonisolated func enqueue(_ output: MeetingRecorderOutput) {
+        inputContinuation.yield(output)
     }
 
-    /// Ends the chunks in progress, so that no chunk spans a pause.
-    nonisolated func cut() {
-        inputContinuation.yield(.cut)
-    }
-
-    func setDictationActive(_ active: Bool) {
-        dictationActive = active
+    /// While held, no chunk starts decoding, because the shared speech engine
+    /// is busy with a dictation or has no model loaded. Audio keeps arriving
+    /// and waits.
+    func holdDecoding(_ held: Bool) {
+        decodingHeld = held
         decodeIfIdle()
     }
 
     /// Decodes the rest after the meeting stopped and returns the final
     /// transcript, which is also stored.
-    func finish(callPlayedOnSpeakers: Bool) async throws -> [MeetingSegment] {
+    func finish() async throws -> [MeetingSegment] {
         inputContinuation.finish()
         await consumer?.value
         flushSegmenters()
         await waitUntilDecoded()
-        return try await finalize(callPlayedOnSpeakers: callPlayedOnSpeakers)
+        return try await finalize()
     }
 
     /// For a meeting that the app did not finish: decodes the audio after the
     /// last stored segment of each track, in steps so that memory stays small,
     /// and returns the final transcript.
-    func recover(callPlayedOnSpeakers: Bool) async throws -> [MeetingSegment] {
+    func recover() async throws -> [MeetingSegment] {
         let stored = await store.segments(of: meetingID)
         var resumeAt: [MeetingTrack: Int] = [:]
         var end = 0
@@ -136,7 +128,7 @@ actor MeetingTranscriber {
                 guard lower < stepEnd else { continue }
                 let samples = try MeetingAudioFileReader.samples(at: store.audioURL(track, for: meetingID), range: lower ..< stepEnd)
                 if !samples.isEmpty {
-                    receive(.block(track, samples, lower))
+                    process(.samples(track, samples, position: lower))
                 }
             }
             await waitUntilDecoded()
@@ -144,19 +136,19 @@ actor MeetingTranscriber {
         }
         flushSegmenters()
         await waitUntilDecoded()
-        return try await finalize(callPlayedOnSpeakers: callPlayedOnSpeakers)
+        return try await finalize()
     }
 
     // MARK: - Chunks
 
-    private func receive(_ item: Input) {
-        switch item {
-        case let .block(track, samples, position):
+    private func process(_ output: MeetingRecorderOutput) {
+        switch output {
+        case let .samples(track, samples, position):
             if let chunks = segmenters[track]?.append(samples, at: position) {
                 pending += chunks
             }
             decodeIfIdle()
-        case .cut:
+        case .paused:
             flushSegmenters()
         }
     }
@@ -176,12 +168,12 @@ actor MeetingTranscriber {
             resumeIdleWaiters()
             return
         }
-        guard !dictationActive else { return }
+        guard !decodingHeld else { return }
         decoder = Task { await decodePending() }
     }
 
     private func decodePending() async {
-        while !dictationActive, let index = earliestPendingIndex() {
+        while !decodingHeld, let index = earliestPendingIndex() {
             let chunk = pending.remove(at: index)
             if await !decode(chunk) {
                 pending.append(chunk)
@@ -266,8 +258,9 @@ actor MeetingTranscriber {
         waiters.forEach { $0.resume() }
     }
 
-    private func finalize(callPlayedOnSpeakers: Bool) async throws -> [MeetingSegment] {
+    private func finalize() async throws -> [MeetingSegment] {
         let stored = await store.segments(of: meetingID)
+        let callPlayedOnSpeakers = await store.record(meetingID)?.callPlayedOnSpeakers ?? false
         let transcript = MeetingTranscript.final(stored, callPlayedOnSpeakers: callPlayedOnSpeakers)
         if transcript.count != stored.count {
             try await store.replaceSegments(transcript, of: meetingID)
