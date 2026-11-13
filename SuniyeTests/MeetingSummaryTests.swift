@@ -122,6 +122,13 @@ final class MeetingSummaryWriterTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? MeetingSummaryError, .failed("The model stopped before it finished."))
         }
+        let emptyWriter = MeetingSummaryWriter(model: FakeSummaryModel(context: 4_096) { _ in "Title: Sync\n## Decisions\n- None" })
+        do {
+            _ = try await emptyWriter.write(input(conversation(turns: 4, words: 10)))
+            XCTFail("expected a failure")
+        } catch {
+            XCTAssertEqual(error as? MeetingSummaryError, .failed("The model wrote nothing."), "a summary with nothing in it is no summary")
+        }
     }
 
     func testTooLittleSpeechAndNoNotesIsNeverSent() async throws {

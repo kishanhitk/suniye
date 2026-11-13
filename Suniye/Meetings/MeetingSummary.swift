@@ -168,6 +168,9 @@ actor MeetingSummaryWriter {
             }
         }
         let parsed = MeetingSummaryText.parse(answer)
+        guard !parsed.body.isEmpty else {
+            throw MeetingSummaryError.failed(Self.cause(of: LLMPostProcessorError.emptyOutput))
+        }
         return MeetingSummary(title: parsed.title, body: parsed.body, provider: model.provider, parts: parts)
     }
 
