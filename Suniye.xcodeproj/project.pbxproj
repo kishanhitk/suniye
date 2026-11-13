@@ -186,6 +186,7 @@
 		A2F15D9699E05918C7A96F38 /* AppleFoundationModelsPostProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A16E593550418D25E53DADE /* AppleFoundationModelsPostProcessorTests.swift */; };
 		A812A56A0A2C9789B8DEE871 /* UpdateServiceMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B02C346233A9DC50B3D8C611 /* UpdateServiceMoreTests.swift */; };
 		A96F742191751BA844730D18 /* Qwen3ASRTranscriptionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DD65947527644BE37F7DEC8 /* Qwen3ASRTranscriptionServiceTests.swift */; };
+		A9F8D4988A17664D6A427FF2 /* MeetingPipelineRealModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF750791FCB07A12AC56E6D /* MeetingPipelineRealModelTests.swift */; };
 		ABBE39ACCFDBB6ADD2342962 /* AppAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A15D7D20796CE98FF1612651 /* AppAnalytics.swift */; };
 		AC9882C375B2BE7B4DA592C8 /* GeneralSettingsStoreMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6630118CE32F73C5461F0700 /* GeneralSettingsStoreMoreTests.swift */; };
 		AD4B3865600E1270C50BDB96 /* MeetingAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C00C743730B7934B1EF776 /* MeetingAnalytics.swift */; };
@@ -501,6 +502,7 @@
 		C7F3C3D023876B9EE8256C00 /* Suniye.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Suniye.swift; sourceTree = "<group>"; };
 		CA71D523EC88C51E2E911E4B /* LocalGemmaPostProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaPostProcessorTests.swift; sourceTree = "<group>"; };
 		CB8BDFE6C9896219254CC03D /* AudioRingBuffer.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = AudioRingBuffer.c; sourceTree = "<group>"; };
+		CEF750791FCB07A12AC56E6D /* MeetingPipelineRealModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingPipelineRealModelTests.swift; sourceTree = "<group>"; };
 		CF1DD54B813C7230F0B16B34 /* MagicFormatOutputPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatOutputPolicy.swift; sourceTree = "<group>"; };
 		CF483C4F8F43B591D1E13ABA /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		D04231EADA487127BD0F97D0 /* LocalLLMModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLLMModelManager.swift; sourceTree = "<group>"; };
@@ -725,6 +727,7 @@
 				2D93A814E7829C3B3FFC89EC /* MeetingCaptureTests.swift */,
 				1EC3C5F79375CBB7F9353EE0 /* MeetingCoordinatorTests.swift */,
 				38A9FC3C77BBB80A1D3DC3C2 /* MeetingListTests.swift */,
+				CEF750791FCB07A12AC56E6D /* MeetingPipelineRealModelTests.swift */,
 				D8D43212D0E723FE44745E4B /* MeetingStoreTests.swift */,
 				189DBC6D4F3BC5F61CC6D4D8 /* MeetingSummaryTests.swift */,
 				852F40AAC9CE96D78EFF08AC /* MeetingTranscriptTests.swift */,
@@ -1327,6 +1330,7 @@
 				32D41D5FA71BC995AEA2A15A /* MeetingCaptureTests.swift in Sources */,
 				DABFB9E4A2770ACD863D0415 /* MeetingCoordinatorTests.swift in Sources */,
 				344EC396E34BBA352C4BA024 /* MeetingListTests.swift in Sources */,
+				A9F8D4988A17664D6A427FF2 /* MeetingPipelineRealModelTests.swift in Sources */,
 				43488D48F6530BC8828E4DBD /* MeetingStoreTests.swift in Sources */,
 				58A7A667162C11E9D1D3674C /* MeetingSummaryTests.swift in Sources */,
 				5FE11D0387C7BA12FCDA3C4B /* MeetingTranscriptTests.swift in Sources */,
