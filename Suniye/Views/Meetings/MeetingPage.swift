@@ -27,6 +27,7 @@ struct MeetingPage: View {
     @State private var summary: String?
     /// Nil until the notes are read, so the editor never saves over them.
     @State private var notes: MeetingNotesDraft?
+    @State private var notesUnreadable = false
 
     init(meetings: MeetingCoordinator, appState: AppState, id: UUID) {
         self.meetings = meetings
@@ -67,7 +68,9 @@ struct MeetingPage: View {
                 summary = await meetings.summary(of: id)
             }
             .task(id: id) {
-                notes = MeetingNotesDraft(saved: await meetings.notes(of: id))
+                let saved = await meetings.notes(of: id)
+                notes = saved.map(MeetingNotesDraft.init(saved:))
+                notesUnreadable = saved == nil
             }
             .onAppear { meetings.pageOnScreen = id }
             .onDisappear {
@@ -188,6 +191,9 @@ struct MeetingPage: View {
                     MeetingNotesEditor(draft: draft) { text in
                         Task { await meetings.saveNotes(text, for: id) }
                     }
+                } else if notesUnreadable {
+                    Text("Couldn’t read the notes.")
+                        .foregroundStyle(MainWindowPalette.secondaryText)
                 }
                 if live == nil {
                     MeetingRegenerateMenu(title: "Regenerate Summary", meetings: meetings, actions: actions, record: record)

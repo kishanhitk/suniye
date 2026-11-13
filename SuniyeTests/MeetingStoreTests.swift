@@ -118,6 +118,16 @@ final class MeetingStoreTests: XCTestCase {
         XCTAssertEqual(summary, "## Summary\nShip Thursday.")
     }
 
+    func testNotesThatCannotBeReadAreNotEmpty() async throws {
+        let record = makeRecord()
+        try await store.create(record)
+        try Data([0xFF, 0xFE, 0xFD]).write(to: store.folder(for: record.id).appendingPathComponent("notes.txt"))
+
+        let notes = await store.notes(of: record.id)
+
+        XCTAssertNil(notes, "an editor that loaded \"\" would write over the file")
+    }
+
     func testDeleteAudioKeepsTheTranscriptAndDeleteRemovesTheMeeting() async throws {
         let record = makeRecord()
         try await store.create(record)

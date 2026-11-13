@@ -256,7 +256,7 @@ final class MeetingCoordinator {
         }
         let text = MeetingListText(
             summary: await store.summary(of: id),
-            notes: await store.notes(of: id),
+            notes: await store.notes(of: id) ?? "",
             transcript: await transcript(of: id).map(\.text)
         )
         listTexts[id] = text
@@ -275,7 +275,8 @@ final class MeetingCoordinator {
         await store.summary(of: id)
     }
 
-    func notes(of id: UUID) async -> String {
+    /// nil when the notes cannot be read.
+    func notes(of id: UUID) async -> String? {
         await store.notes(of: id)
     }
 
@@ -853,7 +854,7 @@ final class MeetingCoordinator {
     }
 
     private func hasEnoughSpeech(_ id: UUID, segments: [MeetingSegment]) async -> Bool {
-        MeetingSummaryWriter.hasEnoughSpeech(segments, notes: await store.notes(of: id))
+        MeetingSummaryWriter.hasEnoughSpeech(segments, notes: await store.notes(of: id) ?? "")
     }
 
     private func apply(_ record: MeetingRecord) {

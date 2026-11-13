@@ -156,8 +156,11 @@ actor MeetingStore {
         return MeetingTranscript.ordered(segments)
     }
 
-    func notes(of id: UUID) -> String {
-        (try? String(contentsOf: notesURL(id), encoding: .utf8)) ?? ""
+    /// "" when the meeting has no notes; nil when the file cannot be read.
+    func notes(of id: UUID) -> String? {
+        let url = notesURL(id)
+        guard fileManager.fileExists(atPath: url.path) else { return "" }
+        return try? String(contentsOf: url, encoding: .utf8)
     }
 
     func saveNotes(_ text: String, for id: UUID) throws {

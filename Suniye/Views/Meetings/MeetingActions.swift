@@ -43,7 +43,7 @@ final class MeetingActions {
             let markdown = MeetingExport.markdown(
                 record: record,
                 summary: await meetings.summary(of: record.id),
-                notes: await meetings.notes(of: record.id),
+                notes: await meetings.notes(of: record.id) ?? "",
                 segments: await meetings.transcript(of: record.id)
             )
             let panel = NSSavePanel()
