@@ -11,19 +11,17 @@ struct MeetingsSection: View {
             MeetingPage(meetings: meetings, appState: appState, id: id)
                 .id(id)
         } else {
-            MeetingsPage(meetings: meetings, appState: appState)
+            MeetingsPage(meetings: meetings)
         }
     }
 }
 
 struct MeetingsPage: View {
     @Bindable var meetings: MeetingCoordinator
-    let appState: AppState
 
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     @State private var texts: [UUID: MeetingListText] = [:]
-    @State private var selectedID: UUID?
     @State private var actions = MeetingActions()
 
     var body: some View {
@@ -94,13 +92,7 @@ struct MeetingsPage: View {
                 ForEach(groups, id: \.day) { group in
                     Section {
                         ForEach(group.records) { record in
-                            MeetingRow(
-                                record: record,
-                                snippet: snippet(for: record),
-                                query: query,
-                                isSelected: selectedID == record.id
-                            ) {
-                                selectedID = record.id
+                            MeetingRow(record: record, snippet: snippet(for: record), query: query) {
                                 meetings.openMeetingID = record.id
                             }
                             .task(id: record) {
@@ -117,13 +109,6 @@ struct MeetingsPage: View {
                             .foregroundStyle(MainWindowPalette.tertiaryText)
                             .padding(.top, group.day == groups.first?.day ? 0 : 18)
                     }
-                }
-            }
-            .focusable()
-            .focusEffectDisabled()
-            .onDeleteCommand {
-                if let selectedID, let record = meetings.record(selectedID) {
-                    actions.confirmDelete(record)
                 }
             }
         }
@@ -209,7 +194,6 @@ private struct MeetingRow: View {
     let record: MeetingRecord
     let snippet: String?
     let query: String
-    let isSelected: Bool
     let open: () -> Void
 
     var body: some View {
@@ -239,10 +223,6 @@ private struct MeetingRow: View {
             }
             .padding(.vertical, AppMetrics.listRowVerticalPadding)
             .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
-                    .fill(isSelected ? MainWindowPalette.selectedFill : Color.clear)
-            )
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle(pressedScale: 0.995))
