@@ -234,7 +234,8 @@ actor MeetingSummaryWriter {
             answers[request] = answer
             return answer
         } catch {
-            // A canceled HTTP request surfaces as a network error.
+            // A cancel surfaces as different errors (a stopped server start,
+            // an Apple model error); the task's state tells it from a failure.
             if Task.isCancelled {
                 throw CancellationError()
             }
@@ -269,8 +270,6 @@ actor MeetingSummaryWriter {
     }
 }
 
-/// The text of each request. The model reads one message: the rules first,
-/// then the data in tags.
 /// The requests to the model. A small model follows the rules it read last,
 /// so each request puts the transcript or the notes first and the rules
 /// after them.

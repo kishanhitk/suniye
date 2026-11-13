@@ -55,7 +55,6 @@ protocol LocalGemmaClient {
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> ChatCompletionResult
-    /// Tokens in `text` for the model's tokenizer.
     func tokenCount(_ text: String, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> Int
     func stopRuntime() async
 }

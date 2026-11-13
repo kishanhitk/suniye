@@ -1,6 +1,5 @@
 import Foundation
 
-/// A piece of one track for the speech model.
 struct MeetingAudioChunk: Equatable, Sendable {
     let track: MeetingTrack
     /// Sample position of the first sample in the track's audio file.

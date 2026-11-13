@@ -1,16 +1,8 @@
 import Foundation
 
-/// Meetings on disk, one folder per meeting:
-///
-///     meetings/<id>/meeting.json    the record
-///     meetings/<id>/segments.jsonl  one transcript segment per line, appended as each finishes
-///     meetings/<id>/notes.txt       the user's notes
-///     meetings/<id>/summary.md      the summary
-///     meetings/<id>/you.wav         microphone track
-///     meetings/<id>/them.wav        call audio track
-///
-/// Appends and small atomic writes keep a crash from losing more than the
-/// segment in flight.
+/// Meetings on disk, one folder per meeting; docs/MEETINGS.md lists the
+/// files. Appends and small atomic writes keep a crash from losing more than
+/// the segment in flight.
 actor MeetingStore {
     enum StoreError: LocalizedError, Equatable {
         case unknownMeeting(UUID)
@@ -186,7 +178,6 @@ actor MeetingStore {
         try text.write(to: summaryURL(id), atomically: true, encoding: .utf8)
     }
 
-    /// Bytes that all meetings take on disk.
     func diskUsage() -> Int64 {
         guard let files = fileManager.enumerator(at: rootDirectory, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
         var total: Int64 = 0

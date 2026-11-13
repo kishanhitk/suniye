@@ -15,8 +15,8 @@ final class MeetingSummaries {
     private let analytics: Analytics
     /// Gets the record once its summary state is final.
     var onFinished: ((MeetingRecord) -> Void)?
-    /// Runs after each run of the model, so that Magic Format can load its
-    /// own prompt into the model's cache again.
+    /// Runs after each summary, so that Magic Format can load its own prompt
+    /// into the model's cache again.
     var onModelIdle: (() -> Void)?
     private var queue: [UUID] = []
     private var writers: [UUID: (engine: MeetingSummaryEngine, writer: MeetingSummaryWriter)] = [:]

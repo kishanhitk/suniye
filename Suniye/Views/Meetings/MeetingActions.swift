@@ -6,7 +6,7 @@ struct MeetingActionFailure: Equatable {
     let message: String
 }
 
-/// The dialogs that meeting commands open, shared by the list and the page.
+/// Meeting commands for the list and the page, and the dialogs they open.
 @MainActor
 @Observable
 final class MeetingActions {

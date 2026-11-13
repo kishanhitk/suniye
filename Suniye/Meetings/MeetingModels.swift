@@ -131,8 +131,8 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
 }
 
 /// Maps a position in a track's audio file to the meeting's wall clock. The
-/// files skip paused time, so every pause that ends at or before an audio
-/// position shifts it later by the pause length.
+/// files skip paused time, so every closed pause that starts at or before
+/// the moment shifts it later by the pause length.
 struct MeetingTimeline: Equatable, Sendable {
     let pauses: [MeetingPause]
 

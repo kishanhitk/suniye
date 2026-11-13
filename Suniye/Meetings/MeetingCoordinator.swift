@@ -46,7 +46,7 @@ struct MeetingWriteFailure: Equatable {
     let outOfSpace: Bool
 }
 
-/// Something the user should see while the meeting page is not on screen.
+/// Something that happened to a meeting, for a toast.
 enum MeetingNotice: Equatable {
     case callAudioNeverHeard
     case callAudioStopped(since: TimeInterval)
@@ -108,7 +108,6 @@ final class MeetingSession {
         record.status == .paused
     }
 
-    /// The lines that the live transcript shows.
     var visibleSegments: [MeetingSegment] {
         MeetingTranscript.live(
             segments,
@@ -117,7 +116,6 @@ final class MeetingSession {
         )
     }
 
-    /// The tracks that started and did not fail since.
     fileprivate var workingTracks: [MeetingTrack] {
         recorder.tracks.filter { failedTracks[$0] == nil }
     }
@@ -156,7 +154,6 @@ final class MeetingCoordinator {
             }
         }
     }
-    /// Meetings whose transcript is being finished now.
     private(set) var finishing: Set<UUID> = []
     /// A meeting that a disk write error stopped, for its banner.
     private(set) var writeFailure: MeetingWriteFailure?
@@ -498,7 +495,6 @@ final class MeetingCoordinator {
         answerCallCard(.keepRecording)
     }
 
-    /// Call detection runs from launch, unless the user chose Do Nothing.
     private func updateCallDetection() {
         guard launched else { return }
         if settings.callStartAction == .doNothing {
@@ -574,8 +570,6 @@ final class MeetingCoordinator {
         }
     }
 
-    /// Closes the card that the user answered, or that closed by itself, and
-    /// counts how it closed.
     private func answerCallCard(_ action: MeetingCallCardAction) {
         guard let card = callCard else { return }
         analytics.track(.meetingCallCard(card: card.analyticsKind, action: action))
@@ -608,7 +602,6 @@ final class MeetingCoordinator {
         }
     }
 
-    /// Writes the summary again, with `templateID` when it is given.
     func regenerate(_ id: UUID, templateID: String? = nil) async {
         guard live?.id != id, !finishing.contains(id), record(id)?.status != .summarizing else { return }
         if let templateID {
@@ -624,7 +617,6 @@ final class MeetingCoordinator {
         summaries.enqueue(id)
     }
 
-    /// A meeting that records or whose transcript is being finished stays.
     func delete(_ id: UUID) async throws {
         guard live?.id != id, !finishing.contains(id) else { return }
         summaries.remove(id)
@@ -836,7 +828,6 @@ final class MeetingCoordinator {
         }
     }
 
-    /// Puts a saved record into the list and the live meeting.
     private func apply(_ record: MeetingRecord) {
         listTexts[record.id] = nil
         if let index = meetings.firstIndex(where: { $0.id == record.id }) {

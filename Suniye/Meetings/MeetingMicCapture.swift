@@ -34,7 +34,7 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
     }
 
     /// An engine reports a harmless configuration change right after it
-    /// starts (KIS-141); changes this soon after an open are not reopened.
+    /// starts; changes this soon after an open are not reopened.
     static let settleTime: TimeInterval = 2
     /// This many reopens with no sound between them end the track.
     static let maximumReopens = 20

@@ -5887,8 +5887,8 @@ extension AppState: MeetingHost {
         }
     }
 
-    /// A meeting notice becomes a toast unless the meeting's page is on
-    /// screen in the active app, where the page already shows it.
+    /// A meeting notice becomes a toast. A notice that the meeting's page
+    /// shows itself is skipped while that page is on screen in the active app.
     func showMeetingNotice(_ notice: MeetingNotice) {
         let pageOnScreen = NSApp.isActive ? meetings.pageOnScreen : nil
         let live = meetings.live.flatMap { $0.id == pageOnScreen ? nil : $0 }

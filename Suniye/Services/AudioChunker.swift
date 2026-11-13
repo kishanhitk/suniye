@@ -3,6 +3,7 @@ import Foundation
 /// Splits 16 kHz audio that an engine cannot take in one call into chunks cut
 /// at the quietest 100 ms inside the last 5 s before each boundary, matching
 /// the Cohere Transcribe reference feature extractor. Chunks do not overlap.
+/// The meeting segmenter cuts its longest chunks with `quietestPoint` too.
 struct AudioChunker {
     static let boundarySearchSamples = 5 * 16_000
     static let energyWindowSamples = 1_600

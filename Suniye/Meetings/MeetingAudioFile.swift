@@ -115,8 +115,7 @@ final class MeetingAudioFileWriter {
 }
 
 enum MeetingAudioFileReader {
-    /// Reads samples `range` (in samples) as floats. A range past the end is
-    /// cut to the file.
+    /// `range` counts samples. A range past the end is cut to the file.
     static func samples(at url: URL, range: Range<Int>? = nil) throws -> [Float] {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }

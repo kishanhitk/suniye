@@ -162,7 +162,6 @@ struct MeetingPage: View {
         return parts.joined(separator: " · ")
     }
 
-    /// The text that Copy takes from the visible tab, or nil when it is empty.
     private func copyText(_ record: MeetingRecord) -> String? {
         let text: String
         switch tab {
@@ -258,7 +257,7 @@ private struct MeetingTabs: NSViewRepresentable {
     }
 }
 
-/// "Copy Summary", then "Copied" with a checkmark for 1.5 s.
+/// "Copy Summary", then "Copied" with a checkmark for a moment.
 struct MeetingCopyButton: View {
     let title: String
     let text: String

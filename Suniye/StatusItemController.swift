@@ -87,15 +87,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         reportIssueItem.target = self
         quitItem.target = self
 
-        // The abandonment-recovery affordance: a user who closes the window
-        // mid-setup must see a labeled way back (with live download progress),
-        // not a normal-looking menu that silently does nothing.
         menu.addItem(recordMeetingItem)
         menu.addItem(meetingStatusItem)
         menu.addItem(pauseMeetingItem)
         menu.addItem(stopMeetingItem)
         menu.addItem(openMeetingItem)
         menu.addItem(.separator())
+        // The abandonment-recovery affordance: a user who closes the window
+        // mid-setup must see a labeled way back (with live download progress),
+        // not a normal-looking menu that silently does nothing.
         menu.addItem(finishSetupItem)
         menu.addItem(openSettingsItem)
         menu.addItem(copyLastTranscriptItem)

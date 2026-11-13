@@ -24,16 +24,17 @@ enum MeetingRecorderEvent: Equatable, Sendable {
     case storageFailed(String, outOfSpace: Bool)
 }
 
-/// Writes the two tracks of one meeting to disk, in step with the wall clock.
+/// Writes the two tracks of one meeting to disk, in step with the system
+/// uptime clock.
 ///
 /// - Paused time is not written; the meeting record keeps the pauses, and
 ///   `MeetingTimeline` maps audio positions back to the wall clock.
-/// - A gap in a track (a device change, a slow start) is filled with silence,
-///   so a position in either file means the same moment.
-/// - While a dictation records, the microphone track gets silence: the
-///   dictated words are not meeting talk.
+/// - A track that falls behind the clock by more than `gapThreshold` (a
+///   device change, a slow start) gets silence, so a position in either file
+///   means about the same moment. A track that runs ahead is not cut.
+/// - While a dictation captures audio, the microphone track gets silence:
+///   the dictated words are not meeting talk.
 final class MeetingRecorder: @unchecked Sendable {
-    /// After this much silence on the call track, the recorder reports it.
     static let callSilenceLimit: TimeInterval = 120
     /// Smaller gaps are timing jitter between blocks, not lost audio.
     static let gapThreshold: TimeInterval = 0.25
@@ -61,7 +62,7 @@ final class MeetingRecorder: @unchecked Sendable {
     private var reportedCallSilence = false
     private var silenceTimer: DispatchSourceTimer?
 
-    /// `sources` without `.them` records the microphone only (macOS before 14.4).
+    /// `sources` without `.them` records the microphone only.
     init(
         sources: [MeetingTrack: MeetingAudioSource],
         fileURLs: [MeetingTrack: URL],

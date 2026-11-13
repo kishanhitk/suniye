@@ -11,8 +11,6 @@ extension MeetingEnvironment {
         return false
     }
 
-    /// The Mac itself: the meeting microphone, the call audio tap, the
-    /// first-recording notice, the disk and the output device.
     @MainActor
     static func live() -> MeetingEnvironment {
         MeetingEnvironment(

@@ -95,8 +95,8 @@ public enum AnalyticsEvent: Sendable {
     /// `parts` is the number of transcript parts that got notes of their own;
     /// 1 when the transcript fit in one request, nil when no summary was written.
     case meetingSummarized(provider: MeetingSummaryEngine, outcome: MeetingOutcome, parts: Int?, durationMs: Int)
-    /// How a call card closed. A card that a recording's start or stop closed
-    /// sends nothing.
+    /// How a call card closed. A card that the app closed itself (a recording
+    /// started or stopped, or the call came back) sends nothing.
     case meetingCallCard(card: MeetingCallCardKind, action: MeetingCallCardAction)
 
     /// Self-observability of the analytics pipeline itself.

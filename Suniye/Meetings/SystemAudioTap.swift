@@ -6,11 +6,11 @@ import Foundation
 /// Suniye, in a private aggregate device that holds only the tap.
 ///
 /// - Tap autostart stays off and `AudioDeviceStart` runs explicitly: autostart
-///   waits for a tapped app and made Zoom hang on join in Muesli (issue 600).
-/// - The aggregate device keeps one fixed UID, so a crash cannot pile up
-///   hidden devices with fresh UIDs (Muesli PR 387).
+///   waits for a tapped app and can make Zoom hang on join.
+/// - The aggregate device takes the first free UID of two fixed ones, so a
+///   crash cannot pile up hidden devices with fresh UIDs.
 /// - An output route change does not rebuild the tap; the tap sits before the
-///   output device (Muesli PR 408 lost the remote side on rebuilds).
+///   output device, and a rebuild can lose the other side of the call.
 /// - macOS asks for the system audio permission on the first start. No public
 ///   API reports the answer: a denied tap delivers silence, which the recorder
 ///   reports after a while without sound.
