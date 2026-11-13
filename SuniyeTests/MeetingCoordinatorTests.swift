@@ -183,6 +183,22 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.stop()
     }
 
+    func testTwoPausesAtOnceOpenOnePause() async throws {
+        let coordinator = makeCoordinator()
+        try await coordinator.startMeeting(source: .manual)
+        let session = try XCTUnwrap(coordinator.live)
+
+        clock += 10
+        async let first: Void = coordinator.pause()
+        async let second: Void = coordinator.pause()
+        _ = await (first, second)
+        clock += 5
+        try await coordinator.resume()
+
+        XCTAssertEqual(session.record.pauses, [MeetingPause(start: 10, end: 15)])
+        await coordinator.stop()
+    }
+
     func testAtLaunchARecordingThatAQuitLeftIsFinishedWithNoClick() async throws {
         let left = MeetingRecord(title: "Meeting", startedAt: clock, tracks: [.you], status: .recording, templateID: "general")
         try await store.create(left)
