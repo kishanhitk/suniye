@@ -40,11 +40,20 @@ actor MeetingStore {
         self.rootDirectory = rootDirectory
         self.fileManager = fileManager
         encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(date.formatted(Self.dateStyle))
+        }
         encoder.outputFormatting = [.sortedKeys]
         decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            try Self.dateStyle.parse(decoder.singleValueContainer().decode(String.self))
+        }
     }
+
+    /// Times keep their milliseconds: the recorded time and the pauses count
+    /// from `startedAt`.
+    private static let dateStyle = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
 
     nonisolated func folder(for id: UUID) -> URL {
         rootDirectory.appendingPathComponent(id.uuidString.lowercased(), isDirectory: true)

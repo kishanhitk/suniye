@@ -23,7 +23,7 @@ final class MeetingStoreTests: XCTestCase {
 
     func testRecordsRoundTripNewestFirst() async throws {
         let older = makeRecord(startedAt: Date(timeIntervalSince1970: 1_800_000_000), status: .done)
-        var newer = makeRecord(startedAt: Date(timeIntervalSince1970: 1_800_003_600))
+        var newer = makeRecord(startedAt: Date(timeIntervalSince1970: 1_800_003_600.25))
         newer.callAppName = "Zoom"
         try await store.create(older)
         try await store.create(newer)
