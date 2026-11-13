@@ -68,7 +68,7 @@ struct MeetingSegmenter {
         while (analyzedWindows + 1) * Self.windowSamples <= pending.count {
             let window = analyzedWindows * Self.windowSamples ..< (analyzedWindows + 1) * Self.windowSamples
             analyzedWindows += 1
-            let level = Self.rms(pending[window])
+            let level = MeetingAudioFormat.rms(pending[window])
             loudest = max(loudest, level)
             let quiet = level < max(MeetingAudioFormat.silenceLevel, loudest * Self.quietRatio)
             quietRun = quiet ? quietRun + 1 : 0
@@ -79,7 +79,7 @@ struct MeetingSegmenter {
             }
             if window.upperBound >= Self.maximumSamples {
                 let searched = (Self.maximumSamples - AudioChunker.boundarySearchSamples) ..< Self.maximumSamples
-                let quietest = AudioChunker.quietestPoint(in: searched) { Self.rms(pending[$0]) }
+                let quietest = AudioChunker.quietestPoint(in: searched) { MeetingAudioFormat.rms(pending[$0]) }
                 return cut(at: quietest)
             }
         }
@@ -93,7 +93,7 @@ struct MeetingSegmenter {
         var hasSound = false
         for start in stride(from: 0, to: samples.count, by: Self.windowSamples) {
             let end = min(start + Self.windowSamples, samples.count)
-            if Self.rms(samples[start ..< end]) >= MeetingAudioFormat.silenceLevel {
+            if MeetingAudioFormat.rms(samples[start ..< end]) >= MeetingAudioFormat.silenceLevel {
                 hasSound = true
                 break
             }
@@ -105,14 +105,5 @@ struct MeetingSegmenter {
         loudest = 0
         quietRun = 0
         return chunk
-    }
-
-    static func rms(_ samples: ArraySlice<Float>) -> Float {
-        guard !samples.isEmpty else { return 0 }
-        var sum: Float = 0
-        for sample in samples {
-            sum += sample * sample
-        }
-        return (sum / Float(samples.count)).squareRoot()
     }
 }

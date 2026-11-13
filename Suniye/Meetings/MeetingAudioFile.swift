@@ -11,6 +11,15 @@ enum MeetingAudioFormat {
     /// RMS below this (about -60 dBFS) is silence: the call track has no
     /// sound, and a chunk is not decoded.
     static let silenceLevel: Float = 0.001
+
+    static func rms<Samples: Collection>(_ samples: Samples) -> Float where Samples.Element == Float {
+        guard !samples.isEmpty else { return 0 }
+        var sum: Float = 0
+        for sample in samples {
+            sum += sample * sample
+        }
+        return (sum / Float(samples.count)).squareRoot()
+    }
 }
 
 enum MeetingAudioFileError: LocalizedError, Equatable {

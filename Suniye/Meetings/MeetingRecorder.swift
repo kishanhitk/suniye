@@ -242,7 +242,7 @@ final class MeetingRecorder: @unchecked Sendable {
         onOutput?(.samples(track, samples, position: position))
         samplesWritten[track] = position + samples.count
 
-        let level = Self.rms(samples)
+        let level = MeetingAudioFormat.rms(samples)
         if track == .them, level >= MeetingAudioFormat.silenceLevel {
             lastCallSound = arrival
             callTrackHeardSound = true
@@ -293,14 +293,5 @@ final class MeetingRecorder: @unchecked Sendable {
             }
         }
         writers = [:]
-    }
-
-    static func rms(_ samples: [Float]) -> Float {
-        guard !samples.isEmpty else { return 0 }
-        var sum: Float = 0
-        for sample in samples {
-            sum += sample * sample
-        }
-        return (sum / Float(samples.count)).squareRoot()
     }
 }
