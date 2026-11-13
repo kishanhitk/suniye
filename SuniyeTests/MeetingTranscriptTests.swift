@@ -90,7 +90,7 @@ final class MeetingTranscriptRulesTests: XCTestCase {
     func testNoLineAfterTheEndOfTheFollowedCallIsKept() {
         let during = segment(.you, 0, 3, "See you on Friday.")
         let after = segment(.you, 5, 7, "That went well.")
-        var record = MeetingRecord(title: "Call", startedAt: Date(), templateID: "general")
+        var record = MeetingRecord(title: "Call", startedAt: Date(), tracks: [.you, .them], templateID: "general")
         record.transcriptEnd = 4 * MeetingAudioFormat.sampleRate
 
         XCTAssertEqual(MeetingTranscript.final([after, during], of: record), [during])
@@ -145,7 +145,7 @@ final class MeetingTranscriberTests: XCTestCase {
         try await super.setUp()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("MeetingTranscriberTests-\(UUID().uuidString)", isDirectory: true)
         store = MeetingStore(rootDirectory: root)
-        record = MeetingRecord(title: "Zoom call", startedAt: Date(timeIntervalSince1970: 1_800_000_000), templateID: "general")
+        record = MeetingRecord(title: "Zoom call", startedAt: Date(timeIntervalSince1970: 1_800_000_000), tracks: [.you, .them], templateID: "general")
         try await store.create(record)
     }
 

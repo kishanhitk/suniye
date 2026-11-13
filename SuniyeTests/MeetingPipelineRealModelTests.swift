@@ -102,7 +102,7 @@ final class MeetingPipelineRealModelTests: XCTestCase {
 
         let tracks = try await Self.synthesizeCall(echo: echo)
         let store = MeetingStore(rootDirectory: root)
-        let record = MeetingRecord(title: "Call", startedAt: Date(), templateID: MeetingTemplate.general.id, callPlayedOnSpeakers: echo)
+        let record = MeetingRecord(title: "Call", startedAt: Date(), tracks: [.you, .them], templateID: MeetingTemplate.general.id, callPlayedOnSpeakers: echo)
         try await store.create(record)
         let transcriber = MeetingTranscriber(
             meetingID: record.id,

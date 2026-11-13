@@ -8,7 +8,7 @@ enum MeetingExport {
         MeetingTranscript.turns(
             segments,
             timeline: MeetingTimeline(pauses: record.pauses),
-            speakerLabels: segments.contains { $0.track == .them }
+            speakerLabels: record.hasCallTrack
         )
         .joined(separator: "\n")
     }

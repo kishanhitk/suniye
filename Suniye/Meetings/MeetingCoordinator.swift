@@ -71,7 +71,6 @@ final class MeetingSession {
         case stopped
     }
 
-    let hasCallTrack: Bool
     fileprivate(set) var record: MeetingRecord
     fileprivate(set) var youLevel: Float = 0
     fileprivate(set) var themLevel: Float = 0
@@ -94,11 +93,14 @@ final class MeetingSession {
         self.record = record
         self.recorder = recorder
         self.transcriber = transcriber
-        hasCallTrack = recorder.tracks.contains(.them)
     }
 
     var id: UUID {
         record.id
+    }
+
+    var hasCallTrack: Bool {
+        record.hasCallTrack
     }
 
     var isPaused: Bool {
@@ -315,19 +317,22 @@ final class MeetingCoordinator {
             throw MeetingStartError.noMicrophoneAccess
         }
 
+        let id = UUID()
+        let recorder = MeetingRecorder(
+            sources: environment.makeSources(canRecordCallAudio, host?.meetingInputDeviceID),
+            fileURLs: Dictionary(uniqueKeysWithValues: MeetingTrack.allCases.map { ($0, store.audioURL($0, for: id)) })
+        )
         let record = MeetingRecord(
+            id: id,
             title: callApp?.title ?? "Meeting",
             startedAt: environment.now(),
+            tracks: recorder.tracks,
             callAppName: callApp?.name,
             callAppBundleID: callApp?.bundleID,
             templateID: settings.templateID,
             callPlayedOnSpeakers: environment.callPlaysOnSpeakers()
         )
         try await store.create(record)
-        let recorder = MeetingRecorder(
-            sources: environment.makeSources(canRecordCallAudio, host?.meetingInputDeviceID),
-            fileURLs: Dictionary(uniqueKeysWithValues: MeetingTrack.allCases.map { ($0, store.audioURL($0, for: record.id)) })
-        )
         let transcriber = makeTranscriber(for: record.id, tracks: recorder.tracks)
         let session = MeetingSession(record: record, recorder: recorder, transcriber: transcriber)
         // The recorder's queue keeps its events in order, and so does the main queue.

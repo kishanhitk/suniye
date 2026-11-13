@@ -96,7 +96,7 @@ final class MeetingSummaries {
             segments: segments,
             notes: await store.notes(of: id),
             template: await templates.template(id: record.templateID),
-            speakerLabels: segments.contains { $0.track == .them }
+            speakerLabels: record.hasCallTrack
         )
         let change: (inout MeetingRecord) -> Void
         let outcome: MeetingOutcome

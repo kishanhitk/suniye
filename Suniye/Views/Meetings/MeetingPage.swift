@@ -205,12 +205,11 @@ struct MeetingPage: View {
     private func transcriptLines(_ record: MeetingRecord) -> [MeetingTranscriptLine] {
         let shown = live?.visibleSegments ?? segments
         let timeline = MeetingTimeline(pauses: record.pauses)
-        let labels = live?.hasCallTrack ?? shown.contains { $0.track == .them }
         return shown.map { segment in
             MeetingTranscriptLine(
                 id: segment.id,
                 time: MeetingTranscript.clock(timeline.wallSeconds(forSample: segment.audioStart)),
-                speaker: labels ? (segment.track == .you ? "You" : "Them") : nil,
+                speaker: record.hasCallTrack ? (segment.track == .you ? "You" : "Them") : nil,
                 text: segment.text
             )
         }

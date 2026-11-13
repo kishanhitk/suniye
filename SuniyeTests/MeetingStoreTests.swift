@@ -18,7 +18,7 @@ final class MeetingStoreTests: XCTestCase {
     }
 
     private func makeRecord(startedAt: Date = Date(timeIntervalSince1970: 1_800_000_000), status: MeetingStatus = .recording) -> MeetingRecord {
-        MeetingRecord(title: "Zoom call", startedAt: startedAt, status: status, templateID: "general")
+        MeetingRecord(title: "Zoom call", startedAt: startedAt, tracks: [.you, .them], status: status, templateID: "general")
     }
 
     func testRecordsRoundTripNewestFirst() async throws {

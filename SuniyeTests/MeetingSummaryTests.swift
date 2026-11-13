@@ -181,7 +181,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
     }
 
     func testAGeneratedTitleReplacesOnlyThePlaceholder() {
-        var placeholder = MeetingRecord(title: "Zoom call", startedAt: Date(), templateID: "general")
+        var placeholder = MeetingRecord(title: "Zoom call", startedAt: Date(), tracks: [.you, .them], templateID: "general")
         var named = placeholder
         named.title = "Hiring sync"
         named.titleSource = .user

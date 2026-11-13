@@ -184,7 +184,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     }
 
     func testAtLaunchARecordingThatAQuitLeftIsFinishedWithNoClick() async throws {
-        let left = MeetingRecord(title: "Meeting", startedAt: clock, status: .recording, templateID: "general")
+        let left = MeetingRecord(title: "Meeting", startedAt: clock, tracks: [.you], status: .recording, templateID: "general")
         try await store.create(left)
         let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: left.id))
         try writer.append(tone(2.5, level: 0.3) + silence(0.5))

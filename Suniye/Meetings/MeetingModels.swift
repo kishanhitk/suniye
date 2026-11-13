@@ -59,6 +59,9 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     var title: String
     var titleSource: MeetingTitleSource
     let startedAt: Date
+    /// The tracks that recorded. A meeting with a call track shows who
+    /// speaks: page, export and summary.
+    let tracks: [MeetingTrack]
     var endedAt: Date?
     var callAppName: String?
     var callAppBundleID: String?
@@ -79,6 +82,7 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         title: String,
         titleSource: MeetingTitleSource = .placeholder,
         startedAt: Date,
+        tracks: [MeetingTrack],
         endedAt: Date? = nil,
         callAppName: String? = nil,
         callAppBundleID: String? = nil,
@@ -91,6 +95,7 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         self.title = title
         self.titleSource = titleSource
         self.startedAt = startedAt
+        self.tracks = tracks
         self.endedAt = endedAt
         self.callAppName = callAppName
         self.callAppBundleID = callAppBundleID
@@ -102,6 +107,10 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
 
     var duration: TimeInterval? {
         endedAt.map { $0.timeIntervalSince(startedAt) }
+    }
+
+    var hasCallTrack: Bool {
+        tracks.contains(.them)
     }
 
     /// Ends the meeting `seconds` after its start on the wall clock. A pause
