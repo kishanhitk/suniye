@@ -27,8 +27,6 @@ struct SpeechModelPage: View {
                     title: banner.title,
                     detail: banner.detail,
                     progress: banner.progress,
-                    // A multi-gigabyte download was only stoppable from
-                    // onboarding; from this page the sole escape was quitting.
                     actionTitle: appState.canCancelASRModelDownload ? "Cancel" : nil,
                     action: appState.canCancelASRModelDownload
                         ? { appState.cancelASRModelDownload() }
@@ -51,7 +49,6 @@ struct SpeechModelPage: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             DetailPageTitle(title: "Speech Model")
-            // The claim this page exists to make.
             Text("Recognition happens on this Mac. Audio is never uploaded.")
                 .font(AppTypography.body)
                 .foregroundStyle(MainWindowPalette.secondaryText)

@@ -32,8 +32,6 @@ struct TranscriptAppIcon: View {
 
 
 
-/// The newest transcript, shown in full. It is the one the user is most likely
-/// to want to reuse, so its text is not truncated and Copy is always visible.
 struct CompactTranscriptRow: View {
     let result: RecentResult
     var isSelected = false

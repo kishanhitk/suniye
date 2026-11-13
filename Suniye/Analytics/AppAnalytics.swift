@@ -28,15 +28,12 @@ enum AppAnalytics {
             build: version?.build.map(String.init) ?? "0",
             channel: (version?.channel ?? .stable).rawValue,
             isDebug: isDebugBuild(),
-            // Stamped onto every event's AE row (via the batch envelope) so any
-            // metric can be sliced by hardware. Read once here at startup.
             device: DeviceProfileReader.read()
         )
 
         return AnalyticsClient(identity: identity, store: store, queue: queue, uploader: uploader)
     }
 
-    /// Durable queue lives alongside the app's other config in Application Support.
     static func queueURL() -> URL {
         AppSupportDirectory.urlOrTemporary()
             .appendingPathComponent("analytics", isDirectory: true)

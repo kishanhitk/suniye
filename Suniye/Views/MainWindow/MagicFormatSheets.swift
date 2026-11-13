@@ -40,9 +40,6 @@ struct EngineSheet: View {
             }
 
             HStack(spacing: 10) {
-                // Only the row the user is actually looking at: testing one
-                // engine and then selecting another left the first engine's
-                // result sitting beside the second one's commit button.
                 if let result = appState.magicFormatSetupTestResult,
                    appState.magicFormatLastTestedProvider == pending {
                     HStack(spacing: 6) {
@@ -91,8 +88,6 @@ struct EngineSheet: View {
                 Text(name(for: provider))
                     .font(AppTypography.rowTitle)
                     .foregroundStyle(Color.primary)
-                // The two facts you would weigh: what it costs you, and what it
-                // costs in quality.
                 Text(facts(for: provider))
                     .font(AppTypography.subheadline)
                     .foregroundStyle(MainWindowPalette.secondaryText)
@@ -374,9 +369,6 @@ struct PerAppInstructionsSheet: View {
         .frame(width: 560)
         .subtleScrollers()
         .background(MainWindowPalette.windowBackground)
-        // Every edit here writes straight through, so Done only dismisses and
-        // Escape means the same thing. Without this the sheet ignored Escape
-        // and the only way out was the mouse.
         .onExitCommand { dismiss() }
     }
 
@@ -675,9 +667,6 @@ struct APIEndpointSheet: View {
         .frame(width: 560)
         .subtleScrollers()
         .background(MainWindowPalette.windowBackground)
-        // Every edit here writes straight through, so Done only dismisses and
-        // Escape means the same thing. Without this the sheet ignored Escape
-        // and the only way out was the mouse.
         .onExitCommand { dismiss() }
     }
 }

@@ -81,7 +81,6 @@ struct SettingsGroupHeading: View {
     }
 }
 
-/// Hairline between rows, inset so it reads as a separator rather than a border.
 struct RowSeparator: View {
     var body: some View {
         Rectangle()

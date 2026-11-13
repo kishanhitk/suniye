@@ -76,9 +76,6 @@ final class ModelManager: ModelManagerProtocol {
     }
 
     var catalog: [ASRModelCatalogEntry] {
-        // System-managed entries (Apple SpeechTranscriber) are filtered out on devices
-        // that don't support them, which cascades to installed-model discovery, fallback,
-        // and the UI — hiding the Apple option entirely on macOS < 26.
         ASRModelCatalog.availableEntries
     }
 
@@ -102,7 +99,6 @@ final class ModelManager: ModelManagerProtocol {
     func modelDirectoryURL(for modelID: ASRModelID) throws -> URL {
         let entry = catalogEntry(for: modelID)
         guard !entry.isSystemManaged else {
-            // System-managed models have no on-disk directory we control.
             throw ModelError.unknownModel
         }
         return try modelsRootDirectoryURL()
@@ -289,8 +285,6 @@ final class ModelManager: ModelManagerProtocol {
 
     func deleteModel(_ modelID: ASRModelID) throws {
         if catalogEntry(for: modelID).isSystemManaged {
-            // System-managed models are owned by the OS and cannot be deleted by us.
-            // The UI hides the delete action for these; this guard keeps callers safe.
             return
         }
         let modelDirectory = try modelDirectoryURL(for: modelID)

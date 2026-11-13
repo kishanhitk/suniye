@@ -32,8 +32,6 @@ struct MagicFormatPolishOutcome {
 }
 
 extension CleanupFallbackReason {
-    /// Exhaustive: adding an `LLMPostProcessorError` case won't compile until it
-    /// picks an analytics reason — the boundary can't silently degrade.
     init(_ error: LLMPostProcessorError) {
         switch error {
         case .invalidConfiguration: self = .invalidConfig
@@ -191,8 +189,6 @@ final class MagicFormatCoordinator {
         }
     }
 
-    /// Shared endpoint/model/key resolution for the API provider. The
-    /// fallback-vs-throw policy stays at the call sites (polish vs rewrite).
     private func resolveAPIConfig(request: PolishRequest) -> Result<LLMConfig, APIConfigFailure> {
         guard let endpointURL = request.settings.validatedEndpointURL else {
             return .failure(.invalidEndpoint)
@@ -261,8 +257,6 @@ final class MagicFormatCoordinator {
         }
     }
 
-    /// The shared polish epilogue: run the provider, trim, guard empty output,
-    /// log, and shape the outcome. One drift point instead of three.
     private func runPolish(
         provider: MagicFormatEngine,
         model: String?,
@@ -293,7 +287,6 @@ final class MagicFormatCoordinator {
     /// Edit Mode: run a freeform instruction + user text through the selected provider.
     /// Unlike `polish`, failures throw instead of falling back to raw text.
     func rewrite(instructions: String, userText: String, request: PolishRequest) async throws -> String {
-        // Real work takes priority over the speculative warm-up probe, same as polish.
         prewarmTask?.cancel()
         prewarmTask = nil
 

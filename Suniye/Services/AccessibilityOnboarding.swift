@@ -85,7 +85,6 @@ final class PermisoAccessibilityOnboarding: AccessibilityOnboardingPresenting {
         if isPresenting {
             end(.dismissed)
         }
-        // Already granted: nothing to show, report success immediately.
         if isTrusted() {
             onGranted()
             onEnded(.granted)

@@ -211,9 +211,6 @@ final class HotkeyService: HotkeyServiceProtocol {
             if registerStatus == noErr, let hotKeyRef {
                 carbonHotKeyRefs[slot] = hotKeyRef
             } else {
-                // Intentionally leave the other slot alive: one slot failing to
-                // register (e.g. combo taken by another app) must not tear down
-                // monitoring for the other.
                 AppLogger.shared.log(.error, "hotkey registration failed slot=\(slot.rawValue) status=\(registerStatus)")
             }
         }

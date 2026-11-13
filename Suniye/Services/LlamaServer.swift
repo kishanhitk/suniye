@@ -343,7 +343,7 @@ actor LlamaServer {
         var address = sockaddr_in()
         address.sin_family = sa_family_t(AF_INET)
         address.sin_addr.s_addr = in_addr_t(0) // INADDR_ANY
-        address.sin_port = 0 // let the OS choose a free port
+        address.sin_port = 0
 
         let bound = withUnsafePointer(to: &address) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
@@ -384,8 +384,6 @@ actor LlamaServer {
         _ = await waitForExit(process, timeoutSeconds: 2)
     }
 
-    /// Waits (by polling the non-blocking `isRunning` flag) for the process to exit, up to
-    /// `timeoutSeconds`. Returns `true` if it exited within the window.
     private static func waitForExit(_ process: Process, timeoutSeconds: Double) async -> Bool {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while process.isRunning {

@@ -187,8 +187,6 @@ struct StylePage: View {
         VStack(alignment: .leading, spacing: 10) {
             SettingsGroupHeading(
                 text: "Vocabulary",
-                // The dependency stated where the words are. Honest version: these
-                // reach the formatter, so they apply while it is on.
                 note: "Words the formatter is told to spell your way."
             )
 

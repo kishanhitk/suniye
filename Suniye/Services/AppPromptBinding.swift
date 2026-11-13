@@ -75,7 +75,6 @@ enum AppPromptBindingCandidates {
         return AppPromptBindingCandidate(bundleID: bundleID, appDisplayName: name)
     }
 
-    /// Pure filter over (bundleID, name) pairs so candidate discovery is unit-testable.
     static func candidates(
         from apps: [(bundleID: String?, name: String?)],
         excluding bindings: [AppPromptBinding],
