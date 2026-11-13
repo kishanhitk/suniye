@@ -227,22 +227,6 @@ final class AppStateCoverageMagicFormatTests: XCTestCase {
 
     // MARK: - Prompt management
 
-    func testResetPromptFunctionsRestoreDefaults() {
-        let appState = makeTestAppState()
-
-        appState.llmAppleSystemPrompt = "custom apple"
-        appState.llmGemmaSystemPrompt = "custom gemma"
-        appState.llmBaseSystemPrompt = "custom base"
-
-        appState.resetAppleMagicFormatPrompt()
-        appState.resetGemmaMagicFormatPrompt()
-        appState.resetBaseMagicFormatPrompt()
-
-        XCTAssertEqual(appState.llmAppleSystemPrompt, LLMDefaults.defaultAppleMagicFormatPrompt)
-        XCTAssertEqual(appState.llmGemmaSystemPrompt, LLMDefaults.defaultGemmaMagicFormatPrompt)
-        XCTAssertEqual(appState.llmBaseSystemPrompt, LLMDefaults.defaultBaseSystemPrompt)
-    }
-
     func testEditingBasePromptWritesProviderPromptFile() throws {
         let promptStore = MagicFormatPromptFileStore(
             promptsDirectoryURL: FileManager.default.temporaryDirectory
@@ -334,12 +318,6 @@ final class AppStateCoverageMagicFormatTests: XCTestCase {
         XCTAssertNil(appState.llmModelValidationError)
     }
 
-    func testModelIdPreviewAndDisplayModelId() {
-        let appState = makeTestAppState()
-        XCTAssertFalse(appState.llmSelectedModelIdPreview.isEmpty)
-        XCTAssertFalse(appState.llmDisplayModelId(for: .gemini25Flash).isEmpty)
-        XCTAssertEqual(appState.llmStatusHint, appState.magicFormatSetupState.detail)
-    }
 }
 
 /// Keychain double with independently controllable failures for set, get, and delete.

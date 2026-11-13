@@ -42,7 +42,7 @@ final class AppStateCoverageRecordingTests: XCTestCase {
     private func startRecording(_ appState: AppState, audioCapture: StubAudioCaptureService) async {
         let started = expectation(description: "capture started")
         audioCapture.onStartCapture = { _ in started.fulfill() }
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         await drainScheduledTasks()
     }
@@ -58,16 +58,6 @@ final class AppStateCoverageRecordingTests: XCTestCase {
     }
 
     // MARK: - Stop guards
-
-    func testStopRecordingFromUIIgnoredWhenNotRecording() {
-        let audioCapture = StubAudioCaptureService()
-        let appState = readyAppState(audioCapture: audioCapture)
-
-        appState.stopRecordingFromUI()
-
-        XCTAssertEqual(audioCapture.stopCaptureCallCount, 0)
-        XCTAssertEqual(appState.phase, .ready)
-    }
 
     func testFinishEditModeRecordingNoOpWhenNotRecording() async {
         let audioCapture = StubAudioCaptureService()
@@ -93,40 +83,55 @@ final class AppStateCoverageRecordingTests: XCTestCase {
 
     // MARK: - Blocked starts
 
-    func testStartWhileRecordingShowsAlreadyListening() async {
+    /// A shortcut press while a pill recording runs starts nothing.
+    func testShortcutPressWhileRecordingShowsAlreadyListening() async {
         let audioCapture = StubAudioCaptureService()
-        let appState = readyAppState(audioCapture: audioCapture)
-        await startRecording(appState, audioCapture: audioCapture)
+        let hotkey = StubHotkeyService()
+        let appState = await recordingFromThePill(audioCapture: audioCapture, hotkey: hotkey)
 
-        appState.startRecordingFromUI()
+        hotkey.onHotkeyDown?()
         await drainScheduledTasks()
 
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Already listening"))
         XCTAssertEqual(appState.phase, .recording)
     }
 
-    func testStartWhileRecordingWithNonListeningIndicatorComputesFallbackRestore() async {
+    func testShortcutPressWhileRecordingWithNonListeningIndicatorComputesFallbackRestore() async {
         let audioCapture = StubAudioCaptureService()
-        let appState = readyAppState(audioCapture: audioCapture)
-        await startRecording(appState, audioCapture: audioCapture)
+        let hotkey = StubHotkeyService()
+        let appState = await recordingFromThePill(audioCapture: audioCapture, hotkey: hotkey)
 
         appState.floatingIndicatorState = .idle
-        appState.startRecordingFromUI()
+        hotkey.onHotkeyDown?()
         await drainScheduledTasks()
 
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Already listening"))
+    }
+
+    private func recordingFromThePill(audioCapture: StubAudioCaptureService, hotkey: StubHotkeyService) async -> AppState {
+        let appState = makeTestAppState(
+            audioCaptureService: audioCapture,
+            hotkeyService: hotkey,
+            generalSettingsStore: TestGeneralSettingsStore(value: GeneralSettings(onboardingProgress: .finished)),
+            startServices: true
+        )
+        await waitUntil { appState.phase == .ready }
+        appState.hasMicPermission = true
+        appState.hasAccessibilityPermission = true
+        await startRecording(appState, audioCapture: audioCapture)
+        return appState
     }
 
     func testBlockedStartMessagesForModelPhases() async {
         let appState = readyAppState()
 
         appState.phase = .downloadingModel
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await drainScheduledTasks()
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Model download in progress"))
 
         appState.phase = .loading
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await drainScheduledTasks()
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Still loading model"))
     }
@@ -135,7 +140,7 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         let appState = readyAppState()
         appState.phase = .loading
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await drainScheduledTasks()
         XCTAssertEqual(appState.floatingIndicatorState, .error(message: "Still loading model"))
 
@@ -218,7 +223,7 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         appState.activeOnboardingStep = .speak
         await startRecording(appState, audioCapture: audioCapture)
 
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await waitUntil { appState.phase == .ready }
         await drainScheduledTasks()
 
@@ -246,7 +251,7 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         appState.autoSubmitEnabled = true
         await startRecording(appState, audioCapture: audioCapture)
 
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await waitUntil { insertion.submitCallCount == 1 && appState.phase == .ready }
 
         XCTAssertEqual(insertion.submitCallCount, 1)
@@ -267,7 +272,7 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         )
         await startRecording(appState, audioCapture: audioCapture)
 
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await waitUntil { appState.phase == .ready }
 
         XCTAssertEqual(insertion.insertedTexts, ["Tell me when you are ready to send."])
@@ -293,7 +298,7 @@ final class AppStateCoverageRecordingTests: XCTestCase {
         appState.autoSubmitEnabled = true
         await startRecording(appState, audioCapture: audioCapture)
 
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await waitUntil { appState.phase == .ready }
 
         XCTAssertEqual(insertion.submitCallCount, 0)
@@ -316,8 +321,7 @@ final class AppStateCoverageRecordingTests: XCTestCase {
 
         // Down: Edit Mode is unavailable (Magic Format off), so it must refuse.
         hotkeyService.onEditModeHotkeyDown?()
-        await waitUntil { appState.statusText == "Magic Format required" }
-        XCTAssertEqual(appState.statusText, "Magic Format required")
+        await waitUntil { appState.lastError != nil }
         XCTAssertEqual(appState.lastError, "Edit Mode needs a working Magic Format provider")
 
         // Up: no active edit recording, so it is a no-op.

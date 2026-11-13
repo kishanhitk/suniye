@@ -115,7 +115,6 @@ final class AppStateUpdateTests: XCTestCase {
         let appState = makeAppState()
 
         XCTAssertEqual(appState.magicFormatSetupState, .off)
-        XCTAssertEqual(appState.llmStatusHint, "Turn it on to improve dictation before text is pasted.")
     }
 
     func testMagicFormatStatusNeedsAPIKeyWhenEnabledWithoutKey() {
@@ -175,7 +174,6 @@ final class AppStateUpdateTests: XCTestCase {
         appState.refreshLLMKeyStatus()
 
         XCTAssertEqual(appState.magicFormatSetupState, .ready)
-        XCTAssertEqual(appState.llmKeyStatusText, "Saved")
     }
 
     private func makeAppState(

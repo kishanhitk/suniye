@@ -68,7 +68,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
         let appState = readyAppState(audioCapture: audioCapture)
         appState.microphone.selectedInputDeviceID = "usb-mic"
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
 
         XCTAssertEqual(audioCapture.lastPreferredInputDeviceID, "usb-mic")
@@ -194,7 +194,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
         audioCapture.onCancelCapture = { _ in canceled.fulfill() }
         let appState = readyAppState(audioCapture: audioCapture)
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         let sessionID = try XCTUnwrap(audioCapture.lastStartedSessionID)
 
@@ -263,9 +263,9 @@ final class AppStateAudioCaptureTests: XCTestCase {
         audioCapture.onStopCapture = { _ in stopped.fulfill() }
         let appState = readyAppState(audioCapture: audioCapture)
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [stopped], timeout: 1)
         audioCapture.resumeStartCapture()
         await drainScheduledTasks()
@@ -291,9 +291,9 @@ final class AppStateAudioCaptureTests: XCTestCase {
             transcriptionService: transcriptionService
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [stopped], timeout: 1)
         await drainScheduledTasks()
 
@@ -310,7 +310,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
         audioCapture.onCancelCapture = { _ in canceled.fulfill() }
         let appState = readyAppState(audioCapture: audioCapture)
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         let sessionID = try XCTUnwrap(audioCapture.lastStartedSessionID)
         audioCapture.onEvent?(.interrupted(sessionID: sessionID, reason: .inputMuted))
@@ -336,7 +336,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
             transcriptionService: transcriptionService
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         let sessionID = try XCTUnwrap(audioCapture.lastStartedSessionID)
         audioCapture.onEvent?(.interrupted(sessionID: sessionID, reason: .maximumDurationReached))
@@ -372,7 +372,7 @@ final class AppStateAudioCaptureTests: XCTestCase {
         let appState = readyAppState(audioCapture: audioCapture)
         appState.echoCancellationEnabled = true
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
 
         XCTAssertEqual(audioCapture.lastEchoCancellationEnabled, true)

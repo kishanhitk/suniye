@@ -142,7 +142,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.hasAccessibilityPermission = false
         appState.startOnboardingIfNeeded()
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
 
         await fulfillment(of: [started], timeout: 1)
         XCTAssertEqual(appState.phase, .recording)
@@ -155,7 +155,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.hasMicPermission = true
         appState.activeOnboardingStep = .welcome
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         for _ in 0 ..< 8 { await Task.yield() }
 
         XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
@@ -187,9 +187,9 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.hasMicPermission = true
         appState.startOnboardingIfNeeded()
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [transcribed], timeout: 1)
         for _ in 0 ..< 12 { await Task.yield() }
         return appState

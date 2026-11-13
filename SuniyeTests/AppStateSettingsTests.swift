@@ -29,7 +29,7 @@ final class AppStateSettingsTests: XCTestCase {
         historyStore.value = [first, second]
 
         let appState = makeTestAppState(historyStore: historyStore)
-        appState.deleteRecentResult(first)
+        appState.library.delete(first)
 
         XCTAssertEqual(appState.recentResults.count, 1)
         XCTAssertEqual(appState.dictationStats.lifetimeSessions, 2)
@@ -438,7 +438,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasMicPermission = true
         appState.hasAccessibilityPermission = true
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
@@ -457,7 +457,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasAccessibilityPermission = true
         appState.soundFeedbackEnabled = true
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
@@ -477,47 +477,11 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasAccessibilityPermission = true
         appState.soundFeedbackEnabled = true
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
         XCTAssertEqual(soundFeedback.playedEvents, [.error])
-    }
-
-    func testStartRecordingClearsRetryableTranscriptionError() async {
-        let audioCapture = StubAudioCaptureService()
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-        appState.phase = .error
-        appState.statusText = "Transcription error"
-        appState.lastError = "Transcription failed: No audio captured"
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-
-        appState.startRecordingFromUI()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
-        XCTAssertEqual(appState.phase, .recording)
-        XCTAssertEqual(appState.statusText, "Recording")
-        XCTAssertNil(appState.lastError)
-    }
-
-    func testStartRecordingDoesNotClearNonRetryableLoadError() async {
-        let audioCapture = StubAudioCaptureService()
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-        appState.phase = .error
-        appState.statusText = "Load failed"
-        appState.lastError = "Model load failed: broken recognizer"
-        appState.hasMicPermission = true
-        appState.hasAccessibilityPermission = true
-
-        appState.startRecordingFromUI()
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
-        XCTAssertEqual(appState.phase, .error)
-        XCTAssertEqual(appState.statusText, "Load failed")
-        XCTAssertEqual(appState.lastError, "Model load failed: broken recognizer")
     }
 
     func testManualIndicatorToggleStartsRecordingFromReady() async {
@@ -914,9 +878,9 @@ final class AppStateSettingsTests: XCTestCase {
         appState.soundFeedbackEnabled = true
         appState.activeOnboardingStep = .speak
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(soundFeedback.playedEvents, [.error])
@@ -940,9 +904,9 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasAccessibilityPermission = true
         appState.activeOnboardingStep = .speak
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(appState.onboardingPracticeText, "Hello from practice")
@@ -972,13 +936,13 @@ final class AppStateSettingsTests: XCTestCase {
             severity: .success
         )
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(appState.onboardingPracticeText, "")
         XCTAssertNil(appState.onboardingPracticeResult)
 
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(appState.onboardingPracticeText, "")
@@ -994,7 +958,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasAccessibilityPermission = true
         appState.activeOnboardingStep = .welcome
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
@@ -1012,7 +976,7 @@ final class AppStateSettingsTests: XCTestCase {
         appState.hasAccessibilityPermission = true
         appState.activeOnboardingStep = .typeAnywhere
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         try? await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(audioCapture.startCaptureCallCount, 1)
@@ -1234,7 +1198,6 @@ final class AppStateSettingsTests: XCTestCase {
         XCTAssertEqual(modelManager.deleteCallCount, 1)
         XCTAssertEqual(transcriptionService.unloadCallCount, 1)
         XCTAssertEqual(appState.phase, .needsModel)
-        XCTAssertEqual(appState.statusText, "Model required")
         XCTAssertNil(appState.activeOnboardingStep)
         XCTAssertTrue(appState.hasCompletedCoreOnboarding)
     }
@@ -1403,7 +1366,6 @@ final class AppStateSettingsTests: XCTestCase {
         appState.modelDownloadStartedAt = Date(timeIntervalSince1970: 540)
 
         XCTAssertEqual(appState.modelStatusValue, "Downloading 25%")
-        XCTAssertEqual(appState.modelStatusIcon, "arrow.down.circle.fill")
         XCTAssertEqual(appState.modelPrimaryActionTitle, "Downloading…")
         XCTAssertEqual(appState.modelDownloadProgressLabel, "25% downloaded • 170 MB of ~680 MB\nAbout 3m left")
     }
@@ -1419,7 +1381,6 @@ final class AppStateSettingsTests: XCTestCase {
         appState.downloadProgress = 0.2
 
         XCTAssertEqual(appState.modelStatusValue, "Current")
-        XCTAssertEqual(appState.modelStatusIcon, "checkmark.circle.fill")
         XCTAssertEqual(appState.modelPrimaryActionTitle, "Current")
     }
 
@@ -1443,33 +1404,6 @@ final class AppStateSettingsTests: XCTestCase {
         appState.lastFailedASRModelError = "network timeout"
 
         XCTAssertEqual(appState.modelStatusValue, "Download failed")
-        XCTAssertEqual(appState.modelStatusIcon, "xmark.octagon.fill")
-        XCTAssertEqual(
-            appState.modelPrimaryActionDetail,
-            "Last attempt failed. Retry setup for Parakeet TDT 0.6B v3 to use it for dictation."
-        )
-    }
-
-    func testModelOperationStateDuringValidationAfterDownload() {
-        let modelManager = StubModelManager()
-        modelManager.installedModelIDs = []
-        let appState = makeTestAppState(modelManager: modelManager)
-        appState.phase = .loading
-        appState.activeASRModelOperationID = .parakeetV3
-
-        XCTAssertTrue(appState.isModelOperationInProgress)
-        XCTAssertEqual(appState.modelOperationStatusText, "Extracting and validating Parakeet TDT 0.6B v3…")
-    }
-
-    func testMissingLibraryModelShowsDownloadActionTitle() {
-        let modelManager = StubModelManager()
-        modelManager.installedModelIDs = [.parakeetV3]
-        let appState = makeTestAppState(modelManager: modelManager)
-        appState.selectedASRModelID = .parakeetV3
-        appState.loadedASRModelID = .parakeetV3
-
-        XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .whisperLargeV3Turbo), "Download Model")
-        XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .parakeetV3), "Current")
     }
 
     func testLaunchAtLoginToggleTracksServiceStatus() {

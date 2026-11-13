@@ -73,11 +73,9 @@ final class AppStateCoverageDisplayTests: XCTestCase {
 
         XCTAssertEqual(appState.asrModelCatalog.map(\.id), modelManager.catalog.map(\.id))
         XCTAssertFalse(appState.availableASRModelEntries.map(\.id).contains(appState.selectedASRModelID))
-        XCTAssertFalse(appState.hasAnyInstalledModel)
         XCTAssertFalse(appState.isModelInstalled)
 
         modelManager.installedModelIDs = [.parakeetV3]
-        XCTAssertTrue(appState.hasAnyInstalledModel)
     }
 
     // MARK: - Model status value / color / icon
@@ -161,34 +159,6 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         XCTAssertEqual(appState.modelStatusColor, .orange)
     }
 
-    func testModelStatusIconBranches() {
-        let appState = makeTestAppState()
-
-        appState.phase = .ready
-        appState.loadedASRModelID = appState.selectedASRModelID
-        XCTAssertEqual(appState.modelStatusIcon, "checkmark.circle.fill")
-        appState.loadedASRModelID = nil
-        XCTAssertEqual(appState.modelStatusIcon, "exclamationmark.triangle.fill")
-
-        appState.phase = .loading
-        appState.activeASRModelOperationID = appState.selectedASRModelID
-        XCTAssertEqual(appState.modelStatusIcon, "arrow.down.circle.fill")
-        appState.activeASRModelOperationID = .moonshineBase
-        appState.loadedASRModelID = appState.selectedASRModelID
-        XCTAssertEqual(appState.modelStatusIcon, "checkmark.circle.fill")
-        appState.loadedASRModelID = nil
-        XCTAssertEqual(appState.modelStatusIcon, "exclamationmark.triangle.fill")
-
-        appState.phase = .error
-        appState.lastFailedASRModelID = appState.selectedASRModelID
-        XCTAssertEqual(appState.modelStatusIcon, "xmark.octagon.fill")
-        appState.lastFailedASRModelID = nil
-        XCTAssertEqual(appState.modelStatusIcon, "checkmark.circle.fill")
-
-        appState.phase = .needsModel
-        XCTAssertEqual(appState.modelStatusIcon, "exclamationmark.triangle.fill")
-    }
-
     // MARK: - Primary action title / detail
 
     func testModelPrimaryActionTitleBranches() {
@@ -213,38 +183,13 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         XCTAssertEqual(appState.modelPrimaryActionTitle, "Download Model")
     }
 
-    func testModelPrimaryActionDetailBranches() {
-        let modelManager = StubModelManager()
-        let appState = makeTestAppState(modelManager: modelManager)
-
-        appState.loadedASRModelID = appState.selectedASRModelID
-        XCTAssertTrue(appState.modelPrimaryActionDetail.contains("Stored locally"))
-
-        appState.loadedASRModelID = nil
-        appState.activeASRModelOperationID = appState.selectedASRModelID
-        XCTAssertTrue(appState.modelPrimaryActionDetail.contains("Keep Suniye open"))
-
-        appState.activeASRModelOperationID = nil
-        appState.lastFailedASRModelID = appState.selectedASRModelID
-        appState.lastFailedASRModelError = "boom"
-        XCTAssertTrue(appState.modelPrimaryActionDetail.contains("Last attempt failed"))
-
-        appState.lastFailedASRModelID = nil
-        appState.lastFailedASRModelError = nil
-        XCTAssertTrue(appState.modelPrimaryActionDetail.contains("fully local"))
-    }
-
     func testModelLocationAndSizeTexts() {
         let appState = makeTestAppState()
-        XCTAssertTrue(appState.modelLocationText.contains("suniye-models"))
-        XCTAssertFalse(appState.modelInstalledSizeText.isEmpty)
         XCTAssertTrue(appState.modelExpectedSizeText.hasPrefix("~"))
         XCTAssertGreaterThan(appState.modelExpectedByteCount, 0)
 
         let failingManager = CovDisplayFailingModelManager()
         let fallbackState = makeTestAppState(modelManager: failingManager)
-        XCTAssertEqual(fallbackState.modelLocationText, "~/Library/Application Support/Suniye/models")
-        XCTAssertEqual(fallbackState.asrModelLocationText(for: .parakeetV3), "~/Library/Application Support/Suniye/models")
     }
 
     // MARK: - Banner
@@ -291,35 +236,6 @@ final class AppStateCoverageDisplayTests: XCTestCase {
 
     // MARK: - Per-model status helpers
 
-    func testASRModelStatusTextBranches() {
-        let modelManager = StubModelManager()
-        let appState = makeTestAppState(modelManager: modelManager)
-
-        appState.activeASRModelOperationID = .parakeetV3
-        appState.phase = .downloadingModel
-        XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Downloading")
-
-        appState.phase = .loading
-        XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Loading")
-
-        // An active operation in any other phase falls through to the ladder.
-        appState.phase = .ready
-        XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Installed")
-
-        appState.activeASRModelOperationID = nil
-
-        appState.loadedASRModelID = .parakeetV3
-        XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Current")
-
-        appState.loadedASRModelID = nil
-        appState.lastFailedASRModelID = .parakeetV3
-        XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Failed")
-
-        appState.lastFailedASRModelID = nil
-        XCTAssertEqual(appState.asrModelStatusText(for: .parakeetV3), "Installed")
-        XCTAssertEqual(appState.asrModelStatusText(for: .moonshineBase), "Missing")
-    }
-
     func testASRModelStatusColorBranches() {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
@@ -346,10 +262,8 @@ final class AppStateCoverageDisplayTests: XCTestCase {
 
         appState.activeASRModelOperationID = .parakeetV3
         appState.phase = .loading
-        XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .parakeetV3), "Loading…")
 
         appState.phase = .downloadingModel
-        XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .parakeetV3), "Downloading…")
         // Operations are serialised: nothing else can start while one runs.
         XCTAssertFalse(appState.asrModelCanPerformPrimaryAction(for: .parakeetV3))
         XCTAssertFalse(appState.asrModelSecondaryActionsEnabled(for: .parakeetV3))
@@ -361,13 +275,10 @@ final class AppStateCoverageDisplayTests: XCTestCase {
 
         appState.phase = .ready
         appState.loadedASRModelID = .parakeetV3
-        XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .parakeetV3), "Current")
         XCTAssertFalse(appState.asrModelCanPerformPrimaryAction(for: .parakeetV3))
         XCTAssertTrue(appState.asrModelCanPerformPrimaryAction(for: .moonshineBase))
 
         appState.loadedASRModelID = nil
-        XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .parakeetV3), "Use Model")
-        XCTAssertEqual(appState.asrModelPrimaryActionTitle(for: .moonshineBase), "Download Model")
         XCTAssertTrue(appState.asrModelSecondaryActionsEnabled(for: .parakeetV3))
         XCTAssertFalse(appState.asrModelSecondaryActionsEnabled(for: .moonshineBase))
     }
@@ -396,35 +307,12 @@ final class AppStateCoverageDisplayTests: XCTestCase {
 
     // MARK: - Operation status / progress labels
 
-    func testModelOperationStatusTextBranches() {
-        let modelManager = StubModelManager()
-        let appState = makeTestAppState(modelManager: modelManager)
-
-        XCTAssertEqual(appState.modelOperationStatusText, "")
-        XCTAssertFalse(appState.isModelOperationInProgress)
-
-        appState.activeASRModelOperationID = .parakeetV3
-        appState.phase = .downloadingModel
-        XCTAssertTrue(appState.modelOperationStatusText.hasPrefix("Downloading"))
-        XCTAssertTrue(appState.isModelOperationInProgress)
-
-        appState.phase = .loading
-        modelManager.installedModelIDs = []
-        XCTAssertTrue(appState.modelOperationStatusText.hasPrefix("Extracting and validating"))
-        modelManager.installedModelIDs = [.parakeetV3]
-        XCTAssertTrue(appState.modelOperationStatusText.hasPrefix("Loading"))
-
-        appState.phase = .ready
-        XCTAssertEqual(appState.modelOperationStatusText, "")
-    }
-
     func testModelDownloadProgressLabelAndETA() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let appState = makeTestAppState(nowProvider: { now })
 
         // Not downloading: label is empty, ETA falls back to the estimating text.
         XCTAssertEqual(appState.modelDownloadProgressLabel, "")
-        XCTAssertEqual(appState.modelDownloadETAStatusText, "Estimating time remaining")
 
         appState.phase = .downloadingModel
         appState.activeASRModelOperationID = appState.selectedASRModelID
@@ -432,24 +320,20 @@ final class AppStateCoverageDisplayTests: XCTestCase {
 
         // Elapsed under a second: still estimating.
         appState.modelDownloadStartedAt = now.addingTimeInterval(-0.5)
-        XCTAssertEqual(appState.modelDownloadETAStatusText, "Estimating time remaining")
         XCTAssertTrue(appState.modelDownloadProgressLabel.contains("Estimating time remaining"))
 
         // Normal minutes/seconds ETA.
         appState.modelDownloadStartedAt = now.addingTimeInterval(-100)
-        XCTAssertTrue(appState.modelDownloadETAStatusText.hasPrefix("About"))
         XCTAssertTrue(appState.modelDownloadProgressLabel.contains("50% downloaded"))
         XCTAssertTrue(appState.modelDownloadProgressLabel.contains("About"))
 
         // Hour-scale ETA takes the hour/minute formatter branch.
         appState.modelDownloadStartedAt = now.addingTimeInterval(-3600)
         appState.downloadProgress = 0.4
-        XCTAssertTrue(appState.modelDownloadETAStatusText.hasPrefix("About"))
 
         // Nearly done.
         appState.downloadProgress = 0.999
         appState.modelDownloadStartedAt = now.addingTimeInterval(-100)
-        XCTAssertEqual(appState.modelDownloadETAStatusText, "Almost done")
     }
 
     // MARK: - Launch at login
@@ -458,15 +342,12 @@ final class AppStateCoverageDisplayTests: XCTestCase {
         let appState = makeTestAppState()
 
         appState.launchAtLoginStatus = .disabled
-        XCTAssertEqual(appState.launchAtLoginDetailText, "Launch at login is off.")
         XCTAssertFalse(appState.launchAtLoginEnabledForUI)
 
         appState.launchAtLoginStatus = .enabled
         XCTAssertTrue(appState.launchAtLoginEnabledForUI)
-        XCTAssertTrue(appState.launchAtLoginDetailText.contains("automatically"))
 
         appState.launchAtLoginStatus = .unsupported("Not supported here")
-        XCTAssertEqual(appState.launchAtLoginDetailText, "Not supported here")
         XCTAssertFalse(appState.launchAtLoginEnabledForUI)
     }
 }

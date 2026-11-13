@@ -247,26 +247,6 @@ final class AppStateCoverageOnboardingTests: XCTestCase {
         XCTAssertEqual(appState.onboardingProgress, .typeAnywhereReached)
     }
 
-    func testAdvanceOnboardingWalksAllSteps() async {
-        let appState = freshOnboardingState()
-        appState.startOnboardingIfNeeded()
-
-        await appState.advanceOnboarding() // welcome -> speak
-        XCTAssertEqual(appState.activeOnboardingStep, .speak)
-        await appState.advanceOnboarding() // speak -> typeAnywhere
-        XCTAssertEqual(appState.activeOnboardingStep, .typeAnywhere)
-        await appState.advanceOnboarding() // typeAnywhere -> more
-        XCTAssertEqual(appState.activeOnboardingStep, .more)
-        XCTAssertFalse(appState.onboardingProgress.isFinished)
-        await appState.advanceOnboarding() // more -> finished
-        XCTAssertNil(appState.activeOnboardingStep)
-        XCTAssertTrue(appState.onboardingProgress.isFinished)
-
-        // nil -> restart resolves via startOnboardingIfNeeded (stays finished).
-        await appState.advanceOnboarding()
-        XCTAssertNil(appState.activeOnboardingStep)
-    }
-
     func testFinishOnboardingEmitsCompletionAndOutcome() {
         let spy = SpyAnalytics()
         let appState = makeTestAppState(

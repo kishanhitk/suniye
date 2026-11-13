@@ -291,9 +291,9 @@ final class AppStatePerAppPromptTests: XCTestCase {
         appState.refreshLLMKeyStatus()
         addSlackBinding(to: appState, prompt: "Keep it terse.")
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         for _ in 0 ..< 500 where appState.phase != .ready {
             await Task.yield()
         }

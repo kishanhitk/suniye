@@ -43,9 +43,9 @@ final class AppStateAnalyticsEmissionTests: XCTestCase {
         transcription.onTranscribe = { transcribed.fulfill() }
         let appState = readyAppState(spy: spy, audioCapture: audio, transcription: transcription)
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [transcribed], timeout: 1)
         await drain()
 
@@ -75,9 +75,9 @@ final class AppStateAnalyticsEmissionTests: XCTestCase {
             transcription.onTranscribe = { transcribed.fulfill() }
             let appState = readyAppState(spy: spy, audioCapture: audio, transcription: transcription)
 
-            appState.startRecordingFromUI()
+            appState.toggleFloatingIndicatorRecording()
             await fulfillment(of: [started], timeout: 1)
-            appState.stopRecordingFromUI()
+            appState.toggleFloatingIndicatorRecording()
             await fulfillment(of: [transcribed], timeout: 1)
             await drain()
 
@@ -102,9 +102,9 @@ final class AppStateAnalyticsEmissionTests: XCTestCase {
         audio.onStopCapture = { _ in stopped.fulfill() }
         let appState = readyAppState(spy: spy, audioCapture: audio)
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [stopped], timeout: 1)
         await drain()
 
@@ -120,7 +120,7 @@ final class AppStateAnalyticsEmissionTests: XCTestCase {
         audio.onCancelCapture = { _ in canceled.fulfill() }
         let appState = readyAppState(spy: spy, audioCapture: audio)
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         let sessionID = try XCTUnwrap(audio.lastStartedSessionID)
         audio.onEvent?(.interrupted(sessionID: sessionID, reason: .inputMuted))

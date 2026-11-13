@@ -46,7 +46,6 @@ final class AppState {
             }
         }
     }
-    var statusText = "Initializing..."
     var lastError: String?
 
     /// Every change goes through `updateGeneralSettings`, which saves it and
@@ -279,16 +278,6 @@ final class AppState {
         get { llmSettings.appPromptBindings }
         set { updateLLMSettings { $0.appPromptBindings = newValue } }
     }
-    var llmSystemPrompt = ""
-    var llmTimeoutSeconds = LLMDefaults.defaultTimeoutSeconds {
-        didSet {
-            let clamped = LLMDefaults.clampTimeout(llmTimeoutSeconds)
-            if llmTimeoutSeconds != clamped {
-                llmTimeoutSeconds = clamped
-            }
-        }
-    }
-
     var hasLLMAPIKey = false
     var llmKeyOperationError: String?
     var isMagicFormatSetupTestInProgress = false
@@ -335,10 +324,6 @@ final class AppState {
         asrModelCatalog.filter { $0.id != selectedASRModelID }
     }
 
-    var hasAnyInstalledModel: Bool {
-        !modelManager.installedModels().isEmpty
-    }
-
     var isModelInstalled: Bool {
         modelManager.isInstalled(selectedASRModelID)
     }
@@ -348,29 +333,6 @@ final class AppState {
     /// the status says Connected, which looks like nothing is stored.
     private(set) var llmAPIKeyHint: String?
     private(set) var currentLLMAPIKeyFingerprint: Int?
-
-    /// The API key's own state. `llmKeyStatusText` answers "is the active engine
-    /// ready", which in the endpoint sheet reported the local model's health next
-    /// to the key field.
-    var llmAPIKeyStatusText: String {
-        if hasLLMAPIKey && isAPIMagicFormatSetupVerified {
-            return "Connected"
-        }
-        return hasLLMAPIKey ? "Saved" : "No key"
-    }
-
-    var llmKeyStatusText: String {
-        if usesLocalMagicFormatSettings {
-            if usesAppleMagicFormatSettings {
-                return appleMagicFormatAvailability.isAvailable ? "Ready" : "Unavailable"
-            }
-            return localGemmaMagicFormatAvailability.isAvailable ? "Ready" : "Unavailable"
-        }
-        if hasLLMAPIKey && isAPIMagicFormatSetupVerified {
-            return "Connected"
-        }
-        return hasLLMAPIKey ? "Saved" : "Not connected"
-    }
 
     /// Whether the *API endpoint* specifically has been verified. Testing Local
     /// Gemma or Apple Intelligence sets the shared result too, and that must not
@@ -458,18 +420,6 @@ final class AppState {
             return nil
         }
         return llmSettings.modelValidationError
-    }
-
-    var llmStatusHint: String? {
-        magicFormatSetupState.detail
-    }
-
-    var llmSelectedModelIdPreview: String {
-        llmSettings.validatedModelId ?? ""
-    }
-
-    func llmDisplayModelId(for preset: LLMModelPreset) -> String {
-        llmSettings.displayModelId(for: preset)
     }
 
     var vocabularyTerms: [String] {
@@ -602,20 +552,12 @@ final class AppState {
         library.lastTranscriptText
     }
 
-    var modelInstalledSizeText: String {
-        ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(for: selectedASRModelID), countStyle: .file)
-    }
-
     var modelExpectedByteCount: Int64 {
         modelManager.expectedDownloadSizeBytes(for: activeASRModelOperationID ?? selectedASRModelID)
     }
 
     var modelExpectedSizeText: String {
         "~" + ByteCountFormatter.string(fromByteCount: modelExpectedByteCount, countStyle: .file)
-    }
-
-    var modelDownloadETAStatusText: String {
-        modelDownloadETAText ?? "Estimating time remaining"
     }
 
     var modelDownloadProgressLabel: String {
@@ -630,24 +572,6 @@ final class AppState {
             return "\(percentage)% downloaded • \(downloadedSize) of \(modelExpectedSizeText)\n\(etaText)"
         }
         return "\(percentage)% downloaded • \(downloadedSize) of \(modelExpectedSizeText)\nEstimating time remaining"
-    }
-
-    var isModelOperationInProgress: Bool {
-        activeASRModelOperationID != nil && (phase == .downloadingModel || phase == .loading)
-    }
-
-    var modelOperationStatusText: String {
-        let modelName = (activeASRModelOperationID.map { ASRModelCatalog.entry(for: $0).displayName }) ?? currentASRModelEntry.displayName
-        switch phase {
-        case .downloadingModel:
-            return "Downloading \(modelName)…"
-        case .loading where activeASRModelOperationID != nil && !isModelInstalled:
-            return "Extracting and validating \(modelName)…"
-        case .loading where activeASRModelOperationID != nil:
-            return "Loading \(modelName)…"
-        default:
-            return ""
-        }
     }
 
     var modelStatusValue: String {
@@ -671,29 +595,6 @@ final class AppState {
         }
     }
 
-    /// The active-model card already names the model as the one in use, so a pill
-    /// repeating "Current" is noise. It earns its space only when the state is
-    /// something else: downloading, loading, missing, failed.
-    var asrModelStatusNeedsAttention: Bool {
-        modelStatusValue != "Current"
-    }
-
-    var modelStatusIcon: String {
-        switch phase {
-        case .ready, .recording, .transcribing:
-            return loadedASRModelID == selectedASRModelID ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
-        case .downloadingModel, .loading:
-            if activeASRModelOperationID == selectedASRModelID {
-                return "arrow.down.circle.fill"
-            }
-            return loadedASRModelID == selectedASRModelID ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
-        case .error:
-            return lastFailedASRModelID == selectedASRModelID ? "xmark.octagon.fill" : "checkmark.circle.fill"
-        case .needsModel:
-            return "exclamationmark.triangle.fill"
-        }
-    }
-
     var modelPrimaryActionTitle: String {
         if activeASRModelOperationID == selectedASRModelID {
             return phase == .loading ? "Loading…" : "Downloading…"
@@ -705,23 +606,6 @@ final class AppState {
             return "Use Model"
         }
         return "Download Model"
-    }
-
-    var modelPrimaryActionDetail: String {
-        if loadedASRModelID == selectedASRModelID {
-            return "Stored locally for offline dictation. Delete it if you want to reclaim disk space."
-        }
-        if activeASRModelOperationID == selectedASRModelID {
-            return "Keep \(AppIdentity.current.displayName) open while \(currentASRModelEntry.displayName) is downloaded, validated, and loaded."
-        }
-        if lastFailedASRModelID == selectedASRModelID, let lastFailedASRModelError, !lastFailedASRModelError.isEmpty {
-            return "Last attempt failed. Retry setup for \(currentASRModelEntry.displayName) to use it for dictation."
-        }
-        return "Download \(currentASRModelEntry.displayName) to keep speech recognition fully local."
-    }
-
-    var modelLocationText: String {
-        asrModelLocationText(for: selectedASRModelID)
     }
 
     var asrModelBanner: ASRModelBannerState? {
@@ -766,45 +650,6 @@ final class AppState {
         }
 
         return nil
-    }
-
-    func asrModelStatusText(for modelID: ASRModelID) -> String {
-        if activeASRModelOperationID == modelID {
-            switch phase {
-            case .downloadingModel:
-                return "Downloading"
-            case .loading:
-                return "Loading"
-            default:
-                break
-            }
-        }
-
-        if loadedASRModelID == modelID && selectedASRModelID == modelID {
-            return "Current"
-        }
-
-        if lastFailedASRModelID == modelID {
-            return "Failed"
-        }
-
-        if modelManager.isInstalled(modelID) {
-            return "Installed"
-        }
-
-        return "Missing"
-    }
-
-    func asrModelPrimaryActionTitle(for modelID: ASRModelID) -> String {
-        if activeASRModelOperationID == modelID {
-            return phase == .loading ? "Loading…" : "Downloading…"
-        }
-
-        if loadedASRModelID == modelID && selectedASRModelID == modelID {
-            return "Current"
-        }
-
-        return modelManager.isInstalled(modelID) ? "Use Model" : "Download Model"
     }
 
     func asrModelCanPerformPrimaryAction(for modelID: ASRModelID) -> Bool {
@@ -867,19 +712,6 @@ final class AppState {
             return entry.sizeDisplayText
         }
         return ByteCountFormatter.string(fromByteCount: modelManager.installedByteCount(for: modelID), countStyle: .file)
-    }
-
-    func asrModelLocationText(for modelID: ASRModelID) -> String {
-        let entry = ASRModelCatalog.entry(for: modelID)
-        if entry.isSystemManaged {
-            // System-managed models have no on-disk folder; the OS owns the asset.
-            return entry.sizeDisplayText
-        }
-        return (try? modelManager.modelDirectoryURL(for: modelID).path.replacingOccurrences(of: NSHomeDirectory(), with: "~")) ?? "~/Library/Application Support/Suniye/models"
-    }
-
-    var launchAtLoginDetailText: String {
-        launchAtLoginStatus.detailText
     }
 
     /// On and off need no explanation \u{2014} the switch says which it is. Only the
@@ -1463,10 +1295,8 @@ final class AppState {
             floatingIndicatorController.start()
         }
         await meetings.start()
-        statusText = "Checking permissions..."
         await refreshPermissions()
 
-        statusText = "Checking model..."
         var bootstrapCandidates = orderedInstalledASRModelIDs()
         // A chosen system-managed model (Apple Speech) has no files, so the
         // installed list never contains it; without this it was silently replaced
@@ -1477,35 +1307,28 @@ final class AppState {
         }
         if bootstrapCandidates.isEmpty, !onboardingProgress.isFinished {
             phase = .loading
-            statusText = "Loading model..."
             if await adoptSystemDefaultModel() {
                 phase = .ready
-                statusText = "Ready"
                 lastError = nil
             } else {
                 phase = .needsModel
-                statusText = "Model required"
             }
         } else if !bootstrapCandidates.isEmpty {
             phase = .loading
-            statusText = "Loading model..."
             do {
                 let bootstrapModelID = try await loadFirstAvailableASRModel(from: bootstrapCandidates)
                 if bootstrapModelID != selectedASRModelID {
                     selectedASRModelID = bootstrapModelID
                 }
                 phase = .ready
-                statusText = "Ready"
                 lastError = nil
             } catch {
                 phase = .error
                 lastError = "Model load failed: \(error.localizedDescription)"
-                statusText = "Load failed"
             }
             activeASRModelOperationID = nil
         } else {
             phase = .needsModel
-            statusText = "Model required"
         }
         startOnboardingIfNeeded()
         resumeInterruptedLocalGemmaDownloadIfNeeded()
@@ -1590,22 +1413,6 @@ final class AppState {
         }
         onboardingRun.begin(at: nowProvider(), resumed: onboardingProgress != .notStarted)
         activeOnboardingStep = step
-    }
-
-    /// Single forward transition used by the onboarding UI.
-    func advanceOnboarding() async {
-        switch activeOnboardingStep {
-        case .welcome:
-            await beginOnboardingSetup()
-        case .speak:
-            advanceOnboardingFromSpeak()
-        case .typeAnywhere:
-            advanceOnboardingFromTypeAnywhere()
-        case .more:
-            finishOnboarding()
-        case nil:
-            startOnboardingIfNeeded()
-        }
     }
 
     /// "Get Started": persists progress and starts the required ASR model
@@ -2224,18 +2031,6 @@ final class AppState {
         ))
     }
 
-    func resetAppleMagicFormatPrompt() {
-        llmAppleSystemPrompt = LLMDefaults.defaultAppleMagicFormatPrompt
-    }
-
-    func resetGemmaMagicFormatPrompt() {
-        llmGemmaSystemPrompt = LLMDefaults.defaultGemmaMagicFormatPrompt
-    }
-
-    func resetBaseMagicFormatPrompt() {
-        llmBaseSystemPrompt = LLMDefaults.defaultBaseSystemPrompt
-    }
-
     func openCurrentMagicFormatPromptInEditor() {
         _ = fileOpener(currentMagicFormatPromptURL)
     }
@@ -2462,10 +2257,6 @@ final class AppState {
         }
     }
 
-    func deleteRecentResult(_ result: RecentResult) {
-        library.delete(result)
-    }
-
     func startModelDownload() {
         downloadASRModel(selectedASRModelID, autoSelect: true)
     }
@@ -2508,7 +2299,6 @@ final class AppState {
         let hadLoadedModel = loadedASRModelID != nil
         activeASRModelOperationID = modelID
         phase = .loading
-        statusText = "Loading model..."
         lastError = nil
         lastFailedASRModelID = nil
         lastFailedASRModelError = nil
@@ -2521,7 +2311,6 @@ final class AppState {
                 let assetInstalled = await modelManager.isSystemManagedAssetInstalled(modelID)
                 if !assetInstalled {
                     phase = .downloadingModel
-                    statusText = "Downloading model..."
                     downloadProgress = 0
                     modelDownloadStartedAt = nowProvider()
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .started)
@@ -2536,13 +2325,11 @@ final class AppState {
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .completed, startedAt: modelDownloadStartedAt)
                     modelDownloadStartedAt = nil
                     phase = .loading
-                    statusText = "Loading model..."
                 }
 
                 try await loadRecognizer(for: modelID)
                 selectedASRModelID = modelID
                 phase = .ready
-                statusText = "Ready"
                 lastError = nil
                 lastFailedASRModelID = nil
                 lastFailedASRModelError = nil
@@ -2554,9 +2341,9 @@ final class AppState {
                     }
                     downloadProgress = 0
                     if hadLoadedModel {
-                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
+                        setPhaseUnlessCapturing(.ready)
                     } else {
-                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required")
+                        setPhaseUnlessCapturing(.needsModel)
                     }
                     lastError = nil
                     AppLogger.shared.log(.info, "system-managed asset download canceled id=\(modelID.rawValue)")
@@ -2589,7 +2376,6 @@ final class AppState {
         let hadLoadedModel = loadedASRModelID != nil
         activeASRModelOperationID = modelID
         phase = .downloadingModel
-        statusText = "Downloading model..."
         lastError = nil
         lastFailedASRModelID = nil
         lastFailedASRModelError = nil
@@ -2609,7 +2395,7 @@ final class AppState {
                     }
                 }
 
-                setPhaseUnlessCapturing(.loading, statusText: "Validating model...")
+                setPhaseUnlessCapturing(.loading)
 
                 guard modelManager.isInstalled(modelID) else {
                     throw AppStateError.modelValidationFailed
@@ -2622,7 +2408,7 @@ final class AppState {
                     do {
                         try await loadRecognizer(for: modelID)
                         selectedASRModelID = modelID
-                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
+                        setPhaseUnlessCapturing(.ready)
                         lastError = nil
                         lastFailedASRModelID = nil
                         lastFailedASRModelError = nil
@@ -2636,9 +2422,9 @@ final class AppState {
                     }
                 } else {
                     if hadLoadedModel {
-                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
+                        setPhaseUnlessCapturing(.ready)
                     } else {
-                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required")
+                        setPhaseUnlessCapturing(.needsModel)
                     }
                     lastFailedASRModelID = nil
                     lastFailedASRModelError = nil
@@ -2648,9 +2434,9 @@ final class AppState {
                     trackModelDownload(kind: .asr, model: modelID.rawValue, outcome: .canceled, startedAt: modelDownloadStartedAt)
                     downloadProgress = 0
                     if hadLoadedModel {
-                        setPhaseUnlessCapturing(.ready, statusText: "Ready")
+                        setPhaseUnlessCapturing(.ready)
                     } else {
-                        setPhaseUnlessCapturing(.needsModel, statusText: "Model required")
+                        setPhaseUnlessCapturing(.needsModel)
                     }
                     lastError = nil
                     AppLogger.shared.log(.info, "model download canceled id=\(modelID.rawValue)")
@@ -2740,7 +2526,6 @@ final class AppState {
         activeASRModelOperationID = modelID
         analytics.track(.modelChanged(kind: .asr, model: SafeLabel(modelID.rawValue)))
         phase = .loading
-        statusText = "Loading model..."
         lastError = nil
         lastFailedASRModelID = nil
         lastFailedASRModelError = nil
@@ -2750,7 +2535,6 @@ final class AppState {
                 try await loadRecognizer(for: modelID)
                 selectedASRModelID = modelID
                 phase = .ready
-                statusText = "Ready"
                 lastError = nil
                 lastFailedASRModelID = nil
                 lastFailedASRModelError = nil
@@ -2788,16 +2572,13 @@ final class AppState {
                 let fallbackCandidates = orderedInstalledASRModelIDs(excluding: Set([modelID]))
                 if isCurrentModel, !fallbackCandidates.isEmpty {
                     phase = .loading
-                    statusText = "Loading model..."
                     do {
                         let fallbackModelID = try await loadFirstAvailableASRModel(from: fallbackCandidates)
                         selectedASRModelID = fallbackModelID
                         phase = .ready
-                        statusText = "Ready"
                         lastError = nil
                     } catch {
                         phase = .error
-                        statusText = "Load failed"
                         lastError = "Model load failed: \(error.localizedDescription)"
                     }
                     activeASRModelOperationID = nil
@@ -2808,7 +2589,6 @@ final class AppState {
                 } else if isCurrentModel {
                     selectedASRModelID = .parakeetV3
                     phase = .needsModel
-                    statusText = "Model required"
                 }
 
                 downloadProgress = 0
@@ -2820,7 +2600,7 @@ final class AppState {
                 }
                 AppLogger.shared.log(.info, "model deleted id=\(modelID.rawValue)")
             } catch {
-                setPhaseUnlessCapturing(.error, statusText: "Model delete failed")
+                setPhaseUnlessCapturing(.error)
                 lastError = error.localizedDescription
                 lastFailedASRModelID = modelID
                 lastFailedASRModelError = error.localizedDescription
@@ -2891,22 +2671,6 @@ final class AppState {
 
     func updatePasteLastTranscriptHotkey(_ configuration: HotkeyConfiguration) {
         changeHotkeys(generalSettings.hotkeys.settingPasteLastTranscript(configuration))
-    }
-
-    func startRecordingFromUI() {
-        Task { @MainActor in
-            await beginRecordingFlow(trigger: .manual)
-        }
-    }
-
-    func stopRecordingFromUI() {
-        guard phase == .recording else {
-            return
-        }
-        let trigger = activeRecordingSource ?? .manual
-        Task {
-            await stopRecordingAndTranscribe(trigger: trigger)
-        }
     }
 
     func startUpdateController() {
@@ -3021,7 +2785,6 @@ final class AppState {
                 guard let self else {
                     return
                 }
-                self.statusText = text
                 guard case .processing = self.floatingIndicatorState else {
                     return
                 }
@@ -3181,12 +2944,11 @@ final class AppState {
         phase == .recording || phase == .transcribing
     }
 
-    private func setPhaseUnlessCapturing(_ newPhase: Phase, statusText newStatusText: String) {
+    private func setPhaseUnlessCapturing(_ newPhase: Phase) {
         guard !isCapturing else {
             return
         }
         phase = newPhase
-        statusText = newStatusText
     }
 
     private func handleASRModelOperationFailure(for modelID: ASRModelID, error: Error, fallbackToReadyState: Bool) {
@@ -3196,12 +2958,12 @@ final class AppState {
         lastFailedASRModelError = message
 
         if fallbackToReadyState, loadedASRModelID != nil {
-            setPhaseUnlessCapturing(.ready, statusText: "Ready")
+            setPhaseUnlessCapturing(.ready)
             lastError = nil
             return
         }
 
-        setPhaseUnlessCapturing(.error, statusText: "Download failed")
+        setPhaseUnlessCapturing(.error)
         lastError = message
     }
 
@@ -3219,16 +2981,10 @@ final class AppState {
     func beginEditModeRecordingFlow() async {
         guard isEditModeAvailable else {
             lastError = "Edit Mode needs a working Magic Format provider"
-            statusText = "Magic Format required"
             AppLogger.shared.log(.warning, "edit mode blocked: magic format not ready")
             playSoundFeedback(.error)
             showTransientIndicatorError("Set up Magic Format to use Edit Mode", restoreState: blockedStartRestoreIndicatorState())
             return
-        }
-        // Same self-heal as the dictation flow: a transient audio/transcription
-        // error must not leave the edit hotkey dead until a dictation clears it.
-        if phase == .error, canRetryRecordingAfterError {
-            clearRetryableRecordingError()
         }
         guard phase == .ready else {
             AppLogger.shared.log(.debug, "edit mode start ignored in phase=\(phase.rawValue)")
@@ -3386,9 +3142,6 @@ final class AppState {
     }
 
     private func beginRecordingFlow(trigger: RecordingSource, destination: DictationDestination? = nil) async {
-        if phase == .error, canRetryRecordingAfterError {
-            clearRetryableRecordingError()
-        }
         if isOnboardingBlockingRecordingStart {
             AppLogger.shared.log(.debug, "start recording ignored on the onboarding welcome screen")
             showTransientIndicatorError("Finish setup first", restoreState: .idle, duration: 1.2)
@@ -3420,7 +3173,6 @@ final class AppState {
         let resolvedDestination = destination ?? currentDictationDestination
         guard hasMicPermission else {
             lastError = "Microphone permission not granted"
-            statusText = "Permission required"
             AppLogger.shared.log(.warning, "microphone permission denied")
             analytics.track(.dictationBlocked(reason: .micDenied))
             playSoundFeedback(.error)
@@ -3440,7 +3192,6 @@ final class AppState {
             }
             guard hasAccessibilityPermission else {
                 lastError = "Accessibility permission not granted"
-                statusText = "Accessibility required"
                 AppLogger.shared.log(.warning, "accessibility permission denied before recording")
                 analytics.track(.dictationBlocked(reason: .accessibilityDenied))
                 playSoundFeedback(.error)
@@ -3510,7 +3261,6 @@ final class AppState {
         session.timing.recordStart = recordStart
         activeDictationSession = session
         phase = .recording
-        statusText = "Recording"
         overlayErrorResetTask?.cancel()
         overlayErrorResetTask = nil
         if destination == .onboardingPractice {
@@ -3561,7 +3311,6 @@ final class AppState {
 
         stopLivePreview()
         phase = .transcribing
-        statusText = "Transcribing..."
         setFloatingIndicatorState(Self.transcribingIndicatorState)
         let duration = Date().timeIntervalSince(context.startedAt)
         activeDictationSession?.timing.stopped = .now()
@@ -3948,7 +3697,6 @@ final class AppState {
             return
         }
 
-        statusText = "Rewriting..."
         setFloatingIndicatorState(.processing(message: "Rewriting..."))
 
         do {
@@ -4000,7 +3748,6 @@ final class AppState {
             break
         }
         phase = .ready
-        statusText = "Ready"
         switch end {
         case .completed:
             setFloatingIndicatorState(.idle)
@@ -4588,7 +4335,6 @@ final class AppState {
             return
         }
         let message = "Transcribing \(progress.chunk) of \(progress.totalChunks)..."
-        statusText = message
         setFloatingIndicatorState(.processing(message: message))
     }
 
@@ -4609,22 +4355,6 @@ final class AppState {
         case .error:
             return "Resolve current error first"
         }
-    }
-
-    private var canRetryRecordingAfterError: Bool {
-        switch statusText {
-        case "Transcription error", "Audio error", "Permission required", "Accessibility required":
-            return true
-        default:
-            return false
-        }
-    }
-
-    private func clearRetryableRecordingError() {
-        lastError = nil
-        statusText = "Ready"
-        phase = .ready
-        AppLogger.shared.log(.info, "cleared retryable error state before recording")
     }
 
     private static func detectLLME2EMode(arguments: [String]) -> LLME2EMode {

@@ -243,7 +243,6 @@ final class AppStateLLMTests: XCTestCase {
         _ = await appState.postProcessTextIfEnabled("raw text")
 
         XCTAssertEqual(appState.floatingIndicatorState, .processing(message: "Polishing..."))
-        XCTAssertEqual(appState.statusText, "Polishing...")
     }
 
     func testPrewarmEligibleForLocalGemmaTriggersPrewarm() async {
@@ -813,7 +812,6 @@ final class AppStateLLMTests: XCTestCase {
 
         await appState.testMagicFormatSetup(apiKeyDraft: "draft-key")
 
-        XCTAssertEqual(appState.llmKeyStatusText, "Not connected")
         // Assert the meaningful fields, not the whole struct: the result also
         // carries a measured latency, which is not deterministic in a test.
         XCTAssertEqual(appState.magicFormatSetupTestResult?.message, "Connection works.")
@@ -920,7 +918,6 @@ final class AppStateLLMTests: XCTestCase {
         // carries a measured latency, which is not deterministic in a test.
         XCTAssertEqual(appState.magicFormatSetupTestResult?.message, "Connection works.")
         XCTAssertEqual(appState.magicFormatSetupTestResult?.severity, .success)
-        XCTAssertEqual(appState.llmKeyStatusText, "Connected")
     }
 
     func testTestMagicFormatSetupIgnoresStaleResultAfterSettingsChange() async {
@@ -1078,25 +1075,6 @@ final class AppStateLLMTests: XCTestCase {
         )
     }
 
-    func testHiddenLLMAdvancedSettingsPersistAsDefaults() {
-        let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
-        let keychain = TestKeychainService(value: "api-key")
-        let store = TestLLMSettingsStore()
-
-        let appState = makeTestAppState(
-            llmPostProcessor: fakeLLM,
-            llmSettingsStore: store,
-            keychainService: keychain
-        )
-
-        appState.llmTimeoutSeconds = 99
-        appState.llmSystemPrompt = "old hidden prompt"
-
-        XCTAssertEqual(appState.llmTimeoutSeconds, LLMDefaults.maxTimeoutSeconds)
-        XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.defaultTimeoutSeconds)
-        XCTAssertEqual(store.latest.systemPrompt, "")
-    }
-
     func testLoadMergesLegacyHiddenPromptAndClearsHiddenSettings() {
         let fakeLLM = FakeLLMPostProcessor(result: .success("polished"))
         let keychain = TestKeychainService(value: "api-key")
@@ -1121,7 +1099,6 @@ final class AppStateLLMTests: XCTestCase {
         )
 
         XCTAssertEqual(appState.llmBaseSystemPrompt, "BASE\n\nUSER")
-        XCTAssertEqual(appState.llmSystemPrompt, "")
         XCTAssertEqual(store.latest.systemPrompt, "")
         XCTAssertEqual(store.latest.timeoutSeconds, LLMDefaults.defaultTimeoutSeconds)
     }
@@ -1187,7 +1164,6 @@ final class AppStateLLMTests: XCTestCase {
             appState.llmBaseSystemPrompt,
             "Preserve meaning and intent.\n\nPreserve meaning"
         )
-        XCTAssertEqual(appState.llmSystemPrompt, "")
         XCTAssertEqual(store.latest.systemPrompt, "")
     }
 
@@ -1215,7 +1191,6 @@ final class AppStateLLMTests: XCTestCase {
         )
 
         XCTAssertEqual(appState.llmBaseSystemPrompt, "BASE\n\nUSER")
-        XCTAssertEqual(appState.llmSystemPrompt, "")
         XCTAssertEqual(store.latest.systemPrompt, "")
     }
 
@@ -1241,9 +1216,9 @@ final class AppStateLLMTests: XCTestCase {
         appState.llmProvider = .openAICompatible
         appState.refreshLLMKeyStatus()
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await waitUntil(timeoutSeconds: 2) { !appState.recentResults.isEmpty && appState.phase == .ready }
         return appState.recentResults.first
     }

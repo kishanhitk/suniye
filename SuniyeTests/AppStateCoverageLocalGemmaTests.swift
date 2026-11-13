@@ -320,32 +320,6 @@ final class AppStateCoverageLocalGemmaTests: XCTestCase {
         XCTAssertEqual(apiState.magicFormatProviderDetailText, "Using your OpenAI-compatible endpoint.")
     }
 
-    func testLLMKeyStatusTextLocalProviderBranches() {
-        let manager = StubLocalLLMModelManager()
-        manager.installedModelIDs = [manager.preferredModelID]
-
-        let gemmaReady = makeTestAppState(
-            localGemmaMagicFormatPostProcessor: NoopLocalGemmaMagicFormatPostProcessor(availability: .available),
-            localLLMModelManager: manager
-        )
-        gemmaReady.llmProvider = .localGemma
-        XCTAssertEqual(gemmaReady.llmKeyStatusText, "Ready")
-
-        let gemmaMissing = makeTestAppState()
-        gemmaMissing.llmProvider = .localGemma
-        XCTAssertEqual(gemmaMissing.llmKeyStatusText, "Unavailable")
-
-        let appleReady = makeTestAppState(
-            appleMagicFormatPostProcessor: NoopAppleMagicFormatPostProcessor(availability: .available)
-        )
-        appleReady.llmProvider = .appleFoundationModels
-        XCTAssertEqual(appleReady.llmKeyStatusText, "Ready")
-
-        let appleMissing = makeTestAppState()
-        appleMissing.llmProvider = .appleFoundationModels
-        XCTAssertEqual(appleMissing.llmKeyStatusText, "Unavailable")
-    }
-
     func testCurrentMagicFormatPromptURLFollowsProvider() {
         let promptStore = MagicFormatPromptFileStore(
             promptsDirectoryURL: FileManager.default.temporaryDirectory

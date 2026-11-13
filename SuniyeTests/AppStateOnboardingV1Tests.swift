@@ -155,7 +155,6 @@ final class AppStateOnboardingV1Tests: XCTestCase {
         await drain()
 
         XCTAssertEqual(appState.phase, .needsModel)
-        XCTAssertEqual(appState.statusText, "Model required")
         XCTAssertEqual(systemDefaultEvents(spy).first?.reason, .osTooOld)
     }
 
@@ -452,18 +451,6 @@ final class AppStateOnboardingV1Tests: XCTestCase {
         XCTAssertEqual(appState.activeOnboardingStep, .speak)
     }
 
-    func testAdvanceOnboardingWalksIntoMoreThenFinishes() async {
-        let spy = SpyAnalytics()
-        let appState = typeAnywhereState(spy: spy)
-
-        await appState.advanceOnboarding()
-        XCTAssertEqual(appState.activeOnboardingStep, .more)
-        await appState.advanceOnboarding()
-
-        XCTAssertNil(appState.activeOnboardingStep)
-        XCTAssertTrue(appState.onboardingProgress.isFinished)
-    }
-
     private func dictate(_ appState: AppState, audio: StubAudioCaptureService, transcription: StubTranscriptionService) async {
         audio.stopCaptureResult = makeValidCapturedAudio()
         transcription.transcribeResult = .success("on my way")
@@ -471,9 +458,9 @@ final class AppStateOnboardingV1Tests: XCTestCase {
         let transcribed = expectation(description: "transcribed")
         audio.onStartCapture = { _ in started.fulfill() }
         transcription.onTranscribe = { transcribed.fulfill() }
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [transcribed], timeout: 1)
         await drain()
     }

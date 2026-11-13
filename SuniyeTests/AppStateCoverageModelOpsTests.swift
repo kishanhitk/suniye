@@ -45,7 +45,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         await waitUntil { appState.activeASRModelOperationID == nil }
 
         XCTAssertEqual(appState.phase, .ready)
-        XCTAssertEqual(appState.statusText, "Ready")
         XCTAssertNil(appState.lastError)
         XCTAssertEqual(appState.lastFailedASRModelID, .moonshineBase)
         XCTAssertEqual(appState.lastFailedASRModelError, "load exploded")
@@ -65,7 +64,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         await waitUntil { appState.activeASRModelOperationID == nil }
 
         XCTAssertEqual(appState.phase, .error)
-        XCTAssertEqual(appState.statusText, "Download failed")
         XCTAssertEqual(appState.lastError, "load exploded")
         XCTAssertEqual(appState.lastFailedASRModelID, .moonshineBase)
     }
@@ -99,7 +97,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         await waitUntil { appState.activeASRModelOperationID == nil }
 
         XCTAssertEqual(appState.phase, .ready)
-        XCTAssertEqual(appState.statusText, "Ready")
         XCTAssertEqual(appState.loadedASRModelID, .parakeetV3)
         XCTAssertTrue(modelManager.installedModelIDs.contains(.moonshineBase))
         XCTAssertNil(appState.lastFailedASRModelID)
@@ -115,7 +112,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         await waitUntil { appState.activeASRModelOperationID == nil }
 
         XCTAssertEqual(appState.phase, .needsModel)
-        XCTAssertEqual(appState.statusText, "Model required")
     }
 
     func testDownloadValidationFailureSurfacesModelValidationError() async {
@@ -144,7 +140,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         await waitUntil { appState.activeASRModelOperationID == nil }
 
         XCTAssertEqual(appState.phase, .error)
-        XCTAssertEqual(appState.statusText, "Download failed")
         XCTAssertEqual(appState.lastError, "network down")
         XCTAssertEqual(appState.downloadProgress, 0)
     }
@@ -225,7 +220,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         await waitUntil { appState.activeASRModelOperationID == nil && appState.phase == .error }
 
         XCTAssertEqual(appState.phase, .error)
-        XCTAssertEqual(appState.statusText, "Load failed")
         XCTAssertTrue(appState.lastError?.contains("fallback broke") == true)
         XCTAssertEqual(transcription.unloadCallCount, 1)
     }
@@ -257,7 +251,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         await waitUntil { appState.activeASRModelOperationID == nil && appState.phase == .error }
 
         XCTAssertEqual(appState.phase, .error)
-        XCTAssertEqual(appState.statusText, "Model delete failed")
         XCTAssertEqual(appState.lastError, "disk locked")
         XCTAssertEqual(appState.lastFailedASRModelID, .parakeetV3)
         XCTAssertEqual(appState.lastFailedASRModelError, "disk locked")
@@ -277,7 +270,6 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         await appState.bootstrap()
 
         XCTAssertEqual(appState.phase, .error)
-        XCTAssertEqual(appState.statusText, "Load failed")
         XCTAssertTrue(appState.lastError?.contains("bootstrap broke") == true)
         XCTAssertNil(appState.activeASRModelOperationID)
     }
@@ -363,10 +355,7 @@ final class AppStateCoverageModelOpsTests: XCTestCase {
         XCTAssertNotEqual(appState.asrModelInstalledSizeText(for: .parakeetV3), "Built into macOS")
 
         // Location label must not fabricate an on-disk path for a system-managed model.
-        XCTAssertEqual(appState.asrModelLocationText(for: .appleSpeech), "Built into macOS")
         appState.selectedASRModelID = .appleSpeech
-        XCTAssertEqual(appState.modelLocationText, "Built into macOS")
-        XCTAssertTrue(appState.asrModelLocationText(for: .parakeetV3).contains("models"))
     }
 
     func testPrimaryActionForSystemManagedDownloadsAssetThenSelects() async {
