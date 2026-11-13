@@ -26,7 +26,7 @@ struct MeetingPage: View {
     @State private var segments: [MeetingSegment] = []
     @State private var summary: String?
     /// Nil until the notes are read, so the editor never saves over them.
-    @State private var notes: String?
+    @State private var notes: MeetingNotesDraft?
 
     init(meetings: MeetingCoordinator, appState: AppState, id: UUID) {
         self.meetings = meetings
@@ -67,7 +67,7 @@ struct MeetingPage: View {
                 summary = await meetings.summary(of: id)
             }
             .task(id: id) {
-                notes = await meetings.notes(of: id)
+                notes = MeetingNotesDraft(saved: await meetings.notes(of: id))
             }
             .onAppear { meetings.pageOnScreen = id }
             .onDisappear {
@@ -76,7 +76,7 @@ struct MeetingPage: View {
                 }
             }
             .onChange(of: live == nil) { _, finished in
-                if finished, tab == .notes, notes?.isEmpty ?? true {
+                if finished, tab == .notes, notes?.text.isEmpty ?? true {
                     tab = .summary
                 }
             }
@@ -168,7 +168,7 @@ struct MeetingPage: View {
         case .summary:
             text = summary ?? ""
         case .notes:
-            text = notes ?? ""
+            text = notes?.text ?? ""
         case .transcript:
             text = MeetingExport.transcript(record: record, segments: segments)
         }
@@ -184,11 +184,8 @@ struct MeetingPage: View {
             MeetingSummaryTab(meetings: meetings, appState: appState, actions: actions, record: record, summary: summary)
         case .notes:
             VStack(alignment: .leading, spacing: 12) {
-                if let loaded = notes {
-                    MeetingNotesEditor(
-                        text: Binding(get: { notes ?? loaded }, set: { notes = $0 }),
-                        saved: loaded
-                    ) { text in
+                if let draft = Binding($notes) {
+                    MeetingNotesEditor(draft: draft) { text in
                         Task { await meetings.saveNotes(text, for: id) }
                     }
                 }
