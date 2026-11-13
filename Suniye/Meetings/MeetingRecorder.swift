@@ -12,8 +12,9 @@ enum MeetingRecorderEvent: Equatable, Sendable {
     case levels(you: Float, them: Float)
     /// The call track had no sound for `MeetingRecorder.callSilenceLimit`.
     /// `heardBefore` tells a call track that stopped from one that never
-    /// delivered sound, which points at the permission.
-    case callAudioSilent(heardBefore: Bool)
+    /// delivered sound, which points at the permission. `since` is the
+    /// recorded time of the last sound, or of the call track's start.
+    case callAudioSilent(heardBefore: Bool, since: TimeInterval)
     case callAudioReturned
     case inputChanged(deviceName: String)
     /// A track's source started: at the start, at a resume, or after
@@ -60,6 +61,9 @@ final class MeetingRecorder: @unchecked Sendable {
     private var lastCallSound: TimeInterval = 0
     private var callTrackHeardSound = false
     private var reportedCallSilence = false
+    /// The call source started and did not fail since: only then can its
+    /// silence mean that the call has no sound.
+    private var callSourceRunning = false
     private var silenceTimer: DispatchSourceTimer?
 
     /// `sources` without `.them` records the microphone only.
@@ -93,7 +97,6 @@ final class MeetingRecorder: @unchecked Sendable {
                 throw error
             }
             startedAt = uptime()
-            lastCallSound = startedAt
             running = true
         }
         do {
@@ -136,8 +139,6 @@ final class MeetingRecorder: @unchecked Sendable {
             guard running, let since = pausedSince else { return false }
             pausedTotal += uptime() - since
             pausedSince = nil
-            lastCallSound = uptime()
-            reportedCallSilence = false
             return true
         }
         guard shouldStart else { return }
@@ -161,19 +162,21 @@ final class MeetingRecorder: @unchecked Sendable {
             try source.start()
         } catch {
             AppLogger.shared.log(.error, "meeting recorder could not restart the call track error=\(error.localizedDescription)")
-            queue.async { self.onEvent?(.trackFailed(.them, error.localizedDescription)) }
+            queue.async { self.sourceFailed(.them, error.localizedDescription) }
             return
         }
-        queue.sync {
-            lastCallSound = uptime()
-            reportedCallSilence = false
-            onEvent?(.trackStarted(.them))
-        }
+        queue.sync { sourceStarted(.them) }
         AppLogger.shared.log(.info, "meeting recorder restarted the call track")
     }
 
     func setMicrophoneMuted(_ muted: Bool) {
         queue.async { self.microphoneMuted = muted }
+    }
+
+    /// Reports the call track's silence again, for a recording that starts
+    /// to follow a call after it reported the silence once.
+    func rearmCallSilence() {
+        queue.async { self.reportedCallSilence = false }
     }
 
     // MARK: - Sources
@@ -194,7 +197,7 @@ final class MeetingRecorder: @unchecked Sendable {
             do {
                 try source.start()
                 startedAny = true
-                queue.async { self.onEvent?(.trackStarted(track)) }
+                queue.async { self.sourceStarted(track) }
             } catch {
                 AppLogger.shared.log(.error, "meeting recorder could not start track=\(track.rawValue) error=\(error.localizedDescription)")
                 failures.append((track, error))
@@ -204,7 +207,7 @@ final class MeetingRecorder: @unchecked Sendable {
             throw first.error
         }
         for failure in failures {
-            queue.async { self.handle(.failed(failure.error.localizedDescription), track: failure.track) }
+            queue.async { self.sourceFailed(failure.track, failure.error.localizedDescription) }
         }
     }
 
@@ -263,8 +266,24 @@ final class MeetingRecorder: @unchecked Sendable {
         case let .inputChanged(name):
             onEvent?(.inputChanged(deviceName: name))
         case let .failed(message):
-            onEvent?(.trackFailed(track, message))
+            sourceFailed(track, message)
         }
+    }
+
+    private func sourceStarted(_ track: MeetingTrack) {
+        if track == .them {
+            callSourceRunning = true
+            lastCallSound = uptime()
+            reportedCallSilence = false
+        }
+        onEvent?(.trackStarted(track))
+    }
+
+    private func sourceFailed(_ track: MeetingTrack, _ message: String) {
+        if track == .them {
+            callSourceRunning = false
+        }
+        onEvent?(.trackFailed(track, message))
     }
 
     private func startSilenceTimer() {
@@ -277,10 +296,10 @@ final class MeetingRecorder: @unchecked Sendable {
     }
 
     private func checkCallSilence() {
-        guard running, pausedSince == nil, !reportedCallSilence else { return }
+        guard running, pausedSince == nil, callSourceRunning, !reportedCallSilence else { return }
         if uptime() - lastCallSound >= Self.callSilenceLimit {
             reportedCallSilence = true
-            onEvent?(.callAudioSilent(heardBefore: callTrackHeardSound))
+            onEvent?(.callAudioSilent(heardBefore: callTrackHeardSound, since: max(0, lastCallSound - startedAt - pausedTotal)))
         }
     }
 

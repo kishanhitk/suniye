@@ -49,7 +49,7 @@ struct MeetingWriteFailure: Equatable {
 /// Something that happened to a meeting, for a toast.
 enum MeetingNotice: Equatable {
     case callAudioNeverHeard
-    case callAudioStopped(since: TimeInterval)
+    case callAudioStopped
     case microphoneChanged(String)
     case trackFailed(MeetingTrack)
     /// `after` is the limit that stopped the recording.
@@ -68,8 +68,8 @@ final class MeetingSession {
         /// No sound came from the call yet, which often means that the system
         /// audio permission is off.
         case neverHeard
-        /// The call had sound, then went silent.
-        case stopped
+        /// The call had sound, then went silent at `since`, in recorded time.
+        case stopped(since: TimeInterval)
     }
 
     fileprivate(set) var record: MeetingRecord
@@ -79,8 +79,6 @@ final class MeetingSession {
     /// For each track: every chunk before this sample position is decoded.
     fileprivate(set) var decodedThrough: [MeetingTrack: Int] = [:]
     fileprivate(set) var callAudioProblem: CallAudioProblem?
-    /// Recorded time when the call went silent, for "No sound since 16:30".
-    fileprivate(set) var callSilentSince: TimeInterval?
     fileprivate(set) var failedTracks: [MeetingTrack: String] = [:]
     /// The new microphone, for a few seconds after the device changed.
     fileprivate(set) var changedInput: String?
@@ -534,6 +532,8 @@ final class MeetingCoordinator {
                         $0.callAppName = app.name
                         $0.callAppBundleID = app.bundleID
                     }
+                    // A silence that the recorder reported before is a problem now.
+                    session.recorder.rearmCallSilence()
                 }
             }
         case let .callEnded(app):
@@ -768,17 +768,14 @@ final class MeetingCoordinator {
         case let .levels(you, them):
             session.youLevel = you
             session.themLevel = them
-        case let .callAudioSilent(heardBefore):
+        case let .callAudioSilent(heardBefore, since):
             // A meeting in the room has no call, so its silent call track is
             // no problem.
             guard session.record.callAppBundleID != nil else { return }
-            let since = max(0, session.elapsed(at: environment.now()) - MeetingRecorder.callSilenceLimit)
-            session.callAudioProblem = heardBefore ? .stopped : .neverHeard
-            session.callSilentSince = since
-            onNotice?(heardBefore ? .callAudioStopped(since: since) : .callAudioNeverHeard)
+            session.callAudioProblem = heardBefore ? .stopped(since: since) : .neverHeard
+            onNotice?(heardBefore ? .callAudioStopped : .callAudioNeverHeard)
         case .callAudioReturned:
             session.callAudioProblem = nil
-            session.callSilentSince = nil
         case let .inputChanged(name):
             session.changedInput = name
             onNotice?(.microphoneChanged(name))
@@ -792,7 +789,6 @@ final class MeetingCoordinator {
             session.failedTracks[track] = nil
             if track == .them {
                 session.callAudioProblem = nil
-                session.callSilentSince = nil
             }
         case let .trackFailed(track, message):
             session.failedTracks[track] = message

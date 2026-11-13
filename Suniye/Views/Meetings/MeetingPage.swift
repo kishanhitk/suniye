@@ -309,7 +309,7 @@ private struct MeetingLiveMeta: View {
                     }
                     .buttonStyle(.borderless)
                     .popover(isPresented: $showsCallProblem, arrowEdge: .bottom) {
-                        CallProblemPopover(problem: problem, session: session, meetings: meetings)
+                        CallProblemPopover(problem: problem, meetings: meetings)
                     }
                 } else {
                     track("Them", level: session.themLevel, problem: session.failedTracks[.them])
@@ -338,26 +338,23 @@ private struct MeetingLiveMeta: View {
 
 private struct CallProblemPopover: View {
     let problem: MeetingSession.CallAudioProblem
-    let session: MeetingSession
     let meetings: MeetingCoordinator
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             switch problem {
             case .neverHeard:
-                Text("No sound from the call for 2 minutes")
+                Text("No sound from the call for \(MeetingDurationText.spelledOut(MeetingRecorder.callSilenceLimit))")
                     .font(AppTypography.bodyMedium)
                 Text("If people are talking, Suniye may need permission to record system audio.")
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Open System Settings") {
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
                 }
-            case .stopped:
+            case let .stopped(since):
                 Text("Call audio stopped")
                     .font(AppTypography.bodyMedium)
-                if let since = session.callSilentSince {
-                    Text("No sound from the call since \(MeetingTranscript.clock(since)).")
-                }
+                Text("No sound from the call since \(MeetingTranscript.clock(since)).")
                 Button("Restart Call Audio") {
                     meetings.restartCallAudio()
                 }
