@@ -837,16 +837,16 @@ final class MeetingCoordinator {
         environment.now().timeIntervalSince(session.record.startedAt)
     }
 
-    /// The change holds in memory before the store writes it: the next action
-    /// sees it at once, and the live meeting's state matches the recorder also
-    /// when the write fails.
+    /// Memory holds the change at once, so the next action sees it, and also
+    /// when the write fails. The store's copy does not replace it: an update
+    /// that started later may not be on disk yet.
     private func update(_ id: UUID, _ change: @escaping (inout MeetingRecord) -> Void) async {
         if var record = live?.id == id ? live?.record : record(id) {
             change(&record)
             apply(record)
         }
         do {
-            apply(try await store.update(id, change))
+            _ = try await store.update(id, change)
         } catch {
             AppLogger.shared.log(.error, "meeting not saved id=\(id.uuidString) error=\(error.localizedDescription)")
         }
