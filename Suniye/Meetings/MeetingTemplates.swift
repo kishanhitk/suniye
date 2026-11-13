@@ -98,7 +98,7 @@ actor MeetingTemplateStore {
     /// The template with `id`, or General when it was deleted.
     func template(id: String) -> MeetingTemplate {
         let all = templates()
-        return all.first { $0.id == id } ?? all[0]
+        return all.first { $0.id == id } ?? all.first { $0.id == MeetingTemplate.general.id } ?? .general
     }
 
     /// Saves the list that the template editor shows, in one write. A
