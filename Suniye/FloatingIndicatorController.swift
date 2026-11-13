@@ -57,6 +57,7 @@ enum FloatingIndicatorLayout {
 @MainActor
 final class FloatingIndicatorController {
     var onAction: (() -> Void)?
+    var onMeetingAction: ((MeetingPillAction) -> Void)?
     var onPlacementChanged: ((FloatingIndicatorPlacement?) -> Void)?
 
     private var panel: NSPanel?
@@ -122,6 +123,14 @@ final class FloatingIndicatorController {
         render()
     }
 
+    /// The meeting that records now, or nil. While one records the pill shows
+    /// it, even when the pill would hide while idle.
+    func updateMeeting(_ session: MeetingSession?) {
+        model.meeting = session
+        guard isStarted else { return }
+        render()
+    }
+
     func update(_ state: FloatingIndicatorState) {
         baseState = state
         if state.tracksPointerScreen {
@@ -146,6 +155,9 @@ final class FloatingIndicatorController {
     }
 
     private var shouldShowPanel: Bool {
+        if model.meeting != nil {
+            return true
+        }
         if hideWhenIdle, case .idle = effectiveState {
             return false
         }
@@ -191,6 +203,9 @@ final class FloatingIndicatorController {
                 },
                 onAction: { [weak self] in
                     self?.onAction?()
+                },
+                onMeetingAction: { [weak self] action in
+                    self?.onMeetingAction?(action)
                 },
                 onDragChanged: { [weak self] in
                     self?.handleDragChanged()
@@ -442,13 +457,14 @@ final class FloatingIndicatorController {
     }
 
     private func size(for state: FloatingIndicatorState) -> NSSize {
+        let hasMeeting = model.meeting != nil
         switch state {
         case .idle:
-            return NSSize(width: 74, height: 7)
+            return hasMeeting ? FloatingIndicatorMetrics.meetingPillSize(expanded: false) : NSSize(width: 74, height: 7)
         case .hover:
-            return NSSize(width: 272, height: 84)
+            return hasMeeting ? FloatingIndicatorMetrics.meetingPillSize(expanded: true) : NSSize(width: 272, height: 84)
         case let .listening(_, source, preview):
-            let panelSize = FloatingIndicatorMetrics.listeningPanelSize(preview: preview, source: source)
+            let panelSize = FloatingIndicatorMetrics.listeningPanelSize(preview: preview, source: source, showsMeetingTimer: hasMeeting)
             return NSSize(width: panelSize.width, height: panelSize.height)
         case let .processing(message):
             guard let message else {

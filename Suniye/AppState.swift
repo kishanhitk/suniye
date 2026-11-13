@@ -1991,6 +1991,9 @@ final class AppState {
             self?.refreshUpdateControllerState()
         }
         self.meetings.host = self
+        self.meetings.onNotice = { [weak self] notice in
+            self?.showMeetingNotice(notice)
+        }
         self.editLearningService.onLearnedTerms = { [weak self] terms in
             self?.handleLearnedVocabularyTerms(terms)
         }
@@ -2035,6 +2038,12 @@ final class AppState {
         if floatingIndicatorEnabled {
             floatingIndicatorController.onAction = { [weak self] in
                 self?.toggleFloatingIndicatorRecording()
+            }
+            floatingIndicatorController.onMeetingAction = { [weak self] action in
+                self?.handleMeetingPillAction(action)
+            }
+            meetings.onLiveChange = { [weak self] session in
+                self?.floatingIndicatorController.updateMeeting(session)
             }
             floatingIndicatorController.onPlacementChanged = { [weak self] placement in
                 self?.handleFloatingIndicatorPlacementChanged(placement)
@@ -5786,6 +5795,81 @@ extension AppState: MeetingHost {
 
     func meetingSummaryModelIsIdle() {
         prewarmLocalLLMIfEligible()
+    }
+
+    func startMeetingFromMenu() {
+        Task {
+            do {
+                try await meetings.startMeeting(source: .manual)
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Couldn’t start the recording"
+                alert.informativeText = error.localizedDescription
+                NSApp.activate(ignoringOtherApps: true)
+                alert.runModal()
+            }
+        }
+    }
+
+    func handleMeetingPillAction(_ action: MeetingPillAction) {
+        guard let live = meetings.live else { return }
+        switch action {
+        case .open:
+            openMeeting(live.id)
+        case .pause:
+            Task { await meetings.pause() }
+        case .resume:
+            Task {
+                do {
+                    try await meetings.resume()
+                } catch {
+                    learningToastPresenter.show(message: "Couldn’t resume the recording", detail: nil, actionTitle: nil, action: nil)
+                }
+            }
+        case .stop:
+            Task { await meetings.stop() }
+        }
+    }
+
+    /// A meeting notice becomes a toast unless the meeting's page is on
+    /// screen in the active app, where the page already shows it.
+    func showMeetingNotice(_ notice: MeetingNotice) {
+        let pageOnScreen = NSApp.isActive ? meetings.pageOnScreen : nil
+        if case let .summaryReady(id) = notice {
+            guard pageOnScreen != id else { return }
+            learningToastPresenter.show(message: "Summary ready", detail: nil, actionTitle: "Open") { [weak self] in
+                self?.openMeeting(id)
+            }
+            return
+        }
+        guard let live = meetings.live, pageOnScreen != live.id else { return }
+        let time = MeetingTranscript.clock(live.elapsed(at: Date()))
+        switch notice {
+        case .callAudioStopped:
+            learningToastPresenter.show(message: "Call audio stopped", detail: time, actionTitle: "Restart Call Audio") { [weak self] in
+                self?.meetings.restartCallAudio()
+            }
+        case .callAudioNeverHeard:
+            learningToastPresenter.show(message: "No sound from the call", detail: time, actionTitle: "Open Meeting") { [weak self] in
+                self?.openMeeting(live.id)
+            }
+        case let .microphoneChanged(name):
+            learningToastPresenter.show(message: "Recording with \(name)", detail: time, actionTitle: nil, action: nil)
+        case let .trackFailed(track):
+            learningToastPresenter.show(
+                message: track == .you ? "The microphone stopped" : "Call audio stopped",
+                detail: time,
+                actionTitle: "Open Meeting"
+            ) { [weak self] in
+                self?.openMeeting(live.id)
+            }
+        case .stoppedByDiskFull:
+            learningToastPresenter.show(message: "Recording stopped because the disk is full", detail: time, actionTitle: "Open Meeting") { [weak self] in
+                self?.openMeeting(live.id)
+            }
+        case .summaryReady:
+            break
+        }
     }
 
     fileprivate static func makeMeetingCoordinator(

@@ -68,6 +68,12 @@ struct MeetingPage: View {
             .task(id: id) {
                 notes = await meetings.store.notes(of: id)
             }
+            .onAppear { meetings.pageOnScreen = id }
+            .onDisappear {
+                if meetings.pageOnScreen == id {
+                    meetings.pageOnScreen = nil
+                }
+            }
             .onChange(of: live == nil) { _, finished in
                 if finished, tab == .notes, notes.isEmpty {
                     tab = .summary

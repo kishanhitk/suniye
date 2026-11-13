@@ -26,6 +26,16 @@ enum MeetingStartError: LocalizedError, Equatable {
     }
 }
 
+/// Something the user should see while the meeting page is not on screen.
+enum MeetingNotice: Equatable {
+    case callAudioNeverHeard
+    case callAudioStopped(since: TimeInterval)
+    case microphoneChanged(String)
+    case trackFailed(MeetingTrack)
+    case stoppedByDiskFull
+    case summaryReady(UUID)
+}
+
 /// The meeting that records now, as the meeting page and the pill show it.
 @MainActor
 @Observable
@@ -101,7 +111,13 @@ final class MeetingCoordinator {
 
     /// Newest first.
     private(set) var meetings: [MeetingRecord] = []
-    private(set) var live: MeetingSession?
+    private(set) var live: MeetingSession? {
+        didSet {
+            if oldValue !== live {
+                onLiveChange?(live)
+            }
+        }
+    }
     /// Meetings whose transcript is being finished now.
     private(set) var finishing: Set<UUID> = []
     /// A meeting that a disk write error stopped, for its banner.
@@ -110,9 +126,14 @@ final class MeetingCoordinator {
     var openMeetingID: UUID?
     /// Set when something outside the window asks to show a meeting.
     private(set) var pendingShow = false
+    /// The meeting whose page is on screen, so a notice does not repeat it.
+    var pageOnScreen: UUID?
     private(set) var settings: MeetingSettings
     let canRecordCallAudio: Bool
     @ObservationIgnored weak var host: MeetingHost?
+    /// Called when a meeting starts recording (with it) and when it stops (nil).
+    @ObservationIgnored var onLiveChange: ((MeetingSession?) -> Void)?
+    @ObservationIgnored var onNotice: ((MeetingNotice) -> Void)?
     @ObservationIgnored let summaries: MeetingSummaries
     @ObservationIgnored let store: MeetingStore
     @ObservationIgnored let templates: MeetingTemplateStore
@@ -150,7 +171,12 @@ final class MeetingCoordinator {
             availability: summaryAvailability,
             makeModel: makeSummaryModel
         )
-        summaries.onFinished = { [weak self] record in self?.apply(record) }
+        summaries.onFinished = { [weak self] record in
+            self?.apply(record)
+            if record.status == .done {
+                self?.onNotice?(.summaryReady(record.id))
+            }
+        }
         summaries.onModelIdle = { [weak self] in self?.host?.meetingSummaryModelIsIdle() }
     }
 
@@ -440,13 +466,19 @@ final class MeetingCoordinator {
             session.youLevel = you
             session.themLevel = them
         case let .callAudioSilent(heardBefore):
+            // A meeting in the room has no call, so its silent call track is
+            // no problem.
+            guard session.record.callAppBundleID != nil else { return }
+            let since = max(0, session.elapsed(at: environment.now()) - MeetingRecorder.callSilenceLimit)
             session.callAudioProblem = heardBefore ? .stopped : .neverHeard
-            session.callSilentSince = max(0, session.elapsed(at: environment.now()) - MeetingRecorder.callSilenceLimit)
+            session.callSilentSince = since
+            onNotice?(heardBefore ? .callAudioStopped(since: since) : .callAudioNeverHeard)
         case .callAudioReturned:
             session.callAudioProblem = nil
             session.callSilentSince = nil
         case let .inputChanged(name):
             session.changedInput = name
+            onNotice?(.microphoneChanged(name))
             changedInputReset?.cancel()
             changedInputReset = Task { [weak session] in
                 try? await Task.sleep(for: Self.changedInputSeconds)
@@ -455,9 +487,11 @@ final class MeetingCoordinator {
             }
         case let .trackFailed(track, message):
             session.failedTracks[track] = message
+            onNotice?(.trackFailed(track))
         case let .storageFailed(message):
             AppLogger.shared.log(.error, "meeting stopped by a write error id=\(session.id.uuidString) error=\(message)")
             stoppedByWriteError = session.id
+            onNotice?(.stoppedByDiskFull)
             Task { await stop() }
         }
     }

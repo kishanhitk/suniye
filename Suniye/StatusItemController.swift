@@ -8,6 +8,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let appIdentity = AppIdentity.current
     private let statusItem: NSStatusItem
 
+    private let recordMeetingItem = NSMenuItem(title: "Record Meeting", action: #selector(recordMeeting), keyEquivalent: "")
+    private let meetingStatusItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let pauseMeetingItem = NSMenuItem(title: "Pause Recording", action: #selector(pauseOrResumeMeeting), keyEquivalent: "")
+    private let stopMeetingItem = NSMenuItem(title: "Stop Recording", action: #selector(stopMeeting), keyEquivalent: "")
+    private let openMeetingItem = NSMenuItem(title: "Open Meeting", action: #selector(openMeeting), keyEquivalent: "")
     private let finishSetupItem = NSMenuItem(title: "", action: #selector(openMainWindow), keyEquivalent: "")
     private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openMainWindow), keyEquivalent: "o")
     private let copyLastTranscriptItem = NSMenuItem(title: "Copy Last Transcript", action: #selector(copyLastTranscript), keyEquivalent: "")
@@ -71,6 +76,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
+        for item in [recordMeetingItem, pauseMeetingItem, stopMeetingItem, openMeetingItem] {
+            item.target = self
+        }
         finishSetupItem.target = self
         openSettingsItem.target = self
         copyLastTranscriptItem.target = self
@@ -82,6 +90,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         // The abandonment-recovery affordance: a user who closes the window
         // mid-setup must see a labeled way back (with live download progress),
         // not a normal-looking menu that silently does nothing.
+        menu.addItem(recordMeetingItem)
+        menu.addItem(meetingStatusItem)
+        menu.addItem(pauseMeetingItem)
+        menu.addItem(stopMeetingItem)
+        menu.addItem(openMeetingItem)
+        menu.addItem(.separator())
         menu.addItem(finishSetupItem)
         menu.addItem(openSettingsItem)
         menu.addItem(copyLastTranscriptItem)
@@ -105,6 +119,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private func refresh() {
         let phase = appState.phase
+
+        let live = appState.meetings.live
+        recordMeetingItem.isHidden = live != nil
+        for item in [meetingStatusItem, pauseMeetingItem, stopMeetingItem, openMeetingItem] {
+            item.isHidden = live == nil
+        }
+        if let live {
+            meetingStatusItem.title = "\(live.isPaused ? "Paused" : "Recording") · \(MeetingTranscript.clock(live.elapsed(at: Date())))"
+            pauseMeetingItem.title = live.isPaused ? "Resume Recording" : "Pause Recording"
+        }
 
         if let setupTitle = appState.setupMenuItemTitle {
             finishSetupItem.isHidden = false
@@ -181,6 +205,30 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         image.isTemplate = true
         return image
+    }
+
+    @objc
+    private func recordMeeting() {
+        AppLogger.shared.log(.info, "menu action: record meeting")
+        appState.startMeetingFromMenu()
+    }
+
+    @objc
+    private func pauseOrResumeMeeting() {
+        AppLogger.shared.log(.info, "menu action: pause or resume meeting")
+        appState.handleMeetingPillAction(appState.meetings.live?.isPaused == true ? .resume : .pause)
+    }
+
+    @objc
+    private func stopMeeting() {
+        AppLogger.shared.log(.info, "menu action: stop meeting")
+        appState.handleMeetingPillAction(.stop)
+    }
+
+    @objc
+    private func openMeeting() {
+        AppLogger.shared.log(.info, "menu action: open meeting")
+        appState.handleMeetingPillAction(.open)
     }
 
     @objc
