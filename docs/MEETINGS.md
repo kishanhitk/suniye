@@ -46,7 +46,7 @@ Suniye finds a call from the apps that hold the microphone:
 
 **Never ask for** lists the apps that get no offer.
 
-A call ends when the call app releases the microphone, or holds it and plays no sound for 2 minutes. The card shows "Recording stops in 30 s." with **Stop Now** and **Keep Recording**. The recording keeps nothing after the moment the call ended.
+A call ends when the call app releases the microphone, or holds it with its audio output off for 2 minutes. The card shows "Recording stops in 30 s." with **Stop Now** and **Keep Recording**. The recording keeps nothing after the moment the call ended.
 
 Call detection reads the Core Audio process list. It reads nothing while no input device runs, nothing during a dictation, every second while an app waits for its delay, and every 5 s otherwise. It opens no audio device.
 

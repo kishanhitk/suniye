@@ -79,7 +79,8 @@ enum MeetingCallApps {
 /// A call app or browser that holds the microphone, as one read sees it.
 struct MicrophoneUser: Equatable, Sendable {
     let app: MeetingCallApp
-    let playsOutput: Bool
+    /// The app's audio output runs. It can run and play silence.
+    let runsOutput: Bool
 }
 
 /// When calls start and end, from reads of the call apps and browsers that
@@ -91,8 +92,8 @@ struct MicrophoneUser: Equatable, Sendable {
 /// - A call ends when its app releases the microphone.
 /// - While a meeting records, it follows one call: the call it started
 ///   for, or else a call that goes on at its start or starts later. That
-///   call also ends when its app plays no sound for `silentCallLimit`,
-///   counted from the moment the recording follows it.
+///   call also ends when its app's audio output stays off for
+///   `silentCallLimit`, counted from the moment the recording follows it.
 struct MeetingCallWatch {
     static let callAppDelay: TimeInterval = 2
     static let browserDelay: TimeInterval = 20
@@ -108,9 +109,9 @@ struct MeetingCallWatch {
         case callEnded(MeetingCallApp)
         /// The call that the recording follows ended at `endedAt`, on the
         /// clock of `update`: when its app released the microphone, or, when
-        /// `silent`, played sound for the last time.
+        /// `silent`, when its audio output last ran.
         case recordedCallEnded(MeetingCallApp, endedAt: TimeInterval, silent: Bool)
-        /// The call of a silent end plays sound again.
+        /// The audio output of a silent end's call runs again.
         case recordedCallResumed(MeetingCallApp)
     }
 
@@ -180,7 +181,7 @@ struct MeetingCallWatch {
         }
         for user in users {
             var holder = holders[user.app.bundleID] ?? Holder(app: user.app, since: now, lastOutput: now)
-            if user.playsOutput {
+            if user.runsOutput {
                 holder.lastOutput = now
                 if silentEndReported, recordedCall?.bundleID == user.app.bundleID {
                     silentEndReported = false

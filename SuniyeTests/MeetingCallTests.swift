@@ -6,7 +6,7 @@ let teams = MeetingCallApp(name: "Microsoft Teams", bundleID: "com.microsoft.tea
 let chrome = MeetingCallApp(name: "Chrome", bundleID: "com.google.Chrome", isBrowser: true)
 
 func holding(_ apps: MeetingCallApp..., output: Bool = true) -> [MicrophoneUser] {
-    apps.map { MicrophoneUser(app: $0, playsOutput: output) }
+    apps.map { MicrophoneUser(app: $0, runsOutput: output) }
 }
 
 final class MeetingCallWatchTests: XCTestCase {
