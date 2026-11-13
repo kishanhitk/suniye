@@ -91,7 +91,8 @@ struct MicrophoneUser: Equatable, Sendable {
 /// - A call ends when its app releases the microphone.
 /// - While a meeting records, it follows one call: the call it started
 ///   for, or else a call that goes on at its start or starts later. That
-///   call also ends when its app plays no sound for `silentCallLimit`.
+///   call also ends when its app plays no sound for `silentCallLimit`,
+///   counted from the moment the recording follows it.
 struct MeetingCallWatch {
     static let callAppDelay: TimeInterval = 2
     static let browserDelay: TimeInterval = 20
@@ -109,6 +110,8 @@ struct MeetingCallWatch {
         /// clock of `update`: when its app released the microphone, or, when
         /// `silent`, played sound for the last time.
         case recordedCallEnded(MeetingCallApp, endedAt: TimeInterval, silent: Bool)
+        /// The call of a silent end plays sound again.
+        case recordedCallResumed(MeetingCallApp)
     }
 
     private struct Holder {
@@ -121,6 +124,9 @@ struct MeetingCallWatch {
     private var holders: [String: Holder] = [:]
     private var isRecording = false
     private var recordedCall: MeetingCallApp?
+    /// When the recording started to follow `recordedCall`: a silent end
+    /// counts from then, not from before the recording.
+    private var followedSince: TimeInterval = 0
     private var silentEndReported = false
 
     /// True while an app holds the microphone.
@@ -134,16 +140,16 @@ struct MeetingCallWatch {
     }
 
     /// `call` is the call that the new recording is for, or nil.
-    mutating func recordingStarted(call: MeetingCallApp?) -> [Event] {
+    mutating func recordingStarted(call: MeetingCallApp?, at now: TimeInterval) -> [Event] {
         isRecording = true
         if let call {
-            follow(call)
+            follow(call, at: now)
             return []
         }
         recordedCall = nil
         let calls = holders.values.filter(\.isCall)
         guard let first = calls.min(by: { ($0.app.isBrowser ? 1 : 0, $0.since) < ($1.app.isBrowser ? 1 : 0, $1.since) }) else { return [] }
-        follow(first.app)
+        follow(first.app, at: now)
         return [.followed(first.app)]
     }
 
@@ -176,33 +182,40 @@ struct MeetingCallWatch {
             var holder = holders[user.app.bundleID] ?? Holder(app: user.app, since: now, lastOutput: now)
             if user.playsOutput {
                 holder.lastOutput = now
+                if silentEndReported, recordedCall?.bundleID == user.app.bundleID {
+                    silentEndReported = false
+                    events.append(.recordedCallResumed(user.app))
+                }
             }
             if !holder.isCall {
                 let confirmed = !user.app.isBrowser || showsMeeting(user.app)
                 if now - holder.since >= (confirmed ? Self.callAppDelay : Self.browserDelay) {
                     holder.isCall = true
-                    events += callStarted(user.app, confirmed: confirmed)
+                    events += callStarted(user.app, confirmed: confirmed, at: now)
                 }
             }
             holders[user.app.bundleID] = holder
         }
-        if let call = recordedCall, !silentEndReported, let holder = holders[call.bundleID],
-           now - holder.lastOutput >= Self.silentCallLimit {
-            silentEndReported = true
-            events.append(.recordedCallEnded(call, endedAt: holder.lastOutput, silent: true))
+        if let call = recordedCall, !silentEndReported, let holder = holders[call.bundleID] {
+            let lastOutput = max(holder.lastOutput, followedSince)
+            if now - lastOutput >= Self.silentCallLimit {
+                silentEndReported = true
+                events.append(.recordedCallEnded(call, endedAt: lastOutput, silent: true))
+            }
         }
         return events
     }
 
-    private mutating func callStarted(_ app: MeetingCallApp, confirmed: Bool) -> [Event] {
+    private mutating func callStarted(_ app: MeetingCallApp, confirmed: Bool, at now: TimeInterval) -> [Event] {
         guard isRecording else { return [.callStarted(app, confirmed: confirmed)] }
         guard recordedCall == nil else { return [] }
-        follow(app)
+        follow(app, at: now)
         return [.followed(app)]
     }
 
-    private mutating func follow(_ app: MeetingCallApp) {
+    private mutating func follow(_ app: MeetingCallApp, at now: TimeInterval) {
         recordedCall = app
+        followedSince = now
         silentEndReported = false
     }
 }

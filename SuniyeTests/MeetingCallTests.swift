@@ -65,7 +65,7 @@ final class MeetingCallWatchTests: XCTestCase {
         _ = watch.update(holding(zoom), at: 0, showsMeeting: noTitle)
         _ = watch.update(holding(zoom), at: 2, showsMeeting: noTitle)
 
-        let atStart = watch.recordingStarted(call: nil)
+        let atStart = watch.recordingStarted(call: nil, at: 3)
         let secondCall = watch.update(holding(zoom, teams), at: 5, showsMeeting: noTitle) + watch.update(holding(zoom, teams), at: 7, showsMeeting: noTitle)
         let zoomLeft = watch.update(holding(teams), at: 10, showsMeeting: noTitle)
         let teamsLater = watch.update([], at: 11, showsMeeting: noTitle)
@@ -81,17 +81,36 @@ final class MeetingCallWatchTests: XCTestCase {
     func testTheRecordedCallEndsOnceAfterTwoMinutesWithoutSound() {
         var watch = MeetingCallWatch()
         let noTitle: (MeetingCallApp) -> Bool = { _ in false }
-        _ = watch.recordingStarted(call: zoom)
+        _ = watch.recordingStarted(call: zoom, at: 0)
         _ = watch.update(holding(zoom), at: 0, showsMeeting: noTitle)
         _ = watch.update(holding(zoom), at: 5, showsMeeting: noTitle)
 
         let quiet = watch.update(holding(zoom, output: false), at: 124, showsMeeting: noTitle)
         let silent = watch.update(holding(zoom, output: false), at: 125, showsMeeting: noTitle)
         let later = watch.update(holding(zoom, output: false), at: 300, showsMeeting: noTitle)
+        let resumed = watch.update(holding(zoom), at: 310, showsMeeting: noTitle)
+        let silentAgain = watch.update(holding(zoom, output: false), at: 430, showsMeeting: noTitle)
 
         XCTAssertEqual(quiet, [])
         XCTAssertEqual(silent, [.recordedCallEnded(zoom, endedAt: 5, silent: true)])
         XCTAssertEqual(later, [])
+        XCTAssertEqual(resumed, [.recordedCallResumed(zoom)])
+        XCTAssertEqual(silentAgain, [.recordedCallEnded(zoom, endedAt: 310, silent: true)])
+    }
+
+    func testTheSilenceOfAFollowedCallCountsFromTheRecordingStart() {
+        var watch = MeetingCallWatch()
+        let noTitle: (MeetingCallApp) -> Bool = { _ in false }
+        _ = watch.update(holding(zoom, output: false), at: 0, showsMeeting: noTitle)
+        _ = watch.update(holding(zoom, output: false), at: 200, showsMeeting: noTitle)
+
+        let atStart = watch.recordingStarted(call: zoom, at: 300)
+        let soon = watch.update(holding(zoom, output: false), at: 305, showsMeeting: noTitle)
+        let silent = watch.update(holding(zoom, output: false), at: 420, showsMeeting: noTitle)
+
+        XCTAssertEqual(atStart, [])
+        XCTAssertEqual(soon, [], "silence before the recording does not end it")
+        XCTAssertEqual(silent, [.recordedCallEnded(zoom, endedAt: 300, silent: true)])
     }
 }
 

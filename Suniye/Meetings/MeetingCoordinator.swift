@@ -397,7 +397,7 @@ final class MeetingCoordinator {
     private func stop(_ reason: MeetingStopReason, endingAt cut: Date?) async {
         guard let session = beginStop() else { return }
         let now = wallSeconds(of: session)
-        let end = cut.map { min(now, $0.timeIntervalSince(session.record.startedAt)) } ?? now
+        let end = cut.map { min(now, max(0, $0.timeIntervalSince(session.record.startedAt))) } ?? now
         await update(session.id) {
             $0.end(atWallSeconds: end)
             if cut != nil {
@@ -543,6 +543,10 @@ final class MeetingCoordinator {
             let ended = now.addingTimeInterval(endedAt - environment.uptime())
             let delay = environment.callCardDurations.stop
             showCard(.callEnded(app, silent: silent, endedAt: ended, stopsAt: now.addingTimeInterval(delay)), for: delay)
+        case .recordedCallResumed:
+            if case .callEnded(_, silent: true, _, _) = callCard {
+                closeCallCard()
+            }
         }
     }
 

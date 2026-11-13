@@ -475,6 +475,27 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(cardAnswers, ["offer not_now", "call_ended keep_recording", "call_ended timeout"])
     }
 
+    func testTheCallEndedCardClosesWhenTheCallPlaysSoundAgain() async throws {
+        cardDurations.stop = 0.05
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        await coordinator.recordOfferedCall()
+
+        hold(holding(zoom, output: false), after: MeetingCallWatch.silentCallLimit + 1)
+        let silentCard = coordinator.callCard
+        hold(holding(zoom), after: 1)
+        try await Task.sleep(for: .milliseconds(150))
+
+        guard case .callEnded(zoom, silent: true, _, _) = silentCard else {
+            return XCTFail("expected the silent call-ended card, got \(String(describing: silentCard))")
+        }
+        XCTAssertNil(coordinator.callCard)
+        XCTAssertNotNil(coordinator.live, "the recording goes on")
+        await coordinator.stop()
+    }
+
     func testDoNothingStopsCallDetection() async {
         let coordinator = makeCoordinator()
         await coordinator.start()
