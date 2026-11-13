@@ -222,8 +222,7 @@ final class AppState {
     )
 
     /// Every change goes through `updateLLMSettings`, which saves it and
-    /// applies its effects in `llmSettingsDidChange(from:)`. The one exception
-    /// is a reload from the prompt files, which must not write them back.
+    /// applies its effects in `llmSettingsDidChange(from:)`.
     private(set) var llmSettings = LLMSettings()
 
     var llmEnabled: Bool {
@@ -2033,21 +2032,6 @@ final class AppState {
 
     func openCurrentMagicFormatPromptInEditor() {
         _ = fileOpener(currentMagicFormatPromptURL)
-    }
-
-    /// The prompts come from the files, so they are not written back to them.
-    func reloadMagicFormatPromptsFromFiles() {
-        llmSettings = magicFormatPromptFileStore.syncPrompts(settings: llmSettings)
-        llmSettingsStore.save(llmSettings)
-        clearMagicFormatSetupTestResult()
-    }
-
-    func openAppPromptInEditor(id: UUID) {
-        guard let binding = llmAppPromptBindings.first(where: { $0.id == id }),
-              let url = magicFormatPromptFileStore.appPromptURL(bundleID: binding.bundleID) else {
-            return
-        }
-        _ = fileOpener(url)
     }
 
     var currentMagicFormatPromptURL: URL {

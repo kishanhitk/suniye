@@ -1,18 +1,5 @@
 import SwiftUI
 
-extension MagicFormatSetupState {
-    var color: Color {
-        switch self {
-        case .off:
-            return MainWindowPalette.secondaryText
-        case .needsAPIKey, .needsServiceSetup:
-            return .orange
-        case .ready:
-            return .green
-        }
-    }
-}
-
 extension MagicFormatSetupTestResult.Severity {
     var color: Color {
         switch self {

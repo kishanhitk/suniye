@@ -228,23 +228,6 @@ final class AppStateMagicFormatTests: XCTestCase {
         XCTAssertEqual(content, "rewritten base prompt")
     }
 
-    func testOpenAppPromptInEditorBranches() {
-        var openedURLs: [URL] = []
-        let appState = makeTestAppState(fileOpener: { url in
-            openedURLs.append(url)
-            return true
-        })
-
-        // Unknown binding id: nothing opens.
-        appState.openAppPromptInEditor(id: UUID())
-        XCTAssertTrue(openedURLs.isEmpty)
-
-        let binding = appState.addAppPromptBinding(bundleID: "com.example.app", appDisplayName: "Example")
-        appState.openAppPromptInEditor(id: binding!.id)
-        XCTAssertEqual(openedURLs.count, 1)
-        XCTAssertTrue(openedURLs[0].path.contains("com.example.app"))
-    }
-
     func testUpdateAppPromptBindingIgnoresUnknownID() {
         let appState = makeTestAppState()
         let binding = appState.addAppPromptBinding(bundleID: "com.example.app", appDisplayName: "Example")

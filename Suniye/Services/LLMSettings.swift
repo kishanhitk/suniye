@@ -136,39 +136,6 @@ enum LLMModelPreset: String, CaseIterable, Codable {
         }
     }
 
-    var subtitle: String {
-        switch self {
-        case .gemini25Flash:
-            return "Fast, cheap, good quality"
-        case .gpt41Mini:
-            return "OpenAI, balanced"
-        case .custom:
-            return "Use any provider model ID"
-        }
-    }
-
-    var magicFormatLabel: String {
-        switch self {
-        case .gemini25Flash:
-            return "Fast"
-        case .gpt41Mini:
-            return "Balanced"
-        case .custom:
-            return "Custom"
-        }
-    }
-
-    var magicFormatDescription: String {
-        switch self {
-        case .gemini25Flash:
-            return "Quick fixes with lower cost."
-        case .gpt41Mini:
-            return "Best default for most dictation."
-        case .custom:
-            return "Use the exact model ID supported by your endpoint."
-        }
-    }
-
     var modelId: String {
         modelId(for: .openRouter)
     }

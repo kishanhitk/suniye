@@ -44,43 +44,6 @@ enum MagicFormatSetupState: Equatable {
     case needsAPIKey
     case needsServiceSetup
     case ready
-
-    var title: String {
-        switch self {
-        case .off:
-            return "Off"
-        case .needsAPIKey:
-            return "Needs API key"
-        case .needsServiceSetup:
-            return "Needs service setup"
-        case .ready:
-            return "Ready"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .off:
-            return "Turn it on to improve dictation before text is pasted."
-        case .needsAPIKey:
-            return "Add an API key to start using Magic Format."
-        case .needsServiceSetup:
-            return "Finish the service setup above."
-        case .ready:
-            return "Magic Format is ready to improve your text before it is pasted."
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .off:
-            return "pause.circle"
-        case .needsAPIKey, .needsServiceSetup:
-            return "exclamationmark.circle"
-        case .ready:
-            return "checkmark.circle.fill"
-        }
-    }
 }
 
 struct MagicFormatSetupTestResult: Equatable {

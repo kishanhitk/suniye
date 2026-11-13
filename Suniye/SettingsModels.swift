@@ -407,15 +407,6 @@ enum UpdateChannel: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    var sparkleChannelName: String? {
-        switch self {
-        case .stable:
-            return nil
-        case .tip:
-            return rawValue
-        }
-    }
-
     var sparkleAllowedChannels: Set<String> {
         switch self {
         case .stable:
