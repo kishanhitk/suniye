@@ -4,6 +4,10 @@ import Foundation
 struct LlamaServerEndpoint: Equatable {
     let baseURL: URL
     let apiKey: String
+
+    var chatCompletionsURL: URL {
+        baseURL.appendingPathComponent("v1/chat/completions")
+    }
 }
 
 /// The helper binary and its model arguments. Every start adds the loopback
@@ -22,13 +26,43 @@ enum LlamaServerError: Error, Equatable {
     case startupTimedOut
     /// `stop()`, or a start for another launch, ended this start first.
     case startupCanceled
+    /// `/tokenize` answered with a status other than 200.
+    case tokenizeFailed
+
+    var logValue: String {
+        switch self {
+        case .launchFailed:
+            return "launch_failed"
+        case let .exited(reason):
+            return reason
+        case .startupTimedOut:
+            return "startup_timeout"
+        case .startupCanceled:
+            return "startup_canceled"
+        case .tokenizeFailed:
+            return "tokenize_failed"
+        }
+    }
 }
 
 /// One bundled `llama-server` child: started on demand for a launch, shared by
 /// concurrent callers, replaced by a start for a different launch, and stopped
-/// by `stop()` or an idle timeout.
+/// by `stop()` or an idle timeout. Requests go through `complete` and
+/// `tokenCount`, which restart the idle timer when they end.
+///
+/// Start errors are `LlamaServerError`; chat completion errors are
+/// `ChatCompletionError`.
 actor LlamaServer {
     static let shutdownTimeoutSeconds = 2.0
+
+    /// The bundled helper is built for Apple Silicon only.
+    static var isSupportedHardware: Bool {
+        #if arch(arm64)
+            return true
+        #else
+            return false
+        #endif
+    }
 
     private struct Startup {
         let id: UUID
@@ -36,7 +70,8 @@ actor LlamaServer {
         let task: Task<LlamaServerEndpoint, Error>
     }
 
-    private let healthSession: URLSession
+    private let session: URLSession
+    private let completionClient: ChatCompletionClient
     /// Fired (model name, cold-start load ms) once per real process start, from
     /// `start()`'s success path. Analytics-only; may be nil.
     private let onModelLoad: (@Sendable (String, Int) -> Void)?
@@ -51,11 +86,12 @@ actor LlamaServer {
     private var stoppingTask: Task<Void, Never>?
 
     init(
-        healthSession: URLSession = .shared,
+        session: URLSession = .shared,
         onModelLoad: (@Sendable (String, Int) -> Void)? = nil,
         onKeepAliveEvicted: (@Sendable (String) -> Void)? = nil
     ) {
-        self.healthSession = healthSession
+        self.session = session
+        self.completionClient = ChatCompletionClient(session: session)
         self.onModelLoad = onModelLoad
         self.onKeepAliveEvicted = onKeepAliveEvicted
     }
@@ -102,6 +138,66 @@ actor LlamaServer {
             "--no-webui",
             "--log-disable",
         ]
+    }
+
+    /// Starts or joins the server for `launch` and sends one chat completion.
+    /// A caller canceled during the start sends nothing: the server has one
+    /// generation slot, and the start goes on for the other callers.
+    func complete(
+        _ payload: ChatCompletionPayload,
+        launch: LlamaServerLaunch,
+        startupTimeoutSeconds: Double,
+        idleTimeoutSeconds: Double,
+        timeoutSeconds: Double
+    ) async throws -> ChatCompletionResult {
+        let endpoint = try await endpoint(
+            for: launch,
+            startupTimeoutSeconds: startupTimeoutSeconds,
+            idleTimeoutSeconds: idleTimeoutSeconds
+        )
+        defer {
+            scheduleIdleShutdown(after: idleTimeoutSeconds)
+        }
+        try Task.checkCancellation()
+        return try await completionClient.complete(
+            endpointURL: endpoint.chatCompletionsURL,
+            apiKey: endpoint.apiKey,
+            payload: payload,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    /// Counts with `/tokenize`, which runs beside a generation and does not
+    /// take the generation slot.
+    func tokenCount(
+        _ text: String,
+        launch: LlamaServerLaunch,
+        startupTimeoutSeconds: Double,
+        idleTimeoutSeconds: Double
+    ) async throws -> Int {
+        let endpoint = try await endpoint(
+            for: launch,
+            startupTimeoutSeconds: startupTimeoutSeconds,
+            idleTimeoutSeconds: idleTimeoutSeconds
+        )
+        defer {
+            scheduleIdleShutdown(after: idleTimeoutSeconds)
+        }
+        var request = URLRequest(url: endpoint.baseURL.appendingPathComponent("tokenize"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(endpoint.apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(["content": text])
+        let (data, response) = try await session.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw LlamaServerError.tokenizeFailed
+        }
+        return try JSONDecoder().decode(TokenizeReply.self, from: data).tokens.count
+    }
+
+    private struct TokenizeReply: Decodable {
+        let tokens: [Int]
     }
 
     func isWarm(for launch: LlamaServerLaunch) -> Bool {
@@ -277,7 +373,7 @@ actor LlamaServer {
         request.setValue("Bearer \(endpoint.apiKey)", forHTTPHeaderField: "Authorization")
 
         do {
-            let (_, response) = try await healthSession.data(for: request)
+            let (_, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 return false
             }

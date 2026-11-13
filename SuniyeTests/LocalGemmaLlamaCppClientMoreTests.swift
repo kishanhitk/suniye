@@ -9,8 +9,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         localManager.installedModelIDs = []
         let client = LocalGemmaLlamaCppClient(
             locator: LocalGemmaRuntimeLocator(modelManager: localManager),
-            server: LlamaServer(),
-            session: .shared
+            server: LlamaServer()
         )
 
         let warm = await client.isRuntimeWarm()
@@ -33,8 +32,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
     func testStopRuntimeForwardsToServer() async {
         let client = LocalGemmaLlamaCppClient(
             locator: LocalGemmaRuntimeLocator(modelManager: StubLocalLLMModelManager()),
-            server: LlamaServer(),
-            session: .shared
+            server: LlamaServer()
         )
 
         // Nothing is running; stop must be a safe no-op that returns.
@@ -135,8 +133,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         localManager.installedModelIDs.insert(.gemma4E2BQ4KM)
         return LocalGemmaLlamaCppClient(
             locator: LocalGemmaRuntimeLocator(modelManager: localManager),
-            server: server,
-            session: .shared
+            server: server
         )
     }
 

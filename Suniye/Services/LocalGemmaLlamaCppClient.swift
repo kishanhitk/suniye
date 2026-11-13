@@ -3,24 +3,13 @@ import Foundation
 final class LocalGemmaLlamaCppClient: LocalGemmaClient {
     private let locator: LocalGemmaRuntimeLocator
     private let server: LlamaServer
-    private let session: URLSession
-    private let completionClient: ChatCompletionClient
 
     init(
         locator: LocalGemmaRuntimeLocator = LocalGemmaRuntimeLocator(),
-        server: LlamaServer? = nil,
-        session: URLSession = .shared,
-        onModelLoad: (@Sendable (String, Int) -> Void)? = nil,
-        onKeepAliveEvicted: (@Sendable (String) -> Void)? = nil
+        server: LlamaServer = LlamaServer()
     ) {
         self.locator = locator
-        self.server = server ?? LlamaServer(
-            healthSession: session,
-            onModelLoad: onModelLoad,
-            onKeepAliveEvicted: onKeepAliveEvicted
-        )
-        self.session = session
-        self.completionClient = ChatCompletionClient(session: session)
+        self.server = server
     }
 
     var availability: LocalGemmaAvailability {
@@ -48,33 +37,22 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> ChatCompletionResult {
-        let (runtime, endpoint) = try await startServer(
-            startupTimeoutSeconds: startupTimeoutSeconds,
-            idleTimeoutSeconds: idleTimeoutSeconds
-        )
-        defer {
-            Task {
-                await server.scheduleIdleShutdown(after: idleTimeoutSeconds)
-            }
+        let runtime = try resolveRuntime()
+        let result = try await mappingErrors {
+            try await server.complete(
+                LocalGemmaCompletionRequestFactory.makePayload(
+                    instructions: instructions,
+                    prompt: prompt,
+                    maxTokens: maxTokens,
+                    sampling: sampling,
+                    modelName: runtime.model.displayName
+                ),
+                launch: runtime.launch,
+                startupTimeoutSeconds: startupTimeoutSeconds,
+                idleTimeoutSeconds: idleTimeoutSeconds,
+                timeoutSeconds: timeoutSeconds
+            )
         }
-
-        // A canceled caller (prewarm probe preempted by a real request) must not
-        // occupy the server's single generation slot; startup above is a shared
-        // task and completes for the real caller regardless.
-        try Task.checkCancellation()
-
-        let result = try await completionClient.complete(
-            endpointURL: endpoint.baseURL.appendingPathComponent("v1/chat/completions"),
-            apiKey: endpoint.apiKey,
-            payload: LocalGemmaCompletionRequestFactory.makePayload(
-                instructions: instructions,
-                prompt: prompt,
-                maxTokens: maxTokens,
-                sampling: sampling,
-                modelName: runtime.model.displayName
-            ),
-            timeoutSeconds: timeoutSeconds
-        )
         // One line per generation (probe included): cached_tokens ≈ prompt_tokens of a
         // preceding probe proves the prewarm primed the KV cache; 0 means a full
         // prefill landed on the critical path.
@@ -87,63 +65,38 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         return result
     }
 
-    /// Counts with llama-server's `/tokenize`, which runs beside a generation
-    /// and does not take the generation slot.
     func tokenCount(_ text: String, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> Int {
-        let (_, endpoint) = try await startServer(
-            startupTimeoutSeconds: startupTimeoutSeconds,
-            idleTimeoutSeconds: idleTimeoutSeconds
-        )
-        defer {
-            Task {
-                await server.scheduleIdleShutdown(after: idleTimeoutSeconds)
-            }
+        let runtime = try resolveRuntime()
+        return try await mappingErrors {
+            try await server.tokenCount(
+                text,
+                launch: runtime.launch,
+                startupTimeoutSeconds: startupTimeoutSeconds,
+                idleTimeoutSeconds: idleTimeoutSeconds
+            )
         }
-        var request = URLRequest(url: endpoint.baseURL.appendingPathComponent("tokenize"))
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(endpoint.apiKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONEncoder().encode(["content": text])
-        let (data, response) = try await session.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw LLMPostProcessorError.provider("tokenize_failed")
-        }
-        return try JSONDecoder().decode(TokenizeReply.self, from: data).tokens.count
     }
 
     func stopRuntime() async {
         await server.stop()
     }
 
-    private struct TokenizeReply: Decodable {
-        let tokens: [Int]
-    }
-
-    /// The cold-start `model_load` event is emitted inside the server actor's
-    /// `start()` success path — the actor serializes startup, so a real load
-    /// fires exactly one event with the true spawn+health latency, even when a
-    /// prewarm probe and a real request race for the same (shared) startup.
-    private func startServer(
-        startupTimeoutSeconds: Double,
-        idleTimeoutSeconds: Double
-    ) async throws -> (LocalGemmaRuntime, LlamaServerEndpoint) {
-        let runtime: LocalGemmaRuntime
+    private func resolveRuntime() throws -> LocalGemmaRuntime {
         switch locator.resolve() {
-        case let .success(resolved):
-            runtime = resolved
+        case let .success(runtime):
+            return runtime
         case let .failure(availability):
             throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
         }
+    }
+
+    private func mappingErrors<T>(_ body: () async throws -> T) async throws -> T {
         do {
-            let endpoint = try await server.endpoint(
-                for: runtime.launch,
-                startupTimeoutSeconds: startupTimeoutSeconds,
-                idleTimeoutSeconds: idleTimeoutSeconds
-            )
-            return (runtime, endpoint)
+            return try await body()
         } catch let error as LlamaServerError {
             throw Self.postProcessorError(for: error)
+        } catch let error as ChatCompletionError {
+            throw LLMPostProcessorError(error)
         }
     }
 
@@ -157,6 +110,8 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
             return .timeout
         case .startupCanceled:
             return .provider("server_start_canceled")
+        case .tokenizeFailed:
+            return .provider("tokenize_failed")
         }
     }
 }
@@ -172,7 +127,7 @@ enum LocalGemmaCompletionRequestFactory {
         timeoutSeconds: Double
     ) throws -> URLRequest {
         try ChatCompletionRequestFactory.makeRequest(
-            endpointURL: endpoint.baseURL.appendingPathComponent("v1/chat/completions"),
+            endpointURL: endpoint.chatCompletionsURL,
             apiKey: endpoint.apiKey,
             payload: makePayload(
                 instructions: instructions,

@@ -176,6 +176,21 @@ enum LLMPostProcessorError: LocalizedError {
         }
     }
 
+    init(_ error: ChatCompletionError) {
+        switch error {
+        case .timeout:
+            self = .timeout
+        case .unauthorized:
+            self = .unauthorized
+        case let .provider(reason):
+            self = .provider(reason)
+        case .malformedResponse:
+            self = .malformedResponse
+        case let .network(reason):
+            self = .network(reason)
+        }
+    }
+
     var logValue: String {
         switch self {
         case .invalidConfiguration:
@@ -194,6 +209,20 @@ enum LLMPostProcessorError: LocalizedError {
             return "output_truncated"
         case .network:
             return "network"
+        }
+    }
+}
+
+extension ChatCompletionResult {
+    /// `text`, unless the provider stopped on a length limit (`max_tokens` or a
+    /// full context window): then `text` is a prefix of the answer and the only
+    /// honest result is an error.
+    var untruncatedText: String {
+        get throws {
+            guard finishReason != Self.lengthStop else {
+                throw LLMPostProcessorError.outputTruncated
+            }
+            return text
         }
     }
 }

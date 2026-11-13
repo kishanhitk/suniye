@@ -162,14 +162,13 @@ struct ASRModelCatalogEntry: Identifiable, Equatable {
     }
 
     /// Whether this entry can be used on the current device: system-managed entries
-    /// need the OS to support them, and Qwen3-ASR needs the bundled llama-server,
-    /// which is built for Apple Silicon only.
+    /// need the OS to support them, and Qwen3-ASR needs the bundled llama-server.
     var isAvailableOnThisDevice: Bool {
         switch family {
         case .appleSpeech:
             return AppleSpeechSupport.isAvailable
         case .qwen3ASR:
-            return LocalLLMHardware.isAppleSilicon
+            return LlamaServer.isSupportedHardware
         case .nemoTransducer, .moonshine, .senseVoice, .whisper, .cohereTranscribe:
             return true
         }

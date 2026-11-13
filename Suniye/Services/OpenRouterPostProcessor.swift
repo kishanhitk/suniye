@@ -47,10 +47,9 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
 
     func testSetup(config: LLMConfig) async throws {
         try validateConfig(config)
-        let output = try await client.complete(
-            endpointURL: config.endpointURL,
-            apiKey: config.apiKey,
-            payload: makeSetupPayload(config: config),
+        let output = try await complete(
+            makeSetupPayload(config: config),
+            config: config,
             timeoutSeconds: config.timeoutSeconds
         ).text
         let sanitized = sanitizeOutput(output)
@@ -71,15 +70,27 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
     /// A length stop surfaces as `outputTruncated`: polish falls back to the
     /// raw transcript, Edit Mode reports the failure.
     private func completeText(config: LLMConfig, inputCharacterCount: Int, payload: ChatCompletionPayload) async throws -> String {
-        try await client.complete(
-            endpointURL: config.endpointURL,
-            apiKey: config.apiKey,
-            payload: payload,
+        try await complete(
+            payload,
+            config: config,
             timeoutSeconds: MagicFormatGenerationBudget.timeoutSeconds(
                 floor: config.timeoutSeconds,
                 inputCharacterCount: inputCharacterCount
             )
         ).untruncatedText
+    }
+
+    private func complete(_ payload: ChatCompletionPayload, config: LLMConfig, timeoutSeconds: Double) async throws -> ChatCompletionResult {
+        do {
+            return try await client.complete(
+                endpointURL: config.endpointURL,
+                apiKey: config.apiKey,
+                payload: payload,
+                timeoutSeconds: timeoutSeconds
+            )
+        } catch let error as ChatCompletionError {
+            throw LLMPostProcessorError(error)
+        }
     }
 
     private func makePayload(modelId: String, instructions: String, inputText: String) -> ChatCompletionPayload {

@@ -51,16 +51,6 @@ enum LocalLLMModelCatalog {
     }
 }
 
-enum LocalLLMHardware {
-    static var isAppleSilicon: Bool {
-        #if arch(arm64)
-            return true
-        #else
-            return false
-        #endif
-    }
-}
-
 struct LocalLLMDownloadProgress: Equatable {
     let fractionCompleted: Double
     let downloadedBytes: Int64
@@ -178,7 +168,7 @@ final class LocalLLMModelManager: LocalLLMModelManagerProtocol {
         catalog: [LocalLLMModelCatalogEntry] = LocalLLMModelCatalog.entries,
         preferredModelID: LocalLLMModelID = LocalLLMModelCatalog.preferredModelID,
         fileManager: FileManager = .default,
-        isHardwareSupported: Bool = LocalLLMHardware.isAppleSilicon,
+        isHardwareSupported: Bool = LlamaServer.isSupportedHardware,
         rootDirectoryProvider: (() throws -> URL)? = nil,
         downloader: LocalLLMDownloading = URLSessionLocalLLMDownloader()
     ) {

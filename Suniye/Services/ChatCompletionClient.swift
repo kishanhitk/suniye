@@ -176,16 +176,28 @@ struct ChatCompletionResult: Equatable {
     let finishReason: String?
 
     static let lengthStop = "length"
+}
 
-    /// `text`, unless the provider stopped on a length limit (`max_tokens` or a
-    /// full context window): then `text` is a prefix of the answer and the only
-    /// honest result is an error.
-    var untruncatedText: String {
-        get throws {
-            guard finishReason != Self.lengthStop else {
-                throw LLMPostProcessorError.outputTruncated
-            }
-            return text
+enum ChatCompletionError: Error, Equatable {
+    case timeout
+    case unauthorized
+    /// `http_<status>` for a status other than 2xx, 401 and 403.
+    case provider(String)
+    case malformedResponse
+    case network(String)
+
+    var logValue: String {
+        switch self {
+        case .timeout:
+            return "timeout"
+        case .unauthorized:
+            return "unauthorized"
+        case .provider:
+            return "provider_error"
+        case .malformedResponse:
+            return "malformed_response"
+        case .network:
+            return "network"
         }
     }
 }
@@ -216,20 +228,20 @@ final class ChatCompletionClient {
             }
 
             guard let http = response as? HTTPURLResponse else {
-                throw LLMPostProcessorError.malformedResponse
+                throw ChatCompletionError.malformedResponse
             }
 
             switch http.statusCode {
             case 200 ..< 300:
                 break
             case 401, 403:
-                throw LLMPostProcessorError.unauthorized
+                throw ChatCompletionError.unauthorized
             default:
-                throw LLMPostProcessorError.provider("http_\(http.statusCode)")
+                throw ChatCompletionError.provider("http_\(http.statusCode)")
             }
 
             return try ChatCompletionResponse.extractResult(from: data)
-        } catch let error as LLMPostProcessorError {
+        } catch let error as ChatCompletionError {
             throw error
         } catch {
             // Caller canceled (e.g. a prewarm probe preempted by a real request):
@@ -239,9 +251,9 @@ final class ChatCompletionClient {
                 throw CancellationError()
             }
             if (error as NSError).code == NSURLErrorTimedOut || error is TimeoutError {
-                throw LLMPostProcessorError.timeout
+                throw ChatCompletionError.timeout
             }
-            throw LLMPostProcessorError.network(error.localizedDescription)
+            throw ChatCompletionError.network(error.localizedDescription)
         }
     }
 }
@@ -310,10 +322,10 @@ private struct ChatCompletionResponse: Decodable {
         do {
             response = try JSONDecoder().decode(Self.self, from: data)
         } catch {
-            throw LLMPostProcessorError.malformedResponse
+            throw ChatCompletionError.malformedResponse
         }
         guard let first = response.choices.first else {
-            throw LLMPostProcessorError.malformedResponse
+            throw ChatCompletionError.malformedResponse
         }
         let result = ChatCompletionResult(
             text: first.message?.content.text ?? first.text ?? "",
@@ -323,7 +335,7 @@ private struct ChatCompletionResponse: Decodable {
         // A length stop with nothing generated is still a truncation, not a
         // malformed reply: the context was already full.
         guard !result.text.isEmpty || result.finishReason == ChatCompletionResult.lengthStop else {
-            throw LLMPostProcessorError.malformedResponse
+            throw ChatCompletionError.malformedResponse
         }
         return result
     }

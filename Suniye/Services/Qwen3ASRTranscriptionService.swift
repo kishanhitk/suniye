@@ -44,16 +44,14 @@ actor Qwen3ASRTranscriptionService: TranscriptionServiceProtocol {
     }
 
     private let server: LlamaServer
-    private let completionClient: ChatCompletionClient
     private let makeSpeechDetector: () throws -> SpeechDetecting
     private var model: LoadedModel?
 
     init(
-        session: URLSession = .shared,
+        server: LlamaServer = LlamaServer(),
         makeSpeechDetector: @escaping () throws -> SpeechDetecting = { try SpeechDetector.bundled() }
     ) {
-        self.server = LlamaServer(healthSession: session)
-        self.completionClient = ChatCompletionClient(session: session)
+        self.server = server
         self.makeSpeechDetector = makeSpeechDetector
     }
 
@@ -143,27 +141,19 @@ actor Qwen3ASRTranscriptionService: TranscriptionServiceProtocol {
     }
 
     private func decode(_ audio: [Float], model: LoadedModel) async throws -> Qwen3ASR.Reply {
-        let endpoint: LlamaServerEndpoint
-        do {
-            endpoint = try await server.endpoint(
-                for: model.launch,
-                startupTimeoutSeconds: Qwen3ASR.startupTimeoutSeconds,
-                idleTimeoutSeconds: 0
-            )
-        } catch let error as LlamaServerError {
-            throw ServiceError.serverFailed(Self.logValue(of: error))
-        }
-
         let started = DispatchTime.now()
         let result: ChatCompletionResult
         do {
-            result = try await completionClient.complete(
-                endpointURL: endpoint.baseURL.appendingPathComponent("v1/chat/completions"),
-                apiKey: endpoint.apiKey,
-                payload: Qwen3ASR.makePayload(samples: audio, modelName: model.launch.modelName),
+            result = try await server.complete(
+                Qwen3ASR.makePayload(samples: audio, modelName: model.launch.modelName),
+                launch: model.launch,
+                startupTimeoutSeconds: Qwen3ASR.startupTimeoutSeconds,
+                idleTimeoutSeconds: 0,
                 timeoutSeconds: Qwen3ASR.timeoutSeconds(sampleCount: audio.count)
             )
-        } catch let error as LLMPostProcessorError {
+        } catch let error as LlamaServerError {
+            throw ServiceError.serverFailed(error.logValue)
+        } catch let error as ChatCompletionError {
             throw ServiceError.requestFailed(error.logValue)
         }
 
@@ -184,19 +174,6 @@ actor Qwen3ASRTranscriptionService: TranscriptionServiceProtocol {
             AppLogger.shared.log(.warning, "qwen3-asr reply stopped at the token cap; the chunk transcript may be cut short")
         }
         return reply
-    }
-
-    private static func logValue(of error: LlamaServerError) -> String {
-        switch error {
-        case .launchFailed:
-            return "launch_failed"
-        case let .exited(reason):
-            return reason
-        case .startupTimedOut:
-            return "startup_timeout"
-        case .startupCanceled:
-            return "startup_canceled"
-        }
     }
 
     private static func seconds(since start: DispatchTime) -> Double {

@@ -1090,12 +1090,14 @@ final class AppState {
         // One client, so Magic Format and meeting summaries share one llama-server.
         let localGemmaClient = LocalGemmaLlamaCppClient(
             locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager),
-            onModelLoad: { model, loadMs in
-                analytics.track(.modelLoad(model: SafeLabel(model), loadMs: loadMs, evictedByKeepAlive: false))
-            },
-            onKeepAliveEvicted: { model in
-                analytics.track(.modelLoad(model: SafeLabel(model), loadMs: 0, evictedByKeepAlive: true))
-            }
+            server: LlamaServer(
+                onModelLoad: { model, loadMs in
+                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: loadMs, evictedByKeepAlive: false))
+                },
+                onKeepAliveEvicted: { model in
+                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: 0, evictedByKeepAlive: true))
+                }
+            )
         )
         let resolvedLocalGemmaPostProcessor = localGemmaMagicFormatPostProcessor ?? LocalGemmaPostProcessor(
             client: localGemmaClient,
