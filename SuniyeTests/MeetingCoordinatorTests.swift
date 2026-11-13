@@ -50,7 +50,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         try await super.tearDown()
     }
 
-    private func makeCoordinator() -> MeetingCoordinator {
+    private func makeCoordinator(speechlessLimit: TimeInterval = 15 * 60) -> MeetingCoordinator {
         let environment = MeetingEnvironment(
             makeSources: { [unowned self] _, _ in [.you: you, .them: them] },
             confirmNotice: { [unowned self] in
@@ -59,7 +59,9 @@ final class MeetingCoordinatorTests: XCTestCase {
             },
             freeDiskBytes: { [unowned self] in freeBytes },
             callPlaysOnSpeakers: { false },
-            now: { [unowned self] in clock }
+            now: { [unowned self] in clock },
+            liveCheckInterval: .milliseconds(20),
+            speechlessLimit: speechlessLimit
         )
         let coordinator = MeetingCoordinator(
             store: store,
@@ -254,6 +256,45 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.folder(for: first).path))
         XCTAssertNotNil(coordinator.record(recording))
         await coordinator.stop()
+    }
+
+    func testARecordingStopsAtTheTimeLimit() async throws {
+        let coordinator = makeCoordinator()
+        var notices: [MeetingNotice] = []
+        coordinator.onNotice = { notices.append($0) }
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+
+        clock += MeetingCoordinator.recordingLimit
+        let stopped = await waitUntil { coordinator.live == nil }
+
+        XCTAssertTrue(stopped)
+        XCTAssertEqual(coordinator.record(id)?.endedAt, clock)
+        XCTAssertEqual(notices.first, .stoppedAtTimeLimit(id))
+    }
+
+    func testARecordingStopsWhenNobodySpeaksForTheLimit() async throws {
+        let coordinator = makeCoordinator(speechlessLimit: 6)
+        coordinator.speechModelChanged(.parakeetV3)
+        var notices: [MeetingNotice] = []
+        coordinator.onNotice = { notices.append($0) }
+        try await coordinator.startMeeting(source: .manual)
+        let session = try XCTUnwrap(coordinator.live)
+
+        // Words end at 2.8 s; both tracks are transcribed to 6 s.
+        you.push(tone(2.5, level: 0.3) + silence(4.5))
+        them.push(silence(7))
+        let decoded = await waitUntil { session.decodedThrough.count == 2 && session.decodedThrough.values.allSatisfy { $0 >= 6 * rate } }
+        let recordingAfterThreeQuietSeconds = coordinator.live != nil
+        you.push(silence(4))
+        them.push(silence(4))
+        let stopped = await waitUntil { coordinator.live == nil }
+
+        XCTAssertTrue(decoded)
+        XCTAssertTrue(recordingAfterThreeQuietSeconds)
+        XCTAssertTrue(stopped)
+        XCTAssertEqual(notices.first, .stoppedWithoutSpeech(session.id))
+        XCTAssertEqual(session.segments.map(\.text), [longSentence])
     }
 
     func testSourceProblemsShowOnTheLiveMeeting() async throws {

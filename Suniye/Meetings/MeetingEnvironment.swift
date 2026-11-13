@@ -18,7 +18,9 @@ struct MeetingEnvironment {
     var freeDiskBytes: () -> Int64?
     var callPlaysOnSpeakers: () -> Bool
     var now: () -> Date
-    var outputCheckInterval: Duration = .seconds(5)
+    var liveCheckInterval: Duration = .seconds(5)
+    /// A recording stops after this much transcribed audio with no speech.
+    var speechlessLimit: TimeInterval = 15 * 60
 }
 
 /// Where the call plays, for the echo filter.

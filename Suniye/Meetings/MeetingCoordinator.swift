@@ -26,13 +26,24 @@ enum MeetingStartError: LocalizedError, Equatable {
     }
 }
 
+/// Why a recording stopped.
+enum MeetingStopCause: String, Sendable {
+    case user
+    case sleep
+    case timeLimit
+    case noSpeech
+    case diskFull
+}
+
 /// Something the user should see while the meeting page is not on screen.
 enum MeetingNotice: Equatable {
     case callAudioNeverHeard
     case callAudioStopped(since: TimeInterval)
     case microphoneChanged(String)
     case trackFailed(MeetingTrack)
-    case stoppedByDiskFull
+    case stoppedAtTimeLimit(UUID)
+    case stoppedWithoutSpeech(UUID)
+    case stoppedByDiskFull(UUID)
     case summaryReady(UUID)
 }
 
@@ -53,8 +64,8 @@ final class MeetingSession {
     fileprivate(set) var youLevel: Float = 0
     fileprivate(set) var themLevel: Float = 0
     fileprivate(set) var segments: [MeetingSegment] = []
-    /// Every call chunk before this sample position is decoded.
-    fileprivate(set) var callDecodedThrough = 0
+    /// For each track: every chunk before this sample position is decoded.
+    fileprivate(set) var decodedThrough: [MeetingTrack: Int] = [:]
     fileprivate(set) var callAudioProblem: CallAudioProblem?
     /// Recorded time when the call went silent, for "No sound since 16:30".
     fileprivate(set) var callSilentSince: TimeInterval?
@@ -64,6 +75,8 @@ final class MeetingSession {
 
     @ObservationIgnored fileprivate let recorder: MeetingRecorder
     @ObservationIgnored fileprivate let transcriber: MeetingTranscriber
+    /// Set by the first stop, so that a second one does nothing.
+    @ObservationIgnored fileprivate var isStopping = false
 
     fileprivate init(record: MeetingRecord, recorder: MeetingRecorder, transcriber: MeetingTranscriber) {
         self.record = record
@@ -84,9 +97,17 @@ final class MeetingSession {
     var visibleSegments: [MeetingSegment] {
         MeetingTranscript.live(
             segments,
-            callDecodedThrough: hasCallTrack ? callDecodedThrough : nil,
+            callDecodedThrough: hasCallTrack ? decodedThrough[.them] ?? 0 : nil,
             callPlayedOnSpeakers: record.callPlayedOnSpeakers
         )
+    }
+
+    /// Transcribed audio after the last words, on every track that records.
+    fileprivate var secondsWithoutSpeech: Double {
+        let tracks = recorder.tracks.filter { failedTracks[$0] == nil }
+        let decoded = tracks.map { decodedThrough[$0] ?? 0 }.min() ?? 0
+        let lastWords = segments.map(\.audioEnd).max() ?? 0
+        return Double(max(0, decoded - lastWords)) / Double(MeetingAudioFormat.sampleRate)
     }
 
     /// Recorded time: the wall clock since the start, without the pauses.
@@ -107,6 +128,8 @@ final class MeetingCoordinator {
     /// Recording needs at least this much free space: two tracks for the
     /// 4-hour limit take about 1 GB.
     static let minimumFreeBytes: Int64 = 1_000_000_000
+    /// Recorded time after which a recording stops.
+    static let recordingLimit: TimeInterval = 4 * 60 * 60
     static let changedInputSeconds: Duration = .seconds(5)
 
     /// Newest first.
@@ -143,7 +166,7 @@ final class MeetingCoordinator {
     @ObservationIgnored private var dictating = false
     @ObservationIgnored private var loadedModel: ASRModelID?
     @ObservationIgnored private var listTexts: [UUID: MeetingListText] = [:]
-    @ObservationIgnored private var outputCheck: Task<Void, Never>?
+    @ObservationIgnored private var liveCheck: Task<Void, Never>?
     @ObservationIgnored private var changedInputReset: Task<Void, Never>?
 
     init(
@@ -269,7 +292,7 @@ final class MeetingCoordinator {
         recorder.setMicrophoneMuted(dictating)
         live = session
         meetings.insert(record, at: 0)
-        watchOutputRoute(of: session)
+        checkLive(session)
         AppLogger.shared.log(.info, "meeting started id=\(record.id.uuidString) source=\(source.rawValue) tracks=\(recorder.tracks.map(\.rawValue).joined(separator: ","))")
     }
 
@@ -295,21 +318,29 @@ final class MeetingCoordinator {
     }
 
     /// Stops the recording, then finishes the transcript and queues the summary.
-    func stop() async {
-        guard let session = live else { return }
+    func stop(_ cause: MeetingStopCause = .user) async {
+        guard let session = live, !session.isStopping else { return }
+        session.isStopping = true
         session.recorder.stop()
-        outputCheck?.cancel()
-        outputCheck = nil
-        let now = wallSeconds(of: session)
+        liveCheck?.cancel()
+        liveCheck = nil
+        let end = wallSeconds(of: session)
         await update(session.id) {
-            if let last = $0.pauses.indices.last, $0.pauses[last].end == nil {
-                $0.pauses[last].end = now
-            }
-            $0.endedAt = $0.startedAt.addingTimeInterval(now)
+            $0.end(atWallSeconds: end)
             $0.status = .finishing
         }
         live = nil
-        AppLogger.shared.log(.info, "meeting stopped id=\(session.id.uuidString)")
+        AppLogger.shared.log(.info, "meeting stopped id=\(session.id.uuidString) cause=\(cause.rawValue)")
+        switch cause {
+        case .timeLimit:
+            onNotice?(.stoppedAtTimeLimit(session.id))
+        case .noSpeech:
+            onNotice?(.stoppedWithoutSpeech(session.id))
+        case .diskFull:
+            onNotice?(.stoppedByDiskFull(session.id))
+        case .user, .sleep:
+            break
+        }
         await finish(session.id, transcriber: session.transcriber) { try await $0.finish() }
     }
 
@@ -329,17 +360,13 @@ final class MeetingCoordinator {
     /// Before the app quits: stops the recording and saves it, and leaves the
     /// transcript to the next launch, which finishes it with no click.
     func stopForQuit() async {
-        guard let session = live else { return }
+        guard let session = live, !session.isStopping else { return }
+        session.isStopping = true
         session.recorder.stop()
-        outputCheck?.cancel()
-        outputCheck = nil
-        let now = wallSeconds(of: session)
-        await update(session.id) {
-            if let last = $0.pauses.indices.last, $0.pauses[last].end == nil {
-                $0.pauses[last].end = now
-            }
-            $0.endedAt = $0.startedAt.addingTimeInterval(now)
-        }
+        liveCheck?.cancel()
+        liveCheck = nil
+        let end = wallSeconds(of: session)
+        await update(session.id) { $0.end(atWallSeconds: end) }
         live = nil
         AppLogger.shared.log(.info, "meeting stopped for quit id=\(session.id.uuidString)")
     }
@@ -503,8 +530,7 @@ final class MeetingCoordinator {
         case let .storageFailed(message):
             AppLogger.shared.log(.error, "meeting stopped by a write error id=\(session.id.uuidString) error=\(message)")
             stoppedByWriteError = session.id
-            onNotice?(.stoppedByDiskFull)
-            Task { await stop() }
+            Task { await stop(.diskFull) }
         }
     }
 
@@ -514,23 +540,28 @@ final class MeetingCoordinator {
         case let .segment(segment):
             session.segments.append(segment)
         case let .decodedThrough(track, position):
-            if track == .them {
-                session.callDecodedThrough = position
+            session.decodedThrough[track] = position
+            if session.secondsWithoutSpeech >= environment.speechlessLimit {
+                Task { await stop(.noSpeech) }
             }
         }
     }
 
-    /// The echo filter needs to know whether the call ever played on speakers.
-    private func watchOutputRoute(of session: MeetingSession) {
-        outputCheck?.cancel()
-        outputCheck = Task { [weak self, weak session] in
+    /// Every few seconds while the meeting records: stops it at the time
+    /// limit, and notes when the call plays on speakers, for the echo filter.
+    private func checkLive(_ session: MeetingSession) {
+        liveCheck?.cancel()
+        liveCheck = Task { [weak self, weak session] in
             while !Task.isCancelled {
-                guard let self, let session, !session.record.callPlayedOnSpeakers else { return }
-                if self.environment.callPlaysOnSpeakers() {
-                    await self.update(session.id) { $0.callPlayedOnSpeakers = true }
+                guard let self, let session else { return }
+                if session.elapsed(at: self.environment.now()) >= Self.recordingLimit {
+                    Task { await self.stop(.timeLimit) }
                     return
                 }
-                try? await Task.sleep(for: self.environment.outputCheckInterval)
+                if !session.record.callPlayedOnSpeakers, self.environment.callPlaysOnSpeakers() {
+                    await self.update(session.id) { $0.callPlayedOnSpeakers = true }
+                }
+                try? await Task.sleep(for: self.environment.liveCheckInterval)
             }
         }
     }

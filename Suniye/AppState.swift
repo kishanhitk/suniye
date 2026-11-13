@@ -2056,6 +2056,7 @@ final class AppState {
 
         if startServices {
             analytics.start()
+            stopMeetingAtSleep()
             emitAppLaunchEvent()
             presentOnboardingIfNeeded()
             wireHotkey()
@@ -5871,27 +5872,24 @@ extension AppState: MeetingHost {
     /// screen in the active app, where the page already shows it.
     func showMeetingNotice(_ notice: MeetingNotice) {
         let pageOnScreen = NSApp.isActive ? meetings.pageOnScreen : nil
-        if case let .summaryReady(id) = notice {
-            guard pageOnScreen != id else { return }
-            learningToastPresenter.show(message: "Summary ready", detail: nil, actionTitle: "Open") { [weak self] in
-                self?.openMeeting(id)
-            }
-            return
-        }
-        guard let live = meetings.live, pageOnScreen != live.id else { return }
-        let time = MeetingTranscript.clock(live.elapsed(at: Date()))
+        let live = meetings.live.flatMap { $0.id == pageOnScreen ? nil : $0 }
+        let time = live.map { MeetingTranscript.clock($0.elapsed(at: Date())) }
         switch notice {
         case .callAudioStopped:
+            guard live != nil else { return }
             learningToastPresenter.show(message: "Call audio stopped", detail: time, actionTitle: "Restart Call Audio") { [weak self] in
                 self?.meetings.restartCallAudio()
             }
         case .callAudioNeverHeard:
+            guard let live else { return }
             learningToastPresenter.show(message: "No sound from the call", detail: time, actionTitle: "Open Meeting") { [weak self] in
                 self?.openMeeting(live.id)
             }
         case let .microphoneChanged(name):
+            guard live != nil else { return }
             learningToastPresenter.show(message: "Recording with \(name)", detail: time, actionTitle: nil, action: nil)
         case let .trackFailed(track):
+            guard let live else { return }
             learningToastPresenter.show(
                 message: track == .you ? "The microphone stopped" : "Call audio stopped",
                 detail: time,
@@ -5899,12 +5897,40 @@ extension AppState: MeetingHost {
             ) { [weak self] in
                 self?.openMeeting(live.id)
             }
-        case .stoppedByDiskFull:
-            learningToastPresenter.show(message: "Recording stopped because the disk is full", detail: time, actionTitle: "Open Meeting") { [weak self] in
-                self?.openMeeting(live.id)
+        case let .stoppedAtTimeLimit(id):
+            showMeetingStopped(id, message: "Recording stopped after 4 hours")
+        case let .stoppedWithoutSpeech(id):
+            showMeetingStopped(id, message: "Recording stopped after 15 minutes without speech")
+        case let .stoppedByDiskFull(id):
+            // The meeting page shows its own banner for it.
+            guard id != pageOnScreen else { return }
+            showMeetingStopped(id, message: "Recording stopped because the disk is full")
+        case let .summaryReady(id):
+            guard id != pageOnScreen else { return }
+            learningToastPresenter.show(message: "Summary ready", detail: nil, actionTitle: "Open") { [weak self] in
+                self?.openMeeting(id)
             }
-        case .summaryReady:
-            break
+        }
+    }
+
+    private func showMeetingStopped(_ id: UUID, message: String) {
+        learningToastPresenter.show(message: message, detail: nil, actionTitle: "Open Meeting") { [weak self] in
+            self?.openMeeting(id)
+        }
+    }
+
+    /// Capture stops while the Mac sleeps, so sleep, and a closed lid that
+    /// puts the Mac to sleep, stop the recording and save it.
+    fileprivate func stopMeetingAtSleep() {
+        _ = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                Task { await self.meetings.stop(.sleep) }
+            }
         }
     }
 

@@ -115,6 +115,15 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     var duration: TimeInterval? {
         endedAt.map { $0.timeIntervalSince(startedAt) }
     }
+
+    /// Ends the meeting `seconds` after its start on the wall clock, and a
+    /// pause that is still open with it.
+    mutating func end(atWallSeconds seconds: Double) {
+        if let last = pauses.indices.last, pauses[last].end == nil {
+            pauses[last].end = seconds
+        }
+        endedAt = startedAt.addingTimeInterval(seconds)
+    }
 }
 
 /// Maps a position in a track's audio file to the meeting's wall clock. The
