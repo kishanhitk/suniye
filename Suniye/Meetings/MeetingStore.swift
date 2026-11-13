@@ -228,6 +228,7 @@ actor MeetingStore {
                     AppLogger.shared.log(.warning, "meeting recovery could not repair audio id=\(record.id.uuidString) track=\(track.rawValue) error=\(error.localizedDescription)")
                 }
             }
+            cutTornSegment(of: record.id)
             record.status = record.status == .finishing ? .interrupted : .finishing
             // A pause that never ended has no audio after it, so it moves no
             // audio position and only blurs the meeting length.
@@ -247,6 +248,21 @@ actor MeetingStore {
             }
         }
         return recovered
+    }
+
+    /// A crash during a write can leave a line with no end. A line appended
+    /// after it would join it and be lost on read, so the torn part goes.
+    private func cutTornSegment(of id: UUID) {
+        let url = segmentsURL(id)
+        guard let data = fileManager.contents(atPath: url.path), let last = data.last, last != 0x0A else { return }
+        let keep = (data.lastIndex(of: 0x0A).map { $0 + 1 }) ?? 0
+        do {
+            let handle = try FileHandle(forWritingTo: url)
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: UInt64(keep))
+        } catch {
+            AppLogger.shared.log(.warning, "meeting recovery could not cut a torn segment id=\(id.uuidString) error=\(error.localizedDescription)")
+        }
     }
 
     private func recordURL(_ id: UUID) -> URL {

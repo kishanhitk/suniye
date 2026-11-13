@@ -70,6 +70,24 @@ final class MeetingStoreTests: XCTestCase {
         XCTAssertEqual(segments, [earlier, later])
     }
 
+    func testALineWrittenAfterRecoveryIsNotLostBehindATornOne() async throws {
+        let record = makeRecord(status: .recording)
+        try await store.create(record)
+        let before = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 16_000, text: "Before the crash.", engine: "e")
+        try await store.appendSegment(before, to: record.id)
+        let handle = try FileHandle(forWritingTo: store.folder(for: record.id).appendingPathComponent("segments.jsonl"))
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("{\"id\":\"cut-by-a-cra".utf8))
+        try handle.close()
+
+        _ = await store.recoverInterruptedMeetings()
+        let after = MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 32_000, text: "After the launch.", engine: "e")
+        try await store.appendSegment(after, to: record.id)
+        let segments = await store.segments(of: record.id)
+
+        XCTAssertEqual(segments, [before, after])
+    }
+
     func testReplaceSegmentsRewritesTheTranscript() async throws {
         let record = makeRecord()
         try await store.create(record)
