@@ -33,9 +33,21 @@ enum MeetingSummaryAvailability: Equatable, Sendable {
 /// One request to a summary model. Single-turn: the model reads
 /// `instructions`, a blank line, then `input`.
 struct MeetingSummaryRequest: Hashable, Sendable {
+    enum Kind: Hashable, Sendable {
+        case summary
+        /// Notes on part `number` of the `count` parts of a transcript.
+        case part(number: Int, count: Int)
+        /// One shorter set of notes from the notes on several parts.
+        case join
+    }
+
+    let kind: Kind
     let instructions: String
     let input: String
-    let maxOutputTokens: Int
+
+    var maxOutputTokens: Int {
+        kind == .summary ? MeetingSummaryWriter.summaryOutputTokens : MeetingSummaryWriter.partOutputTokens
+    }
 
     var text: String {
         instructions + "\n\n" + input
@@ -263,74 +275,93 @@ actor MeetingSummaryWriter {
 
 /// The text of each request. The model reads one message: the rules first,
 /// then the data in tags.
+/// The requests to the model. A small model follows the rules it read last,
+/// so each request puts the transcript or the notes first and the rules
+/// after them.
 enum MeetingSummaryPrompt {
     static func summary(template: MeetingTemplate, notes: String, transcript: String, speakerLabels: Bool) -> MeetingSummaryRequest {
         MeetingSummaryRequest(
-            instructions: summaryRules(source: "its transcript", speakerLabels: speakerLabels, template: template),
-            input: notesBlock(notes) + "\n\n<transcript>\n\(transcript)\n</transcript>",
-            maxOutputTokens: MeetingSummaryWriter.summaryOutputTokens
+            kind: .summary,
+            instructions: "You write the summary of a meeting from its transcript.",
+            input: "<transcript>\n\(transcript)\n</transcript>\n\n" + notesBlock(notes) + "\n\n" + summaryRules(template: template, speakerLabels: speakerLabels)
         )
     }
 
     static func summary(template: MeetingTemplate, notes: String, partNotes: [String], speakerLabels: Bool) -> MeetingSummaryRequest {
         MeetingSummaryRequest(
-            instructions: summaryRules(source: "notes on the parts of its transcript", speakerLabels: speakerLabels, template: template),
-            input: notesBlock(notes) + "\n\n" + partNotesBlock(partNotes),
-            maxOutputTokens: MeetingSummaryWriter.summaryOutputTokens
+            kind: .summary,
+            instructions: "You write the summary of a meeting from notes on the parts of its transcript.",
+            input: partNotesBlock(partNotes) + "\n\n" + notesBlock(notes) + "\n\n" + summaryRules(template: template, speakerLabels: speakerLabels)
         )
     }
 
     static func part(transcript: String, number: Int, of count: Int, speakerLabels: Bool) -> MeetingSummaryRequest {
         MeetingSummaryRequest(
-            instructions: """
-            Take notes on one part of a long meeting, from its transcript.
+            kind: .part(number: number, count: count),
+            instructions: "You take notes on one part of a long meeting.",
+            input: """
+            <transcript part="\(number) of \(count)">
+            \(transcript)
+            </transcript>
+
+            Fill in these four lines from this part of the meeting:
+            Decisions:
+            Tasks:
+            Dates and numbers:
+            Open questions:
 
             Rules:
-            - Write each note as one line that starts with "- ".
-            - Note the topics, the facts, the decisions, the tasks with who does them, and the open questions.
+            - After each label, write the items on the same line, separated by "; ". Write "none" when there is none.
+            - Write each item in your own short words. Do not copy lines of the transcript.
             - Keep names, numbers and dates as the transcript says them.
-            - Use only facts from the transcript.
+            - For a task, say who does it and by when.
+            - Leave out opinions and talk that decides nothing.
             \(speakerRule(speakerLabels))
             - Write in the language of the transcript.
-            """,
-            input: "<transcript part=\"\(number) of \(count)\">\n\(transcript)\n</transcript>",
-            maxOutputTokens: MeetingSummaryWriter.partOutputTokens
+            """
         )
     }
 
     static func join(_ notes: [String]) -> MeetingSummaryRequest {
         MeetingSummaryRequest(
-            instructions: """
-            Join these notes on parts of a meeting into one shorter list.
+            kind: .join,
+            instructions: "You join notes on the parts of a meeting.",
+            input: partNotesBlock(notes) + """
+
+
+            Join these notes into the same four lines:
+            Decisions:
+            Tasks:
+            Dates and numbers:
+            Open questions:
 
             Rules:
-            - Write each note as one line that starts with "- ".
-            - Keep every decision, every task with who does it, and every open question.
+            - After each label, write the items on the same line, separated by "; ". Write "none" when there is none.
+            - Keep every decision, every task with who does it, every date and number, and every open question.
             - Remove repeats.
             - Write in the language of the notes.
-            """,
-            input: partNotesBlock(notes),
-            maxOutputTokens: MeetingSummaryWriter.partOutputTokens
+            """
         )
     }
 
-    private static func summaryRules(source: String, speakerLabels: Bool, template: MeetingTemplate) -> String {
+    private static func summaryRules(template: MeetingTemplate, speakerLabels: Bool) -> String {
         """
-        Write the summary of a meeting from \(source) and the notes that the user typed.
+        <template>
+        \(template.sections)
+        </template>
+
+        Write the summary of the meeting above.
 
         Rules:
-        - The first line is a short title for the meeting: at most 8 words, with no "#", no quotes and no full stop.
+        - Start with one line: "Title: " and a short title for the meeting, at most 8 words.
         - Then write the sections of the template, in its order, each under its "## " heading.
+        - Keep every decision, every task with who does it, and every date and number that someone gave.
         - Write each list item as one line that starts with "- ". Write plain text: no bold, no tables.
         - Leave out a section that has nothing to put in it.
         - Use only facts from the meeting. Do not guess.
         \(speakerRule(speakerLabels))
         - When the user's notes and the meeting disagree, follow the notes.
         - Write in the language of the meeting.
-
-        <template>
-        \(template.sections)
-        </template>
         """
     }
 
@@ -412,10 +443,11 @@ enum MeetingSummaryText {
             }
         }
         return blocks
-            .filter { block in
-                guard let heading = block.heading else { return !block.lines.isEmpty }
-                return block.lines.contains { !saysNothing($0, under: heading) }
+            .map { block in
+                guard let heading = block.heading else { return block }
+                return (heading, block.lines.filter { !saysNothing($0, under: heading) })
             }
+            .filter { !$0.lines.isEmpty }
             .map { block in ([block.heading].compactMap { $0 } + block.lines).joined(separator: "\n") }
             .joined(separator: "\n\n")
     }

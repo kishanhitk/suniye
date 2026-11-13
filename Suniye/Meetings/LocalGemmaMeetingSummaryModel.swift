@@ -31,6 +31,7 @@ struct LocalGemmaMeetingSummaryModel: MeetingSummaryModel {
             instructions: request.instructions,
             prompt: request.input,
             maxTokens: request.maxOutputTokens,
+            sampling: .greedyWithoutRepeats,
             startupTimeoutSeconds: LocalGemmaDefaults.startupTimeoutSeconds,
             idleTimeoutSeconds: LocalGemmaDefaults.idleTimeoutSeconds,
             timeoutSeconds: MagicFormatGenerationBudget.timeoutSeconds(

@@ -43,6 +43,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         instructions: String,
         prompt: String,
         maxTokens: Int?,
+        sampling: LocalGemmaSampling,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
@@ -69,6 +70,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
                 instructions: instructions,
                 prompt: prompt,
                 maxTokens: maxTokens,
+                sampling: sampling,
                 modelName: runtime.model.displayName
             ),
             timeoutSeconds: timeoutSeconds
@@ -165,6 +167,7 @@ enum LocalGemmaCompletionRequestFactory {
         instructions: String,
         prompt: String,
         maxTokens: Int?,
+        sampling: LocalGemmaSampling,
         modelName: String,
         timeoutSeconds: Double
     ) throws -> URLRequest {
@@ -175,13 +178,14 @@ enum LocalGemmaCompletionRequestFactory {
                 instructions: instructions,
                 prompt: prompt,
                 maxTokens: maxTokens,
+                sampling: sampling,
                 modelName: modelName
             ),
             timeoutSeconds: timeoutSeconds
         )
     }
 
-    static func makePayload(instructions: String, prompt: String, maxTokens: Int?, modelName: String) -> ChatCompletionPayload {
+    static func makePayload(instructions: String, prompt: String, maxTokens: Int?, sampling: LocalGemmaSampling, modelName: String) -> ChatCompletionPayload {
         let userContent = """
         \(instructions)
 
@@ -195,7 +199,9 @@ enum LocalGemmaCompletionRequestFactory {
             topK: 1,
             topP: 1,
             maxTokens: maxTokens,
-            stream: false
+            stream: false,
+            dryMultiplier: sampling == .greedyWithoutRepeats ? 0.8 : nil,
+            dryPenaltyLastN: sampling == .greedyWithoutRepeats ? 256 : nil
         )
     }
 }

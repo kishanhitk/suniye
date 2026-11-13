@@ -32,6 +32,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
 
             ## Decisions
             * Ship on Friday.
+            - None
 
             ## Action items
             - None noted.
@@ -48,7 +49,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
         XCTAssertEqual(requests.count, 1)
         XCTAssertTrue(requests[0].input.contains("You: word0"))
         XCTAssertTrue(requests[0].input.contains("<notes>\nShip Friday\n</notes>"))
-        XCTAssertTrue(requests[0].instructions.contains(MeetingTemplate.general.sections))
+        XCTAssertTrue(requests[0].input.contains(MeetingTemplate.general.sections))
         XCTAssertEqual(summary.title, "Weekly sync")
         XCTAssertEqual(summary.body, "## Overview\nWe agreed to ship on Friday.\n\n## Decisions\n- Ship on Friday.")
         XCTAssertEqual(summary.provider, .localModel)
@@ -60,7 +61,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
 
         _ = try await writer.write(input(conversation(turns: 60, words: 50)))
         let requests = await model.requests
-        let parts = requests.filter { $0.instructions.hasPrefix("Take notes on one part") }
+        let parts = requests.filter(\.isPart)
 
         XCTAssertGreaterThanOrEqual(parts.count, 2)
         let room = Int(Double(2_000 - MeetingSummaryWriter.partOutputTokens) * MeetingSummaryWriter.fillFactor)
@@ -69,7 +70,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
             XCTAssertLessThanOrEqual(tokens, room)
         }
         let last = try XCTUnwrap(requests.last)
-        XCTAssertTrue(last.instructions.hasPrefix("Write the summary"))
+        XCTAssertEqual(last.kind, .summary)
         XCTAssertTrue(last.input.contains("Part 1:\n- notes on part 1 of \(parts.count)"))
         XCTAssertTrue(last.input.contains("Part \(parts.count):"))
     }
@@ -77,18 +78,23 @@ final class MeetingSummaryWriterTests: XCTestCase {
     func testNotesOnPartsThatDoNotFitAreJoinedFirst() async throws {
         let longNotes = (0 ..< 120).map { "- fact\($0)" }.joined(separator: "\n")
         let model = FakeSummaryModel(context: 1_600) { request in
-            if request.instructions.hasPrefix("Take notes") { return longNotes }
-            if request.instructions.hasPrefix("Join") { return "- joined" }
-            return "Release review\n## Overview\nShort."
+            switch request.kind {
+            case .part:
+                return longNotes
+            case .join:
+                return "- joined"
+            case .summary:
+                return "Release review\n## Overview\nShort."
+            }
         }
         let writer = MeetingSummaryWriter(model: model)
 
         let summary = try await writer.write(input(conversation(turns: 60, words: 50)))
-        let kinds = await model.requests.map { String($0.instructions.prefix(4)) }
+        let kinds = await model.requests.map(\.kind)
 
-        XCTAssertTrue(kinds.contains("Join"))
-        XCTAssertEqual(kinds.last, "Writ")
-        XCTAssertLessThan(kinds.firstIndex(of: "Join") ?? .max, kinds.count - 1)
+        XCTAssertTrue(kinds.contains(.join))
+        XCTAssertEqual(kinds.last, .summary)
+        XCTAssertLessThan(kinds.firstIndex(of: .join) ?? .max, kinds.count - 1)
         XCTAssertEqual(summary.title, "Release review")
     }
 
@@ -154,8 +160,8 @@ final class MeetingSummaryWriterTests: XCTestCase {
 
         XCTAssertTrue(reachedThirdRequest)
         XCTAssertThrowsError(try firstResult.get()) { XCTAssertTrue($0 is CancellationError, "\($0)") }
-        XCTAssertFalse(resumed.contains { $0.input.contains("part=\"1 of") || $0.input.contains("part=\"2 of") })
-        XCTAssertTrue(resumed.contains { $0.input.contains("part=\"3 of") })
+        XCTAssertFalse(resumed.contains { $0.partNumber == 1 || $0.partNumber == 2 })
+        XCTAssertTrue(resumed.contains { $0.partNumber == 3 })
     }
 
     func testTheTitleIsCleanedAndASentenceIsNotATitle() {
@@ -187,13 +193,14 @@ final class LocalGemmaMeetingSummaryModelTests: XCTestCase {
     func testAnAnswerIsCleanedAndACutShortOneIsRefused() async throws {
         let client = FakeGemmaClient(result: ChatCompletionResult(text: "Weekly sync\n## Overview\nShip.<end_of_turn>", timings: nil, finishReason: "stop"))
         let model = LocalGemmaMeetingSummaryModel(client: client)
-        let request = MeetingSummaryRequest(instructions: "Rules.", input: "<transcript>\nYou: Ship.\n</transcript>", maxOutputTokens: 1_200)
+        let request = MeetingSummaryRequest(kind: .summary, instructions: "Rules.", input: "<transcript>\nYou: Ship.\n</transcript>")
 
         let answer = try await model.generate(request)
         client.result = ChatCompletionResult(text: "Weekly sync\n## Over", timings: nil, finishReason: ChatCompletionResult.lengthStop)
 
         XCTAssertEqual(answer, "Weekly sync\n## Overview\nShip.")
-        XCTAssertEqual(client.lastCall?.maxTokens, 1_200)
+        XCTAssertEqual(client.lastCall?.maxTokens, MeetingSummaryWriter.summaryOutputTokens)
+        XCTAssertEqual(client.lastCall?.sampling, .greedyWithoutRepeats, "greedy decoding alone can repeat a line until the limit")
         XCTAssertEqual(client.lastCall?.instructions, "Rules.")
         do {
             _ = try await model.generate(request)
@@ -315,15 +322,14 @@ private actor FakeSummaryModel: MeetingSummaryModel {
         if let answer {
             return try answer(request)
         }
-        if request.instructions.hasPrefix("Take notes"),
-           let range = request.input.range(of: #"part="\d+ of \d+""#, options: .regularExpression) {
-            let label = request.input[range].dropFirst(6).dropLast()
-            return "- notes on part \(label)"
-        }
-        if request.instructions.hasPrefix("Join") {
+        switch request.kind {
+        case let .part(number, count):
+            return "- notes on part \(number) of \(count)"
+        case .join:
             return "- joined notes"
+        case .summary:
+            return "Planning\n## Overview\nPlans."
         }
-        return "Planning\n## Overview\nPlans."
     }
 }
 
@@ -332,6 +338,7 @@ private final class FakeGemmaClient: LocalGemmaClient {
         let instructions: String
         let prompt: String
         let maxTokens: Int?
+        let sampling: LocalGemmaSampling
     }
 
     var result: ChatCompletionResult
@@ -350,16 +357,30 @@ private final class FakeGemmaClient: LocalGemmaClient {
         instructions: String,
         prompt: String,
         maxTokens: Int?,
+        sampling: LocalGemmaSampling,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> ChatCompletionResult {
-        lastCall = Call(instructions: instructions, prompt: prompt, maxTokens: maxTokens)
+        lastCall = Call(instructions: instructions, prompt: prompt, maxTokens: maxTokens, sampling: sampling)
         return result
     }
 
     func tokenCount(_ text: String, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> Int {
         guard let tokens else { throw LLMPostProcessorError.provider("tokenize_failed") }
         return tokens
+    }
+}
+
+private extension MeetingSummaryRequest {
+    var partNumber: Int? {
+        if case let .part(number, _) = kind {
+            return number
+        }
+        return nil
+    }
+
+    var isPart: Bool {
+        partNumber != nil
     }
 }
