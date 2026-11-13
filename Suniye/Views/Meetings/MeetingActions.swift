@@ -1,14 +1,19 @@
 import AppKit
 import SwiftUI
 
-/// The dialogs that meeting commands open, shared by the list and the page.
+struct MeetingActionFailure: Equatable {
+    let title: String
+    let message: String
+}
+
+/// Meeting commands for the list and the page, and the dialogs they open.
 @MainActor
 @Observable
 final class MeetingActions {
     var deleting: MeetingRecord?
     var renaming: MeetingRecord?
     var renameText = ""
-    var startError: String?
+    var failure: MeetingActionFailure?
     var editingTemplates = false
 
     func startMeeting(_ meetings: MeetingCoordinator) {
@@ -19,7 +24,7 @@ final class MeetingActions {
                     meetings.openMeetingID = live.id
                 }
             } catch {
-                startError = error.localizedDescription
+                failure = MeetingActionFailure(title: "Couldn’t start the recording", message: error.localizedDescription)
             }
         }
     }
@@ -37,9 +42,9 @@ final class MeetingActions {
         Task {
             let markdown = MeetingExport.markdown(
                 record: record,
-                summary: await meetings.store.summary(of: record.id),
-                notes: await meetings.store.notes(of: record.id),
-                segments: await meetings.store.segments(of: record.id)
+                summary: await meetings.summary(of: record.id),
+                notes: await meetings.notes(of: record.id),
+                segments: await meetings.transcript(of: record.id)
             )
             let panel = NSSavePanel()
             panel.nameFieldStringValue = "\(record.title).md"
@@ -104,13 +109,13 @@ private struct MeetingActionDialogs: ViewModifier {
                 Button("Cancel", role: .cancel) {}
             }
             .alert(
-                "Couldn’t start the recording",
-                isPresented: Binding(get: { actions.startError != nil }, set: { if !$0 { actions.startError = nil } }),
-                presenting: actions.startError
+                actions.failure?.title ?? "",
+                isPresented: Binding(get: { actions.failure != nil }, set: { if !$0 { actions.failure = nil } }),
+                presenting: actions.failure
             ) { _ in
                 Button("OK") {}
-            } message: { message in
-                Text(message)
+            } message: { failure in
+                Text(failure.message)
             }
             .sheet(isPresented: $actions.editingTemplates) {
                 MeetingTemplateEditor(templates: meetings.templates)

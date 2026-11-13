@@ -52,10 +52,8 @@ struct RecognizerConfig {
     }
 }
 
-/// Distinguishes the one-shot final decode from repeated live-preview decodes.
-/// Partial decodes skip the per-decode log lines entirely (AppLogger persists
-/// every level, so even debug lines would flood app.log at ~1 line/s); partial
-/// failures are logged by the caller instead.
+/// Why a decode runs. The router and the engines treat each purpose in its
+/// own way.
 enum TranscriptionPurpose: String {
     case final
     case partial
@@ -67,8 +65,9 @@ enum TranscriptionPurpose: String {
     /// with no speech gives empty text.
     case meeting
 
-    /// Partial and meeting decodes run hundreds of times in one session, so
-    /// they write no per-decode log line.
+    /// Partial and meeting decodes run hundreds of times in one session, and
+    /// AppLogger keeps every level, so they write no per-decode log line.
+    /// Their callers log the failures.
     var writesDecodeLog: Bool {
         self == .final || self == .probe
     }

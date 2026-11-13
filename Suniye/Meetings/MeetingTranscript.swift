@@ -18,6 +18,13 @@ enum MeetingTranscript {
     }
 
     /// Every segment in time order, without the echo segments.
+    /// The transcript that a reader sees: no echo of the call, and no line
+    /// after the end of the call that the meeting followed.
+    static func final(_ segments: [MeetingSegment], of record: MeetingRecord) -> [MeetingSegment] {
+        let kept = record.transcriptEnd.map { end in segments.filter { $0.audioStart < end } } ?? segments
+        return final(kept, callPlayedOnSpeakers: record.callPlayedOnSpeakers)
+    }
+
     static func final(_ segments: [MeetingSegment], callPlayedOnSpeakers: Bool) -> [MeetingSegment] {
         guard callPlayedOnSpeakers else { return ordered(segments) }
         let call = segments.filter { $0.track == .them }

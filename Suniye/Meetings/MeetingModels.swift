@@ -15,8 +15,6 @@ struct MeetingSegment: Codable, Equatable, Identifiable, Sendable {
     let audioStart: Int
     let audioEnd: Int
     let text: String
-    /// The speech model that wrote the text, for example "parakeetV3".
-    let engine: String
 }
 
 enum MeetingStatus: String, Codable, Sendable {
@@ -31,6 +29,12 @@ enum MeetingStatus: String, Codable, Sendable {
     /// finish again, because the finish itself may have ended the app.
     case interrupted
 
+    /// Titles of the states without a summary, for the meeting page and the
+    /// meetings list.
+    static let summaryFailedTitle = "Couldn’t write the summary"
+    static let noSpeechTitle = "Too little speech to summarize"
+    static let interruptedTitle = "A transcript did not finish"
+
     /// States that only a running session can be in. A record found in one of
     /// them at launch belongs to a session that ended without saving.
     var needsRecovery: Bool {
@@ -41,12 +45,6 @@ enum MeetingStatus: String, Codable, Sendable {
             return false
         }
     }
-}
-
-enum MeetingStartSource: String, Codable, Sendable {
-    case manual
-    case offer
-    case automatic
 }
 
 enum MeetingTitleSource: String, Codable, Sendable {
@@ -67,18 +65,21 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     var title: String
     var titleSource: MeetingTitleSource
     let startedAt: Date
+    /// The tracks that recorded. A meeting with a call track shows who
+    /// speaks: page, export and summary.
+    let tracks: [MeetingTrack]
     var endedAt: Date?
     var callAppName: String?
     var callAppBundleID: String?
-    let startSource: MeetingStartSource
     var status: MeetingStatus
     var templateID: String
     var pauses: [MeetingPause]
     /// The call played on speakers at some point, so the microphone may have
     /// heard it and the transcript needs the echo filter.
     var callPlayedOnSpeakers: Bool
-    /// The model that wrote the summary on disk.
-    var summaryProvider: MeetingSummaryProvider?
+    /// The audio position where the call that the meeting followed ended: the
+    /// transcript keeps no line that starts at or after it.
+    var transcriptEnd: Int?
     /// Why the last summary failed, for the meeting page.
     var summaryFailure: String?
 
@@ -87,33 +88,35 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         title: String,
         titleSource: MeetingTitleSource = .placeholder,
         startedAt: Date,
+        tracks: [MeetingTrack],
         endedAt: Date? = nil,
         callAppName: String? = nil,
         callAppBundleID: String? = nil,
-        startSource: MeetingStartSource,
         status: MeetingStatus = .recording,
         templateID: String,
         pauses: [MeetingPause] = [],
-        callPlayedOnSpeakers: Bool = false,
-        summaryProvider: MeetingSummaryProvider? = nil
+        callPlayedOnSpeakers: Bool = false
     ) {
         self.id = id
         self.title = title
         self.titleSource = titleSource
         self.startedAt = startedAt
+        self.tracks = tracks
         self.endedAt = endedAt
         self.callAppName = callAppName
         self.callAppBundleID = callAppBundleID
-        self.startSource = startSource
         self.status = status
         self.templateID = templateID
         self.pauses = pauses
         self.callPlayedOnSpeakers = callPlayedOnSpeakers
-        self.summaryProvider = summaryProvider
     }
 
     var duration: TimeInterval? {
         endedAt.map { $0.timeIntervalSince(startedAt) }
+    }
+
+    var hasCallTrack: Bool {
+        tracks.contains(.them)
     }
 
     /// Ends the meeting `seconds` after its start on the wall clock. A pause
@@ -128,13 +131,17 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
 }
 
 /// Maps a position in a track's audio file to the meeting's wall clock. The
-/// files skip paused time, so every pause that ends at or before an audio
-/// position shifts it later by the pause length.
+/// files skip paused time, so every closed pause that starts at or before
+/// the moment shifts it later by the pause length.
 struct MeetingTimeline: Equatable, Sendable {
     let pauses: [MeetingPause]
 
     func wallSeconds(forSample position: Int) -> Double {
         wallSeconds(forAudioSeconds: Double(position) / Double(MeetingAudioFormat.sampleRate))
+    }
+
+    func audioPosition(forWallSeconds wall: Double) -> Int {
+        Int(audioSeconds(forWallSeconds: wall) * Double(MeetingAudioFormat.sampleRate))
     }
 
     /// The audio position, in seconds, of a moment on the wall clock: the

@@ -82,11 +82,11 @@ After a quit or a crash during a recording, the next launch finishes the transcr
 
 ## Files
 
-`~/Library/Application Support/Suniye/meetings/<meeting id>/`
+`~/Library/Application Support/Suniye/meetings/<meeting id>/` (`meetings-preview` for Suniye Preview)
 
 | File | Content |
 |---|---|
-| `meeting.json` | Title, times, pauses, call app, status |
+| `meeting.json` | Title, times, tracks, pauses, call app, status |
 | `segments.jsonl` | Transcript lines |
 | `notes.txt` | Your notes |
 | `summary.md` | The summary |

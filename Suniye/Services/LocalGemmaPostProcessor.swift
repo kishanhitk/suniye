@@ -30,6 +30,17 @@ enum LocalGemmaDefaults {
     }
 }
 
+/// How the local model picks each token.
+enum LocalGemmaSampling {
+    /// The most likely token. Magic Format keeps the user's words, repeats
+    /// included.
+    case greedy
+    /// The most likely token, with a penalty on a token that extends a repeat
+    /// of the last 256 tokens: greedy decoding alone can write one note line
+    /// again and again until the output limit.
+    case greedyWithoutRepeats
+}
+
 protocol LocalGemmaClient {
     var availability: LocalGemmaAvailability { get }
     func isRuntimeWarm() async -> Bool
@@ -39,11 +50,11 @@ protocol LocalGemmaClient {
         instructions: String,
         prompt: String,
         maxTokens: Int?,
+        sampling: LocalGemmaSampling,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> ChatCompletionResult
-    /// Tokens in `text` for the model's tokenizer.
     func tokenCount(_ text: String, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> Int
     func stopRuntime() async
 }
@@ -127,6 +138,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             instructions: request.instructions,
             prompt: request.prompt,
             maxTokens: LocalGemmaDefaults.probeMaxTokens,
+            sampling: .greedy,
             startupTimeoutSeconds: config.startupTimeoutSeconds,
             idleTimeoutSeconds: config.idleTimeoutSeconds,
             timeoutSeconds: config.generationTimeoutSeconds
@@ -145,6 +157,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             instructions: instructions,
             prompt: prompt,
             maxTokens: nil,
+            sampling: .greedy,
             startupTimeoutSeconds: config.startupTimeoutSeconds,
             idleTimeoutSeconds: config.idleTimeoutSeconds,
             timeoutSeconds: MagicFormatGenerationBudget.timeoutSeconds(

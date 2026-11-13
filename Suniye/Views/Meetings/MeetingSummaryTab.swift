@@ -34,7 +34,7 @@ struct MeetingSummaryTab: View {
             case .summaryFailed:
                 stateCard(
                     icon: "exclamationmark.triangle",
-                    title: "Couldn’t write the summary",
+                    title: MeetingStatus.summaryFailedTitle,
                     detail: [record.summaryFailure, "Your transcript and notes are saved."].compactMap { $0 }.joined(separator: " ")
                 ) {
                     Button("Try Again") {
@@ -44,7 +44,7 @@ struct MeetingSummaryTab: View {
             case .noSpeech:
                 stateCard(
                     icon: "mic.slash",
-                    title: "Too little speech to summarize",
+                    title: MeetingStatus.noSpeechTitle,
                     detail: "The transcript has fewer than \(MeetingSummaryWriter.minimumWords) words."
                 ) {
                     Button("Delete Meeting…") { actions.confirmDelete(record) }
@@ -52,7 +52,7 @@ struct MeetingSummaryTab: View {
             case .interrupted:
                 stateCard(
                     icon: "exclamationmark.triangle",
-                    title: "A transcript did not finish",
+                    title: MeetingStatus.interruptedTitle,
                     detail: "The audio is saved."
                 ) {
                     Button("Finish Transcript") { meetings.finishTranscript(record.id) }

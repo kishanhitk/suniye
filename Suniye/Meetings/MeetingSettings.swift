@@ -9,7 +9,8 @@ enum MeetingCallStartAction: String, Codable, CaseIterable, Sendable {
 
 struct MeetingSettings: Codable, Equatable, Sendable {
     var callStartAction = MeetingCallStartAction.ask
-    /// Bundle IDs of the call apps that never get the offer card.
+    /// Bundle IDs of the call apps that get no offer card and no automatic
+    /// recording.
     var neverAskBundleIDs: [String] = []
     /// The user read the first-recording notice and chose Continue.
     var noticeAccepted = false
@@ -18,7 +19,8 @@ struct MeetingSettings: Codable, Equatable, Sendable {
 
     init() {}
 
-    /// A key that an older build did not write keeps its default.
+    /// A missing key keeps its default, so settings that one build saved
+    /// still load after a later build adds a key.
     init(from decoder: Decoder) throws {
         self.init()
         let container = try decoder.container(keyedBy: CodingKeys.self)

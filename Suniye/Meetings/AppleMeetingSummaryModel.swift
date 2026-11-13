@@ -3,13 +3,8 @@ import Foundation
 #if canImport(FoundationModels)
 import FoundationModels
 
-/// Apple Intelligence as a summary model.
 @available(macOS 26.0, *)
 struct AppleMeetingSummaryModel: MeetingSummaryModel {
-    var provider: MeetingSummaryProvider {
-        .appleIntelligence
-    }
-
     private var model: SystemLanguageModel {
         SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations)
     }

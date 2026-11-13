@@ -9,10 +9,6 @@ struct LocalGemmaMeetingSummaryModel: MeetingSummaryModel {
 
     let client: LocalGemmaClient
 
-    var provider: MeetingSummaryProvider {
-        .localModel
-    }
-
     func contextTokens() async -> Int {
         LocalGemmaDefaults.contextSize
     }
@@ -31,6 +27,7 @@ struct LocalGemmaMeetingSummaryModel: MeetingSummaryModel {
             instructions: request.instructions,
             prompt: request.input,
             maxTokens: request.maxOutputTokens,
+            sampling: .greedyWithoutRepeats,
             startupTimeoutSeconds: LocalGemmaDefaults.startupTimeoutSeconds,
             idleTimeoutSeconds: LocalGemmaDefaults.idleTimeoutSeconds,
             timeoutSeconds: MagicFormatGenerationBudget.timeoutSeconds(

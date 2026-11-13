@@ -225,6 +225,7 @@ public enum MeetingStopReason: String, Sendable, CaseIterable {
     case timeLimit = "time_limit"
     case noSpeech = "no_speech"
     case diskFull = "disk_full"
+    case writeFailed = "write_failed"
     case quit
 }
 
@@ -236,7 +237,8 @@ public enum MeetingTracks: String, Sendable, CaseIterable {
     case noTrack = "none"
 }
 
-public enum MeetingTranscriptOutcome: String, Sendable, CaseIterable {
+/// How a meeting's transcript or summary ended.
+public enum MeetingOutcome: String, Sendable, CaseIterable {
     case done
     case noSpeech = "no_speech"
     case failed
@@ -245,12 +247,6 @@ public enum MeetingTranscriptOutcome: String, Sendable, CaseIterable {
 public enum MeetingSummaryEngine: String, Sendable, CaseIterable {
     case appleIntelligence = "apple_intelligence"
     case localModel = "local_model"
-}
-
-public enum MeetingSummaryOutcome: String, Sendable, CaseIterable {
-    case done
-    case noSpeech = "no_speech"
-    case failed
 }
 
 /// The card about a call at the top right of the screen.

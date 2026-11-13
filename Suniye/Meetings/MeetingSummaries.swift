@@ -5,31 +5,29 @@ import SuniyeAnalytics
 /// dictation runs: a dictation stops the summary in progress, and it goes on
 /// where it stopped once the dictation ends.
 @MainActor
-@Observable
 final class MeetingSummaries {
-    /// The meeting whose summary is being written now.
-    private(set) var writing: UUID?
+    private var writing: UUID?
 
-    @ObservationIgnored private let store: MeetingStore
-    @ObservationIgnored private let templates: MeetingTemplateStore
-    @ObservationIgnored private let availability: () -> MeetingSummaryAvailability
-    @ObservationIgnored private let makeModel: (MeetingSummaryProvider) -> MeetingSummaryModel?
-    @ObservationIgnored private let analytics: Analytics
+    private let store: MeetingStore
+    private let templates: MeetingTemplateStore
+    private let availability: () -> MeetingSummaryAvailability
+    private let makeModel: (MeetingSummaryEngine) -> MeetingSummaryModel?
+    private let analytics: Analytics
     /// Gets the record once its summary state is final.
-    @ObservationIgnored var onFinished: ((MeetingRecord) -> Void)?
-    /// Runs after each run of the model, so that Magic Format can load its
-    /// own prompt into the model's cache again.
-    @ObservationIgnored var onModelIdle: (() -> Void)?
-    @ObservationIgnored private var queue: [UUID] = []
-    @ObservationIgnored private var writers: [UUID: (provider: MeetingSummaryProvider, writer: MeetingSummaryWriter)] = [:]
-    @ObservationIgnored private var task: Task<Void, Never>?
-    @ObservationIgnored private var held = false
+    var onFinished: ((MeetingRecord) -> Void)?
+    /// Runs after each summary, so that Magic Format can load its own prompt
+    /// into the model's cache again.
+    var onModelIdle: (() -> Void)?
+    private var queue: [UUID] = []
+    private var writers: [UUID: (engine: MeetingSummaryEngine, writer: MeetingSummaryWriter)] = [:]
+    private var task: Task<Void, Never>?
+    private var held = false
 
     init(
         store: MeetingStore,
         templates: MeetingTemplateStore,
         availability: @escaping () -> MeetingSummaryAvailability,
-        makeModel: @escaping (MeetingSummaryProvider) -> MeetingSummaryModel?,
+        makeModel: @escaping (MeetingSummaryEngine) -> MeetingSummaryModel?,
         analytics: Analytics
     ) {
         self.store = store
@@ -37,10 +35,6 @@ final class MeetingSummaries {
         self.availability = availability
         self.makeModel = makeModel
         self.analytics = analytics
-    }
-
-    func isQueued(_ id: UUID) -> Bool {
-        queue.contains(id)
     }
 
     func enqueue(_ id: UUID) {
@@ -76,14 +70,14 @@ final class MeetingSummaries {
 
     private func runNext() {
         guard task == nil, !held, let id = queue.first,
-              case let .ready(provider) = availability(),
-              let writer = writer(for: id, provider: provider) else { return }
+              case let .ready(engine) = availability(),
+              let writer = writer(for: id, engine: engine) else { return }
         task = Task { [weak self] in
-            await self?.summarize(id, with: writer, provider: provider)
+            await self?.summarize(id, with: writer, engine: engine)
         }
     }
 
-    private func summarize(_ id: UUID, with writer: MeetingSummaryWriter, provider: MeetingSummaryProvider) async {
+    private func summarize(_ id: UUID, with writer: MeetingSummaryWriter, engine: MeetingSummaryEngine) async {
         writing = id
         defer {
             writing = nil
@@ -101,10 +95,10 @@ final class MeetingSummaries {
             segments: segments,
             notes: await store.notes(of: id),
             template: await templates.template(id: record.templateID),
-            speakerLabels: segments.contains { $0.track == .them }
+            speakerLabels: record.hasCallTrack
         )
         let change: (inout MeetingRecord) -> Void
-        let outcome: MeetingSummaryOutcome
+        let outcome: MeetingOutcome
         var parts: Int?
         do {
             let summary = try await writer.write(input)
@@ -112,7 +106,6 @@ final class MeetingSummaries {
             change = {
                 $0.adoptGeneratedTitle(summary.title)
                 $0.status = .done
-                $0.summaryProvider = provider
                 $0.summaryFailure = nil
             }
             outcome = .done
@@ -123,7 +116,7 @@ final class MeetingSummaries {
             change = { $0.status = .noSpeech }
             outcome = .noSpeech
         } catch {
-            AppLogger.shared.log(.error, "meeting summary failed id=\(id.uuidString) provider=\(provider.rawValue) error=\(error.localizedDescription)")
+            AppLogger.shared.log(.error, "meeting summary failed id=\(id.uuidString) engine=\(engine.rawValue) error=\(error.localizedDescription)")
             let cause = error.localizedDescription
             change = {
                 $0.status = .summaryFailed
@@ -132,7 +125,7 @@ final class MeetingSummaries {
             outcome = .failed
         }
         analytics.track(.meetingSummarized(
-            provider: provider.analyticsEngine,
+            provider: engine,
             outcome: outcome,
             parts: parts,
             durationMs: Int((ContinuousClock.now - started) / .milliseconds(1))
@@ -147,13 +140,13 @@ final class MeetingSummaries {
 
     /// One writer per meeting and model, so a stopped summary reuses the
     /// answers that it already has.
-    private func writer(for id: UUID, provider: MeetingSummaryProvider) -> MeetingSummaryWriter? {
-        if let existing = writers[id], existing.provider == provider {
+    private func writer(for id: UUID, engine: MeetingSummaryEngine) -> MeetingSummaryWriter? {
+        if let existing = writers[id], existing.engine == engine {
             return existing.writer
         }
-        guard let model = makeModel(provider) else { return nil }
+        guard let model = makeModel(engine) else { return nil }
         let writer = MeetingSummaryWriter(model: model)
-        writers[id] = (provider, writer)
+        writers[id] = (engine, writer)
         return writer
     }
 }

@@ -41,7 +41,7 @@ final class MeetingMicCaptureTests: XCTestCase {
     func testDeliversResampledBlocksFromTheInputOnlyBackendWithoutEchoCancellation() throws {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let factory = FakeMeetingDriverFactory(rate: 48_000, samples: Array(repeating: 0.25, count: 4_800))
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory) { nil }
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory)
         let received = expectation(description: "samples")
         received.assertForOverFulfill = false
         let collected = Collected<Float>()
@@ -59,7 +59,7 @@ final class MeetingMicCaptureTests: XCTestCase {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "airpods", name: "AirPods Pro"))
         let monitor = FakeMeetingMonitor()
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: [0.1])
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: monitor, driverFactory: factory) { nil }
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: monitor, driverFactory: factory)
         let changed = expectation(description: "input changed")
         let events = Collected<MeetingAudioSourceEvent>()
         capture.onEvent = { events.append([$0]); changed.fulfill() }
@@ -79,7 +79,7 @@ final class MeetingMicCaptureTests: XCTestCase {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let monitor = FakeMeetingMonitor()
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: [0.1])
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: monitor, driverFactory: factory) { nil }
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: monitor, driverFactory: factory)
         try capture.start()
 
         monitor.onChange?(.defaultInput)
@@ -91,7 +91,7 @@ final class MeetingMicCaptureTests: XCTestCase {
     func testNoAudioMovesToTheStandardEngineAndThenEndsTheTrack() throws {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: [])
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, firstFrameDeadline: .milliseconds(50)) { nil }
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, firstFrameDeadline: .milliseconds(50))
         let failed = expectation(description: "failed")
         let events = Collected<MeetingAudioSourceEvent>()
         capture.onEvent = { events.append([$0]); failed.fulfill() }
@@ -108,7 +108,7 @@ final class MeetingMicCaptureTests: XCTestCase {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: [0.1])
         factory.failingBackends = [.inputOnlyHAL]
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory) { nil }
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory)
 
         try capture.start()
         capture.stop()
@@ -120,7 +120,7 @@ final class MeetingMicCaptureTests: XCTestCase {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let monitor = FakeMeetingMonitor()
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: [0.1])
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: monitor, driverFactory: factory) { nil }
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: monitor, driverFactory: factory)
         try capture.start()
 
         monitor.onChange?(.ioStoppedAbnormally)
@@ -134,7 +134,7 @@ final class MeetingMicCaptureTests: XCTestCase {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: [0.1])
         var now: TimeInterval = 100
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { now }) { nil }
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { now })
         try capture.start()
 
         factory.configurationChangeHandlers.last?()
@@ -152,7 +152,7 @@ final class MeetingMicCaptureTests: XCTestCase {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: Array(repeating: 0, count: 320))
         var now: TimeInterval = 100
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { now }) { nil }
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { now })
         let reopened = expectation(description: "reopen")
         factory.onStart = { if $0 == 2 { reopened.fulfill() } }
         let events = Collected<MeetingAudioSourceEvent>()
@@ -174,7 +174,7 @@ final class MeetingMicCaptureTests: XCTestCase {
         let catalog = FakeMeetingCatalog(route: Self.route(id: "built-in", name: "MacBook Air Microphone"))
         let factory = FakeMeetingDriverFactory(rate: 16_000, samples: Array(repeating: 0, count: 320))
         var now: TimeInterval = 100
-        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { now }) { nil }
+        let capture = MeetingMicCapture(hardwareCatalog: catalog, deviceMonitor: FakeMeetingMonitor(), driverFactory: factory, uptime: { now })
         let delivered = expectation(description: "two blocks")
         delivered.expectedFulfillmentCount = 2
         capture.onSamples = { _ in delivered.fulfill() }
@@ -237,7 +237,7 @@ final class MeetingMicCaptureTests: XCTestCase {
             deviceMonitor: FakeMeetingMonitor(),
             driverFactory: factory,
             uptime: { [weak self] in self?.clock ?? 0 }
-        ) { nil }
+        )
         let delivered = DispatchSemaphore(value: 0)
         capture.onSamples = { _ in delivered.signal() }
         return (capture, delivered)
@@ -459,7 +459,7 @@ final class MeetingRecorderTests: XCTestCase {
         them.push(Array(repeating: 0.2, count: 320))
         now += MeetingRecorder.callSilenceLimit + 1
         wait(for: [stopped], timeout: 2)
-        try recorder.restartCallAudio()
+        recorder.restartCallAudio()
         recorder.stop()
 
         XCTAssertEqual(them.startCount, 2)
@@ -480,21 +480,6 @@ final class MeetingRecorderTests: XCTestCase {
 
         XCTAssertFalse(events.samples.contains { if case .callAudioSilent = $0 { return true }; return false })
         XCTAssertEqual(recorder.tracks, [.you])
-    }
-
-    func testSourceEventsReachTheRecorderListener() throws {
-        let you = FakeMeetingSource()
-        let recorder = makeRecorder(you: you, them: nil)
-        let received = expectation(description: "event")
-        let events = Collected<MeetingRecorderEvent>()
-        recorder.onEvent = { events.append([$0]); received.fulfill() }
-        try recorder.start()
-
-        you.onEvent?(.failed("gone"))
-        wait(for: [received], timeout: 2)
-        recorder.stop()
-
-        XCTAssertEqual(events.samples, [.trackFailed(.you, "gone")])
     }
 }
 

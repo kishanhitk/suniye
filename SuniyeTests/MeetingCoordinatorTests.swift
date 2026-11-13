@@ -102,9 +102,8 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(finished)
         XCTAssertEqual(noticeCount, 1, "the notice shows before the first recording only")
         XCTAssertEqual(coordinator.record(id)?.title, "Release plan")
-        XCTAssertEqual(coordinator.record(id)?.summaryProvider, .localModel)
         let summary = await store.summary(of: id)
-        let audioLeft = await store.hasAudio(of: id)
+        let audioLeft = !store.audioTracks(of: id).isEmpty
         let segments = await store.segments(of: id)
         XCTAssertEqual(summary, "## Overview\nShip on Friday.")
         XCTAssertFalse(audioLeft, "the audio goes once the transcript is final")
@@ -118,6 +117,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(event("meeting_transcribed")?["outcome"], .label("done"))
         XCTAssertEqual(event("meeting_transcribed")?["segments"], .int(1))
         XCTAssertEqual(event("meeting_summarized")?["parts"], .int(1))
+        XCTAssertEqual(event("meeting_summarized")?["provider"], .label("local_model"))
         await coordinator.stop()
     }
 
@@ -152,12 +152,14 @@ final class MeetingCoordinatorTests: XCTestCase {
         them.push(tone(2.5, level: 0.5) + silence(0.5))
         try await Task.sleep(for: .milliseconds(200))
         let decodesDuringDictation = await engine.calls
+        coordinator.dictationCaptureEnded()
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
         coordinator.dictationChanged(active: false)
         await coordinator.stop()
         let segments = await store.segments(of: id)
 
         XCTAssertEqual(decodesDuringDictation, 0)
-        XCTAssertEqual(segments.map(\.track), [.them], "the dictated words are not meeting talk")
+        XCTAssertEqual(segments.map(\.track), [.them, .you], "the dictated words are not meeting talk; talk after the capture ends is")
     }
 
     func testPausesAreKeptInTheRecordAndLeftOutOfTheTimer() async throws {
@@ -182,7 +184,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     }
 
     func testAtLaunchARecordingThatAQuitLeftIsFinishedWithNoClick() async throws {
-        let left = MeetingRecord(title: "Meeting", startedAt: clock, startSource: .manual, status: .recording, templateID: "general")
+        let left = MeetingRecord(title: "Meeting", startedAt: clock, tracks: [.you], status: .recording, templateID: "general")
         try await store.create(left)
         let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: left.id))
         try writer.append(tone(2.5, level: 0.3) + silence(0.5))
@@ -289,7 +291,7 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(stopped)
         XCTAssertEqual(coordinator.record(id)?.endedAt, clock)
-        XCTAssertEqual(notices.first, .stoppedAtTimeLimit(id))
+        XCTAssertEqual(notices.first, .stoppedAtTimeLimit(id, after: 4 * 60 * 60))
         XCTAssertEqual(event("meeting_ended")?["reason"], .label("time_limit"))
         XCTAssertEqual(event("meeting_ended")?["duration_ms"], .int(240 * 60_000))
     }
@@ -314,7 +316,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(decoded)
         XCTAssertTrue(recordingAfterThreeQuietSeconds)
         XCTAssertTrue(stopped)
-        XCTAssertEqual(notices.first, .stoppedWithoutSpeech(session.id))
+        XCTAssertEqual(notices.first, .stoppedWithoutSpeech(session.id, after: 6))
         XCTAssertEqual(session.segments.map(\.text), [longSentence])
     }
 
@@ -334,7 +336,6 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(event("meeting_started")?["source"], .label("offer"))
         XCTAssertEqual(record?.title, "Zoom call")
         XCTAssertEqual(record?.callAppBundleID, zoom.bundleID)
-        XCTAssertEqual(record?.startSource, .offer)
         await coordinator.stop()
     }
 
@@ -375,12 +376,11 @@ final class MeetingCoordinatorTests: XCTestCase {
             return false
         }
         let id = try XCTUnwrap(coordinator.live?.id)
-        let source = coordinator.live?.record.startSource
         await coordinator.cancelAutomaticRecording()
         let stored = await store.loadAll()
 
         XCTAssertTrue(started)
-        XCTAssertEqual(source, .automatic)
+        XCTAssertEqual(event("meeting_started")?["source"], .label("automatic"))
         XCTAssertNil(coordinator.live)
         XCTAssertNil(coordinator.record(id))
         XCTAssertTrue(stored.isEmpty)
@@ -472,6 +472,23 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertFalse(microphone.listening)
         XCTAssertEqual(microphone.reads, 0)
         XCTAssertNil(coordinator.callCard)
+    }
+
+    func testATrackThatStartsAgainNoLongerShowsAsFailed() async throws {
+        let coordinator = makeCoordinator()
+        them.failsToStart = true
+        try await coordinator.startMeeting(source: .manual)
+        let session = try XCTUnwrap(coordinator.live)
+        let failed = await waitUntil { session.failedTracks[.them] != nil }
+
+        await coordinator.pause()
+        them.failsToStart = false
+        try await coordinator.resume()
+        let cleared = await waitUntil { session.failedTracks.isEmpty }
+
+        XCTAssertTrue(failed)
+        XCTAssertTrue(cleared)
+        await coordinator.stop()
     }
 
     func testSourceProblemsShowOnTheLiveMeeting() async throws {
@@ -599,9 +616,13 @@ private final class PushSource: MeetingAudioSource, @unchecked Sendable {
     var onEvent: ((MeetingAudioSourceEvent) -> Void)?
     private(set) var startCount = 0
     private(set) var stopCount = 0
+    var failsToStart = false
 
     func start() throws {
         startCount += 1
+        if failsToStart {
+            throw CocoaError(.fileWriteUnknown)
+        }
     }
 
     func stop() {
@@ -660,7 +681,6 @@ private actor WordEngine: TranscriptionServiceProtocol {
 /// Answers one summary; while closed, a request waits until it opens or its
 /// task is canceled.
 private actor GatedSummaryModel: MeetingSummaryModel {
-    nonisolated let provider = MeetingSummaryProvider.localModel
     private(set) var requests = 0
     private(set) var waiting = false
     private var isOpen = true

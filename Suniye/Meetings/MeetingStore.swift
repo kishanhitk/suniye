@@ -1,16 +1,8 @@
 import Foundation
 
-/// Meetings on disk, one folder per meeting:
-///
-///     meetings/<id>/meeting.json    the record
-///     meetings/<id>/segments.jsonl  one transcript segment per line, appended as each finishes
-///     meetings/<id>/notes.txt       the user's notes
-///     meetings/<id>/summary.md      the summary
-///     meetings/<id>/you.wav         microphone track
-///     meetings/<id>/them.wav        call audio track
-///
-/// Appends and small atomic writes keep a crash from losing more than the
-/// segment in flight.
+/// Meetings on disk, one folder per meeting; docs/MEETINGS.md lists the
+/// files. Appends and small atomic writes keep a crash from losing more than
+/// the segment in flight.
 actor MeetingStore {
     enum StoreError: LocalizedError, Equatable {
         case unknownMeeting(UUID)
@@ -23,22 +15,23 @@ actor MeetingStore {
         }
     }
 
-    static func defaultRootDirectory(fileManager: FileManager = .default) -> URL {
-        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? fileManager.temporaryDirectory
-        return base
-            .appendingPathComponent("Suniye", isDirectory: true)
-            .appendingPathComponent("meetings", isDirectory: true)
+    static let supportDirectory: URL = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        ?? FileManager.default.temporaryDirectory)
+        .appendingPathComponent("Suniye", isDirectory: true)
+
+    /// One folder per app: Stable and Preview run side by side, and each one
+    /// recovers the recordings that it finds at launch.
+    static func defaultRootDirectory(identity: AppIdentity = .current) -> URL {
+        supportDirectory.appendingPathComponent(identity.isPreview ? "meetings-preview" : "meetings", isDirectory: true)
     }
 
     nonisolated let rootDirectory: URL
-    private let fileManager: FileManager
+    private let fileManager = FileManager.default
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    init(rootDirectory: URL = MeetingStore.defaultRootDirectory(), fileManager: FileManager = .default) {
+    init(rootDirectory: URL = MeetingStore.defaultRootDirectory()) {
         self.rootDirectory = rootDirectory
-        self.fileManager = fileManager
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()
@@ -68,7 +61,7 @@ actor MeetingStore {
         try save(record)
     }
 
-    func save(_ record: MeetingRecord) throws {
+    private func save(_ record: MeetingRecord) throws {
         guard fileManager.fileExists(atPath: folder(for: record.id).path) else {
             throw StoreError.unknownMeeting(record.id)
         }
@@ -185,7 +178,6 @@ actor MeetingStore {
         try text.write(to: summaryURL(id), atomically: true, encoding: .utf8)
     }
 
-    /// Bytes that all meetings take on disk.
     func diskUsage() -> Int64 {
         guard let files = fileManager.enumerator(at: rootDirectory, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
         var total: Int64 = 0
@@ -195,8 +187,9 @@ actor MeetingStore {
         return total
     }
 
-    func hasAudio(of id: UUID) -> Bool {
-        MeetingTrack.allCases.contains { fileManager.fileExists(atPath: audioURL($0, for: id).path) }
+    /// The tracks whose audio file is still on disk.
+    nonisolated func audioTracks(of id: UUID) -> [MeetingTrack] {
+        MeetingTrack.allCases.filter { FileManager.default.fileExists(atPath: audioURL($0, for: id).path) }
     }
 
     func deleteAudio(of id: UUID) {
@@ -227,6 +220,7 @@ actor MeetingStore {
                     AppLogger.shared.log(.warning, "meeting recovery could not repair audio id=\(record.id.uuidString) track=\(track.rawValue) error=\(error.localizedDescription)")
                 }
             }
+            cutTornSegment(of: record.id)
             record.status = record.status == .finishing ? .interrupted : .finishing
             // A pause that never ended has no audio after it, so it moves no
             // audio position and only blurs the meeting length.
@@ -246,6 +240,21 @@ actor MeetingStore {
             }
         }
         return recovered
+    }
+
+    /// A crash during a write can leave a line with no end. A line appended
+    /// after it would join it and be lost on read, so the torn part goes.
+    private func cutTornSegment(of id: UUID) {
+        let url = segmentsURL(id)
+        guard let data = fileManager.contents(atPath: url.path), let last = data.last, last != 0x0A else { return }
+        let keep = (data.lastIndex(of: 0x0A).map { $0 + 1 }) ?? 0
+        do {
+            let handle = try FileHandle(forWritingTo: url)
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: UInt64(keep))
+        } catch {
+            AppLogger.shared.log(.warning, "meeting recovery could not cut a torn segment id=\(id.uuidString) error=\(error.localizedDescription)")
+        }
     }
 
     private func recordURL(_ id: UUID) -> URL {

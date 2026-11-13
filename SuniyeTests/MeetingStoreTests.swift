@@ -18,7 +18,7 @@ final class MeetingStoreTests: XCTestCase {
     }
 
     private func makeRecord(startedAt: Date = Date(timeIntervalSince1970: 1_800_000_000), status: MeetingStatus = .recording) -> MeetingRecord {
-        MeetingRecord(title: "Zoom call", startedAt: startedAt, startSource: .manual, status: status, templateID: "general")
+        MeetingRecord(title: "Zoom call", startedAt: startedAt, tracks: [.you, .them], status: status, templateID: "general")
     }
 
     func testRecordsRoundTripNewestFirst() async throws {
@@ -34,9 +34,17 @@ final class MeetingStoreTests: XCTestCase {
         XCTAssertEqual(loaded.first, newer)
     }
 
-    func testSaveOfUnknownMeetingFails() async {
+    func testStableAndPreviewKeepTheirMeetingsApart() {
+        let stable = AppIdentity(displayName: "Suniye", isPreview: false)
+        let preview = AppIdentity(displayName: "Suniye Preview", isPreview: true)
+
+        XCTAssertNotEqual(MeetingStore.defaultRootDirectory(identity: stable), MeetingStore.defaultRootDirectory(identity: preview))
+        XCTAssertNotEqual(MeetingTemplateStore.defaultFileURL(identity: stable), MeetingTemplateStore.defaultFileURL(identity: preview))
+    }
+
+    func testAWriteToAnUnknownMeetingFails() async {
         do {
-            try await store.save(makeRecord())
+            _ = try await store.update(UUID()) { $0.title = "Lost" }
             XCTFail("expected unknownMeeting")
         } catch {
             XCTAssertTrue(error is MeetingStore.StoreError)
@@ -46,8 +54,8 @@ final class MeetingStoreTests: XCTestCase {
     func testSegmentsAppendInTimeOrderAndSkipATornLine() async throws {
         let record = makeRecord()
         try await store.create(record)
-        let later = MeetingSegment(id: UUID(), track: .them, audioStart: 176_000, audioEnd: 243_200, text: "QA found one crash.", engine: "parakeetV3")
-        let earlier = MeetingSegment(id: UUID(), track: .you, audioStart: 64_000, audioEnd: 144_000, text: "The build is ready.", engine: "parakeetV3")
+        let later = MeetingSegment(id: UUID(), track: .them, audioStart: 176_000, audioEnd: 243_200, text: "QA found one crash.")
+        let earlier = MeetingSegment(id: UUID(), track: .you, audioStart: 64_000, audioEnd: 144_000, text: "The build is ready.")
         try await store.appendSegment(later, to: record.id)
         try await store.appendSegment(earlier, to: record.id)
 
@@ -62,11 +70,29 @@ final class MeetingStoreTests: XCTestCase {
         XCTAssertEqual(segments, [earlier, later])
     }
 
+    func testALineWrittenAfterRecoveryIsNotLostBehindATornOne() async throws {
+        let record = makeRecord(status: .recording)
+        try await store.create(record)
+        let before = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 16_000, text: "Before the crash.")
+        try await store.appendSegment(before, to: record.id)
+        let handle = try FileHandle(forWritingTo: store.folder(for: record.id).appendingPathComponent("segments.jsonl"))
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("{\"id\":\"cut-by-a-cra".utf8))
+        try handle.close()
+
+        _ = await store.recoverInterruptedMeetings()
+        let after = MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 32_000, text: "After the launch.")
+        try await store.appendSegment(after, to: record.id)
+        let segments = await store.segments(of: record.id)
+
+        XCTAssertEqual(segments, [before, after])
+    }
+
     func testReplaceSegmentsRewritesTheTranscript() async throws {
         let record = makeRecord()
         try await store.create(record)
-        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 32_000, text: "echo", engine: "e"), to: record.id)
-        let kept = MeetingSegment(id: UUID(), track: .them, audioStart: 16_000, audioEnd: 32_000, text: "Hello.", engine: "e")
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 32_000, text: "echo"), to: record.id)
+        let kept = MeetingSegment(id: UUID(), track: .them, audioStart: 16_000, audioEnd: 32_000, text: "Hello.")
 
         try await store.replaceSegments([kept], of: record.id)
 
@@ -100,12 +126,12 @@ final class MeetingStoreTests: XCTestCase {
         try writer.close()
         try await store.saveNotes("notes", for: record.id)
 
-        let hadAudio = await store.hasAudio(of: record.id)
+        let tracksBefore = store.audioTracks(of: record.id)
         await store.deleteAudio(of: record.id)
-        let hasAudio = await store.hasAudio(of: record.id)
+        let tracksAfter = store.audioTracks(of: record.id)
         let notes = await store.notes(of: record.id)
-        XCTAssertTrue(hadAudio)
-        XCTAssertFalse(hasAudio)
+        XCTAssertEqual(tracksBefore, [.you])
+        XCTAssertEqual(tracksAfter, [])
         XCTAssertEqual(notes, "notes")
 
         try await store.delete(record.id)
@@ -135,7 +161,7 @@ final class MeetingStoreTests: XCTestCase {
         try await store.create(done)
 
         let audio = store.audioURL(.them, for: paused.id)
-        let writer = try MeetingAudioFileWriter(url: audio, headerRefreshSeconds: 3600)
+        let writer = try MeetingAudioFileWriter(url: audio)
         try writer.append(Array(repeating: 0.25, count: 16_000))
         // No close: the header still says zero samples, as after a crash.
         let samplesBeforeRepair = try MeetingAudioFileReader.samples(at: audio).count
@@ -156,6 +182,16 @@ final class MeetingStoreTests: XCTestCase {
 
 final class MeetingAudioFileTests: XCTestCase {
     private var url: URL!
+
+    func testOnlyAFullVolumeCountsAsOutOfSpace() {
+        let full = NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))
+        let wrapped = NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError, userInfo: [NSUnderlyingErrorKey: full])
+
+        XCTAssertTrue(MeetingAudioFileWriter.isOutOfSpace(full))
+        XCTAssertTrue(MeetingAudioFileWriter.isOutOfSpace(wrapped))
+        XCTAssertTrue(MeetingAudioFileWriter.isOutOfSpace(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError)))
+        XCTAssertFalse(MeetingAudioFileWriter.isOutOfSpace(NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))))
+    }
 
     override func setUp() {
         super.setUp()
@@ -193,17 +229,6 @@ final class MeetingAudioFileTests: XCTestCase {
         XCTAssertEqual(middle.count, 3)
         XCTAssertEqual(middle[0], 0.010, accuracy: 0.0002)
         XCTAssertEqual(pastEnd.count, 5)
-    }
-
-    func testHeaderIsRefreshedWhileWritingSoACrashLosesLittleAudio() throws {
-        let writer = try MeetingAudioFileWriter(url: url, headerRefreshSeconds: 1)
-        try writer.append(Array(repeating: 0.1, count: 16_000))
-        try writer.append(Array(repeating: 0.1, count: 8_000))
-
-        let header = try Data(contentsOf: url).subdata(in: 40 ..< 44)
-        let dataBytes = header.withUnsafeBytes { $0.load(as: UInt32.self) }.littleEndian
-
-        XCTAssertEqual(dataBytes, 32_000, "the header covers the first full second; the last half second waits for the next refresh")
     }
 
     func testReaderRejectsAFileThatIsNotAWave() throws {

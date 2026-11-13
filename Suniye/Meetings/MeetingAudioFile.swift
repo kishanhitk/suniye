@@ -1,9 +1,8 @@
 import Foundation
 
 /// One meeting track on disk: 16 kHz, mono, 16-bit PCM WAV. The writer
-/// appends as audio arrives and rewrites the two size fields of the header
-/// every few seconds, so a file cut by a crash loses at most that much audio
-/// and `repairHeader(at:)` makes the rest readable.
+/// appends as audio arrives and writes the sizes in the header when it
+/// closes; the reader and crash recovery use the file length instead.
 enum MeetingAudioFormat {
     static let sampleRate = 16_000
     static let headerSize = 44
@@ -11,6 +10,15 @@ enum MeetingAudioFormat {
     /// RMS below this (about -60 dBFS) is silence: the call track has no
     /// sound, and a chunk is not decoded.
     static let silenceLevel: Float = 0.001
+
+    static func rms<Samples: Collection>(_ samples: Samples) -> Float where Samples.Element == Float {
+        guard !samples.isEmpty else { return 0 }
+        var sum: Float = 0
+        for sample in samples {
+            sum += sample * sample
+        }
+        return (sum / Float(samples.count)).squareRoot()
+    }
 }
 
 enum MeetingAudioFileError: LocalizedError, Equatable {
@@ -25,16 +33,21 @@ enum MeetingAudioFileError: LocalizedError, Equatable {
 }
 
 final class MeetingAudioFileWriter {
-    let url: URL
-    private let handle: FileHandle
-    private let headerRefreshSamples: Int
-    private var samplesWritten = 0
-    private var samplesSinceHeaderRefresh = 0
+    /// True for a write that failed because the volume is full.
+    static func isOutOfSpace(_ error: Error) -> Bool {
+        let error = error as NSError
+        switch (error.domain, error.code) {
+        case (NSCocoaErrorDomain, NSFileWriteOutOfSpaceError), (NSPOSIXErrorDomain, Int(ENOSPC)):
+            return true
+        default:
+            return (error.userInfo[NSUnderlyingErrorKey] as? Error).map(isOutOfSpace) ?? false
+        }
+    }
 
-    /// `headerRefreshSeconds` bounds how much audio a crash can cost.
-    init(url: URL, headerRefreshSeconds: Double = 5) throws {
-        self.url = url
-        headerRefreshSamples = max(1, Int(headerRefreshSeconds * Double(MeetingAudioFormat.sampleRate)))
+    private let handle: FileHandle
+    private var samplesWritten = 0
+
+    init(url: URL) throws {
         FileManager.default.createFile(atPath: url.path, contents: Self.header(dataBytes: 0))
         handle = try FileHandle(forWritingTo: url)
         try handle.seekToEnd()
@@ -57,24 +70,13 @@ final class MeetingAudioFileWriter {
         }
         try handle.write(contentsOf: data)
         samplesWritten += samples.count
-        samplesSinceHeaderRefresh += samples.count
-        if samplesSinceHeaderRefresh >= headerRefreshSamples {
-            try refreshHeader()
-        }
     }
 
     func close() throws {
-        try refreshHeader()
-        try handle.synchronize()
-        try handle.close()
-    }
-
-    private func refreshHeader() throws {
-        let end = try handle.offset()
         try handle.seek(toOffset: 0)
         try handle.write(contentsOf: Self.header(dataBytes: samplesWritten * MeetingAudioFormat.bytesPerSample))
-        try handle.seek(toOffset: end)
-        samplesSinceHeaderRefresh = 0
+        try handle.synchronize()
+        try handle.close()
     }
 
     static func header(dataBytes: Int) -> Data {
@@ -113,8 +115,7 @@ final class MeetingAudioFileWriter {
 }
 
 enum MeetingAudioFileReader {
-    /// Reads samples `range` (in samples) as floats. A range past the end is
-    /// cut to the file.
+    /// `range` counts samples. A range past the end is cut to the file.
     static func samples(at url: URL, range: Range<Int>? = nil) throws -> [Float] {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }

@@ -11,9 +11,9 @@ struct MeetingListText: Equatable, Sendable {
     func snippet(for status: MeetingStatus) -> String? {
         switch status {
         case .summaryFailed:
-            return "Couldn’t write the summary."
+            return MeetingStatus.summaryFailedTitle + "."
         case .noSpeech:
-            return "Too little speech to summarize."
+            return MeetingStatus.noSpeechTitle + "."
         case .done:
             return summary.flatMap(Self.firstSentence)
         case .recording, .paused, .finishing, .summarizing, .interrupted:
@@ -60,5 +60,17 @@ enum MeetingDurationText {
             return "\(minutes) min"
         }
         return rest == 0 ? "\(hours) h" : "\(hours) h \(rest) min"
+    }
+
+    /// "4 hours", "15 minutes", "1 hour, 30 minutes", in English like the
+    /// rest of the app's copy.
+    static func spelledOut(_ seconds: TimeInterval) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .full
+        formatter.allowedUnits = [.hour, .minute]
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "en_US")
+        formatter.calendar = calendar
+        return formatter.string(from: seconds) ?? text(seconds)
     }
 }

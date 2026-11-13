@@ -56,6 +56,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
                 instructions: "Reply with OK.",
                 prompt: "Connection test.",
                 maxTokens: 8,
+                sampling: .greedy,
                 startupTimeoutSeconds: 8,
                 idleTimeoutSeconds: 600,
                 timeoutSeconds: 5
@@ -113,6 +114,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
                     instructions: "Reply with OK.",
                     prompt: "Connection test.",
                     maxTokens: 8,
+                    sampling: .greedy,
                     startupTimeoutSeconds: 0.8,
                     idleTimeoutSeconds: 600,
                     timeoutSeconds: 5

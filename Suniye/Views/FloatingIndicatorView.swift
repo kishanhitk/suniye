@@ -10,7 +10,6 @@ import SwiftUI
 @Observable
 final class FloatingIndicatorModel {
     var state: FloatingIndicatorState = .idle
-    /// The meeting that records now.
     var meeting: MeetingSession?
 }
 

@@ -16,20 +16,25 @@ enum MeetingRecorderEvent: Equatable, Sendable {
     case callAudioSilent(heardBefore: Bool)
     case callAudioReturned
     case inputChanged(deviceName: String)
+    /// A track's source started: at the start, at a resume, or after
+    /// Restart Call Audio.
+    case trackStarted(MeetingTrack)
     case trackFailed(MeetingTrack, String)
-    case storageFailed(String)
+    /// `outOfSpace` tells a full disk from any other write error.
+    case storageFailed(String, outOfSpace: Bool)
 }
 
-/// Writes the two tracks of one meeting to disk, in step with the wall clock.
+/// Writes the two tracks of one meeting to disk, in step with the system
+/// uptime clock.
 ///
 /// - Paused time is not written; the meeting record keeps the pauses, and
 ///   `MeetingTimeline` maps audio positions back to the wall clock.
-/// - A gap in a track (a device change, a slow start) is filled with silence,
-///   so a position in either file means the same moment.
-/// - While a dictation records, the microphone track gets silence: the
-///   dictated words are not meeting talk.
+/// - A track that falls behind the clock by more than `gapThreshold` (a
+///   device change, a slow start) gets silence, so a position in either file
+///   means about the same moment. A track that runs ahead is not cut.
+/// - While a dictation captures audio, the microphone track gets silence:
+///   the dictated words are not meeting talk.
 final class MeetingRecorder: @unchecked Sendable {
-    /// After this much silence on the call track, the recorder reports it.
     static let callSilenceLimit: TimeInterval = 120
     /// Smaller gaps are timing jitter between blocks, not lost audio.
     static let gapThreshold: TimeInterval = 0.25
@@ -57,7 +62,7 @@ final class MeetingRecorder: @unchecked Sendable {
     private var reportedCallSilence = false
     private var silenceTimer: DispatchSourceTimer?
 
-    /// `sources` without `.them` records the microphone only (macOS before 14.4).
+    /// `sources` without `.them` records the microphone only.
     init(
         sources: [MeetingTrack: MeetingAudioSource],
         fileURLs: [MeetingTrack: URL],
@@ -146,16 +151,24 @@ final class MeetingRecorder: @unchecked Sendable {
     }
 
     /// Builds the call track again from nothing: a broken tap can keep
-    /// delivering silence until it is destroyed and created again.
-    func restartCallAudio() throws {
+    /// delivering silence until it is destroyed and created again. Reports
+    /// `trackStarted` or `trackFailed`.
+    func restartCallAudio() {
         guard let source = sources[.them] else { return }
         let isRecording: Bool = queue.sync { running && pausedSince == nil }
         guard isRecording else { return }
         source.stop()
-        try source.start()
+        do {
+            try source.start()
+        } catch {
+            AppLogger.shared.log(.error, "meeting recorder could not restart the call track error=\(error.localizedDescription)")
+            queue.async { self.onEvent?(.trackFailed(.them, error.localizedDescription)) }
+            return
+        }
         queue.sync {
             lastCallSound = uptime()
             reportedCallSilence = false
+            onEvent?(.trackStarted(.them))
         }
         AppLogger.shared.log(.info, "meeting recorder restarted the call track")
     }
@@ -182,6 +195,7 @@ final class MeetingRecorder: @unchecked Sendable {
             do {
                 try source.start()
                 startedAny = true
+                queue.async { self.onEvent?(.trackStarted(track)) }
             } catch {
                 AppLogger.shared.log(.error, "meeting recorder could not start track=\(track.rawValue) error=\(error.localizedDescription)")
                 failures.append((track, error))
@@ -222,14 +236,14 @@ final class MeetingRecorder: @unchecked Sendable {
             try writer.append(samples)
         } catch {
             AppLogger.shared.log(.error, "meeting recorder could not write track=\(track.rawValue) error=\(error.localizedDescription)")
-            onEvent?(.storageFailed(error.localizedDescription))
+            onEvent?(.storageFailed(error.localizedDescription, outOfSpace: MeetingAudioFileWriter.isOutOfSpace(error)))
             running = false
             return
         }
         onOutput?(.samples(track, samples, position: position))
         samplesWritten[track] = position + samples.count
 
-        let level = Self.rms(samples)
+        let level = MeetingAudioFormat.rms(samples)
         if track == .them, level >= MeetingAudioFormat.silenceLevel {
             lastCallSound = arrival
             callTrackHeardSound = true
@@ -280,14 +294,5 @@ final class MeetingRecorder: @unchecked Sendable {
             }
         }
         writers = [:]
-    }
-
-    static func rms(_ samples: [Float]) -> Float {
-        guard !samples.isEmpty else { return 0 }
-        var sum: Float = 0
-        for sample in samples {
-            sum += sample * sample
-        }
-        return (sum / Float(samples.count)).squareRoot()
     }
 }

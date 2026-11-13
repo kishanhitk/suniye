@@ -20,7 +20,8 @@ protocol MeetingAudioSource: AnyObject {
 /// The meeting's microphone track. It runs beside dictation's
 /// `AudioCaptureService` on the same drivers and the same device choice, so
 /// the dictation path does not change. Unlike a dictation, a meeting outlives
-/// a device change: it reopens whatever input the device choice picks now.
+/// a device change: it reopens the input that the device choice picks, with
+/// the microphone that the user picked when the meeting started.
 final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
     var onSamples: (([Float]) -> Void)? {
         get { withCallbackLock { sampleCallback } }
@@ -33,7 +34,7 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
     }
 
     /// An engine reports a harmless configuration change right after it
-    /// starts (KIS-141); changes this soon after an open are not reopened.
+    /// starts; changes this soon after an open are not reopened.
     static let settleTime: TimeInterval = 2
     /// This many reopens with no sound between them end the track.
     static let maximumReopens = 20
@@ -47,7 +48,7 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
     private let hardwareCatalog: AudioCaptureHardwareCatalogProtocol
     private let deviceMonitor: AudioDeviceMonitorProtocol
     private let driverFactory: AudioCaptureDriverFactoryProtocol
-    private let preferredInputDeviceID: () -> String?
+    private let preferredInputDeviceID: String?
     private let firstFrameDeadline: DispatchTimeInterval
     private let uptime: () -> TimeInterval
     private let callbackLock = NSLock()
@@ -75,7 +76,7 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
         driverFactory: AudioCaptureDriverFactoryProtocol = DefaultAudioCaptureDriverFactory(),
         firstFrameDeadline: DispatchTimeInterval = .milliseconds(1_500),
         uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
-        preferredInputDeviceID: @escaping () -> String?
+        preferredInputDeviceID: String? = nil
     ) {
         self.hardwareCatalog = hardwareCatalog
         self.deviceMonitor = deviceMonitor
@@ -126,7 +127,7 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
     // MARK: - Input lifecycle (on `queue`)
 
     private func openInput(fallback: Bool) throws {
-        let resolution = try hardwareCatalog.resolveDeviceRoute(preferredInputDeviceID: preferredInputDeviceID())
+        let resolution = try hardwareCatalog.resolveDeviceRoute(preferredInputDeviceID: preferredInputDeviceID)
         let plan = fallback
             ? AudioCapturePolicy.fallbackPlan(for: resolution.route, echoCancellationEnabled: false, reason: .backendStartFailed)
             : AudioCapturePolicy.primaryPlan(for: resolution.route, echoCancellationEnabled: false)
@@ -227,7 +228,7 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
 
     private func reopenIfTheDeviceChoiceChanged(reason: String) {
         guard running else { return }
-        let picked = try? hardwareCatalog.resolveDeviceRoute(preferredInputDeviceID: preferredInputDeviceID())
+        let picked = try? hardwareCatalog.resolveDeviceRoute(preferredInputDeviceID: preferredInputDeviceID)
         guard picked?.route.effectiveInputDeviceID != currentRoute?.effectiveInputDeviceID else { return }
         reopen(reason: reason)
     }

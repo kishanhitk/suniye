@@ -25,7 +25,8 @@ struct MeetingPage: View {
     @State private var actions = MeetingActions()
     @State private var segments: [MeetingSegment] = []
     @State private var summary: String?
-    @State private var notes = ""
+    /// Nil until the notes are read, so the editor never saves over them.
+    @State private var notes: String?
 
     init(meetings: MeetingCoordinator, appState: AppState, id: UUID) {
         self.meetings = meetings
@@ -45,12 +46,12 @@ struct MeetingPage: View {
                         .font(AppTypography.body)
                         .foregroundStyle(MainWindowPalette.secondaryText)
                 }
-                if meetings.stoppedByWriteError == id, let duration = record.duration {
+                if let failure = meetings.writeFailure, failure.meetingID == id, let duration = record.duration {
                     InlineStatusBanner(
                         icon: "exclamationmark.triangle.fill",
                         tint: .orange,
-                        title: "Recording stopped because the disk is full",
-                        detail: "Everything up to \(MeetingTranscript.clock(duration)) is saved. Free up space to record again."
+                        title: failure.outOfSpace ? "Recording stopped because the disk is full" : "Recording stopped because the audio could not be saved",
+                        detail: "Everything up to \(MeetingTranscript.clock(duration)) is saved." + (failure.outOfSpace ? " Free up space to record again." : "")
                     )
                 }
                 MeetingTabs(selection: $tab, summaryEnabled: live == nil)
@@ -62,11 +63,11 @@ struct MeetingPage: View {
             .padding(.bottom, AppMetrics.detailPaddingBottom)
             .meetingActionDialogs(actions, meetings: meetings)
             .task(id: record) {
-                segments = await meetings.store.segments(of: id)
-                summary = await meetings.store.summary(of: id)
+                segments = await meetings.transcript(of: id)
+                summary = await meetings.summary(of: id)
             }
             .task(id: id) {
-                notes = await meetings.store.notes(of: id)
+                notes = await meetings.notes(of: id)
             }
             .onAppear { meetings.pageOnScreen = id }
             .onDisappear {
@@ -75,7 +76,7 @@ struct MeetingPage: View {
                 }
             }
             .onChange(of: live == nil) { _, finished in
-                if finished, tab == .notes, notes.isEmpty {
+                if finished, tab == .notes, notes?.isEmpty ?? true {
                     tab = .summary
                 }
             }
@@ -119,7 +120,7 @@ struct MeetingPage: View {
                             do {
                                 try await meetings.resume()
                             } catch {
-                                actions.startError = error.localizedDescription
+                                actions.failure = MeetingActionFailure(title: "Couldn’t resume the recording", message: error.localizedDescription)
                             }
                         } else {
                             await meetings.pause()
@@ -161,14 +162,13 @@ struct MeetingPage: View {
         return parts.joined(separator: " · ")
     }
 
-    /// The text that Copy takes from the visible tab, or nil when it is empty.
     private func copyText(_ record: MeetingRecord) -> String? {
         let text: String
         switch tab {
         case .summary:
             text = summary ?? ""
         case .notes:
-            text = notes
+            text = notes ?? ""
         case .transcript:
             text = MeetingExport.transcript(record: record, segments: segments)
         }
@@ -184,8 +184,13 @@ struct MeetingPage: View {
             MeetingSummaryTab(meetings: meetings, appState: appState, actions: actions, record: record, summary: summary)
         case .notes:
             VStack(alignment: .leading, spacing: 12) {
-                MeetingNotesEditor(text: $notes) { text in
-                    Task { await meetings.saveNotes(text, for: id) }
+                if let loaded = notes {
+                    MeetingNotesEditor(
+                        text: Binding(get: { notes ?? loaded }, set: { notes = $0 }),
+                        saved: loaded
+                    ) { text in
+                        Task { await meetings.saveNotes(text, for: id) }
+                    }
                 }
                 if live == nil {
                     MeetingRegenerateMenu(title: "Regenerate Summary", meetings: meetings, actions: actions, record: record)
@@ -199,12 +204,11 @@ struct MeetingPage: View {
     private func transcriptLines(_ record: MeetingRecord) -> [MeetingTranscriptLine] {
         let shown = live?.visibleSegments ?? segments
         let timeline = MeetingTimeline(pauses: record.pauses)
-        let labels = live?.hasCallTrack ?? shown.contains { $0.track == .them }
         return shown.map { segment in
             MeetingTranscriptLine(
                 id: segment.id,
                 time: MeetingTranscript.clock(timeline.wallSeconds(forSample: segment.audioStart)),
-                speaker: labels ? (segment.track == .you ? "You" : "Them") : nil,
+                speaker: record.hasCallTrack ? (segment.track == .you ? "You" : "Them") : nil,
                 text: segment.text
             )
         }
@@ -253,7 +257,7 @@ private struct MeetingTabs: NSViewRepresentable {
     }
 }
 
-/// "Copy Summary", then "Copied" with a checkmark for 1.5 s.
+/// "Copy Summary", then "Copied" with a checkmark for a moment.
 struct MeetingCopyButton: View {
     let title: String
     let text: String

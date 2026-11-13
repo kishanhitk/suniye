@@ -74,7 +74,7 @@ struct MeetingSettingsGroup: View {
     }
 }
 
-/// The call apps that never get the offer card.
+/// The call apps that get no offer card and no automatic recording.
 private struct NeverAskSheet: View {
     let meetings: MeetingCoordinator
     @Environment(\.dismiss) private var dismiss

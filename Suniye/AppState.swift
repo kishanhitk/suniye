@@ -3300,6 +3300,7 @@ final class AppState {
         activeDictationSession?.timing.stopped = .now()
 
         let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
+        meetings.dictationCaptureEnded()
         guard let context = activeDictationSession, context.id == sessionID else {
             return
         }
@@ -4439,6 +4440,11 @@ extension AppState: MeetingHost {
         alert.runModal()
     }
 
+    func pauseOrResumeMeeting() {
+        guard let live = meetings.live else { return }
+        handleMeetingPillAction(live.isPaused ? .resume : .pause)
+    }
+
     func handleMeetingPillAction(_ action: MeetingPillAction) {
         guard let live = meetings.live else { return }
         switch action {
@@ -4459,8 +4465,8 @@ extension AppState: MeetingHost {
         }
     }
 
-    /// A meeting notice becomes a toast unless the meeting's page is on
-    /// screen in the active app, where the page already shows it.
+    /// A meeting notice becomes a toast. A notice that the meeting's page
+    /// shows itself is skipped while that page is on screen in the active app.
     func showMeetingNotice(_ notice: MeetingNotice) {
         let pageOnScreen = NSApp.isActive ? meetings.pageOnScreen : nil
         let live = meetings.live.flatMap { $0.id == pageOnScreen ? nil : $0 }
@@ -4488,14 +4494,17 @@ extension AppState: MeetingHost {
             ) { [weak self] in
                 self?.openMeeting(live.id)
             }
-        case let .stoppedAtTimeLimit(id):
-            showMeetingStopped(id, message: "Recording stopped after 4 hours")
-        case let .stoppedWithoutSpeech(id):
-            showMeetingStopped(id, message: "Recording stopped after 15 minutes without speech")
+        case let .stoppedAtTimeLimit(id, limit):
+            showMeetingStopped(id, message: "Recording stopped after \(MeetingDurationText.spelledOut(limit))")
+        case let .stoppedWithoutSpeech(id, limit):
+            showMeetingStopped(id, message: "Recording stopped after \(MeetingDurationText.spelledOut(limit)) without speech")
         case let .stoppedByDiskFull(id):
             // The meeting page shows its own banner for it.
             guard id != pageOnScreen else { return }
             showMeetingStopped(id, message: "Recording stopped because the disk is full")
+        case let .stoppedByWriteError(id):
+            guard id != pageOnScreen else { return }
+            showMeetingStopped(id, message: "Recording stopped because the audio could not be saved")
         case let .summaryReady(id):
             guard id != pageOnScreen else { return }
             learningToastPresenter.show(message: "Summary ready", detail: nil, actionTitle: "Open") { [weak self] in
@@ -4532,24 +4541,18 @@ extension AppState: MeetingHost {
         localGemmaClient: LocalGemmaClient,
         analytics: Analytics
     ) -> MeetingCoordinator {
-        let canRecordCallAudio: Bool
-        if #available(macOS 14.4, *) {
-            canRecordCallAudio = true
-        } else {
-            canRecordCallAudio = false
-        }
-        return MeetingCoordinator(
+        MeetingCoordinator(
             store: MeetingStore(),
             templates: MeetingTemplateStore(),
             settingsStore: MeetingSettingsStore(),
             engine: transcriptionService,
-            environment: .live(canRecordCallAudio: canRecordCallAudio),
-            canRecordCallAudio: canRecordCallAudio,
+            environment: .live(),
+            canRecordCallAudio: MeetingEnvironment.canRecordCallAudio,
             summaryAvailability: {
                 MeetingSummaryAvailability(apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
             },
-            makeSummaryModel: { provider in
-                switch provider {
+            makeSummaryModel: { engine in
+                switch engine {
                 case .localModel:
                     return LocalGemmaMeetingSummaryModel(client: localGemmaClient)
                 case .appleIntelligence:
