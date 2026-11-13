@@ -24,6 +24,7 @@ extension MeetingEnvironment {
                 guard let output = CoreAudioDeviceCatalog.defaultOutput() else { return true }
                 return MeetingCallOutput.playsOnSpeakers(transport: output.transport, dataSource: output.dataSource)
             },
+            makeMicrophoneUsers: { CoreAudioMicrophoneUsers() },
             now: Date.init
         )
     }

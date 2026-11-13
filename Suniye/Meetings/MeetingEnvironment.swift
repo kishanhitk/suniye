@@ -9,6 +9,8 @@ protocol MeetingHost: AnyObject {
     /// A summary stopped using the model, so Magic Format can load its own
     /// prompt into the model's cache again.
     func meetingSummaryModelIsIdle()
+    /// A recording that a call card or call detection asked for did not start.
+    func meetingCouldNotStart(_ error: Error)
 }
 
 /// What the coordinator needs from the Mac, so that tests can replace it.
@@ -17,10 +19,14 @@ struct MeetingEnvironment {
     var confirmNotice: @MainActor () async -> Bool
     var freeDiskBytes: () -> Int64?
     var callPlaysOnSpeakers: () -> Bool
+    var makeMicrophoneUsers: @MainActor () -> MicrophoneUserReading
     var now: () -> Date
+    /// A clock that does not jump, for call detection.
+    var uptime: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     var liveCheckInterval: Duration = .seconds(5)
     /// A recording stops after this much transcribed audio with no speech.
     var speechlessLimit: TimeInterval = 15 * 60
+    var callCardDurations = MeetingCallCard.Durations()
 }
 
 /// Where the call plays, for the echo filter.

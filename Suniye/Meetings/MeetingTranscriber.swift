@@ -52,6 +52,7 @@ actor MeetingTranscriber {
     private var decoder: Task<Void, Never>?
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     private var stats = Stats()
+    private var isCanceled = false
 
     init(
         meetingID: UUID,
@@ -89,6 +90,16 @@ actor MeetingTranscriber {
         inputContinuation.yield(output)
     }
 
+    /// For a recording that is thrown away: stops reading and decoding, and
+    /// returns when nothing writes to the store any more.
+    func cancel() async {
+        isCanceled = true
+        pending = []
+        inputContinuation.finish()
+        await consumer?.value
+        await decoder?.value
+    }
+
     /// Asks `mayDecode` again. Call it when its answer can have changed to
     /// yes. Audio that arrived while the answer was no waits until then.
     func wake() {
@@ -96,13 +107,14 @@ actor MeetingTranscriber {
     }
 
     /// Decodes the rest after the meeting stopped and returns the final
-    /// transcript, which is also stored.
-    func finish() async throws -> [MeetingSegment] {
+    /// transcript, which is also stored. With `end`, a line that starts at or
+    /// after that sample position goes.
+    func finish(keepingAudioBefore end: Int? = nil) async throws -> [MeetingSegment] {
         inputContinuation.finish()
         await consumer?.value
         flushSegmenters()
         await waitUntilDecoded()
-        return try await finalize()
+        return try await finalize(keepingAudioBefore: end)
     }
 
     /// For a meeting that the app did not finish: decodes the audio after the
@@ -136,12 +148,13 @@ actor MeetingTranscriber {
         }
         flushSegmenters()
         await waitUntilDecoded()
-        return try await finalize()
+        return try await finalize(keepingAudioBefore: nil)
     }
 
     // MARK: - Chunks
 
     private func process(_ output: MeetingRecorderOutput) {
+        guard !isCanceled else { return }
         switch output {
         case let .samples(track, samples, position):
             if let chunks = segmenters[track]?.append(samples, at: position) {
@@ -174,7 +187,7 @@ actor MeetingTranscriber {
     /// Stops when nothing is pending or `mayDecode` says no; `wake()` or the
     /// next chunk starts it again.
     private func decodePending() async {
-        while earliestPendingIndex() != nil, await mayDecode(), let index = earliestPendingIndex() {
+        while !isCanceled, earliestPendingIndex() != nil, await mayDecode(), let index = earliestPendingIndex() {
             let chunk = pending.remove(at: index)
             if await !decode(chunk) {
                 pending.append(chunk)
@@ -261,16 +274,17 @@ actor MeetingTranscriber {
         waiters.forEach { $0.resume() }
     }
 
-    private func finalize() async throws -> [MeetingSegment] {
+    private func finalize(keepingAudioBefore end: Int?) async throws -> [MeetingSegment] {
         let stored = await store.segments(of: meetingID)
+        let kept = end.map { end in stored.filter { $0.audioStart < end } } ?? stored
         let callPlayedOnSpeakers = await store.record(meetingID)?.callPlayedOnSpeakers ?? false
-        let transcript = MeetingTranscript.final(stored, callPlayedOnSpeakers: callPlayedOnSpeakers)
+        let transcript = MeetingTranscript.final(kept, callPlayedOnSpeakers: callPlayedOnSpeakers)
         if transcript.count != stored.count {
             try await store.replaceSegments(transcript, of: meetingID)
         }
         AppLogger.shared.log(
             .info,
-            "meeting transcript finished id=\(meetingID.uuidString) chunks=\(stats.chunks) silent=\(stats.silent) segments=\(stats.segments) echoes=\(stored.count - transcript.count) retries=\(stats.retries) failed=\(stats.failed) decodeSeconds=\(String(format: "%.1f", stats.decodeSeconds))"
+            "meeting transcript finished id=\(meetingID.uuidString) chunks=\(stats.chunks) silent=\(stats.silent) segments=\(stats.segments) cut=\(stored.count - kept.count) echoes=\(kept.count - transcript.count) retries=\(stats.retries) failed=\(stats.failed) decodeSeconds=\(String(format: "%.1f", stats.decodeSeconds))"
         )
         return transcript
     }

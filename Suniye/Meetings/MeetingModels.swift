@@ -116,11 +116,12 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
         endedAt.map { $0.timeIntervalSince(startedAt) }
     }
 
-    /// Ends the meeting `seconds` after its start on the wall clock, and a
-    /// pause that is still open with it.
+    /// Ends the meeting `seconds` after its start on the wall clock. A pause
+    /// that runs past that moment ends there, and a later pause goes.
     mutating func end(atWallSeconds seconds: Double) {
-        if let last = pauses.indices.last, pauses[last].end == nil {
-            pauses[last].end = seconds
+        pauses = pauses.compactMap { pause in
+            guard pause.start < seconds else { return nil }
+            return MeetingPause(start: pause.start, end: min(pause.end ?? seconds, seconds))
         }
         endedAt = startedAt.addingTimeInterval(seconds)
     }
@@ -134,6 +135,15 @@ struct MeetingTimeline: Equatable, Sendable {
 
     func wallSeconds(forSample position: Int) -> Double {
         wallSeconds(forAudioSeconds: Double(position) / Double(MeetingAudioFormat.sampleRate))
+    }
+
+    /// The audio position, in seconds, of a moment on the wall clock: the
+    /// paused time before that moment does not count.
+    func audioSeconds(forWallSeconds wall: Double) -> Double {
+        let paused = pauses.reduce(0) { total, pause in
+            total + max(0, min(pause.end ?? wall, wall) - pause.start)
+        }
+        return max(0, wall - paused)
     }
 
     func wallSeconds(forAudioSeconds audio: Double) -> Double {

@@ -1726,6 +1726,7 @@ final class AppState {
     /// A section that code outside the main window asked to show. The window
     /// shows it and clears the request.
     var requestedSection: MainWindowSection?
+    @ObservationIgnored private var callCardPresenter: MeetingCallCardPresenter?
     private let localLLMModelManager: LocalLLMModelManagerProtocol
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol
@@ -2047,6 +2048,13 @@ final class AppState {
             }
             meetings.onLiveChange = { [weak self] session in
                 self?.floatingIndicatorController.updateMeeting(session)
+            }
+            let callCardPresenter = MeetingCallCardPresenter(meetings: meetings) { [weak self] in
+                self?.openMainWindow(at: .general)
+            }
+            self.callCardPresenter = callCardPresenter
+            meetings.onCallCardChange = { card in
+                callCardPresenter.show(card)
             }
             floatingIndicatorController.onPlacementChanged = { [weak self] placement in
                 self?.handleFloatingIndicatorPlacementChanged(placement)
@@ -5839,13 +5847,17 @@ extension AppState: MeetingHost {
             do {
                 try await meetings.startMeeting(source: .manual)
             } catch {
-                let alert = NSAlert()
-                alert.messageText = "Couldn’t start the recording"
-                alert.informativeText = error.localizedDescription
-                NSApp.activate(ignoringOtherApps: true)
-                alert.runModal()
+                meetingCouldNotStart(error)
             }
         }
+    }
+
+    func meetingCouldNotStart(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "Couldn’t start the recording"
+        alert.informativeText = error.localizedDescription
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     func handleMeetingPillAction(_ action: MeetingPillAction) {

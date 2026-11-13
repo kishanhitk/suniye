@@ -29,6 +29,9 @@ final class MeetingCoordinatorTests: XCTestCase {
     private var noticeAnswer = true
     private var noticeCount = 0
     private var freeBytes: Int64 = 10_000_000_000
+    private var microphone: FakeMicrophoneUsers!
+    private var uptime: TimeInterval = 1000
+    private var cardDurations = MeetingCallCard.Durations()
 
     override func setUp() async throws {
         try await super.setUp()
@@ -42,6 +45,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         engine = WordEngine(words: [0.3: longSentence, 0.5: "Them speaks here."])
         summaryModel = GatedSummaryModel()
         clock = Date(timeIntervalSince1970: 1_800_000_000)
+        microphone = FakeMicrophoneUsers()
     }
 
     override func tearDown() async throws {
@@ -59,9 +63,12 @@ final class MeetingCoordinatorTests: XCTestCase {
             },
             freeDiskBytes: { [unowned self] in freeBytes },
             callPlaysOnSpeakers: { false },
+            makeMicrophoneUsers: { [unowned self] in microphone },
             now: { [unowned self] in clock },
+            uptime: { [unowned self] in uptime },
             liveCheckInterval: .milliseconds(20),
-            speechlessLimit: speechlessLimit
+            speechlessLimit: speechlessLimit,
+            callCardDurations: cardDurations
         )
         let coordinator = MeetingCoordinator(
             store: store,
@@ -297,6 +304,154 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(session.segments.map(\.text), [longSentence])
     }
 
+    func testAskOffersACallAndRecordStartsAMeetingForIt() async throws {
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        let offered = coordinator.callCard
+        await coordinator.recordOfferedCall()
+        let record = coordinator.live?.record
+
+        XCTAssertEqual(offered, .offer(zoom))
+        XCTAssertNil(coordinator.callCard)
+        XCTAssertEqual(record?.title, "Zoom call")
+        XCTAssertEqual(record?.callAppBundleID, zoom.bundleID)
+        XCTAssertEqual(record?.startSource, .offer)
+        await coordinator.stop()
+    }
+
+    func testTheOfferClosesWhenTheCallEndsAndNeverShowsForANeverAskApp() async {
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        hold(holding(teams))
+        hold(holding(teams), after: 2)
+        let offered = coordinator.callCard
+        hold([], after: 1)
+        let afterTheCall = coordinator.callCard
+        hold(holding(zoom), after: 1)
+        hold(holding(zoom), after: 2)
+        coordinator.neverAsk(for: zoom)
+        hold([], after: 1)
+        hold(holding(zoom), after: 1)
+        hold(holding(zoom), after: 2)
+
+        XCTAssertEqual(offered, .offer(teams))
+        XCTAssertNil(afterTheCall)
+        XCTAssertEqual(coordinator.settings.neverAskBundleIDs, [zoom.bundleID])
+        XCTAssertNil(coordinator.callCard)
+    }
+
+    func testRecordAutomaticallyStartsTheRecordingAndCancelDeletesIt() async throws {
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        await coordinator.chooseCallStartAction(.recordAutomatically)
+
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        let started = await waitUntil {
+            if case .startedAutomatically(zoom, _) = coordinator.callCard {
+                return true
+            }
+            return false
+        }
+        let id = try XCTUnwrap(coordinator.live?.id)
+        let source = coordinator.live?.record.startSource
+        await coordinator.cancelAutomaticRecording()
+        let stored = await store.loadAll()
+
+        XCTAssertTrue(started)
+        XCTAssertEqual(source, .automatic)
+        XCTAssertNil(coordinator.live)
+        XCTAssertNil(coordinator.record(id))
+        XCTAssertTrue(stored.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.folder(for: id).path))
+    }
+
+    func testABrowserWithoutACallTitleIsOnlyOfferedWhenRecordingAutomatically() async {
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        await coordinator.chooseCallStartAction(.recordAutomatically)
+
+        hold(holding(chrome))
+        hold(holding(chrome), after: 2)
+        let atTwoSeconds = coordinator.callCard
+        hold(holding(chrome), after: 18)
+
+        XCTAssertNil(atTwoSeconds)
+        XCTAssertEqual(coordinator.callCard, .offer(chrome))
+        XCTAssertNil(coordinator.live)
+    }
+
+    func testStopNowEndsTheMeetingWhereTheCallEnded() async throws {
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        await coordinator.start()
+        let start = clock!
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        await coordinator.recordOfferedCall()
+        let id = try XCTUnwrap(coordinator.live?.id)
+
+        // Words from 0 to 2.8 s; Zoom releases the microphone at 4.5 s; more
+        // words from 4.8 s.
+        you.push(tone(2.5, level: 0.3) + silence(2))
+        clock += 4.5
+        hold([], after: 4.5)
+        let card = coordinator.callCard
+        you.push(silence(0.3) + tone(2.5, level: 0.5) + silence(0.5))
+        let heardAfterTheCall = await waitUntil { coordinator.live?.segments.count == 2 }
+        clock += 5
+        await coordinator.stopEndedCall()
+        let segments = await store.segments(of: id)
+
+        XCTAssertEqual(card, .callEnded(zoom, silent: false, endedAt: start + 4.5, stopsAt: start + 4.5 + 30))
+        XCTAssertTrue(heardAfterTheCall)
+        XCTAssertEqual(try XCTUnwrap(coordinator.record(id)?.endedAt).timeIntervalSince(start), 4.5, accuracy: 0.001)
+        XCTAssertEqual(segments.map(\.text), [longSentence], "the words after the call ended go")
+    }
+
+    func testAfterKeepRecordingTheMeetingFollowsTheNextCallAndStopsWhenItEnds() async throws {
+        cardDurations.stop = 0.05
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        coordinator.dismissCallCard()
+        try await coordinator.startMeeting(source: .manual)
+        let followed = await waitUntil { coordinator.live?.record.callAppBundleID == zoom.bundleID }
+
+        hold([], after: 5)
+        coordinator.dismissCallCard()
+        try await Task.sleep(for: .milliseconds(150))
+        let keptRecording = coordinator.live != nil
+        hold(holding(zoom), after: 1)
+        hold(holding(zoom), after: 2)
+        hold([], after: 5)
+        let stopped = await waitUntil { coordinator.live == nil }
+
+        XCTAssertTrue(followed, "a meeting that starts during a call follows it")
+        XCTAssertTrue(keptRecording)
+        XCTAssertTrue(stopped, "the call-ended card stops the recording by itself")
+    }
+
+    func testDoNothingStopsCallDetection() async {
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        let listensWithAsk = microphone.listening
+
+        await coordinator.chooseCallStartAction(.doNothing)
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+
+        XCTAssertTrue(listensWithAsk)
+        XCTAssertFalse(microphone.listening)
+        XCTAssertEqual(microphone.reads, 0)
+        XCTAssertNil(coordinator.callCard)
+    }
+
     func testSourceProblemsShowOnTheLiveMeeting() async throws {
         let coordinator = makeCoordinator()
         try await coordinator.startMeeting(source: .manual)
@@ -346,6 +501,15 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(saved?.status, .recording, "the next launch finishes it")
         XCTAssertEqual(saved?.endedAt, saved?.startedAt.addingTimeInterval(3))
         XCTAssertTrue(finished)
+    }
+
+    /// The call apps that hold the microphone from now on, `seconds` later,
+    /// as the read after a Core Audio listener sees them.
+    private func hold(_ users: [MicrophoneUser], after seconds: TimeInterval = 0) {
+        uptime += seconds
+        microphone.anyInputRunning = !users.isEmpty
+        microphone.users = users
+        microphone.inputActivityChanged()
     }
 
     private func waitUntil(_ condition: @MainActor () async -> Bool) async -> Bool {
@@ -425,6 +589,8 @@ private final class FakeHost: MeetingHost {
     func meetingSummaryModelIsIdle() {
         idleCount += 1
     }
+
+    func meetingCouldNotStart(_ error: Error) {}
 }
 
 /// Answers by the audio's peak level.
