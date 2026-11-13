@@ -29,6 +29,12 @@ enum MeetingStatus: String, Codable, Sendable {
     /// finish again, because the finish itself may have ended the app.
     case interrupted
 
+    /// Titles of the states without a summary, for the meeting page and the
+    /// meetings list.
+    static let summaryFailedTitle = "Couldn’t write the summary"
+    static let noSpeechTitle = "Too little speech to summarize"
+    static let interruptedTitle = "A transcript did not finish"
+
     /// States that only a running session can be in. A record found in one of
     /// them at launch belongs to a session that ended without saving.
     var needsRecovery: Bool {

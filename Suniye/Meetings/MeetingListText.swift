@@ -11,9 +11,9 @@ struct MeetingListText: Equatable, Sendable {
     func snippet(for status: MeetingStatus) -> String? {
         switch status {
         case .summaryFailed:
-            return "Couldn’t write the summary."
+            return MeetingStatus.summaryFailedTitle + "."
         case .noSpeech:
-            return "Too little speech to summarize."
+            return MeetingStatus.noSpeechTitle + "."
         case .done:
             return summary.flatMap(Self.firstSentence)
         case .recording, .paused, .finishing, .summarizing, .interrupted:

@@ -87,7 +87,7 @@ enum MeetingSummaryError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .tooLittleSpeech:
-            return "Too little speech to summarize"
+            return MeetingStatus.noSpeechTitle
         case let .failed(cause):
             return cause
         }

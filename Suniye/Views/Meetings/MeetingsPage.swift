@@ -42,7 +42,7 @@ struct MeetingsPage: View {
                 InlineStatusBanner(
                     icon: "exclamationmark.triangle.fill",
                     tint: .orange,
-                    title: "A transcript did not finish",
+                    title: MeetingStatus.interruptedTitle,
                     detail: "Suniye closed while it wrote the transcript of the \(record.startedAt.formatted(date: .omitted, time: .shortened)) meeting. The audio is saved.",
                     actionTitle: meetings.finishing.contains(record.id) ? nil : "Finish Transcript",
                     action: { meetings.finishTranscript(record.id) }
