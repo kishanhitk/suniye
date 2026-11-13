@@ -7,13 +7,12 @@ protocol GeneralSettingsStoreProtocol {
 
 final class GeneralSettingsStore: GeneralSettingsStoreProtocol {
     private let userDefaults: UserDefaults
-    private let storageKey: String
+    private let storageKey = "dev.suniye.general.settings"
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    init(userDefaults: UserDefaults = .standard, storageKey: String = "dev.suniye.general.settings") {
+    init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
-        self.storageKey = storageKey
     }
 
     func load() -> GeneralSettings {

@@ -40,12 +40,12 @@ final class LLMSettingsStoreTests: XCTestCase {
         let suite = "dev.suniye.tests.llm.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(Data(stored.utf8), forKey: "llm")
-        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
+        defaults.set(Data(stored.utf8), forKey: "dev.suniye.llm.settings")
+        let store = LLMSettingsStore(userDefaults: defaults)
 
         store.save(store.load())
 
-        let saved = try XCTUnwrap(defaults.data(forKey: "llm"))
+        let saved = try XCTUnwrap(defaults.data(forKey: "dev.suniye.llm.settings"))
         XCTAssertEqual(
             try JSONSerialization.jsonObject(with: saved) as? NSDictionary,
             try JSONSerialization.jsonObject(with: Data(stored.utf8)) as? NSDictionary
@@ -55,7 +55,7 @@ final class LLMSettingsStoreTests: XCTestCase {
     func testStoreRoundTrip() {
         let suite = "dev.suniye.tests.llmsettings.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
+        let store = LLMSettingsStore(userDefaults: defaults)
 
         var settings = LLMSettings()
         settings.isEnabled = true
@@ -78,7 +78,7 @@ final class LLMSettingsStoreTests: XCTestCase {
     func testKeepAliveDurationRoundTrips() {
         let suite = "dev.suniye.tests.llmsettings.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
+        let store = LLMSettingsStore(userDefaults: defaults)
 
         var settings = LLMSettings()
         settings.localModelKeepAlive = .oneHour
@@ -232,7 +232,7 @@ final class LLMSettingsStoreTests: XCTestCase {
     func testLoadReturnsDefaultsWhenNothingIsStored() {
         let suite = "dev.suniye.tests.llm.empty.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
+        let store = LLMSettingsStore(userDefaults: defaults)
 
         XCTAssertEqual(store.load(), LLMSettings())
     }
@@ -240,7 +240,7 @@ final class LLMSettingsStoreTests: XCTestCase {
     func testSaveSilentlySkipsUnencodableSettings() {
         let suite = "dev.suniye.tests.llm.unencodable.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
+        let store = LLMSettingsStore(userDefaults: defaults)
 
         // Bypass the clamping initializer; infinity is not representable by
         // the JSON encoder, so save must bail out without writing anything.
@@ -249,7 +249,7 @@ final class LLMSettingsStoreTests: XCTestCase {
 
         store.save(unencodable)
 
-        XCTAssertNil(defaults.data(forKey: "llm"))
+        XCTAssertNil(defaults.data(forKey: "dev.suniye.llm.settings"))
         XCTAssertEqual(store.load(), LLMSettings())
     }
 }

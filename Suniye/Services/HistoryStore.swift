@@ -7,14 +7,13 @@ protocol HistoryStoreProtocol {
 
 final class HistoryStore: HistoryStoreProtocol {
     private let userDefaults: UserDefaults
-    private let storageKey: String
+    private let storageKey = "dev.suniye.history"
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let legacyDecoder = JSONDecoder()
 
-    init(userDefaults: UserDefaults = .standard, storageKey: String = "dev.suniye.history") {
+    init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
-        self.storageKey = storageKey
         encoder.dateEncodingStrategy = .millisecondsSince1970
         decoder.dateDecodingStrategy = .millisecondsSince1970
         legacyDecoder.dateDecodingStrategy = .iso8601

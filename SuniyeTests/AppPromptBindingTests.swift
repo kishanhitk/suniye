@@ -41,7 +41,7 @@ final class AppPromptBindingTests: XCTestCase {
         let suite = "dev.suniye.tests.apppromptbindings.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let store = LLMSettingsStore(userDefaults: defaults, storageKey: "llm")
+        let store = LLMSettingsStore(userDefaults: defaults)
 
         var settings = LLMSettings()
         settings.appPromptBindings = bindings

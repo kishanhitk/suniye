@@ -7,13 +7,12 @@ protocol LLMSettingsStoreProtocol {
 
 final class LLMSettingsStore: LLMSettingsStoreProtocol {
     private let userDefaults: UserDefaults
-    private let storageKey: String
+    private let storageKey = "dev.suniye.llm.settings"
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    init(userDefaults: UserDefaults = .standard, storageKey: String = "dev.suniye.llm.settings") {
+    init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
-        self.storageKey = storageKey
     }
 
     func load() -> LLMSettings {
