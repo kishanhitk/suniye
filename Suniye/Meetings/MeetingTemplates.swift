@@ -13,9 +13,9 @@ struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
         Self.builtIn.contains { $0.id == id }
     }
 
-    /// The shipped text of a built-in template; nil for one the user added.
-    var defaultSections: String? {
-        Self.builtIn.first { $0.id == id }?.sections
+    /// The shipped version of a built-in template; nil for one the user added.
+    var shipped: MeetingTemplate? {
+        Self.builtIn.first { $0.id == id }
     }
 
     static let general = MeetingTemplate(id: "general", name: "General", sections: """
@@ -119,11 +119,12 @@ actor MeetingTemplateStore {
     }
 
     /// Saves the list that the template editor shows, in one write. A
-    /// built-in template is stored only while its text differs from the
-    /// shipped text; one that is not in the list keeps the shipped text.
+    /// built-in template is stored only while its name or text differs from
+    /// the shipped one; one that is not in the list goes back to the shipped
+    /// one.
     func replace(with templates: [MeetingTemplate]) throws {
         guard load() != nil else { throw StoreError.unreadable }
-        try write(templates.filter { $0.sections != $0.defaultSections })
+        try write(templates.filter { $0 != $0.shipped })
     }
 
     /// The stored templates; nil when the file is there but cannot be read.

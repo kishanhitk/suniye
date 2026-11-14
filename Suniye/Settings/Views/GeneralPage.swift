@@ -21,7 +21,7 @@ struct GeneralPage: View {
             indicator
             dictation
             startup
-            MeetingSettingsGroup(meetings: appState.meetings)
+            MeetingSettingsGroup(appState: appState)
             privacy
             about
         }

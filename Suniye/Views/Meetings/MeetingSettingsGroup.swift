@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The Meetings group on the General page.
 struct MeetingSettingsGroup: View {
-    @Bindable var meetings: MeetingCoordinator
+    let appState: AppState
     @State private var editingTemplates = false
     @State private var editingNeverAsk = false
     @State private var diskBytes: Int64?
@@ -35,6 +35,9 @@ struct MeetingSettingsGroup: View {
             DisclosureSettingRow(title: "Never ask for", value: neverAskValue) {
                 editingNeverAsk = true
             }
+
+            RowSeparator()
+            MeetingTranscriptModelRow(appState: appState)
 
             RowSeparator()
             ControlSettingRow(title: "Default template") {
@@ -83,6 +86,10 @@ struct MeetingSettingsGroup: View {
         .task(id: meetings.meetings.count) {
             diskBytes = await meetings.store.diskUsage()
         }
+    }
+
+    private var meetings: MeetingCoordinator {
+        appState.meetings
     }
 
     /// "0 bytes", not ByteCountFormatter's "Zero KB".
@@ -135,5 +142,83 @@ private struct NeverAskSheet: View {
         }
         .padding(20)
         .frame(width: 360)
+    }
+}
+
+/// The speech model that writes meeting transcripts. A model that is not on
+/// the Mac shows its download size, and picking it starts the download.
+private struct MeetingTranscriptModelRow: View {
+    @Bindable var appState: AppState
+    @State private var systemAssetInstalled: [ASRModelID: Bool] = [:]
+
+    private var selection: ASRModelID? {
+        appState.meetings.settings.transcriptModel
+    }
+
+    var body: some View {
+        ControlSettingRow(title: "Transcript model", info: "Writes the transcript after the recording stops. Dictation keeps its own model.") {
+            if let downloading = appState.meetingTranscriptModelDownload {
+                download(downloading)
+            } else {
+                HStack(spacing: 10) {
+                    if let selection, !isOnMac(selection) {
+                        Button("Download") { appState.useForMeetingTranscripts(selection) }
+                            .disabled(!appState.asrModelCanPerformPrimaryAction(for: selection))
+                    }
+                    picker
+                }
+            }
+        }
+        .task(id: appState.meetingTranscriptModelDownload) {
+            for entry in appState.asrModelCatalog where entry.isSystemManaged {
+                systemAssetInstalled[entry.id] = await appState.isSystemManagedASRAssetInstalled(entry.id)
+            }
+        }
+    }
+
+    /// A fixed width: a pop-up sizes itself to its widest item, and the
+    /// items of models that are not on the Mac carry their download size.
+    private var picker: some View {
+        Picker(
+            "Transcript model",
+            selection: Binding(get: { selection }, set: { appState.useForMeetingTranscripts($0) })
+        ) {
+            Text("Same as dictation").tag(ASRModelID?.none)
+            Divider()
+            ForEach(appState.asrModelCatalog) { entry in
+                Text(label(entry))
+                    .tag(ASRModelID?.some(entry.id))
+                    .disabled(!isOnMac(entry.id) && !appState.asrModelCanPerformPrimaryAction(for: entry.id))
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 210)
+    }
+
+    private func download(_ model: ASRModelID) -> some View {
+        HStack(spacing: 8) {
+            ProgressView(value: appState.downloadProgress)
+                .progressViewStyle(.linear)
+                .frame(width: 80)
+            Text("\(ASRModelCatalog.entry(for: model).displayName) · \(Int(appState.downloadProgress * 100))%")
+                .font(AppTypography.caption)
+                .foregroundStyle(MainWindowPalette.secondaryText)
+                .monospacedDigit()
+            if appState.canCancelASRModelDownload {
+                Button("Cancel") { appState.cancelASRModelDownload() }
+            }
+        }
+    }
+
+    private func isOnMac(_ model: ASRModelID) -> Bool {
+        ASRModelCatalog.entry(for: model).isSystemManaged ? systemAssetInstalled[model] ?? false : appState.isASRModelDownloaded(model)
+    }
+
+    /// The Speech Model page's words for a model that is not on the Mac.
+    private func label(_ entry: ASRModelCatalogEntry) -> String {
+        guard !isOnMac(entry.id) else { return entry.displayName }
+        let size = entry.isSystemManaged ? "Built into macOS, not yet downloaded" : "\(entry.sizeDisplayText) to download"
+        return "\(entry.displayName) · \(size)"
     }
 }

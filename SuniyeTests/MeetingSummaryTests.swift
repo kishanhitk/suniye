@@ -359,6 +359,7 @@ final class MeetingTemplateStoreTests: XCTestCase {
         let store = MeetingTemplateStore(fileURL: fileURL)
         var edited = await store.templates()
         edited[0].sections = "## Overview\nOne sentence."
+        edited[2].name = "Daily"
         edited.append(MeetingTemplate(id: "retro", name: "Retro", sections: "## Went well\nOne line each."))
 
         try await store.replace(with: edited)
@@ -369,6 +370,7 @@ final class MeetingTemplateStoreTests: XCTestCase {
 
         XCTAssertEqual(reloaded.map(\.id), ["general", "one-on-one", "stand-up", "interview", "retro"])
         XCTAssertEqual(reloaded.first?.sections, "## Overview\nOne sentence.")
+        XCTAssertEqual(reloaded[2].name, "Daily", "a built-in template keeps a new name")
         XCTAssertEqual(restored, .general)
     }
 

@@ -65,10 +65,32 @@ After a quit or a crash during a recording, the next launch writes the transcrip
 ## Transcript
 
 - No speech recognition runs while the meeting records. The meeting page shows the notes, the meters and the warnings.
-- After the stop, the speech model of dictation writes the transcript from the audio files. The meeting page shows "Finishing the transcript…" with the minutes done.
-- A dictation goes first: the transcript waits while you dictate.
+- After the stop, the transcript model writes the transcript from the audio files. The meeting page shows "Finishing the transcript…" with the minutes done.
+- **Settings → General → Meetings → Transcript model**:
+  - **Same as dictation** (default): the dictation model, on the dictation engine.
+  - A model you pick, the dictation model too: it loads for the transcript on an engine of its own and unloads after it, so a switch of the dictation model does not change it. Dictation keeps its model. The Mac holds both models in memory while the transcript is written.
+- A dictation goes first: from the key-down to the end of the dictation, no piece of audio starts decoding. The piece that decodes at the key-down finishes.
+- Picking a model that is not on the Mac downloads it. It becomes the transcript model when the download is done.
+- When the transcript model is not on the Mac at the stop, the meeting shows that cause and **Finish Transcript**.
 - The audio goes to the model in pieces of 2 to 12 s, cut at pauses.
 - The audio files go when the transcript is final.
+
+Measured on 14 Nov 2026 with one hour of a real meeting: AMI Meeting Corpus IN1016, 60.1 min, 4 people in a room. "You" is one person's headset and "Them" the other three; each headset is silent outside its speaker's annotated speech. The dictation model is Parakeet TDT 0.6B v3.
+
+Limits of this measurement: one meeting, in English, with four speakers; each track holds only its own speakers' speech; talk that overlaps in the Them track counts as errors.
+
+| Transcript model | Pass for 60.1 min | Load | Peak memory of the app | One 6 s dictation: alone → during the pass | Word error rate |
+|---|---|---|---|---|---|
+| Parakeet TDT 0.6B v3 (Same as dictation) | 5.4 min (9% of the meeting length) | none: already loaded | 1.85 GB | 488 ms → 406 ms | 33.1% |
+| Cohere Transcribe | 11.7 min (19% of the meeting length) | 10.3 s | 4.43 GB | 409 ms → 455 ms (at most 611) | 25.4% |
+| Qwen3-ASR 1.7B | 12.6 min (21% of the meeting length) | 17.8 s | 1.64 GB app + 2.85 GB helper | 361 ms → 358 ms (at most 368) | 18.8% |
+| Apple Speech | 2.8 min (5% of the meeting length) | 0.2 s | 1.85 GB | 367 ms → 329 ms (at most 489) | 22.6% |
+
+- Peak memory is the whole app with the dictation model loaded (about 1.8 GB). Apple Speech runs in a macOS service, so its model is not in the app's number. Qwen3-ASR runs in its llama-server helper; the helper's number includes its mapped model file (measured on 5 minutes of the same audio).
+- After the pass, the app with Cohere Transcribe stays 0.57 GB above its level with only the dictation model.
+- The dictation column for a model other than the dictation model is the median of 4 dictations during the pass, with the hold from the key-down (measured on 15 minutes of the same meeting for Cohere Transcribe and Qwen3-ASR). Before the hold, a 6 s dictation took 961 to 1,178 ms beside Cohere Transcribe and 546 to 761 ms beside Qwen3-ASR.
+- The longest piece of audio decodes in 1.91 s on Cohere Transcribe, 2.55 s on Qwen3-ASR and 0.52 s on Apple Speech, so the piece in flight at the key-down ends while you speak.
+- Word error rate: each track against the AMI reference words, lowercase, with no punctuation, no filler words and digits as words. Overlapping talk in the Them track counts as errors.
 
 ## Summary
 
@@ -88,6 +110,7 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 | Apple Intelligence | 4 to 5 | 14 to 79 | 0 to 38 |
 
 - Templates: General, 1:1, Stand-up, Interview, and your own (**Settings → General → Meetings → Summary templates**).
+- You can rename and edit a built-in template. **Reset to Default** brings back its shipped name and text.
 - A template's "## " headings are the sections of the summary. A section named Overview or Summary is a short paragraph; every other section is a list.
 - The transcript is read in parts of at most about 4,000 tokens. The model gets each part, and your notes, with a request for at most three items for each section. Suniye joins the items in meeting order, your notes first, and drops exact repeats; the model then writes only the title and the overview. No last step can drop an item.
 - The built-in sections (Decisions, Action items, Dates and numbers, Open questions) have fixed rules for what goes in them. A template that you wrote or edited goes to each part as a guide to its sections.

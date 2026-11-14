@@ -25,6 +25,9 @@ final class MeetingCoordinatorTests: XCTestCase {
     private var them: PushSource!
     private var host: FakeHost!
     private var engine: WordEngine!
+    private var transcriptEngine: WordEngine!
+    private var requestedTranscriptModels: [ASRModelID] = []
+    private var transcriptEngineError: Error?
     private var summaryModel: GatedSummaryModel!
     private var clock: Date!
     private var freeBytes: Int64 = 10_000_000_000
@@ -44,6 +47,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         them = PushSource()
         host = FakeHost()
         engine = WordEngine(words: [0.3: longSentence, 0.5: "Them speaks here."])
+        transcriptEngine = WordEngine(words: [0.3: longSentence, 0.5: "Them speaks here."])
         summaryModel = GatedSummaryModel()
         clock = Date(timeIntervalSince1970: 1_800_000_000)
         microphone = FakeMicrophoneUsers()
@@ -75,6 +79,13 @@ final class MeetingCoordinatorTests: XCTestCase {
             templates: MeetingTemplateStore(fileURL: root.appendingPathComponent("templates.json")),
             settingsStore: MeetingSettingsStore(userDefaults: defaults),
             engine: engine,
+            makeTranscriptEngine: { [unowned self] model in
+                requestedTranscriptModels.append(model)
+                if let transcriptEngineError {
+                    throw transcriptEngineError
+                }
+                return transcriptEngine
+            },
             environment: environment,
             summaryAvailability: { [unowned self] in summaryAvailability },
             makeSummaryModel: { [unowned self] _ in summaryModel },
@@ -154,6 +165,67 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(decodesDuringDictation, 0)
         XCTAssertEqual(segments.map(\.track), [.them, .you], "the dictated words are not meeting talk; talk after the capture ends is")
         XCTAssertNil(coordinator.transcriptProgress[id])
+    }
+
+    func testAnotherTranscriptModelGetsAnEngineOfItsOwnThatAlsoWaitsForADictation() async throws {
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.transcriptModel = .cohereTranscribe }
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+
+        coordinator.dictationChanged(active: true)
+        let stopping = Task { await coordinator.stop() }
+        let started = await waitUntil { coordinator.transcriptProgress[id] != nil }
+        try await Task.sleep(for: .milliseconds(200))
+        let decodesDuringTheDictation = await transcriptEngine.calls
+        coordinator.dictationChanged(active: false)
+        await stopping.value
+        let segments = await store.segments(of: id)
+        let dictationEngineDecodes = await engine.calls
+        let unloads = await transcriptEngine.unloads
+
+        XCTAssertTrue(started)
+        XCTAssertEqual(requestedTranscriptModels, [.cohereTranscribe])
+        XCTAssertEqual(decodesDuringTheDictation, 0, "no piece starts while a dictation runs")
+        XCTAssertEqual(segments.map(\.text), [longSentence])
+        XCTAssertEqual(dictationEngineDecodes, 0, "the dictation model stays with dictation")
+        XCTAssertEqual(unloads, 1, "the transcript model is unloaded after the pass")
+        XCTAssertEqual(event("meeting_transcribed")?["asr_model"], .label("coheretranscribe"))
+    }
+
+    func testAChosenModelThatIsAlsoTheDictationModelStillGetsAnEngineOfItsOwn() async throws {
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.transcriptModel = .parakeetV3 }
+        try await coordinator.startMeeting(source: .manual)
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+
+        await coordinator.stop()
+        let dictationEngineDecodes = await engine.calls
+
+        XCTAssertEqual(requestedTranscriptModels, [.parakeetV3], "a switch of the dictation model cannot change a chosen model")
+        XCTAssertEqual(dictationEngineDecodes, 0)
+    }
+
+    func testATranscriptModelThatIsNotDownloadedStopsTheTranscriptWithThatCauseAndKeepsTheAudio() async throws {
+        transcriptEngineError = MeetingTranscriptModelError.notDownloaded("Cohere Transcribe")
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.transcriptModel = .cohereTranscribe }
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+
+        await coordinator.stop()
+
+        XCTAssertEqual(coordinator.record(id)?.status, .interrupted)
+        XCTAssertEqual(
+            coordinator.record(id)?.transcriptFailure,
+            "Cohere Transcribe is not downloaded. Download it in Settings, or choose another transcript model."
+        )
+        XCTAssertEqual(store.audioTracks(of: id), [.you, .them], "Finish Transcript can use the audio later")
     }
 
     func testPausesAreKeptInTheRecordAndLeftOutOfTheTimer() async throws {
@@ -652,17 +724,21 @@ final class MeetingSettingsStoreTests: XCTestCase {
         let suite = "MeetingSettingsStoreTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(Data(#"{"noticeAccepted":true,"neverAskBundleIDs":["us.zoom.xos"]}"#.utf8), forKey: "settings")
+        defaults.set(Data(#"{"noticeAccepted":true,"neverAskBundleIDs":["us.zoom.xos"],"transcriptModel":"retiredModel"}"#.utf8), forKey: "settings")
         let store = MeetingSettingsStore(userDefaults: defaults, key: "settings")
 
         var loaded = store.load()
+        let unknownModel = loaded.transcriptModel
         loaded.callStartAction = .recordAutomatically
+        loaded.transcriptModel = .cohereTranscribe
         store.save(loaded)
         let reloaded = store.load()
 
         XCTAssertEqual(reloaded.neverAskBundleIDs, ["us.zoom.xos"], "a key that a later build dropped does not stop the load")
+        XCTAssertNil(unknownModel, "a transcript model that this build does not know is the dictation model")
         XCTAssertEqual(reloaded.templateID, MeetingTemplate.general.id)
         XCTAssertEqual(reloaded.callStartAction, .recordAutomatically)
+        XCTAssertEqual(reloaded.transcriptModel, .cohereTranscribe)
     }
 }
 
@@ -720,6 +796,7 @@ private final class LoudSpeechDetector: SpeechDetecting {
 /// Answers by the audio's peak level.
 private actor WordEngine: TranscriptionServiceProtocol {
     private(set) var calls = 0
+    private(set) var unloads = 0
     private let words: [Float: String]
 
     init(words: [Float: String]) {
@@ -728,7 +805,9 @@ private actor WordEngine: TranscriptionServiceProtocol {
 
     func loadModel(config: RecognizerConfig) async throws {}
 
-    func unloadModel() async {}
+    func unloadModel() async {
+        unloads += 1
+    }
 
     func transcribe(
         samples: [Float],

@@ -161,13 +161,20 @@ final class MeetingCoordinator {
     @ObservationIgnored let templates: MeetingTemplateStore
 
     @ObservationIgnored private let settingsStore: MeetingSettingsStore
+    /// The dictation engine.
     @ObservationIgnored private let engine: TranscriptionServiceProtocol
+    /// A loaded engine of its own for a transcript model that is not the
+    /// dictation model.
+    @ObservationIgnored private let makeTranscriptEngine: (ASRModelID) async throws -> TranscriptionServiceProtocol
     @ObservationIgnored private let environment: MeetingEnvironment
     @ObservationIgnored private let analytics: Analytics
     @ObservationIgnored private let detector: MeetingCallDetector
     @ObservationIgnored private var launched = false
     @ObservationIgnored private var isStarting = false
     @ObservationIgnored private var cardTimer: Task<Void, Never>?
+    /// The meetings whose transcript is being written.
+    @ObservationIgnored private var passes: Set<UUID> = []
+    /// The passes that decode now. Each one waits while a dictation runs.
     @ObservationIgnored private var transcribers: [UUID: MeetingTranscriber] = [:]
     @ObservationIgnored private var dictating = false
     /// The dictation's audio capture runs: the microphone track gets silence.
@@ -184,6 +191,7 @@ final class MeetingCoordinator {
         templates: MeetingTemplateStore,
         settingsStore: MeetingSettingsStore,
         engine: TranscriptionServiceProtocol,
+        makeTranscriptEngine: @escaping (ASRModelID) async throws -> TranscriptionServiceProtocol,
         environment: MeetingEnvironment,
         summaryAvailability: @escaping () -> MeetingSummaryAvailability,
         makeSummaryModel: @escaping (MeetingSummaryEngine) -> MeetingSummaryModel?,
@@ -193,6 +201,7 @@ final class MeetingCoordinator {
         self.templates = templates
         self.settingsStore = settingsStore
         self.engine = engine
+        self.makeTranscriptEngine = makeTranscriptEngine
         self.environment = environment
         self.analytics = analytics
         settings = settingsStore.load()
@@ -394,8 +403,8 @@ final class MeetingCoordinator {
         case .user, .callEnded, .sleep, .quit:
             break
         }
-        if let transcriber = makeTranscriber(for: session.id) {
-            await transcribe(session.id, with: transcriber)
+        if passes.insert(session.id).inserted {
+            await transcribe(session.id)
         }
     }
 
@@ -418,10 +427,10 @@ final class MeetingCoordinator {
     /// Finishes the transcript of a meeting from its audio files: after a
     /// quit or a crash, or when the user asks again after a failed finish.
     func finishTranscript(_ id: UUID) {
-        guard let transcriber = makeTranscriber(for: id) else { return }
+        guard passes.insert(id).inserted else { return }
         Task {
             await update(id) { $0.status = .finishing }
-            await transcribe(id, with: transcriber)
+            await transcribe(id)
         }
     }
 
@@ -650,8 +659,8 @@ final class MeetingCoordinator {
         loadedModel != nil && !dictating
     }
 
+    /// Each pass asks its own `mayDecode` again.
     private func wakeTranscribers() {
-        guard speechEngineFree else { return }
         for transcriber in transcribers.values {
             Task { await transcriber.wake() }
         }
@@ -682,38 +691,19 @@ final class MeetingCoordinator {
         ))
     }
 
-    /// Nil when the transcript of the meeting is being written already.
-    private func makeTranscriber(for id: UUID) -> MeetingTranscriber? {
-        guard transcribers[id] == nil else { return nil }
-        let transcriber = MeetingTranscriber(
-            meetingID: id,
-            tracks: store.audioTracks(of: id),
-            store: store,
-            engine: engine,
-            mayDecode: { [weak self] in await self?.speechEngineFree ?? false },
-            onProgress: { [weak self] progress in
-                DispatchQueue.main.async { MainActor.assumeIsolated { self?.show(progress, of: id) } }
-            }
-        )
-        transcribers[id] = transcriber
-        return transcriber
-    }
-
-    private func show(_ progress: MeetingTranscriptProgress, of id: UUID) {
-        guard transcribers[id] != nil else { return }
-        transcriptProgress[id] = progress
-    }
-
-    private func transcribe(_ id: UUID, with transcriber: MeetingTranscriber) async {
+    /// Writes the transcript, then queues the summary. `passes` holds `id`
+    /// already.
+    private func transcribe(_ id: UUID) async {
         let started = ContinuousClock.now
+        let chosenModel = settings.transcriptModel
         defer {
-            transcribers[id] = nil
+            passes.remove(id)
             transcriptProgress[id] = nil
         }
         let outcome: MeetingOutcome
         var segments = 0
         do {
-            let transcript = try await transcriber.transcribe()
+            let transcript = try await runPass(id, model: chosenModel)
             segments = transcript.count
             outcome = segments == 0 ? .noSpeech : .done
             await store.deleteAudio(of: id)
@@ -736,10 +726,59 @@ final class MeetingCoordinator {
         }
         analytics.track(.meetingTranscribed(
             outcome: outcome,
-            model: SafeLabel(loadedModel?.rawValue ?? ""),
+            model: SafeLabel((chosenModel ?? loadedModel)?.rawValue ?? ""),
             segments: segments,
             durationMs: Int((ContinuousClock.now - started) / .milliseconds(1))
         ))
+    }
+
+    /// With no model ("Same as dictation"), the pass runs on the dictation
+    /// engine with the model that engine has. A chosen model, the dictation
+    /// model too, gets an engine of its own that is unloaded after the pass,
+    /// so a switch of the dictation model does not change the pass. On either
+    /// engine, no piece of audio starts decoding while a dictation runs.
+    private func runPass(_ id: UUID, model: ASRModelID?) async throws -> [MeetingSegment] {
+        guard let model else {
+            return try await run(makeTranscriber(for: id, engine: engine) { [weak self] in await self?.speechEngineFree ?? false }, for: id)
+        }
+        let ownEngine = try await makeTranscriptEngine(model)
+        let transcriber = makeTranscriber(for: id, engine: ownEngine) { [weak self] in await self?.dictating == false }
+        do {
+            let transcript = try await run(transcriber, for: id)
+            await ownEngine.unloadModel()
+            return transcript
+        } catch {
+            await ownEngine.unloadModel()
+            throw error
+        }
+    }
+
+    private func run(_ transcriber: MeetingTranscriber, for id: UUID) async throws -> [MeetingSegment] {
+        transcribers[id] = transcriber
+        defer { transcribers[id] = nil }
+        return try await transcriber.transcribe()
+    }
+
+    private func makeTranscriber(
+        for id: UUID,
+        engine: TranscriptionServiceProtocol,
+        mayDecode: @escaping @Sendable () async -> Bool
+    ) -> MeetingTranscriber {
+        MeetingTranscriber(
+            meetingID: id,
+            tracks: store.audioTracks(of: id),
+            store: store,
+            engine: engine,
+            mayDecode: mayDecode,
+            onProgress: { [weak self] progress in
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.show(progress, of: id) } }
+            }
+        )
+    }
+
+    private func show(_ progress: MeetingTranscriptProgress, of id: UUID) {
+        guard passes.contains(id) else { return }
+        transcriptProgress[id] = progress
     }
 
     private func handle(_ event: MeetingRecorderEvent, from session: MeetingSession) {
