@@ -23,12 +23,11 @@ struct AppleMeetingSummaryModel: MeetingSummaryModel {
     func generate(_ request: MeetingSummaryRequest) async throws -> String {
         let session = LanguageModelSession(model: model)
         do {
-            // With no limit, an answer that repeats one kind of line runs until
-            // the context is full and the request fails. The model cuts the
-            // answer at the limit with no error.
+            // No maximumResponseTokens: the model cuts an answer at that limit
+            // with no error. An answer that does not fit fails instead.
             let response = try await session.respond(
                 to: request.text,
-                options: GenerationOptions(sampling: .greedy, temperature: 0, maximumResponseTokens: request.maxOutputTokens)
+                options: GenerationOptions(sampling: .greedy, temperature: 0)
             )
             return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch let error as LanguageModelSession.GenerationError {

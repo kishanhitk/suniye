@@ -492,6 +492,8 @@ extension AudioCaptureService: MicrophoneStreamDelegate {
         return accept(samples, into: active)
     }
 
+    func microphoneStreamDidDrain(_ stream: MicrophoneStream) {}
+
     func microphoneStream(_ stream: MicrophoneStream, willFallBack cause: MicrophoneStream.FallbackCause) {}
 
     func microphoneStream(

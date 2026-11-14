@@ -6,6 +6,8 @@ import Foundation
 protocol MicrophoneStreamDelegate: AnyObject {
     /// Return false to stop reading the ring for now.
     func microphoneStream(_ stream: MicrophoneStream, didRead samples: UnsafeBufferPointer<Float>) -> Bool
+    /// One drain ended: the ring is empty, or `didRead` returned false.
+    func microphoneStreamDidDrain(_ stream: MicrophoneStream)
     func microphoneStream(_ stream: MicrophoneStream, willFallBack cause: MicrophoneStream.FallbackCause)
     /// A throw stops the backend that just started and fails that step.
     func microphoneStream(
@@ -127,6 +129,7 @@ final class MicrophoneStream {
             hasReceivedFrame = true
             return delegate?.microphoneStream(self, didRead: block) ?? false
         }
+        delegate?.microphoneStreamDidDrain(self)
     }
 
     private func fallBackToStandardEngine(because cause: FallbackCause) throws {

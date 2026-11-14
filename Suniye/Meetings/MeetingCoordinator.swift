@@ -198,6 +198,9 @@ final class MeetingCoordinator {
     }
     @ObservationIgnored private var loadedModel: ASRModelID?
     @ObservationIgnored private var listTexts: [UUID: MeetingListText] = [:]
+    /// Counts `dropListText` calls, so a read that began before a drop does
+    /// not cache its text again.
+    @ObservationIgnored private var listTextDrops = 0
     @ObservationIgnored private var liveCheck: Task<Void, Never>?
     @ObservationIgnored private var changedInputReset: Task<Void, Never>?
 
@@ -260,13 +263,21 @@ final class MeetingCoordinator {
         if let cached = listTexts[id] {
             return cached
         }
+        let drops = listTextDrops
         let text = MeetingListText(
             summary: await store.summary(of: id),
             notes: await store.notes(of: id) ?? "",
             transcript: await transcript(of: id).map(\.text)
         )
-        listTexts[id] = text
+        if drops == listTextDrops {
+            listTexts[id] = text
+        }
         return text
+    }
+
+    private func dropListText(_ id: UUID) {
+        listTexts[id] = nil
+        listTextDrops += 1
     }
 
     /// The transcript as a reader sees it, also while the app still finishes
@@ -618,7 +629,7 @@ final class MeetingCoordinator {
     }
 
     func saveNotes(_ notes: String, for id: UUID) async {
-        listTexts[id] = nil
+        dropListText(id)
         do {
             try await store.saveNotes(notes, for: id)
         } catch {
@@ -915,7 +926,7 @@ final class MeetingCoordinator {
     }
 
     private func apply(_ record: MeetingRecord) {
-        listTexts[record.id] = nil
+        dropListText(record.id)
         if let index = meetings.firstIndex(where: { $0.id == record.id }) {
             meetings[index] = record
         }

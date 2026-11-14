@@ -9,7 +9,9 @@ enum MeetingAudioSourceEvent: Equatable, Sendable {
     case failed(String)
 }
 
-/// One meeting track. Blocks arrive as 16 kHz mono floats on a background queue.
+/// One meeting track. Blocks arrive as 16 kHz mono floats on a background
+/// queue. A block holds all the audio that the source had when it handed the
+/// block over: the recorder places each block by the time it arrives.
 protocol MeetingAudioSource: AnyObject {
     var onSamples: (([Float]) -> Void)? { get set }
     var onEvent: ((MeetingAudioSourceEvent) -> Void)? { get set }
@@ -48,6 +50,8 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
     private var running = false
     private var stream: MicrophoneStream?
     private var resampler: MeetingResampler?
+    /// The audio of the drain that runs now, handed on as one block when it ends.
+    private var drained: [Float] = []
     private var openedAt: TimeInterval = 0
     private var reopensWithoutSound = 0
     private var digitalSilenceSince: TimeInterval?
@@ -211,11 +215,15 @@ extension MeetingMicCapture: MicrophoneStreamDelegate {
             reopensWithoutSound = 0
         }
         noteDigitalSilence(isZero)
-        let block = resampler.process(samples)
-        if !block.isEmpty {
-            onSamples?(block)
-        }
+        drained += resampler.process(samples)
         return true
+    }
+
+    func microphoneStreamDidDrain(_ stream: MicrophoneStream) {
+        guard !drained.isEmpty else { return }
+        let block = drained
+        drained = []
+        onSamples?(block)
     }
 
     func microphoneStream(_ stream: MicrophoneStream, willFallBack cause: MicrophoneStream.FallbackCause) {

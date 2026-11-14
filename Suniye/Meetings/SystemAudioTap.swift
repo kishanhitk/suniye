@@ -202,12 +202,13 @@ final class SystemAudioTap: MeetingAudioSource, @unchecked Sendable {
 
     private func drainRing() {
         guard let ringDrain, let resampler else { return }
+        var drained: [Float] = []
         ringDrain.read { samples in
-            let block = resampler.process(samples)
-            if !block.isEmpty {
-                onSamples?(block)
-            }
+            drained += resampler.process(samples)
             return true
+        }
+        if !drained.isEmpty {
+            onSamples?(drained)
         }
     }
 
