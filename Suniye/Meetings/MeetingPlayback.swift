@@ -65,7 +65,10 @@ final class MeetingPlayback {
         guard let player else { return }
         let start = time.map { min(max(0, $0), duration) } ?? (position < duration ? position : 0)
         guard start < duration else {
+            // A move to the end stops the audio there.
+            player.pause()
             position = duration
+            stopped()
             return
         }
         guard player.play(from: start) else {
