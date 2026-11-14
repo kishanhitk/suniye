@@ -60,49 +60,23 @@ protocol AudioCaptureServiceProtocol: AnyObject {
 }
 
 final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendable {
-    var onEvent: ((AudioCaptureEvent) -> Void)? {
-        get { withCallbackLock { eventCallback } }
-        set { withCallbackLock { eventCallback = newValue } }
-    }
+    @Locked var onEvent: ((AudioCaptureEvent) -> Void)?
 
     private final class ActiveCapture {
         let id: UUID
-        let requestedEchoCancellation: Bool
-        let inputDeviceID: AudioObjectID
-        let deviceRoute: AudioDeviceRoute
-        let ring: OpaquePointer
+        let stream: MicrophoneStream
         var route: AudioRouteSnapshot
-        var driver: AudioCaptureDriver?
-        var currentPlan: AudioCapturePlan?
         var samples: [Float] = []
         var interruption: AudioCaptureInterruption?
-        var fallbackAttempted = false
-        var firstFrameSeen = false
         var engineRestartCount = 0
-        var firstFrameDeadlineGeneration = 0
         var smoothedLevels = Array(repeating: Float(0), count: AudioLevelMeter.bandCount)
         var lastLevelEmissionTime: CFTimeInterval = 0
-        var drainTimer: DispatchSourceTimer?
         var pendingStop: CheckedContinuation<CapturedAudio, Never>?
 
-        init(
-            id: UUID,
-            requestedEchoCancellation: Bool,
-            inputDeviceID: AudioObjectID,
-            deviceRoute: AudioDeviceRoute,
-            route: AudioRouteSnapshot,
-            ring: OpaquePointer
-        ) {
+        init(id: UUID, stream: MicrophoneStream) {
             self.id = id
-            self.requestedEchoCancellation = requestedEchoCancellation
-            self.inputDeviceID = inputDeviceID
-            self.deviceRoute = deviceRoute
-            self.route = route
-            self.ring = ring
-        }
-
-        deinit {
-            SuniyeAudioRingBufferDestroy(ring)
+            self.stream = stream
+            route = stream.plan.snapshot()
         }
     }
 
@@ -111,16 +85,11 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     private let deviceMonitor: AudioDeviceMonitorProtocol
     private let hardwareCatalog: AudioCaptureHardwareCatalogProtocol
     private let driverFactory: AudioCaptureDriverFactoryProtocol
-    private let callbackLock = NSLock()
-    private let ringCapacity = 1_048_576
-    private let drainCapacity = 32_768
     private let maximumDurationSeconds: Double
-    private let firstFrameDeadlineSeconds: Double
+    private let firstFrameDeadline: DispatchTimeInterval
     private let maximumEngineRestarts = 2
     private let scheduleReleaseTail: (@escaping () -> Void) -> Void
-    private let drainScratch: UnsafeMutablePointer<Float>
 
-    private var eventCallback: ((AudioCaptureEvent) -> Void)?
     private var activeCapture: ActiveCapture?
 
     static let releaseTail: DispatchTimeInterval = .milliseconds(200)
@@ -139,9 +108,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         self.hardwareCatalog = hardwareCatalog
         self.driverFactory = driverFactory
         self.maximumDurationSeconds = maximumDurationSeconds
-        self.firstFrameDeadlineSeconds = firstFrameDeadlineSeconds
+        firstFrameDeadline = .nanoseconds(Int(firstFrameDeadlineSeconds * 1_000_000_000))
         self.scheduleReleaseTail = scheduleReleaseTail
-        self.drainScratch = .allocate(capacity: drainCapacity)
         controlQueue.setSpecific(key: controlQueueKey, value: ())
 
         deviceMonitor.onChange = { [weak self] reason in
@@ -155,8 +123,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     deinit {
         deviceMonitor.stop()
         let cleanup = {
-            self.stopHardware(for: self.activeCapture)
-            self.activeCapture?.drainTimer?.cancel()
+            self.activeCapture?.stream.stop()
             self.activeCapture = nil
         }
         if DispatchQueue.getSpecific(key: controlQueueKey) != nil {
@@ -164,7 +131,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         } else {
             controlQueue.sync(execute: cleanup)
         }
-        drainScratch.deallocate()
     }
 
     func startCapture(
@@ -179,35 +145,21 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                     let resolution = try self.hardwareCatalog.resolveDeviceRoute(
                         preferredInputDeviceID: preferredInputDeviceID
                     )
-                    let plan = AudioCapturePolicy.primaryPlan(
-                        for: resolution.route,
-                        echoCancellationEnabled: echoCancellationEnabled
+                    let stream = try MicrophoneStream(
+                        queue: self.controlQueue,
+                        driverFactory: self.driverFactory,
+                        resolution: resolution,
+                        echoCancellationEnabled: echoCancellationEnabled,
+                        firstFrameDeadline: self.firstFrameDeadline
                     )
-                    guard let ring = SuniyeAudioRingBufferCreate(self.ringCapacity) else {
-                        throw AudioCaptureServiceError.ringBufferUnavailable
-                    }
-
-                    let active = ActiveCapture(
-                        id: sessionID,
-                        requestedEchoCancellation: echoCancellationEnabled,
-                        inputDeviceID: resolution.inputDeviceID,
-                        deviceRoute: resolution.route,
-                        route: plan.snapshot(),
-                        ring: ring
-                    )
+                    stream.delegate = self
+                    let active = ActiveCapture(id: sessionID, stream: stream)
                     self.activeCapture = active
-                    self.startDrainTimer(for: active)
-
-                    do {
-                        try self.startDriver(for: plan, active: active)
-                    } catch {
-                        try self.fallbackToStandardEngine(active: active, originalError: error)
-                    }
+                    try stream.start()
 
                     self.deviceMonitor.watch(
                         deviceID: self.hardwareCatalog.deviceID(forUID: active.route.effectiveInputDeviceID)
                     )
-                    self.scheduleFirstFrameDeadline(for: active)
                     AppLogger.shared.log(.info, "audio capture start session=\(sessionID.uuidString) \(active.route.privacySafeLogValue)")
                     continuation.resume(returning: AudioCaptureSession(id: sessionID, route: active.route))
                 } catch {
@@ -235,6 +187,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                     return
                 }
                 active.pendingStop = continuation
+                active.stream.stopWatchingFirstFrame()
                 self.scheduleReleaseTail { [weak self, weak active] in
                     self?.controlQueue.async {
                         guard let self, let active, self.activeCapture === active else { return }
@@ -310,36 +263,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         }
     }
 
-    private func fallbackToStandardEngine(active: ActiveCapture, originalError: Error) throws {
-        stopHardware(for: active)
-        active.fallbackAttempted = true
-        SuniyeAudioRingBufferReset(active.ring)
-        let plan = AudioCapturePolicy.fallbackPlan(
-            for: active.deviceRoute,
-            echoCancellationEnabled: active.requestedEchoCancellation,
-            reason: .backendStartFailed
-        )
-        try startDriver(for: plan, active: active)
-        onEvent?(.routeChanged(sessionID: active.id, route: active.route))
-        AppLogger.shared.log(.warning, "audio backend fallback session=\(active.id.uuidString) reason=\(originalError.localizedDescription) \(active.route.privacySafeLogValue)")
-    }
-
-    private func startDriver(for plan: AudioCapturePlan, active: ActiveCapture) throws {
-        let started = try driverFactory.startDriver(
-            for: plan,
-            inputDeviceID: active.inputDeviceID,
-            ring: active.ring
-        ) { [weak self, weak active] in
-            self?.controlQueue.async {
-                guard let self, let active, self.activeCapture === active else { return }
-                self.handleEngineConfigurationChange(active)
-            }
-        }
-        active.driver = started.driver
-        active.currentPlan = plan
-        active.route = plan.snapshot(format: started.format)
-    }
-
     /// Handles an `AVAudioEngineConfigurationChange` reported by an active engine driver.
     ///
     /// The engine emits a benign configuration change immediately after `start()` (e.g. just after the
@@ -366,7 +289,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         }
         active.engineRestartCount += 1
         do {
-            try restartActiveDriver(active)
+            try active.stream.restart()
             AppLogger.shared.log(
                 .warning,
                 "audio engine reconfigured; restarted in place session=\(active.id.uuidString) attempt=\(active.engineRestartCount) \(active.route.privacySafeLogValue)"
@@ -380,51 +303,19 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         }
     }
 
-    /// Rebuilds the current driver on the same ring after a benign engine reconfiguration.
-    /// Preserves already-captured audio; only resets the ring and re-arms the first-frame deadline
-    /// when no frame has arrived yet.
-    private func restartActiveDriver(_ active: ActiveCapture) throws {
-        guard let plan = active.currentPlan else {
-            assertionFailure("restartActiveDriver called with no active plan")
-            throw AudioCaptureServiceError.operationFailed("Restart audio driver: no active plan", kAudio_ParamError)
+    private func accept(_ values: UnsafeBufferPointer<Float>, into active: ActiveCapture) -> Bool {
+        let remainingCapacity = max(0, maximumSampleCount(for: active) - active.samples.count)
+        let accepted = min(values.count, remainingCapacity)
+        if accepted > 0 {
+            let acceptedValues = UnsafeBufferPointer(rebasing: values[0 ..< accepted])
+            active.samples.append(contentsOf: acceptedValues)
+            updateLevels(active: active, values: acceptedValues)
         }
-        stopHardware(for: active)
-        if !active.firstFrameSeen {
-            SuniyeAudioRingBufferReset(active.ring)
+        if accepted < values.count || active.samples.count >= maximumSampleCount(for: active) {
+            interruptActiveCapture(.maximumDurationReached)
+            return false
         }
-        try startDriver(for: plan, active: active)
-        if !active.firstFrameSeen {
-            scheduleFirstFrameDeadline(for: active)
-        }
-    }
-
-    private func startDrainTimer(for active: ActiveCapture) {
-        let timer = DispatchSource.makeTimerSource(queue: controlQueue)
-        timer.schedule(deadline: .now() + .milliseconds(20), repeating: .milliseconds(20), leeway: .milliseconds(4))
-        timer.setEventHandler { [weak self, weak active] in
-            guard let self, let active, self.activeCapture === active else { return }
-            self.drain(active)
-        }
-        active.drainTimer = timer
-        timer.resume()
-    }
-
-    private func drain(_ active: ActiveCapture) {
-        var count = SuniyeAudioRingBufferRead(active.ring, drainScratch, drainCapacity)
-        while count > 0 {
-            active.firstFrameSeen = true
-            let remainingCapacity = max(0, maximumSampleCount(for: active) - active.samples.count)
-            let accepted = min(count, remainingCapacity)
-            if accepted > 0 {
-                active.samples.append(contentsOf: UnsafeBufferPointer(start: drainScratch, count: accepted))
-                updateLevels(active: active, values: UnsafeBufferPointer(start: drainScratch, count: accepted))
-            }
-            if accepted < count || active.samples.count >= maximumSampleCount(for: active) {
-                interruptActiveCapture(.maximumDurationReached)
-                return
-            }
-            count = SuniyeAudioRingBufferRead(active.ring, drainScratch, drainCapacity)
-        }
+        return true
     }
 
     private func updateLevels(active: ActiveCapture, values: UnsafeBufferPointer<Float>) {
@@ -456,38 +347,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
 
     private func maximumSampleCount(for active: ActiveCapture) -> Int {
         Int(Double(max(8_000, active.route.inputSampleRate)) * maximumDurationSeconds)
-    }
-
-    private func scheduleFirstFrameDeadline(for active: ActiveCapture) {
-        // An in-place engine restart re-arms this deadline. Tag each scheduling with a
-        // generation so a superseded deadline closure (from before the restart) no longer
-        // fires a spurious fallback/interrupt against the now-restarted driver.
-        active.firstFrameDeadlineGeneration += 1
-        let generation = active.firstFrameDeadlineGeneration
-        controlQueue.asyncAfter(deadline: .now() + firstFrameDeadlineSeconds) { [weak self, weak active] in
-            guard let self,
-                  let active,
-                  self.activeCapture === active,
-                  active.interruption == nil,
-                  active.pendingStop == nil,
-                  !active.firstFrameSeen,
-                  active.firstFrameDeadlineGeneration == generation else {
-                return
-            }
-            if active.route.backend != .standardEngine, !active.fallbackAttempted {
-                do {
-                    try self.fallbackToStandardEngine(
-                        active: active,
-                        originalError: AudioCaptureServiceError.operationFailed("No first audio buffer", kAudio_ParamError)
-                    )
-                    self.scheduleFirstFrameDeadline(for: active)
-                } catch {
-                    self.interruptActiveCapture(.noAudioArriving)
-                }
-            } else {
-                self.interruptActiveCapture(.noAudioArriving)
-            }
-        }
     }
 
     private func handleDeviceChange(_ reason: AudioDeviceChangeReason) {
@@ -552,10 +411,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
             return
         }
         active.interruption = reason
-        stopHardware(for: active)
-        drain(active)
-        active.drainTimer?.cancel()
-        active.drainTimer = nil
+        active.stream.stop()
+        active.stream.drain()
         AppLogger.shared.log(.warning, "audio capture interrupted session=\(active.id.uuidString) reason=\(reason.rawValue) \(active.route.privacySafeLogValue)")
         onEvent?(.interrupted(sessionID: active.id, reason: reason))
     }
@@ -565,10 +422,8 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
         // through interruptActiveCapture while this finalize still runs.
         let pendingStop = active.pendingStop
         active.pendingStop = nil
-        stopHardware(for: active)
-        drain(active)
-        active.drainTimer?.cancel()
-        active.drainTimer = nil
+        active.stream.stop()
+        active.stream.drain()
         let samples = discard ? [] : active.samples
         let captured: CapturedAudio
         if let interruption = active.interruption, interruption != .maximumDurationReached {
@@ -579,7 +434,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                 samples: samples,
                 sampleRate: active.route.inputSampleRate,
                 route: active.route,
-                droppedSampleCount: SuniyeAudioRingBufferDroppedSamples(active.ring)
+                droppedSampleCount: active.stream.droppedSampleCount
             )
         }
         activeCapture = nil
@@ -596,11 +451,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
             return
         }
         _ = finalize(active: active, discard: true)
-    }
-
-    private func stopHardware(for active: ActiveCapture?) {
-        active?.driver?.stop()
-        active?.driver = nil
     }
 
     private func scheduleReleaseCheck(sessionID: UUID) {
@@ -633,10 +483,48 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
             )
         )
     }
+}
 
-    private func withCallbackLock<T>(_ work: () -> T) -> T {
-        callbackLock.lock()
-        defer { callbackLock.unlock() }
-        return work()
+extension AudioCaptureService: MicrophoneStreamDelegate {
+    func microphoneStream(_ stream: MicrophoneStream, didRead samples: UnsafeBufferPointer<Float>) -> Bool {
+        guard let active = activeCapture(for: stream) else { return false }
+        return accept(samples, into: active)
+    }
+
+    func microphoneStream(_ stream: MicrophoneStream, willFallBack cause: MicrophoneStream.FallbackCause) {}
+
+    func microphoneStream(
+        _ stream: MicrophoneStream,
+        didStart plan: AudioCapturePlan,
+        format: AudioCaptureFormat,
+        fallback cause: MicrophoneStream.FallbackCause?
+    ) {
+        guard let active = activeCapture(for: stream) else { return }
+        active.route = plan.snapshot(format: format)
+        guard let cause else { return }
+        let reason: Error
+        switch cause {
+        case let .startFailed(error):
+            reason = error
+        case .noFirstFrame:
+            reason = AudioCaptureServiceError.operationFailed("No first audio buffer", kAudio_ParamError)
+        }
+        onEvent?(.routeChanged(sessionID: active.id, route: active.route))
+        AppLogger.shared.log(.warning, "audio backend fallback session=\(active.id.uuidString) reason=\(reason.localizedDescription) \(active.route.privacySafeLogValue)")
+    }
+
+    func microphoneStreamConfigurationChanged(_ stream: MicrophoneStream) {
+        guard let active = activeCapture(for: stream) else { return }
+        handleEngineConfigurationChange(active)
+    }
+
+    func microphoneStream(_ stream: MicrophoneStream, deliveredNoAudio standardEngineError: Error?) {
+        guard activeCapture(for: stream) != nil else { return }
+        interruptActiveCapture(.noAudioArriving)
+    }
+
+    private func activeCapture(for stream: MicrophoneStream) -> ActiveCapture? {
+        guard let active = activeCapture, active.stream === stream else { return nil }
+        return active
     }
 }
