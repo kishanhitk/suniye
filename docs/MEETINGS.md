@@ -69,6 +69,7 @@ After a quit or a crash, the next launch writes no transcript by itself: it does
 ## Transcript
 
 - No speech recognition runs while the meeting records. The meeting page shows the notes, the meters and the warnings.
+- The pill shows a red dot, the recorded time and one level meter for the louder track.
 - After the stop, the transcript model writes the transcript from the audio files. The meeting page shows "Finishing the transcript…" with the minutes done.
 - **Settings → General → Meetings → Transcript model**:
   - **Same as dictation** (default): the dictation model, on the dictation engine.

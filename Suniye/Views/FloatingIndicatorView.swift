@@ -547,10 +547,10 @@ private struct ListeningMeterView: View {
     }
 }
 
-/// The pill while a meeting records. At rest: the dot, the time and a level
-/// meter for each track, or a pause glyph while paused, or a warning glyph
-/// while a track has a problem. On hover: Pause (or Resume), Stop and Open
-/// Notes. A click on the pill opens the meeting.
+/// The pill while a meeting records. At rest: the dot, the time and one level
+/// meter for the louder track, or a pause glyph while paused, or a warning
+/// glyph while a track has a problem. On hover: Pause (or Resume), Stop and
+/// Open Notes. A click on the pill opens the meeting.
 private struct MeetingPillContent: View {
     let session: MeetingSession
     let expanded: Bool
@@ -581,10 +581,15 @@ private struct MeetingPillContent: View {
                     .foregroundStyle(.white, Color(red: 0.95, green: 0.57, blue: 0))
                     .frame(width: FloatingIndicatorMetrics.meetingPillGlyphWidth)
             } else {
-                meter(session.youLevel, tint: .white.opacity(0.95))
-                if session.hasCallTrack {
-                    meter(session.themLevel, tint: .white.opacity(0.55))
-                }
+                // The bars at rest show that capture works: there is no live
+                // transcript to show it.
+                MeetingLevelMeter(
+                    level: max(session.youLevel, session.themLevel),
+                    tint: .white.opacity(0.95),
+                    restTint: .white.opacity(0.3),
+                    barWidth: 2,
+                    height: 16
+                )
             }
         }
         .foregroundStyle(.white)
@@ -595,12 +600,6 @@ private struct MeetingPillContent: View {
         }
         .accessibilityAction(named: "Stop") { onAction(.stop) }
         .accessibilityAction(named: "Open Notes") { onAction(.open) }
-    }
-
-    /// Bars at rest are the sign that capture works: there is no live
-    /// transcript to show it.
-    private func meter(_ level: Float, tint: Color) -> some View {
-        MeetingLevelMeter(level: level, tint: tint, restTint: .white.opacity(0.3), barWidth: 2, height: 16)
     }
 }
 

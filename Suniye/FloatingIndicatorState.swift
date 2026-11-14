@@ -27,18 +27,13 @@ enum FloatingIndicatorMetrics {
     }
 
     /// The meeting pill, sized to what it shows. At rest: the dot, the time,
-    /// then a level meter for each track, or one glyph while paused or while
-    /// a track has a problem. On hover: the dot, the time, and Pause (or
-    /// Resume), Stop and Open Notes.
-    static func meetingPillSize(expanded: Bool, isPaused: Bool, hasProblem: Bool, hasCallTrack: Bool) -> CGSize {
+    /// then one level meter, or one glyph while paused or while a track has a
+    /// problem. On hover: the dot, the time, and Pause (or Resume), Stop and
+    /// Open Notes.
+    static func meetingPillSize(expanded: Bool, isPaused: Bool, hasProblem: Bool) -> CGSize {
         let lead = meetingPillDotWidth + meetingPillGap + meetingPillTimeWidth
         guard expanded else {
-            let trailing: CGFloat
-            if isPaused || hasProblem {
-                trailing = meetingPillGlyphWidth
-            } else {
-                trailing = hasCallTrack ? 2 * meetingPillMeterWidth + meetingPillGap : meetingPillMeterWidth
-            }
+            let trailing = isPaused || hasProblem ? meetingPillGlyphWidth : meetingPillMeterWidth
             return CGSize(width: 2 * 14 + lead + meetingPillGap + trailing, height: 34)
         }
         let buttons = meetingPillButtonWidth(isPaused ? "Resume" : "Pause", hasIcon: true)
@@ -196,6 +191,6 @@ enum FloatingIndicatorState: Equatable {
 extension FloatingIndicatorMetrics {
     @MainActor
     static func meetingPillSize(for session: MeetingSession, expanded: Bool) -> CGSize {
-        meetingPillSize(expanded: expanded, isPaused: session.isPaused, hasProblem: session.hasTrackProblem, hasCallTrack: session.hasCallTrack)
+        meetingPillSize(expanded: expanded, isPaused: session.isPaused, hasProblem: session.hasTrackProblem)
     }
 }
