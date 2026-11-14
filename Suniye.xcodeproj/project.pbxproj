@@ -112,6 +112,7 @@
 		52B90755A1D796BAB9440B64 /* MagicFormatPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD3D8E1B7A6DE71A7093683 /* MagicFormatPage.swift */; };
 		52FFFA6A814D5746A5CF8EEE /* DictationStatsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56E465B1111D1E9347B41372 /* DictationStatsStoreTests.swift */; };
 		538CCC22F273225E882F7463 /* HistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */; };
+		55908CD3FBF1CD8643E56290 /* MagicFormatStatusColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F3E5FF9D61B60F703112800 /* MagicFormatStatusColors.swift */; };
 		55E5BDE2ED65587857A330FA /* DictationAppUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ABD94B2CFB94D4FEAE8FB26 /* DictationAppUsage.swift */; };
 		563EA2C51056E4DF37B50F91 /* AppIconCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68D142E1D2C2EA1AC0410DB2 /* AppIconCache.swift */; };
 		56F6C83F84D44FC17F6C1AE2 /* AudioCaptureServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6F2EB76CF32A101E8454D9 /* AudioCaptureServiceTests.swift */; };
@@ -177,7 +178,6 @@
 		96D47C5DFE84C5C9C49BBAD6 /* OpenRouterPostProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386B9D8DFD2BB94A83C15741 /* OpenRouterPostProcessorTests.swift */; };
 		972BB48E8651A07955FD43FF /* LocalLLMModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E009E289B5FD5E9CE2E7DE3 /* LocalLLMModelManager.swift */; };
 		9840E58357F352B218E9560E /* IssueReportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 720231C08C15D653CB744988 /* IssueReportView.swift */; };
-		9B146A836F4108A578F78539 /* StatusColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D4B010460A5C0F82805B883 /* StatusColors.swift */; };
 		9B620B2FE86BC5077B032344 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 883D78CB6AA12B92E4A572B8 /* StatusItemController.swift */; };
 		9BAF2203812D14A327D6D95C /* ModelDownloadSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A869CBDB7FC8EA39C42431E /* ModelDownloadSupport.swift */; };
 		9C50C47FFF1CFFE6EB01CCA4 /* silero_vad_v5.onnx in Resources */ = {isa = PBXBuildFile; fileRef = 19EE19E33409A6D383FBBC27 /* silero_vad_v5.onnx */; };
@@ -275,6 +275,7 @@
 		F51AB85283295FEEB0FA0866 /* LLMPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA85018741AA6759EA4673CE /* LLMPostProcessor.swift */; };
 		F58587EACAC8D364EBAEB35B /* AppStateEditModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F315E4E1F24DD7A14BC4B4 /* AppStateEditModeTests.swift */; };
 		F719DE8985962FA2179069D5 /* Qwen3ASRTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4EC9BA169B0621D342918A8 /* Qwen3ASRTests.swift */; };
+		F7D72761A285F6E9884B7ECD /* SpeechModelStatusColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6747D2B680B3915DA6F9B966 /* SpeechModelStatusColors.swift */; };
 		F85C6EF1ABC2A8B1D499F9E0 /* ChatCompletionClientMoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8ED33B3E86E3D32345233D3 /* ChatCompletionClientMoreTests.swift */; };
 		F871B19DF9CE3C8A9C22FCD9 /* LlamaServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B5C4B06DC7CB1BF19113B8B /* LlamaServer.swift */; };
 		F906F96CB8C49BEB9408162F /* MicrophoneChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D8A816470895160000BB7AD /* MicrophoneChoice.swift */; };
@@ -421,6 +422,7 @@
 		662584944F30DDB878E080DB /* RecentResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentResult.swift; sourceTree = "<group>"; };
 		667CD8D078A7298D136D4BC5 /* AppStateEditLearningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateEditLearningTests.swift; sourceTree = "<group>"; };
 		66890690C8C597EB937BE2F9 /* HistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStoreTests.swift; sourceTree = "<group>"; };
+		6747D2B680B3915DA6F9B966 /* SpeechModelStatusColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechModelStatusColors.swift; sourceTree = "<group>"; };
 		6751D4776C0AAB669ABBE499 /* AppIconCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconCacheTests.swift; sourceTree = "<group>"; };
 		68912427BD39E32164067123 /* TextInsertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionService.swift; sourceTree = "<group>"; };
 		68CC89597993168FB2A643A4 /* TranscriptsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptsPage.swift; sourceTree = "<group>"; };
@@ -428,7 +430,6 @@
 		6993C888B94665EF5BE169A7 /* MainWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindowView.swift; sourceTree = "<group>"; };
 		6B7E6651CF9466C7AB1093D2 /* AudioCaptureModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureModels.swift; sourceTree = "<group>"; };
 		6CE8327389246CFF18546464 /* RoutingTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingTranscriptionService.swift; sourceTree = "<group>"; };
-		6D4B010460A5C0F82805B883 /* StatusColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusColors.swift; sourceTree = "<group>"; };
 		6D87A92E75E56D48799037D5 /* AppStateAccessibilityOnboardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateAccessibilityOnboardingTests.swift; sourceTree = "<group>"; };
 		6F02A73ADB04B9EA2A05504E /* TranscriptBrowsing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptBrowsing.swift; sourceTree = "<group>"; };
 		6FF7C31C1A2AEEB19A845985 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
@@ -469,6 +470,7 @@
 		8A869CBDB7FC8EA39C42431E /* ModelDownloadSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadSupport.swift; sourceTree = "<group>"; };
 		8D4C44D5D8846E9AC198372D /* AppleFoundationModelsPostProcessorMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelsPostProcessorMoreTests.swift; sourceTree = "<group>"; };
 		8D66C0108BAD9B0F52C0C56C /* DictationShortcutGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationShortcutGesture.swift; sourceTree = "<group>"; };
+		8F3E5FF9D61B60F703112800 /* MagicFormatStatusColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatStatusColors.swift; sourceTree = "<group>"; };
 		9044A7C4A8E272E7DD540E1E /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
 		920198666EB5634CA199A1B4 /* FloatingIndicatorStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorStateTests.swift; sourceTree = "<group>"; };
 		93693DE6F2D98B6A5F69C833 /* MeetingSegmenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSegmenter.swift; sourceTree = "<group>"; };
@@ -900,6 +902,7 @@
 				3DD3D8E1B7A6DE71A7093683 /* MagicFormatPage.swift */,
 				B9B8EEC37CB377B353D706D8 /* MagicFormatProviderPresentation.swift */,
 				C656E29E7635F0953759B9DC /* MagicFormatSheets.swift */,
+				8F3E5FF9D61B60F703112800 /* MagicFormatStatusColors.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -984,6 +987,7 @@
 			isa = PBXGroup;
 			children = (
 				7E1E8F156A43681676F677E4 /* SpeechModelPage.swift */,
+				6747D2B680B3915DA6F9B966 /* SpeechModelStatusColors.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1097,7 +1101,6 @@
 			children = (
 				FB7DB7B5C04B89DA04AF3EE0 /* MainWindowController.swift */,
 				6993C888B94665EF5BE169A7 /* MainWindowView.swift */,
-				6D4B010460A5C0F82805B883 /* StatusColors.swift */,
 				883D78CB6AA12B92E4A572B8 /* StatusItemController.swift */,
 			);
 			path = Views;
@@ -1385,6 +1388,7 @@
 				143EB012DF06F3D2D38CFE2A /* MagicFormatProviderPresentation.swift in Sources */,
 				BEBFE4B82D273C0A770D7A85 /* MagicFormatSetupState.swift in Sources */,
 				820273F503630AEE8C6E60AF /* MagicFormatSheets.swift in Sources */,
+				55908CD3FBF1CD8643E56290 /* MagicFormatStatusColors.swift in Sources */,
 				2247C70620E2527C3E9F8DB0 /* MainWindowComponents.swift in Sources */,
 				DD2DF879055EDA81608657AF /* MainWindowController.swift in Sources */,
 				D86E625941C2BF82BDED6971 /* MainWindowSection.swift in Sources */,
@@ -1445,7 +1449,7 @@
 				147821DD30212BB0F273AC40 /* SoundFeedbackService.swift in Sources */,
 				25180F62119AA8301306A3FE /* SpeechDetector.swift in Sources */,
 				4528CF55783D5AE8B04A99C0 /* SpeechModelPage.swift in Sources */,
-				9B146A836F4108A578F78539 /* StatusColors.swift in Sources */,
+				F7D72761A285F6E9884B7ECD /* SpeechModelStatusColors.swift in Sources */,
 				9B620B2FE86BC5077B032344 /* StatusItemController.swift in Sources */,
 				88F36964AB518AB5BC3A3AD7 /* SubtleScroller.swift in Sources */,
 				027F7B4ACEFBABA013051504 /* Suniye.swift in Sources */,
