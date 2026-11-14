@@ -12,8 +12,16 @@ struct MeetingActionFailure: Equatable {
 final class MeetingActions {
     var deleting: MeetingRecord?
     var askingTranscribeAgain: MeetingRecord?
+    var replacingSummary: SummaryReplacement?
     var failure: MeetingActionFailure?
     var editingTemplates = false
+
+    /// Regenerate on a summary that the user edited, waiting for its answer.
+    struct SummaryReplacement: Equatable {
+        let meetingID: UUID
+        let templateID: String?
+        let templateName: String
+    }
 
     func startMeeting(_ meetings: MeetingCoordinator) {
         Task {
@@ -110,6 +118,18 @@ private struct MeetingActionDialogs: ViewModifier {
                 Button("Cancel", role: .cancel) {}
             } message: { record in
                 Text(MeetingActions.transcribeAgainMessage(model: meetings.transcriptModelName, edited: record.transcriptEditedAt != nil))
+            }
+            .alert(
+                "Replace your edited summary?",
+                isPresented: Binding(get: { actions.replacingSummary != nil }, set: { if !$0 { actions.replacingSummary = nil } }),
+                presenting: actions.replacingSummary
+            ) { replacement in
+                Button("Replace") {
+                    Task { await meetings.regenerate(replacement.meetingID, templateID: replacement.templateID) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { replacement in
+                Text("A new summary with the \(replacement.templateName) template replaces your changes.")
             }
             .alert(
                 actions.failure?.title ?? "",

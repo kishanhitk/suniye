@@ -144,7 +144,7 @@ struct MeetingRegenerateMenu: View {
                     Button {
                         // Another template also becomes the default; the
                         // current one leaves the default as it is.
-                        Task { await meetings.regenerate(record.id, templateID: isCurrent ? nil : template.id) }
+                        regenerate(templateID: isCurrent ? nil : template.id, templateName: template.name)
                     } label: {
                         if isCurrent {
                             Label(template.name, systemImage: "checkmark")
@@ -168,6 +168,18 @@ struct MeetingRegenerateMenu: View {
         .accessibilityLabel("Regenerate Summary")
         .task(id: actions.editingTemplates) {
             templates = await meetings.templates.templates()
+        }
+    }
+
+    /// A summary that the user edited is replaced only after a question.
+    private func regenerate(templateID: String?, templateName: String) {
+        Task {
+            await meetings.textSaves.finish(record.id)
+            if meetings.record(record.id)?.summaryEditedAt != nil {
+                actions.replacingSummary = MeetingActions.SummaryReplacement(meetingID: record.id, templateID: templateID, templateName: templateName)
+            } else {
+                await meetings.regenerate(record.id, templateID: templateID)
+            }
         }
     }
 }

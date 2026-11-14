@@ -134,7 +134,7 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 - The built-in sections (Decisions, Action items, Dates and numbers, Open questions) have fixed rules for what goes in them. A template that you wrote or edited goes to each part as a guide to its sections.
 - The built-in templates have a **Dates and numbers** section for the dates and numbers that fit no other section.
 - A template with no list section is summarized by the model in one step, or from notes on the parts when the transcript is long. So is a template so long that a part would hold less than 1,000 tokens of transcript.
-- **Regenerate** (the arrow at the right of the tabs, on the Summary tab) opens the templates; the current one has a checkmark. The template that you pick writes the summary again. Another template also becomes the **Default template**.
+- **Regenerate** (the arrow at the right of the tabs, on the Summary tab) opens the templates; the current one has a checkmark. The template that you pick writes the summary again. Another template also becomes the **Default template**. A summary that you edited is replaced only after you answer "Replace your edited summary?".
 
 ## Edit
 
