@@ -882,6 +882,32 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(notices, [.notTranscribedAgain(meeting.id)])
     }
 
+    func testTranscribeAgainKeepsTheTranscriptWhenTheAudioOfATrackIsGone() async throws {
+        let end = clock.addingTimeInterval(-24 * 60 * 60)
+        var meeting = MeetingRecord(title: "Design sync", startedAt: end.addingTimeInterval(-1_800), tracks: [.you, .them], status: .done, templateID: "general")
+        meeting.endedAt = end
+        try await store.create(meeting)
+        let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: meeting.id))
+        try writer.append(tone(2.5, level: 0.3) + silence(0.5))
+        try writer.close()
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .them, audioStart: 0, audioEnd: 40_000, text: "Their words."), to: meeting.id)
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 48_000, audioEnd: 88_000, text: "Old words."), to: meeting.id)
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        var notices: [MeetingNotice] = []
+        coordinator.onNotice = { notices.append($0) }
+        await coordinator.start()
+
+        coordinator.transcribeAgain(meeting.id)
+        let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
+        let transcript = await coordinator.transcript(of: meeting.id)
+
+        XCTAssertTrue(finished)
+        XCTAssertEqual(transcript.map(\.text), ["Their words.", "Old words."], "the Them lines have no audio to come back from")
+        XCTAssertEqual(notices, [.notTranscribedAgain(meeting.id)])
+    }
+
     func testAudioThatCannotBeDeletedStaysOnTheList() async throws {
         let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
         let folder = store.folder(for: meeting.id).path
