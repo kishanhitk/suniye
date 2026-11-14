@@ -150,21 +150,23 @@ struct MeetingCallCardView: View {
         .frame(width: 272, alignment: .leading)
     }
 
-    private func ended(_ app: MeetingCallApp, silent: Bool, stopsAt: Date) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func ended(_ app: MeetingCallApp, silent: Bool, stopsAt: Date?) -> some View {
+        let title = silent ? "No sound from \(app.name)" : "\(app.name) left the call"
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 AppGlyph()
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    let seconds = max(0, Int(stopsAt.timeIntervalSince(context.date).rounded(.up)))
-                    Heading(
-                        title: silent ? "No sound from \(app.name)" : "\(app.name) left the call",
-                        detail: "Recording stops in \(seconds) s."
-                    )
+                if let stopsAt {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let seconds = max(0, Int(stopsAt.timeIntervalSince(context.date).rounded(.up)))
+                        Heading(title: title, detail: "Recording stops in \(seconds) s.")
+                    }
+                } else {
+                    Heading(title: title, detail: "Suniye is still recording.")
                 }
                 Spacer(minLength: 0)
             }
             HStack(spacing: 8) {
-                Button("Stop Now") {
+                Button(stopsAt == nil ? "Stop Recording" : "Stop Now") {
                     Task { await meetings.stopEndedCall() }
                 }
                 .buttonStyle(.borderedProminent)

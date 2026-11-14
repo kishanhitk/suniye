@@ -29,14 +29,15 @@ struct MeetingsPage: View {
             HStack(alignment: .firstTextBaseline) {
                 DetailPageTitle(title: "Meetings")
                 Spacer()
-                Button {
-                    actions.startMeeting(meetings)
-                } label: {
-                    Label("Record Meeting", systemImage: "record.circle")
+                if meetings.live == nil {
+                    Button {
+                        actions.startMeeting(meetings)
+                    } label: {
+                        Label("Record Meeting", systemImage: "record.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut("n", modifiers: .command)
                 }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut("n", modifiers: .command)
-                .disabled(meetings.live != nil)
             }
 
             if !meetings.canRecordCallAudio {
@@ -46,7 +47,21 @@ struct MeetingsPage: View {
                     title: "Recording a call needs macOS 14.4 or later",
                     detail: "You can still record a meeting in the room.",
                     actionTitle: "Software Update",
-                    action: { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension")!) }
+                    action: { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension")!) },
+                    actionIsProminent: false
+                )
+            }
+
+            ForEach(notTranscribed) { record in
+                InlineStatusBanner(
+                    icon: "exclamationmark.triangle.fill",
+                    tint: .orange,
+                    title: MeetingStatus.notTranscribedTitle,
+                    detail: MeetingDurationText.savedAudio(of: record),
+                    actionTitle: "Finish Transcript",
+                    action: { meetings.finishTranscript(record.id) },
+                    secondaryActionTitle: "Delete",
+                    secondaryAction: { actions.confirmDelete(record) }
                 )
             }
 
@@ -68,7 +83,12 @@ struct MeetingsPage: View {
             }
 
             if !listed.isEmpty {
-                TranscriptSearchBar(searchText: $searchText, isSearchFocused: $isSearchFocused, placeholder: "Search meetings")
+                TranscriptSearchBar(
+                    searchText: $searchText,
+                    isSearchFocused: $isSearchFocused,
+                    placeholder: "Search meetings",
+                    resultCount: resultCount
+                )
             }
 
             list
@@ -131,13 +151,23 @@ struct MeetingsPage: View {
     private func unfinishedDetail(_ record: MeetingRecord) -> String {
         let time = record.startedAt.formatted(date: .omitted, time: .shortened)
         guard let failure = record.transcriptFailure else {
-            return "Suniye closed while it wrote the transcript of the \(time) meeting. The audio is saved."
+            return "Suniye closed before the transcript of the \(time) meeting was done. The audio is saved."
         }
         return "\(failure) The audio of the \(time) meeting is saved."
     }
 
     private var unfinished: [MeetingRecord] {
         meetings.meetings.filter { $0.status == .interrupted }
+    }
+
+    private var notTranscribed: [MeetingRecord] {
+        meetings.meetings.filter { $0.status == .notTranscribed }
+    }
+
+    /// "3 meetings" while a search finds some.
+    private var resultCount: String? {
+        guard !query.isEmpty, !visible.isEmpty else { return nil }
+        return visible.count == 1 ? "1 meeting" : "\(visible.count) meetings"
     }
 
     private var visible: [MeetingRecord] {
@@ -177,25 +207,34 @@ private struct LiveMeetingRow: View {
     let open: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Circle()
                 .fill(session.isPaused ? Color.secondary : Color.red)
                 .frame(width: 8, height: 8)
             Text(session.isPaused ? "Paused" : "Recording")
-                .font(AppTypography.bodyMedium)
-            MeetingTimer(session: session)
-                .foregroundStyle(MainWindowPalette.secondaryText)
-            Text(session.record.title)
                 .font(AppTypography.body)
+            MeetingTimer(session: session)
+                .font(AppTypography.body.monospaced())
+            Text(session.record.title)
+                .font(AppTypography.bodyMedium)
                 .lineLimit(1)
             Spacer()
             Button("Open Notes", action: open)
+                .buttonStyle(.bordered)
         }
-        .padding(.vertical, AppMetrics.listRowVerticalPadding)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.red.opacity(0.07))
+        )
     }
 }
 
 private struct MeetingRow: View {
+    /// The search match marks of the approved list: the system yellow.
+    static let matchColor = Color.yellow.opacity(0.45)
+
     let record: MeetingRecord
     let snippet: String?
     let query: String
@@ -209,11 +248,21 @@ private struct MeetingRow: View {
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .frame(width: 72, alignment: .leading)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(record.title)
-                        .font(AppTypography.bodyMedium)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(record.title)
+                            .font(AppTypography.bodyMedium)
+                            .lineLimit(1)
+                        if record.status == .notTranscribed {
+                            Text("Not finished")
+                                .font(AppTypography.caption.weight(.medium))
+                                .foregroundStyle(MainWindowPalette.warningTagText)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Color.orange.opacity(0.16)))
+                        }
+                    }
                     if let snippet {
-                        Text(snippet.highlightingMatches(of: query))
+                        Text(snippet.highlightingMatches(of: query, color: Self.matchColor))
                             .font(AppTypography.body)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                             .lineLimit(2)

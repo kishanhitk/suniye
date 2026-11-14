@@ -9,9 +9,11 @@ enum MeetingCallCard: Equatable {
     /// `cancelEndsAt`.
     case startedAutomatically(MeetingCallApp, cancelEndsAt: Date)
     /// The call of the recording ended at `endedAt`: its app released the
-    /// microphone, or, when `silent`, played no sound. The recording stops at
-    /// `stopsAt` and keeps nothing after `endedAt`.
-    case callEnded(MeetingCallApp, silent: Bool, endedAt: Date, stopsAt: Date)
+    /// microphone, or, when `silent`, played no sound. A recording that
+    /// started by itself stops at `stopsAt` and keeps nothing after
+    /// `endedAt`. A recording that the user started has no `stopsAt`: it goes
+    /// on until the user answers.
+    case callEnded(MeetingCallApp, silent: Bool, endedAt: Date, stopsAt: Date?)
 
     struct Durations {
         var offer: TimeInterval = 20
@@ -73,6 +75,9 @@ final class MeetingSession {
     }
 
     fileprivate(set) var record: MeetingRecord
+    /// How the recording started: one that started by itself also stops by
+    /// itself when its call ends.
+    let source: MeetingSource
     fileprivate(set) var youLevel: Float = 0
     fileprivate(set) var themLevel: Float = 0
     fileprivate(set) var callAudioProblem: CallAudioProblem?
@@ -85,8 +90,9 @@ final class MeetingSession {
     /// Set by the first stop, so that a second one does nothing.
     @ObservationIgnored fileprivate var isStopping = false
 
-    fileprivate init(record: MeetingRecord, recorder: MeetingRecorder, speech: MeetingSpeechWatch) {
+    fileprivate init(record: MeetingRecord, source: MeetingSource, recorder: MeetingRecorder, speech: MeetingSpeechWatch) {
         self.record = record
+        self.source = source
         self.recorder = recorder
         self.speech = speech
     }
@@ -101,6 +107,11 @@ final class MeetingSession {
 
     var isPaused: Bool {
         record.status == .paused
+    }
+
+    /// No sound comes from the call, or a track failed.
+    var hasTrackProblem: Bool {
+        callAudioProblem != nil || !failedTracks.isEmpty
     }
 
     fileprivate var workingTracks: [MeetingTrack] {
@@ -172,8 +183,10 @@ final class MeetingCoordinator {
     @ObservationIgnored private var launched = false
     @ObservationIgnored private var isStarting = false
     @ObservationIgnored private var cardTimer: Task<Void, Never>?
-    /// The meetings whose transcript is being written.
+    /// The meetings whose transcript waits or is being written.
     @ObservationIgnored private var passes: Set<UUID> = []
+    /// The pass asked for last: each pass starts when the one before it ends.
+    @ObservationIgnored private var lastPass: Task<Void, Never>?
     /// The passes that decode now. Each one waits while a dictation runs.
     @ObservationIgnored private var transcribers: [UUID: MeetingTranscriber] = [:]
     @ObservationIgnored private var dictating = false
@@ -227,14 +240,12 @@ final class MeetingCoordinator {
         environment.canRecordCallAudio
     }
 
-    /// At launch: finish the transcripts that a quit or a crash left, and
-    /// queue the summaries that are not written yet.
+    /// At launch: repair what a quit or a crash left, and queue the summaries
+    /// that are not written yet. A transcript that a quit or a crash left
+    /// waits for Finish Transcript.
     func start() async {
-        let recovered = await store.recoverInterruptedMeetings()
+        _ = await store.recoverInterruptedMeetings()
         meetings = await store.loadAll()
-        for record in recovered where record.status == .finishing {
-            finishTranscript(record.id)
-        }
         for record in meetings where record.status == .summarizing {
             summaries.enqueue(record.id)
         }
@@ -285,6 +296,15 @@ final class MeetingCoordinator {
         updateSettings { $0.callStartAction = action }
     }
 
+    /// Saves the list that the template editor shows. When the Default
+    /// template is not in it any more, General is the default again.
+    func saveTemplates(_ list: [MeetingTemplate]) async throws {
+        try await templates.replace(with: list)
+        if !list.contains(where: { $0.id == settings.templateID }) {
+            updateSettings { $0.templateID = MeetingTemplate.general.id }
+        }
+    }
+
     // MARK: - Recording
 
     func startMeeting(source: MeetingSource, callApp: MeetingCallApp? = nil) async throws {
@@ -315,7 +335,7 @@ final class MeetingCoordinator {
         )
         try await store.create(record)
         let speech = MeetingSpeechWatch(makeDetector: environment.makeSpeechDetector)
-        let session = MeetingSession(record: record, recorder: recorder, speech: speech)
+        let session = MeetingSession(record: record, source: source, recorder: recorder, speech: speech)
         // The recorder's queue keeps its output and events in order, and so
         // do the speech watch's stream and the main queue.
         recorder.onOutput = { speech.enqueue($0) }
@@ -403,9 +423,7 @@ final class MeetingCoordinator {
         case .user, .callEnded, .sleep, .quit:
             break
         }
-        if passes.insert(session.id).inserted {
-            await transcribe(session.id)
-        }
+        await queuePass(session.id)?.value
     }
 
     /// A call track that cannot start again shows as a failed track.
@@ -413,8 +431,8 @@ final class MeetingCoordinator {
         live?.recorder.restartCallAudio()
     }
 
-    /// Before the app quits: stops the recording and saves it, and leaves the
-    /// transcript to the next launch, which finishes it with no click.
+    /// Before the app quits: stops the recording and saves it. The next
+    /// launch shows it with Finish Transcript.
     func stopForQuit() async {
         guard let session = beginStop() else { return }
         let end = wallSeconds(of: session)
@@ -427,11 +445,7 @@ final class MeetingCoordinator {
     /// Finishes the transcript of a meeting from its audio files: after a
     /// quit or a crash, or when the user asks again after a failed finish.
     func finishTranscript(_ id: UUID) {
-        guard passes.insert(id).inserted else { return }
-        Task {
-            await update(id) { $0.status = .finishing }
-            await transcribe(id)
-        }
+        queuePass(id)
     }
 
     // MARK: - Calls
@@ -472,11 +486,14 @@ final class MeetingCoordinator {
         AppLogger.shared.log(.info, "meeting canceled id=\(session.id.uuidString)")
     }
 
-    /// Stop Now on the call-ended card: the meeting ends when the call did.
+    /// Stop Now on the countdown of a recording that started by itself: the
+    /// meeting ends when the call did. Stop Recording on the card of a
+    /// recording that the user started: it stops now, and keeps the talk
+    /// after the call.
     func stopEndedCall() async {
-        guard case let .callEnded(_, _, endedAt, _) = callCard else { return }
+        guard case let .callEnded(_, _, endedAt, stopsAt) = callCard else { return }
         answerCallCard(.stopNow)
-        await stop(.callEnded, endingAt: endedAt)
+        await stop(.callEnded, endingAt: stopsAt == nil ? nil : endedAt)
     }
 
     /// Keep Recording on the call-ended card.
@@ -525,9 +542,13 @@ final class MeetingCoordinator {
                 answerCallCard(.callEnded)
             }
         case let .recordedCallEnded(app, endedAt, silent):
-            guard live != nil else { return }
+            guard let session = live else { return }
             let now = environment.now()
             let ended = now.addingTimeInterval(endedAt - environment.uptime())
+            guard session.source == .automatic else {
+                showCard(.callEnded(app, silent: silent, endedAt: ended, stopsAt: nil), for: nil)
+                return
+            }
             let delay = environment.callCardDurations.stop
             showCard(.callEnded(app, silent: silent, endedAt: ended, stopsAt: now.addingTimeInterval(delay)), for: delay)
         case .recordedCallResumed:
@@ -553,10 +574,13 @@ final class MeetingCoordinator {
     }
 
     /// Shows `card` until an answer, or for `seconds`: then the card closes
-    /// by itself, and the call-ended card stops the recording.
-    private func showCard(_ card: MeetingCallCard, for seconds: TimeInterval) {
+    /// by itself, and the call-ended card stops the recording. With no
+    /// `seconds`, the card stays until an answer.
+    private func showCard(_ card: MeetingCallCard, for seconds: TimeInterval?) {
         cardTimer?.cancel()
+        cardTimer = nil
         callCard = card
+        guard let seconds else { return }
         cardTimer = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled, let self, self.callCard == card else { return }
@@ -691,11 +715,29 @@ final class MeetingCoordinator {
         ))
     }
 
+    /// Queues the transcript pass of `id` behind the passes asked before it,
+    /// with the transcript model set now, and returns it; nil when a pass of
+    /// `id` already waits or runs. One pass at a time: two passes with a
+    /// chosen model would each load an engine of their own beside the
+    /// dictation model.
+    @discardableResult
+    private func queuePass(_ id: UUID) -> Task<Void, Never>? {
+        guard passes.insert(id).inserted else { return nil }
+        let model = settings.transcriptModel
+        let previous = lastPass
+        let pass = Task { [weak self] in
+            await self?.update(id) { $0.status = .finishing }
+            await previous?.value
+            await self?.transcribe(id, model: model)
+        }
+        lastPass = pass
+        return pass
+    }
+
     /// Writes the transcript, then queues the summary. `passes` holds `id`
     /// already.
-    private func transcribe(_ id: UUID) async {
+    private func transcribe(_ id: UUID, model chosenModel: ASRModelID?) async {
         let started = ContinuousClock.now
-        let chosenModel = settings.transcriptModel
         defer {
             passes.remove(id)
             transcriptProgress[id] = nil

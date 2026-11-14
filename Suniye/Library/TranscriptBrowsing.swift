@@ -87,7 +87,7 @@ enum TranscriptBrowser {
 extension String {
     /// The transcript with every case- and diacritic-insensitive occurrence of
     /// `query` tinted, so a search result shows *why* it matched.
-    func highlightingMatches(of query: String) -> AttributedString {
+    func highlightingMatches(of query: String, color: Color = Color.accentColor.opacity(0.28)) -> AttributedString {
         var attributed = AttributedString(self)
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else {
@@ -100,7 +100,7 @@ extension String {
                   of: needle,
                   options: [.caseInsensitive, .diacriticInsensitive]
               ) {
-            attributed[match].backgroundColor = Color.accentColor.opacity(0.28)
+            attributed[match].backgroundColor = color
             // Step past this match; a zero-width result would otherwise spin.
             guard match.upperBound > searchStart else {
                 break

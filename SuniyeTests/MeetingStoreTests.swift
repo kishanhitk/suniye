@@ -161,7 +161,7 @@ final class MeetingStoreTests: XCTestCase {
         XCTAssertEqual(usage, Int64(1_000 + recordBytes))
     }
 
-    func testRecoveryFinishesARecordingMeetingButLeavesAFailedFinishToTheUser() async throws {
+    func testRecoveryLeavesEveryUnfinishedMeetingToTheUser() async throws {
         var paused = makeRecord(status: .paused)
         paused.pauses = [MeetingPause(start: 0.5, end: 10.5), MeetingPause(start: 90, end: nil)]
         let finishing = makeRecord(startedAt: Date(timeIntervalSince1970: 1_750_000_000), status: .finishing)
@@ -179,7 +179,7 @@ final class MeetingStoreTests: XCTestCase {
         let recovered = await store.recoverInterruptedMeetings()
 
         XCTAssertEqual(recovered.map(\.id), [paused.id, finishing.id])
-        XCTAssertEqual(recovered.map(\.status), [.finishing, .interrupted])
+        XCTAssertEqual(recovered.map(\.status), [.notTranscribed, .interrupted])
         XCTAssertEqual(recovered.first?.pauses, [MeetingPause(start: 0.5, end: 10.5)])
         XCTAssertEqual(recovered.first?.endedAt, paused.startedAt.addingTimeInterval(11), "1 s of audio and the 10 s pause inside it")
         let reloaded = await store.record(done.id)

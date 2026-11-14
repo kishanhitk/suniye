@@ -39,6 +39,7 @@ struct MeetingPage: View {
     var body: some View {
         if let record = meetings.record(id) {
             VStack(alignment: .leading, spacing: 14) {
+                backLink
                 header(record)
                 if let live {
                     MeetingLiveMeta(session: live)
@@ -51,7 +52,7 @@ struct MeetingPage: View {
                 if let failure = meetings.writeFailure, failure.meetingID == id, let duration = record.duration {
                     InlineStatusBanner(
                         icon: "exclamationmark.triangle.fill",
-                        tint: .orange,
+                        tint: .red,
                         title: failure.outOfSpace ? "Recording stopped because the disk is full" : "Recording stopped because the audio could not be saved",
                         detail: "Everything up to \(MeetingTranscript.clock(duration)) is saved." + (failure.outOfSpace ? " Free up space to record again." : "")
                     )
@@ -97,19 +98,27 @@ struct MeetingPage: View {
 
     // MARK: - Header
 
+    /// "‹ Meetings" above the title, back to the list.
+    private var backLink: some View {
+        Button {
+            meetings.openMeetingID = nil
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Meetings")
+            }
+            .font(AppTypography.body)
+            .foregroundStyle(Color.accentColor)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("[", modifiers: .command)
+        .accessibilityLabel("Back to Meetings")
+    }
+
     private func header(_ record: MeetingRecord) -> some View {
         HStack(alignment: .center, spacing: 10) {
-            Button {
-                meetings.openMeetingID = nil
-            } label: {
-                Image(systemName: "chevron.backward")
-                    .font(AppTypography.bodyMedium)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-            }
-            .buttonStyle(.borderless)
-            .help("Back")
-            .keyboardShortcut("[", modifiers: .command)
-
             Text(record.title)
                 .font(AppTypography.transcriptsHeadline)
                 .tracking(AppTypography.transcriptsHeadlineTracking)
@@ -330,7 +339,7 @@ private struct MeetingLiveMeta: View {
         } else {
             HStack(spacing: 6) {
                 Text(track.speakerLabel)
-                MeetingLevelMeter(level: session.isPaused ? 0 : level, tint: track == .you ? .accentColor : MainWindowPalette.secondaryText)
+                MeetingLevelMeter(level: level, tint: track == .you ? .accentColor : MainWindowPalette.secondaryText, isPaused: session.isPaused)
             }
         }
     }
@@ -378,20 +387,32 @@ private struct MeetingLiveBanner: View {
 struct MeetingLevelMeter: View {
     let level: Float
     let tint: Color
+    var restTint = MainWindowPalette.divider
+    var barWidth: CGFloat = 3
+    var height: CGFloat = 14
+    /// While paused the bars rest. A pause sends one zero, so the bars before
+    /// it would otherwise stay up for the whole pause.
+    var isPaused = false
     @State private var levels = [Float](repeating: 0, count: 5)
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 2) {
             ForEach(levels.indices, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(levels[index] > 0.02 ? tint : MainWindowPalette.divider)
-                    .frame(width: 3, height: 3 + 11 * CGFloat(min(max(levels[index], 0), 1)))
+                RoundedRectangle(cornerRadius: barWidth / 2)
+                    .fill(levels[index] > 0.02 ? tint : restTint)
+                    .frame(width: barWidth, height: 3 + (height - 3) * CGFloat(min(max(levels[index], 0), 1)))
             }
         }
-        .frame(height: 14, alignment: .bottom)
+        .frame(height: height, alignment: .bottom)
         .animation(.linear(duration: 0.066), value: levels)
         .onChange(of: level) { _, newLevel in
+            guard !isPaused else { return }
             levels = Array((levels + [newLevel]).suffix(5))
+        }
+        .onChange(of: isPaused) { _, paused in
+            if paused {
+                levels = [Float](repeating: 0, count: 5)
+            }
         }
         .accessibilityHidden(true)
     }

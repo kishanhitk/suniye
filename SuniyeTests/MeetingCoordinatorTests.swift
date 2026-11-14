@@ -27,6 +27,10 @@ final class MeetingCoordinatorTests: XCTestCase {
     private var engine: WordEngine!
     private var transcriptEngine: WordEngine!
     private var requestedTranscriptModels: [ASRModelID] = []
+    /// While set, a transcript engine load waits until it opens.
+    private var loadGate: LoadGate?
+    /// This many transcript engine loads fail before one succeeds.
+    private var failingLoads = 0
     private var transcriptEngineError: Error?
     private var summaryModel: GatedSummaryModel!
     private var clock: Date!
@@ -81,6 +85,11 @@ final class MeetingCoordinatorTests: XCTestCase {
             engine: engine,
             makeTranscriptEngine: { [unowned self] model in
                 requestedTranscriptModels.append(model)
+                await loadGate?.wait()
+                if failingLoads > 0 {
+                    failingLoads -= 1
+                    throw MeetingTranscriptModelError.notDownloaded("Cohere Transcribe")
+                }
                 if let transcriptEngineError {
                     throw transcriptEngineError
                 }
@@ -265,21 +274,86 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.stop()
     }
 
-    func testAtLaunchARecordingThatAQuitLeftIsFinishedWithNoClick() async throws {
-        let left = MeetingRecord(title: "Meeting", startedAt: clock, tracks: [.you], status: .recording, templateID: "general")
-        try await store.create(left)
-        let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: left.id))
-        try writer.append(tone(2.5, level: 0.3) + silence(0.5))
-        try writer.close()
+    func testAtLaunchARecordingThatAQuitLeftWaitsForFinishTranscript() async throws {
+        let left = try await leftRecording(startedAt: clock)
         let coordinator = makeCoordinator()
         coordinator.speechModelChanged(.parakeetV3)
 
         await coordinator.start()
-        let finished = await waitUntil { coordinator.record(left.id)?.status == .done }
+        try await Task.sleep(for: .milliseconds(100))
+        let atLaunch = coordinator.record(left)?.status
+        let decodesAtLaunch = await engine.calls
+        coordinator.finishTranscript(left)
+        let finished = await waitUntil { coordinator.record(left)?.status == .done }
 
+        XCTAssertEqual(atLaunch, .notTranscribed)
+        XCTAssertEqual(decodesAtLaunch, 0, "a launch loads no speech model and decodes nothing with no click")
         XCTAssertTrue(finished)
-        let segments = await store.segments(of: left.id)
+        let segments = await store.segments(of: left)
         XCTAssertEqual(segments.map(\.text), [longSentence])
+    }
+
+    func testTranscriptsRunOneAtATimeWithTheModelSetWhenTheyWereAskedFor() async throws {
+        let first = try await leftRecording(startedAt: clock - 600)
+        let second = try await leftRecording(startedAt: clock - 300)
+        let gate = LoadGate()
+        loadGate = gate
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.transcriptModel = .cohereTranscribe }
+        await coordinator.start()
+
+        coordinator.finishTranscript(first)
+        coordinator.finishTranscript(second)
+        let firstLoads = await waitUntil { await gate.waiting }
+        try await Task.sleep(for: .milliseconds(100))
+        let loadsWhileTheFirstWaits = requestedTranscriptModels.count
+        coordinator.updateSettings { $0.transcriptModel = nil }
+        await gate.open()
+        let finished = await waitUntil {
+            coordinator.record(first)?.status == .done && coordinator.record(second)?.status == .done
+        }
+        let dictationEngineDecodes = await engine.calls
+
+        XCTAssertTrue(firstLoads)
+        XCTAssertEqual(loadsWhileTheFirstWaits, 1, "the second pass waits for the first")
+        XCTAssertTrue(finished)
+        XCTAssertEqual(requestedTranscriptModels, [.cohereTranscribe, .cohereTranscribe], "a waiting pass keeps the model of its request")
+        XCTAssertEqual(dictationEngineDecodes, 0)
+    }
+
+    func testAPassThatFailsLetsTheNextOneRun() async throws {
+        let first = try await leftRecording(startedAt: clock - 600)
+        let second = try await leftRecording(startedAt: clock - 300)
+        failingLoads = 1
+        let coordinator = makeCoordinator()
+        coordinator.updateSettings { $0.transcriptModel = .cohereTranscribe }
+        await coordinator.start()
+
+        coordinator.finishTranscript(first)
+        coordinator.finishTranscript(second)
+        let settled = await waitUntil {
+            coordinator.record(first)?.status == .interrupted && coordinator.record(second)?.status == .done
+        }
+
+        XCTAssertTrue(settled)
+    }
+
+    func testDeletingTheDefaultTemplateMakesGeneralTheDefault() async throws {
+        let coordinator = makeCoordinator()
+        let retro = MeetingTemplate(id: "retro", name: "Retro", sections: "## Went well")
+        try await coordinator.saveTemplates(MeetingTemplate.builtIn + [retro])
+        coordinator.updateSettings { $0.templateID = retro.id }
+
+        try await coordinator.saveTemplates(MeetingTemplate.builtIn + [retro])
+        let kept = coordinator.settings.templateID
+        try await coordinator.saveTemplates(MeetingTemplate.builtIn)
+        try await coordinator.startMeeting(source: .manual)
+
+        XCTAssertEqual(kept, retro.id)
+        XCTAssertEqual(coordinator.settings.templateID, MeetingTemplate.general.id)
+        XCTAssertEqual(coordinator.live?.record.templateID, MeetingTemplate.general.id, "a new meeting does not store a deleted template")
+        await coordinator.stop()
     }
 
     func testARenameWhileTheSummaryRunsIsKept() async throws {
@@ -488,14 +562,12 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.live)
     }
 
-    func testStopNowEndsTheMeetingWhereTheCallEnded() async throws {
+    func testStopNowEndsAnAutomaticRecordingWhereTheCallEnded() async throws {
         let coordinator = makeCoordinator()
         coordinator.speechModelChanged(.parakeetV3)
         await coordinator.start()
         let start = clock!
-        hold(holding(zoom))
-        hold(holding(zoom), after: 2)
-        await coordinator.recordOfferedCall()
+        await startAutomatically(coordinator)
         let id = try XCTUnwrap(coordinator.live?.id)
 
         // Words from 0 to 2.8 s; Zoom releases the microphone at 4.5 s; more
@@ -512,13 +584,59 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(card, .callEnded(zoom, silent: false, endedAt: start + 4.5, stopsAt: start + 4.5 + 30))
         XCTAssertEqual(decoded, 2, "the words after the call were recorded and decoded")
-        XCTAssertEqual(cardAnswers, ["offer record", "call_ended stop_now"])
+        XCTAssertEqual(cardAnswers, ["call_ended stop_now"])
         XCTAssertEqual(event("meeting_ended")?["reason"], .label("call_ended"))
         XCTAssertEqual(try XCTUnwrap(coordinator.record(id)?.endedAt).timeIntervalSince(start), 4.5, accuracy: 0.001)
         XCTAssertEqual(segments.map(\.text), [longSentence], "the words after the call ended go")
     }
 
-    func testAfterKeepRecordingTheMeetingFollowsTheNextCallAndStopsWhenItEnds() async throws {
+    func testAnAutomaticRecordingStopsByItselfAfterItsCallEnds() async throws {
+        cardDurations.stop = 0.05
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        let start = clock!
+        await startAutomatically(coordinator)
+        let id = try XCTUnwrap(coordinator.live?.id)
+
+        clock += 4
+        hold([], after: 4)
+        let stopped = await waitUntil { coordinator.live == nil }
+
+        XCTAssertTrue(stopped)
+        XCTAssertEqual(cardAnswers, ["call_ended timeout"])
+        XCTAssertEqual(try XCTUnwrap(coordinator.record(id)?.endedAt).timeIntervalSince(start), 4, accuracy: 0.001)
+    }
+
+    func testARecordingThatTheUserStartedGoesOnAfterItsCallEndsAndStopRecordingKeepsTheTalkAfterIt() async throws {
+        cardDurations.stop = 0.05
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        await coordinator.start()
+        let start = clock!
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        await coordinator.recordOfferedCall()
+        let id = try XCTUnwrap(coordinator.live?.id)
+
+        you.push(tone(2.5, level: 0.3) + silence(2))
+        clock += 4.5
+        hold([], after: 4.5)
+        let card = coordinator.callCard
+        try await Task.sleep(for: .milliseconds(150))
+        let goesOn = coordinator.live != nil
+        you.push(silence(0.3) + tone(2.5, level: 0.5) + silence(0.5))
+        clock += 5
+        await coordinator.stopEndedCall()
+        let segments = await store.segments(of: id)
+
+        XCTAssertEqual(card, .callEnded(zoom, silent: false, endedAt: start + 4.5, stopsAt: nil))
+        XCTAssertTrue(goesOn, "no countdown stops a recording that the user started")
+        XCTAssertEqual(cardAnswers, ["offer record", "call_ended stop_now"])
+        XCTAssertEqual(try XCTUnwrap(coordinator.record(id)?.endedAt).timeIntervalSince(start), 9.5, accuracy: 0.001)
+        XCTAssertEqual(segments.map(\.text), [longSentence, "Them speaks here."], "the talk after the call stays")
+    }
+
+    func testAMeetingThatStartsDuringACallFollowsItAndKeepRecordingClosesTheCard() async throws {
         cardDurations.stop = 0.05
         let coordinator = makeCoordinator()
         await coordinator.start()
@@ -529,18 +647,18 @@ final class MeetingCoordinatorTests: XCTestCase {
         let followed = await waitUntil { coordinator.live?.record.callAppBundleID == zoom.bundleID }
 
         hold([], after: 5)
+        let card = coordinator.callCard
         coordinator.keepRecording()
         try await Task.sleep(for: .milliseconds(150))
-        let keptRecording = coordinator.live != nil
-        hold(holding(zoom), after: 1)
-        hold(holding(zoom), after: 2)
-        hold([], after: 5)
-        let stopped = await waitUntil { coordinator.live == nil }
 
         XCTAssertTrue(followed, "a meeting that starts during a call follows it")
-        XCTAssertTrue(keptRecording)
-        XCTAssertTrue(stopped, "the call-ended card stops the recording by itself")
-        XCTAssertEqual(cardAnswers, ["offer not_now", "call_ended keep_recording", "call_ended timeout"])
+        guard case .callEnded(zoom, silent: false, _, stopsAt: nil) = card else {
+            return XCTFail("expected the call-ended card with no countdown, got \(String(describing: card))")
+        }
+        XCTAssertNil(coordinator.callCard)
+        XCTAssertNotNil(coordinator.live)
+        XCTAssertEqual(cardAnswers, ["offer not_now", "call_ended keep_recording"])
+        await coordinator.stop()
     }
 
     func testTheCallEndedCardClosesWhenTheCallPlaysSoundAgain() async throws {
@@ -650,7 +768,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.stop()
     }
 
-    func testAQuitSavesTheRecordingAndTheNextLaunchFinishesIt() async throws {
+    func testAQuitSavesTheRecordingForFinishTranscriptAtTheNextLaunch() async throws {
         let first = makeCoordinator()
         first.speechModelChanged(.parakeetV3)
         try await first.startMeeting(source: .manual)
@@ -663,12 +781,34 @@ final class MeetingCoordinatorTests: XCTestCase {
         let next = makeCoordinator()
         next.speechModelChanged(.parakeetV3)
         await next.start()
+        let atLaunch = next.record(id)?.status
+        next.finishTranscript(id)
         let finished = await waitUntil { next.record(id)?.status == .done }
 
         XCTAssertNil(first.live)
-        XCTAssertEqual(saved?.status, .recording, "the next launch finishes it")
         XCTAssertEqual(saved?.endedAt, saved?.startedAt.addingTimeInterval(3))
+        XCTAssertEqual(atLaunch, .notTranscribed, "the next launch shows it with Finish Transcript")
         XCTAssertTrue(finished)
+    }
+
+    /// A meeting that a quit left during the recording, with 3 s of audio:
+    /// one sentence.
+    private func leftRecording(startedAt: Date) async throws -> UUID {
+        let left = MeetingRecord(title: "Meeting", startedAt: startedAt, tracks: [.you], status: .recording, templateID: "general")
+        try await store.create(left)
+        let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: left.id))
+        try writer.append(tone(2.5, level: 0.3) + silence(0.5))
+        try writer.close()
+        return left.id
+    }
+
+    /// Record Automatically, then a Zoom call that holds the microphone for 2 s.
+    private func startAutomatically(_ coordinator: MeetingCoordinator) async {
+        coordinator.chooseCallStartAction(.recordAutomatically)
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        let started = await waitUntil { coordinator.live != nil }
+        XCTAssertTrue(started, "Record Automatically starts the recording")
     }
 
     /// The props of the last event with this name.
@@ -790,6 +930,23 @@ private final class FakeHost: MeetingHost {
 private final class LoudSpeechDetector: SpeechDetecting {
     func containsSpeech(_ samples: [Float]) -> Bool {
         samples.contains { abs($0) >= 0.25 }
+    }
+}
+
+/// Holds every caller of `wait()` until `open()`.
+private actor LoadGate {
+    private(set) var waiting = false
+    private var isOpen = false
+
+    func wait() async {
+        waiting = true
+        while !isOpen {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    func open() {
+        isOpen = true
     }
 }
 

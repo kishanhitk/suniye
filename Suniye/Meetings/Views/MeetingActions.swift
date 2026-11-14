@@ -120,7 +120,7 @@ private struct MeetingActionDialogs: ViewModifier {
                 Text(failure.message)
             }
             .sheet(isPresented: $actions.editingTemplates) {
-                MeetingTemplateEditor(templates: meetings.templates)
+                MeetingTemplateEditor(meetings: meetings)
             }
     }
 }

@@ -46,7 +46,10 @@ Suniye finds a call from the apps that hold the microphone:
 
 **Never ask for** lists the apps that get no offer.
 
-A call ends when the call app releases the microphone, or holds it with its audio output off for 2 minutes. The card shows "Recording stops in 30 s." with **Stop Now** and **Keep Recording**. The recording keeps nothing after the moment the call ended.
+A call ends when the call app releases the microphone, or holds it with its audio output off for 2 minutes. Then a card shows:
+
+- A recording that started by itself: "Recording stops in 30 s." with **Stop Now** and **Keep Recording**. With no click, it stops after 30 s. It keeps nothing after the moment the call ended.
+- A recording that you started: "Suniye is still recording." with **Stop Recording** and **Keep Recording**. The recording goes on until you choose. **Stop Recording** stops it at that moment and keeps the talk after the call.
 
 Call detection reads the Core Audio process list. It reads nothing while no input device runs, nothing during a dictation, every second while an app waits for its delay, and every 5 s otherwise. It opens no audio device.
 
@@ -60,7 +63,7 @@ Call detection reads the Core Audio process list. It reads nothing while no inpu
 - A full disk.
 - **Quit Suniye** asks first. A logout, restart or shutdown stops and saves with no question.
 
-After a quit or a crash during a recording, the next launch writes the transcript with no click. After a quit or a crash while the transcript is written, the meeting shows **Finish Transcript**.
+After a quit or a crash, the next launch writes no transcript by itself: it does not load a speech model and run for minutes with no click. A recording that a quit or a crash stopped shows on the list with **Finish Transcript** and **Delete**, and its row has a "Not finished" tag. A transcript that a quit or a crash cut short shows **Finish Transcript**.
 
 ## Transcript
 
@@ -70,6 +73,7 @@ After a quit or a crash during a recording, the next launch writes the transcrip
   - **Same as dictation** (default): the dictation model, on the dictation engine.
   - A model you pick, the dictation model too: it loads for the transcript on an engine of its own and unloads after it, so a switch of the dictation model does not change it. Dictation keeps its model. The Mac holds both models in memory while the transcript is written.
 - A dictation goes first: from the key-down to the end of the dictation, no piece of audio starts decoding. The piece that decodes at the key-down finishes.
+- One transcript at a time: when two meetings wait for a transcript, the second one starts after the first one ends, with the transcript model that was set when it was asked for.
 - Picking a model that is not on the Mac downloads it. It becomes the transcript model when the download is done.
 - When the transcript model is not on the Mac at the stop, the meeting shows that cause and **Finish Transcript**.
 - The audio goes to the model in pieces of 2 to 12 s, cut at pauses.
@@ -111,6 +115,7 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 
 - Templates: General, 1:1, Stand-up, Interview, and your own (**Settings → General → Meetings → Summary templates**).
 - You can rename and edit a built-in template. **Reset to Default** brings back its shipped name and text.
+- When you delete the template that is the **Default template**, General is the default again.
 - A template's "## " headings are the sections of the summary. A section named Overview or Summary is a short paragraph; every other section is a list.
 - The transcript is read in parts of at most about 4,000 tokens. The model gets each part, and your notes, with a request for at most three items for each section. Suniye joins the items in meeting order, your notes first, and drops exact repeats; the model then writes only the title and the overview. No last step can drop an item.
 - The built-in sections (Decisions, Action items, Dates and numbers, Open questions) have fixed rules for what goes in them. A template that you wrote or edited goes to each part as a guide to its sections.
