@@ -291,6 +291,15 @@ final class MeetingCoordinator {
         updateSettings { $0.callStartAction = action }
     }
 
+    /// Saves the list that the template editor shows. When the Default
+    /// template is not in it any more, General is the default again.
+    func saveTemplates(_ list: [MeetingTemplate]) async throws {
+        try await templates.replace(with: list)
+        if !list.contains(where: { $0.id == settings.templateID }) {
+            updateSettings { $0.templateID = MeetingTemplate.general.id }
+        }
+    }
+
     // MARK: - Recording
 
     func startMeeting(source: MeetingSource, callApp: MeetingCallApp? = nil) async throws {

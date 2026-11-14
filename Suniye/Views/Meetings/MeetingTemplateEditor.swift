@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Edits the summary templates. Changes stay drafts until Done.
 struct MeetingTemplateEditor: View {
-    let templates: MeetingTemplateStore
+    let meetings: MeetingCoordinator
     @Environment(\.dismiss) private var dismiss
     @State private var drafts: [MeetingTemplate] = []
     @State private var saved: [MeetingTemplate] = []
@@ -37,7 +37,7 @@ struct MeetingTemplateEditor: View {
         .padding(20)
         .frame(width: 560, height: 460)
         .task {
-            saved = await templates.templates()
+            saved = await meetings.templates.templates()
             drafts = saved
             selectedID = drafts.first?.id
         }
@@ -136,7 +136,7 @@ struct MeetingTemplateEditor: View {
         }
         Task {
             do {
-                try await templates.replace(with: drafts)
+                try await meetings.saveTemplates(drafts)
                 dismiss()
             } catch {
                 saveError = error.localizedDescription

@@ -305,6 +305,23 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(unloadsAtEachLoad, [0, 1], "the second engine loads after the first one is unloaded")
     }
 
+    func testDeletingTheDefaultTemplateMakesGeneralTheDefault() async throws {
+        let coordinator = makeCoordinator()
+        let retro = MeetingTemplate(id: "retro", name: "Retro", sections: "## Went well")
+        try await coordinator.saveTemplates(MeetingTemplate.builtIn + [retro])
+        coordinator.updateSettings { $0.templateID = retro.id }
+
+        try await coordinator.saveTemplates(MeetingTemplate.builtIn + [retro])
+        let kept = coordinator.settings.templateID
+        try await coordinator.saveTemplates(MeetingTemplate.builtIn)
+        try await coordinator.startMeeting(source: .manual)
+
+        XCTAssertEqual(kept, retro.id)
+        XCTAssertEqual(coordinator.settings.templateID, MeetingTemplate.general.id)
+        XCTAssertEqual(coordinator.live?.record.templateID, MeetingTemplate.general.id, "a new meeting does not store a deleted template")
+        await coordinator.stop()
+    }
+
     func testARenameWhileTheSummaryRunsIsKept() async throws {
         await summaryModel.close()
         let coordinator = makeCoordinator()

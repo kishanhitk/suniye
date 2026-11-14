@@ -75,7 +75,7 @@ struct MeetingSettingsGroup: View {
             }
         }
         .sheet(isPresented: $editingTemplates) {
-            MeetingTemplateEditor(templates: meetings.templates)
+            MeetingTemplateEditor(meetings: meetings)
         }
         .task(id: editingTemplates) {
             templates = await meetings.templates.templates()

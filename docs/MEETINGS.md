@@ -115,6 +115,7 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 
 - Templates: General, 1:1, Stand-up, Interview, and your own (**Settings → General → Meetings → Summary templates**).
 - You can rename and edit a built-in template. **Reset to Default** brings back its shipped name and text.
+- When you delete the template that is the **Default template**, General is the default again.
 - A template's "## " headings are the sections of the summary. A section named Overview or Summary is a short paragraph; every other section is a list.
 - The transcript is read in parts of at most about 4,000 tokens. The model gets each part, and your notes, with a request for at most three items for each section. Suniye joins the items in meeting order, your notes first, and drops exact repeats; the model then writes only the title and the overview. No last step can drop an item.
 - The built-in sections (Decisions, Action items, Dates and numbers, Open questions) have fixed rules for what goes in them. A template that you wrote or edited goes to each part as a guide to its sections.
