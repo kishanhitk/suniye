@@ -18,7 +18,6 @@
 		06AD5371B770B5791BA2E1F1 /* Qwen3ASRTranscriptionServiceRealModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13A07114D24C8E4DD7B434CE /* Qwen3ASRTranscriptionServiceRealModelTests.swift */; };
 		084CFC3D74DA86A8CC8F7FDF /* AppleFoundationModelsPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 297ED9BE4153B873BC75241E /* AppleFoundationModelsPostProcessor.swift */; };
 		08523636E7B17C0E40CE33B0 /* CohereTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 640D07E9F442CECD9CB71A62 /* CohereTranscriptionService.swift */; };
-		087B92BAEB91B2A23153DA41 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABAF17E14062BC73F65CF7FD /* UpdateService.swift */; };
 		08A8F890890D6B151C4DC93E /* MeetingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73824270FE6102390BD086BE /* MeetingCoordinator.swift */; };
 		0D52D29FA88DC99EB7115C7B /* PartialTranscriptionSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624DF0C47847FACD2976DEAE /* PartialTranscriptionSchedulerTests.swift */; };
 		0D5DE001B946DA2A99E4D993 /* SuniyeAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9A771CF1C984260F9C9B27 /* SuniyeAppTests.swift */; };
@@ -262,6 +261,7 @@
 		F02E1415E884F5445C9D5D89 /* PermisoAssistant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B51A10C9A785F42B8C5BCE2 /* PermisoAssistant.swift */; };
 		F074350E2A1C98AE874AB218 /* CohereTranscribeDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC6C22E7CEC7674001C2CD06 /* CohereTranscribeDecodingTests.swift */; };
 		F0C45D7EA13E9B7B0BDD8C10 /* MeetingTranscript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F6E514498C196263452AD45 /* MeetingTranscript.swift */; };
+		F183A58816F0A5B46EE3A8E8 /* UpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB991581A62EFF8EF3EE2DF9 /* UpdateService.swift */; };
 		F2F5E1417665BAB29988390B /* EditModeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 221C1BA9BE357716B57E8034 /* EditModeService.swift */; };
 		F38754173205C5F3391AEB79 /* CohereTranscribeDecoding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9096A76DF0F31897E428C4 /* CohereTranscribeDecoding.swift */; };
 		F51AB85283295FEEB0FA0866 /* LLMPostProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA85018741AA6759EA4673CE /* LLMPostProcessor.swift */; };
@@ -478,7 +478,7 @@
 		A76F48FBABA83E903A65BF4E /* HotkeyConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfigurationTests.swift; sourceTree = "<group>"; };
 		A90D5B82089314B9767C0F6D /* IssueReportServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IssueReportServiceTests.swift; sourceTree = "<group>"; };
 		AAB0245559F5486F777BC3ED /* AppStateMeetingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateMeetingTests.swift; sourceTree = "<group>"; };
-		ABAF17E14062BC73F65CF7FD /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
+		AB991581A62EFF8EF3EE2DF9 /* UpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateService.swift; sourceTree = "<group>"; };
 		AF6D0B3F348990D4948F8255 /* MeetingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingModels.swift; sourceTree = "<group>"; };
 		AFC215558D575BA1241875A6 /* SuniyeAnalytics */ = {isa = PBXFileReference; lastKnownFileType = folder; name = SuniyeAnalytics; path = SuniyeAnalytics; sourceTree = SOURCE_ROOT; };
 		B02D8B6B0696B241C2C8033C /* LocalGemmaLlamaCppClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaLlamaCppClient.swift; sourceTree = "<group>"; };
@@ -660,6 +660,7 @@
 				A62D6E75139BF31C174E01C3 /* Settings */,
 				004E8D6258102985EC5D79FF /* Shared */,
 				823FCB0C7CB7601850FA364A /* SpeechModels */,
+				43307281051F7B84E291AAF7 /* Updates */,
 				7086235B9F9976DC847998DD /* Vendor */,
 				ACABD336294DBFA58C26FE31 /* Views */,
 			);
@@ -877,6 +878,14 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		43307281051F7B84E291AAF7 /* Updates */ = {
+			isa = PBXGroup;
+			children = (
+				AB991581A62EFF8EF3EE2DF9 /* UpdateService.swift */,
+			);
+			path = Updates;
+			sourceTree = "<group>";
+		};
 		496863AC6AA816D090C15961 /* Views */ = {
 			isa = PBXGroup;
 			children = (
@@ -965,7 +974,6 @@
 			children = (
 				33B7E4812E370B7EAC6B8D21 /* Qwen3ASRTranscriptionService.swift */,
 				98B58C8F7A33FE14A72479F5 /* RoutingTranscriptionService.swift */,
-				ABAF17E14062BC73F65CF7FD /* UpdateService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1430,7 +1438,7 @@
 				26D8BB0404D33B99FC70A84C /* TranscriptionService.swift in Sources */,
 				1397F109F0D14B2520B2FF78 /* TranscriptsPage.swift in Sources */,
 				3DC99695B11FBB624A29CF16 /* TranscriptsSparkline.swift in Sources */,
-				087B92BAEB91B2A23153DA41 /* UpdateService.swift in Sources */,
+				F183A58816F0A5B46EE3A8E8 /* UpdateService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
