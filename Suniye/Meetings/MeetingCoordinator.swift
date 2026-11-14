@@ -713,6 +713,22 @@ final class MeetingCoordinator {
         dropListText(id)
     }
 
+    /// Writes the summary that the user changed, as Markdown.
+    func editSummary(_ id: UUID, markdown: String) async {
+        guard record(id)?.status == .done else { return }
+        do {
+            try await store.saveSummary(markdown, for: id)
+        } catch {
+            AppLogger.shared.log(.error, "meeting summary edit not saved id=\(id.uuidString) error=\(error.localizedDescription)")
+            return
+        }
+        if record(id)?.summaryEditedAt == nil {
+            let now = environment.now()
+            await update(id) { $0.summaryEditedAt = now }
+        }
+        dropListText(id)
+    }
+
     /// The cached list text goes after the write, so no read that ran
     /// during it keeps the old notes.
     func saveNotes(_ notes: String, for id: UUID) async {

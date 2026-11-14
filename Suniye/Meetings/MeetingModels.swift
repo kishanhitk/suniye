@@ -134,6 +134,9 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     /// When the user first changed a transcript line; nil until then, and
     /// again after Transcribe Again.
     var transcriptEditedAt: Date?
+    /// When the user first changed the summary; nil until then, and again
+    /// after a new summary.
+    var summaryEditedAt: Date?
 
     init(
         id: UUID = UUID(),

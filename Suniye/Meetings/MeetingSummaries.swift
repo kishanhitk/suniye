@@ -107,6 +107,7 @@ final class MeetingSummaries {
                 $0.adoptGeneratedTitle(summary.title)
                 $0.status = .done
                 $0.summaryFailure = nil
+                $0.summaryEditedAt = nil
             }
             outcome = .done
             parts = summary.parts

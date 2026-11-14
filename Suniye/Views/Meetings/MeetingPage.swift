@@ -242,7 +242,16 @@ struct MeetingPage: View {
     private func content(_ record: MeetingRecord) -> some View {
         switch live == nil ? tab : .notes {
         case .summary:
-            MeetingSummaryTab(meetings: meetings, appState: appState, actions: actions, record: record, summary: summary)
+            MeetingSummaryTab(
+                meetings: meetings,
+                appState: appState,
+                actions: actions,
+                record: record,
+                summary: summary,
+                isEditable: canEditText(record) && record.status == .done
+            ) { markdown, ended in
+                editSummary(markdown, ended: ended)
+            }
         case .notes:
             if let draft = Binding($notes) {
                 MeetingNotesEditor(draft: draft) { text in
@@ -290,6 +299,18 @@ struct MeetingPage: View {
             meetings.textSaves.save(.transcript, of: id, save: save)
         } else {
             meetings.textSaves.stage(.transcript, of: id, save: save)
+        }
+    }
+
+    private func editSummary(_ markdown: String, ended: Bool) {
+        summary = markdown
+        let save: () async -> Void = { [meetings, id] in
+            await meetings.editSummary(id, markdown: markdown)
+        }
+        if ended {
+            meetings.textSaves.save(.summary, of: id, save: save)
+        } else {
+            meetings.textSaves.stage(.summary, of: id, save: save)
         }
     }
 

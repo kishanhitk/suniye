@@ -7,14 +7,20 @@ struct MeetingSummaryTab: View {
     let actions: MeetingActions
     let record: MeetingRecord
     let summary: String?
+    var isEditable = false
+    var edited: (_ markdown: String, _ ended: Bool) -> Void = { _, _ in }
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 16) {
-                state
+        if record.status == .done, let summary {
+            MeetingSummaryEditor(markdown: summary, isEditable: isEditable, edited: edited)
+        } else {
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 16) {
+                    state
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.vertical, 4)
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(.vertical, 4)
         }
     }
 
@@ -24,9 +30,7 @@ struct MeetingSummaryTab: View {
         case .finishing:
             MeetingTranscriptProgressView(progress: meetings.transcriptPasses[record.id]?.progress, isWaiting: meetings.transcriptPasses[record.id]?.waiting ?? false)
         case .done:
-            if let summary {
-                MeetingSummaryBody(markdown: summary)
-            }
+            EmptyView()
         case .summarizing:
             summarizing
         case .summaryFailed:
@@ -165,41 +169,5 @@ struct MeetingRegenerateMenu: View {
         .task(id: actions.editingTemplates) {
             templates = await meetings.templates.templates()
         }
-    }
-}
-
-/// A summary's Markdown as blocks: "## " headings, "- " list lines, and
-/// plain lines as paragraphs.
-struct MeetingSummaryBody: View {
-    let markdown: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
-                switch block {
-                case let .heading(text):
-                    Text(text)
-                        .font(AppTypography.sectionHeading)
-                        .padding(.top, index == 0 ? 0 : 10)
-                case let .item(text):
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("•")
-                            .foregroundStyle(MainWindowPalette.secondaryText)
-                        Text(text)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                case let .paragraph(text):
-                    Text(text)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .font(AppTypography.body)
-        .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var blocks: [MeetingSummaryBlock] {
-        MeetingSummaryBlock.parse(markdown)
     }
 }

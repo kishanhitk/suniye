@@ -935,6 +935,25 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(inputs.contains { $0.contains("typedword") }, "the summary reads the typed text, not the text on disk before it")
     }
 
+    func testASummaryEditIsSavedAndMarkedAndANewSummaryClearsTheMark() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: longSentence), to: meeting.id)
+        try await store.saveSummary("## Overview\nShip Friday.", for: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        await coordinator.editSummary(meeting.id, markdown: "## Overview\nShip on Monday.")
+        let saved = await coordinator.summary(of: meeting.id)
+        let marked = coordinator.record(meeting.id)?.summaryEditedAt
+        await coordinator.regenerate(meeting.id)
+        let written = await waitUntil { coordinator.record(meeting.id)?.status == .done }
+
+        XCTAssertEqual(saved, "## Overview\nShip on Monday.")
+        XCTAssertEqual(marked, clock)
+        XCTAssertTrue(written)
+        XCTAssertNil(coordinator.record(meeting.id)?.summaryEditedAt, "a new summary is not the user's edit")
+    }
+
     func testAFailedTranscribeAgainKeepsTheTranscript() async throws {
         let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
         try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words."), to: meeting.id)

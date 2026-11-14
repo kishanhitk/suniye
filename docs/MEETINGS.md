@@ -140,7 +140,8 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 
 - The title: click it to edit it in place. Return or a click elsewhere keeps the new title; Esc drops it. An empty title goes back to the old one. A title that you set stays when a new summary is written.
 - A transcript line: click its text to edit it; its time and speaker stay. Return or Esc ends the edit. A line that you empty goes when the edit ends. ⌘Z undoes typing while the page is open.
-- While a transcript or a summary is written, the transcript cannot be edited.
+- The summary: click to edit any heading, paragraph or item. Return in an item starts a new item; Return in an empty item ends the list.
+- While a transcript or a summary is written, the transcript and the summary cannot be edited.
 - Copy, Export as Markdown, Search and Regenerate use the edited text.
 - A quit, a tab change or leaving the meeting page saves the text that you typed.
 
