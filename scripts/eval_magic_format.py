@@ -103,7 +103,7 @@ def start_server(server: str, model: Path) -> tuple[subprocess.Popen[bytes], str
     return process, base_url, ready_ms
 
 
-# Mirrors Suniye/Services/MagicFormatParagraphBreaks.swift, which the app applies
+# Mirrors Suniye/MagicFormat/MagicFormatParagraphBreaks.swift, which the app applies
 # around every Magic Format request.
 NOUN_PHRASE_WORDS = [
     "a", "an", "the", "this", "that", "each", "every", "another", "any", "one", "no", "some", "more",

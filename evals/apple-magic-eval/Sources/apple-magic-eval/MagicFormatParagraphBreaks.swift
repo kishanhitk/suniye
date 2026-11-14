@@ -1,1 +1,1 @@
-../../../../Suniye/Services/MagicFormatParagraphBreaks.swift
+../../../../Suniye/MagicFormat/MagicFormatParagraphBreaks.swift
