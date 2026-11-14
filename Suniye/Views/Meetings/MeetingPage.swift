@@ -41,7 +41,8 @@ struct MeetingPage: View {
             VStack(alignment: .leading, spacing: 14) {
                 header(record)
                 if let live {
-                    MeetingLiveMeta(session: live, meetings: meetings)
+                    MeetingLiveMeta(session: live)
+                    MeetingLiveBanner(session: live, meetings: meetings)
                 } else {
                     Text(metaLine(record))
                         .font(AppTypography.body)
@@ -55,7 +56,7 @@ struct MeetingPage: View {
                         detail: "Everything up to \(MeetingTranscript.clock(duration)) is saved." + (failure.outOfSpace ? " Free up space to record again." : "")
                     )
                 }
-                MeetingTabs(selection: $tab, summaryEnabled: live == nil)
+                MeetingTabs(selection: $tab, tabs: live == nil ? MeetingTab.allCases : [.notes, .transcript])
                     .fixedSize()
                 content(record)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -226,13 +227,15 @@ struct MeetingPage: View {
 
 /// Summary, Notes, Transcript in one native segmented control, whose Summary
 /// segment is off while the meeting records.
+/// While the meeting records there is no summary yet, so the control has
+/// only Notes and Transcript.
 private struct MeetingTabs: NSViewRepresentable {
     @Binding var selection: MeetingTab
-    let summaryEnabled: Bool
+    let tabs: [MeetingTab]
 
     func makeNSView(context: Context) -> NSSegmentedControl {
         let control = NSSegmentedControl(
-            labels: MeetingTab.allCases.map(\.title),
+            labels: tabs.map(\.title),
             trackingMode: .selectOne,
             target: context.coordinator,
             action: #selector(Coordinator.changed(_:))
@@ -243,25 +246,34 @@ private struct MeetingTabs: NSViewRepresentable {
 
     func updateNSView(_ control: NSSegmentedControl, context: Context) {
         context.coordinator.selection = $selection
-        control.setEnabled(summaryEnabled, forSegment: MeetingTab.summary.rawValue)
-        control.selectedSegment = selection.rawValue
+        context.coordinator.tabs = tabs
+        if control.segmentCount != tabs.count {
+            control.segmentCount = tabs.count
+            for (index, tab) in tabs.enumerated() {
+                control.setLabel(tab.title, forSegment: index)
+                control.setWidth(0, forSegment: index)
+            }
+            control.invalidateIntrinsicContentSize()
+        }
+        control.selectedSegment = tabs.firstIndex(of: selection) ?? -1
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(selection: $selection)
+        Coordinator(selection: $selection, tabs: tabs)
     }
 
     final class Coordinator: NSObject {
         var selection: Binding<MeetingTab>
+        var tabs: [MeetingTab]
 
-        init(selection: Binding<MeetingTab>) {
+        init(selection: Binding<MeetingTab>, tabs: [MeetingTab]) {
             self.selection = selection
+            self.tabs = tabs
         }
 
         @objc func changed(_ sender: NSSegmentedControl) {
-            if let tab = MeetingTab(rawValue: sender.selectedSegment) {
-                selection.wrappedValue = tab
-            }
+            guard tabs.indices.contains(sender.selectedSegment) else { return }
+            selection.wrappedValue = tabs[sender.selectedSegment]
         }
     }
 }
@@ -295,8 +307,6 @@ struct MeetingCopyButton: View {
 /// problem in place of the meter.
 private struct MeetingLiveMeta: View {
     let session: MeetingSession
-    let meetings: MeetingCoordinator
-    @State private var showsCallProblem = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -310,89 +320,88 @@ private struct MeetingLiveMeta: View {
                 }
                 MeetingTimer(session: session)
             }
-            track(session.changedInput ?? MeetingTrack.you.speakerLabel, level: session.youLevel, problem: session.failedTracks[.you])
+            track(.you, level: session.youLevel)
             if session.hasCallTrack {
-                if let problem = session.callAudioProblem {
-                    Button {
-                        showsCallProblem = true
-                    } label: {
-                        Label("No sound", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                    }
-                    .buttonStyle(.borderless)
-                    .popover(isPresented: $showsCallProblem, arrowEdge: .bottom) {
-                        CallProblemPopover(problem: problem, meetings: meetings)
-                    }
-                } else {
-                    track(MeetingTrack.them.speakerLabel, level: session.themLevel, problem: session.failedTracks[.them])
-                }
+                track(.them, level: session.callAudioProblem == nil ? session.themLevel : 0)
             }
         }
         .font(AppTypography.body)
         .foregroundStyle(MainWindowPalette.secondaryText)
     }
 
+    /// A failed track shows its cause in place of the meter.
     @ViewBuilder
-    private func track(_ name: String, level: Float, problem: String?) -> some View {
-        if let problem {
-            Label(name, systemImage: "exclamationmark.triangle.fill")
+    private func track(_ track: MeetingTrack, level: Float) -> some View {
+        if let problem = session.failedTracks[track] {
+            Label(track.speakerLabel, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
                 .help(problem)
         } else {
             HStack(spacing: 6) {
-                Text(name)
-                    .lineLimit(1)
-                MeetingLevelMeter(level: session.isPaused ? 0 : level)
+                Text(track.speakerLabel)
+                MeetingLevelMeter(level: session.isPaused ? 0 : level, tint: track == .you ? .accentColor : MainWindowPalette.secondaryText)
             }
         }
     }
 }
 
-private struct CallProblemPopover: View {
-    let problem: MeetingSession.CallAudioProblem
+/// No sound from the call, or a new microphone, above the tabs.
+private struct MeetingLiveBanner: View {
+    let session: MeetingSession
     let meetings: MeetingCoordinator
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        if session.hasCallTrack, let problem = session.callAudioProblem {
             switch problem {
             case .neverHeard:
-                Text("No sound from the call for \(MeetingDurationText.spelledOut(MeetingRecorder.callSilenceLimit))")
-                    .font(AppTypography.bodyMedium)
-                Text("If people are talking, Suniye may need permission to record system audio.")
-                    .fixedSize(horizontal: false, vertical: true)
-                Button("Open System Settings") {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
-                }
-                .buttonStyle(.borderedProminent)
+                InlineStatusBanner(
+                    icon: "exclamationmark.circle",
+                    tint: .orange,
+                    title: "No sound from the call for \(MeetingDurationText.spelledOut(MeetingRecorder.callSilenceLimit))",
+                    detail: "If people are talking, Suniye may need permission to record system audio.",
+                    actionTitle: "Open System Settings",
+                    action: { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!) }
+                )
             case let .stopped(since):
-                Text("Call audio stopped")
-                    .font(AppTypography.bodyMedium)
-                Text("No sound from the call since \(MeetingTranscript.clock(since)).")
-                Button("Restart Call Audio") {
-                    meetings.restartCallAudio()
-                }
-                .buttonStyle(.borderedProminent)
+                InlineStatusBanner(
+                    icon: "exclamationmark.circle",
+                    tint: .orange,
+                    title: "Call audio stopped",
+                    detail: "No sound from the call since \(MeetingTranscript.clock(since)).",
+                    actionTitle: "Restart Call Audio",
+                    action: { meetings.restartCallAudio() }
+                )
             }
+        } else if let name = session.changedInput {
+            InlineStatusBanner(
+                icon: "mic",
+                tint: .accentColor,
+                title: "Microphone changed",
+                detail: "Recording continues with \(name)."
+            )
         }
-        .padding(14)
-        .frame(width: 280, alignment: .leading)
     }
 }
 
-/// A short bar for a track's level, 0...1.
+/// Five bars for a track: its last five levels, the newest on the right.
 struct MeetingLevelMeter: View {
     let level: Float
+    let tint: Color
+    @State private var levels = [Float](repeating: 0, count: 5)
 
     var body: some View {
-        Capsule()
-            .fill(MainWindowPalette.divider)
-            .frame(width: 36, height: 4)
-            .overlay(alignment: .leading) {
-                Capsule()
-                    .fill(Color.primary.opacity(0.55))
-                    .frame(width: 36 * CGFloat(min(max(level, 0), 1)), height: 4)
+        HStack(alignment: .bottom, spacing: 2) {
+            ForEach(levels.indices, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(levels[index] > 0.02 ? tint : MainWindowPalette.divider)
+                    .frame(width: 3, height: 3 + 11 * CGFloat(min(max(levels[index], 0), 1)))
             }
-            .animation(.linear(duration: 0.066), value: level)
-            .accessibilityHidden(true)
+        }
+        .frame(height: 14, alignment: .bottom)
+        .animation(.linear(duration: 0.066), value: levels)
+        .onChange(of: level) { _, newLevel in
+            levels = Array((levels + [newLevel]).suffix(5))
+        }
+        .accessibilityHidden(true)
     }
 }

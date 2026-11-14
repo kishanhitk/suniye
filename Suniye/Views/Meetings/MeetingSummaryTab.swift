@@ -27,7 +27,7 @@ struct MeetingSummaryTab: View {
     @ViewBuilder
     private var state: some View {
         if record.status == .finishing {
-            progress("Finishing the transcript...")
+            progress("Finishing the transcript…")
         } else {
             switch record.status {
             case .done:
@@ -77,12 +77,12 @@ struct MeetingSummaryTab: View {
             localModel: appState.localGemmaMagicFormatAvailability
         ) {
         case .ready:
-            progress("Writing the summary...")
+            progress("Writing the summary…")
         case .needsDownload:
             EmptyStateCard(
                 icon: "sparkles",
-                title: "Summaries need the local model",
-                detail: "\(LocalGemmaDefaults.expectedSizeText). Your transcript is saved."
+                title: "Summaries need a model",
+                detail: "Download the summary model. Your transcript is saved."
             ) {
                 switch appState.localGemmaInstallState {
                 case .downloading, .verifying:
@@ -98,7 +98,7 @@ struct MeetingSummaryTab: View {
                         Button("Cancel") { appState.cancelLocalGemmaDownload() }
                     }
                 case .notInstalled, .failed, .installed, .unavailable:
-                    Button("Download") { appState.startLocalGemmaDownload() }
+                    Button("Download · \(LocalGemmaDefaults.expectedSizeText)") { appState.startLocalGemmaDownload() }
                         .buttonStyle(.borderedProminent)
                         .disabled(!appState.canStartLocalGemmaDownload)
                 }

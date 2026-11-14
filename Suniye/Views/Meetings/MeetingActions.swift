@@ -77,7 +77,7 @@ private struct MeetingActionDialogs: ViewModifier {
     func body(content: Content) -> some View {
         content
             .confirmationDialog(
-                "Delete this meeting?",
+                actions.deleting.map { "Delete “\($0.title)”?" } ?? "",
                 isPresented: Binding(get: { actions.deleting != nil }, set: { if !$0 { actions.deleting = nil } }),
                 presenting: actions.deleting
             ) { record in
@@ -96,7 +96,7 @@ private struct MeetingActionDialogs: ViewModifier {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
-                Text("This deletes the summary, notes and transcript. You can’t undo it.")
+                Text("This deletes the summary, notes, transcript and audio. You can’t undo it.")
             }
             .alert(
                 "Rename Meeting",
@@ -151,7 +151,7 @@ struct MeetingMenuItems: View {
             Button("Export as Markdown…") { actions.export(record, meetings: meetings) }
         }
         Button("Rename…") { actions.rename(record) }
-        Button("Reveal in Finder") { actions.revealInFinder(record, meetings: meetings) }
+        Button("Show in Finder") { actions.revealInFinder(record, meetings: meetings) }
         if !isLive {
             Divider()
             Button("Delete Meeting…") { actions.confirmDelete(record) }

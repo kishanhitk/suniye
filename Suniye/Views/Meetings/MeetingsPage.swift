@@ -39,6 +39,17 @@ struct MeetingsPage: View {
                 .disabled(meetings.live != nil)
             }
 
+            if !meetings.canRecordCallAudio {
+                InlineStatusBanner(
+                    icon: "info.circle",
+                    tint: .accentColor,
+                    title: "Recording a call needs macOS 14.4 or later",
+                    detail: "You can still record a meeting in the room.",
+                    actionTitle: "Software Update",
+                    action: { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension")!) }
+                )
+            }
+
             ForEach(unfinished) { record in
                 InlineStatusBanner(
                     icon: "exclamationmark.triangle.fill",
@@ -77,16 +88,8 @@ struct MeetingsPage: View {
             EmptyStateCard(
                 icon: "person.2",
                 title: "No Meetings Yet",
-                detail: meetings.canRecordCallAudio
-                    ? "Record a call or a meeting in the room."
-                    : "Recording a call needs macOS 14.4 or later."
-            ) {
-                if !meetings.canRecordCallAudio {
-                    Button("Open Software Update") {
-                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension")!)
-                    }
-                }
-            }
+                detail: meetings.canRecordCallAudio ? "Record a call or a meeting in the room." : "Record a meeting in the room."
+            )
         } else if visible.isEmpty, !query.isEmpty {
             EmptyStateCard(icon: "magnifyingglass", title: "No Matches", detail: "No meetings match this search.")
         } else {
@@ -186,7 +189,7 @@ private struct LiveMeetingRow: View {
                 .font(AppTypography.body)
                 .lineLimit(1)
             Spacer()
-            Button("Open Meeting", action: open)
+            Button("Open Notes", action: open)
         }
         .padding(.vertical, AppMetrics.listRowVerticalPadding)
     }

@@ -5820,13 +5820,8 @@ extension AppState: MeetingHost {
     func terminateReplyForMeeting() -> NSApplication.TerminateReply {
         guard meetings.live != nil else { return .terminateNow }
         if !Self.systemIsQuittingApps() {
-            let alert = NSAlert()
-            alert.messageText = "A meeting is recording"
-            alert.informativeText = "Quitting stops the recording. Suniye finishes the transcript when it opens again."
-            alert.addButton(withTitle: "Keep Recording")
-            alert.addButton(withTitle: "Stop and Quit")
             NSApp.activate(ignoringOtherApps: true)
-            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+            guard MeetingQuitAlert.make().runModal() == .alertSecondButtonReturn else { return .terminateCancel }
         }
         Task {
             await meetings.stopForQuit()

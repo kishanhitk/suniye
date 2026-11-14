@@ -126,6 +126,7 @@ struct MeetingCallCardView: View {
                 Button("Not Now") { meetings.declineOffer() }
             }
             .controlSize(.large)
+            .buttonBorderShape(.roundedRectangle)
         }
         .frame(width: 328, alignment: .leading)
     }
@@ -141,6 +142,7 @@ struct MeetingCallCardView: View {
                     Task { await meetings.cancelAutomaticRecording() }
                 }
                 .controlSize(.large)
+                .buttonBorderShape(.roundedRectangle)
             }
             CancelTrack(endsAt: cancelEndsAt)
                 .accessibilityLabel("Time left to cancel")
@@ -169,21 +171,18 @@ struct MeetingCallCardView: View {
                 Button("Keep Recording") { meetings.keepRecording() }
             }
             .controlSize(.large)
+            .buttonBorderShape(.roundedRectangle)
         }
         .frame(width: 328, alignment: .leading)
     }
 }
 
+/// The app icon, as in the main window's sidebar.
 private struct AppGlyph: View {
     var body: some View {
-        Image("StatusBarIcon")
+        Image(nsImage: NSApp.applicationIconImage)
             .resizable()
-            .renderingMode(.template)
-            .foregroundStyle(.primary)
-            .frame(width: 18, height: 18)
             .frame(width: 30, height: 30)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.primary.opacity(0.12)))
             .accessibilityHidden(true)
     }
 }

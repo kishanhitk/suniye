@@ -594,7 +594,7 @@ private struct MeetingPillContent: View {
             onAction(session.isPaused ? .resume : .pause)
         }
         .accessibilityAction(named: "Stop") { onAction(.stop) }
-        .accessibilityAction(named: "Open Meeting") { onAction(.open) }
+        .accessibilityAction(named: "Open Notes") { onAction(.open) }
     }
 }
 

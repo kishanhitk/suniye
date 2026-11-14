@@ -12,7 +12,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let meetingStatusItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let pauseMeetingItem = NSMenuItem(title: "Pause Recording", action: #selector(pauseOrResumeMeeting), keyEquivalent: "")
     private let stopMeetingItem = NSMenuItem(title: "Stop Recording", action: #selector(stopMeeting), keyEquivalent: "")
-    private let openMeetingItem = NSMenuItem(title: "Open Meeting", action: #selector(openMeeting), keyEquivalent: "")
+    private let openMeetingItem = NSMenuItem(title: "Open Meeting Notes", action: #selector(openMeeting), keyEquivalent: "")
     private let finishSetupItem = NSMenuItem(title: "", action: #selector(openMainWindow), keyEquivalent: "")
     private let openSettingsItem = NSMenuItem(title: "Open Settings", action: #selector(openMainWindow), keyEquivalent: "o")
     private let copyLastTranscriptItem = NSMenuItem(title: "Copy Last Transcript", action: #selector(copyLastTranscript), keyEquivalent: "")
