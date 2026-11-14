@@ -174,11 +174,8 @@ struct MeetingRegenerateMenu: View {
     /// A summary that the user edited is replaced only after a question.
     private func regenerate(templateID: String?, templateName: String) {
         Task {
-            await meetings.textSaves.finish(record.id)
-            if meetings.record(record.id)?.summaryEditedAt != nil {
+            if await !meetings.regenerateUnlessEdited(record.id, templateID: templateID) {
                 actions.replacingSummary = MeetingActions.SummaryReplacement(meetingID: record.id, templateID: templateID, templateName: templateName)
-            } else {
-                await meetings.regenerate(record.id, templateID: templateID)
             }
         }
     }

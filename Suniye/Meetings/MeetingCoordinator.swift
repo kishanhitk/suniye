@@ -764,6 +764,16 @@ final class MeetingCoordinator {
         dropListText(id)
     }
 
+    /// Writes the summary again, unless the user edited it, also in text
+    /// that waited for its save: then it writes nothing and returns false,
+    /// and the page asks before the edit is replaced.
+    func regenerateUnlessEdited(_ id: UUID, templateID: String? = nil) async -> Bool {
+        await textSaves.finish(id)
+        guard record(id)?.summaryEditedAt == nil else { return false }
+        await regenerate(id, templateID: templateID)
+        return true
+    }
+
     func regenerate(_ id: UUID, templateID: String? = nil) async {
         guard record(id)?.status.canRegenerate == true else { return }
         await textSaves.finish(id)

@@ -1053,6 +1053,30 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(store.audioTracks(of: meeting.id), [], "the next check deletes it")
     }
 
+    func testRegenerateWritesAtOnceOnlyWhenTheSummaryHasNoEdit() async throws {
+        let edited = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let plain = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        for id in [edited.id, plain.id] {
+            try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: longSentence), to: id)
+            try await store.saveSummary("## Overview\nShip Friday.", for: id)
+        }
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        coordinator.textSaves.stage(.summary, of: edited.id) {
+            await coordinator.editSummary(edited.id, markdown: "## Overview\nShip on Monday.")
+        }
+
+        let wroteEdited = await coordinator.regenerateUnlessEdited(edited.id)
+        let wrotePlain = await coordinator.regenerateUnlessEdited(plain.id)
+        let kept = await coordinator.summary(of: edited.id)
+
+        XCTAssertFalse(wroteEdited, "the edit counts, also while it waits for its save")
+        XCTAssertEqual(kept, "## Overview\nShip on Monday.")
+        XCTAssertEqual(coordinator.record(edited.id)?.status, .done)
+        XCTAssertTrue(wrotePlain)
+        XCTAssertEqual(coordinator.record(plain.id)?.status, .summarizing)
+    }
+
     func testNotesTypedJustBeforeTheStopCountForTheSummary() async throws {
         let coordinator = makeCoordinator()
         coordinator.speechModelChanged(.parakeetV3)
