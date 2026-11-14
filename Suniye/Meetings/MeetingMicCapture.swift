@@ -9,7 +9,9 @@ enum MeetingAudioSourceEvent: Equatable, Sendable {
     case failed(String)
 }
 
-/// One meeting track. Blocks arrive as 16 kHz mono floats on a background queue.
+/// One meeting track. Blocks arrive as 16 kHz mono floats on a background
+/// queue. A block holds all the audio that the source had when it handed the
+/// block over: the recorder places each block by the time it arrives.
 protocol MeetingAudioSource: AnyObject {
     var onSamples: (([Float]) -> Void)? { get set }
     var onEvent: ((MeetingAudioSourceEvent) -> Void)? { get set }
@@ -263,6 +265,7 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
 
     private func drainRing() {
         guard let ring, let resampler else { return }
+        var drained: [Float] = []
         var count = SuniyeAudioRingBufferRead(ring, drainScratch, drainCapacity)
         while count > 0 {
             receivedFrame = true
@@ -272,11 +275,11 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
                 reopensWithoutSound = 0
             }
             noteDigitalSilence(isZero)
-            let block = resampler.process(raw)
-            if !block.isEmpty {
-                onSamples?(block)
-            }
+            drained += resampler.process(raw)
             count = SuniyeAudioRingBufferRead(ring, drainScratch, drainCapacity)
+        }
+        if !drained.isEmpty {
+            onSamples?(drained)
         }
     }
 

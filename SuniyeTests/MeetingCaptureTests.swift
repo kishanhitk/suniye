@@ -521,6 +521,31 @@ final class MeetingRecorderTests: XCTestCase {
         XCTAssertFalse(events.samples.contains { if case .callAudioSilent = $0 { return true }; return false })
         XCTAssertEqual(recorder.tracks, [.you])
     }
+
+    func testAudioThatWaitedInTheMicrophoneRingIsNotReadAsAGap() throws {
+        let factory = FakeMeetingDriverFactory(rate: 48_000, samples: Array(repeating: 0.25, count: 5 * 48_000))
+        factory.onStart = { [clock] _ in clock.advance(by: 5) }
+        let microphone = MeetingMicCapture(
+            hardwareCatalog: FakeMeetingCatalog(route: MeetingMicCaptureTests.route(id: "built-in", name: "MacBook Air Microphone")),
+            deviceMonitor: FakeMeetingMonitor(),
+            driverFactory: factory
+        )
+        let recorder = MeetingRecorder(sources: [.you: microphone], audioURL: { [unowned self] in url($0) }, uptime: { [clock] in clock.now })
+        let delivered = expectation(description: "the first drain")
+        delivered.assertForOverFulfill = false
+        recorder.onOutput = { _ in delivered.fulfill() }
+
+        try recorder.start()
+        wait(for: [delivered], timeout: 2)
+        recorder.stop()
+
+        XCTAssertEqual(
+            Double(try MeetingAudioFileReader.sampleCount(at: url(.you))),
+            5 * 16_000,
+            accuracy: 64,
+            "5 s that the ring held while the clock moved 5 s are 5 s of audio, with no silence before them"
+        )
+    }
 }
 
 // MARK: - Fakes

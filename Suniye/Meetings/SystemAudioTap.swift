@@ -232,13 +232,14 @@ final class SystemAudioTap: MeetingAudioSource, @unchecked Sendable {
 
     private func drainRing() {
         guard let ring, let resampler else { return }
+        var drained: [Float] = []
         var count = SuniyeAudioRingBufferRead(ring, drainScratch, drainCapacity)
         while count > 0 {
-            let block = resampler.process(UnsafeBufferPointer(start: drainScratch, count: count))
-            if !block.isEmpty {
-                onSamples?(block)
-            }
+            drained += resampler.process(UnsafeBufferPointer(start: drainScratch, count: count))
             count = SuniyeAudioRingBufferRead(ring, drainScratch, drainCapacity)
+        }
+        if !drained.isEmpty {
+            onSamples?(drained)
         }
     }
 
