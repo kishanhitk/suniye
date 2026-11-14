@@ -330,7 +330,7 @@ private struct MeetingLiveMeta: View {
         } else {
             HStack(spacing: 6) {
                 Text(track.speakerLabel)
-                MeetingLevelMeter(level: session.isPaused ? 0 : level, tint: track == .you ? .accentColor : MainWindowPalette.secondaryText)
+                MeetingLevelMeter(level: level, tint: track == .you ? .accentColor : MainWindowPalette.secondaryText, isPaused: session.isPaused)
             }
         }
     }
@@ -378,6 +378,9 @@ private struct MeetingLiveBanner: View {
 struct MeetingLevelMeter: View {
     let level: Float
     let tint: Color
+    /// While paused the bars rest. A pause sends one zero, so the bars before
+    /// it would otherwise stay up for the whole pause.
+    var isPaused = false
     @State private var levels = [Float](repeating: 0, count: 5)
 
     var body: some View {
@@ -391,7 +394,13 @@ struct MeetingLevelMeter: View {
         .frame(height: 14, alignment: .bottom)
         .animation(.linear(duration: 0.066), value: levels)
         .onChange(of: level) { _, newLevel in
+            guard !isPaused else { return }
             levels = Array((levels + [newLevel]).suffix(5))
+        }
+        .onChange(of: isPaused) { _, paused in
+            if paused {
+                levels = [Float](repeating: 0, count: 5)
+            }
         }
         .accessibilityHidden(true)
     }
