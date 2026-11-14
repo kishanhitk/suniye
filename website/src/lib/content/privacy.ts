@@ -44,6 +44,7 @@ export const HOW_IT_STAYS_PRIVATE: readonly string[] = [
   "Each install gets a random identifier so we can count returning users, but it maps to no name, email, or device serial — it can't identify you and isn't shared with anyone. This makes the data **pseudonymous**: we can see trends, never people. We collect it on a legitimate-interest basis, disclose it here, and let you opt out.",
   "Data is stored on our own Cloudflare infrastructure — never sold, never shared with third-party trackers. We keep one small record per install (its random id, the days it was first and last seen, coarse hardware — Mac model, chip, CPU cores, memory tier, macOS version — and coarse country). All per-event usage data — word counts, timings, feature flags, target-app category, error types, language, and the rest of the list above — is kept for about 90 days, after which only aggregate counts remain.",
   "Turn it off: **Settings → Privacy → Share Anonymous Analytics**. When off, nothing is sent and any queued data is discarded.",
+  "Meeting audio never leaves your Mac. Suniye deletes it when the transcript is ready, or 7 or 30 days after the meeting when you choose to keep it in **Settings → General → Meetings**.",
 ];
 
 export const WEBSITE_ANALYTICS =

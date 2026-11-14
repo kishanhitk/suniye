@@ -5,6 +5,7 @@ Suniye records a call or a meeting in the room. After the recording stops, it wr
 ## Privacy
 
 - No audio, transcript, notes or summary leaves the Mac.
+- The audio stays on the Mac until the transcript is ready, or up to 30 days when you choose it (see [Meeting audio](#meeting-audio)).
 - Anonymous counts go to analytics when that setting is on: how a recording starts and stops, its length in whole minutes, the tracks, the number of transcript lines and summary parts, the times, and the answers to the call cards. The [privacy page](https://suniye.app/privacy) lists them.
 
 ## Tracks
@@ -77,7 +78,7 @@ After a quit or a crash, the next launch writes no transcript by itself: it does
 - Picking a model that is not on the Mac downloads it. It becomes the transcript model when the download is done.
 - When the transcript model is not on the Mac at the stop, the meeting shows that cause and **Finish Transcript**.
 - The audio goes to the model in pieces of 2 to 12 s, cut at pauses.
-- The audio files go when the transcript is final.
+- The audio files go when the transcript is final, or later when you keep them (see [Meeting audio](#meeting-audio)).
 
 Measured on 14 Nov 2026 with one hour of a real meeting: AMI Meeting Corpus IN1016, 60.1 min, 4 people in a room. "You" is one person's headset and "Them" the other three; each headset is silent outside its speaker's annotated speech. The dictation model is Parakeet TDT 0.6B v3.
 
@@ -95,6 +96,15 @@ Limits of this measurement: one meeting, in English, with four speakers; each tr
 - The dictation column for a model other than the dictation model is the median of 4 dictations during the pass, with the hold from the key-down (measured on 15 minutes of the same meeting for Cohere Transcribe and Qwen3-ASR). Before the hold, a 6 s dictation took 961 to 1,178 ms beside Cohere Transcribe and 546 to 761 ms beside Qwen3-ASR.
 - The longest piece of audio decodes in 1.91 s on Cohere Transcribe, 2.55 s on Qwen3-ASR and 0.52 s on Apple Speech, so the piece in flight at the key-down ends while you speak.
 - Word error rate: each track against the AMI reference words, lowercase, with no punctuation, no filler words and digits as words. Overlapping talk in the Them track counts as errors.
+
+## Meeting audio
+
+**Settings → General → Meetings → Keep meeting audio**:
+
+- **Until the transcript is ready** (default): the audio goes when the transcript is final.
+- **7 days** or **30 days**: the audio goes that long after the end of the meeting.
+
+Suniye checks at launch and after each transcript, with no timer. A change of the setting applies at the next check, so a wrong click deletes nothing at once. A meeting with no finished transcript keeps its audio for **Finish Transcript**. **Delete Meeting** deletes the audio at once.
 
 ## Summary
 
@@ -133,6 +143,6 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 | `segments.jsonl` | Transcript lines |
 | `notes.txt` | Your notes |
 | `summary.md` | The summary |
-| `you.wav`, `them.wav` | 16 kHz audio while the meeting records and until the transcript is final |
+| `you.wav`, `them.wav` | 16 kHz audio while the meeting records, and after the transcript as long as **Keep meeting audio** says |
 
 **Settings → General → Meetings** shows the space on disk and **Reveal in Finder**.

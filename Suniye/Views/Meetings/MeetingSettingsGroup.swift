@@ -63,7 +63,28 @@ struct MeetingSettingsGroup: View {
             }
 
             RowSeparator()
-            ControlSettingRow(title: "Meeting files", info: "Audio is deleted when the transcript is ready.") {
+            ControlSettingRow(
+                title: "Keep meeting audio",
+                info: "Audio lets you transcribe a meeting again. Transcripts and notes stay until you delete them. A change applies the next time Suniye opens or finishes a transcript."
+            ) {
+                Picker(
+                    "Keep meeting audio",
+                    selection: Binding(
+                        get: { meetings.settings.audioRetention },
+                        set: { retention in meetings.updateSettings { $0.audioRetention = retention } }
+                    )
+                ) {
+                    Text("Until the transcript is ready").tag(MeetingAudioRetention.untilTranscript)
+                    Text("7 days").tag(MeetingAudioRetention.sevenDays)
+                    Text("30 days").tag(MeetingAudioRetention.thirtyDays)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+
+            RowSeparator()
+            ControlSettingRow(title: "Meeting files", info: Self.audioRule(meetings.settings.audioRetention)) {
                 HStack(spacing: 10) {
                     Text(diskBytes.map(Self.size) ?? "")
                         .foregroundStyle(MainWindowPalette.secondaryText)
@@ -83,13 +104,18 @@ struct MeetingSettingsGroup: View {
         .sheet(isPresented: $editingNeverAsk) {
             NeverAskSheet(meetings: meetings)
         }
-        .task(id: meetings.meetings.count) {
+        .task(id: [meetings.meetings.count, meetings.audioOnMac.count]) {
             diskBytes = await meetings.store.diskUsage()
         }
     }
 
     private var meetings: MeetingCoordinator {
         appState.meetings
+    }
+
+    private static func audioRule(_ retention: MeetingAudioRetention) -> String {
+        guard let days = retention.days else { return "Audio is deleted when the transcript is ready." }
+        return "Audio is deleted \(days) days after the meeting."
     }
 
     /// "0 bytes", not ByteCountFormatter's "Zero KB".

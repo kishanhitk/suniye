@@ -152,6 +152,8 @@ final class MeetingCoordinator {
     private(set) var transcriptProgress: [UUID: MeetingTranscriptProgress] = [:]
     /// The meetings whose transcript waits for the transcript of another one.
     private(set) var waitingTranscripts: Set<UUID> = []
+    /// The meetings whose audio is on the Mac.
+    private(set) var audioOnMac: Set<UUID> = []
     /// The meeting that the Meetings section shows; nil shows the list.
     var openMeetingID: UUID?
     /// The meeting whose page is on screen, so a notice does not repeat it.
@@ -245,17 +247,19 @@ final class MeetingCoordinator {
         environment.canRecordCallAudio
     }
 
-    /// At launch: repair what a quit or a crash left, and queue the summaries
-    /// that are not written yet. A transcript that a quit or a crash left
-    /// waits for Finish Transcript.
+    /// At launch: repair what a quit or a crash left, queue the summaries
+    /// that are not written yet, and delete the audio whose time is over. A
+    /// transcript that a quit or a crash left waits for Finish Transcript.
     func start() async {
         _ = await store.recoverInterruptedMeetings()
         meetings = await store.loadAll()
+        audioOnMac = Set(meetings.map(\.id).filter { !store.audioTracks(of: $0).isEmpty })
         for record in meetings where record.status == .summarizing {
             summaries.enqueue(record.id)
         }
         launched = true
         updateCallDetection()
+        await deleteExpiredAudio()
     }
 
     /// The summary, notes and transcript of a meeting, read from disk once.
@@ -384,6 +388,7 @@ final class MeetingCoordinator {
         // a session that is not live, and the recorder sends some at once.
         live = session
         meetings.insert(record, at: 0)
+        audioOnMac.insert(record.id)
         closeCallCard()
         detector.recordingStarted(call: callApp)
         checkLive(session)
@@ -502,6 +507,7 @@ final class MeetingCoordinator {
         guard let session = beginStop() else { return }
         live = nil
         meetings.removeAll { $0.id == session.id }
+        audioOnMac.remove(session.id)
         do {
             try await store.delete(session.id)
         } catch {
@@ -671,6 +677,7 @@ final class MeetingCoordinator {
         summaries.remove(id)
         try await store.delete(id)
         meetings.removeAll { $0.id == id }
+        audioOnMac.remove(id)
     }
 
     func record(_ id: UUID) -> MeetingRecord? {
@@ -766,17 +773,12 @@ final class MeetingCoordinator {
     /// already.
     private func transcribe(_ id: UUID, model chosenModel: ASRModelID?) async {
         let started = ContinuousClock.now
-        defer {
-            passes.remove(id)
-            transcriptProgress[id] = nil
-        }
         let outcome: MeetingOutcome
         var segments = 0
         do {
             let transcript = try await runPass(id, model: chosenModel)
             segments = transcript.count
             outcome = segments == 0 ? .noSpeech : .done
-            await store.deleteAudio(of: id)
             let enough = await hasEnoughSpeech(id, segments: transcript)
             await update(id) {
                 $0.status = enough ? .summarizing : .noSpeech
@@ -794,12 +796,31 @@ final class MeetingCoordinator {
                 $0.transcriptFailure = cause
             }
         }
+        passes.remove(id)
+        transcriptProgress[id] = nil
         analytics.track(.meetingTranscribed(
             outcome: outcome,
             model: SafeLabel((chosenModel ?? loadedModel)?.rawValue ?? ""),
             segments: segments,
             durationMs: Int((ContinuousClock.now - started) / .milliseconds(1))
         ))
+        await deleteExpiredAudio()
+    }
+
+    /// Deletes the audio whose time is over: at launch and after each
+    /// transcript, never on a timer. A meeting with no final transcript keeps
+    /// its audio for Finish Transcript, and a meeting in a pass keeps it until
+    /// the pass ends.
+    private func deleteExpiredAudio() async {
+        let now = environment.now()
+        for record in meetings where audioOnMac.contains(record.id) && record.status.hasFinalTranscript && !passes.contains(record.id) {
+            if let days = settings.audioRetention.days,
+               now < (record.endedAt ?? record.startedAt).addingTimeInterval(TimeInterval(days) * 24 * 60 * 60) {
+                continue
+            }
+            await store.deleteAudio(of: record.id)
+            audioOnMac.remove(record.id)
+        }
     }
 
     /// With no model ("Same as dictation"), the pass runs on the dictation

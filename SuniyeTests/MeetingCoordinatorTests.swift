@@ -772,6 +772,41 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(markdown.contains("We ship on Friday."))
     }
 
+    func testKeptAudioGoesAtTheFirstLaunchAfterItsTime() async throws {
+        let cases: [(status: MeetingStatus, keep: MeetingAudioRetention, endedDaysAgo: Double, kept: Bool)] = [
+            (.done, .untilTranscript, 0, false),
+            (.done, .sevenDays, 6, true),
+            (.done, .sevenDays, 8, false),
+            (.noSpeech, .thirtyDays, 29, true),
+            (.summaryFailed, .thirtyDays, 31, false),
+            (.notTranscribed, .untilTranscript, 31, true),
+        ]
+        for (status, keep, days, kept) in cases {
+            let meeting = try await finishedMeeting(status: status, endedDaysAgo: days)
+            let coordinator = makeCoordinator()
+            coordinator.updateSettings { $0.audioRetention = keep }
+
+            await coordinator.start()
+
+            let label = "\(status) with \(keep), \(days) days after the meeting"
+            XCTAssertEqual(!store.audioTracks(of: meeting.id).isEmpty, kept, label)
+            XCTAssertEqual(coordinator.audioOnMac.contains(meeting.id), kept, label)
+        }
+    }
+
+    func testAudioKeptForSevenDaysStaysAfterTheTranscript() async throws {
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+
+        await coordinator.stop()
+
+        XCTAssertEqual(store.audioTracks(of: id), [.you, .them])
+    }
+
     func testATrackThatStartsAgainNoLongerShowsAsFailed() async throws {
         let coordinator = makeCoordinator()
         them.failsToStart = true
@@ -825,6 +860,19 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(saved?.endedAt, saved?.startedAt.addingTimeInterval(3))
         XCTAssertEqual(atLaunch, .notTranscribed, "the next launch shows it with Finish Transcript")
         XCTAssertTrue(finished)
+    }
+
+    /// A meeting that ended `days` days before the clock, with 3 s of audio:
+    /// one sentence.
+    private func finishedMeeting(status: MeetingStatus, endedDaysAgo days: Double) async throws -> MeetingRecord {
+        let end = clock.addingTimeInterval(-days * 24 * 60 * 60)
+        var meeting = MeetingRecord(title: "Design sync", startedAt: end.addingTimeInterval(-1_800), tracks: [.you], status: status, templateID: "general")
+        meeting.endedAt = end
+        try await store.create(meeting)
+        let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: meeting.id))
+        try writer.append(tone(2.5, level: 0.3) + silence(0.5))
+        try writer.close()
+        return meeting
     }
 
     /// A meeting that a quit left during the recording, with 3 s of audio:
@@ -900,21 +948,25 @@ final class MeetingSettingsStoreTests: XCTestCase {
         let suite = "MeetingSettingsStoreTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(Data(#"{"noticeAccepted":true,"neverAskBundleIDs":["us.zoom.xos"],"transcriptModel":"retiredModel"}"#.utf8), forKey: "settings")
+        defaults.set(Data(#"{"noticeAccepted":true,"neverAskBundleIDs":["us.zoom.xos"],"transcriptModel":"retiredModel","audioRetention":"forever"}"#.utf8), forKey: "settings")
         let store = MeetingSettingsStore(userDefaults: defaults, key: "settings")
 
         var loaded = store.load()
         let unknownModel = loaded.transcriptModel
+        let unknownRetention = loaded.audioRetention
         loaded.callStartAction = .recordAutomatically
         loaded.transcriptModel = .cohereTranscribe
+        loaded.audioRetention = .thirtyDays
         store.save(loaded)
         let reloaded = store.load()
 
         XCTAssertEqual(reloaded.neverAskBundleIDs, ["us.zoom.xos"], "a key that a later build dropped does not stop the load")
         XCTAssertNil(unknownModel, "a transcript model that this build does not know is the dictation model")
+        XCTAssertEqual(unknownRetention, .untilTranscript, "an audio choice that this build does not know is the default")
         XCTAssertEqual(reloaded.templateID, MeetingTemplate.general.id)
         XCTAssertEqual(reloaded.callStartAction, .recordAutomatically)
         XCTAssertEqual(reloaded.transcriptModel, .cohereTranscribe)
+        XCTAssertEqual(reloaded.audioRetention, .thirtyDays)
     }
 }
 
