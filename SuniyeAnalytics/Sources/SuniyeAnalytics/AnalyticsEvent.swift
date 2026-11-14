@@ -98,6 +98,9 @@ public enum AnalyticsEvent: Sendable {
     /// How a call card closed. A card that the app closed itself (a recording
     /// started or stopped, or the call came back) sends nothing.
     case meetingCallCard(card: MeetingCallCardKind, action: MeetingCallCardAction)
+    /// The first change to one part of a meeting's text in one visit of its
+    /// page. No text.
+    case meetingEdited(part: MeetingEditedText)
 
     /// Self-observability of the analytics pipeline itself.
     case analyticsHealth(queueDepth: Int, uploadFailures: Int, evictedByTTL: Int, evictedBySize: Int)
@@ -137,6 +140,7 @@ public enum AnalyticsEvent: Sendable {
         case .meetingTranscribed: return "meeting_transcribed"
         case .meetingSummarized: return "meeting_summarized"
         case .meetingCallCard: return "meeting_call_card"
+        case .meetingEdited: return "meeting_edited"
         case .analyticsHealth: return "analytics_health"
         }
     }
@@ -250,6 +254,8 @@ public enum AnalyticsEvent: Sendable {
             return out
         case let .meetingCallCard(card, action):
             return ["kind": .label(card), "action": .label(action)]
+        case let .meetingEdited(part):
+            return ["kind": .label(part)]
         case let .analyticsHealth(queueDepth, uploadFailures, evictedByTTL, evictedBySize):
             return [
                 "queue_depth": .int(queueDepth),

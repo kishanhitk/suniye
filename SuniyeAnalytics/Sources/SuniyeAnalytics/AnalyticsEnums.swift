@@ -249,6 +249,11 @@ public enum MeetingSummaryEngine: String, Sendable, CaseIterable {
     case localModel = "local_model"
 }
 
+/// The text of a meeting that the user can change on its page.
+public enum MeetingEditedText: String, Sendable, CaseIterable {
+    case title, transcript, summary
+}
+
 /// The card about a call at the top right of the screen.
 public enum MeetingCallCardKind: String, Sendable, CaseIterable {
     case offer

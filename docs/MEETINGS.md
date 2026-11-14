@@ -6,7 +6,7 @@ Suniye records a call or a meeting in the room. After the recording stops, it wr
 
 - No audio, transcript, notes or summary leaves the Mac.
 - The audio stays on the Mac until the transcript is ready, or up to 30 days when you choose it (see [Meeting audio](#meeting-audio)).
-- Anonymous counts go to analytics when that setting is on: how a recording starts and stops, its length in whole minutes, the tracks, the number of transcript lines and summary parts, the times, and the answers to the call cards. The [privacy page](https://suniye.app/privacy) lists them.
+- Anonymous counts go to analytics when that setting is on: how a recording starts and stops, its length in whole minutes, the tracks, the number of transcript lines and summary parts, the times, the answers to the call cards, and the part of a meeting's text that you edit (title, transcript or summary, once for each part in a visit of the page). The [privacy page](https://suniye.app/privacy) lists them.
 
 ## Tracks
 

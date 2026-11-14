@@ -717,6 +717,12 @@ final class MeetingCoordinator {
         dropListText(id)
     }
 
+    /// The user changed this part of a meeting's text, for the first time in
+    /// this visit of its page.
+    func textEdited(_ part: MeetingEditedText) {
+        analytics.track(.meetingEdited(part: part))
+    }
+
     /// Writes the summary that the user changed, as Markdown.
     func editSummary(_ id: UUID, markdown: String) async {
         guard record(id)?.status == .done else { return }

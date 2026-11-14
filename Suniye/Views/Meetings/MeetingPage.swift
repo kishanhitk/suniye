@@ -1,4 +1,5 @@
 import AppKit
+import SuniyeAnalytics
 import SwiftUI
 
 enum MeetingTab: Int, CaseIterable {
@@ -28,6 +29,8 @@ struct MeetingPage: View {
     /// Nil until the notes are read, so the editor never saves over them.
     @State private var notes: MeetingNotesDraft?
     @State private var notesUnreadable = false
+    /// The parts of the text that the user changed in this visit of the page.
+    @State private var editedParts: Set<MeetingEditedText> = []
 
     init(meetings: MeetingCoordinator, appState: AppState, id: UUID) {
         self.meetings = meetings
@@ -157,6 +160,7 @@ struct MeetingPage: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .overlay(alignment: .topLeading) {
                     MeetingTitleField(title: record.title) { title in
+                        noteEdit(.title)
                         meetings.textSaves.save(.title, of: id) {
                             await meetings.rename(id, to: title)
                         }
@@ -303,6 +307,7 @@ struct MeetingPage: View {
     /// The page shows the edit at once; the save waits for a pause in the
     /// typing, and an emptied line goes only when the edit ends.
     private func editTranscript(_ texts: [UUID: String], ended: Bool) {
+        noteEdit(.transcript)
         segments = segments.compactMap { segment in
             guard let text = texts[segment.id] else { return segment }
             return text.isEmpty && ended ? nil : segment.withText(text)
@@ -318,6 +323,7 @@ struct MeetingPage: View {
     }
 
     private func editSummary(_ markdown: String, ended: Bool) {
+        noteEdit(.summary)
         summary = markdown
         let save: () async -> Void = { [meetings, id] in
             await meetings.editSummary(id, markdown: markdown)
@@ -326,6 +332,12 @@ struct MeetingPage: View {
             meetings.textSaves.save(.summary, of: id, save: save)
         } else {
             meetings.textSaves.stage(.summary, of: id, save: save)
+        }
+    }
+
+    private func noteEdit(_ part: MeetingEditedText) {
+        if editedParts.insert(part).inserted {
+            meetings.textEdited(part)
         }
     }
 
