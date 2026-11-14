@@ -922,6 +922,31 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(transcript.map(\.text), [longSentence])
     }
 
+    func testTranscribeAgainFiltersTheNewTranscriptOfAnEditedMeeting() async throws {
+        let end = clock.addingTimeInterval(-24 * 60 * 60)
+        var meeting = MeetingRecord(title: "Call", startedAt: end.addingTimeInterval(-60), tracks: [.you], status: .done, templateID: "general")
+        meeting.endedAt = end
+        meeting.transcriptEnd = 4 * MeetingAudioFormat.sampleRate
+        try await store.create(meeting)
+        let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: meeting.id))
+        try writer.append(tone(2.5, level: 0.3) + silence(3) + tone(2.5, level: 0.5) + silence(0.5))
+        try writer.close()
+        let line = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words.")
+        try await store.appendSegment(line, to: meeting.id)
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        await coordinator.start()
+        await coordinator.editTranscript(meeting.id, texts: [line.id: "Edited words."], deleteEmpty: false)
+
+        coordinator.transcribeAgain(meeting.id)
+        let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
+        let stored = await store.segments(of: meeting.id)
+
+        XCTAssertTrue(finished)
+        XCTAssertEqual(stored.map(\.text), [longSentence], "the line after the end of the call stays out, also on disk")
+    }
+
     func testRegenerateWaitsForTheTranscriptThatTheUserTyped() async throws {
         let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
         let line = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: longSentence)
