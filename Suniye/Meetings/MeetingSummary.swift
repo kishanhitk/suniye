@@ -172,15 +172,21 @@ actor MeetingSummaryWriter {
         guard room >= Self.minimumPartTokens else { return nil }
         let parts = await split(input, room: room)
 
+        // The user's items come first in each section, so a repeat of one of
+        // them from the transcript goes.
         var found: [[String: [String]]] = []
+        let notes = input.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !notes.isEmpty {
+            let empty = MeetingSummaryPrompt.items(notes: "", template: input.template, sections: layout.lists)
+            let noteRoom = min(budget(context: context, output: Self.partOutputTokens), Self.maximumPartTokens) - (await tokens(in: empty.text))
+            for piece in await split(notes: notes, room: noteRoom) {
+                let request = MeetingSummaryPrompt.items(notes: piece, template: input.template, sections: layout.lists)
+                found.append(MeetingSummaryItems.parse(try await run(request), sections: layout.lists))
+            }
+        }
         for (index, part) in parts.enumerated() {
             let transcript = MeetingTranscript.turns(part, timeline: nil, speakerLabels: input.speakerLabels).joined(separator: "\n")
             let request = MeetingSummaryPrompt.items(transcript: transcript, number: index + 1, of: parts.count, template: input.template, sections: layout.lists, speakerLabels: input.speakerLabels)
-            found.append(MeetingSummaryItems.parse(try await run(request), sections: layout.lists))
-        }
-        let notes = input.notes.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !notes.isEmpty {
-            let request = MeetingSummaryPrompt.items(notes: notes, template: input.template, sections: layout.lists)
             found.append(MeetingSummaryItems.parse(try await run(request), sections: layout.lists))
         }
         let items = MeetingSummaryItems.join(found, sections: layout.lists)
@@ -202,7 +208,8 @@ actor MeetingSummaryWriter {
 
     /// The title, and the paragraph when the template has one, from the
     /// joined items. When they do not all fit, each section gives its first
-    /// items.
+    /// items; when one item of each section does not fit either, the summary
+    /// has no title and no paragraph.
     private func overview(
         of items: [String: [String]],
         input: MeetingSummaryInput,
@@ -216,6 +223,7 @@ actor MeetingSummaryWriter {
             shown = shown.mapValues { Array($0.prefix(max(1, $0.count / 2))) }
             request = MeetingSummaryPrompt.overview(items: shown, sections: layout.lists, template: input.template, paragraph: layout.paragraph)
         }
+        guard await tokens(in: request.text) <= room else { return (nil, "") }
         return MeetingSummaryText.overview(try await run(request))
     }
 
@@ -307,23 +315,37 @@ actor MeetingSummaryWriter {
         let tokensPerCharacter = Double(await tokens(in: fullText)) / Double(max(1, fullText.count))
         // A segment costs its text, a speaker label with ": ", and a line break.
         let labelCost = (MeetingTrack.allCases.map(\.speakerLabel.count).max() ?? 0) + 3
-        var parts: [[MeetingSegment]] = []
-        var current: [MeetingSegment] = []
+        return Self.pack(segments, room: room) { Double($0.text.count + labelCost) * tokensPerCharacter }
+    }
+
+    /// Cuts the user's notes at line ends into pieces of at most `room`
+    /// tokens.
+    private func split(notes: String, room: Int) async -> [String] {
+        let tokensPerCharacter = Double(await tokens(in: notes)) / Double(max(1, notes.count))
+        return Self.pack(notes.components(separatedBy: .newlines), room: room) { Double($0.count + 1) * tokensPerCharacter }
+            .map { $0.joined(separator: "\n") }
+    }
+
+    /// Fills each group up to `room`, in order; an element that is larger
+    /// than `room` is a group of its own.
+    private static func pack<Element>(_ elements: [Element], room: Int, cost: (Element) -> Double) -> [[Element]] {
+        var groups: [[Element]] = []
+        var current: [Element] = []
         var used = 0.0
-        for segment in segments {
-            let cost = Double(segment.text.count + labelCost) * tokensPerCharacter
-            if !current.isEmpty, used + cost > Double(room) {
-                parts.append(current)
+        for element in elements {
+            let size = cost(element)
+            if !current.isEmpty, used + size > Double(room) {
+                groups.append(current)
                 current = []
                 used = 0
             }
-            current.append(segment)
-            used += cost
+            current.append(element)
+            used += size
         }
         if !current.isEmpty {
-            parts.append(current)
+            groups.append(current)
         }
-        return parts
+        return groups
     }
 
     // MARK: - Requests
@@ -582,19 +604,24 @@ struct MeetingSummaryLayout: Equatable, Sendable {
     let sections: [String]
     let paragraph: String?
 
+    static let paragraphNames = ["overview", "summary"]
+
     var lists: [String] {
         sections.filter { $0 != paragraph }
     }
 
-    /// Nil for a template with no list section.
+    /// Nil for a template with no list section, or with two sections of one
+    /// name: code reads the items by section name.
     init?(template: MeetingTemplate) {
         let headings = template.sections.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { $0.hasPrefix("## ") }
             .map { String($0.dropFirst(3)).trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        let paragraph = headings.first { ["overview", "summary"].contains($0.lowercased()) }
-        guard headings.contains(where: { $0 != paragraph }) else { return nil }
+        let paragraph = headings.first { Self.paragraphNames.contains($0.lowercased()) }
+        guard headings.contains(where: { $0 != paragraph }),
+              Set(headings.map { $0.lowercased() }).count == headings.count
+        else { return nil }
         sections = headings
         self.paragraph = paragraph
     }
@@ -603,8 +630,8 @@ struct MeetingSummaryLayout: Equatable, Sendable {
 /// The items that a model wrote under section labels, and their join.
 enum MeetingSummaryItems {
     /// Reads "Label: a; b" lines, and a label line ("Label:" or "## Label")
-    /// followed by "- " lines. Lines under other labels, and items that say
-    /// "none", go.
+    /// followed by "- " or "1. " lines. Lines under other labels, and items
+    /// that say that there is none, go.
     static func parse(_ answer: String, sections: [String]) -> [String: [String]] {
         var items: [String: [String]] = [:]
         var current: String?
@@ -612,32 +639,40 @@ enum MeetingSummaryItems {
             let line = raw.replacingOccurrences(of: "**", with: "").trimmingCharacters(in: .whitespaces)
             if let (section, rest) = labeled(line, sections: sections) {
                 current = section
-                items[section, default: []] += rest.components(separatedBy: ";").compactMap(clean)
+                items[section, default: []] += rest.components(separatedBy: ";").compactMap { clean($0, section: section) }
             } else if line.hasPrefix("#") || line.hasSuffix(":") {
                 current = nil
-            } else if let current, line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("• ") {
-                items[current, default: []] += [clean(String(line.dropFirst(2)))].compactMap { $0 }
+            } else if let current, let item = listItem(line) {
+                items[current, default: []] += [clean(item, section: current)].compactMap { $0 }
             }
         }
         return items
     }
 
     /// The items of each section in the order of `answers`, each once: an
-    /// item goes when an earlier item of the section has all its words.
+    /// item goes when an earlier item of the section has the same words in
+    /// the same order.
     static func join(_ answers: [[String: [String]]], sections: [String]) -> [String: [String]] {
         var joined: [String: [String]] = [:]
         for section in sections {
-            var kept: [String] = []
-            var seen: [Set<String>] = []
-            for item in answers.flatMap({ $0[section] ?? [] }) {
-                let words = Set(MeetingTranscript.words(in: item))
-                guard !words.isEmpty, !seen.contains(where: words.isSubset(of:)) else { continue }
-                seen.append(words)
-                kept.append(item)
+            var seen: Set<[String]> = []
+            joined[section] = answers.flatMap { $0[section] ?? [] }.filter { item in
+                let words = MeetingTranscript.words(in: item)
+                return !words.isEmpty && seen.insert(words).inserted
             }
-            joined[section] = kept
         }
         return joined
+    }
+
+    /// The text of a "- ", "* ", "• ", "1. " or "1) " line.
+    private static func listItem(_ line: String) -> String? {
+        for marker in ["- ", "* ", "• "] where line.hasPrefix(marker) {
+            return String(line.dropFirst(marker.count))
+        }
+        let digits = line.prefix { $0.isNumber }
+        let rest = line.dropFirst(digits.count)
+        guard !digits.isEmpty, rest.hasPrefix(". ") || rest.hasPrefix(") ") else { return nil }
+        return String(rest.dropFirst(2))
     }
 
     private static func labeled(_ line: String, sections: [String]) -> (String, String)? {
@@ -654,11 +689,9 @@ enum MeetingSummaryItems {
         return nil
     }
 
-    private static func clean(_ item: String) -> String? {
+    private static func clean(_ item: String, section: String) -> String? {
         let text = item.trimmingCharacters(in: .whitespaces)
-        let bare = text.trimmingCharacters(in: CharacterSet(charactersIn: " .")).lowercased()
-        guard !bare.isEmpty, !MeetingSummaryText.emptyPhrases.contains(bare) else { return nil }
-        return text
+        return MeetingSummaryText.saysNothing(text, about: section) ? nil : text
     }
 }
 
@@ -743,25 +776,33 @@ enum MeetingSummaryText {
         return blocks
             .map { block in
                 guard let heading = block.heading else { return block }
-                return (heading, block.lines.filter { !saysNothing($0, under: heading) })
+                let topic = heading.dropFirst(3).trimmingCharacters(in: .whitespaces)
+                return (heading, block.lines.filter { !saysNothing($0.hasPrefix("- ") ? String($0.dropFirst(2)) : $0, about: topic) })
             }
             .filter { !$0.lines.isEmpty }
             .map { block in ([block.heading].compactMap { $0 } + block.lines).joined(separator: "\n") }
             .joined(separator: "\n\n")
     }
 
-    /// "- None noted." under any heading, or "- No action items." under
-    /// "## Action items".
-    private static func saysNothing(_ line: String, under heading: String) -> Bool {
-        var text = line.hasPrefix("- ") ? String(line.dropFirst(2)) : line
-        text = text.trimmingCharacters(in: CharacterSet(charactersIn: " .")).lowercased()
-        let topic = heading.dropFirst(3).trimmingCharacters(in: .whitespaces).lowercased()
-        return emptyPhrases.contains(text) || text == "no \(topic)"
+    /// "None noted." in any section, or "No action items." or "No action
+    /// items were discussed." in the "Action items" section.
+    static func saysNothing(_ item: String, about section: String) -> Bool {
+        let text = item.trimmingCharacters(in: CharacterSet(charactersIn: " .")).lowercased()
+        if text.isEmpty || emptyPhrases.contains(text) {
+            return true
+        }
+        let none = "no \(section.lowercased())"
+        guard text.hasPrefix(none) else { return false }
+        let rest = text.dropFirst(none.count).trimmingCharacters(in: .whitespaces)
+        return rest.isEmpty || emptyTails.contains(rest)
     }
 
-    static let emptyPhrases: Set<String> = [
+    private static let emptyPhrases: Set<String> = [
         "none", "none noted", "none mentioned", "none discussed", "none raised",
         "nothing", "nothing noted", "n/a", "not applicable", "not discussed",
+    ]
+    private static let emptyTails: Set<String> = [
+        "discussed", "noted", "mentioned", "raised", "were discussed", "were noted", "were mentioned", "were raised",
     ]
 }
 

@@ -30,7 +30,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
         let model = FakeSummaryModel(context: 4_096) { request in
             switch request.kind {
             case .part:
-                return "**Decisions:** Ship on Friday; none\nAction items: none\nDates and numbers: Review on 3 December\nOpen questions: None noted."
+                return "**Decisions:** Ship on Friday; none\nAction items: Send the test steps; No action items.\nDates and numbers: Review on 3 December\nOpen questions: None noted."
             case .userNotes:
                 return "Action items: Ask legal"
             case .overview:
@@ -44,10 +44,10 @@ final class MeetingSummaryWriterTests: XCTestCase {
         let summary = try await writer.write(input(conversation(turns: 4, words: 10), notes: "Ask legal"))
         let requests = await model.requests
 
-        XCTAssertEqual(requests.map(\.kind), [.part(number: 1, count: 1), .userNotes, .overview])
-        XCTAssertTrue(requests[0].input.contains("You: word0"))
-        XCTAssertTrue(requests[0].input.contains("Decisions:\nAction items:\nDates and numbers:\nOpen questions:"))
-        XCTAssertTrue(requests[1].input.contains("<notes>\nAsk legal\n</notes>"))
+        XCTAssertEqual(requests.map(\.kind), [.userNotes, .part(number: 1, count: 1), .overview])
+        XCTAssertTrue(requests[0].input.contains("<notes>\nAsk legal\n</notes>"))
+        XCTAssertTrue(requests[1].input.contains("You: word0"))
+        XCTAssertTrue(requests[1].input.contains("Decisions:\nAction items:\nDates and numbers:\nOpen questions:"))
         XCTAssertEqual(summary.title, "Weekly sync")
         XCTAssertEqual(summary.body, """
         ## Overview
@@ -58,10 +58,11 @@ final class MeetingSummaryWriterTests: XCTestCase {
 
         ## Action items
         - Ask legal
+        - Send the test steps
 
         ## Dates and numbers
         - Review on 3 December
-        """)
+        """, "the user's items come first")
     }
 
     func testALongMeetingJoinsTheItemsOfItsPartsInOrderAndOnce() async throws {
@@ -146,16 +147,16 @@ final class MeetingSummaryWriterTests: XCTestCase {
 
     func testItemsAreReadUnderTheirLabelsAndJoinedOnce() {
         let sections = ["Decisions", "Action items", "Open questions"]
-        let answer = "Decisions:\n- Ship on Friday\n- None\nAction items: Priya writes the notes; none\nOther notes:\n- not a section\n## Open questions\n- Budget?"
+        let answer = "Decisions:\n- Ship on Friday\n- None\nAction items: Priya writes the notes; no action items were discussed\nOther notes:\n- not a section\n## Open questions\n1. Budget?\n2) Venue?"
 
         let parsed = MeetingSummaryItems.parse(answer, sections: sections)
         let joined = MeetingSummaryItems.join(
-            [["Decisions": ["Ship on Friday", "Hire two people"]], ["Decisions": ["ship on friday.", "Ship 2.4 on Friday"]]],
+            [["Decisions": ["Do not ship on Friday", "Alice interviews Bob"]], ["Decisions": ["do not ship on friday.", "Ship on Friday", "Bob interviews Alice"]]],
             sections: ["Decisions"]
         )
 
-        XCTAssertEqual(parsed, ["Decisions": ["Ship on Friday"], "Action items": ["Priya writes the notes"], "Open questions": ["Budget?"]])
-        XCTAssertEqual(joined["Decisions"], ["Ship on Friday", "Hire two people", "Ship 2.4 on Friday"], "a repeat goes; an item with more words stays")
+        XCTAssertEqual(parsed, ["Decisions": ["Ship on Friday"], "Action items": ["Priya writes the notes"], "Open questions": ["Budget?", "Venue?"]])
+        XCTAssertEqual(joined["Decisions"], ["Do not ship on Friday", "Alice interviews Bob", "Ship on Friday", "Bob interviews Alice"], "only the same words in the same order are a repeat")
     }
 
     func testTheTemplateHeadingsAreTheSections() throws {
@@ -166,6 +167,59 @@ final class MeetingSummaryWriterTests: XCTestCase {
         XCTAssertEqual(general.lists, ["Decisions", "Action items", "Dates and numbers", "Open questions"])
         XCTAssertNil(MeetingSummaryLayout(template: freeTemplate))
         XCTAssertNil(MeetingSummaryLayout(template: MeetingTemplate(id: "o", name: "O", sections: "## Overview\nTwo sentences.")), "a paragraph alone has no list to join")
+        XCTAssertNil(MeetingSummaryLayout(template: MeetingTemplate(id: "d", name: "D", sections: "## Tasks\n## Notes\n## tasks")), "code reads the items by section name")
+    }
+
+    func testLongNotesAreReadInPiecesBeforeTheTranscript() async throws {
+        let notes = (0 ..< 60).map { "note\($0) " + String(repeating: "word ", count: 20) }.joined(separator: "\n")
+        let model = FakeSummaryModel(context: 2_000) { request in
+            switch request.kind {
+            case .userNotes:
+                let first = request.input.components(separatedBy: "\n").first { $0.hasPrefix("note") } ?? ""
+                return "Decisions: " + (first.components(separatedBy: " ").first ?? "")
+            case .part:
+                return "Decisions: Ship on Friday"
+            case .overview:
+                return "Title: Notes\nThe team took notes."
+            case .summary, .join:
+                return ""
+            }
+        }
+
+        let summary = try await MeetingSummaryWriter(model: model).write(input(conversation(turns: 4, words: 10), notes: notes))
+        let requests = await model.requests
+        let pieces = requests.filter { $0.kind == .userNotes }
+
+        XCTAssertGreaterThan(pieces.count, 1)
+        let room = Int(Double(2_000 - MeetingSummaryWriter.partOutputTokens) * MeetingSummaryWriter.fillFactor)
+        for piece in pieces {
+            let tokens = await model.tokenCount(piece.text) ?? 0
+            XCTAssertLessThanOrEqual(tokens, room)
+        }
+        XCTAssertEqual(requests.prefix(pieces.count).map(\.kind), Array(repeating: .userNotes, count: pieces.count))
+        XCTAssertTrue(summary.body.hasPrefix("## Overview\nThe team took notes.\n\n## Decisions\n- note0\n"))
+        XCTAssertTrue(summary.body.hasSuffix("- Ship on Friday"))
+    }
+
+    func testAnOverviewThatCannotFitLeavesTheListsWithNoTitle() async throws {
+        let long = (0 ..< 2_000).map { "word\($0)" }.joined(separator: " ")
+        let model = FakeSummaryModel(context: 2_400) { request in
+            switch request.kind {
+            case .part:
+                return "Decisions: \(long)"
+            case .overview:
+                return "Title: Never asked"
+            case .userNotes, .summary, .join:
+                return ""
+            }
+        }
+
+        let summary = try await MeetingSummaryWriter(model: model).write(input(conversation(turns: 4, words: 10)))
+        let kinds = await model.requests.map(\.kind)
+
+        XCTAssertFalse(kinds.contains(.overview))
+        XCTAssertNil(summary.title)
+        XCTAssertEqual(summary.body, "## Decisions\n- \(long)")
     }
 
     func testACutShortAnswerFailsWithItsCause() async {
