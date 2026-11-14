@@ -47,7 +47,8 @@ struct MeetingsPage: View {
                     title: "Recording a call needs macOS 14.4 or later",
                     detail: "You can still record a meeting in the room.",
                     actionTitle: "Software Update",
-                    action: { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension")!) }
+                    action: { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension")!) },
+                    actionIsProminent: false
                 )
             }
 

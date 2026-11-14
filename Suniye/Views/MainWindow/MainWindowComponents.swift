@@ -520,6 +520,8 @@ struct InlineStatusBanner: View {
     /// Trailing button, for banners that can be acted on where they stand.
     var actionTitle: String?
     var action: (() -> Void)?
+    /// False draws the trailing button bordered instead of filled.
+    var actionIsProminent = true
     /// A bordered button before the trailing one, for a second choice.
     var secondaryActionTitle: String?
     var secondaryAction: (() -> Void)?
@@ -572,9 +574,15 @@ struct InlineStatusBanner: View {
                         .controlSize(.small)
                 }
                 if let actionTitle, let action {
-                    Button(actionTitle, action: action)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
+                    if actionIsProminent {
+                        Button(actionTitle, action: action)
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                    } else {
+                        Button(actionTitle, action: action)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
                 }
             }
 
