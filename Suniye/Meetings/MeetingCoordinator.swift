@@ -367,8 +367,6 @@ final class MeetingCoordinator {
         guard await host?.requestMeetingMicrophoneAccess() == true else {
             throw MeetingStartError.noMicrophoneAccess
         }
-        // The microphone would hear the playback.
-        playback.close()
 
         let id = UUID()
         let recorder = MeetingRecorder(
@@ -401,6 +399,9 @@ final class MeetingCoordinator {
         }
         await speech.start()
         recorder.setMicrophoneMuted(dictationCaptures)
+        // The microphone would hear the playback. No await from here to
+        // `live`, so no Play comes in between.
+        playback.close()
         do {
             try recorder.start()
         } catch {
