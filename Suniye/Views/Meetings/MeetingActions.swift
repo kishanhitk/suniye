@@ -11,8 +11,6 @@ struct MeetingActionFailure: Equatable {
 @Observable
 final class MeetingActions {
     var deleting: MeetingRecord?
-    var renaming: MeetingRecord?
-    var renameText = ""
     var askingTranscribeAgain: MeetingRecord?
     var failure: MeetingActionFailure?
     var editingTemplates = false
@@ -32,11 +30,6 @@ final class MeetingActions {
 
     func confirmDelete(_ record: MeetingRecord) {
         deleting = record
-    }
-
-    func rename(_ record: MeetingRecord) {
-        renameText = record.title
-        renaming = record
     }
 
     func askTranscribeAgain(_ record: MeetingRecord) {
@@ -98,18 +91,6 @@ private struct MeetingActionDialogs: ViewModifier {
                 Text("This deletes the summary, notes, transcript and audio. You can’t undo it.")
             }
             .alert(
-                "Rename Meeting",
-                isPresented: Binding(get: { actions.renaming != nil }, set: { if !$0 { actions.renaming = nil } }),
-                presenting: actions.renaming
-            ) { record in
-                TextField("Title", text: $actions.renameText)
-                Button("Rename") {
-                    let title = actions.renameText
-                    Task { await meetings.rename(record.id, to: title) }
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-            .alert(
                 actions.askingTranscribeAgain.map { "Transcribe “\($0.title)” again?" } ?? "",
                 isPresented: Binding(get: { actions.askingTranscribeAgain != nil }, set: { if !$0 { actions.askingTranscribeAgain = nil } }),
                 presenting: actions.askingTranscribeAgain
@@ -155,7 +136,6 @@ struct MeetingMenuItems: View {
                     .disabled(!meetings.canTranscribeAgain(record))
             }
         }
-        Button("Rename…") { actions.rename(record) }
         Button("Show in Finder") { actions.revealInFinder(record, meetings: meetings) }
         if !isLive {
             Divider()

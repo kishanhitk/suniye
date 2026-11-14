@@ -138,15 +138,23 @@ struct MeetingPage: View {
 
     private func header(_ record: MeetingRecord) -> some View {
         HStack(alignment: .center, spacing: 10) {
+            // The hidden text gives the row the height and the room that the
+            // title text had before it could be edited; the text view draws
+            // the title on top, a little taller, so no letter is cut.
             Text(record.title)
                 .font(AppTypography.transcriptsHeadline)
-                .tracking(AppTypography.transcriptsHeadlineTracking)
                 .lineLimit(1)
-                .truncationMode(.tail)
-                .contentTransition(.opacity)
-                .animation(.easeOut(duration: 0.2), value: record.title)
-
-            Spacer(minLength: 12)
+                .hidden()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .topLeading) {
+                    MeetingTitleField(title: record.title) { title in
+                        meetings.textSaves.save(.title, of: id) {
+                            await meetings.rename(id, to: title)
+                        }
+                    }
+                    .frame(height: MeetingTitleField.height)
+                }
+                .padding(.trailing, 22)
 
             if let live {
                 Button {

@@ -138,6 +138,7 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 
 ## Edit
 
+- The title: click it to edit it in place. Return or a click elsewhere keeps the new title; Esc drops it. An empty title goes back to the old one. A title that you set stays when a new summary is written.
 - A quit, a tab change or leaving the meeting page saves the text that you typed.
 
 ## Files
