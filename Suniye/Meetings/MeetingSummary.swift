@@ -10,13 +10,13 @@ enum MeetingSummaryAvailability: Equatable, Sendable {
     /// No on-device model runs on this Mac.
     case unavailable
 
-    /// Apple Intelligence when it is ready, else the local model when it is
-    /// installed.
+    /// The local model when it is installed, else Apple Intelligence when it
+    /// is ready.
     init(apple: AppleFoundationModelsAvailability, localModel: LocalGemmaAvailability) {
-        if apple.isAvailable {
-            self = .ready(.appleIntelligence)
-        } else if localModel.isAvailable {
+        if localModel.isAvailable {
             self = .ready(.localModel)
+        } else if apple.isAvailable {
+            self = .ready(.appleIntelligence)
         } else if localModel == .modelNotInstalled {
             self = .needsDownload
         } else {
