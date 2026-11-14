@@ -27,8 +27,6 @@ final class MeetingCoordinatorTests: XCTestCase {
     private var engine: WordEngine!
     private var summaryModel: GatedSummaryModel!
     private var clock: Date!
-    private var noticeAnswer = true
-    private var noticeCount = 0
     private var freeBytes: Int64 = 10_000_000_000
     private var microphone: FakeMicrophoneUsers!
     private var analytics: SpyAnalytics!
@@ -62,10 +60,6 @@ final class MeetingCoordinatorTests: XCTestCase {
         let environment = MeetingEnvironment(
             canRecordCallAudio: true,
             makeSources: { [unowned self] _ in [.you: you, .them: them] },
-            confirmNotice: { [unowned self] in
-                noticeCount += 1
-                return noticeAnswer
-            },
             freeDiskBytes: { [unowned self] in freeBytes },
             callPlaysOnSpeakers: { false },
             makeMicrophoneUsers: { [unowned self] in microphone },
@@ -89,7 +83,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         return coordinator
     }
 
-    func testAMeetingAsksForTheNoticeOnceAndEndsWithItsSummary() async throws {
+    func testAMeetingEndsWithItsSummary() async throws {
         let coordinator = makeCoordinator()
         coordinator.speechModelChanged(.parakeetV3)
 
@@ -98,10 +92,8 @@ final class MeetingCoordinatorTests: XCTestCase {
         you.push(tone(2.5, level: 0.3) + silence(0.5))
         await coordinator.stop()
         let finished = await waitUntil { coordinator.record(id)?.status == .done }
-        try await coordinator.startMeeting(source: .manual)
 
         XCTAssertTrue(finished)
-        XCTAssertEqual(noticeCount, 1, "the notice shows before the first recording only")
         XCTAssertEqual(coordinator.record(id)?.title, "Release plan")
         let summary = await store.summary(of: id)
         let audioLeft = !store.audioTracks(of: id).isEmpty
@@ -112,24 +104,19 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(host.idleCount, 1, "Magic Format can warm its prompt after the summary")
         XCTAssertEqual(
             analytics.trackedEvents.map(\.name),
-            ["meeting_started", "meeting_ended", "meeting_transcribed", "meeting_summarized", "meeting_started"]
+            ["meeting_started", "meeting_ended", "meeting_transcribed", "meeting_summarized"]
         )
         XCTAssertEqual(event("meeting_ended")?["tracks"], .label("you_them"))
         XCTAssertEqual(event("meeting_transcribed")?["outcome"], .label("done"))
         XCTAssertEqual(event("meeting_transcribed")?["segments"], .int(1))
         XCTAssertEqual(event("meeting_summarized")?["parts"], .int(1))
         XCTAssertEqual(event("meeting_summarized")?["provider"], .label("local_model"))
-        await coordinator.stop()
     }
 
-    func testACanceledNoticeOrTooLittleSpaceStartsNothing() async throws {
+    func testTooLittleSpaceStartsNothing() async throws {
         let coordinator = makeCoordinator()
-        noticeAnswer = false
-
-        try await coordinator.startMeeting(source: .manual)
-        let afterCancel = await store.loadAll()
-        noticeAnswer = true
         freeBytes = 100_000_000
+
         do {
             try await coordinator.startMeeting(source: .manual)
             XCTFail("expected a refusal")
@@ -138,7 +125,8 @@ final class MeetingCoordinatorTests: XCTestCase {
         }
 
         XCTAssertNil(coordinator.live)
-        XCTAssertTrue(afterCancel.isEmpty)
+        let saved = await store.loadAll()
+        XCTAssertTrue(saved.isEmpty)
         XCTAssertEqual(you.startCount, 0)
     }
 
@@ -386,7 +374,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     func testRecordAutomaticallyStartsTheRecordingAndCancelDeletesIt() async throws {
         let coordinator = makeCoordinator()
         await coordinator.start()
-        await coordinator.chooseCallStartAction(.recordAutomatically)
+        coordinator.chooseCallStartAction(.recordAutomatically)
 
         hold(holding(zoom))
         hold(holding(zoom), after: 2)
@@ -413,7 +401,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     func testABrowserWithoutACallTitleIsOnlyOfferedWhenRecordingAutomatically() async {
         let coordinator = makeCoordinator()
         await coordinator.start()
-        await coordinator.chooseCallStartAction(.recordAutomatically)
+        coordinator.chooseCallStartAction(.recordAutomatically)
 
         hold(holding(chrome))
         hold(holding(chrome), after: 2)
@@ -506,7 +494,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.start()
         let listensWithAsk = microphone.listening
 
-        await coordinator.chooseCallStartAction(.doNothing)
+        coordinator.chooseCallStartAction(.doNothing)
         hold(holding(zoom))
         hold(holding(zoom), after: 2)
 
@@ -519,7 +507,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     func testWithDoNothingARecordingStillFollowsItsCall() async throws {
         let coordinator = makeCoordinator()
         await coordinator.start()
-        await coordinator.chooseCallStartAction(.doNothing)
+        coordinator.chooseCallStartAction(.doNothing)
 
         try await coordinator.startMeeting(source: .manual)
         hold(holding(zoom))
@@ -585,21 +573,6 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(session.changedInput, "AirPods Pro")
         XCTAssertEqual(session.failedTracks, [.them: "The tap stopped."])
         await coordinator.stop()
-    }
-
-    func testRecordAutomaticallyNeedsTheNoticeAndCancelKeepsAsk() async {
-        let coordinator = makeCoordinator()
-        noticeAnswer = false
-
-        await coordinator.chooseCallStartAction(.recordAutomatically)
-        let afterCancel = coordinator.settings
-        noticeAnswer = true
-        await coordinator.chooseCallStartAction(.recordAutomatically)
-
-        XCTAssertEqual(afterCancel.callStartAction, .ask)
-        XCTAssertEqual(coordinator.settings.callStartAction, .recordAutomatically)
-        XCTAssertTrue(coordinator.settings.noticeAccepted)
-        XCTAssertEqual(noticeCount, 2)
     }
 
     func testAQuitSavesTheRecordingAndTheNextLaunchFinishesIt() async throws {
@@ -676,7 +649,7 @@ final class MeetingSettingsStoreTests: XCTestCase {
         let suite = "MeetingSettingsStoreTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(Data(#"{"noticeAccepted":true}"#.utf8), forKey: "settings")
+        defaults.set(Data(#"{"noticeAccepted":true,"neverAskBundleIDs":["us.zoom.xos"]}"#.utf8), forKey: "settings")
         let store = MeetingSettingsStore(userDefaults: defaults, key: "settings")
 
         var loaded = store.load()
@@ -684,7 +657,7 @@ final class MeetingSettingsStoreTests: XCTestCase {
         store.save(loaded)
         let reloaded = store.load()
 
-        XCTAssertTrue(reloaded.noticeAccepted)
+        XCTAssertEqual(reloaded.neverAskBundleIDs, ["us.zoom.xos"], "a key that a later build dropped does not stop the load")
         XCTAssertEqual(reloaded.templateID, MeetingTemplate.general.id)
         XCTAssertEqual(reloaded.callStartAction, .recordAutomatically)
     }

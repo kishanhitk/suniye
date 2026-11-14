@@ -12,8 +12,6 @@ struct MeetingSettings: Codable, Equatable, Sendable {
     /// Bundle IDs of the call apps that get no offer card and no automatic
     /// recording.
     var neverAskBundleIDs: [String] = []
-    /// The user read the first-recording notice and chose Continue.
-    var noticeAccepted = false
     /// The template that the user picked last.
     var templateID = MeetingTemplate.general.id
 
@@ -26,7 +24,6 @@ struct MeetingSettings: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         callStartAction = try container.decodeIfPresent(MeetingCallStartAction.self, forKey: .callStartAction) ?? callStartAction
         neverAskBundleIDs = try container.decodeIfPresent([String].self, forKey: .neverAskBundleIDs) ?? neverAskBundleIDs
-        noticeAccepted = try container.decodeIfPresent(Bool.self, forKey: .noticeAccepted) ?? noticeAccepted
         templateID = try container.decodeIfPresent(String.self, forKey: .templateID) ?? templateID
     }
 }

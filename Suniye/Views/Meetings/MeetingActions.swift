@@ -127,6 +127,10 @@ private struct MeetingActionDialogs: ViewModifier {
 
 /// The More menu of a meeting, and the context menu of its row.
 struct MeetingMenuItems: View {
+    /// What Copy Notice puts on the clipboard, for the user to tell the
+    /// other people in the call.
+    static let noticeSentence = "I’m recording this call to take notes. The recording stays on my computer."
+
     let record: MeetingRecord
     let meetings: MeetingCoordinator
     let actions: MeetingActions
@@ -141,7 +145,7 @@ struct MeetingMenuItems: View {
         if isLive {
             Button("Copy Notice") {
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(MeetingNoticeAlert.sentence, forType: .string)
+                NSPasteboard.general.setString(Self.noticeSentence, forType: .string)
             }
         } else {
             Button("Export as Markdown…") { actions.export(record, meetings: meetings) }

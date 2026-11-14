@@ -18,7 +18,7 @@ struct MeetingSettingsGroup: View {
                     "When a call starts",
                     selection: Binding(
                         get: { meetings.settings.callStartAction },
-                        set: { action in Task { await meetings.chooseCallStartAction(action) } }
+                        set: { meetings.chooseCallStartAction($0) }
                     )
                 ) {
                     Text("Ask").tag(MeetingCallStartAction.ask)
