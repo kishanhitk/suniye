@@ -22,6 +22,7 @@
 		0D52D29FA88DC99EB7115C7B /* PartialTranscriptionSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 624DF0C47847FACD2976DEAE /* PartialTranscriptionSchedulerTests.swift */; };
 		0D5DE001B946DA2A99E4D993 /* SuniyeAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9A771CF1C984260F9C9B27 /* SuniyeAppTests.swift */; };
 		1010ECBB713A653EFCEE90D3 /* PartialTranscriptStabilizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71F09E71632C13C91BE934A /* PartialTranscriptStabilizerTests.swift */; };
+		10A3508FBDC7CF9D0546092A /* HotkeyConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 751D3D93EFB0A0AAB9A75140 /* HotkeyConfiguration.swift */; };
 		130C07628C0D3E28C6C66E9B /* AudioRingBuffer.c in Sources */ = {isa = PBXBuildFile; fileRef = CB8BDFE6C9896219254CC03D /* AudioRingBuffer.c */; };
 		137D1EF09941D22D862F80A8 /* PermisoPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 778C3F4BA67F5BF8643B0057 /* PermisoPanel.swift */; };
 		1382B9023A773ADC62E71907 /* FloatingIndicatorLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C333F9E2D2E53C8388E26E /* FloatingIndicatorLayoutTests.swift */; };
@@ -249,7 +250,6 @@
 		E68584D536C4FF0DEC3A067E /* MeetingEnvironment+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A5B1A724E299635D2DB9BB5 /* MeetingEnvironment+Live.swift */; };
 		E701F13B36E2E5F0E60E53DD /* ChatCompletionClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603574D7CEDCDDA5BF73E36C /* ChatCompletionClientTests.swift */; };
 		E877D4D7A206AF5389A998FE /* MagicFormatPostProcessorTestDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87C71E72DD0A95818F74F8C5 /* MagicFormatPostProcessorTestDoubles.swift */; };
-		E9210190CDD60F212008A02A /* SettingsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045F7AACA142A791AFFA7C43 /* SettingsModels.swift */; };
 		E9FD019C79C5F9252AE20FDF /* OnboardingLandscape.swift in Sources */ = {isa = PBXBuildFile; fileRef = E30B5CBFBBC268B8A7F4CEAA /* OnboardingLandscape.swift */; };
 		ECB8962148D89BA8FA126117 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36AE25C3ACAD04B2215185A9 /* OnboardingView.swift */; };
 		ED3D561A67011A8130243D63 /* AppStateAnalyticsEmissionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6775E90672907094144771F /* AppStateAnalyticsEmissionTests.swift */; };
@@ -304,7 +304,6 @@
 /* Begin PBXFileReference section */
 		01DE926025E6275D49E5C880 /* GeneralSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsStore.swift; sourceTree = "<group>"; };
 		02AC4B1246BC17DF107F3059 /* ChatCompletionClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatCompletionClient.swift; sourceTree = "<group>"; };
-		045F7AACA142A791AFFA7C43 /* SettingsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModels.swift; sourceTree = "<group>"; };
 		046F926226E346D7CA0D318F /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
 		062D5FBEACA050691E0ADCAC /* MeetingSettingsGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSettingsGroup.swift; sourceTree = "<group>"; };
 		068E74F2F90FB911D085D8DB /* ModelManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerTests.swift; sourceTree = "<group>"; };
@@ -425,6 +424,7 @@
 		730EF6DDF61D565A9D49DFCA /* GeneralSettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsStoreTests.swift; sourceTree = "<group>"; };
 		73824270FE6102390BD086BE /* MeetingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingCoordinator.swift; sourceTree = "<group>"; };
 		73B49F1E40E87BF78702B0A5 /* SettingsWindowLocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowLocator.swift; sourceTree = "<group>"; };
+		751D3D93EFB0A0AAB9A75140 /* HotkeyConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfiguration.swift; sourceTree = "<group>"; };
 		75E6194F3E61C3D677F93DA9 /* libsherpa-onnx-c-api.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = "libsherpa-onnx-c-api.dylib"; path = "Suniye/Frameworks/libsherpa-onnx-c-api.dylib"; sourceTree = "<group>"; };
 		778C3F4BA67F5BF8643B0057 /* PermisoPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermisoPanel.swift; sourceTree = "<group>"; };
 		779B40D45870210B5F6D3B1E /* MeetingPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingPage.swift; sourceTree = "<group>"; };
@@ -635,7 +635,6 @@
 				5CEA7C09DD5097D48B235EF5 /* onnxruntime_c_api.h */,
 				3DA12B4973440B4D8638C5FB /* onnxruntime_ep_c_api.h */,
 				436F8EBC13268D2B033EA389 /* onnxruntime_error_code.h */,
-				045F7AACA142A791AFFA7C43 /* SettingsModels.swift */,
 				E3471ED7BC0D817AF7D5C516 /* SherpaOnnx.swift */,
 				85BCA4A71724B17FDD57DFAD /* Suniye-Bridging-Header.h */,
 				2DD93649BF3CC7AE2644ECE6 /* Suniye.entitlements */,
@@ -1002,6 +1001,7 @@
 				B96F52916909BC2636748EF2 /* EditLearningService.swift */,
 				221C1BA9BE357716B57E8034 /* EditModeService.swift */,
 				D4B294F02CFAE25968B624AF /* FloatingIndicatorState.swift */,
+				751D3D93EFB0A0AAB9A75140 /* HotkeyConfiguration.swift */,
 				F90F77AEEDBC3F9CABF8A14D /* HotkeyService.swift */,
 				DC2879BBD54F536AA9A09125 /* PartialTranscriptionScheduler.swift */,
 				3A8394A55CBD33F82C5AB70E /* PartialTranscriptStabilizer.swift */,
@@ -1321,6 +1321,7 @@
 				92FAADAF3B9DF1381B3F9CAB /* GeneralPage.swift in Sources */,
 				212595AC5937E54BEE465C45 /* GeneralSettingsStore.swift in Sources */,
 				842BB1B6A3DF6FD46259E789 /* HistoryStore.swift in Sources */,
+				10A3508FBDC7CF9D0546092A /* HotkeyConfiguration.swift in Sources */,
 				4DDA9328D8CF516F9F188BB4 /* HotkeyService.swift in Sources */,
 				D250A7E27E67270B79859FF5 /* IssueReportForm.swift in Sources */,
 				7694B6F89D9CEC47010E3D04 /* IssueReportService.swift in Sources */,
@@ -1403,7 +1404,6 @@
 				0320CC58B3F888D318B177D5 /* Qwen3ASR.swift in Sources */,
 				61986F04977EB71320143584 /* Qwen3ASRTranscriptionService.swift in Sources */,
 				2724B9F83B5642C627147916 /* RoutingTranscriptionService.swift in Sources */,
-				E9210190CDD60F212008A02A /* SettingsModels.swift in Sources */,
 				C8512606B99724B90A5E7AF5 /* SettingsRows.swift in Sources */,
 				333852D3F7D107BEDBDB5000 /* SettingsWindowLocator.swift in Sources */,
 				DC8532A515E87705B0F4BFC5 /* SherpaOnnx.swift in Sources */,
