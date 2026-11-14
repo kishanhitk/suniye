@@ -246,7 +246,7 @@ final class MeetingCoordinator {
         self.environment = environment
         self.analytics = analytics
         settings = settingsStore.load()
-        playback = MeetingPlayback(store: store, makePlayer: environment.makePlayer)
+        playback = MeetingPlayback(store: store, makePlayer: environment.makePlayer, analytics: analytics)
         detector = MeetingCallDetector(reader: environment.makeMicrophoneUsers(), uptime: environment.uptime)
         summaries = MeetingSummaries(
             store: store,

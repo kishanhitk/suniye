@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SuniyeAnalytics
 
 /// The playback of one meeting's kept audio, from its page; one meeting at a
 /// time. The coordinator closes it when a recording starts or the meeting
@@ -22,17 +23,22 @@ final class MeetingPlayback {
 
     @ObservationIgnored private let store: MeetingStore
     @ObservationIgnored private let makePlayer: @MainActor ([URL]) throws -> MeetingAudioPlayer
+    @ObservationIgnored private let analytics: Analytics
     @ObservationIgnored private let tickInterval: Duration
     @ObservationIgnored private var player: MeetingAudioPlayer?
     @ObservationIgnored private var ticker: Task<Void, Never>?
+    /// The page opens the audio for its visit, so one event for each visit.
+    @ObservationIgnored private var played = false
 
     init(
         store: MeetingStore,
         makePlayer: @escaping @MainActor ([URL]) throws -> MeetingAudioPlayer,
+        analytics: Analytics,
         tickInterval: Duration = .milliseconds(100)
     ) {
         self.store = store
         self.makePlayer = makePlayer
+        self.analytics = analytics
         self.tickInterval = tickInterval
     }
 
@@ -70,6 +76,10 @@ final class MeetingPlayback {
         position = start
         isPlaying = true
         moves += 1
+        if !played {
+            played = true
+            analytics.track(.meetingPlayed)
+        }
         ticker?.cancel()
         ticker = Task { [weak self, tickInterval] in
             while !Task.isCancelled {
@@ -109,6 +119,7 @@ final class MeetingPlayback {
         duration = 0
         failed = false
         moves = 0
+        played = false
     }
 
     /// The lines that play at `sample`: each line whose audio holds it, so

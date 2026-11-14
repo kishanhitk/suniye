@@ -35,6 +35,8 @@ final class AnalyticsEventEncodingTests: XCTestCase {
         let edited = AnalyticsEvent.meetingEdited(part: .transcript)
         XCTAssertEqual(edited.name, "meeting_edited")
         XCTAssertEqual(edited.props, ["kind": .label("transcript")])
+        XCTAssertEqual(AnalyticsEvent.meetingPlayed.name, "meeting_played")
+        XCTAssertEqual(AnalyticsEvent.meetingPlayed.props, [:])
     }
 
     func testModelLoadEvent() {
