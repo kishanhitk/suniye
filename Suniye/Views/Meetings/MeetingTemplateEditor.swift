@@ -105,6 +105,7 @@ struct MeetingTemplateEditor: View {
                 TextField("Name", text: $drafts[index].name)
                     .textFieldStyle(.roundedBorder)
                     .labelsHidden()
+                    .disabled(drafts[index].isBuiltIn)
             }
             VStack(alignment: .leading, spacing: 5) {
                 Text("Instructions for the summary")
