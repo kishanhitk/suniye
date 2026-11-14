@@ -224,6 +224,36 @@ final class MeetingTranscriberTests: XCTestCase {
         XCTAssertEqual(transcript.map(\.text), ["Hello."])
     }
 
+    func testAWakeThatComesWhileDecodingIsAskedIsNotLost() async throws {
+        try writeAudio(tone(2.5) + silence(0.5), track: .you)
+        let engine = FakeMeetingEngine(words: [0.3: "Hello."])
+        let gate = RacingGate()
+        let transcriber = MeetingTranscriber(
+            meetingID: record.id,
+            tracks: [.you],
+            store: store,
+            engine: engine,
+            mayDecode: { await gate.mayDecode() },
+            retryDelay: .milliseconds(5),
+            onProgress: { _ in }
+        )
+
+        let finishing = Task { try await transcriber.transcribe() }
+        await gate.waitUntilAsked()
+        await transcriber.wake()
+        await gate.answerTheFirstAsk(false)
+        var decoded = false
+        for _ in 0 ..< 200 where !decoded {
+            try await Task.sleep(for: .milliseconds(10))
+            decoded = await !engine.decodedPeaks.isEmpty
+        }
+
+        XCTAssertTrue(decoded, "the dictation ended during the ask, and its wake starts the decoding again")
+        guard decoded else { return }
+        let transcript = try await finishing.value
+        XCTAssertEqual(transcript.map(\.text), ["Hello."])
+    }
+
     func testAChunkEndsWhereTheMeetingPaused() async throws {
         _ = try await store.update(record.id) { $0.pauses = [MeetingPause(start: 1, end: 61)] }
         try writeAudio(tone(1, level: 0.2) + tone(1, level: 0.4), track: .you)
@@ -261,6 +291,30 @@ final class MeetingTranscriberTests: XCTestCase {
 }
 
 // MARK: - Fakes
+
+/// Holds the first ask until the test answers it, as when a dictation ends
+/// while the transcriber waits for `mayDecode`. Later asks say yes.
+private actor RacingGate {
+    private var asks = 0
+    private var firstAsk: CheckedContinuation<Bool, Never>?
+
+    func mayDecode() async -> Bool {
+        asks += 1
+        guard asks == 1 else { return true }
+        return await withCheckedContinuation { firstAsk = $0 }
+    }
+
+    func waitUntilAsked() async {
+        while firstAsk == nil {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    func answerTheFirstAsk(_ answer: Bool) {
+        firstAsk?.resume(returning: answer)
+        firstAsk = nil
+    }
+}
 
 private actor DecodeGate {
     private(set) var isOpen = true

@@ -73,6 +73,8 @@ actor MeetingTranscriber {
     /// stored.
     private var holes: [MeetingTrack: Int] = [:]
     private var decoder: Task<Void, Never>?
+    /// Set by `wake()`, so that a wake during an `await mayDecode()` is not lost.
+    private var woken = false
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     private var stats = Stats()
 
@@ -97,6 +99,7 @@ actor MeetingTranscriber {
     /// Asks `mayDecode` again. Call it when its answer can have changed to
     /// yes. Audio waits while the answer is no.
     func wake() {
+        woken = true
         decodeIfIdle()
     }
 
@@ -168,7 +171,13 @@ actor MeetingTranscriber {
     /// Stops when nothing is pending or `mayDecode` says no; `wake()` starts
     /// it again.
     private func decodePending() async {
-        while earliestPendingIndex() != nil, await mayDecode(), let index = earliestPendingIndex() {
+        while earliestPendingIndex() != nil {
+            woken = false
+            guard await mayDecode() else {
+                if woken { continue }
+                break
+            }
+            guard let index = earliestPendingIndex() else { break }
             let chunk = pending.remove(at: index)
             if await !decode(chunk) {
                 pending.append(chunk)
