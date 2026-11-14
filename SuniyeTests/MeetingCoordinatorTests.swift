@@ -163,7 +163,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         coordinator.dictationCaptureEnded()
         you.push(tone(2.5, level: 0.3) + silence(0.5))
         let stopping = Task { await coordinator.stop() }
-        let progressShown = await waitUntil { coordinator.transcriptProgress[id] != nil }
+        let progressShown = await waitUntil { coordinator.transcriptPasses[id]?.progress != nil }
         try await Task.sleep(for: .milliseconds(200))
         let decodesDuringDictation = await engine.calls
         coordinator.dictationChanged(active: false)
@@ -173,7 +173,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(progressShown, "the page shows the progress while the transcript waits")
         XCTAssertEqual(decodesDuringDictation, 0)
         XCTAssertEqual(segments.map(\.track), [.them, .you], "the dictated words are not meeting talk; talk after the capture ends is")
-        XCTAssertNil(coordinator.transcriptProgress[id])
+        XCTAssertNil(coordinator.transcriptPasses[id])
     }
 
     func testAnotherTranscriptModelGetsAnEngineOfItsOwnThatAlsoWaitsForADictation() async throws {
@@ -186,7 +186,7 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         coordinator.dictationChanged(active: true)
         let stopping = Task { await coordinator.stop() }
-        let started = await waitUntil { coordinator.transcriptProgress[id] != nil }
+        let started = await waitUntil { coordinator.transcriptPasses[id]?.progress != nil }
         try await Task.sleep(for: .milliseconds(200))
         let decodesDuringTheDictation = await transcriptEngine.calls
         coordinator.dictationChanged(active: false)
@@ -308,7 +308,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         let firstLoads = await waitUntil { await gate.waiting }
         try await Task.sleep(for: .milliseconds(100))
         let loadsWhileTheFirstWaits = requestedTranscriptModels.count
-        let waitingWhileTheFirstLoads = coordinator.waitingTranscripts
+        let waitingWhileTheFirstLoads = Set(coordinator.transcriptPasses.filter(\.value.waiting).keys)
         coordinator.updateSettings { $0.transcriptModel = nil }
         await gate.open()
         let finished = await waitUntil {
@@ -320,7 +320,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(loadsWhileTheFirstWaits, 1, "the second pass waits for the first")
         XCTAssertEqual(waitingWhileTheFirstLoads, [second], "the page of the second shows that it waits")
         XCTAssertTrue(finished)
-        XCTAssertTrue(coordinator.waitingTranscripts.isEmpty)
+        XCTAssertTrue(coordinator.transcriptPasses.isEmpty)
         XCTAssertEqual(requestedTranscriptModels, [.cohereTranscribe, .cohereTranscribe], "a waiting pass keeps the model of its request")
         XCTAssertEqual(dictationEngineDecodes, 0)
     }
@@ -820,8 +820,8 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.start()
 
         coordinator.transcribeAgain(meeting.id)
-        let asked = coordinator.transcribingAgain.contains(meeting.id)
-        let finished = await waitUntil { !coordinator.transcribingAgain.contains(meeting.id) }
+        let asked = coordinator.transcriptPasses[meeting.id]?.kind == .again
+        let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
         let transcript = await coordinator.transcript(of: meeting.id)
         let notes = await coordinator.notes(of: meeting.id)
         let summary = await coordinator.summary(of: meeting.id)
@@ -850,7 +850,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.start()
 
         coordinator.transcribeAgain(meeting.id)
-        let finished = await waitUntil { !coordinator.transcribingAgain.contains(meeting.id) }
+        let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
         let transcript = await coordinator.transcript(of: meeting.id)
 
         XCTAssertTrue(finished)
@@ -868,7 +868,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         coordinator.transcribeAgain(meeting.id)
 
         XCTAssertFalse(coordinator.canTranscribeAgain(record))
-        XCTAssertFalse(coordinator.transcribingAgain.contains(meeting.id))
+        XCTAssertNil(coordinator.transcriptPasses[meeting.id])
     }
 
     func testATrackThatStartsAgainNoLongerShowsAsFailed() async throws {
