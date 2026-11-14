@@ -935,6 +935,7 @@ func makeTestMeetingCoordinator(engine: TranscriptionServiceProtocol, analytics:
         templates: MeetingTemplateStore(fileURL: root.appendingPathComponent("templates.json")),
         settingsStore: MeetingSettingsStore(userDefaults: UserDefaults(suiteName: "suniye-meeting-tests-\(UUID().uuidString)")!),
         engine: engine,
+        makeTranscriptEngine: { _ in engine },
         environment: MeetingEnvironment(
             canRecordCallAudio: false,
             makeSources: { _ in [:] },

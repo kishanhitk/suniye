@@ -65,8 +65,12 @@ After a quit or a crash during a recording, the next launch writes the transcrip
 ## Transcript
 
 - No speech recognition runs while the meeting records. The meeting page shows the notes, the meters and the warnings.
-- After the stop, the speech model of dictation writes the transcript from the audio files. The meeting page shows "Finishing the transcript…" with the minutes done.
-- A dictation goes first: the transcript waits while you dictate.
+- After the stop, the transcript model writes the transcript from the audio files. The meeting page shows "Finishing the transcript…" with the minutes done.
+- **Settings → General → Meetings → Transcript model**:
+  - **Same as dictation** (default): the dictation model, on the dictation engine. A dictation goes first: the transcript waits while you dictate.
+  - Another model: it loads for the transcript on an engine of its own and unloads after it. Dictation keeps its model and does not wait. The Mac holds both models in memory while the transcript is written.
+- Picking a model that is not on the Mac downloads it. It becomes the transcript model when the download is done.
+- When the transcript model is not on the Mac at the stop, the meeting shows that cause and **Finish Transcript**.
 - The audio goes to the model in pieces of 2 to 12 s, cut at pauses.
 - The audio files go when the transcript is final.
 

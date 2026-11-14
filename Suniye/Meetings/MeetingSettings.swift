@@ -14,17 +14,34 @@ struct MeetingSettings: Codable, Equatable, Sendable {
     var neverAskBundleIDs: [String] = []
     /// The template that the user picked last.
     var templateID = MeetingTemplate.general.id
+    /// The speech model that writes the transcripts; nil is the dictation
+    /// model.
+    var transcriptModel: ASRModelID?
 
     init() {}
 
     /// A missing key keeps its default, so settings that one build saved
-    /// still load after a later build adds a key.
+    /// still load after a later build adds a key. A transcript model that
+    /// this build does not know is the dictation model.
     init(from decoder: Decoder) throws {
         self.init()
         let container = try decoder.container(keyedBy: CodingKeys.self)
         callStartAction = try container.decodeIfPresent(MeetingCallStartAction.self, forKey: .callStartAction) ?? callStartAction
         neverAskBundleIDs = try container.decodeIfPresent([String].self, forKey: .neverAskBundleIDs) ?? neverAskBundleIDs
         templateID = try container.decodeIfPresent(String.self, forKey: .templateID) ?? templateID
+        transcriptModel = try container.decodeIfPresent(String.self, forKey: .transcriptModel).flatMap(ASRModelID.init(rawValue:))
+    }
+}
+
+/// The transcript model cannot write a transcript now.
+enum MeetingTranscriptModelError: LocalizedError, Equatable {
+    case notDownloaded(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .notDownloaded(name):
+            return "\(name) is not downloaded. Download it in Settings, or choose another transcript model."
+        }
     }
 }
 

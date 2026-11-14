@@ -262,6 +262,8 @@ final class AppState {
             }
         }
     }
+    /// The model that downloads to become the meeting transcript model.
+    private(set) var meetingTranscriptModelDownload: ASRModelID?
     var modelDownloadStartedAt: Date?
     /// One model operation at a time. Downloads and loads were split into
     /// separate slots so an installed model could be selected mid-download; the
@@ -1947,6 +1949,7 @@ final class AppState {
         )
         self.meetings = meetingCoordinator ?? AppState.makeMeetingCoordinator(
             transcriptionService: transcriptionService,
+            modelManager: modelManager,
             appleSummaryAvailability: { appleMagicFormatPostProcessor.availability },
             localSummaryAvailability: { resolvedLocalGemmaPostProcessor.availability },
             localGemmaClient: localGemmaClient,
@@ -3425,7 +3428,7 @@ final class AppState {
 
                 setPhaseUnlessCapturing(.loading, statusText: "Validating model...")
 
-                guard modelManager.isInstalled(modelID) else {
+                guard await modelManager.isSystemManagedAssetInstalled(modelID) else {
                     throw AppStateError.modelValidationFailed
                 }
 
@@ -5792,6 +5795,30 @@ enum AppStateError: LocalizedError {
     }
 }
 
+extension AppState {
+    /// Makes `model` the meeting transcript model; nil is the dictation
+    /// model. A model that is not on the Mac downloads first, without
+    /// becoming the dictation model, and becomes the transcript model when
+    /// the download succeeds.
+    func useForMeetingTranscripts(_ model: ASRModelID?) {
+        guard let model else {
+            meetings.updateSettings { $0.transcriptModel = nil }
+            return
+        }
+        Task {
+            if await !modelManager.isSystemManagedAssetInstalled(model) {
+                guard asrModelCanPerformPrimaryAction(for: model) else { return }
+                meetingTranscriptModelDownload = model
+                downloadASRModel(model, autoSelect: false)
+                await asrDownloadTask?.value
+                meetingTranscriptModelDownload = nil
+                guard await modelManager.isSystemManagedAssetInstalled(model) else { return }
+            }
+            meetings.updateSettings { $0.transcriptModel = model }
+        }
+    }
+}
+
 extension AppState: MeetingHost {
     /// Opens the main window at a meeting's page, or at the list for nil.
     func openMeeting(_ id: UUID?) {
@@ -5953,6 +5980,7 @@ extension AppState: MeetingHost {
 
     fileprivate static func makeMeetingCoordinator(
         transcriptionService: TranscriptionServiceProtocol,
+        modelManager: ModelManagerProtocol,
         appleSummaryAvailability: @escaping () -> AppleFoundationModelsAvailability,
         localSummaryAvailability: @escaping () -> LocalGemmaAvailability,
         localGemmaClient: LocalGemmaClient,
@@ -5963,6 +5991,14 @@ extension AppState: MeetingHost {
             templates: MeetingTemplateStore(),
             settingsStore: MeetingSettingsStore(),
             engine: transcriptionService,
+            makeTranscriptEngine: { model in
+                guard await modelManager.isSystemManagedAssetInstalled(model) else {
+                    throw MeetingTranscriptModelError.notDownloaded(ASRModelCatalog.entry(for: model).displayName)
+                }
+                let engine = RoutingTranscriptionService()
+                try await engine.loadModel(config: modelManager.makeRecognizerConfig(for: model))
+                return engine
+            },
             environment: .live(),
             summaryAvailability: {
                 MeetingSummaryAvailability(apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
