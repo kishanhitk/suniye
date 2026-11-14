@@ -39,19 +39,13 @@ final class MeetingActions {
     }
 
     func export(_ record: MeetingRecord, meetings: MeetingCoordinator) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(record.title).md"
+        panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
-            let markdown = MeetingExport.markdown(
-                record: record,
-                summary: await meetings.summary(of: record.id),
-                notes: await meetings.notes(of: record.id) ?? "",
-                segments: await meetings.transcript(of: record.id)
-            )
-            let panel = NSSavePanel()
-            panel.nameFieldStringValue = "\(record.title).md"
-            panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
-            guard panel.runModal() == .OK, let url = panel.url else { return }
             do {
-                try markdown.write(to: url, atomically: true, encoding: .utf8)
+                try await meetings.export(record, to: url)
             } catch {
                 AppLogger.shared.log(.error, "meeting export failed error=\(error.localizedDescription)")
                 failure = MeetingActionFailure(title: "Couldn’t export the meeting", message: error.localizedDescription)
@@ -127,10 +121,6 @@ private struct MeetingActionDialogs: ViewModifier {
 
 /// The More menu of a meeting, and the context menu of its row.
 struct MeetingMenuItems: View {
-    /// What Copy Notice puts on the clipboard, for the user to tell the
-    /// other people in the call.
-    static let noticeSentence = "I’m recording this call to take notes. The recording stays on my computer."
-
     let record: MeetingRecord
     let meetings: MeetingCoordinator
     let actions: MeetingActions
@@ -142,12 +132,7 @@ struct MeetingMenuItems: View {
             Button("Open Meeting") { meetings.openMeetingID = record.id }
             Divider()
         }
-        if isLive {
-            Button("Copy Notice") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(Self.noticeSentence, forType: .string)
-            }
-        } else {
+        if !isLive {
             Button("Export as Markdown…") { actions.export(record, meetings: meetings) }
         }
         Button("Rename…") { actions.rename(record) }

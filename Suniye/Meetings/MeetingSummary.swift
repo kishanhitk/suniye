@@ -69,7 +69,8 @@ protocol MeetingSummaryModel {
     /// cannot count.
     func tokenCount(_ text: String) async -> Int?
     /// Throws `LLMPostProcessorError.outputTruncated` when the answer did not
-    /// fit.
+    /// fit. The Apple model cannot tell: it cuts an answer at the output limit
+    /// with no error.
     func generate(_ request: MeetingSummaryRequest) async throws -> String
 }
 

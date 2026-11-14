@@ -145,7 +145,7 @@ actor MeetingTranscriber {
         flushSegmenters()
         decodeIfIdle()
         await waitUntilDecoded()
-        try await requireComplete()
+        try requireComplete()
         return try await finalize()
     }
 
@@ -196,6 +196,11 @@ actor MeetingTranscriber {
 
     /// Returns false when the chunk should be tried again.
     private func decode(_ chunk: MeetingAudioChunk) async -> Bool {
+        // A line stored past a failed chunk would make the next finish start
+        // after it, so the rest of the track waits for that finish.
+        if let hole = holes[chunk.track], chunk.start > hole {
+            return true
+        }
         guard chunk.hasSound else {
             stats.silent += 1
             stats.chunks += 1
@@ -250,18 +255,10 @@ actor MeetingTranscriber {
         holes[chunk.track] = min(holes[chunk.track] ?? chunk.start, chunk.start)
     }
 
-    /// A track with a hole keeps no line from the hole on, so the next
+    /// A track with a hole has no line from the hole on, so the next
     /// `transcribe()` decodes it again from there.
-    private func requireComplete() async throws {
-        guard !holes.isEmpty else { return }
-        let stored = await store.segments(of: meetingID)
-        let kept = stored.filter { segment in
-            holes[segment.track].map { segment.audioEnd <= $0 } ?? true
-        }
-        if kept.count != stored.count {
-            try await store.replaceSegments(kept, of: meetingID)
-        }
-        throw TranscriptError.incomplete
+    private func requireComplete() throws {
+        guard holes.isEmpty else { throw TranscriptError.incomplete }
     }
 
     private func waitUntilDecoded() async {

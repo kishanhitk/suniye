@@ -280,10 +280,12 @@ final class MeetingTranscriberTests: XCTestCase {
             XCTAssertEqual(error as? MeetingTranscriber.TranscriptError, .incomplete)
         }
         let kept = await store.segments(of: record.id)
+        let firstFinish = await engine.decodedPeaks.map { ($0 * 10).rounded() / 10 }
         let transcript = try await makeTranscriber(engine: engine, tracks: [.you]).transcribe()
         let decoded = await engine.decodedPeaks.map { ($0 * 10).rounded() / 10 }
 
         XCTAssertEqual(kept.map(\.text), ["Alpha."], "no line after the failed chunk stays, so the next finish starts there")
+        XCTAssertFalse(firstFinish.contains(0.6), "no chunk after the failed one is decoded, so a quit before the finish ends cannot leave a line past it")
         XCTAssertEqual(transcript.map(\.text), ["Alpha.", "Bravo.", "Charlie."])
         XCTAssertEqual(decoded.filter { $0 == 0.2 }.count, 3, "a failed decode is tried again")
         XCTAssertEqual(decoded.filter { $0 == 0.4 }.count, MeetingTranscriber.maximumAttempts + 1)

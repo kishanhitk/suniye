@@ -754,6 +754,24 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(after.notes, "Ship Monday")
     }
 
+    func testExportWritesTheSummaryNotesAndTranscriptOfTheMeeting() async throws {
+        let meeting = MeetingRecord(title: "Design sync", startedAt: clock, tracks: [.you], status: .done, templateID: "general")
+        try await store.create(meeting)
+        try await store.saveSummary("## Overview\nShip Friday.", for: meeting.id)
+        try await store.saveNotes("Ask legal.", for: meeting.id)
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 32_000, text: "We ship on Friday."), to: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        let file = root.appendingPathComponent("Design sync.md")
+
+        try await coordinator.export(meeting, to: file)
+        let markdown = try String(contentsOf: file, encoding: .utf8)
+
+        XCTAssertTrue(markdown.contains("Ship Friday."))
+        XCTAssertTrue(markdown.contains("Ask legal."))
+        XCTAssertTrue(markdown.contains("We ship on Friday."))
+    }
+
     func testATrackThatStartsAgainNoLongerShowsAsFailed() async throws {
         let coordinator = makeCoordinator()
         them.failsToStart = true
