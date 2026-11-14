@@ -274,6 +274,10 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(rewritten)
         XCTAssertTrue(done)
+        let kinds = await summaryModel.kinds
+        XCTAssertEqual(kinds, [.part(number: 1, count: 1), .overview, .part(number: 1, count: 1), .overview])
+        let summary = await coordinator.summary(of: id)
+        XCTAssertEqual(summary, "## Done\n- Shipped the beta", "the Stand-up sections")
         XCTAssertEqual(coordinator.record(id)?.templateID, MeetingTemplate.standUp.id)
         XCTAssertEqual(coordinator.settings.templateID, MeetingTemplate.standUp.id, "the next meeting starts with the last template")
     }
@@ -787,7 +791,7 @@ private actor GatedSummaryModel: MeetingSummaryModel {
         }
         switch request.kind {
         case .part, .userNotes:
-            return "Decisions: Ship on Friday"
+            return "Decisions: Ship on Friday\nDone: Shipped the beta"
         case .overview:
             return "Title: Release plan\nThe team agreed to ship on Friday."
         case .summary, .join:
