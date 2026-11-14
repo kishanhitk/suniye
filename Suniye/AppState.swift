@@ -5850,7 +5850,10 @@ extension AppState {
                 meetingTranscriptModelDownload = model
                 downloadASRModel(model, autoSelect: false)
                 await asrDownloadTask?.value
-                meetingTranscriptModelDownload = nil
+                // A later choice may show its own download by now.
+                if meetingTranscriptModelDownload == model {
+                    meetingTranscriptModelDownload = nil
+                }
                 guard await modelManager.isSystemManagedAssetInstalled(model) else { return }
             }
             guard choice == meetingTranscriptModelChoice else { return }
