@@ -11,9 +11,12 @@ private func conversation(turns: Int, words: Int, track: (Int) -> MeetingTrack =
     }
 }
 
-private func input(_ segments: [MeetingSegment], notes: String = "", labels: Bool = true) -> MeetingSummaryInput {
-    MeetingSummaryInput(segments: segments, notes: notes, template: .general, speakerLabels: labels)
+private func input(_ segments: [MeetingSegment], notes: String = "", labels: Bool = true, template: MeetingTemplate = .general) -> MeetingSummaryInput {
+    MeetingSummaryInput(segments: segments, notes: notes, template: template, speakerLabels: labels)
 }
+
+/// A template with no "## " section: the model writes the whole summary.
+private let freeTemplate = MeetingTemplate(id: "free", name: "Free", sections: "Write a short summary of the meeting.")
 
 final class MeetingSummaryWriterTests: XCTestCase {
     func testAppleIntelligenceComesFirstThenTheInstalledLocalModel() {
@@ -23,42 +26,58 @@ final class MeetingSummaryWriterTests: XCTestCase {
         XCTAssertEqual(MeetingSummaryAvailability(apple: .deviceNotEligible, localModel: .unsupportedHardware), .unavailable)
     }
 
-    func testAShortMeetingIsOneRequestAndTheAnswerIsCleaned() async throws {
-        let model = FakeSummaryModel(context: 4_096) { _ in
-            """
-            # Weekly sync.
-            ## Overview
-            We agreed to **ship** on Friday.
-
-            ## Decisions
-            * Ship on Friday.
-            - None
-
-            ## Action items
-            - None noted.
-
-            ## Open questions
-            - No open questions.
-            """
+    func testAShortMeetingIsOnePartThenTheTitleAndOverview() async throws {
+        let model = FakeSummaryModel(context: 4_096) { request in
+            switch request.kind {
+            case .part:
+                return "**Decisions:** Ship on Friday; none\nAction items: none\nDates and numbers: Review on 3 December\nOpen questions: None noted."
+            case .userNotes:
+                return "Action items: Ask legal"
+            case .overview:
+                return "Title: \"Weekly sync.\"\nWe agreed to ship on Friday."
+            case .summary, .join:
+                return ""
+            }
         }
         let writer = MeetingSummaryWriter(model: model)
 
-        let summary = try await writer.write(input(conversation(turns: 4, words: 10), notes: "Ship Friday"))
+        let summary = try await writer.write(input(conversation(turns: 4, words: 10), notes: "Ask legal"))
         let requests = await model.requests
 
-        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.map(\.kind), [.part(number: 1, count: 1), .userNotes, .overview])
         XCTAssertTrue(requests[0].input.contains("You: word0"))
-        XCTAssertTrue(requests[0].input.contains("<notes>\nShip Friday\n</notes>"))
-        XCTAssertTrue(requests[0].input.contains(MeetingTemplate.general.sections))
+        XCTAssertTrue(requests[0].input.contains("Decisions:\nAction items:\nDates and numbers:\nOpen questions:"))
+        XCTAssertTrue(requests[1].input.contains("<notes>\nAsk legal\n</notes>"))
         XCTAssertEqual(summary.title, "Weekly sync")
-        XCTAssertEqual(summary.body, "## Overview\nWe agreed to ship on Friday.\n\n## Decisions\n- Ship on Friday.")
+        XCTAssertEqual(summary.body, """
+        ## Overview
+        We agreed to ship on Friday.
+
+        ## Decisions
+        - Ship on Friday
+
+        ## Action items
+        - Ask legal
+
+        ## Dates and numbers
+        - Review on 3 December
+        """)
     }
 
-    func testALongMeetingIsSummarizedFromNotesOnItsParts() async throws {
-        let model = FakeSummaryModel(context: 2_000)
+    func testALongMeetingJoinsTheItemsOfItsPartsInOrderAndOnce() async throws {
+        let model = FakeSummaryModel(context: 2_000) { request in
+            switch request.kind {
+            case let .part(number, _):
+                return "Decisions: Ship on Friday; Decision \(number)"
+            case .overview:
+                return "Title: Release plan\nThe team planned the release."
+            case .userNotes, .summary, .join:
+                return ""
+            }
+        }
         let writer = MeetingSummaryWriter(model: model)
 
-        _ = try await writer.write(input(conversation(turns: 60, words: 50)))
+        let summary = try await writer.write(input(conversation(turns: 60, words: 50)))
         let requests = await model.requests
         let parts = requests.filter(\.isPart)
 
@@ -68,13 +87,14 @@ final class MeetingSummaryWriterTests: XCTestCase {
             let tokens = await model.tokenCount(part.text) ?? 0
             XCTAssertLessThanOrEqual(tokens, room)
         }
-        let last = try XCTUnwrap(requests.last)
-        XCTAssertEqual(last.kind, .summary)
-        XCTAssertTrue(last.input.contains("Part 1:\n- notes on part 1 of \(parts.count)"))
-        XCTAssertTrue(last.input.contains("Part \(parts.count):"))
+        let decisions = ["Ship on Friday"] + (1 ... parts.count).map { "Decision \($0)" }
+        XCTAssertEqual(requests.last?.kind, .overview)
+        XCTAssertTrue(requests.last?.input.contains("Decisions: " + decisions.joined(separator: "; ")) ?? false)
+        XCTAssertEqual(summary.body, "## Overview\nThe team planned the release.\n\n## Decisions\n" + decisions.map { "- \($0)" }.joined(separator: "\n"))
+        XCTAssertEqual(summary.parts, parts.count)
     }
 
-    func testNotesOnPartsThatDoNotFitAreJoinedFirst() async throws {
+    func testATemplateWithNoListSectionIsWrittenWholeAndItsPartNotesAreJoinedFirst() async throws {
         let longNotes = (0 ..< 120).map { "- fact\($0)" }.joined(separator: "\n")
         let model = FakeSummaryModel(context: 1_600) { request in
             switch request.kind {
@@ -84,17 +104,30 @@ final class MeetingSummaryWriterTests: XCTestCase {
                 return "- joined"
             case .summary:
                 return "Release review\n## Overview\nShort."
+            case .userNotes, .overview:
+                return ""
             }
         }
         let writer = MeetingSummaryWriter(model: model)
 
-        let summary = try await writer.write(input(conversation(turns: 60, words: 50)))
+        let summary = try await writer.write(input(conversation(turns: 60, words: 50), template: freeTemplate))
         let kinds = await model.requests.map(\.kind)
 
         XCTAssertTrue(kinds.contains(.join))
         XCTAssertEqual(kinds.last, .summary)
         XCTAssertLessThan(kinds.firstIndex(of: .join) ?? .max, kinds.count - 1)
         XCTAssertEqual(summary.title, "Release review")
+    }
+
+    func testATemplateThatLeavesTooLittleRoomForAPartIsWrittenWhole() async throws {
+        let rules = (0 ..< 3_000).map { "rule\($0)" }.joined(separator: " ")
+        let longTemplate = MeetingTemplate(id: "long", name: "Long", sections: "## Overview\n## Decisions\n\(rules)")
+        let model = FakeSummaryModel(context: 8_192)
+
+        _ = try await MeetingSummaryWriter(model: model).write(input(conversation(turns: 4, words: 10), template: longTemplate))
+        let kinds = await model.requests.map(\.kind)
+
+        XCTAssertEqual(kinds, [.summary])
     }
 
     func testAModelThatCannotCountIsPlannedAtTwoCharactersPerToken() async throws {
@@ -105,10 +138,34 @@ final class MeetingSummaryWriterTests: XCTestCase {
         _ = try await MeetingSummaryWriter(model: counting).write(meeting)
         _ = try await MeetingSummaryWriter(model: estimating).write(meeting)
 
-        let counted = await counting.requests.count
-        let estimated = await estimating.requests.count
-        XCTAssertEqual(counted, 1, "counted by words, the meeting fits in one request")
+        let counted = await counting.requests.filter(\.isPart).count
+        let estimated = await estimating.requests.filter(\.isPart).count
+        XCTAssertEqual(counted, 1, "counted by words, the meeting fits in one part")
         XCTAssertGreaterThan(estimated, 1, "at 2 characters per token, the same meeting does not fit")
+    }
+
+    func testItemsAreReadUnderTheirLabelsAndJoinedOnce() {
+        let sections = ["Decisions", "Action items", "Open questions"]
+        let answer = "Decisions:\n- Ship on Friday\n- None\nAction items: Priya writes the notes; none\nOther notes:\n- not a section\n## Open questions\n- Budget?"
+
+        let parsed = MeetingSummaryItems.parse(answer, sections: sections)
+        let joined = MeetingSummaryItems.join(
+            [["Decisions": ["Ship on Friday", "Hire two people"]], ["Decisions": ["ship on friday.", "Ship 2.4 on Friday"]]],
+            sections: ["Decisions"]
+        )
+
+        XCTAssertEqual(parsed, ["Decisions": ["Ship on Friday"], "Action items": ["Priya writes the notes"], "Open questions": ["Budget?"]])
+        XCTAssertEqual(joined["Decisions"], ["Ship on Friday", "Hire two people", "Ship 2.4 on Friday"], "a repeat goes; an item with more words stays")
+    }
+
+    func testTheTemplateHeadingsAreTheSections() throws {
+        let general = try XCTUnwrap(MeetingSummaryLayout(template: .general))
+
+        XCTAssertEqual(general.sections, ["Overview", "Decisions", "Action items", "Dates and numbers", "Open questions"])
+        XCTAssertEqual(general.paragraph, "Overview")
+        XCTAssertEqual(general.lists, ["Decisions", "Action items", "Dates and numbers", "Open questions"])
+        XCTAssertNil(MeetingSummaryLayout(template: freeTemplate))
+        XCTAssertNil(MeetingSummaryLayout(template: MeetingTemplate(id: "o", name: "O", sections: "## Overview\nTwo sentences.")), "a paragraph alone has no list to join")
     }
 
     func testACutShortAnswerFailsWithItsCause() async {
@@ -146,7 +203,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
 
         XCTAssertEqual(requestsWithoutNotes, 0)
         let requestsWithNotes = await model.requests.count
-        XCTAssertEqual(requestsWithNotes, 1, "the user's notes are worth a summary")
+        XCTAssertGreaterThan(requestsWithNotes, 0, "the user's notes are worth a summary")
     }
 
     func testAStoppedSummaryGoesOnFromThePartsThatFinished() async throws {
@@ -326,7 +383,11 @@ private actor FakeSummaryModel: MeetingSummaryModel {
         }
         switch request.kind {
         case let .part(number, count):
-            return "- notes on part \(number) of \(count)"
+            return "Decisions: decision on part \(number) of \(count)"
+        case .userNotes:
+            return "Action items: from the notes"
+        case .overview:
+            return "Title: Planning\nPlans."
         case .join:
             return "- joined notes"
         case .summary:

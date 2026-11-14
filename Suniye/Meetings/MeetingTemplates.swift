@@ -1,8 +1,9 @@
 import Foundation
 
 /// How to write a meeting's summary: its sections and what goes in them, as
-/// text that the user can edit. The title line and the heading format are
-/// fixed rules in `MeetingSummaryPrompt`, so an edit cannot break the parser.
+/// text that the user can edit. Its "## " headings are the sections of the
+/// summary (`MeetingSummaryLayout`); the title line is a fixed rule in
+/// `MeetingSummaryPrompt`.
 struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
     let id: String
     var name: String

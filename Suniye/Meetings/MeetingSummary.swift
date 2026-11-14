@@ -30,10 +30,15 @@ enum MeetingSummaryAvailability: Equatable, Sendable {
 struct MeetingSummaryRequest: Hashable, Sendable {
     enum Kind: Hashable, Sendable {
         case summary
-        /// Notes on part `number` of the `count` parts of a transcript.
+        /// Notes or items on part `number` of the `count` parts of a
+        /// transcript.
         case part(number: Int, count: Int)
         /// One shorter set of notes from the notes on several parts.
         case join
+        /// The items in the user's notes.
+        case userNotes
+        /// The title and the paragraph, from the joined items.
+        case overview
     }
 
     let kind: Kind
@@ -41,7 +46,14 @@ struct MeetingSummaryRequest: Hashable, Sendable {
     let input: String
 
     var maxOutputTokens: Int {
-        kind == .summary ? MeetingSummaryWriter.summaryOutputTokens : MeetingSummaryWriter.partOutputTokens
+        switch kind {
+        case .summary:
+            return MeetingSummaryWriter.summaryOutputTokens
+        case .overview:
+            return MeetingSummaryWriter.overviewOutputTokens
+        case .part, .join, .userNotes:
+            return MeetingSummaryWriter.partOutputTokens
+        }
     }
 
     var text: String {
@@ -96,16 +108,28 @@ enum MeetingSummaryError: LocalizedError, Equatable {
 
 /// Writes a meeting's summary with one on-device model.
 ///
-/// A transcript that fits in one request goes in one request. A longer one is
-/// cut into parts at segment edges; each part becomes short notes, and a last
-/// request writes the summary from the notes of all parts. When those notes
-/// do not fit either, they are first joined in groups. The answer to each
-/// request is kept: a summary that a dictation stopped goes on where it
-/// stopped, and a new template reuses the notes on the parts.
+/// For a template with list sections (`MeetingSummaryLayout`), the transcript
+/// is cut into parts at segment edges, and each part, and the user's notes,
+/// give their items under those sections. Code joins the items in meeting
+/// order and drops repeats, so no last step can lose an item; the model then
+/// writes only the title and the paragraph. A template with no list section
+/// is written by the model from the whole transcript, or from notes on its
+/// parts when it does not fit.
+///
+/// The answer to each request is kept: a summary that a dictation stopped
+/// goes on where it stopped.
 actor MeetingSummaryWriter {
     static let minimumWords = 25
     static let summaryOutputTokens = 1_200
     static let partOutputTokens = 500
+    static let overviewOutputTokens = 300
+    /// A small model keeps more items from a shorter part, so a part stays
+    /// under this size also when the context could hold more.
+    static let maximumPartTokens = 4_000
+    /// A long template leaves less room for the transcript in each part.
+    /// Below this room, a long meeting would need hundreds of requests, so
+    /// the model writes the summary from the whole transcript.
+    static let minimumPartTokens = 1_000
     /// The share of the context that a prompt may fill: the rest is for the
     /// chat template's own tokens and a count that is a little low.
     static let fillFactor = 0.9
@@ -129,8 +153,76 @@ actor MeetingSummaryWriter {
         guard Self.hasEnoughSpeech(input.segments, notes: input.notes) else {
             throw MeetingSummaryError.tooLittleSpeech
         }
-        let notes = input.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let layout = MeetingSummaryLayout(template: input.template),
+           let summary = try await writeBySection(input, layout: layout) {
+            return summary
+        }
+        return try await writeWhole(input)
+    }
 
+    // MARK: - By section
+
+    /// Nil when the template leaves too little room for a part, or when the
+    /// notes hold no item: the model then writes the summary from the
+    /// transcript.
+    private func writeBySection(_ input: MeetingSummaryInput, layout: MeetingSummaryLayout) async throws -> MeetingSummary? {
+        let context = await model.contextTokens()
+        let empty = MeetingSummaryPrompt.items(transcript: "", number: 1, of: 1, template: input.template, sections: layout.lists, speakerLabels: input.speakerLabels)
+        let room = min(budget(context: context, output: Self.partOutputTokens), Self.maximumPartTokens) - (await tokens(in: empty.text))
+        guard room >= Self.minimumPartTokens else { return nil }
+        let parts = await split(input, room: room)
+
+        var found: [[String: [String]]] = []
+        for (index, part) in parts.enumerated() {
+            let transcript = MeetingTranscript.turns(part, timeline: nil, speakerLabels: input.speakerLabels).joined(separator: "\n")
+            let request = MeetingSummaryPrompt.items(transcript: transcript, number: index + 1, of: parts.count, template: input.template, sections: layout.lists, speakerLabels: input.speakerLabels)
+            found.append(MeetingSummaryItems.parse(try await run(request), sections: layout.lists))
+        }
+        let notes = input.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !notes.isEmpty {
+            let request = MeetingSummaryPrompt.items(notes: notes, template: input.template, sections: layout.lists)
+            found.append(MeetingSummaryItems.parse(try await run(request), sections: layout.lists))
+        }
+        let items = MeetingSummaryItems.join(found, sections: layout.lists)
+        guard items.values.contains(where: { !$0.isEmpty }) else { return nil }
+
+        let overview = try await overview(of: items, input: input, layout: layout, context: context)
+        var blocks: [String] = []
+        for section in layout.sections {
+            if section == layout.paragraph {
+                if !overview.paragraph.isEmpty {
+                    blocks.append("## \(section)\n\(overview.paragraph)")
+                }
+            } else if let list = items[section], !list.isEmpty {
+                blocks.append((["## \(section)"] + list.map { "- \($0)" }).joined(separator: "\n"))
+            }
+        }
+        return MeetingSummary(title: overview.title, body: blocks.joined(separator: "\n\n"), parts: parts.count)
+    }
+
+    /// The title, and the paragraph when the template has one, from the
+    /// joined items. When they do not all fit, each section gives its first
+    /// items.
+    private func overview(
+        of items: [String: [String]],
+        input: MeetingSummaryInput,
+        layout: MeetingSummaryLayout,
+        context: Int
+    ) async throws -> (title: String?, paragraph: String) {
+        let room = budget(context: context, output: Self.overviewOutputTokens)
+        var shown = items
+        var request = MeetingSummaryPrompt.overview(items: shown, sections: layout.lists, template: input.template, paragraph: layout.paragraph)
+        while await tokens(in: request.text) > room, let longest = shown.values.map(\.count).max(), longest > 1 {
+            shown = shown.mapValues { Array($0.prefix(max(1, $0.count / 2))) }
+            request = MeetingSummaryPrompt.overview(items: shown, sections: layout.lists, template: input.template, paragraph: layout.paragraph)
+        }
+        return MeetingSummaryText.overview(try await run(request))
+    }
+
+    // MARK: - Whole
+
+    private func writeWhole(_ input: MeetingSummaryInput) async throws -> MeetingSummary {
+        let notes = input.notes.trimmingCharacters(in: .whitespacesAndNewlines)
         let context = await model.contextTokens()
         let summaryBudget = budget(context: context, output: Self.summaryOutputTokens)
         let transcript = MeetingTranscript.turns(input.segments, timeline: nil, speakerLabels: input.speakerLabels)
@@ -172,34 +264,10 @@ actor MeetingSummaryWriter {
         return MeetingSummary(title: parsed.title, body: parsed.body, parts: parts)
     }
 
-    // MARK: - Parts
-
     private func notesOnParts(_ input: MeetingSummaryInput, context: Int) async throws -> [String] {
-        let segments = MeetingTranscript.ordered(input.segments)
-        let fullText = MeetingTranscript.turns(segments, timeline: nil, speakerLabels: input.speakerLabels).joined(separator: "\n")
-        let tokensPerCharacter = Double(await tokens(in: fullText)) / Double(max(1, fullText.count))
-        let overhead = await tokens(in: MeetingSummaryPrompt.part(transcript: "", number: 1, of: 1, speakerLabels: input.speakerLabels).text)
-        let room = Double(budget(context: context, output: Self.partOutputTokens) - overhead)
-
-        var parts: [[MeetingSegment]] = []
-        var current: [MeetingSegment] = []
-        var used = 0.0
-        // A segment costs its text, a speaker label with ": ", and a line break.
-        let labelCost = (MeetingTrack.allCases.map(\.speakerLabel.count).max() ?? 0) + 3
-        for segment in segments {
-            let cost = Double(segment.text.count + labelCost) * tokensPerCharacter
-            if !current.isEmpty, used + cost > room {
-                parts.append(current)
-                current = []
-                used = 0
-            }
-            current.append(segment)
-            used += cost
-        }
-        if !current.isEmpty {
-            parts.append(current)
-        }
-
+        let empty = MeetingSummaryPrompt.part(transcript: "", number: 1, of: 1, speakerLabels: input.speakerLabels)
+        let room = budget(context: context, output: Self.partOutputTokens) - (await tokens(in: empty.text))
+        let parts = await split(input, room: room)
         var notes: [String] = []
         for (index, part) in parts.enumerated() {
             let transcript = MeetingTranscript.turns(part, timeline: nil, speakerLabels: input.speakerLabels).joined(separator: "\n")
@@ -227,6 +295,35 @@ actor MeetingSummaryWriter {
             joined.append(group.count == 1 ? group[0] : try await run(MeetingSummaryPrompt.join(group)))
         }
         return joined
+    }
+
+    // MARK: - Parts
+
+    /// Cuts the transcript at segment edges into parts of at most `room`
+    /// tokens.
+    private func split(_ input: MeetingSummaryInput, room: Int) async -> [[MeetingSegment]] {
+        let segments = MeetingTranscript.ordered(input.segments)
+        let fullText = MeetingTranscript.turns(segments, timeline: nil, speakerLabels: input.speakerLabels).joined(separator: "\n")
+        let tokensPerCharacter = Double(await tokens(in: fullText)) / Double(max(1, fullText.count))
+        // A segment costs its text, a speaker label with ": ", and a line break.
+        let labelCost = (MeetingTrack.allCases.map(\.speakerLabel.count).max() ?? 0) + 3
+        var parts: [[MeetingSegment]] = []
+        var current: [MeetingSegment] = []
+        var used = 0.0
+        for segment in segments {
+            let cost = Double(segment.text.count + labelCost) * tokensPerCharacter
+            if !current.isEmpty, used + cost > Double(room) {
+                parts.append(current)
+                current = []
+                used = 0
+            }
+            current.append(segment)
+            used += cost
+        }
+        if !current.isEmpty {
+            parts.append(current)
+        }
+        return parts
     }
 
     // MARK: - Requests
@@ -339,6 +436,97 @@ enum MeetingSummaryPrompt {
         )
     }
 
+    /// The items of one part under the template's list sections.
+    static func items(transcript: String, number: Int, of count: Int, template: MeetingTemplate, sections: [String], speakerLabels: Bool) -> MeetingSummaryRequest {
+        let rules = [
+            noteItemRule,
+            "- Write each item in your own short words. Do not copy lines of the transcript.",
+            "- Keep names, numbers and dates as the transcript says them.",
+            "- For a task, say who does it and by when.",
+            sections.contains(datesAndNumbers)
+                ? "- Put a date or a number with the item it belongs to. Under \"\(datesAndNumbers)\", put each one that fits no other line, with what it is about."
+                : nil,
+            "- Leave out opinions and talk that decides nothing.",
+            speakerRule(speakerLabels),
+            "- Write in the language of the transcript.",
+        ].compactMap { $0 }
+        return MeetingSummaryRequest(
+            kind: .part(number: number, count: count),
+            instructions: "You take notes on one part of a meeting.",
+            input: """
+            <transcript part="\(number) of \(count)">
+            \(transcript)
+            </transcript>
+
+            \(templateBlock(template))
+
+            Fill in these lines from this part of the meeting, for the sections of the template:
+            \(labels(sections))
+
+            Rules:
+            \(rules.joined(separator: "\n"))
+            """
+        )
+    }
+
+    /// The items of the user's notes under the template's list sections.
+    static func items(notes: String, template: MeetingTemplate, sections: [String]) -> MeetingSummaryRequest {
+        MeetingSummaryRequest(
+            kind: .userNotes,
+            instructions: "You sort the notes that a user took in a meeting.",
+            input: """
+            \(notesBlock(notes))
+
+            \(templateBlock(template))
+
+            Fill in these lines from the notes, for the sections of the template:
+            \(labels(sections))
+
+            Rules:
+            \(noteItemRule)
+            - Keep the user's words.
+            - Write in the language of the notes.
+            """
+        )
+    }
+
+    /// The title line and, with `paragraph`, the paragraph of the summary.
+    static func overview(items: [String: [String]], sections: [String], template: MeetingTemplate, paragraph: String?) -> MeetingSummaryRequest {
+        let notes = sections.compactMap { section in
+            items[section].flatMap { $0.isEmpty ? nil : "\(section): \($0.joined(separator: "; "))" }
+        }
+        let task = paragraph.map { "- Then write the text of the \"\($0)\" section, as the template says." }
+            ?? "- Write only the title line."
+        return MeetingSummaryRequest(
+            kind: .overview,
+            instructions: "You write the title of a meeting from notes on it.",
+            input: """
+            <meeting_notes>
+            \(notes.joined(separator: "\n"))
+            </meeting_notes>
+
+            \(templateBlock(template))
+
+            Rules:
+            - Start with one line: "Title: " and a short title for the meeting, at most 8 words.
+            \(task)
+            - Use only facts from the notes. Do not guess.
+            - Write plain text: no lists and no headings.
+            - Write in the language of the notes.
+            """
+        )
+    }
+
+    private static let datesAndNumbers = "Dates and numbers"
+
+    private static func labels(_ sections: [String]) -> String {
+        sections.map { "\($0):" }.joined(separator: "\n")
+    }
+
+    private static func templateBlock(_ template: MeetingTemplate) -> String {
+        "<template>\n\(template.sections)\n</template>"
+    }
+
     private static func summaryRules(template: MeetingTemplate, speakerLabels: Bool) -> String {
         """
         <template>
@@ -386,6 +574,94 @@ enum MeetingSummaryPrompt {
     }
 }
 
+/// The sections of a template that code can read: its "## " headings, in
+/// order. A section named Overview or Summary is the paragraph that the model
+/// writes last; every other section is a list that code joins from the notes
+/// on the parts.
+struct MeetingSummaryLayout: Equatable, Sendable {
+    let sections: [String]
+    let paragraph: String?
+
+    var lists: [String] {
+        sections.filter { $0 != paragraph }
+    }
+
+    /// Nil for a template with no list section.
+    init?(template: MeetingTemplate) {
+        let headings = template.sections.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("## ") }
+            .map { String($0.dropFirst(3)).trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let paragraph = headings.first { ["overview", "summary"].contains($0.lowercased()) }
+        guard headings.contains(where: { $0 != paragraph }) else { return nil }
+        sections = headings
+        self.paragraph = paragraph
+    }
+}
+
+/// The items that a model wrote under section labels, and their join.
+enum MeetingSummaryItems {
+    /// Reads "Label: a; b" lines, and a label line ("Label:" or "## Label")
+    /// followed by "- " lines. Lines under other labels, and items that say
+    /// "none", go.
+    static func parse(_ answer: String, sections: [String]) -> [String: [String]] {
+        var items: [String: [String]] = [:]
+        var current: String?
+        for raw in answer.components(separatedBy: .newlines) {
+            let line = raw.replacingOccurrences(of: "**", with: "").trimmingCharacters(in: .whitespaces)
+            if let (section, rest) = labeled(line, sections: sections) {
+                current = section
+                items[section, default: []] += rest.components(separatedBy: ";").compactMap(clean)
+            } else if line.hasPrefix("#") || line.hasSuffix(":") {
+                current = nil
+            } else if let current, line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("• ") {
+                items[current, default: []] += [clean(String(line.dropFirst(2)))].compactMap { $0 }
+            }
+        }
+        return items
+    }
+
+    /// The items of each section in the order of `answers`, each once: an
+    /// item goes when an earlier item of the section has all its words.
+    static func join(_ answers: [[String: [String]]], sections: [String]) -> [String: [String]] {
+        var joined: [String: [String]] = [:]
+        for section in sections {
+            var kept: [String] = []
+            var seen: [Set<String>] = []
+            for item in answers.flatMap({ $0[section] ?? [] }) {
+                let words = Set(MeetingTranscript.words(in: item))
+                guard !words.isEmpty, !seen.contains(where: words.isSubset(of:)) else { continue }
+                seen.append(words)
+                kept.append(item)
+            }
+            joined[section] = kept
+        }
+        return joined
+    }
+
+    private static func labeled(_ line: String, sections: [String]) -> (String, String)? {
+        let text = line.drop { $0 == "#" || $0 == "-" || $0 == " " }
+        for section in sections where text.lowercased().hasPrefix(section.lowercased()) {
+            let rest = text.dropFirst(section.count).trimmingCharacters(in: .whitespaces)
+            if rest.isEmpty {
+                return (section, "")
+            }
+            if rest.hasPrefix(":") {
+                return (section, String(rest.dropFirst()))
+            }
+        }
+        return nil
+    }
+
+    private static func clean(_ item: String) -> String? {
+        let text = item.trimmingCharacters(in: .whitespaces)
+        let bare = text.trimmingCharacters(in: CharacterSet(charactersIn: " .")).lowercased()
+        guard !bare.isEmpty, !MeetingSummaryText.emptyPhrases.contains(bare) else { return nil }
+        return text
+    }
+}
+
 /// Turns a model's answer into a title and a clean body.
 enum MeetingSummaryText {
     static let maximumTitleLength = 80
@@ -409,6 +685,23 @@ enum MeetingSummaryText {
             lines.removeFirst()
         }
         return (title, sections(lines.map(normalize)))
+    }
+
+    /// The title line and the paragraph of an overview answer.
+    static func overview(_ answer: String) -> (title: String?, paragraph: String) {
+        var lines = answer.components(separatedBy: .newlines)
+            .map { $0.replacingOccurrences(of: "**", with: "").trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        var title: String?
+        if let first = lines.first, first.lowercased().hasPrefix("title:") {
+            title = cleanTitle(first)
+            lines.removeFirst()
+        }
+        let paragraph = lines
+            .filter { !$0.hasPrefix("#") && !$0.lowercased().hasPrefix("title:") }
+            .map { $0.hasPrefix("- ") ? String($0.dropFirst(2)) : $0 }
+            .joined(separator: " ")
+        return (title, paragraph)
     }
 
     private static func cleanTitle(_ line: String) -> String? {
@@ -466,7 +759,7 @@ enum MeetingSummaryText {
         return emptyPhrases.contains(text) || text == "no \(topic)"
     }
 
-    private static let emptyPhrases: Set<String> = [
+    static let emptyPhrases: Set<String> = [
         "none", "none noted", "none mentioned", "none discussed", "none raised",
         "nothing", "nothing noted", "n/a", "not applicable", "not discussed",
     ]
