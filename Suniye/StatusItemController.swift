@@ -4,7 +4,7 @@ import Observation
 import SwiftUI
 
 @MainActor
-final class StatusItemController: NSObject {
+final class StatusItemController: NSObject, NSMenuDelegate {
     private let appState: AppState
     private let appIdentity = AppIdentity.current
     private let statusItem: NSStatusItem
@@ -105,7 +105,13 @@ final class StatusItemController: NSObject {
             button.image = statusItemImage(for: appState.phase)
             button.toolTip = appIdentity.displayName
         }
+        menu.delegate = self
         statusItem.menu = menu
+    }
+
+    /// The meeting clock changes with time, which observation does not track.
+    func menuWillOpen(_ menu: NSMenu) {
+        refresh()
     }
 
     private func refreshWhileObserved() {
