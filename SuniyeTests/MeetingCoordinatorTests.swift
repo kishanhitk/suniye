@@ -511,14 +511,12 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.live)
     }
 
-    func testStopNowEndsTheMeetingWhereTheCallEnded() async throws {
+    func testStopNowEndsAnAutomaticRecordingWhereTheCallEnded() async throws {
         let coordinator = makeCoordinator()
         coordinator.speechModelChanged(.parakeetV3)
         await coordinator.start()
         let start = clock!
-        hold(holding(zoom))
-        hold(holding(zoom), after: 2)
-        await coordinator.recordOfferedCall()
+        await startAutomatically(coordinator)
         let id = try XCTUnwrap(coordinator.live?.id)
 
         // Words from 0 to 2.8 s; Zoom releases the microphone at 4.5 s; more
@@ -535,13 +533,59 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(card, .callEnded(zoom, silent: false, endedAt: start + 4.5, stopsAt: start + 4.5 + 30))
         XCTAssertEqual(decoded, 2, "the words after the call were recorded and decoded")
-        XCTAssertEqual(cardAnswers, ["offer record", "call_ended stop_now"])
+        XCTAssertEqual(cardAnswers, ["call_ended stop_now"])
         XCTAssertEqual(event("meeting_ended")?["reason"], .label("call_ended"))
         XCTAssertEqual(try XCTUnwrap(coordinator.record(id)?.endedAt).timeIntervalSince(start), 4.5, accuracy: 0.001)
         XCTAssertEqual(segments.map(\.text), [longSentence], "the words after the call ended go")
     }
 
-    func testAfterKeepRecordingTheMeetingFollowsTheNextCallAndStopsWhenItEnds() async throws {
+    func testAnAutomaticRecordingStopsByItselfAfterItsCallEnds() async throws {
+        cardDurations.stop = 0.05
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        let start = clock!
+        await startAutomatically(coordinator)
+        let id = try XCTUnwrap(coordinator.live?.id)
+
+        clock += 4
+        hold([], after: 4)
+        let stopped = await waitUntil { coordinator.live == nil }
+
+        XCTAssertTrue(stopped)
+        XCTAssertEqual(cardAnswers, ["call_ended timeout"])
+        XCTAssertEqual(try XCTUnwrap(coordinator.record(id)?.endedAt).timeIntervalSince(start), 4, accuracy: 0.001)
+    }
+
+    func testARecordingThatTheUserStartedGoesOnAfterItsCallEndsAndStopRecordingKeepsTheTalkAfterIt() async throws {
+        cardDurations.stop = 0.05
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        await coordinator.start()
+        let start = clock!
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        await coordinator.recordOfferedCall()
+        let id = try XCTUnwrap(coordinator.live?.id)
+
+        you.push(tone(2.5, level: 0.3) + silence(2))
+        clock += 4.5
+        hold([], after: 4.5)
+        let card = coordinator.callCard
+        try await Task.sleep(for: .milliseconds(150))
+        let goesOn = coordinator.live != nil
+        you.push(silence(0.3) + tone(2.5, level: 0.5) + silence(0.5))
+        clock += 5
+        await coordinator.stopEndedCall()
+        let segments = await store.segments(of: id)
+
+        XCTAssertEqual(card, .callEnded(zoom, silent: false, endedAt: start + 4.5, stopsAt: nil))
+        XCTAssertTrue(goesOn, "no countdown stops a recording that the user started")
+        XCTAssertEqual(cardAnswers, ["offer record", "call_ended stop_now"])
+        XCTAssertEqual(try XCTUnwrap(coordinator.record(id)?.endedAt).timeIntervalSince(start), 9.5, accuracy: 0.001)
+        XCTAssertEqual(segments.map(\.text), [longSentence, "Them speaks here."], "the talk after the call stays")
+    }
+
+    func testAMeetingThatStartsDuringACallFollowsItAndKeepRecordingClosesTheCard() async throws {
         cardDurations.stop = 0.05
         let coordinator = makeCoordinator()
         await coordinator.start()
@@ -552,18 +596,18 @@ final class MeetingCoordinatorTests: XCTestCase {
         let followed = await waitUntil { coordinator.live?.record.callAppBundleID == zoom.bundleID }
 
         hold([], after: 5)
+        let card = coordinator.callCard
         coordinator.keepRecording()
         try await Task.sleep(for: .milliseconds(150))
-        let keptRecording = coordinator.live != nil
-        hold(holding(zoom), after: 1)
-        hold(holding(zoom), after: 2)
-        hold([], after: 5)
-        let stopped = await waitUntil { coordinator.live == nil }
 
         XCTAssertTrue(followed, "a meeting that starts during a call follows it")
-        XCTAssertTrue(keptRecording)
-        XCTAssertTrue(stopped, "the call-ended card stops the recording by itself")
-        XCTAssertEqual(cardAnswers, ["offer not_now", "call_ended keep_recording", "call_ended timeout"])
+        guard case .callEnded(zoom, silent: false, _, stopsAt: nil) = card else {
+            return XCTFail("expected the call-ended card with no countdown, got \(String(describing: card))")
+        }
+        XCTAssertNil(coordinator.callCard)
+        XCTAssertNotNil(coordinator.live)
+        XCTAssertEqual(cardAnswers, ["offer not_now", "call_ended keep_recording"])
+        await coordinator.stop()
     }
 
     func testTheCallEndedCardClosesWhenTheCallPlaysSoundAgain() async throws {
@@ -705,6 +749,15 @@ final class MeetingCoordinatorTests: XCTestCase {
         try writer.append(tone(2.5, level: 0.3) + silence(0.5))
         try writer.close()
         return left.id
+    }
+
+    /// Record Automatically, then a Zoom call that holds the microphone for 2 s.
+    private func startAutomatically(_ coordinator: MeetingCoordinator) async {
+        coordinator.chooseCallStartAction(.recordAutomatically)
+        hold(holding(zoom))
+        hold(holding(zoom), after: 2)
+        let started = await waitUntil { coordinator.live != nil }
+        XCTAssertTrue(started, "Record Automatically starts the recording")
     }
 
     /// The props of the last event with this name.

@@ -9,9 +9,11 @@ enum MeetingCallCard: Equatable {
     /// `cancelEndsAt`.
     case startedAutomatically(MeetingCallApp, cancelEndsAt: Date)
     /// The call of the recording ended at `endedAt`: its app released the
-    /// microphone, or, when `silent`, played no sound. The recording stops at
-    /// `stopsAt` and keeps nothing after `endedAt`.
-    case callEnded(MeetingCallApp, silent: Bool, endedAt: Date, stopsAt: Date)
+    /// microphone, or, when `silent`, played no sound. A recording that
+    /// started by itself stops at `stopsAt` and keeps nothing after
+    /// `endedAt`. A recording that the user started has no `stopsAt`: it goes
+    /// on until the user answers.
+    case callEnded(MeetingCallApp, silent: Bool, endedAt: Date, stopsAt: Date?)
 
     struct Durations {
         var offer: TimeInterval = 20
@@ -73,6 +75,9 @@ final class MeetingSession {
     }
 
     fileprivate(set) var record: MeetingRecord
+    /// How the recording started: one that started by itself also stops by
+    /// itself when its call ends.
+    let source: MeetingSource
     fileprivate(set) var youLevel: Float = 0
     fileprivate(set) var themLevel: Float = 0
     fileprivate(set) var callAudioProblem: CallAudioProblem?
@@ -85,8 +90,9 @@ final class MeetingSession {
     /// Set by the first stop, so that a second one does nothing.
     @ObservationIgnored fileprivate var isStopping = false
 
-    fileprivate init(record: MeetingRecord, recorder: MeetingRecorder, speech: MeetingSpeechWatch) {
+    fileprivate init(record: MeetingRecord, source: MeetingSource, recorder: MeetingRecorder, speech: MeetingSpeechWatch) {
         self.record = record
+        self.source = source
         self.recorder = recorder
         self.speech = speech
     }
@@ -315,7 +321,7 @@ final class MeetingCoordinator {
         )
         try await store.create(record)
         let speech = MeetingSpeechWatch(makeDetector: environment.makeSpeechDetector)
-        let session = MeetingSession(record: record, recorder: recorder, speech: speech)
+        let session = MeetingSession(record: record, source: source, recorder: recorder, speech: speech)
         // The recorder's queue keeps its output and events in order, and so
         // do the speech watch's stream and the main queue.
         recorder.onOutput = { speech.enqueue($0) }
@@ -470,11 +476,14 @@ final class MeetingCoordinator {
         AppLogger.shared.log(.info, "meeting canceled id=\(session.id.uuidString)")
     }
 
-    /// Stop Now on the call-ended card: the meeting ends when the call did.
+    /// Stop Now on the countdown of a recording that started by itself: the
+    /// meeting ends when the call did. Stop Recording on the card of a
+    /// recording that the user started: it stops now, and keeps the talk
+    /// after the call.
     func stopEndedCall() async {
-        guard case let .callEnded(_, _, endedAt, _) = callCard else { return }
+        guard case let .callEnded(_, _, endedAt, stopsAt) = callCard else { return }
         answerCallCard(.stopNow)
-        await stop(.callEnded, endingAt: endedAt)
+        await stop(.callEnded, endingAt: stopsAt == nil ? nil : endedAt)
     }
 
     /// Keep Recording on the call-ended card.
@@ -523,9 +532,13 @@ final class MeetingCoordinator {
                 answerCallCard(.callEnded)
             }
         case let .recordedCallEnded(app, endedAt, silent):
-            guard live != nil else { return }
+            guard let session = live else { return }
             let now = environment.now()
             let ended = now.addingTimeInterval(endedAt - environment.uptime())
+            guard session.source == .automatic else {
+                showCard(.callEnded(app, silent: silent, endedAt: ended, stopsAt: nil), for: nil)
+                return
+            }
             let delay = environment.callCardDurations.stop
             showCard(.callEnded(app, silent: silent, endedAt: ended, stopsAt: now.addingTimeInterval(delay)), for: delay)
         case .recordedCallResumed:
@@ -551,10 +564,13 @@ final class MeetingCoordinator {
     }
 
     /// Shows `card` until an answer, or for `seconds`: then the card closes
-    /// by itself, and the call-ended card stops the recording.
-    private func showCard(_ card: MeetingCallCard, for seconds: TimeInterval) {
+    /// by itself, and the call-ended card stops the recording. With no
+    /// `seconds`, the card stays until an answer.
+    private func showCard(_ card: MeetingCallCard, for seconds: TimeInterval?) {
         cardTimer?.cancel()
+        cardTimer = nil
         callCard = card
+        guard let seconds else { return }
         cardTimer = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled, let self, self.callCard == card else { return }
