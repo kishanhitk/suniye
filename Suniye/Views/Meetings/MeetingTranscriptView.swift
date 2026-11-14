@@ -55,20 +55,24 @@ struct MeetingNotesEditor: View {
 struct MeetingTranscriptProgressView: View {
     /// Nil until the transcript reports its first step.
     let progress: MeetingTranscriptProgress?
+    /// The transcript waits for the transcript of another meeting: no bar yet.
+    var isWaiting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
-                Text("Finishing the transcript…")
+                Text(isWaiting ? "Waiting for another transcript…" : "Finishing the transcript…")
                     .font(AppTypography.body)
                     .foregroundStyle(MainWindowPalette.secondaryText)
             }
-            ProgressView(value: progress?.fraction ?? 0)
-                .progressViewStyle(.linear)
-                .frame(width: 280)
-            if let progress {
+            if !isWaiting {
+                ProgressView(value: progress?.fraction ?? 0)
+                    .progressViewStyle(.linear)
+                    .frame(width: 280)
+            }
+            if !isWaiting, let progress {
                 Text(progress.minutesText)
                     .font(AppTypography.caption)
                     .foregroundStyle(MainWindowPalette.secondaryText)

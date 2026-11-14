@@ -220,7 +220,7 @@ struct MeetingPage: View {
             }
         case .transcript:
             if record.status == .finishing {
-                MeetingTranscriptProgressView(progress: meetings.transcriptProgress[id])
+                MeetingTranscriptProgressView(progress: meetings.transcriptProgress[id], isWaiting: meetings.waitingTranscripts.contains(id))
             } else {
                 MeetingTranscriptView(lines: transcriptLines(record))
             }
