@@ -364,6 +364,10 @@ actor MeetingSummaryWriter {
             if Task.isCancelled {
                 throw CancellationError()
             }
+            // Only the domain and the code: app.log goes into diagnostic
+            // reports, and an error description can hold meeting text.
+            let underlying = error as NSError
+            AppLogger.shared.log(.error, "meeting summary request failed kind=\(request.kind) domain=\(underlying.domain) code=\(underlying.code)")
             throw MeetingSummaryError.failed(Self.cause(of: error))
         }
     }
