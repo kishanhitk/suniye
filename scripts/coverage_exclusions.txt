@@ -14,49 +14,49 @@ Suniye/Vendor/Permiso/PermisoPanel.swift              # vendored; NSPanel UI
 Suniye/Vendor/Permiso/SettingsWindowLocator.swift     # vendored; inspects live System Settings windows
 
 # --- Hardware / OS-permission bound ---
-Suniye/Services/AudioCaptureDrivers.swift             # AVAudioEngine/HAL AudioUnit render callbacks; needs microphone
-Suniye/Services/CoreAudioDeviceMonitor.swift          # CoreAudio HAL property listeners; needs audio hardware
+Suniye/Audio/AudioCaptureDrivers.swift                # AVAudioEngine/HAL AudioUnit render callbacks; needs microphone
+Suniye/Audio/CoreAudioDeviceMonitor.swift             # CoreAudio HAL property listeners; needs audio hardware
 Suniye/Meetings/SystemAudioTap.swift                  # Core Audio process tap + private aggregate device; needs the system audio permission and real output (recorder logic is tested with fake sources in MeetingCaptureTests)
 Suniye/Meetings/MeetingEnvironment+Live.swift          # wires the live microphone, the call audio tap, the NSAlert notice and Core Audio reads; the coordinator is tested with a fake environment
 Suniye/Meetings/CoreAudioMicrophoneUsers.swift         # Core Audio process list, device listeners and browser window titles through Accessibility; call detection is tested with a fake reader in MeetingCallTests
-Suniye/Services/HotkeyService.swift                   # Carbon hotkey registration + global NSEvent taps; needs input-monitoring
-Suniye/Services/AccessibilityOnboarding.swift         # drives live AXIsProcessTrusted permission flow
-Suniye/Services/SoundFeedbackService.swift            # NSSound playback wrapper
-Suniye/Services/LaunchAtLoginService.swift            # SMAppService registration; needs signed, installed app
-Suniye/Services/AppleSpeechTranscriptionService.swift # SpeechAnalyzer/SpeechTranscriber/AssetInventory (incl. the fresh-install default check); needs macOS 26 + a downloaded speech model asset (engine routing is tested via RoutingTranscriptionServiceTests)
-Suniye/Services/OrtSession.swift                      # ONNX Runtime session create/run; needs a real model (opt-in CohereTranscriptionServiceRealModelTests). Env + tensor helpers stay gated in OnnxRuntime.swift
-Suniye/Services/CohereTranscriptionService.swift      # encoder/decoder sessions over the 2.9 GB Cohere model; decode logic is extracted to CohereTranscribeDecoding.swift (covered), guards to CohereProviderTests
-Suniye/Services/AppleFoundationModelsPostProcessor.swift # Apple Intelligence FoundationModels API; its on-device paths compile on the macOS 26 SDK but can't run on a headless CI runner (no provisioned model), so they count as uncovered. Exercised locally where the model is available.
+Suniye/Dictation/HotkeyService.swift                  # Carbon hotkey registration + global NSEvent taps; needs input-monitoring
+Suniye/Onboarding/AccessibilityOnboarding.swift       # drives live AXIsProcessTrusted permission flow
+Suniye/Dictation/SoundFeedbackService.swift           # NSSound playback wrapper
+Suniye/Settings/LaunchAtLoginService.swift            # SMAppService registration; needs signed, installed app
+Suniye/SpeechModels/Engines/AppleSpeechTranscriptionService.swift # SpeechAnalyzer/SpeechTranscriber/AssetInventory (incl. the fresh-install default check); needs macOS 26 + a downloaded speech model asset (engine routing is tested via RoutingTranscriptionServiceTests)
+Suniye/SpeechModels/Engines/OrtSession.swift          # ONNX Runtime session create/run; needs a real model (opt-in CohereTranscriptionServiceRealModelTests). Env + tensor helpers stay gated in OnnxRuntime.swift
+Suniye/SpeechModels/Engines/CohereTranscriptionService.swift # encoder/decoder sessions over the 2.9 GB Cohere model; decode logic is extracted to CohereTranscribeDecoding.swift (covered), guards to CohereProviderTests
+Suniye/MagicFormat/Engines/AppleFoundationModelsPostProcessor.swift # Apple Intelligence FoundationModels API; its on-device paths compile on the macOS 26 SDK but can't run on a headless CI runner (no provisioned model), so they count as uncovered. Exercised locally where the model is available.
 Suniye/Meetings/AppleMeetingSummaryModel.swift         # Apple Intelligence FoundationModels session for meeting summaries; same limit as the line above. The summary writer is tested with a fake model.
 
 # --- Window-server bound UI shells (logic lives in state/services) ---
-Suniye/Services/LearningToastPresenter.swift          # transient NSPanel toast
-Suniye/FloatingIndicatorController.swift              # NSPanel + pointer tracking (pure layout math is tested via FloatingIndicatorLayoutTests)
-Suniye/IssueReportWindowController.swift              # NSWindow shell
-Suniye/MainWindowController.swift                     # NSWindow/app-lifecycle shell
-Suniye/StatusItemController.swift                     # NSStatusBar item shell
+Suniye/Dictation/Views/LearningToastPresenter.swift   # transient NSPanel toast
+Suniye/Dictation/Views/FloatingIndicatorController.swift # NSPanel + pointer tracking (pure layout math is tested via FloatingIndicatorLayoutTests)
+Suniye/IssueReport/Views/IssueReportWindowController.swift # NSWindow shell
+Suniye/App/Views/MainWindowController.swift           # NSWindow/app-lifecycle shell
+Suniye/App/Views/StatusItemController.swift           # NSStatusBar item shell
 
 # --- SwiftUI view bodies (render-only; business logic must stay out per AGENTS.md) ---
-Suniye/Views/BehindWindowBlur.swift                   # NSVisualEffectView wrapper; window-server bound
-Suniye/Views/FloatingIndicatorView.swift              # SwiftUI render only
-Suniye/Views/IssueReportView.swift                    # SwiftUI render only
+Suniye/Shared/Views/BehindWindowBlur.swift            # NSVisualEffectView wrapper; window-server bound
+Suniye/Dictation/Views/FloatingIndicatorView.swift    # SwiftUI render only
+Suniye/IssueReport/Views/IssueReportView.swift        # SwiftUI render only
 Suniye/Views/ListeningOverlay.swift                   # SwiftUI render only
-Suniye/Views/OnboardingView.swift                     # SwiftUI render only
-Suniye/Views/Onboarding/SuniyeMark.swift              # SwiftUI render only
-Suniye/Views/Onboarding/OnboardingLandscape.swift     # SwiftUI Canvas render only
-Suniye/Views/MainWindow/MagicFormatComponents.swift   # SwiftUI render only
-Suniye/Views/MainWindow/MagicFormatPage.swift         # SwiftUI render only
-Suniye/Views/MainWindow/MainWindowComponents.swift    # SwiftUI render only
-Suniye/Views/MainWindow/MagicFormatOffState.swift      # SwiftUI render only
-Suniye/Views/MainWindow/MagicFormatSheets.swift        # SwiftUI render only
-Suniye/Views/MainWindow/SettingsRows.swift             # SwiftUI render only
-Suniye/Views/SubtleScroller.swift                      # AppKit scroller drawing
-Suniye/Views/MainWindow/TranscriptsSparkline.swift     # SwiftUI render only
-Suniye/Views/MainWindow/TranscriptsPage.swift          # SwiftUI render only
-Suniye/Views/MainWindow/SpeechModelPage.swift          # SwiftUI render only
-Suniye/Views/MainWindow/TranscriptRows.swift           # SwiftUI render only (highlighting moved to TranscriptBrowsing.swift, covered)
-Suniye/Views/MainWindow/MainWindowPages.swift         # SwiftUI render only
-Suniye/Views/MainWindow/MainWindowView.swift          # SwiftUI render only
+Suniye/Onboarding/Views/OnboardingView.swift          # SwiftUI render only
+Suniye/Onboarding/Views/SuniyeMark.swift              # SwiftUI render only
+Suniye/Onboarding/Views/OnboardingLandscape.swift     # SwiftUI Canvas render only
+Suniye/MagicFormat/Views/MagicFormatComponents.swift  # SwiftUI render only
+Suniye/MagicFormat/Views/MagicFormatPage.swift        # SwiftUI render only
+Suniye/Shared/Views/MainWindowComponents.swift        # SwiftUI render only
+Suniye/MagicFormat/Views/MagicFormatOffState.swift     # SwiftUI render only
+Suniye/MagicFormat/Views/MagicFormatSheets.swift       # SwiftUI render only
+Suniye/Shared/Views/SettingsRows.swift                 # SwiftUI render only
+Suniye/Shared/Views/SubtleScroller.swift               # AppKit scroller drawing
+Suniye/Library/Views/TranscriptsSparkline.swift        # SwiftUI render only
+Suniye/Library/Views/TranscriptsPage.swift             # SwiftUI render only
+Suniye/SpeechModels/Views/SpeechModelPage.swift        # SwiftUI render only
+Suniye/Library/Views/TranscriptRows.swift              # SwiftUI render only (highlighting moved to TranscriptBrowsing.swift, covered)
+Suniye/Settings/Views/GeneralPage.swift               # SwiftUI render only
+Suniye/App/Views/MainWindowView.swift                 # SwiftUI render only
 Suniye/Views/Meetings/MeetingsPage.swift              # SwiftUI render only (list text in MeetingListText.swift, covered)
 Suniye/Views/Meetings/MeetingPage.swift               # SwiftUI render only (copy and export text in MeetingExport.swift, covered)
 Suniye/Views/Meetings/MeetingSummaryTab.swift         # SwiftUI render only (summary blocks in MeetingExport.swift, covered)
@@ -65,4 +65,4 @@ Suniye/Views/Meetings/MeetingTemplateEditor.swift     # SwiftUI render only (tem
 Suniye/Views/Meetings/MeetingActions.swift            # dialog state and AppKit panels; each action calls the covered MeetingCoordinator
 Suniye/Views/Meetings/MeetingSettingsGroup.swift      # SwiftUI render only (the choices call the covered MeetingCoordinator)
 Suniye/Views/Meetings/MeetingCallCardPanel.swift      # NSPanel and SwiftUI render only (each button calls the covered MeetingCoordinator)
-Suniye/Views/MainWindow/MagicFormatProviderPresentation.swift  # SwiftUI render only
+Suniye/MagicFormat/Views/MagicFormatProviderPresentation.swift # SwiftUI render only
