@@ -156,6 +156,23 @@ final class MeetingTranscriptViewTests: XCTestCase {
         XCTAssertEqual(played, [second])
     }
 
+    func testTimesThatBecomeLinksKeepAnEditThatWaitsForItsSave() throws {
+        select("pass")
+        type("ship")
+        let edited = [
+            MeetingTranscriptLine(id: first, time: "00:00", speaker: .them, text: "Did the build ship?"),
+            MeetingTranscriptLine(id: second, time: "00:04", speaker: .you, text: "It did."),
+        ]
+
+        coordinator.render(edited, canSeek: true, into: textView)
+        select("did")
+        type("does")
+
+        XCTAssertEqual(reports.last?.texts, [first: "Did the build ship?", second: "It does."], "the save of the first edit has not run")
+        XCTAssertNotNil(textView.textStorage?.attribute(.link, at: 0, effectiveRange: nil))
+        XCTAssertEqual(try XCTUnwrap(textView.undoManager).canUndo, true)
+    }
+
     func testAMarkedLineStaysMarkedWhenALineAboveItChanges() {
         coordinator.mark([second], follow: 1, in: textView)
 

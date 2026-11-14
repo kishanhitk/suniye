@@ -180,16 +180,23 @@ struct MeetingTranscriptView: NSViewRepresentable {
         }
 
         /// Draws the lines again when they changed. The lines that the user
-        /// edits come back the same, so typing never redraws.
+        /// edits come back the same, so typing never redraws. A change of the
+        /// links alone changes the times in place: an edit that waits for its
+        /// save keeps its lines and its undo.
         func render(_ lines: [MeetingTranscriptLine], canSeek: Bool, into textView: MeetingTranscriptTextView) {
-            guard lines != rendered || canSeek != self.canSeek, let storage = textView.textStorage else { return }
-            storage.setAttributedString(Self.text(for: lines, canSeek: canSeek))
-            rendered = lines
+            guard let storage = textView.textStorage else { return }
+            if lines != rendered {
+                storage.setAttributedString(Self.text(for: lines))
+                Self.setLinks(canSeek, in: storage)
+                rendered = lines
+                touched = []
+                textView.undoManager?.removeAllActions(withTarget: textView)
+                textView.undoManager?.removeAllActions(withTarget: storage)
+                textView.marked = Self.ranges(of: marked, in: storage)
+            } else if canSeek != self.canSeek {
+                Self.setLinks(canSeek, in: storage)
+            }
             self.canSeek = canSeek
-            touched = []
-            textView.undoManager?.removeAllActions(withTarget: textView)
-            textView.undoManager?.removeAllActions(withTarget: storage)
-            textView.marked = Self.ranges(of: marked, in: storage)
         }
 
         /// Marks the lines that play. The view scrolls to them when they
@@ -293,22 +300,15 @@ struct MeetingTranscriptView: NSViewRepresentable {
             [.font: bodyFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph]
         }
 
-        static func text(for lines: [MeetingTranscriptLine], canSeek: Bool) -> NSAttributedString {
+        static func text(for lines: [MeetingTranscriptLine]) -> NSAttributedString {
             let output = NSMutableAttributedString()
             for line in lines {
-                let time: [NSAttributedString.Key: Any] = [
+                output.append(NSAttributedString(string: line.time + "\t", attributes: [
                     .font: NSFont.monospacedDigitSystemFont(ofSize: bodyFont.pointSize, weight: .regular),
                     .foregroundColor: NSColor.secondaryLabelColor,
                     .paragraphStyle: paragraph,
                     lineID: line.id,
-                ]
-                var label = time
-                if canSeek {
-                    label[.link] = seekURL(line.id)
-                    label[.toolTip] = "Play from \(line.time)"
-                }
-                output.append(NSAttributedString(string: line.time, attributes: label))
-                output.append(NSAttributedString(string: "\t", attributes: time))
+                ]))
                 output.append(NSAttributedString(string: (line.speaker?.speakerLabel ?? "") + "\t", attributes: [
                     .font: NSFont.systemFont(ofSize: bodyFont.pointSize, weight: .semibold),
                     .foregroundColor: line.speaker == .you ? NSColor.controlAccentColor : NSColor.secondaryLabelColor,
@@ -364,6 +364,25 @@ struct MeetingTranscriptView: NSViewRepresentable {
                 }
             }
             return ranges
+        }
+
+        /// Makes the time of each line a link that plays from that line, or
+        /// plain text again.
+        private static func setLinks(_ on: Bool, in storage: NSTextStorage) {
+            let string = storage.string as NSString
+            storage.beginEditing()
+            forEachLine(in: storage) { id, paragraph in
+                let tab = string.range(of: "\t", range: paragraph)
+                guard tab.location != NSNotFound else { return }
+                let time = NSRange(location: paragraph.location, length: tab.location - paragraph.location)
+                if on {
+                    storage.addAttributes([.link: seekURL(id), .toolTip: "Play from \(string.substring(with: time))"], range: time)
+                } else {
+                    storage.removeAttribute(.link, range: time)
+                    storage.removeAttribute(.toolTip, range: time)
+                }
+            }
+            storage.endEditing()
         }
 
         private static func forEachLine(in storage: NSTextStorage, _ body: (UUID, NSRange) -> Void) {
