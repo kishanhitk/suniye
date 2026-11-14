@@ -1,5 +1,4 @@
-import CoreGraphics
-import Foundation
+import AppKit
 
 /// Presentation metrics shared by `FloatingIndicatorView` (pill + bubble) and
 /// `FloatingIndicatorController` (hosting panel) so the two cannot drift.
@@ -27,10 +26,46 @@ enum FloatingIndicatorMetrics {
         source == .editHotkey ? editModeListeningPillSize : listeningPillSize
     }
 
-    /// The meeting pill: the dot and the timer at rest; meters and buttons
-    /// on hover.
-    static func meetingPillSize(expanded: Bool) -> CGSize {
-        expanded ? CGSize(width: 236, height: 40) : CGSize(width: 96, height: 30)
+    /// The meeting pill, sized to what it shows. At rest: the dot, the time,
+    /// then a level meter for each track, or one glyph while paused or while
+    /// a track has a problem. On hover: the dot, the time, and Pause (or
+    /// Resume), Stop and Open Notes.
+    static func meetingPillSize(expanded: Bool, isPaused: Bool, hasProblem: Bool, hasCallTrack: Bool) -> CGSize {
+        let lead = meetingPillDotWidth + meetingPillGap + meetingPillTimeWidth
+        guard expanded else {
+            let trailing: CGFloat
+            if isPaused || hasProblem {
+                trailing = meetingPillGlyphWidth
+            } else {
+                trailing = hasCallTrack ? 2 * meetingPillMeterWidth + meetingPillGap : meetingPillMeterWidth
+            }
+            return CGSize(width: 2 * 14 + lead + meetingPillGap + trailing, height: 34)
+        }
+        let buttons = meetingPillButtonWidth(isPaused ? "Resume" : "Pause", hasIcon: true)
+            + meetingPillButtonWidth("Stop", hasIcon: true)
+            + meetingPillButtonWidth("Open Notes", hasIcon: false)
+        return CGSize(width: 2 * 11 + lead + 3 * meetingPillGap + buttons, height: 40)
+    }
+
+    static let meetingPillGap: CGFloat = 10
+    static let meetingPillDotWidth: CGFloat = 8
+    /// Five bars of 2 pt with 2 pt between them.
+    static let meetingPillMeterWidth: CGFloat = 18
+    static let meetingPillGlyphWidth: CGFloat = 14
+    static let meetingPillIconWidth: CGFloat = 11
+    static let meetingPillTimeFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    static let meetingPillButtonFont = NSFont.systemFont(ofSize: 12, weight: .medium)
+    /// "0:00:00": the widest time of a recording, which stops at 4 hours.
+    static let meetingPillTimeWidth = textWidth("0:00:00", font: meetingPillTimeFont)
+
+    /// A capsule button of the hovered pill: 9 pt on each side, and the icon
+    /// 5 pt before the title.
+    static func meetingPillButtonWidth(_ title: String, hasIcon: Bool) -> CGFloat {
+        9 + (hasIcon ? meetingPillIconWidth + 5 : 0) + textWidth(title, font: meetingPillButtonFont) + 9
+    }
+
+    private static func textWidth(_ text: String, font: NSFont) -> CGFloat {
+        ceil((text as NSString).size(withAttributes: [.font: font]).width)
     }
 
     /// Room for the meeting's dot and timer in a listening pill.
@@ -155,5 +190,12 @@ enum FloatingIndicatorState: Equatable {
         case .listening, .processing, .error:
             return false
         }
+    }
+}
+
+extension FloatingIndicatorMetrics {
+    @MainActor
+    static func meetingPillSize(for session: MeetingSession, expanded: Bool) -> CGSize {
+        meetingPillSize(expanded: expanded, isPaused: session.isPaused, hasProblem: session.hasTrackProblem, hasCallTrack: session.hasCallTrack)
     }
 }

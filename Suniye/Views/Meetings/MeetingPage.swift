@@ -378,6 +378,9 @@ private struct MeetingLiveBanner: View {
 struct MeetingLevelMeter: View {
     let level: Float
     let tint: Color
+    var restTint = MainWindowPalette.divider
+    var barWidth: CGFloat = 3
+    var height: CGFloat = 14
     /// While paused the bars rest. A pause sends one zero, so the bars before
     /// it would otherwise stay up for the whole pause.
     var isPaused = false
@@ -386,12 +389,12 @@ struct MeetingLevelMeter: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 2) {
             ForEach(levels.indices, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(levels[index] > 0.02 ? tint : MainWindowPalette.divider)
-                    .frame(width: 3, height: 3 + 11 * CGFloat(min(max(levels[index], 0), 1)))
+                RoundedRectangle(cornerRadius: barWidth / 2)
+                    .fill(levels[index] > 0.02 ? tint : restTint)
+                    .frame(width: barWidth, height: 3 + (height - 3) * CGFloat(min(max(levels[index], 0), 1)))
             }
         }
-        .frame(height: 14, alignment: .bottom)
+        .frame(height: height, alignment: .bottom)
         .animation(.linear(duration: 0.066), value: levels)
         .onChange(of: level) { _, newLevel in
             guard !isPaused else { return }

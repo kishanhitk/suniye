@@ -344,8 +344,8 @@ struct FloatingIndicatorView: View {
     }
 
     private var pillWidth: CGFloat {
-        if showsMeetingPill {
-            return FloatingIndicatorMetrics.meetingPillSize(expanded: state == .hover).width
+        if showsMeetingPill, let meeting = model.meeting {
+            return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: state == .hover).width
         }
         switch state {
         case .idle:
@@ -366,8 +366,8 @@ struct FloatingIndicatorView: View {
     }
 
     private var pillHeight: CGFloat {
-        if showsMeetingPill {
-            return FloatingIndicatorMetrics.meetingPillSize(expanded: state == .hover).height
+        if showsMeetingPill, let meeting = model.meeting {
+            return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: state == .hover).height
         }
         switch state {
         case .idle:
@@ -384,8 +384,9 @@ struct FloatingIndicatorView: View {
     }
 
     private var horizontalPadding: CGFloat {
+        // The meeting pill's width is its content and its side gaps.
         if showsMeetingPill {
-            return 12
+            return 0
         }
         switch state {
         case .idle:
@@ -546,47 +547,46 @@ private struct ListeningMeterView: View {
     }
 }
 
-/// The pill while a meeting records: its dot and timer, and on hover its
-/// meters with Pause (or Resume) and Stop. A click on the pill opens the
-/// meeting.
+/// The pill while a meeting records. At rest: the dot, the time and a level
+/// meter for each track, or a pause glyph while paused, or a warning glyph
+/// while a track has a problem. On hover: Pause (or Resume), Stop and Open
+/// Notes. A click on the pill opens the meeting.
 private struct MeetingPillContent: View {
     let session: MeetingSession
     let expanded: Bool
     let onAction: (MeetingPillAction) -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            MeetingPillTimer(session: session)
+        HStack(spacing: FloatingIndicatorMetrics.meetingPillGap) {
+            MeetingPillTimer(session: session, spacing: FloatingIndicatorMetrics.meetingPillGap)
             if expanded {
-                if session.isPaused {
-                    Image(systemName: "pause.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                } else {
-                    PillMeter(level: session.youLevel)
-                    if session.hasCallTrack {
-                        PillMeter(level: session.themLevel)
-                    }
-                }
-                Spacer(minLength: 0)
-                Button {
+                MeetingPillButton(title: session.isPaused ? "Resume" : "Pause", icon: session.isPaused ? "record.circle" : "pause.fill") {
                     onAction(session.isPaused ? .resume : .pause)
-                } label: {
-                    Image(systemName: session.isPaused ? "record.circle" : "pause.fill")
-                        .frame(width: 28, height: 28)
                 }
-                .help(session.isPaused ? "Resume" : "Pause")
-                Button {
+                MeetingPillButton(title: "Stop", icon: "stop.fill", iconTint: Color(red: 1, green: 0.353, blue: 0.322)) {
                     onAction(.stop)
-                } label: {
-                    Image(systemName: "stop.fill")
-                        .frame(width: 28, height: 28)
                 }
-                .help("Stop")
+                MeetingPillButton(title: "Open Notes") {
+                    onAction(.open)
+                }
+            } else if session.isPaused {
+                Image(systemName: "pause.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(width: FloatingIndicatorMetrics.meetingPillGlyphWidth)
+            } else if session.hasTrackProblem {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Color(red: 0.95, green: 0.57, blue: 0))
+                    .frame(width: FloatingIndicatorMetrics.meetingPillGlyphWidth)
+            } else {
+                meter(session.youLevel, tint: .white.opacity(0.95))
+                if session.hasCallTrack {
+                    meter(session.themLevel, tint: .white.opacity(0.55))
+                }
             }
         }
-        .buttonStyle(PressableButtonStyle(pressedScale: 0.9))
-        .font(.system(size: 12, weight: .semibold))
         .foregroundStyle(.white)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(session.isPaused ? "Meeting paused" : "Meeting recording")
@@ -596,45 +596,58 @@ private struct MeetingPillContent: View {
         .accessibilityAction(named: "Stop") { onAction(.stop) }
         .accessibilityAction(named: "Open Notes") { onAction(.open) }
     }
-}
 
-/// The meeting's dot and recorded time. The dot is gray while paused, and an
-/// orange triangle takes its place while a track has a problem.
-private struct MeetingPillTimer: View {
-    let session: MeetingSession
-
-    var body: some View {
-        HStack(spacing: 6) {
-            if session.callAudioProblem != nil || !session.failedTracks.isEmpty {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.orange)
-            } else {
-                Circle()
-                    .fill(session.isPaused ? Color.gray : Color.red)
-                    .frame(width: 7, height: 7)
-            }
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(MeetingTranscript.clock(session.elapsed(at: context.date)))
-                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(.white.opacity(session.isPaused ? 0.6 : 1))
-            }
-        }
+    /// Bars at rest are the sign that capture works: there is no live
+    /// transcript to show it.
+    private func meter(_ level: Float, tint: Color) -> some View {
+        MeetingLevelMeter(level: level, tint: tint, restTint: .white.opacity(0.3), barWidth: 2, height: 16)
     }
 }
 
-private struct PillMeter: View {
-    let level: Float
+/// A button of the hovered pill: white text on a light wash.
+private struct MeetingPillButton: View {
+    let title: String
+    var icon: String?
+    var iconTint: Color = .white
+    let action: () -> Void
 
     var body: some View {
-        Capsule()
-            .fill(Color.white.opacity(0.2))
-            .frame(width: 28, height: 3)
-            .overlay(alignment: .leading) {
-                Capsule()
-                    .fill(Color.white.opacity(0.85))
-                    .frame(width: 28 * CGFloat(min(max(level, 0), 1)), height: 3)
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(iconTint)
+                        .frame(width: FloatingIndicatorMetrics.meetingPillIconWidth)
+                }
+                Text(title)
+                    .font(Font(FloatingIndicatorMetrics.meetingPillButtonFont))
             }
-            .accessibilityHidden(true)
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background(Capsule().fill(Color.white.opacity(0.14)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressableButtonStyle(pressedScale: 0.95))
+    }
+}
+
+/// The meeting's dot and recorded time. The dot is gray and the time dimmed
+/// while paused.
+private struct MeetingPillTimer: View {
+    let session: MeetingSession
+    var spacing: CGFloat = 7
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            Circle()
+                .fill(session.isPaused ? Color.gray : Color.red)
+                .frame(width: FloatingIndicatorMetrics.meetingPillDotWidth, height: FloatingIndicatorMetrics.meetingPillDotWidth)
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(MeetingTranscript.clock(session.elapsed(at: context.date)))
+                    .font(Font(FloatingIndicatorMetrics.meetingPillTimeFont))
+                    .foregroundStyle(.white.opacity(session.isPaused ? 0.6 : 1))
+            }
+        }
     }
 }

@@ -109,6 +109,11 @@ final class MeetingSession {
         record.status == .paused
     }
 
+    /// No sound comes from the call, or a track failed.
+    var hasTrackProblem: Bool {
+        callAudioProblem != nil || !failedTracks.isEmpty
+    }
+
     fileprivate var workingTracks: [MeetingTrack] {
         recorder.tracks.filter { failedTracks[$0] == nil }
     }
