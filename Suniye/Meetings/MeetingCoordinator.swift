@@ -172,8 +172,10 @@ final class MeetingCoordinator {
     @ObservationIgnored private var launched = false
     @ObservationIgnored private var isStarting = false
     @ObservationIgnored private var cardTimer: Task<Void, Never>?
-    /// The meetings whose transcript is being written.
+    /// The meetings whose transcript waits or is being written.
     @ObservationIgnored private var passes: Set<UUID> = []
+    /// The pass asked for last: each pass starts when the one before it ends.
+    @ObservationIgnored private var lastPass: Task<Void, Never>?
     /// The passes that decode now. Each one waits while a dictation runs.
     @ObservationIgnored private var transcribers: [UUID: MeetingTranscriber] = [:]
     @ObservationIgnored private var dictating = false
@@ -401,9 +403,7 @@ final class MeetingCoordinator {
         case .user, .callEnded, .sleep, .quit:
             break
         }
-        if passes.insert(session.id).inserted {
-            await transcribe(session.id)
-        }
+        await transcribeInTurn(session.id)
     }
 
     /// A call track that cannot start again shows as a failed track.
@@ -425,10 +425,10 @@ final class MeetingCoordinator {
     /// Finishes the transcript of a meeting from its audio files: after a
     /// quit or a crash, or when the user asks again after a failed finish.
     func finishTranscript(_ id: UUID) {
-        guard passes.insert(id).inserted else { return }
+        guard !passes.contains(id) else { return }
         Task {
             await update(id) { $0.status = .finishing }
-            await transcribe(id)
+            await transcribeInTurn(id)
         }
     }
 
@@ -687,6 +687,21 @@ final class MeetingCoordinator {
             tracks: MeetingTracks(session.workingTracks),
             reason: reason
         ))
+    }
+
+    /// Writes the transcript of `id` after the passes asked before it, and
+    /// returns when it is done. One pass at a time: two passes with a chosen
+    /// model would each load an engine of their own beside the dictation
+    /// model.
+    private func transcribeInTurn(_ id: UUID) async {
+        guard passes.insert(id).inserted else { return }
+        let previous = lastPass
+        let pass = Task { [weak self] in
+            await previous?.value
+            await self?.transcribe(id)
+        }
+        lastPass = pass
+        await pass.value
     }
 
     /// Writes the transcript, then queues the summary. `passes` holds `id`
