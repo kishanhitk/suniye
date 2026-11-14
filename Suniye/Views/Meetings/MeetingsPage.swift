@@ -151,7 +151,7 @@ struct MeetingsPage: View {
     private func unfinishedDetail(_ record: MeetingRecord) -> String {
         let time = record.startedAt.formatted(date: .omitted, time: .shortened)
         guard let failure = record.transcriptFailure else {
-            return "Suniye closed while it wrote the transcript of the \(time) meeting. The audio is saved."
+            return "Suniye closed before the transcript of the \(time) meeting was done. The audio is saved."
         }
         return "\(failure) The audio of the \(time) meeting is saved."
     }
