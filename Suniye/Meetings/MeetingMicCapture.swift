@@ -19,21 +19,14 @@ protocol MeetingAudioSource: AnyObject {
     func stop()
 }
 
-/// The meeting's microphone track. It runs beside dictation's
-/// `AudioCaptureService` on the same drivers and the same device choice, so
-/// the dictation path does not change. Unlike a dictation, a meeting outlives
-/// a device change: it reopens the input that the device choice picks, with
-/// the microphone that the user picked when the meeting started.
+/// The meeting's microphone track. It opens the same `MicrophoneStream` and
+/// device choice as dictation's `AudioCaptureService`. Unlike a dictation, a
+/// meeting outlives a device change: it reopens the input that the device
+/// choice picks, with the microphone that the user picked when the meeting
+/// started.
 final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
-    var onSamples: (([Float]) -> Void)? {
-        get { withCallbackLock { sampleCallback } }
-        set { withCallbackLock { sampleCallback = newValue } }
-    }
-
-    var onEvent: ((MeetingAudioSourceEvent) -> Void)? {
-        get { withCallbackLock { eventCallback } }
-        set { withCallbackLock { eventCallback = newValue } }
-    }
+    @Locked var onSamples: (([Float]) -> Void)?
+    @Locked var onEvent: ((MeetingAudioSourceEvent) -> Void)?
 
     /// An engine reports a harmless configuration change right after it
     /// starts; changes this soon after an open are not reopened.
@@ -53,21 +46,12 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
     private let preferredInputDeviceID: String?
     private let firstFrameDeadline: DispatchTimeInterval
     private let uptime: () -> TimeInterval
-    private let callbackLock = NSLock()
-    private let ringCapacity = 1_048_576
-    private let drainCapacity = 32_768
-    private let drainScratch: UnsafeMutablePointer<Float>
 
-    private var sampleCallback: (([Float]) -> Void)?
-    private var eventCallback: ((MeetingAudioSourceEvent) -> Void)?
     private var running = false
-    private var ring: OpaquePointer?
-    private var driver: AudioCaptureDriver?
+    private var stream: MicrophoneStream?
     private var resampler: MeetingResampler?
-    private var drainTimer: DispatchSourceTimer?
-    private var currentRoute: AudioDeviceRoute?
-    private var receivedFrame = false
-    private var openGeneration = 0
+    /// The audio of the drain that runs now, handed on as one block when it ends.
+    private var drained: [Float] = []
     private var openedAt: TimeInterval = 0
     private var reopensWithoutSound = 0
     private var digitalSilenceSince: TimeInterval?
@@ -86,7 +70,6 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
         self.firstFrameDeadline = firstFrameDeadline
         self.uptime = uptime
         self.preferredInputDeviceID = preferredInputDeviceID
-        drainScratch = .allocate(capacity: drainCapacity)
         queue.setSpecific(key: queueKey, value: ())
     }
 
@@ -96,14 +79,13 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
         } else {
             queue.sync { closeInput() }
         }
-        drainScratch.deallocate()
     }
 
     func start() throws {
         try queue.sync {
             guard !running else { return }
             reopensWithoutSound = 0
-            try openInput(fallback: false)
+            try openInput()
             running = true
             deviceMonitor.onChange = { [weak self] reason in
                 self?.queue.async { self?.handleDeviceChange(reason) }
@@ -118,7 +100,7 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
             running = false
             deviceMonitor.stop()
             deviceMonitor.onChange = nil
-            drainRing()
+            stream?.drain()
             if let tail = resampler?.flush(), !tail.isEmpty {
                 onSamples?(tail)
             }
@@ -128,56 +110,32 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
 
     // MARK: - Input lifecycle (on `queue`)
 
-    private func openInput(fallback: Bool) throws {
+    private func openInput() throws {
         let resolution = try hardwareCatalog.resolveDeviceRoute(preferredInputDeviceID: preferredInputDeviceID)
-        let plan = fallback
-            ? AudioCapturePolicy.fallbackPlan(for: resolution.route, echoCancellationEnabled: false, reason: .backendStartFailed)
-            : AudioCapturePolicy.primaryPlan(for: resolution.route, echoCancellationEnabled: false)
-        guard let ring = SuniyeAudioRingBufferCreate(ringCapacity) else {
-            throw AudioCaptureServiceError.ringBufferUnavailable
-        }
-        openGeneration += 1
-        let generation = openGeneration
-        let started: AudioCaptureDriverStart
-        do {
-            started = try driverFactory.startDriver(for: plan, inputDeviceID: resolution.inputDeviceID, ring: ring) { [weak self] in
-                self?.queue.async { self?.handleConfigurationChange(generation: generation) }
+        let stream = try MicrophoneStream(
+            queue: queue,
+            driverFactory: driverFactory,
+            resolution: resolution,
+            echoCancellationEnabled: false,
+            firstFrameDeadline: firstFrameDeadline,
+            resolveFallbackDevice: { [hardwareCatalog, preferredInputDeviceID] in
+                try hardwareCatalog.resolveDeviceRoute(preferredInputDeviceID: preferredInputDeviceID)
             }
-        } catch {
-            SuniyeAudioRingBufferDestroy(ring)
-            guard !fallback else { throw error }
-            AppLogger.shared.log(.warning, "meeting microphone primary backend failed; trying the standard engine error=\(error.localizedDescription)")
-            try openInput(fallback: true)
-            return
-        }
+        )
+        stream.delegate = self
+        self.stream = stream
         do {
-            resampler = try MeetingResampler(inputSampleRate: started.format.sampleRate)
+            try stream.start()
         } catch {
-            started.driver.stop()
-            SuniyeAudioRingBufferDestroy(ring)
+            self.stream = nil
             throw error
         }
-        self.ring = ring
-        driver = started.driver
-        currentRoute = resolution.route
-        receivedFrame = false
-        openedAt = uptime()
-        digitalSilenceSince = nil
-        deviceMonitor.watch(deviceID: resolution.inputDeviceID)
-        startDrainTimer()
-        scheduleFirstFrameCheck(generation: generation, fallback: fallback)
-        AppLogger.shared.log(.info, "meeting microphone open input=\(resolution.route.inputTransport.rawValue) rate=\(started.format.sampleRate) backend=\(plan.backend.rawValue)")
+        stream.watchForFirstFrame()
     }
 
     private func closeInput() {
-        drainTimer?.cancel()
-        drainTimer = nil
-        driver?.stop()
-        driver = nil
-        if let ring {
-            SuniyeAudioRingBufferDestroy(ring)
-        }
-        ring = nil
+        stream?.stop()
+        stream = nil
         resampler = nil
     }
 
@@ -188,13 +146,13 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
             fail("The microphone kept failing (\(reason)).")
             return
         }
-        let previousName = currentRoute?.effectiveInputName
-        drainRing()
+        let previousName = stream?.deviceRoute.effectiveInputName
+        stream?.drain()
         closeInput()
         do {
-            try openInput(fallback: false)
+            try openInput()
             AppLogger.shared.log(.info, "meeting microphone reopened reason=\(reason)")
-            if let name = currentRoute?.effectiveInputName, name != previousName {
+            if let name = stream?.deviceRoute.effectiveInputName, name != previousName {
                 onEvent?(.inputChanged(deviceName: name))
             }
         } catch {
@@ -209,11 +167,6 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
         deviceMonitor.onChange = nil
         closeInput()
         onEvent?(.failed(message))
-    }
-
-    private func handleConfigurationChange(generation: Int) {
-        guard running, generation == openGeneration, uptime() - openedAt >= Self.settleTime else { return }
-        reopen(reason: "configuration change")
     }
 
     private func handleDeviceChange(_ reason: AudioDeviceChangeReason) {
@@ -231,56 +184,8 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
     private func reopenIfTheDeviceChoiceChanged(reason: String) {
         guard running else { return }
         let picked = try? hardwareCatalog.resolveDeviceRoute(preferredInputDeviceID: preferredInputDeviceID)
-        guard picked?.route.effectiveInputDeviceID != currentRoute?.effectiveInputDeviceID else { return }
+        guard picked?.route.effectiveInputDeviceID != stream?.deviceRoute.effectiveInputDeviceID else { return }
         reopen(reason: reason)
-    }
-
-    private func scheduleFirstFrameCheck(generation: Int, fallback: Bool) {
-        queue.asyncAfter(deadline: .now() + firstFrameDeadline) { [weak self] in
-            guard let self, self.running, generation == self.openGeneration, !self.receivedFrame else { return }
-            guard !fallback else {
-                AppLogger.shared.log(.error, "meeting microphone delivered no audio on the standard engine")
-                self.fail("The microphone delivered no audio.")
-                return
-            }
-            AppLogger.shared.log(.warning, "meeting microphone delivered no first frame; trying the standard engine")
-            self.closeInput()
-            do {
-                try self.openInput(fallback: true)
-            } catch {
-                self.fail(error.localizedDescription)
-            }
-        }
-    }
-
-    // MARK: - Drain (on `queue`)
-
-    private func startDrainTimer() {
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + .milliseconds(20), repeating: .milliseconds(20), leeway: .milliseconds(5))
-        timer.setEventHandler { [weak self] in self?.drainRing() }
-        drainTimer = timer
-        timer.resume()
-    }
-
-    private func drainRing() {
-        guard let ring, let resampler else { return }
-        var drained: [Float] = []
-        var count = SuniyeAudioRingBufferRead(ring, drainScratch, drainCapacity)
-        while count > 0 {
-            receivedFrame = true
-            let raw = UnsafeBufferPointer(start: drainScratch, count: count)
-            let isZero = raw.allSatisfy { $0 == 0 }
-            if !isZero {
-                reopensWithoutSound = 0
-            }
-            noteDigitalSilence(isZero)
-            drained += resampler.process(raw)
-            count = SuniyeAudioRingBufferRead(ring, drainScratch, drainCapacity)
-        }
-        if !drained.isEmpty {
-            onSamples?(drained)
-        }
     }
 
     private func noteDigitalSilence(_ isZero: Bool) {
@@ -300,10 +205,61 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
             queue.async { [weak self] in self?.reopenIfTheDeviceChoiceChanged(reason: "digital silence") }
         }
     }
+}
 
-    private func withCallbackLock<T>(_ work: () -> T) -> T {
-        callbackLock.lock()
-        defer { callbackLock.unlock() }
-        return work()
+extension MeetingMicCapture: MicrophoneStreamDelegate {
+    func microphoneStream(_ stream: MicrophoneStream, didRead samples: UnsafeBufferPointer<Float>) -> Bool {
+        guard stream === self.stream, let resampler else { return false }
+        let isZero = samples.allSatisfy { $0 == 0 }
+        if !isZero {
+            reopensWithoutSound = 0
+        }
+        noteDigitalSilence(isZero)
+        drained += resampler.process(samples)
+        return true
+    }
+
+    func microphoneStreamDidDrain(_ stream: MicrophoneStream) {
+        guard !drained.isEmpty else { return }
+        let block = drained
+        drained = []
+        onSamples?(block)
+    }
+
+    func microphoneStream(_ stream: MicrophoneStream, willFallBack cause: MicrophoneStream.FallbackCause) {
+        switch cause {
+        case let .startFailed(error):
+            AppLogger.shared.log(.warning, "meeting microphone primary backend failed; trying the standard engine error=\(error.localizedDescription)")
+        case .noFirstFrame:
+            AppLogger.shared.log(.warning, "meeting microphone delivered no first frame; trying the standard engine")
+        }
+    }
+
+    func microphoneStream(
+        _ stream: MicrophoneStream,
+        didStart plan: AudioCapturePlan,
+        format: AudioCaptureFormat,
+        fallback cause: MicrophoneStream.FallbackCause?
+    ) throws {
+        resampler = try MeetingResampler(inputSampleRate: format.sampleRate)
+        openedAt = uptime()
+        digitalSilenceSince = nil
+        deviceMonitor.watch(deviceID: stream.inputDeviceID)
+        AppLogger.shared.log(.info, "meeting microphone open input=\(stream.deviceRoute.inputTransport.rawValue) rate=\(format.sampleRate) backend=\(plan.backend.rawValue)")
+    }
+
+    func microphoneStreamConfigurationChanged(_ stream: MicrophoneStream) {
+        guard stream === self.stream, running, uptime() - openedAt >= Self.settleTime else { return }
+        reopen(reason: "configuration change")
+    }
+
+    func microphoneStream(_ stream: MicrophoneStream, deliveredNoAudio standardEngineError: Error?) {
+        guard stream === self.stream, running else { return }
+        guard let standardEngineError else {
+            AppLogger.shared.log(.error, "meeting microphone delivered no audio on the standard engine")
+            fail("The microphone delivered no audio.")
+            return
+        }
+        fail(standardEngineError.localizedDescription)
     }
 }

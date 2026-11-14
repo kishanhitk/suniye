@@ -6,7 +6,7 @@ Qwen3-ASR 1.7B is an opt-in speech model: an audio encoder feeding the Qwen3-1.7
 
 - Repository: `ggml-org/Qwen3-ASR-1.7B-GGUF` (Apache-2.0, converted from `Qwen/Qwen3-ASR-1.7B`)
 - Revision: `36a678687ba7d07a74ca70ccb0e36902e005fb80`
-- Files, sizes, and SHA-256: `qwen3ASRFile` entries in `Suniye/ASRModelCatalog.swift`
+- Files, sizes, and SHA-256: `qwen3ASRFile` entries in `Suniye/SpeechModels/ASRModelCatalog.swift`
   - `Qwen3-ASR-1.7B-Q8_0.gguf`: the language model and its vocabulary
   - `mmproj-Qwen3-ASR-1.7B-Q8_0.gguf`: the audio encoder and projector
 - Installed path: `~/Library/Application Support/Suniye/models/qwen3-asr-1.7b-q8_0-gguf/`

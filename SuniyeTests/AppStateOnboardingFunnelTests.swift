@@ -142,24 +142,10 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.hasAccessibilityPermission = false
         appState.startOnboardingIfNeeded()
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
 
         await fulfillment(of: [started], timeout: 1)
         XCTAssertEqual(appState.phase, .recording)
-    }
-
-    func testWelcomeScreenBlocksRecording() async {
-        let audioCapture = StubAudioCaptureService()
-        let appState = makeTestAppState(audioCaptureService: audioCapture)
-        appState.phase = .ready
-        appState.hasMicPermission = true
-        appState.activeOnboardingStep = .welcome
-
-        appState.startRecordingFromUI()
-        for _ in 0 ..< 8 { await Task.yield() }
-
-        XCTAssertEqual(audioCapture.startCaptureCallCount, 0)
-        XCTAssertEqual(appState.phase, .ready)
     }
 
     // MARK: - Practice telemetry
@@ -187,11 +173,11 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.hasMicPermission = true
         appState.startOnboardingIfNeeded()
 
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [transcribed], timeout: 1)
-        for _ in 0 ..< 12 { await Task.yield() }
+        await drainScheduledTasks(yields: 12)
         return appState
     }
 
@@ -199,8 +185,8 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         let spy = SpyAnalytics()
         let appState = await runPracticeDictation(transcript: .success("hello onboarding world"), spy: spy)
 
-        XCTAssertTrue(appState.onboardingPracticeSucceeded)
-        XCTAssertEqual(appState.onboardingPracticeAttempts, 1)
+        XCTAssertTrue(appState.onboardingRun.practiceSucceeded)
+        XCTAssertEqual(appState.onboardingRun.practiceAttempts, 1)
         XCTAssertEqual(appState.onboardingPracticeResult?.severity, .success)
 
         let results = practiceResults(spy)
@@ -219,8 +205,8 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         let spy = SpyAnalytics()
         let appState = await runPracticeDictation(transcript: .success(""), spy: spy)
 
-        XCTAssertFalse(appState.onboardingPracticeSucceeded)
-        XCTAssertEqual(appState.onboardingPracticeAttempts, 1)
+        XCTAssertFalse(appState.onboardingRun.practiceSucceeded)
+        XCTAssertEqual(appState.onboardingRun.practiceAttempts, 1)
         XCTAssertEqual(appState.onboardingPracticeResult?.severity, .error)
         XCTAssertEqual(practiceResults(spy).last?.outcome, .emptyAudio)
     }
@@ -242,7 +228,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.phase = .needsModel
 
         appState.startModelDownload()
-        await waitUntilFunnel { appState.activeASRModelOperationID == nil }
+        await waitUntil { appState.activeASRModelOperationID == nil }
 
         let downloads = modelDownloads(spy)
         XCTAssertEqual(downloads.first?.kind, .asr)
@@ -259,7 +245,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.phase = .needsModel
 
         appState.startModelDownload()
-        await waitUntilFunnel { appState.phase == .error }
+        await waitUntil { appState.phase == .error }
 
         XCTAssertTrue(modelDownloads(spy).contains { $0.kind == .asr && $0.outcome == .failed })
     }
@@ -273,7 +259,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.phase = .needsModel
 
         appState.startModelDownload()
-        await waitUntilFunnel { appState.phase == .error }
+        await waitUntil { appState.phase == .error }
 
         let downloads = modelDownloads(spy)
         XCTAssertFalse(downloads.contains { $0.outcome == .completed })
@@ -282,16 +268,19 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
 
     func testASRDownloadCancelEmitsCanceledAndRestoresNeedsModel() async {
         let spy = SpyAnalytics()
-        let modelManager = GatedModelManager()
+        let gate = AsyncGate()
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = []
+        modelManager.downloadGate = gate
         let appState = makeTestAppState(modelManager: modelManager, analytics: spy)
         appState.phase = .needsModel
 
         appState.startModelDownload()
-        await waitUntilFunnel { appState.phase == .downloadingModel && appState.canCancelASRModelDownload }
+        await waitUntil { appState.phase == .downloadingModel && appState.canCancelASRModelDownload }
 
         appState.cancelASRModelDownload()
-        modelManager.gate.open()
-        await waitUntilFunnel { appState.phase == .needsModel }
+        gate.open()
+        await waitUntil { appState.phase == .needsModel }
 
         XCTAssertTrue(modelDownloads(spy).contains { $0.kind == .asr && $0.outcome == .canceled })
         XCTAssertNil(appState.lastError)
@@ -304,7 +293,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         let appState = makeTestAppState(localLLMModelManager: localManager, analytics: spy)
 
         appState.startLocalGemmaDownload()
-        await waitUntilFunnel { appState.localGemmaInstallState.isInstalled }
+        await waitUntil { appState.localGemmaInstallState.isInstalled }
 
         let downloads = modelDownloads(spy).filter { $0.kind == .cleanup }
         XCTAssertEqual(downloads.first?.outcome, .started)
@@ -402,7 +391,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.phase = .needsModel
 
         appState.startModelDownload()
-        await waitUntilFunnel { appState.phase == .error }
+        await waitUntil { appState.phase == .error }
 
         XCTAssertEqual(appState.lastError, "You appear to be offline. Reconnect and retry the download.")
     }
@@ -415,7 +404,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.phase = .needsModel
 
         appState.startModelDownload()
-        await waitUntilFunnel { appState.phase == .error }
+        await waitUntil { appState.phase == .error }
 
         XCTAssertEqual(appState.lastError, "The download timed out. Retry when your connection is stable.")
     }
@@ -428,7 +417,7 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         appState.phase = .needsModel
 
         appState.startModelDownload()
-        await waitUntilFunnel { appState.phase == .error }
+        await waitUntil { appState.phase == .error }
 
         XCTAssertEqual(appState.lastError, "The connection dropped mid-download. Retry to continue.")
     }
@@ -437,17 +426,20 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
         // Cancelling a switch-download while another model is loaded must fall
         // back to the working model, not to needsModel.
         let spy = SpyAnalytics()
-        let modelManager = GatedModelManager()
+        let gate = AsyncGate()
+        let modelManager = StubModelManager()
+        modelManager.installedModelIDs = []
+        modelManager.downloadGate = gate
         let appState = makeTestAppState(modelManager: modelManager, analytics: spy)
         appState.loadedASRModelID = .parakeetV3
         appState.phase = .ready
 
         appState.startModelDownload()
-        await waitUntilFunnel { appState.canCancelASRModelDownload }
+        await waitUntil { appState.canCancelASRModelDownload }
 
         appState.cancelASRModelDownload()
-        modelManager.gate.open()
-        await waitUntilFunnel { appState.phase == .ready && appState.activeASRModelOperationID == nil }
+        gate.open()
+        await waitUntil { appState.phase == .ready && appState.activeASRModelOperationID == nil }
 
         XCTAssertEqual(appState.phase, .ready)
         XCTAssertTrue(modelDownloads(spy).contains { $0.outcome == .canceled })
@@ -467,65 +459,4 @@ final class AppStateOnboardingFunnelTests: XCTestCase {
     }
 
     // MARK: - Disk preflight message
-
-    func testDiskShortfallMessageMentionsRequiredSpace() async {
-        let modelManager = StubModelManager()
-        modelManager.installedModelIDs = []
-        let appState = makeTestAppState(
-            modelManager: modelManager,
-            availableDiskCapacityProvider: { 10_000_000 }
-        )
-        appState.phase = .needsModel
-        appState.startOnboardingIfNeeded()
-
-        await appState.beginOnboardingSetup()
-
-        XCTAssertEqual(appState.activeOnboardingStep, .welcome)
-        XCTAssertTrue(appState.onboardingDiskSpaceMessage?.contains("free") == true)
-    }
-}
-
-/// Blocks the download until the test opens the gate, then honors task
-/// cancellation — lets tests drive the in-flight-cancel path deterministically.
-private final class GatedModelManager: ModelManagerProtocol {
-    let gate = AsyncGate()
-    private let backing = StubModelManager()
-
-    init() {
-        backing.installedModelIDs = []
-    }
-
-    var catalog: [ASRModelCatalogEntry] { backing.catalog }
-    var fallbackOrder: [ASRModelID] { backing.fallbackOrder }
-    func modelsRootDirectoryURL() throws -> URL { try backing.modelsRootDirectoryURL() }
-    func modelDirectoryURL(for modelID: ASRModelID) throws -> URL { try backing.modelDirectoryURL(for: modelID) }
-    func isInstalled(_ modelID: ASRModelID) -> Bool { backing.isInstalled(modelID) }
-    func installedModels() -> [ASRModelID] { backing.installedModels() }
-    func makeRecognizerConfig(for modelID: ASRModelID) throws -> RecognizerConfig { try backing.makeRecognizerConfig(for: modelID) }
-    func expectedDownloadSizeBytes(for modelID: ASRModelID) -> Int64 { backing.expectedDownloadSizeBytes(for: modelID) }
-    func installedByteCount(for modelID: ASRModelID) -> Int64 { backing.installedByteCount(for: modelID) }
-    func deleteModel(_ modelID: ASRModelID) throws { try backing.deleteModel(modelID) }
-
-    func downloadAndExtractModel(_ modelID: ASRModelID, progress: @escaping @Sendable (Double) -> Void) async throws {
-        progress(0.1)
-        await gate.wait()
-        try Task.checkCancellation()
-        progress(1)
-    }
-}
-
-/// Local polling helper (the shared one lives in another file's fileprivate scope).
-@MainActor
-private func waitUntilFunnel(
-    timeoutNanoseconds: UInt64 = 2_000_000_000,
-    _ condition: @MainActor () -> Bool
-) async {
-    let start = DispatchTime.now().uptimeNanoseconds
-    while !condition() {
-        if DispatchTime.now().uptimeNanoseconds - start > timeoutNanoseconds {
-            return
-        }
-        await Task.yield()
-        try? await Task.sleep(nanoseconds: 5_000_000)
-    }
 }

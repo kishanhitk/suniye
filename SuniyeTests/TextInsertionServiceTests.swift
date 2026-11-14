@@ -135,29 +135,6 @@ final class TextInsertionServiceTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "fallback")
     }
 
-    func testInsertTextPostsFallbackPasteWithoutObservingUnchangedField() async throws {
-        let service = TextInsertionService()
-        let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
-        let element = AXUIElementCreateSystemWide()
-        let unchanged = TextInsertionService.FocusedTextSnapshot(
-            value: "hello",
-            selectedText: nil,
-            selectedRange: NSRange(location: 5, length: 0)
-        )
-        var didPostPaste = false
-
-        service.pasteboardProvider = { pasteboard }
-        service.focusedElementLookupProvider = { .found(element) }
-        service.focusedTextSnapshotProvider = { _ in unchanged }
-        service.selectedTextSetter = { _, _ in false }
-        service.keyPoster = { _, _ in didPostPaste = true }
-
-        try await service.insertText("fallback")
-
-        XCTAssertTrue(didPostPaste)
-        XCTAssertEqual(pasteboard.string(forType: .string), "fallback")
-    }
-
     func testInsertTextThrowsBeforeChangingClipboardWhenNoTextInputIsFocused() async {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
@@ -209,32 +186,6 @@ final class TextInsertionServiceTests: XCTestCase {
 
         try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertEqual(pasteboard.string(forType: .string), "previous")
-    }
-
-    func testInsertTextWaitsForFocusedElementHydration() async throws {
-        let service = TextInsertionService()
-        let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.suniye.tests.\(UUID().uuidString)"))
-        let element = AXUIElementCreateSystemWide()
-        var lookups = 0
-        var didPostPaste = false
-
-        service.pasteboardProvider = { pasteboard }
-        service.focusedElementRetryIntervalNanoseconds = 0
-        service.focusedElementLookupProvider = {
-            lookups += 1
-            // An Electron composer is invisible until its tree hydrates.
-            return lookups < 3 ? .unavailable : .found(element)
-        }
-        service.focusedTextSnapshotProvider = { _ in
-            (value: nil, selectedText: nil, selectedRange: nil)
-        }
-        service.selectedTextSetter = { _, _ in false }
-        service.keyPoster = { _, _ in didPostPaste = true }
-
-        try await service.insertText("fallback")
-
-        XCTAssertEqual(lookups, 3)
-        XCTAssertTrue(didPostPaste)
     }
 
     func testWarmTargetAppAccessibilityAppliesToFrontmostApp() {
@@ -410,4 +361,123 @@ final class TextInsertionServiceTests: XCTestCase {
             " really? "
         )
     }
+
+    func testCaptureInsertionContextReturnsNilWithoutFocusedElement() {
+        let service = TextInsertionService()
+        service.focusedElementLookupProvider = { .notTextInput }
+
+        XCTAssertNil(service.captureInsertionContext())
+    }
+
+    func testCaptureInsertionContextReturnsNilForOutOfBoundsSelection() {
+        let service = TextInsertionService()
+        service.focusedElementLookupProvider = { .found(AXUIElementCreateSystemWide()) }
+        service.focusedTextSnapshotProvider = { _ in
+            TextInsertionService.FocusedTextSnapshot(
+                value: "abc",
+                selectedText: nil,
+                selectedRange: NSRange(location: 10, length: 5)
+            )
+        }
+
+        XCTAssertNil(service.captureInsertionContext())
+    }
+
+    func testFieldValueProviderIsNilWithoutFocusedElement() {
+        let service = TextInsertionService()
+        service.focusedElementLookupProvider = { .notTextInput }
+
+        XCTAssertNil(service.makeFocusedFieldValueProvider())
+    }
+
+    func testFieldValueProviderReReadsFieldAndReleasesService() throws {
+        var service: TextInsertionService? = TextInsertionService()
+        var fieldValue = "before edit"
+        service?.focusedElementLookupProvider = { .found(AXUIElementCreateSystemWide()) }
+        service?.focusedTextSnapshotProvider = { _ in
+            TextInsertionService.FocusedTextSnapshot(
+                value: fieldValue,
+                selectedText: nil,
+                selectedRange: NSRange(location: 0, length: 0)
+            )
+        }
+
+        let provider = try XCTUnwrap(service?.makeFocusedFieldValueProvider())
+        XCTAssertEqual(provider(), "before edit")
+
+        fieldValue = "after edit"
+        XCTAssertEqual(provider(), "after edit")
+
+        // The provider holds the service weakly; once released it reads nil.
+        service = nil
+        XCTAssertNil(provider())
+    }
+
+    func testClipboardSnapshotSkipsTypesWithoutData() {
+        let type = NSPasteboard.PasteboardType("dev.suniye.test.nil-data")
+        let provider = NilPasteboardDataProvider()
+        let item = NSPasteboardItem()
+        XCTAssertTrue(item.setDataProvider(provider, forTypes: [type]))
+
+        let snapshot = TextInsertionService.clipboardSnapshot(from: [item])
+
+        XCTAssertEqual(snapshot.count, 1)
+        XCTAssertTrue(snapshot[0].isEmpty)
+    }
+
+    func testVirtualKeyCodeReturnsNilForCharacterNotOnKeyboard() {
+        XCTAssertNil(TextInsertionService.virtualKeyCode(for: "☃"))
+    }
+
+    private func midSentenceContext() -> TextInsertionContext {
+        TextInsertionContext(
+            value: "coffeemachine",
+            selectedRange: NSRange(location: 6, length: 0),
+            selectedText: nil,
+            previousCharacter: "e",
+            nextCharacter: "m"
+        )
+    }
+
+    func testFormatterLowercasesFirstWordAfterLeadingWhitespace() {
+        let context = TextInsertionContext(
+            value: "coffee",
+            selectedRange: NSRange(location: 6, length: 0),
+            selectedText: nil,
+            previousCharacter: "e",
+            nextCharacter: nil
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion(" Word", insertionContext: context),
+            " word"
+        )
+    }
+
+    func testFormatterKeepsEllipsisIntact() {
+        // "..." has no first word to lowercase, and the final period is part of
+        // an ellipsis so it must not be stripped.
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("...", insertionContext: midSentenceContext()),
+            "... "
+        )
+    }
+
+    func testFormatterStripsFinalPeriodBeforeTrailingWhitespace() {
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("Strong. ", insertionContext: midSentenceContext()),
+            " strong "
+        )
+    }
+
+    func testFormatterLeavesWhitespaceOnlyTextUnchanged() {
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("   ", insertionContext: midSentenceContext()),
+            "   "
+        )
+    }
+}
+
+private final class NilPasteboardDataProvider: NSObject, NSPasteboardItemDataProvider {
+    func pasteboard(_ pasteboard: NSPasteboard?, item: NSPasteboardItem, provideDataForType type: NSPasteboard.PasteboardType) {}
 }

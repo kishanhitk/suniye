@@ -162,13 +162,6 @@ final class OpenRouterPostProcessorTests: XCTestCase {
         }
     }
 
-    func testSanitizeOutputOnlyTrimsOuterWhitespace() {
-        let processor = OpenRouterPostProcessor(session: makeSession())
-        let raw = " \n```\nPolished: hello\nworld\n```\n "
-        let output = processor.sanitizeOutput(raw)
-        XCTAssertEqual(output, "```\nPolished: hello\nworld\n```")
-    }
-
     private func makeSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]

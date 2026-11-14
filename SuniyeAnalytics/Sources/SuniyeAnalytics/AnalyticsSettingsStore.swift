@@ -1,8 +1,7 @@
 import Foundation
 
-/// Locally persisted analytics identity + opt-out state. Mirrors the app's
-/// `GeneralSettingsStore` shape (injectable `UserDefaults` + key, Codable,
-/// silent-fail). The install id is generated once and then frozen — changing it
+/// Locally persisted analytics identity + opt-out state. The install id is
+/// generated once and then frozen — changing it
 /// would silently reset all retention history.
 public struct AnalyticsSettings: Codable, Equatable, Sendable {
     public var installID: String

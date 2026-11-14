@@ -3,10 +3,29 @@ import XCTest
 @testable import Suniye
 
 final class GeneralSettingsStoreTests: XCTestCase {
+    /// The stored JSON is a contract with every installed copy: a blob that a
+    /// released build wrote must load and save back with the same keys and values.
+    func testStoredBlobOfAReleasedBuildSavesBackUnchanged() throws {
+        let stored = #"{"preferredInputDeviceID":"usb-mic","preferredInputDeviceName":"USB Mic","autoSubmitEnabled":true,"hotkeyConfiguration":{"kind":"globe","keyCode":63,"carbonModifiers":0},"pasteLastTranscriptHotkeyConfiguration":{"kind":"keyCombo","keyCode":9,"carbonModifiers":4352},"editModeHotkeyConfiguration":{"kind":"keyCombo","keyCode":2,"carbonModifiers":6144},"echoCancellationEnabled":true,"soundFeedbackEnabled":true,"hideFloatingIndicatorWhenIdle":true,"liveTranscriptionPreviewEnabled":true,"floatingIndicatorPlacement":{"centerXRatio":0.3,"bottomYRatio":0.2},"hasSeenOnboardingWelcome":true,"hasCompletedCoreOnboarding":true,"onboardingProgress":"finished","firstLaunchRecorded":true,"lastKnownAccessibilityGranted":true,"magicFormatNudgeDismissed":true,"localGemmaDownloadCancelled":true,"selectedASRModelID":"whisperBaseEnglish","updateChannel":"tip","accessibilityDragHelperEnabled":false,"shareAnalyticsEnabled":false}"#
+        let suite = "dev.suniye.tests.general.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(Data(stored.utf8), forKey: "dev.suniye.general.settings")
+        let store = GeneralSettingsStore(userDefaults: defaults)
+
+        store.save(store.load())
+
+        let saved = try XCTUnwrap(defaults.data(forKey: "dev.suniye.general.settings"))
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: saved) as? NSDictionary,
+            try JSONSerialization.jsonObject(with: Data(stored.utf8)) as? NSDictionary
+        )
+    }
+
     func testStoreRoundTrip() {
         let suite = "dev.suniye.tests.general.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        let store = GeneralSettingsStore(userDefaults: defaults)
 
         let settings = GeneralSettings(
             preferredInputDeviceID: "usb-mic",
@@ -36,7 +55,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
     func testUnknownASRModelIDFallsBackWithoutResettingOtherSettings() {
         let suite = "dev.suniye.tests.general.unknown-model.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        let store = GeneralSettingsStore(userDefaults: defaults)
         let payload = """
         {
           "preferredInputDeviceID": "usb-mic",
@@ -49,7 +68,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
         }
         """
 
-        defaults.set(Data(payload.utf8), forKey: "general")
+        defaults.set(Data(payload.utf8), forKey: "dev.suniye.general.settings")
         let loaded = store.load()
 
         XCTAssertEqual(loaded.preferredInputDeviceID, "usb-mic")
@@ -65,20 +84,20 @@ final class GeneralSettingsStoreTests: XCTestCase {
     func testLiveTranscriptionPreviewFlagRoundTripsAndDefaultsFalseForLegacyBlob() {
         let suite = "dev.suniye.tests.general.livePreview.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        let store = GeneralSettingsStore(userDefaults: defaults)
 
         store.save(GeneralSettings(liveTranscriptionPreviewEnabled: true))
         XCTAssertTrue(store.load().liveTranscriptionPreviewEnabled)
 
         // Blob saved before the key existed must decode the flag as the default (false).
-        defaults.set(Data(#"{"autoSubmitEnabled": true}"#.utf8), forKey: "general")
+        defaults.set(Data(#"{"autoSubmitEnabled": true}"#.utf8), forKey: "dev.suniye.general.settings")
         XCTAssertFalse(store.load().liveTranscriptionPreviewEnabled)
     }
 
     func testAccessibilityDragHelperFlagRoundTrips() {
         let suite = "dev.suniye.tests.general.dragHelper.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        let store = GeneralSettingsStore(userDefaults: defaults)
 
         let settings = GeneralSettings(accessibilityDragHelperEnabled: false)
         store.save(settings)
@@ -89,7 +108,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
     func testAccessibilityDragHelperDefaultsTrueForLegacyBlob() {
         let suite = "dev.suniye.tests.general.dragHelper.legacy.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        let store = GeneralSettingsStore(userDefaults: defaults)
         // Blob saved before the key existed must decode the flag as the default (true).
         let legacyJSON = """
         {
@@ -97,7 +116,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
           "autoSubmitEnabled": true
         }
         """
-        defaults.set(Data(legacyJSON.utf8), forKey: "general")
+        defaults.set(Data(legacyJSON.utf8), forKey: "dev.suniye.general.settings")
 
         XCTAssertTrue(store.load().accessibilityDragHelperEnabled)
     }
@@ -105,7 +124,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
     func testOnboardingProgressAndNewFlagsRoundTrip() {
         let suite = "dev.suniye.tests.general.onboarding.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        let store = GeneralSettingsStore(userDefaults: defaults)
 
         let settings = GeneralSettings(
             onboardingProgress: .speakReached,
@@ -127,8 +146,8 @@ final class GeneralSettingsStoreTests: XCTestCase {
     func testLegacyBlobDecodesNilProgressAndFalseFlags() {
         let suite = "dev.suniye.tests.general.onboarding.legacy.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
-        defaults.set(Data(#"{"hasSeenOnboardingWelcome": true, "hasCompletedCoreOnboarding": false}"#.utf8), forKey: "general")
+        let store = GeneralSettingsStore(userDefaults: defaults)
+        defaults.set(Data(#"{"hasSeenOnboardingWelcome": true, "hasCompletedCoreOnboarding": false}"#.utf8), forKey: "dev.suniye.general.settings")
 
         let loaded = store.load()
 
@@ -141,8 +160,8 @@ final class GeneralSettingsStoreTests: XCTestCase {
     func testUnknownOnboardingProgressValueDegradesToNil() {
         let suite = "dev.suniye.tests.general.onboarding.future.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
-        defaults.set(Data(#"{"onboardingProgress": "futureState", "autoSubmitEnabled": true}"#.utf8), forKey: "general")
+        let store = GeneralSettingsStore(userDefaults: defaults)
+        defaults.set(Data(#"{"onboardingProgress": "futureState", "autoSubmitEnabled": true}"#.utf8), forKey: "dev.suniye.general.settings")
 
         let loaded = store.load()
 
@@ -171,7 +190,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
     func testStoreLoadBackfillsNewIndicatorFields() throws {
         let suite = "dev.suniye.tests.general.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let store = GeneralSettingsStore(userDefaults: defaults, storageKey: "general")
+        let store = GeneralSettingsStore(userDefaults: defaults)
 
         let legacyJSON = """
         {
@@ -187,7 +206,7 @@ final class GeneralSettingsStoreTests: XCTestCase {
           "hasCompletedCoreOnboarding": false
         }
         """
-        defaults.set(try XCTUnwrap(legacyJSON.data(using: .utf8)), forKey: "general")
+        defaults.set(try XCTUnwrap(legacyJSON.data(using: .utf8)), forKey: "dev.suniye.general.settings")
 
         let settings = store.load()
 
@@ -197,5 +216,30 @@ final class GeneralSettingsStoreTests: XCTestCase {
         XCTAssertNil(settings.preferredInputDeviceName)
         XCTAssertEqual(settings.pasteLastTranscriptHotkeyConfiguration, .pasteLastTranscriptDefault)
         XCTAssertEqual(settings.updateChannel, .stable)
+    }
+
+    func testLoadReturnsDefaultsWhenNothingIsStored() {
+        let suite = "dev.suniye.tests.general.empty.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = GeneralSettingsStore(userDefaults: defaults)
+
+        XCTAssertEqual(store.load(), GeneralSettings())
+    }
+
+    func testSaveSilentlySkipsUnencodableSettings() {
+        let suite = "dev.suniye.tests.general.unencodable.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = GeneralSettingsStore(userDefaults: defaults)
+
+        // Infinity is not representable by the JSON encoder, so save must
+        // bail out without writing anything.
+        let unencodable = GeneralSettings(
+            floatingIndicatorPlacement: FloatingIndicatorPlacement(centerXRatio: .infinity, bottomYRatio: 0.5)
+        )
+
+        store.save(unencodable)
+
+        XCTAssertNil(defaults.data(forKey: "dev.suniye.general.settings"))
+        XCTAssertEqual(store.load(), GeneralSettings())
     }
 }

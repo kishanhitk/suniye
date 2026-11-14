@@ -219,7 +219,7 @@ final class CohereProviderTests: XCTestCase {
         try Data("abc".utf8).write(to: url)
 
         XCTAssertEqual(
-            try ModelManager.sha256Hex(of: url),
+            try ModelDownloadSupport.sha256Hex(of: url),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         )
         XCTAssertEqual(ModelManager.ModelError.checksumMismatch("f").errorDescription, "Downloaded model file failed verification: f")
@@ -246,20 +246,19 @@ final class CohereProviderTests: XCTestCase {
                   Date() < deadline {
                 await Task.yield()
             }
-            let (indicator, status) = await MainActor.run { (appState.floatingIndicatorState, appState.statusText) }
+            let indicator = await MainActor.run { appState.floatingIndicatorState }
             XCTAssertEqual(indicator, .processing(message: "Transcribing 2 of 3..."))
-            XCTAssertEqual(status, "Transcribing 2 of 3...")
             observed.fulfill()
         }
 
         let started = expectation(description: "capture started")
         audioCapture.onStartCapture = { _ in started.fulfill() }
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         for _ in 0 ..< 8 {
             await Task.yield()
         }
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [observed], timeout: 2)
 
         let deadline = Date().addingTimeInterval(2)
@@ -290,12 +289,12 @@ final class CohereProviderTests: XCTestCase {
 
         let started = expectation(description: "capture started")
         audioCapture.onStartCapture = { _ in started.fulfill() }
-        appState.startRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
         await fulfillment(of: [started], timeout: 1)
         for _ in 0 ..< 8 {
             await Task.yield()
         }
-        appState.stopRecordingFromUI()
+        appState.toggleFloatingIndicatorRecording()
 
         let deadline = Date().addingTimeInterval(2)
         while appState.phase != .ready, Date() < deadline {

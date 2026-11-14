@@ -5,11 +5,9 @@ import Foundation
 /// the conservative retry policy. Safe to call `track` from any thread.
 public final class AnalyticsClient: Analytics, @unchecked Sendable {
     public struct Config: Sendable {
-        /// Flush once the queue reaches this many events.
         public var flushThreshold: Int
         /// Max events per upload request (also stays under AE's 250/invocation).
         public var maxBatchSize: Int
-        /// Periodic flush cadence.
         public var flushInterval: TimeInterval
         /// New session id after this much inactivity.
         public var sessionGap: TimeInterval
@@ -111,8 +109,7 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         )
         lock.unlock()
 
-        // Persist off the caller thread — the append fsyncs and `track` runs on
-        // the main actor during dictation.
+        // The append fsyncs, and `track` runs on the main actor during dictation.
         persist { [self] in
             queue.append(encoded, now: current)
             if queue.count >= config.flushThreshold {
@@ -152,7 +149,7 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
                 bumpFailures()
                 return
             case .retry:
-                bumpFailures()                     // keep events, try again later
+                bumpFailures()
                 return
             }
         }
@@ -160,7 +157,6 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
 
     // MARK: - Lifecycle
 
-    /// Starts the periodic flush/health timer. Call once after construction.
     public func start() {
         stop()
         timerTask = Task { [weak self] in
@@ -180,19 +176,17 @@ public final class AnalyticsClient: Analytics, @unchecked Sendable {
         timerTask = nil
     }
 
-    /// Synchronously enqueue `session_end` (durably persisted, no flush).
+    /// Persists `session_end` at once and does not flush; safe at termination.
     public func recordSessionEnd(cleanExit: Bool) {
         let (duration, eventCount) = sessionSummary()
         track(.sessionEnd(durationMs: duration, eventCount: eventCount, cleanExit: cleanExit))
     }
 
-    /// Enqueue `session_end` and flush. Called where awaiting is possible.
     public func endSession(cleanExit: Bool) async {
         recordSessionEnd(cleanExit: cleanExit)
         await flush()
     }
 
-    /// The current install id (for surfacing in a privacy/settings screen).
     public var installID: String { identity.installID }
 
     // MARK: - Internals
