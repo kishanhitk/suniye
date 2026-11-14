@@ -1053,6 +1053,20 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(store.audioTracks(of: meeting.id), [], "the next check deletes it")
     }
 
+    func testAnExportHasTheTextThatWasJustTyped() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        coordinator.textSaves.stage(.notes, of: meeting.id) {
+            await coordinator.saveNotes("Ask legal about the pricing copy.", for: meeting.id)
+        }
+        let url = root.appendingPathComponent("export.md")
+
+        try await coordinator.export(try XCTUnwrap(coordinator.record(meeting.id)), to: url)
+
+        XCTAssertTrue(try String(contentsOf: url, encoding: .utf8).contains("Ask legal about the pricing copy."))
+    }
+
     func testAFailedTranscribeAgainKeepsTheTranscript() async throws {
         let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
         try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words."), to: meeting.id)

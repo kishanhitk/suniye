@@ -328,7 +328,10 @@ final class MeetingCoordinator {
     }
 
     /// Writes the summary, notes and transcript to `url` as Markdown.
+    /// The text that the user typed is saved first, so the file has it.
     func export(_ record: MeetingRecord, to url: URL) async throws {
+        await textSaves.finish(record.id)
+        let record = self.record(record.id) ?? record
         let markdown = MeetingExport.markdown(
             record: record,
             summary: await summary(of: record.id),
