@@ -21,69 +21,24 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
     }
 
     func polish(text: String, config: AppleMagicFormatConfig) async throws -> String {
-        guard availability.isAvailable else {
-            throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
-        }
-
-        return try await MagicFormatPipeline.polish(
+        try await Generator(client: client).polish(
             text: text,
             systemPrompt: config.systemPrompt,
             keywords: config.keywords,
-            singleTurn: true
-        ) { request in
-            do {
-                return try await withTimeout(seconds: MagicFormatGenerationBudget.timeoutSeconds(
-                    floor: config.timeoutSeconds,
-                    inputCharacterCount: text.count
-                )) {
-                    try await self.client.generate(
-                        instructions: request.instructions,
-                        prompt: request.prompt
-                    )
-                }
-            } catch let error as LLMPostProcessorError {
-                throw error
-            } catch is TimeoutError {
-                throw LLMPostProcessorError.timeout
-            } catch {
-                throw LLMPostProcessorError.provider(error.localizedDescription)
-            }
-        }
+            timeoutFloorSeconds: config.timeoutSeconds
+        )
     }
 
     func generate(instructions: String, userText: String, config: AppleMagicFormatConfig) async throws -> String {
-        guard availability.isAvailable else {
-            throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
-        }
-
-        do {
-            let raw = try await withTimeout(seconds: MagicFormatGenerationBudget.timeoutSeconds(
-                floor: config.timeoutSeconds,
-                inputCharacterCount: userText.count
-            )) {
-                try await self.client.generate(
-                    instructions: instructions,
-                    prompt: userText
-                )
-            }
-            let sanitized = MagicFormatOutputSanitizer.sanitize(raw)
-            guard !sanitized.isEmpty else {
-                throw LLMPostProcessorError.emptyOutput
-            }
-            return sanitized
-        } catch let error as LLMPostProcessorError {
-            throw error
-        } catch is TimeoutError {
-            throw LLMPostProcessorError.timeout
-        } catch {
-            throw LLMPostProcessorError.provider(error.localizedDescription)
-        }
+        try await Generator(client: client).rewrite(
+            instructions: instructions,
+            userText: userText,
+            timeoutFloorSeconds: config.timeoutSeconds
+        )
     }
 
     func testSetup(config: AppleMagicFormatConfig) async throws {
-        guard availability.isAvailable else {
-            throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
-        }
+        try Generator(client: client).checkReady()
     }
 
     private static func makeDefaultClient() -> AppleFoundationModelsClient {
@@ -96,37 +51,68 @@ final class AppleFoundationModelsPostProcessor: AppleMagicFormatPostProcessor {
         return UnsupportedAppleFoundationModelsClient()
     }
 
-    private struct TimeoutError: Error {}
+    /// Turns a cancel into `.provider`.
+    private struct Generator: MagicFormatGenerator {
+        let client: AppleFoundationModelsClient
 
-    private func withTimeout<T: Sendable>(seconds: Double, operation: @escaping () async throws -> T) async throws -> T {
-        let race = TimeoutRace<T>()
-        let workTask = Task {
-            do {
-                race.finish(.success(try await operation()))
-            } catch {
-                race.finish(.failure(error))
-            }
-        }
-        let timeoutTask = Task {
-            do {
-                let nanoseconds = UInt64(max(0, seconds) * 1_000_000_000)
-                try await Task.sleep(nanoseconds: nanoseconds)
-                race.finish(.failure(TimeoutError()))
-            } catch {
-                race.finish(.failure(error))
+        var usesSingleTurnPrompt: Bool { true }
+
+        func checkReady() throws {
+            let availability = client.availability
+            guard availability.isAvailable else {
+                throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
             }
         }
 
-        return try await withTaskCancellationHandler {
-            defer {
+        func sanitize(_ raw: String) -> String {
+            MagicFormatOutputSanitizer.sanitize(raw)
+        }
+
+        func generation(for request: MagicFormatGenerationRequest, timeoutSeconds: Double) async throws -> ChatCompletionResult {
+            do {
+                let text = try await withDeadline(seconds: timeoutSeconds) {
+                    try await client.generate(instructions: request.instructions, prompt: request.prompt)
+                }
+                return ChatCompletionResult(text: text, timings: nil, finishReason: nil)
+            } catch is TimeoutError {
+                throw LLMPostProcessorError.timeout
+            } catch {
+                throw LLMPostProcessorError(wrapping: error)
+            }
+        }
+
+        /// Unlike `withTimeout`, returns at the deadline without waiting for the
+        /// operation to stop, and the operation need not be `Sendable`.
+        private func withDeadline<T: Sendable>(seconds: Double, operation: @escaping () async throws -> T) async throws -> T {
+            let race = TimeoutRace<T>()
+            let workTask = Task {
+                do {
+                    race.finish(.success(try await operation()))
+                } catch {
+                    race.finish(.failure(error))
+                }
+            }
+            let timeoutTask = Task {
+                do {
+                    let nanoseconds = UInt64(max(0, seconds) * 1_000_000_000)
+                    try await Task.sleep(nanoseconds: nanoseconds)
+                    race.finish(.failure(TimeoutError()))
+                } catch {
+                    race.finish(.failure(error))
+                }
+            }
+
+            return try await withTaskCancellationHandler {
+                defer {
+                    workTask.cancel()
+                    timeoutTask.cancel()
+                }
+                return try await race.wait()
+            } onCancel: {
                 workTask.cancel()
                 timeoutTask.cancel()
+                race.finish(.failure(CancellationError()))
             }
-            return try await race.wait()
-        } onCancel: {
-            workTask.cancel()
-            timeoutTask.cancel()
-            race.finish(.failure(CancellationError()))
         }
     }
 }

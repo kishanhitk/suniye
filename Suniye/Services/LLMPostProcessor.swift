@@ -23,16 +23,6 @@ struct LocalGemmaMagicFormatConfig: Equatable {
     let idleTimeoutSeconds: Double
 }
 
-/// Wall-clock budget for one uncapped generation: the configured floor plus one
-/// second per 80 input characters (~20 tokens, a slow Mac's decode rate), so a
-/// legitimate long polish finishes and a runaway is still bounded near twice
-/// the legitimate decode. Timing out falls back to the untouched input.
-enum MagicFormatGenerationBudget {
-    static func timeoutSeconds(floor: Double, inputCharacterCount: Int) -> Double {
-        floor + Double(inputCharacterCount) / 80
-    }
-}
-
 protocol LLMPostProcessor {
     func polish(text: String, config: LLMConfig) async throws -> String
     func testSetup(config: LLMConfig) async throws
@@ -189,6 +179,12 @@ enum LLMPostProcessorError: LocalizedError {
         case let .network(reason):
             self = .network(reason)
         }
+    }
+
+    /// `error` itself when it is an `LLMPostProcessorError`, else `.provider`
+    /// with its description (a cancel included).
+    init(wrapping error: Error) {
+        self = error as? LLMPostProcessorError ?? .provider(error.localizedDescription)
     }
 
     var logValue: String {

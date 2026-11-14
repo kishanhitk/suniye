@@ -14,6 +14,7 @@
 		02CE72BBF44FB307BA263B04 /* AppleSpeechTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB16CAD532E7ECD31B041352 /* AppleSpeechTranscriptionService.swift */; };
 		0528225C850E5473F086C812 /* CoreAudioMicrophoneUsers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B803A9C9D6A243793C60B771 /* CoreAudioMicrophoneUsers.swift */; };
 		05D878784AAC0355171D3344 /* AudioRingBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0686CA2F51A15EC3135A4FD /* AudioRingBufferTests.swift */; };
+		0635438D5DBBE005EAB531D8 /* MagicFormatGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 547F8B90875D3564C30C65D8 /* MagicFormatGenerator.swift */; };
 		066495EC738BDF43605587F6 /* AppPromptBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FE358ECC10D9D38BDD3718F /* AppPromptBinding.swift */; };
 		06AD5371B770B5791BA2E1F1 /* Qwen3ASRTranscriptionServiceRealModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13A07114D24C8E4DD7B434CE /* Qwen3ASRTranscriptionServiceRealModelTests.swift */; };
 		06E382BAC6100DE4F3B14E78 /* CohereTranscribeDecoding.swift in Sources */ = {isa = PBXBuildFile; fileRef = A756A4C063C1ADA169DC22CA /* CohereTranscribeDecoding.swift */; };
@@ -387,6 +388,7 @@
 		50826FCC0F5DC60B7FF9CF19 /* SpeechDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechDetectorTests.swift; sourceTree = "<group>"; };
 		52F7F9D385457F3C172F8EE7 /* LocalGemmaMeetingSummaryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaMeetingSummaryModel.swift; sourceTree = "<group>"; };
 		547A58E2F28180249AF7E769 /* c-api.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "c-api.h"; sourceTree = "<group>"; };
+		547F8B90875D3564C30C65D8 /* MagicFormatGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatGenerator.swift; sourceTree = "<group>"; };
 		54FBDC0BAD3B10E88391D848 /* MeetingExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingExport.swift; sourceTree = "<group>"; };
 		5599BFF26E7C9256D7B0F4A8 /* AppStateAudioCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateAudioCaptureTests.swift; sourceTree = "<group>"; };
 		55F75719625B2C9B997FF5DF /* TranscriptsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptsPage.swift; sourceTree = "<group>"; };
@@ -884,6 +886,7 @@
 				D04231EADA487127BD0F97D0 /* LocalLLMModelManager.swift */,
 				44C718902A46A1418404A861 /* Locked.swift */,
 				1D833B22A455551351698DF5 /* MagicFormatCoordinator.swift */,
+				547F8B90875D3564C30C65D8 /* MagicFormatGenerator.swift */,
 				CF1DD54B813C7230F0B16B34 /* MagicFormatOutputPolicy.swift */,
 				7F469A9011B7E8CE6ACF0E72 /* MagicFormatParagraphBreaks.swift */,
 				6F437FB8217873D7CB27AEDD /* MagicFormatPromptFileStore.swift */,
@@ -1182,6 +1185,7 @@
 				36D776DD6AB33F1A3F53B2CC /* Locked.swift in Sources */,
 				9374A5ECE15AF5CBAC46E067 /* MagicFormatComponents.swift in Sources */,
 				A05C2A5B9164D20F2754C08F /* MagicFormatCoordinator.swift in Sources */,
+				0635438D5DBBE005EAB531D8 /* MagicFormatGenerator.swift in Sources */,
 				B8A7569026298BB562FD8AFA /* MagicFormatOffState.swift in Sources */,
 				E7256E2787DFE4B1178B876F /* MagicFormatOutputPolicy.swift in Sources */,
 				7739558005EE588E176936C5 /* MagicFormatPage.swift in Sources */,

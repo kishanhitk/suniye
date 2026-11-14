@@ -145,95 +145,77 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
         ).text
     }
 
-    /// A user-facing generation: uncapped, runs the client, reports its
-    /// counters, and refuses an answer the server cut short.
-    private func generateAndReport(
-        instructions: String,
-        prompt: String,
-        inputCharacterCount: Int,
-        config: LocalGemmaMagicFormatConfig
-    ) async throws -> String {
-        let generation = try await client.generate(
-            instructions: instructions,
-            prompt: prompt,
-            maxTokens: nil,
-            sampling: .greedy,
-            startupTimeoutSeconds: config.startupTimeoutSeconds,
-            idleTimeoutSeconds: config.idleTimeoutSeconds,
-            timeoutSeconds: MagicFormatGenerationBudget.timeoutSeconds(
-                floor: config.generationTimeoutSeconds,
-                inputCharacterCount: inputCharacterCount
-            )
-        )
-        if let timings = generation.timings {
-            onGeneration?(timings)
-        }
-        return try generation.untruncatedText
-    }
-
     func polish(text: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
-        guard availability.isAvailable else {
-            throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
-        }
-
-        return try await MagicFormatPipeline.polish(
+        try await makeGenerator(config).polish(
             text: text,
             systemPrompt: config.systemPrompt,
             keywords: config.keywords,
-            sanitize: Self.sanitize
-        ) { request in
-            do {
-                return try await generateAndReport(
-                    instructions: request.instructions,
-                    prompt: request.prompt,
-                    inputCharacterCount: text.count,
-                    config: config
-                )
-            } catch let error as LLMPostProcessorError {
-                throw error
-            } catch {
-                throw LLMPostProcessorError.provider(error.localizedDescription)
-            }
-        }
+            timeoutFloorSeconds: config.generationTimeoutSeconds
+        )
     }
 
     func generate(instructions: String, userText: String, config: LocalGemmaMagicFormatConfig) async throws -> String {
-        guard availability.isAvailable else {
-            throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
-        }
-
-        do {
-            let raw = try await generateAndReport(
-                instructions: instructions,
-                prompt: userText,
-                inputCharacterCount: userText.count,
-                config: config
-            )
-            let sanitized = Self.sanitize(raw)
-            guard !sanitized.isEmpty else {
-                throw LLMPostProcessorError.emptyOutput
-            }
-            return sanitized
-        } catch let error as LLMPostProcessorError {
-            throw error
-        } catch {
-            throw LLMPostProcessorError.provider(error.localizedDescription)
-        }
+        try await makeGenerator(config).rewrite(
+            instructions: instructions,
+            userText: userText,
+            timeoutFloorSeconds: config.generationTimeoutSeconds
+        )
     }
 
+    /// The probe is capped at `probeMaxTokens`, so a length stop still passes.
     func testSetup(config: LocalGemmaMagicFormatConfig) async throws {
-        guard availability.isAvailable else {
-            throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
-        }
-
-        let output = try await runProbe(config: config)
-        guard !Self.sanitize(output).isEmpty else {
-            throw LLMPostProcessorError.emptyOutput
-        }
+        let generator = makeGenerator(config)
+        try generator.checkReady()
+        _ = try generator.requireOutput(try await runProbe(config: config))
     }
 
     func stopRuntime() async {
         await client.stopRuntime()
+    }
+
+    private func makeGenerator(_ config: LocalGemmaMagicFormatConfig) -> Generator {
+        Generator(client: client, config: config, onGeneration: onGeneration)
+    }
+
+    /// A user-facing generation: uncapped, and it reports llama-server's
+    /// counters. Turns a cancel into `.provider`.
+    private struct Generator: MagicFormatGenerator {
+        let client: LocalGemmaClient
+        let config: LocalGemmaMagicFormatConfig
+        let onGeneration: (@Sendable (ChatCompletionTimings) -> Void)?
+
+        var usesSingleTurnPrompt: Bool { false }
+
+        func checkReady() throws {
+            let availability = client.availability
+            guard availability.isAvailable else {
+                throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
+            }
+        }
+
+        func sanitize(_ raw: String) -> String {
+            LocalGemmaPostProcessor.sanitize(raw)
+        }
+
+        func generation(for request: MagicFormatGenerationRequest, timeoutSeconds: Double) async throws -> ChatCompletionResult {
+            do {
+                let generation = try await client.generate(
+                    instructions: request.instructions,
+                    prompt: request.prompt,
+                    maxTokens: nil,
+                    sampling: .greedy,
+                    startupTimeoutSeconds: config.startupTimeoutSeconds,
+                    idleTimeoutSeconds: config.idleTimeoutSeconds,
+                    timeoutSeconds: timeoutSeconds
+                )
+                if let timings = generation.timings {
+                    onGeneration?(timings)
+                }
+                return generation
+            } catch {
+                throw LLMPostProcessorError(wrapping: error)
+            }
+        }
     }
 
     /// Removes Gemma's thought and turn markers.
