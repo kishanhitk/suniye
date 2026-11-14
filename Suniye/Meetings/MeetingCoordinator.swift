@@ -1117,8 +1117,11 @@ final class MeetingCoordinator {
         playback.block(live != nil || dictationCaptures)
     }
 
+    /// Notes alone are enough, so the notes typed just before a stop are
+    /// saved first.
     private func hasEnoughSpeech(_ id: UUID, segments: [MeetingSegment]) async -> Bool {
-        MeetingSummaryWriter.hasEnoughSpeech(segments, notes: await store.notes(of: id) ?? "")
+        await textSaves.finish(id)
+        return MeetingSummaryWriter.hasEnoughSpeech(segments, notes: await store.notes(of: id) ?? "")
     }
 
     private func apply(_ record: MeetingRecord) {

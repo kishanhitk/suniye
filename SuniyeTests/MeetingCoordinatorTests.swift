@@ -1053,6 +1053,21 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(store.audioTracks(of: meeting.id), [], "the next check deletes it")
     }
 
+    func testNotesTypedJustBeforeTheStopCountForTheSummary() async throws {
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+        you.push(silence(3))
+        coordinator.textSaves.stage(.notes, of: id) {
+            await coordinator.saveNotes("Ask legal about the pricing copy.", for: id)
+        }
+
+        await coordinator.stop()
+
+        XCTAssertEqual(coordinator.record(id)?.status, .summarizing, "the notes are enough for a summary")
+    }
+
     func testAnExportHasTheTextThatWasJustTyped() async throws {
         let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
         let coordinator = makeCoordinator()
