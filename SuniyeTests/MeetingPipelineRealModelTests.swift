@@ -310,7 +310,11 @@ final class MeetingPipelineRealModelTests: XCTestCase {
         Fact(line: "We expect about 2,500 sign-ups in the first week.") {
             ($0.contains("2,500") || $0.contains("2500") || $0.contains("2.5k") || $0.contains("two thousand five hundred")) && $0.contains("sign")
         },
-        Fact(line: "Nobody knows yet whether the data team can join the pilot.") { $0.contains("data team") && $0.contains("pilot") },
+        Fact(line: "Nobody knows yet whether the data team can join the pilot.") { line in
+            line.contains("data team") && line.contains("pilot")
+                && ["whether", " if ", "unclear", "uncertain", "unknown", "not known", "knows", "not sure", "tbd", "to be determined", "to be confirmed", "unconfirmed", "undecided", "not yet", "open question", "might", "may ", "possibly", "?"]
+                .contains { line.contains($0) }
+        },
         Fact(line: "We cancelled the referral bonus for now.") { line in
             line.contains("referral") && ["cancel", "drop", "stop", "remov", "pause", "end"].contains { line.contains($0) }
         },
