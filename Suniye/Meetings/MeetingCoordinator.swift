@@ -271,7 +271,7 @@ final class MeetingCoordinator {
     func start() async {
         _ = await store.recoverInterruptedMeetings()
         meetings = await store.loadAll()
-        audioOnMac = Set(meetings.map(\.id).filter { !store.audioTracks(of: $0).isEmpty })
+        audioOnMac = await store.meetingsWithAudio(meetings.map(\.id))
         for record in meetings where record.status == .summarizing {
             summaries.enqueue(record.id)
         }

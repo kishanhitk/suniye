@@ -231,6 +231,11 @@ actor MeetingStore {
         return audioTracks(of: id).isEmpty
     }
 
+    /// The meetings of `ids` that have an audio file on disk.
+    func meetingsWithAudio(_ ids: [UUID]) -> Set<UUID> {
+        Set(ids.filter { !audioTracks(of: $0).isEmpty })
+    }
+
     func delete(_ id: UUID) throws {
         let url = folder(for: id)
         guard fileManager.fileExists(atPath: url.path) else { return }
