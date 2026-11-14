@@ -32,44 +32,28 @@ final class SystemAudioTap: MeetingAudioSource, @unchecked Sendable {
 
     static let aggregateUIDs = ["dev.suniye.meeting.system-audio", "dev.suniye.meeting.system-audio.2"]
 
-    var onSamples: (([Float]) -> Void)? {
-        get { withCallbackLock { sampleCallback } }
-        set { withCallbackLock { sampleCallback = newValue } }
-    }
-
-    var onEvent: ((MeetingAudioSourceEvent) -> Void)? {
-        get { withCallbackLock { eventCallback } }
-        set { withCallbackLock { eventCallback = newValue } }
-    }
+    @Locked var onSamples: (([Float]) -> Void)?
+    @Locked var onEvent: ((MeetingAudioSourceEvent) -> Void)?
 
     private let queue = DispatchQueue(label: "dev.suniye.meeting.system-audio", qos: .userInitiated)
     private let ioQueue = DispatchQueue(label: "dev.suniye.meeting.system-audio.io", qos: .userInteractive)
-    private let callbackLock = NSLock()
-    private let ringCapacity = 1_048_576
-    private let drainCapacity = 32_768
-    private let drainScratch: UnsafeMutablePointer<Float>
     private let mixScratchCapacity = 16_384
     private let mixScratch: UnsafeMutablePointer<Float>
 
-    private var sampleCallback: (([Float]) -> Void)?
-    private var eventCallback: ((MeetingAudioSourceEvent) -> Void)?
     private var tapID = AudioObjectID(kAudioObjectUnknown)
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var ioProcID: AudioDeviceIOProcID?
-    private var ring: OpaquePointer?
+    private var ringDrain: AudioRingDrain?
     private var resampler: MeetingResampler?
-    private var drainTimer: DispatchSourceTimer?
     private var channelCount = 1
     private var interleaved = true
 
     init() {
-        drainScratch = .allocate(capacity: drainCapacity)
         mixScratch = .allocate(capacity: mixScratchCapacity)
     }
 
     deinit {
         tearDown()
-        drainScratch.deallocate()
         mixScratch.deallocate()
     }
 
@@ -124,18 +108,17 @@ final class SystemAudioTap: MeetingAudioSource, @unchecked Sendable {
 
         aggregateID = try createAggregate(tapUID: description.uuid.uuidString)
 
-        guard let ring = SuniyeAudioRingBufferCreate(ringCapacity) else {
-            throw AudioCaptureServiceError.ringBufferUnavailable
-        }
-        self.ring = ring
+        let ringDrain = try AudioRingDrain(queue: queue)
+        self.ringDrain = ringDrain
         try check(
-            AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, ioQueue) { [weak self] _, inputData, _, _, _ in
-                self?.write(inputData)
+            AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, ioQueue) { [weak self, weak ringDrain] _, inputData, _, _, _ in
+                guard let ringDrain else { return }
+                self?.write(inputData, into: ringDrain.ring)
             },
             "create IO proc"
         )
         try check(AudioDeviceStart(aggregateID, ioProcID), "start device")
-        startDrainTimer()
+        ringDrain.startTimer { [weak self] in self?.drainRing() }
         AppLogger.shared.log(.info, "meeting system audio tap started rate=\(Int(format.mSampleRate)) channels=\(channelCount) excludedSelf=\(ownProcess != nil)")
     }
 
@@ -164,8 +147,7 @@ final class SystemAudioTap: MeetingAudioSource, @unchecked Sendable {
     }
 
     private func tearDown() {
-        drainTimer?.cancel()
-        drainTimer = nil
+        ringDrain?.stopTimer()
         if aggregateID != kAudioObjectUnknown {
             if let ioProcID {
                 AudioDeviceStop(aggregateID, ioProcID)
@@ -179,17 +161,13 @@ final class SystemAudioTap: MeetingAudioSource, @unchecked Sendable {
             AudioHardwareDestroyProcessTap(tapID)
         }
         tapID = AudioObjectID(kAudioObjectUnknown)
-        if let ring {
-            SuniyeAudioRingBufferDestroy(ring)
-        }
-        ring = nil
+        ringDrain = nil
         resampler = nil
     }
 
     // MARK: - Audio (IO queue writes, `queue` drains)
 
-    private func write(_ inputData: UnsafePointer<AudioBufferList>) {
-        guard let ring else { return }
+    private func write(_ inputData: UnsafePointer<AudioBufferList>, into ring: OpaquePointer) {
         let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inputData))
         if !interleaved, buffers.count > 1 {
             let frames = Int(buffers[0].mDataByteSize) / MemoryLayout<Float>.size
@@ -222,23 +200,14 @@ final class SystemAudioTap: MeetingAudioSource, @unchecked Sendable {
         _ = SuniyeAudioRingBufferWrite(ring, mixScratch, frames)
     }
 
-    private func startDrainTimer() {
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + .milliseconds(20), repeating: .milliseconds(20), leeway: .milliseconds(5))
-        timer.setEventHandler { [weak self] in self?.drainRing() }
-        drainTimer = timer
-        timer.resume()
-    }
-
     private func drainRing() {
-        guard let ring, let resampler else { return }
-        var count = SuniyeAudioRingBufferRead(ring, drainScratch, drainCapacity)
-        while count > 0 {
-            let block = resampler.process(UnsafeBufferPointer(start: drainScratch, count: count))
+        guard let ringDrain, let resampler else { return }
+        ringDrain.read { samples in
+            let block = resampler.process(samples)
             if !block.isEmpty {
                 onSamples?(block)
             }
-            count = SuniyeAudioRingBufferRead(ring, drainScratch, drainCapacity)
+            return true
         }
     }
 
@@ -266,11 +235,5 @@ final class SystemAudioTap: MeetingAudioSource, @unchecked Sendable {
             &object
         )
         return status == noErr && object != kAudioObjectUnknown ? object : nil
-    }
-
-    private func withCallbackLock<T>(_ work: () -> T) -> T {
-        callbackLock.lock()
-        defer { callbackLock.unlock() }
-        return work()
     }
 }
