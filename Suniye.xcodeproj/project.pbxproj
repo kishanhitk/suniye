@@ -195,6 +195,7 @@
 		AEF626BF4CAC618107C1C6D3 /* MagicFormatCoordinatorRewriteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34A7FAC27F72E55BD574498 /* MagicFormatCoordinatorRewriteTests.swift */; };
 		AF083B16EDB8FA3332036CC6 /* SystemGlobeKeyAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0267D23A463945CDA26CD070 /* SystemGlobeKeyAction.swift */; };
 		AFC5DA4B24CE886F46072EB3 /* LlamaServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E93DDEC72A57449CC436364E /* LlamaServerTests.swift */; };
+		B0DE52ADBBD309BB2E8C34D6 /* MeetingSpeechWatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4B84F0C66217B2EFFED5EA0 /* MeetingSpeechWatch.swift */; };
 		B23BD5BABB0B43CA5C544D71 /* DictationShortcutGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = D60CA798BEB5D989FB540A15 /* DictationShortcutGesture.swift */; };
 		B244E3C4761C6E586DB1670D /* MeetingSegmenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93693DE6F2D98B6A5F69C833 /* MeetingSegmenter.swift */; };
 		B251595E3A3080BF2437F31F /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 633F09E2901A308614E595B1 /* TranscriptionService.swift */; };
@@ -514,6 +515,7 @@
 		D1FAF2B003307FDF0EBA9BA0 /* ListeningOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningOverlay.swift; sourceTree = "<group>"; };
 		D3161CA1497B7EEA0FB2CE36 /* GeneralSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsStore.swift; sourceTree = "<group>"; };
 		D446136FD33B0273CCFE6C39 /* AppStateHandsFreeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateHandsFreeTests.swift; sourceTree = "<group>"; };
+		D4B84F0C66217B2EFFED5EA0 /* MeetingSpeechWatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSpeechWatch.swift; sourceTree = "<group>"; };
 		D5D360A6AC4595CCDECBF9EE /* CohereTranscriptionServiceRealModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CohereTranscriptionServiceRealModelTests.swift; sourceTree = "<group>"; };
 		D60CA798BEB5D989FB540A15 /* DictationShortcutGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationShortcutGesture.swift; sourceTree = "<group>"; };
 		D64A1B4D64D2A183324E5379 /* MeetingSummaries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingSummaries.swift; sourceTree = "<group>"; };
@@ -940,6 +942,7 @@
 				EDC5A464605428F5C5E95045 /* MeetingResampler.swift */,
 				93693DE6F2D98B6A5F69C833 /* MeetingSegmenter.swift */,
 				F284BB9FCFCAC7375ABE0AB3 /* MeetingSettings.swift */,
+				D4B84F0C66217B2EFFED5EA0 /* MeetingSpeechWatch.swift */,
 				E2C9630A71E81B99E76E0DA8 /* MeetingStore.swift */,
 				D64A1B4D64D2A183324E5379 /* MeetingSummaries.swift */,
 				EC1E39FABAADF5375B7FCBE4 /* MeetingSummary.swift */,
@@ -1188,6 +1191,7 @@
 				B244E3C4761C6E586DB1670D /* MeetingSegmenter.swift in Sources */,
 				2D0194103BECDEDBF4BB018F /* MeetingSettings.swift in Sources */,
 				48B3286CE9022EA1788875D5 /* MeetingSettingsGroup.swift in Sources */,
+				B0DE52ADBBD309BB2E8C34D6 /* MeetingSpeechWatch.swift in Sources */,
 				9416D4724AB37C67F9C322E2 /* MeetingStore.swift in Sources */,
 				8EAD07A62FCB102EA277DD31 /* MeetingSummaries.swift in Sources */,
 				1A77EC67B9063BD6FA363455 /* MeetingSummary.swift in Sources */,

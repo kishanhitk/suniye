@@ -54,7 +54,7 @@ Call detection reads the Core Audio process list. It reads nothing while no inpu
 
 - The pill, the menu bar or the meeting page: **Stop**.
 - The call-ended card.
-- 15 minutes with no words in the transcript.
+- 15 minutes with no speech on any track. The speech detector checks the audio in 10 s windows.
 - 4 hours of recorded time.
 - Sleep, or a closed lid with no external display.
 - A full disk.
