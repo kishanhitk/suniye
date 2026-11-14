@@ -264,6 +264,8 @@ final class AppState {
     }
     /// The model that downloads to become the meeting transcript model.
     private(set) var meetingTranscriptModelDownload: ASRModelID?
+    /// Counts the transcript model choices, so an older one never wins.
+    @ObservationIgnored private var meetingTranscriptModelChoice = 0
     var modelDownloadStartedAt: Date?
     /// One model operation at a time. Downloads and loads were split into
     /// separate slots so an installed model could be selected mid-download; the
@@ -5801,19 +5803,22 @@ extension AppState {
     /// becoming the dictation model, and becomes the transcript model when
     /// the download succeeds.
     func useForMeetingTranscripts(_ model: ASRModelID?) {
+        meetingTranscriptModelChoice += 1
+        let choice = meetingTranscriptModelChoice
         guard let model else {
             meetings.updateSettings { $0.transcriptModel = nil }
             return
         }
         Task {
             if await !modelManager.isSystemManagedAssetInstalled(model) {
-                guard asrModelCanPerformPrimaryAction(for: model) else { return }
+                guard choice == meetingTranscriptModelChoice, asrModelCanPerformPrimaryAction(for: model) else { return }
                 meetingTranscriptModelDownload = model
                 downloadASRModel(model, autoSelect: false)
                 await asrDownloadTask?.value
                 meetingTranscriptModelDownload = nil
                 guard await modelManager.isSystemManagedAssetInstalled(model) else { return }
             }
+            guard choice == meetingTranscriptModelChoice else { return }
             meetings.updateSettings { $0.transcriptModel = model }
         }
     }
