@@ -82,7 +82,12 @@ struct MeetingsPage: View {
             }
 
             if !listed.isEmpty {
-                TranscriptSearchBar(searchText: $searchText, isSearchFocused: $isSearchFocused, placeholder: "Search meetings")
+                TranscriptSearchBar(
+                    searchText: $searchText,
+                    isSearchFocused: $isSearchFocused,
+                    placeholder: "Search meetings",
+                    resultCount: resultCount
+                )
             }
 
             list
@@ -158,6 +163,12 @@ struct MeetingsPage: View {
         meetings.meetings.filter { $0.status == .notTranscribed }
     }
 
+    /// "3 meetings" while a search finds some.
+    private var resultCount: String? {
+        guard !query.isEmpty, !visible.isEmpty else { return nil }
+        return visible.count == 1 ? "1 meeting" : "\(visible.count) meetings"
+    }
+
     private var visible: [MeetingRecord] {
         guard !query.isEmpty else { return listed }
         return listed.filter { record in
@@ -220,6 +231,9 @@ private struct LiveMeetingRow: View {
 }
 
 private struct MeetingRow: View {
+    /// The search match marks of the approved list: the system yellow.
+    static let matchColor = Color.yellow.opacity(0.45)
+
     let record: MeetingRecord
     let snippet: String?
     let query: String
@@ -247,7 +261,7 @@ private struct MeetingRow: View {
                         }
                     }
                     if let snippet {
-                        Text(snippet.highlightingMatches(of: query))
+                        Text(snippet.highlightingMatches(of: query, color: Self.matchColor))
                             .font(AppTypography.body)
                             .foregroundStyle(MainWindowPalette.secondaryText)
                             .lineLimit(2)

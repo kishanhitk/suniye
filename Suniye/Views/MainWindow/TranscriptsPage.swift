@@ -394,6 +394,8 @@ struct TranscriptSearchBar: View {
     @Binding var searchText: String
     @FocusState.Binding var isSearchFocused: Bool
     var placeholder = "Search transcripts"
+    /// What the search finds, such as "3 meetings", at the trailing end.
+    var resultCount: String?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -405,6 +407,12 @@ struct TranscriptSearchBar: View {
                 .textFieldStyle(.plain)
                 .font(AppTypography.body)
                 .focused($isSearchFocused)
+
+            if let resultCount {
+                Text(resultCount)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+            }
 
             if !searchText.isEmpty {
                 Button {
