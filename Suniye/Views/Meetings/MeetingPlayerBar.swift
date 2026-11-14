@@ -1,10 +1,12 @@
 import SwiftUI
 
 /// The Transcript tab of a meeting: the player bar while the meeting's audio
-/// is on the Mac, and the transcript.
+/// is on the Mac, and the transcript with the lines that play marked. The
+/// position changes ten times a second, so only this view reads it.
 struct MeetingTranscriptPane: View {
     let playback: MeetingPlayback
     let id: UUID
+    let segments: [MeetingSegment]
     let lines: [MeetingTranscriptLine]
     let timeline: MeetingTimeline
     let hasAudio: Bool
@@ -18,8 +20,28 @@ struct MeetingTranscriptPane: View {
             if hasAudio {
                 MeetingPlayerBar(playback: playback, id: id, timeline: timeline, canPlay: canPlay)
             }
-            MeetingTranscriptView(lines: lines, isEditable: isEditable, edited: edited)
+            MeetingTranscriptView(
+                lines: lines,
+                isEditable: isEditable,
+                marked: marked,
+                follow: playback.moves,
+                seek: hasAudio && canPlay ? seek : nil,
+                edited: edited
+            )
+            .padding(.horizontal, -MeetingTranscriptView.markOverhang)
         }
+    }
+
+    /// No line is marked until the audio plays or its position moves.
+    private var marked: Set<UUID> {
+        guard hasAudio, playback.meetingID == id, playback.moves > 0 else { return [] }
+        return MeetingPlayback.playingLines(at: Int(playback.position * Double(MeetingAudioFormat.sampleRate)), in: segments)
+    }
+
+    private func seek(_ lineID: UUID) {
+        guard let segment = segments.first(where: { $0.id == lineID }) else { return }
+        playback.open(id)
+        playback.play(from: Double(segment.audioStart) / Double(MeetingAudioFormat.sampleRate))
     }
 }
 

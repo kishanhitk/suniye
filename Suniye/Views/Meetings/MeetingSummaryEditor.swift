@@ -10,8 +10,14 @@ struct MeetingSummaryEditor: NSViewRepresentable {
     var isEditable = false
     var edited: (_ markdown: String, _ ended: Bool) -> Void = { _, _ in }
 
+    /// TextKit 1, which keeps a list going when you press Return in an item;
+    /// TextKit 2 drops the list.
+    static func scrollView() -> NSScrollView {
+        MeetingTextView.scrollable(MeetingTextView(usingTextLayoutManager: false))
+    }
+
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = MeetingTextView.scrollable(textKit2: false)
+        let scrollView = Self.scrollView()
         scrollView.drawsBackground = false
         if let textView = scrollView.documentView as? NSTextView {
             context.coordinator.attach(to: textView)

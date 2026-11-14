@@ -22,7 +22,7 @@ final class MeetingSummaryEditorTests: XCTestCase {
     override func setUp() async throws {
         coordinator = MeetingSummaryEditor.Coordinator()
         coordinator.edited = { [weak self] markdown, ended in self?.reports.append((markdown, ended)) }
-        scrollView = MeetingTextView.scrollable(textKit2: false)
+        scrollView = MeetingSummaryEditor.scrollView()
         textView = try XCTUnwrap(scrollView.documentView as? NSTextView)
         coordinator.attach(to: textView)
         textView.isEditable = true

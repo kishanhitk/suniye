@@ -11,14 +11,12 @@ class MeetingTextView: NSTextView {
         super.viewWillMove(toWindow: newWindow)
     }
 
-    /// In a scroll view that grows down with its text, as
-    /// `NSTextView.scrollableTextView()` builds it. TextKit 1 keeps a list
-    /// going when you press Return in an item; TextKit 2 drops the list.
-    static func scrollable(textKit2: Bool = true) -> NSScrollView {
+    /// `textView` in a scroll view that grows down with its text, as
+    /// `NSTextView.scrollableTextView()` builds it.
+    static func scrollable(_ textView: MeetingTextView) -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         let size = scrollView.contentSize
-        let textView = MeetingTextView(usingTextLayoutManager: textKit2)
         textView.frame = NSRect(origin: .zero, size: size)
         textView.minSize = NSSize(width: 0, height: size.height)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)

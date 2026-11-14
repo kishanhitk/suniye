@@ -77,31 +77,50 @@ struct MeetingTranscriptProgressView: View {
 
 /// The transcript as one text view, so a selection can cross lines and ⌘F
 /// opens the native find bar. The text of a line can be edited; its time and
-/// speaker cannot, and Return ends the edit.
+/// speaker cannot, and Return ends the edit. While the meeting's audio is on
+/// the Mac, a click on a time plays from there, and the lines that play are
+/// marked.
 struct MeetingTranscriptView: NSViewRepresentable {
     let lines: [MeetingTranscriptLine]
     /// False while a transcript pass or a summary runs.
     var isEditable = false
+    /// The lines that play.
+    var marked: Set<UUID> = []
+    /// Changes at each start of the playback and each move of its position,
+    /// so the view follows the marked lines again after the user scrolled.
+    var follow = 0
+    /// Plays from the line with this id; nil when no audio can play.
+    var seek: ((UUID) -> Void)?
     /// The text of each line that the user touched since the lines were last
     /// drawn, and whether the edit ended. An empty text is a line to delete
     /// when the edit ends.
     var edited: (_ texts: [UUID: String], _ ended: Bool) -> Void = { _, _ in }
 
+    /// The text starts this far in from each side, so the band of a marked
+    /// line reaches past the text. The page puts the view as far out.
+    static let markOverhang: CGFloat = 6
+
+    static func scrollView() -> NSScrollView {
+        MeetingTextView.scrollable(MeetingTranscriptTextView(usingTextLayoutManager: true))
+    }
+
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = MeetingTextView.scrollable()
+        let scrollView = Self.scrollView()
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
-        if let textView = scrollView.documentView as? NSTextView {
+        if let textView = scrollView.documentView as? MeetingTranscriptTextView {
             context.coordinator.attach(to: textView)
         }
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
+        guard let textView = scrollView.documentView as? MeetingTranscriptTextView else { return }
         context.coordinator.edited = edited
+        context.coordinator.seek = seek
         textView.isEditable = isEditable
-        context.coordinator.render(lines, into: textView)
+        context.coordinator.render(lines, canSeek: seek != nil, into: textView)
+        context.coordinator.mark(marked, follow: follow, in: textView)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -111,25 +130,37 @@ struct MeetingTranscriptView: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var edited: (_ texts: [UUID: String], _ ended: Bool) -> Void = { _, _ in }
+        var seek: ((UUID) -> Void)?
         /// The lines as the text view shows them.
         private var rendered: [MeetingTranscriptLine] = []
+        /// The times are links that play.
+        private var canSeek = false
         /// The lines that the user touched since the last full draw.
         private var touched: Set<UUID> = []
-        private weak var textView: NSTextView?
+        private var marked: Set<UUID> = []
+        private var follow = 0
+        /// False after the user scrolls, until the playback starts or moves.
+        private var following = true
+        private weak var textView: MeetingTranscriptTextView?
 
         /// Sets up the text view and follows its edits, also those that an
         /// undo or a redo makes: the text view sends no change notice for them.
-        func attach(to textView: NSTextView) {
+        func attach(to textView: MeetingTranscriptTextView) {
             Self.configure(textView)
             textView.delegate = self
             self.textView = textView
             NotificationCenter.default.addObserver(self, selector: #selector(undoManagerChanged(_:)), name: .NSUndoManagerDidUndoChange, object: nil)
             NotificationCenter.default.addObserver(self, selector: #selector(undoManagerChanged(_:)), name: .NSUndoManagerDidRedoChange, object: nil)
+            NotificationCenter.default.addObserver(self, selector: #selector(scrolledByUser), name: NSScrollView.willStartLiveScrollNotification, object: textView.enclosingScrollView)
         }
 
         @objc private func undoManagerChanged(_ notification: Notification) {
             guard let textView, let undoManager = textView.undoManager, notification.object as AnyObject? === undoManager else { return }
             report(textView, ended: false)
+        }
+
+        @objc private func scrolledByUser() {
+            following = false
         }
 
         private static func configure(_ textView: NSTextView) {
@@ -140,19 +171,50 @@ struct MeetingTranscriptView: NSViewRepresentable {
             textView.drawsBackground = false
             textView.usesFindBar = true
             textView.isIncrementalSearchingEnabled = true
-            textView.textContainerInset = NSSize(width: 0, height: 4)
+            textView.textContainerInset = NSSize(width: MeetingTranscriptView.markOverhang, height: 4)
             textView.textContainer?.lineFragmentPadding = 0
+            // A time keeps its own look as a link; only the pointer changes,
+            // and the tooltip is its own, not the link's address.
+            textView.linkTextAttributes = [.cursor: NSCursor.pointingHand]
+            textView.displaysLinkToolTips = false
         }
 
         /// Draws the lines again when they changed. The lines that the user
         /// edits come back the same, so typing never redraws.
-        func render(_ lines: [MeetingTranscriptLine], into textView: NSTextView) {
-            guard lines != rendered, let storage = textView.textStorage else { return }
-            storage.setAttributedString(Self.text(for: lines))
+        func render(_ lines: [MeetingTranscriptLine], canSeek: Bool, into textView: MeetingTranscriptTextView) {
+            guard lines != rendered || canSeek != self.canSeek, let storage = textView.textStorage else { return }
+            storage.setAttributedString(Self.text(for: lines, canSeek: canSeek))
             rendered = lines
+            self.canSeek = canSeek
             touched = []
             textView.undoManager?.removeAllActions(withTarget: textView)
             textView.undoManager?.removeAllActions(withTarget: storage)
+            textView.marked = Self.ranges(of: marked, in: storage)
+        }
+
+        /// Marks the lines that play. The view scrolls to them when they
+        /// change or the playback moves, unless the user scrolled since the
+        /// playback last started or moved.
+        func mark(_ lines: Set<UUID>, follow: Int, in textView: MeetingTranscriptTextView) {
+            let moved = follow != self.follow
+            if moved {
+                self.follow = follow
+                following = true
+            }
+            let changed = lines != marked
+            if changed, let storage = textView.textStorage {
+                marked = lines
+                textView.marked = Self.ranges(of: lines, in: storage)
+            }
+            if following, moved || changed {
+                textView.scrollToMarked()
+            }
+        }
+
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            guard let url = link as? URL, let id = Self.lineID(seeking: url) else { return false }
+            seek?(id)
+            return true
         }
 
         // MARK: - Edits
@@ -196,6 +258,8 @@ struct MeetingTranscriptView: NSViewRepresentable {
 
         private func report(_ textView: NSTextView, ended: Bool) {
             guard let storage = textView.textStorage else { return }
+            // An edit moves the lines after it.
+            self.textView?.marked = Self.ranges(of: marked, in: storage)
             let current = Self.lineTexts(in: storage)
             for (id, text) in current where rendered.first(where: { $0.id == id })?.text != text {
                 touched.insert(id)
@@ -229,15 +293,22 @@ struct MeetingTranscriptView: NSViewRepresentable {
             [.font: bodyFont, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph]
         }
 
-        static func text(for lines: [MeetingTranscriptLine]) -> NSAttributedString {
+        static func text(for lines: [MeetingTranscriptLine], canSeek: Bool) -> NSAttributedString {
             let output = NSMutableAttributedString()
             for line in lines {
-                output.append(NSAttributedString(string: line.time + "\t", attributes: [
+                let time: [NSAttributedString.Key: Any] = [
                     .font: NSFont.monospacedDigitSystemFont(ofSize: bodyFont.pointSize, weight: .regular),
                     .foregroundColor: NSColor.secondaryLabelColor,
                     .paragraphStyle: paragraph,
                     lineID: line.id,
-                ]))
+                ]
+                var label = time
+                if canSeek {
+                    label[.link] = seekURL(line.id)
+                    label[.toolTip] = "Play from \(line.time)"
+                }
+                output.append(NSAttributedString(string: line.time, attributes: label))
+                output.append(NSAttributedString(string: "\t", attributes: time))
                 output.append(NSAttributedString(string: (line.speaker?.speakerLabel ?? "") + "\t", attributes: [
                     .font: NSFont.systemFont(ofSize: bodyFont.pointSize, weight: .semibold),
                     .foregroundColor: line.speaker == .you ? NSColor.controlAccentColor : NSColor.secondaryLabelColor,
@@ -274,16 +345,108 @@ struct MeetingTranscriptView: NSViewRepresentable {
         static func lineTexts(in storage: NSTextStorage) -> [UUID: String] {
             let string = storage.string as NSString
             var texts: [UUID: String] = [:]
+            forEachLine(in: storage) { id, paragraph in
+                if let range = textRange(ofParagraph: paragraph, in: string) {
+                    texts[id] = string.substring(with: range)
+                }
+            }
+            return texts
+        }
+
+        /// The ranges of the lines with these ids, each line with its time
+        /// and speaker.
+        static func ranges(of ids: Set<UUID>, in storage: NSTextStorage) -> [NSRange] {
+            guard !ids.isEmpty else { return [] }
+            var ranges: [NSRange] = []
+            forEachLine(in: storage) { id, paragraph in
+                if ids.contains(id) {
+                    ranges.append(paragraph)
+                }
+            }
+            return ranges
+        }
+
+        private static func forEachLine(in storage: NSTextStorage, _ body: (UUID, NSRange) -> Void) {
+            let string = storage.string as NSString
             var location = 0
             while location < string.length {
                 let paragraph = string.paragraphRange(for: NSRange(location: location, length: 0))
-                if let id = storage.attribute(lineID, at: paragraph.location, effectiveRange: nil) as? UUID,
-                   let range = textRange(ofParagraph: paragraph, in: string) {
-                    texts[id] = string.substring(with: range)
+                if let id = storage.attribute(lineID, at: paragraph.location, effectiveRange: nil) as? UUID {
+                    body(id, paragraph)
                 }
                 location = NSMaxRange(paragraph)
             }
-            return texts
+        }
+
+        private static let seekScheme = "suniye-play"
+
+        static func seekURL(_ id: UUID) -> URL {
+            URL(string: "\(seekScheme):\(id.uuidString)")!
+        }
+
+        static func lineID(seeking url: URL) -> UUID? {
+            guard url.scheme == seekScheme else { return nil }
+            return UUID(uuidString: String(url.absoluteString.dropFirst(seekScheme.count + 1)))
+        }
+    }
+}
+
+/// The transcript's text view. It draws a band behind each line that plays.
+final class MeetingTranscriptTextView: MeetingTextView {
+    /// The ranges of the lines that play.
+    var marked: [NSRange] = [] {
+        didSet {
+            if marked != oldValue {
+                needsDisplay = true
+            }
+        }
+    }
+
+    private static let markColor = NSColor(name: nil) { appearance in
+        let dark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return NSColor.controlAccentColor.withAlphaComponent(dark ? 0.2 : 0.09)
+    }
+
+    override func drawBackground(in rect: NSRect) {
+        super.drawBackground(in: rect)
+        Self.markColor.setFill()
+        for band in bands(layingOut: false) where band.intersects(rect) {
+            NSBezierPath(roundedRect: band, xRadius: 6, yRadius: 6).fill()
+        }
+    }
+
+    /// Scrolls a marked line that is out of sight to a third of the way down.
+    func scrollToMarked() {
+        guard let band = bands(layingOut: true).first, let visible = enclosingScrollView?.documentVisibleRect, !visible.contains(band) else { return }
+        // The view grows to the laid-out text only when its viewport lays
+        // out; until then the scroll stops at its old height.
+        textLayoutManager?.textViewportLayoutController.layoutViewport()
+        scroll(NSPoint(x: 0, y: max(0, band.minY - visible.height / 3)))
+    }
+
+    /// Each marked line across the whole view, 5 pt above its first row and
+    /// below its last, so two marked lines in a row meet. A drawing lays out
+    /// no text: the lines that it shows are laid out. Text laid out alone
+    /// gets an estimated place until the text above it is laid out, so a
+    /// layout runs from the start.
+    func bands(layingOut: Bool) -> [NSRect] {
+        guard let layoutManager = textLayoutManager, let content = layoutManager.textContentManager else { return [] }
+        let top = textContainerOrigin.y
+        return marked.compactMap { range in
+            guard let start = content.location(content.documentRange.location, offsetBy: range.location),
+                  let end = content.location(start, offsetBy: range.length),
+                  let textRange = NSTextRange(location: start, end: end)
+            else { return nil }
+            if layingOut, let fromStart = NSTextRange(location: content.documentRange.location, end: end) {
+                layoutManager.ensureLayout(for: fromStart)
+            }
+            var rows = NSRect.null
+            layoutManager.enumerateTextSegments(in: textRange, type: .standard, options: []) { _, frame, _, _ in
+                rows = rows.union(frame)
+                return true
+            }
+            guard !rows.isNull else { return nil }
+            return NSRect(x: bounds.minX, y: top + rows.minY - 5, width: bounds.width, height: rows.height + 10)
         }
     }
 }

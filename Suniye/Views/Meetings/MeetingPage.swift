@@ -280,6 +280,7 @@ struct MeetingPage: View {
                     MeetingTranscriptPane(
                         playback: meetings.playback,
                         id: id,
+                        segments: segments,
                         lines: transcriptLines(record),
                         timeline: MeetingTimeline(pauses: record.pauses),
                         hasAudio: meetings.audioOnMac.contains(id) && record.status.hasFinalTranscript,

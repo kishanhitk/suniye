@@ -111,6 +111,18 @@ final class MeetingPlayback {
         moves = 0
     }
 
+    /// The lines that play at `sample`: each line whose audio holds it, so
+    /// two when two people talk at once. Between lines, the line that
+    /// started last.
+    static func playingLines(at sample: Int, in segments: [MeetingSegment]) -> Set<UUID> {
+        let holding = segments.filter { $0.audioStart <= sample && sample < $0.audioEnd }
+        if !holding.isEmpty {
+            return Set(holding.map(\.id))
+        }
+        let last = segments.filter { $0.audioStart <= sample }.max { $0.audioStart < $1.audioStart }
+        return last.map { [$0.id] } ?? []
+    }
+
     private func tick() {
         guard isPlaying, let player else { return }
         if player.isPlaying {

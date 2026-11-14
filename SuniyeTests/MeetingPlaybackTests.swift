@@ -47,6 +47,10 @@ final class MeetingPlaybackTests: XCTestCase {
         return condition()
     }
 
+    private func segment(_ track: MeetingTrack, _ start: Double, _ end: Double) -> MeetingSegment {
+        MeetingSegment(id: UUID(), track: track, audioStart: Int(start * 16_000), audioEnd: Int(end * 16_000), text: "Words.")
+    }
+
     func testPlayOpensBothTracksAndThePositionFollowsThePlayer() async throws {
         try writeAudio(.you, .them)
         playback.open(meeting)
@@ -157,5 +161,21 @@ final class MeetingPlaybackTests: XCTestCase {
 
         XCTAssertEqual(players.duration, 1, accuracy: 0.01)
         XCTAssertThrowsError(try MeetingTrackPlayers(urls: []))
+    }
+
+    func testTheLinesThatPlay() {
+        let you = segment(.you, 0, 3)
+        let them = segment(.them, 2, 6)
+        let later = segment(.you, 9, 12)
+        let cases: [(seconds: Double, playing: Set<UUID>, label: String)] = [
+            (1, [you.id], "one person talks"),
+            (2.5, [you.id, them.id], "two people talk at once"),
+            (7, [them.id], "between lines, the line that started last"),
+            (12.5, [later.id], "after the last line"),
+        ]
+        for (seconds, playing, label) in cases {
+            XCTAssertEqual(MeetingPlayback.playingLines(at: Int(seconds * 16_000), in: [you, them, later]), playing, label)
+        }
+        XCTAssertEqual(MeetingPlayback.playingLines(at: 8_000, in: [segment(.them, 1, 2)]), [], "before the first line of a track that started late")
     }
 }

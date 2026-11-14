@@ -111,7 +111,8 @@ Suniye checks at launch and after each transcript, with no timer. A change of th
 
 While the audio is on the Mac and the transcript is finished, the Transcript tab has a player above the lines: play or pause, a position bar, and the time as the lines show it.
 
-- Space plays and pauses while no text that you can edit has the keyboard.
+- A click on the time of a line plays from there. Space plays and pauses while no text that you can edit has the keyboard.
+- The lines that play get a light band: two lines when two people talk at once, and between lines the line that started last. The transcript scrolls to the band until you scroll; play, a click on a time or a move of the position bar starts it again.
 - The playback pauses when you open another tab or start a dictation, and it does not start again by itself. It stops when you leave the meeting page, when a recording starts and when you delete the meeting. Play is off while a meeting records.
 - The audio files hold no paused time: the playback goes from the moment of a pause to the moment of the resume, and the time jumps by the length of the pause.
 - Playback only sends sound to the output and opens no input, so call detection does not see it.
