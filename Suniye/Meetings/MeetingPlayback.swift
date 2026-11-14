@@ -74,6 +74,7 @@ final class MeetingPlayback {
             // A move to the end stops the audio there.
             player.pause()
             position = duration
+            moves += 1
             stopped()
             return
         }

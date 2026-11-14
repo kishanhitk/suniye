@@ -131,12 +131,14 @@ final class MeetingPlaybackTests: XCTestCase {
         playback.play()
         players[0].currentTime = 30
 
+        let moves = playback.moves
         playback.seek(to: 60)
         try await Task.sleep(for: .milliseconds(30))
 
         XCTAssertFalse(playback.isPlaying)
         XCTAssertFalse(players[0].isPlaying)
         XCTAssertEqual(playback.position, 60, "no tick moves it back")
+        XCTAssertEqual(playback.moves, moves + 1, "the transcript follows the move again")
     }
 
     func testOutputThatStopsBeforeTheEndPausesWhereItWas() async throws {
