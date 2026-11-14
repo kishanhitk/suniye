@@ -56,6 +56,7 @@ struct MeetingPage: View {
                     )
                 }
                 MeetingTabs(selection: $tab, summaryEnabled: live == nil)
+                    .fixedSize()
                 content(record)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
@@ -117,7 +118,7 @@ struct MeetingPage: View {
             Spacer(minLength: 12)
 
             if let live {
-                Button(live.isPaused ? "Resume" : "Pause") {
+                Button {
                     Task {
                         if live.isPaused {
                             do {
@@ -129,9 +130,13 @@ struct MeetingPage: View {
                             await meetings.pause()
                         }
                     }
+                } label: {
+                    Label(live.isPaused ? "Resume" : "Pause", systemImage: live.isPaused ? "record.circle" : "pause.fill")
                 }
-                Button("Stop") {
+                Button {
                     Task { await meetings.stop() }
+                } label: {
+                    Label("Stop", systemImage: "stop.fill")
                 }
                 .keyboardShortcut(".", modifiers: .command)
             } else if let text = copyText(record) {
@@ -197,6 +202,7 @@ struct MeetingPage: View {
                 }
                 if live == nil {
                     MeetingRegenerateMenu(title: "Regenerate Summary", meetings: meetings, actions: actions, record: record)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
         case .transcript:
@@ -211,7 +217,7 @@ struct MeetingPage: View {
             MeetingTranscriptLine(
                 id: segment.id,
                 time: MeetingTranscript.clock(timeline.wallSeconds(forSample: segment.audioStart)),
-                speaker: record.hasCallTrack ? segment.track.speakerLabel : nil,
+                speaker: record.hasCallTrack ? segment.track : nil,
                 text: segment.text
             )
         }
@@ -357,6 +363,7 @@ private struct CallProblemPopover: View {
                 Button("Open System Settings") {
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
                 }
+                .buttonStyle(.borderedProminent)
             case let .stopped(since):
                 Text("Call audio stopped")
                     .font(AppTypography.bodyMedium)
@@ -364,6 +371,7 @@ private struct CallProblemPopover: View {
                 Button("Restart Call Audio") {
                     meetings.restartCallAudio()
                 }
+                .buttonStyle(.borderedProminent)
             }
         }
         .padding(14)

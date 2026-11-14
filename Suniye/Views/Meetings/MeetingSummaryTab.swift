@@ -9,12 +9,18 @@ struct MeetingSummaryTab: View {
     let summary: String?
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 16) {
-                state
+        VStack(spacing: 12) {
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 16) {
+                    state
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.vertical, 4)
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(.vertical, 4)
+            if record.status == .done {
+                MeetingRegenerateMenu(title: "Regenerate", meetings: meetings, actions: actions, record: record)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
     }
 
@@ -28,11 +34,10 @@ struct MeetingSummaryTab: View {
                 if let summary {
                     MeetingSummaryBody(markdown: summary)
                 }
-                MeetingRegenerateMenu(title: "Regenerate", meetings: meetings, actions: actions, record: record)
             case .summarizing:
                 summarizing
             case .summaryFailed:
-                stateCard(
+                EmptyStateCard(
                     icon: "exclamationmark.triangle",
                     title: MeetingStatus.summaryFailedTitle,
                     detail: [record.summaryFailure, "Your transcript and notes are saved."].compactMap { $0 }.joined(separator: " ")
@@ -40,9 +45,10 @@ struct MeetingSummaryTab: View {
                     Button("Try Again") {
                         Task { await meetings.regenerate(record.id) }
                     }
+                    .buttonStyle(.borderedProminent)
                 }
             case .noSpeech:
-                stateCard(
+                EmptyStateCard(
                     icon: "mic.slash",
                     title: MeetingStatus.noSpeechTitle,
                     detail: "The transcript has fewer than \(MeetingSummaryWriter.minimumWords) words."
@@ -50,12 +56,13 @@ struct MeetingSummaryTab: View {
                     Button("Delete Meeting…") { actions.confirmDelete(record) }
                 }
             case .interrupted:
-                stateCard(
+                EmptyStateCard(
                     icon: "exclamationmark.triangle",
                     title: MeetingStatus.interruptedTitle,
                     detail: [record.transcriptFailure, "The audio is saved."].compactMap { $0 }.joined(separator: " ")
                 ) {
                     Button("Finish Transcript") { meetings.finishTranscript(record.id) }
+                        .buttonStyle(.borderedProminent)
                 }
             case .recording, .paused, .finishing:
                 EmptyView()
@@ -72,7 +79,7 @@ struct MeetingSummaryTab: View {
         case .ready:
             progress("Writing the summary...")
         case .needsDownload:
-            stateCard(
+            EmptyStateCard(
                 icon: "sparkles",
                 title: "Summaries need the local model",
                 detail: "\(LocalGemmaDefaults.expectedSizeText). Your transcript is saved."
@@ -92,17 +99,16 @@ struct MeetingSummaryTab: View {
                     }
                 case .notInstalled, .failed, .installed, .unavailable:
                     Button("Download") { appState.startLocalGemmaDownload() }
+                        .buttonStyle(.borderedProminent)
                         .disabled(!appState.canStartLocalGemmaDownload)
                 }
             }
         case .unavailable:
-            stateCard(
+            EmptyStateCard(
                 icon: "sparkles",
                 title: "Summaries aren’t available on this Mac",
                 detail: "They need Apple Intelligence or the local model."
-            ) {
-                EmptyView()
-            }
+            )
         }
     }
 
@@ -114,19 +120,6 @@ struct MeetingSummaryTab: View {
                 .font(AppTypography.body)
                 .foregroundStyle(MainWindowPalette.secondaryText)
         }
-    }
-
-    private func stateCard<Action: View>(
-        icon: String,
-        title: String,
-        detail: String,
-        @ViewBuilder action: () -> Action
-    ) -> some View {
-        VStack(spacing: 12) {
-            EmptyStateCard(icon: icon, title: title, detail: detail)
-            action()
-        }
-        .frame(maxWidth: .infinity)
     }
 }
 

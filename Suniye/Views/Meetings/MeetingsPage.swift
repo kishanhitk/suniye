@@ -29,9 +29,12 @@ struct MeetingsPage: View {
             HStack(alignment: .firstTextBaseline) {
                 DetailPageTitle(title: "Meetings")
                 Spacer()
-                Button("Record Meeting") {
+                Button {
                     actions.startMeeting(meetings)
+                } label: {
+                    Label("Record Meeting", systemImage: "record.circle")
                 }
+                .buttonStyle(.borderedProminent)
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(meetings.live != nil)
             }
@@ -71,14 +74,13 @@ struct MeetingsPage: View {
     @ViewBuilder
     private var list: some View {
         if listed.isEmpty, meetings.live == nil {
-            VStack(spacing: 12) {
-                EmptyStateCard(
-                    icon: "person.2",
-                    title: "No Meetings Yet",
-                    detail: meetings.canRecordCallAudio
-                        ? "Record a call or a meeting in the room."
-                        : "Recording a call needs macOS 14.4 or later."
-                )
+            EmptyStateCard(
+                icon: "person.2",
+                title: "No Meetings Yet",
+                detail: meetings.canRecordCallAudio
+                    ? "Record a call or a meeting in the room."
+                    : "Recording a call needs macOS 14.4 or later."
+            ) {
                 if !meetings.canRecordCallAudio {
                     Button("Open Software Update") {
                         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Software-Update-Settings.extension")!)
