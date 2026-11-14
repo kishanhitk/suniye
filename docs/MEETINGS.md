@@ -26,7 +26,7 @@ Suniye records a call or a meeting in the room. After the recording stops, it wr
 - Meetings page: **Record Meeting**.
 - A call (see [Calls](#calls)).
 
-Suniye does not tell the other people in a call that you record it. Some places need the consent of every person in a call: you are responsible for telling them. While a meeting records, **Copy Notice** in the ··· menu copies a sentence for the chat: "I’m recording this call to take notes. The recording stays on my computer."
+Suniye does not tell the other people in a call that you record it. Some places need the consent of every person in a call: you are responsible for telling them.
 
 ## Calls
 
