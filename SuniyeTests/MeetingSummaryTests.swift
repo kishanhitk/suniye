@@ -146,8 +146,8 @@ final class MeetingSummaryWriterTests: XCTestCase {
     }
 
     func testItemsAreReadUnderTheirLabelsAndJoinedOnce() {
-        let sections = ["Decisions", "Action items", "Open questions"]
-        let answer = "Decisions:\n- Ship on Friday\n- None\nAction items: Priya writes the notes; no action items were discussed\nOther notes:\n- not a section\n## Open questions\n1. Budget?\n2) Venue?"
+        let sections = ["Decisions", "Action items", "Open questions", "Dates and numbers"]
+        let answer = "Decisions:\n- Ship on Friday;\n- None\nAction items: Priya writes the notes; no action items were discussed\nOther notes:\n- not a section\n## Open questions\n1. Budget?\n2) Venue?\n## Dates and numbers\nnone\nReview on 3 December; budget 40,000"
 
         let parsed = MeetingSummaryItems.parse(answer, sections: sections)
         let joined = MeetingSummaryItems.join(
@@ -155,7 +155,12 @@ final class MeetingSummaryWriterTests: XCTestCase {
             sections: ["Decisions"]
         )
 
-        XCTAssertEqual(parsed, ["Decisions": ["Ship on Friday"], "Action items": ["Priya writes the notes"], "Open questions": ["Budget?", "Venue?"]])
+        XCTAssertEqual(parsed, [
+            "Decisions": ["Ship on Friday"],
+            "Action items": ["Priya writes the notes"],
+            "Open questions": ["Budget?", "Venue?"],
+            "Dates and numbers": ["Review on 3 December", "budget 40,000"],
+        ])
         XCTAssertEqual(joined["Decisions"], ["Do not ship on Friday", "Alice interviews Bob", "Ship on Friday", "Bob interviews Alice"], "only the same words in the same order are a repeat")
     }
 

@@ -630,8 +630,8 @@ struct MeetingSummaryLayout: Equatable, Sendable {
 /// The items that a model wrote under section labels, and their join.
 enum MeetingSummaryItems {
     /// Reads "Label: a; b" lines, and a label line ("Label:" or "## Label")
-    /// followed by "- " or "1. " lines. Lines under other labels, and items
-    /// that say that there is none, go.
+    /// followed by "- " or "1. " lines, or by "a; b" lines. Lines under other
+    /// labels, and items that say that there is none, go.
     static func parse(_ answer: String, sections: [String]) -> [String: [String]] {
         var items: [String: [String]] = [:]
         var current: String?
@@ -644,6 +644,8 @@ enum MeetingSummaryItems {
                 current = nil
             } else if let current, let item = listItem(line) {
                 items[current, default: []] += [clean(item, section: current)].compactMap { $0 }
+            } else if let current {
+                items[current, default: []] += line.components(separatedBy: ";").compactMap { clean($0, section: current) }
             }
         }
         return items
@@ -690,7 +692,7 @@ enum MeetingSummaryItems {
     }
 
     private static func clean(_ item: String, section: String) -> String? {
-        let text = item.trimmingCharacters(in: .whitespaces)
+        let text = item.trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ";,")))
         return MeetingSummaryText.saysNothing(text, about: section) ? nil : text
     }
 }
