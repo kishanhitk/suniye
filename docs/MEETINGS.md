@@ -78,6 +78,7 @@ After a quit or a crash during a recording, the next launch finishes the transcr
 - Templates: General, 1:1, Stand-up, Interview, and your own (**Settings → General → Meetings → Summary templates**).
 - Your notes go into the summary.
 - A long transcript is cut into parts; each part gets notes, and the summary comes from the notes.
+- The built-in templates have a **Dates and numbers** section for the dates and numbers that fit no other section.
 - **Regenerate** writes the summary again, with the same or another template.
 
 ## Files
