@@ -162,26 +162,6 @@ final class AppStateDisplayTests: XCTestCase {
         XCTAssertEqual(errored?.detail, "runtime broke")
     }
 
-    func testASRModelStatusColorBranches() {
-        let modelManager = StubModelManager()
-        let appState = makeTestAppState(modelManager: modelManager)
-
-        appState.activeASRModelOperationID = .parakeetV3
-        XCTAssertEqual(appState.asrModelStatusColor(for: .parakeetV3), .accentColor)
-
-        appState.activeASRModelOperationID = nil
-        appState.loadedASRModelID = .parakeetV3
-        XCTAssertEqual(appState.asrModelStatusColor(for: .parakeetV3), .green)
-
-        appState.loadedASRModelID = nil
-        appState.lastFailedASRModelID = .parakeetV3
-        XCTAssertEqual(appState.asrModelStatusColor(for: .parakeetV3), .red)
-
-        appState.lastFailedASRModelID = nil
-        XCTAssertEqual(appState.asrModelStatusColor(for: .parakeetV3), MainWindowPalette.secondaryText)
-        XCTAssertEqual(appState.asrModelStatusColor(for: .moonshineBase), .orange)
-    }
-
     func testASRModelPrimaryActionTitleAndAvailabilityBranches() {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)

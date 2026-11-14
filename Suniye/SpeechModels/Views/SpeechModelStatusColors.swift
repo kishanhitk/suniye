@@ -27,24 +27,4 @@ extension AppState {
             return .orange
         }
     }
-
-    func asrModelStatusColor(for modelID: ASRModelID) -> Color {
-        if activeASRModelOperationID == modelID {
-            return .accentColor
-        }
-
-        if loadedASRModelID == modelID && selectedASRModelID == modelID {
-            return .green
-        }
-
-        if lastFailedASRModelID == modelID {
-            return .red
-        }
-
-        if isASRModelDownloaded(modelID) {
-            return MainWindowPalette.secondaryText
-        }
-
-        return .orange
-    }
 }
