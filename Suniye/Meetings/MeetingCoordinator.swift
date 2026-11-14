@@ -470,6 +470,9 @@ final class MeetingCoordinator {
         case .user, .callEnded, .sleep, .quit:
             break
         }
+        if let callEnd = record(session.id)?.transcriptEnd {
+            await store.cutAudio(of: session.id, afterSample: callEnd)
+        }
         await queuePass(session.id, kind: .first)?.value
     }
 

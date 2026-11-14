@@ -568,6 +568,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     func testStopNowEndsAnAutomaticRecordingWhereTheCallEnded() async throws {
         let coordinator = makeCoordinator()
         coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
         await coordinator.start()
         let start = clock!
         await startAutomatically(coordinator)
@@ -584,9 +585,11 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.stopEndedCall()
         let segments = await store.segments(of: id)
         let decoded = await engine.calls
+        let keptSamples = try MeetingAudioFileReader.sampleCount(at: store.audioURL(.you, for: id))
 
         XCTAssertEqual(card, .callEnded(zoom, silent: false, endedAt: start + 4.5, stopsAt: start + 4.5 + 30))
-        XCTAssertEqual(decoded, 2, "the words after the call were recorded and decoded")
+        XCTAssertEqual(decoded, 1, "the words after the call ended leave the audio, so they are never decoded")
+        XCTAssertEqual(keptSamples, Int(4.5 * Double(rate)), "the kept audio ends where the call ended")
         XCTAssertEqual(cardAnswers, ["call_ended stop_now"])
         XCTAssertEqual(event("meeting_ended")?["reason"], .label("call_ended"))
         XCTAssertEqual(try XCTUnwrap(coordinator.record(id)?.endedAt).timeIntervalSince(start), 4.5, accuracy: 0.001)

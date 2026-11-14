@@ -231,6 +231,18 @@ actor MeetingStore {
         return audioTracks(of: id).isEmpty
     }
 
+    /// Cuts every track after `end` samples, so no audio after it stays on
+    /// disk.
+    func cutAudio(of id: UUID, afterSample end: Int) {
+        for track in audioTracks(of: id) {
+            do {
+                try MeetingAudioFileWriter.truncate(at: audioURL(track, for: id), toSamples: end)
+            } catch {
+                AppLogger.shared.log(.error, "meeting audio not cut id=\(id.uuidString) track=\(track.rawValue) error=\(error.localizedDescription)")
+            }
+        }
+    }
+
     /// The meetings of `ids` that have an audio file on disk.
     func meetingsWithAudio(_ ids: [UUID]) -> Set<UUID> {
         Set(ids.filter { !audioTracks(of: $0).isEmpty })
