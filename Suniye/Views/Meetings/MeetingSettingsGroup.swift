@@ -149,7 +149,6 @@ private struct NeverAskSheet: View {
 /// the Mac shows its download size, and picking it starts the download.
 private struct MeetingTranscriptModelRow: View {
     @Bindable var appState: AppState
-    @State private var systemAssetInstalled: [ASRModelID: Bool] = [:]
 
     private var selection: ASRModelID? {
         appState.meetings.settings.transcriptModel
@@ -161,7 +160,7 @@ private struct MeetingTranscriptModelRow: View {
                 download(downloading)
             } else {
                 HStack(spacing: 10) {
-                    if let selection, !isOnMac(selection) {
+                    if let selection, !appState.isASRModelOnMac(selection) {
                         Button("Download") { appState.useForMeetingTranscripts(selection) }
                             .disabled(!appState.asrModelCanPerformPrimaryAction(for: selection))
                     }
@@ -170,9 +169,7 @@ private struct MeetingTranscriptModelRow: View {
             }
         }
         .task(id: appState.meetingTranscriptModelDownload) {
-            for entry in appState.asrModelCatalog where entry.isSystemManaged {
-                systemAssetInstalled[entry.id] = await appState.isSystemManagedASRAssetInstalled(entry.id)
-            }
+            await appState.refreshSystemManagedASRAssets()
         }
     }
 
@@ -188,7 +185,7 @@ private struct MeetingTranscriptModelRow: View {
             ForEach(appState.asrModelCatalog) { entry in
                 Text(label(entry))
                     .tag(ASRModelID?.some(entry.id))
-                    .disabled(!isOnMac(entry.id) && !appState.asrModelCanPerformPrimaryAction(for: entry.id))
+                    .disabled(!appState.isASRModelOnMac(entry.id) && !appState.asrModelCanPerformPrimaryAction(for: entry.id))
             }
         }
         .labelsHidden()
@@ -211,13 +208,9 @@ private struct MeetingTranscriptModelRow: View {
         }
     }
 
-    private func isOnMac(_ model: ASRModelID) -> Bool {
-        ASRModelCatalog.entry(for: model).isSystemManaged ? systemAssetInstalled[model] ?? false : appState.isASRModelDownloaded(model)
-    }
-
     /// The Speech Model page's words for a model that is not on the Mac.
     private func label(_ entry: ASRModelCatalogEntry) -> String {
-        guard !isOnMac(entry.id) else { return entry.displayName }
+        guard !appState.isASRModelOnMac(entry.id) else { return entry.displayName }
         let size = entry.isSystemManaged ? "Built into macOS, not yet downloaded" : "\(entry.sizeDisplayText) to download"
         return "\(entry.displayName) · \(size)"
     }

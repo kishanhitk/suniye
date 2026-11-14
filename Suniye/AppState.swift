@@ -266,6 +266,9 @@ final class AppState {
     private(set) var meetingTranscriptModelDownload: ASRModelID?
     /// Counts the transcript model choices, so an older one never wins.
     @ObservationIgnored private var meetingTranscriptModelChoice = 0
+    /// Whether macOS has the asset of each system-managed speech model, as
+    /// `refreshSystemManagedASRAssets()` last asked.
+    private(set) var systemManagedASRAssetInstalled: [ASRModelID: Bool] = [:]
     var modelDownloadStartedAt: Date?
     /// One model operation at a time. Downloads and loads were split into
     /// separate slots so an installed model could be selected mid-download; the
@@ -1400,6 +1403,22 @@ final class AppState {
     /// OS-managed download.
     func isSystemManagedASRAssetInstalled(_ modelID: ASRModelID) async -> Bool {
         await modelManager.isSystemManagedAssetInstalled(modelID)
+    }
+
+    /// The model runs with no download: its files are on disk, or macOS has
+    /// its asset. A system-managed model counts as missing until
+    /// `refreshSystemManagedASRAssets()` has an answer.
+    func isASRModelOnMac(_ modelID: ASRModelID) -> Bool {
+        ASRModelCatalog.entry(for: modelID).isSystemManaged
+            ? systemManagedASRAssetInstalled[modelID] ?? false
+            : isASRModelDownloaded(modelID)
+    }
+
+    /// Asks macOS again which system-managed speech assets it has.
+    func refreshSystemManagedASRAssets() async {
+        for entry in asrModelCatalog where entry.isSystemManaged {
+            systemManagedASRAssetInstalled[entry.id] = await isSystemManagedASRAssetInstalled(entry.id)
+        }
     }
 
     func asrModelSecondaryActionsEnabled(for modelID: ASRModelID) -> Bool {
