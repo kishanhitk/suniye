@@ -39,6 +39,7 @@ struct MeetingPage: View {
     var body: some View {
         if let record = meetings.record(id) {
             VStack(alignment: .leading, spacing: 14) {
+                backLink
                 header(record)
                 if let live {
                     MeetingLiveMeta(session: live)
@@ -97,19 +98,27 @@ struct MeetingPage: View {
 
     // MARK: - Header
 
+    /// "‹ Meetings" above the title, back to the list.
+    private var backLink: some View {
+        Button {
+            meetings.openMeetingID = nil
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Meetings")
+            }
+            .font(AppTypography.body)
+            .foregroundStyle(Color.accentColor)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("[", modifiers: .command)
+        .accessibilityLabel("Back to Meetings")
+    }
+
     private func header(_ record: MeetingRecord) -> some View {
         HStack(alignment: .center, spacing: 10) {
-            Button {
-                meetings.openMeetingID = nil
-            } label: {
-                Image(systemName: "chevron.backward")
-                    .font(AppTypography.bodyMedium)
-                    .foregroundStyle(MainWindowPalette.secondaryText)
-            }
-            .buttonStyle(.borderless)
-            .help("Back")
-            .keyboardShortcut("[", modifiers: .command)
-
             Text(record.title)
                 .font(AppTypography.transcriptsHeadline)
                 .tracking(AppTypography.transcriptsHeadlineTracking)
