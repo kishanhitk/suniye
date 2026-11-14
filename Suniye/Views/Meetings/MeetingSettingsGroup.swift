@@ -65,7 +65,7 @@ struct MeetingSettingsGroup: View {
             RowSeparator()
             ControlSettingRow(
                 title: "Keep meeting audio",
-                info: "Audio lets you transcribe a meeting again. Transcripts and notes stay until you delete them. A change applies the next time Suniye opens or finishes a transcript."
+                info: "Audio lets you play back and transcribe a meeting again. Transcripts and notes stay until you delete them. A change applies the next time Suniye opens or finishes a transcript."
             ) {
                 Picker(
                     "Keep meeting audio",

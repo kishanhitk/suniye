@@ -16,6 +16,7 @@ Suniye/Vendor/Permiso/SettingsWindowLocator.swift     # vendored; inspects live 
 # --- Hardware / OS-permission bound ---
 Suniye/Services/AudioCaptureDrivers.swift             # AVAudioEngine/HAL AudioUnit render callbacks; needs microphone
 Suniye/Services/CoreAudioDeviceMonitor.swift          # CoreAudio HAL property listeners; needs audio hardware
+Suniye/Meetings/MeetingAudioPlayer.swift              # AVAudioPlayer output through the audio device; the playback model is tested with a fake player
 Suniye/Meetings/SystemAudioTap.swift                  # Core Audio process tap + private aggregate device; needs the system audio permission and real output (recorder logic is tested with fake sources in MeetingCaptureTests)
 Suniye/Meetings/MeetingEnvironment+Live.swift          # wires the live microphone, the call audio tap, the quit alert and Core Audio reads; the coordinator is tested with a fake environment
 Suniye/Meetings/CoreAudioMicrophoneUsers.swift         # Core Audio process list, device listeners and browser window titles through Accessibility; call detection is tested with a fake reader in MeetingCallTests
@@ -61,6 +62,7 @@ Suniye/Views/Meetings/MeetingsPage.swift              # SwiftUI render only (lis
 Suniye/Views/Meetings/MeetingPage.swift               # SwiftUI render only (copy and export text in MeetingExport.swift, covered)
 Suniye/Views/Meetings/MeetingSummaryTab.swift         # SwiftUI render only (summary blocks in MeetingExport.swift, covered)
 Suniye/Views/Meetings/MeetingTranscriptView.swift     # SwiftUI and NSTextView render only
+Suniye/Views/Meetings/MeetingPlayerBar.swift          # SwiftUI render only (playback rules in MeetingPlayback.swift and the Space rule in MeetingSpaceKey.swift, covered)
 Suniye/Views/Meetings/MeetingTemplateEditor.swift     # SwiftUI render only (template rules in MeetingTemplates.swift, covered)
 Suniye/Views/Meetings/MeetingActions.swift            # dialog state and AppKit panels; each action calls the covered MeetingCoordinator
 Suniye/Views/Meetings/MeetingSettingsGroup.swift      # SwiftUI render only (the choices call the covered MeetingCoordinator)

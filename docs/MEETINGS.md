@@ -105,7 +105,16 @@ Limits of this measurement: one meeting, in English, with four speakers; each tr
 - **Until the transcript is ready** (default): the audio goes when the transcript is final.
 - **7 days** or **30 days**: the audio goes that long after the end of the meeting.
 
-Suniye checks at launch and after each transcript, with no timer. A change of the setting applies at the next check, so a wrong click deletes nothing at once. A meeting with no finished transcript keeps its audio for **Finish Transcript**. **Delete Meeting** deletes the audio at once.
+Suniye checks at launch and after each transcript, with no timer. A change of the setting applies at the next check, so a wrong click deletes nothing at once. A meeting with no finished transcript keeps its audio for **Finish Transcript**, and the meeting whose audio plays keeps it until the next check. **Delete Meeting** deletes the audio at once.
+
+### Play
+
+While the audio is on the Mac and the transcript is finished, the Transcript tab has a player above the lines: play or pause, a position bar, and the time as the lines show it.
+
+- Space plays and pauses while no text that you can edit has the keyboard.
+- The playback pauses when you open another tab or start a dictation, and it does not start again by itself. It stops when you leave the meeting page, when a recording starts and when you delete the meeting. Play is off while a meeting records.
+- The audio files hold no paused time: the playback goes from the moment of a pause to the moment of the resume, and the time jumps by the length of the pause.
+- Playback only sends sound to the output and opens no input, so call detection does not see it.
 
 While the audio is on the Mac, **Transcribe Again…** in the meeting's ··· menu writes the transcript again with the current **Transcript model**. Suniye asks first. The current transcript stays until the new one is complete: a failure or a quit keeps it. The notes and the summary stay; **Regenerate** writes the summary again. A new transcript replaces your edits to the transcript; the question says so.
 

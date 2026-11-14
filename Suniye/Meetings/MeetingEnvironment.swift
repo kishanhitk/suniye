@@ -29,6 +29,7 @@ struct MeetingEnvironment {
     var speechlessLimit: TimeInterval = 15 * 60
     var makeSpeechDetector: @Sendable () throws -> SpeechDetecting = { try SpeechDetector.bundled() }
     var callCardDurations = MeetingCallCard.Durations()
+    var makePlayer: @MainActor (_ audioFiles: [URL]) throws -> MeetingAudioPlayer = { try MeetingTrackPlayers(urls: $0) }
 }
 
 /// Where the call plays, for the echo filter.

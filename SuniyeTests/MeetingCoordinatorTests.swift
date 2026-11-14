@@ -40,6 +40,7 @@ final class MeetingCoordinatorTests: XCTestCase {
     private var uptime: TimeInterval = 1000
     private var cardDurations = MeetingCallCard.Durations()
     private var summaryAvailability = MeetingSummaryAvailability.ready(.localModel)
+    private var players: [FakeMeetingAudioPlayer] = []
 
     override func setUp() async throws {
         try await super.setUp()
@@ -76,7 +77,12 @@ final class MeetingCoordinatorTests: XCTestCase {
             liveCheckInterval: .milliseconds(20),
             speechlessLimit: speechlessLimit,
             makeSpeechDetector: { LoudSpeechDetector() },
-            callCardDurations: cardDurations
+            callCardDurations: cardDurations,
+            makePlayer: { [unowned self] _ in
+                let player = FakeMeetingAudioPlayer(duration: 3)
+                players.append(player)
+                return player
+            }
         )
         let coordinator = MeetingCoordinator(
             store: store,
@@ -952,6 +958,64 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(marked, clock)
         XCTAssertTrue(written)
         XCTAssertNil(coordinator.record(meeting.id)?.summaryEditedAt, "a new summary is not the user's edit")
+    }
+
+    func testADictationPausesThePlaybackAndItStaysPaused() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
+        let coordinator = makeCoordinator()
+        coordinator.playback.open(meeting.id)
+        coordinator.playback.play()
+
+        coordinator.dictationChanged(active: true)
+        let paused = !coordinator.playback.isPlaying && !players[0].isPlaying
+        coordinator.dictationChanged(active: false)
+
+        XCTAssertTrue(paused)
+        XCTAssertFalse(coordinator.playback.isPlaying, "it does not start again by itself")
+    }
+
+    func testARecordingClosesThePlayback() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
+        let coordinator = makeCoordinator()
+        coordinator.playback.open(meeting.id)
+        coordinator.playback.play()
+
+        try await coordinator.startMeeting(source: .manual)
+
+        XCTAssertNil(coordinator.playback.meetingID)
+        XCTAssertFalse(players[0].isPlaying)
+    }
+
+    func testDeletingAMeetingStopsItsPlaybackBeforeItsFilesGo() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
+        let coordinator = makeCoordinator()
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        await coordinator.start()
+        coordinator.playback.open(meeting.id)
+        coordinator.playback.play()
+        var filesAtStop: [MeetingTrack]?
+        players[0].pausing = { [unowned self] in filesAtStop = store.audioTracks(of: meeting.id) }
+
+        try await coordinator.delete(meeting.id)
+
+        XCTAssertEqual(filesAtStop, [.you], "the playback stops while its files are there")
+        XCTAssertNil(coordinator.playback.meetingID)
+        XCTAssertEqual(store.audioTracks(of: meeting.id), [])
+    }
+
+    func testAudioOpenInThePlayerStaysPastItsTimeUntilTheNextCheck() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 8)
+        let first = makeCoordinator()
+        first.updateSettings { $0.audioRetention = .sevenDays }
+        first.playback.open(meeting.id)
+
+        await first.start()
+        let keptWhileOpen = store.audioTracks(of: meeting.id)
+        first.playback.close()
+        await makeCoordinator().start()
+
+        XCTAssertEqual(keptWhileOpen, [.you])
+        XCTAssertEqual(store.audioTracks(of: meeting.id), [], "the next check deletes it")
     }
 
     func testAFailedTranscribeAgainKeepsTheTranscript() async throws {

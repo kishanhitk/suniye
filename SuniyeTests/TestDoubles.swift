@@ -1068,3 +1068,40 @@ final class StubSpeechDetector: SpeechDetecting {
         return answers.count > 1 ? answers.removeFirst() : answers[0]
     }
 }
+
+/// A meeting audio player whose time moves only when a test moves it.
+@MainActor
+final class FakeMeetingAudioPlayer: MeetingAudioPlayer {
+    let duration: TimeInterval
+    var currentTime: TimeInterval = 0
+    var isPlaying = false
+    var onEnd: () -> Void = {}
+    /// The time of each start.
+    private(set) var starts: [TimeInterval] = []
+    /// Runs at each pause, before the player pauses.
+    var pausing: () -> Void = {}
+
+    init(duration: TimeInterval) {
+        self.duration = duration
+    }
+
+    func play(from time: TimeInterval) -> Bool {
+        starts.append(time)
+        currentTime = time
+        isPlaying = true
+        return true
+    }
+
+    func pause() {
+        pausing()
+        isPlaying = false
+    }
+
+    /// The audio plays to its end, and the player goes back to the start, as
+    /// AVAudioPlayer does.
+    func playToEnd() {
+        isPlaying = false
+        currentTime = 0
+        onEnd()
+    }
+}

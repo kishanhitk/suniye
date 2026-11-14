@@ -198,6 +198,7 @@ final class MeetingCoordinator {
     @ObservationIgnored let store: MeetingStore
     /// The text that the meeting page saves; a quit waits for it.
     @ObservationIgnored let textSaves = MeetingTextSaves()
+    @ObservationIgnored let playback: MeetingPlayback
     @ObservationIgnored let templates: MeetingTemplateStore
 
     @ObservationIgnored private let settingsStore: MeetingSettingsStore
@@ -245,6 +246,7 @@ final class MeetingCoordinator {
         self.environment = environment
         self.analytics = analytics
         settings = settingsStore.load()
+        playback = MeetingPlayback(store: store, makePlayer: environment.makePlayer)
         detector = MeetingCallDetector(reader: environment.makeMicrophoneUsers(), uptime: environment.uptime)
         summaries = MeetingSummaries(
             store: store,
@@ -365,6 +367,8 @@ final class MeetingCoordinator {
         guard await host?.requestMeetingMicrophoneAccess() == true else {
             throw MeetingStartError.noMicrophoneAccess
         }
+        // The microphone would hear the playback.
+        playback.close()
 
         let id = UUID()
         let recorder = MeetingRecorder(
@@ -761,6 +765,7 @@ final class MeetingCoordinator {
 
     func delete(_ id: UUID) async throws {
         guard live?.id != id, transcriptPasses[id] == nil else { return }
+        playback.close(id)
         summaries.remove(id)
         try await store.delete(id)
         meetings.removeAll { $0.id == id }
@@ -776,8 +781,11 @@ final class MeetingCoordinator {
     /// From the start of a dictation to its end, no meeting chunk starts
     /// decoding and the summary waits. The microphone track gets silence from
     /// the start until `dictationCaptureEnded()`: the dictated words are not
-    /// meeting talk.
+    /// meeting talk. A playback pauses, so the dictation does not hear it.
     func dictationChanged(active: Bool) {
+        if active {
+            playback.pause()
+        }
         dictating = active
         dictationCaptures = active
         summaries.hold(active)
@@ -938,11 +946,12 @@ final class MeetingCoordinator {
 
     /// Deletes the audio whose time is over: at launch and after each
     /// transcript, never on a timer. A meeting with no final transcript keeps
-    /// its audio for Finish Transcript, and a meeting in a pass keeps it until
-    /// the pass ends.
+    /// its audio for Finish Transcript, and a meeting in a pass or with its
+    /// audio open in the player keeps it until the next check.
     private func deleteExpiredAudio() async {
         let now = environment.now()
-        for record in meetings where audioOnMac.contains(record.id) && record.status.hasFinalTranscript && transcriptPasses[record.id] == nil {
+        for record in meetings where audioOnMac.contains(record.id) && record.status.hasFinalTranscript
+            && transcriptPasses[record.id] == nil && playback.meetingID != record.id {
             if let days = settings.audioRetention.days,
                now < (record.endedAt ?? record.startedAt).addingTimeInterval(TimeInterval(days) * 24 * 60 * 60) {
                 continue

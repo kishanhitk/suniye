@@ -98,12 +98,18 @@ struct MeetingPage: View {
             .onAppear { meetings.pageOnScreen = id }
             .onDisappear {
                 meetings.textSaves.saveNow(id)
+                meetings.playback.close(id)
                 if meetings.pageOnScreen == id {
                     meetings.pageOnScreen = nil
                 }
             }
             .onChange(of: tab) {
                 meetings.textSaves.saveNow(id)
+                // The controls are on the Transcript tab: no sound plays
+                // without them in sight.
+                if tab != .transcript {
+                    meetings.playback.pause()
+                }
             }
             .onChange(of: live == nil) { _, finished in
                 if finished, tab == .notes, notes?.text.isEmpty ?? true {
@@ -271,7 +277,15 @@ struct MeetingPage: View {
                     if let pass = meetings.transcriptPasses[id], pass.kind == .again {
                         MeetingTranscriptProgressView(progress: pass.progress, isWaiting: pass.waiting, title: "Transcribing again…")
                     }
-                    MeetingTranscriptView(lines: transcriptLines(record), isEditable: canEditText(record)) { texts, ended in
+                    MeetingTranscriptPane(
+                        playback: meetings.playback,
+                        id: id,
+                        lines: transcriptLines(record),
+                        timeline: MeetingTimeline(pauses: record.pauses),
+                        hasAudio: meetings.audioOnMac.contains(id) && record.status.hasFinalTranscript,
+                        canPlay: meetings.live == nil,
+                        isEditable: canEditText(record)
+                    ) { texts, ended in
                         editTranscript(texts, ended: ended)
                     }
                 }
