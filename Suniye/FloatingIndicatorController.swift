@@ -114,12 +114,14 @@ final class FloatingIndicatorController {
         AppLogger.shared.log(.info, "floating indicator stopped")
     }
 
-    func configure(hideWhenIdle: Bool, placement: FloatingIndicatorPlacement?) {
+    func configure(hideWhenIdle: Bool, showsMeetingTime: Bool, placement: FloatingIndicatorPlacement?) {
         let didChangeVisibility = self.hideWhenIdle != hideWhenIdle
+        let didChangeMeetingTime = model.showsMeetingTime != showsMeetingTime
         let didChangePlacement = customPlacement != placement
         self.hideWhenIdle = hideWhenIdle
+        model.showsMeetingTime = showsMeetingTime
         customPlacement = placement
-        guard didChangeVisibility || didChangePlacement else { return }
+        guard didChangeVisibility || didChangeMeetingTime || didChangePlacement else { return }
         guard isStarted else { return }
         render()
     }
@@ -138,7 +140,7 @@ final class FloatingIndicatorController {
     private func followMeetingPill() {
         guard let session = model.meeting else { return }
         withObservationTracking {
-            _ = FloatingIndicatorMetrics.meetingPillSize(for: session, expanded: false)
+            _ = FloatingIndicatorMetrics.meetingPillSize(for: session, expanded: false, showsTime: model.showsMeetingTime)
         } onChange: { [weak self, weak session] in
             Task { @MainActor [weak self, weak session] in
                 guard let self, let session, self.model.meeting === session else { return }
@@ -480,16 +482,20 @@ final class FloatingIndicatorController {
         switch state {
         case .idle:
             if let meeting = model.meeting {
-                return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: false)
+                return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: false, showsTime: model.showsMeetingTime)
             }
             return NSSize(width: 74, height: 7)
         case .hover:
             if let meeting = model.meeting {
-                return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: true)
+                return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: true, showsTime: model.showsMeetingTime)
             }
             return NSSize(width: 272, height: 84)
         case let .listening(_, source, preview):
-            let panelSize = FloatingIndicatorMetrics.listeningPanelSize(preview: preview, source: source, showsMeetingTimer: hasMeeting)
+            let panelSize = FloatingIndicatorMetrics.listeningPanelSize(
+                preview: preview,
+                source: source,
+                meetingLeadWidth: hasMeeting ? FloatingIndicatorMetrics.meetingLeadWidth(showsTime: model.showsMeetingTime) : 0
+            )
             return NSSize(width: panelSize.width, height: panelSize.height)
         case let .processing(message):
             guard let message else {

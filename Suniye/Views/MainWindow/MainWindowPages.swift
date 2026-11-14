@@ -342,6 +342,12 @@ struct GeneralPage: View {
             )
 
             RowSeparator()
+            ToggleSettingRow(
+                title: "Show meeting time",
+                isOn: $appState.showsMeetingTime
+            )
+
+            RowSeparator()
             ControlSettingRow(
                 title: "Position",
                 info: "Drag the floating pill to place it somewhere that stays out of the way."

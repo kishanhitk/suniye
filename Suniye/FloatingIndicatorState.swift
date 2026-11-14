@@ -26,12 +26,12 @@ enum FloatingIndicatorMetrics {
         source == .editHotkey ? editModeListeningPillSize : listeningPillSize
     }
 
-    /// The meeting pill, sized to what it shows. At rest: the dot, the time,
-    /// then one level meter, or one glyph while paused or while a track has a
-    /// problem. On hover: the dot, the time, and Pause (or Resume), Stop and
-    /// Open Notes.
-    static func meetingPillSize(expanded: Bool, isPaused: Bool, hasProblem: Bool) -> CGSize {
-        let lead = meetingPillDotWidth + meetingPillGap + meetingPillTimeWidth
+    /// The meeting pill, sized to what it shows. At rest: the dot, the time
+    /// when it shows, then one level meter, or one glyph while paused or while
+    /// a track has a problem. On hover: the dot, the time when it shows, and
+    /// Pause (or Resume), Stop and Open Notes.
+    static func meetingPillSize(expanded: Bool, isPaused: Bool, hasProblem: Bool, showsTime: Bool) -> CGSize {
+        let lead = meetingPillDotWidth + (showsTime ? meetingPillGap + meetingPillTimeWidth : 0)
         guard expanded else {
             let trailing = isPaused || hasProblem ? meetingPillGlyphWidth : meetingPillMeterWidth
             return CGSize(width: 2 * 14 + lead + meetingPillGap + trailing, height: 34)
@@ -63,8 +63,11 @@ enum FloatingIndicatorMetrics {
         ceil((text as NSString).size(withAttributes: [.font: font]).width)
     }
 
-    /// Room for the meeting's dot and timer in a listening pill.
-    static let meetingTimerWidth: CGFloat = 66
+    /// Room for the meeting's dot, and its time when it shows, in a
+    /// listening pill. The dot alone takes its width and the pill's 10 pt gap.
+    static func meetingLeadWidth(showsTime: Bool) -> CGFloat {
+        showsTime ? 66 : meetingPillDotWidth + 10
+    }
 
     /// Combined panel size. The panel is bottom-anchored and its content is
     /// bottom-aligned, so extra height for the bubble grows upward only and the
@@ -75,12 +78,10 @@ enum FloatingIndicatorMetrics {
     static func listeningPanelSize(
         preview: FloatingIndicatorState.PreviewState,
         source: FloatingIndicatorState.Source = .hotkey,
-        showsMeetingTimer: Bool = false
+        meetingLeadWidth: CGFloat = 0
     ) -> CGSize {
         var pillSize = pillSize(source: source)
-        if showsMeetingTimer {
-            pillSize.width += meetingTimerWidth
-        }
+        pillSize.width += meetingLeadWidth
         guard preview.reservesBubbleSpace else {
             return pillSize
         }
@@ -190,7 +191,7 @@ enum FloatingIndicatorState: Equatable {
 
 extension FloatingIndicatorMetrics {
     @MainActor
-    static func meetingPillSize(for session: MeetingSession, expanded: Bool) -> CGSize {
-        meetingPillSize(expanded: expanded, isPaused: session.isPaused, hasProblem: session.hasTrackProblem)
+    static func meetingPillSize(for session: MeetingSession, expanded: Bool, showsTime: Bool) -> CGSize {
+        meetingPillSize(expanded: expanded, isPaused: session.isPaused, hasProblem: session.hasTrackProblem, showsTime: showsTime)
     }
 }

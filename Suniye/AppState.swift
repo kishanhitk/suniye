@@ -421,6 +421,19 @@ final class AppState {
             onStateChange?()
         }
     }
+    var showsMeetingTime = true {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            guard oldValue != showsMeetingTime else {
+                return
+            }
+            persistGeneralSettings()
+            syncFloatingIndicatorPreferences()
+            onStateChange?()
+        }
+    }
     var liveTranscriptionPreviewEnabled = false {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -5166,6 +5179,7 @@ final class AppState {
         soundFeedbackEnabled = settings.soundFeedbackEnabled
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
         liveTranscriptionPreviewEnabled = settings.liveTranscriptionPreviewEnabled
+        showsMeetingTime = settings.showsMeetingTime
         floatingIndicatorPlacement = settings.floatingIndicatorPlacement
         selectedASRModelID = settings.selectedASRModelID
         updateChannel = settings.updateChannel
@@ -5222,6 +5236,7 @@ final class AppState {
             soundFeedbackEnabled: soundFeedbackEnabled,
             hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,
             liveTranscriptionPreviewEnabled: liveTranscriptionPreviewEnabled,
+            showsMeetingTime: showsMeetingTime,
             floatingIndicatorPlacement: floatingIndicatorPlacement,
             // Legacy Bools still written (derived) so a downgraded build keeps
             // working; `onboardingProgress` wins on load in this build.
@@ -5499,6 +5514,7 @@ final class AppState {
         guard floatingIndicatorEnabled else { return }
         floatingIndicatorController.configure(
             hideWhenIdle: hideFloatingIndicatorWhenIdle,
+            showsMeetingTime: showsMeetingTime,
             placement: floatingIndicatorPlacement
         )
     }
