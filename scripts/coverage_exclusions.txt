@@ -40,7 +40,6 @@ Suniye/App/Views/StatusItemController.swift           # NSStatusBar item shell
 Suniye/Shared/Views/BehindWindowBlur.swift            # NSVisualEffectView wrapper; window-server bound
 Suniye/Dictation/Views/FloatingIndicatorView.swift    # SwiftUI render only
 Suniye/IssueReport/Views/IssueReportView.swift        # SwiftUI render only
-Suniye/Views/ListeningOverlay.swift                   # SwiftUI render only
 Suniye/Onboarding/Views/OnboardingView.swift          # SwiftUI render only
 Suniye/Onboarding/Views/SuniyeMark.swift              # SwiftUI render only
 Suniye/Onboarding/Views/OnboardingLandscape.swift     # SwiftUI Canvas render only

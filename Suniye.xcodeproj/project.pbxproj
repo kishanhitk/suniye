@@ -230,7 +230,6 @@
 		D9596E4A242074ACA9AFDD0E /* AppleSpeechTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3195A9261B172F86FCD6465C /* AppleSpeechTranscriptionService.swift */; };
 		DABFB9E4A2770ACD863D0415 /* MeetingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EC3C5F79375CBB7F9353EE0 /* MeetingCoordinatorTests.swift */; };
 		DB33D2B8109251B88068BCC8 /* AppStateHandsFreeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D446136FD33B0273CCFE6C39 /* AppStateHandsFreeTests.swift */; };
-		DB41AE744EEE09C11E39DB1C /* ListeningOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1FAF2B003307FDF0EBA9BA0 /* ListeningOverlay.swift */; };
 		DBC9493A82BDB3A0B9D10FE3 /* MeetingMicCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DC4B5E09C956EA3CFADBBA7 /* MeetingMicCapture.swift */; };
 		DC8532A515E87705B0F4BFC5 /* SherpaOnnx.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3471ED7BC0D817AF7D5C516 /* SherpaOnnx.swift */; };
 		DD2DF879055EDA81608657AF /* MainWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB7DB7B5C04B89DA04AF3EE0 /* MainWindowController.swift */; };
@@ -517,7 +516,6 @@
 		D0A6D38E4E72DDF85556F041 /* LocalGemmaRuntimeMoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaRuntimeMoreTests.swift; sourceTree = "<group>"; };
 		D0D96966D22AF827757DB24D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D13ACF72C7948DE8F723CC8A /* MeetingCallDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingCallDetector.swift; sourceTree = "<group>"; };
-		D1FAF2B003307FDF0EBA9BA0 /* ListeningOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListeningOverlay.swift; sourceTree = "<group>"; };
 		D446136FD33B0273CCFE6C39 /* AppStateHandsFreeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateHandsFreeTests.swift; sourceTree = "<group>"; };
 		D4B294F02CFAE25968B624AF /* FloatingIndicatorState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingIndicatorState.swift; sourceTree = "<group>"; };
 		D5D360A6AC4595CCDECBF9EE /* CohereTranscriptionServiceRealModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CohereTranscriptionServiceRealModelTests.swift; sourceTree = "<group>"; };
@@ -991,7 +989,6 @@
 		ACABD336294DBFA58C26FE31 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				D1FAF2B003307FDF0EBA9BA0 /* ListeningOverlay.swift */,
 				F630D1F7A92339C90CBB36AF /* Meetings */,
 			);
 			path = Views;
@@ -1336,7 +1333,6 @@
 				1F59D9C535E11C6DFEA551AD /* LLMSettingsStore.swift in Sources */,
 				7C0F246E42AC81F4E40334C9 /* LaunchAtLoginService.swift in Sources */,
 				8E8D56B673DF67A6D81FD2E2 /* LearningToastPresenter.swift in Sources */,
-				DB41AE744EEE09C11E39DB1C /* ListeningOverlay.swift in Sources */,
 				F871B19DF9CE3C8A9C22FCD9 /* LlamaServer.swift in Sources */,
 				9FADD40D38E8B62ED0CD65DF /* LocalGemmaLlamaCppClient.swift in Sources */,
 				4D6265AF5BB8191A06CD1BEB /* LocalGemmaMeetingSummaryModel.swift in Sources */,
