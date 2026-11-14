@@ -30,6 +30,10 @@ struct MeetingSegment: Codable, Equatable, Identifiable, Sendable {
     let audioStart: Int
     let audioEnd: Int
     let text: String
+
+    func withText(_ text: String) -> MeetingSegment {
+        MeetingSegment(id: id, track: track, audioStart: audioStart, audioEnd: audioEnd, text: text)
+    }
 }
 
 enum MeetingStatus: String, Codable, Sendable {
@@ -127,6 +131,9 @@ struct MeetingRecord: Codable, Equatable, Identifiable, Sendable {
     var transcriptFailure: String?
     /// Why the last summary failed, for the meeting page.
     var summaryFailure: String?
+    /// When the user first changed a transcript line; nil until then, and
+    /// again after Transcribe Again.
+    var transcriptEditedAt: Date?
 
     init(
         id: UUID = UUID(),

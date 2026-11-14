@@ -687,6 +687,32 @@ final class MeetingCoordinator {
         }
     }
 
+    /// Writes the text that the user changed in transcript lines; the times
+    /// and the speakers stay. An empty text deletes its line when the edit
+    /// ended (`deleteEmpty`); until then the line keeps its old text on disk,
+    /// so a line that the user empties to retype it does not go.
+    func editTranscript(_ id: UUID, texts: [UUID: String], deleteEmpty: Bool) async {
+        guard record(id)?.status.hasFinalTranscript == true else { return }
+        let segments = await store.segments(of: id).compactMap { segment -> MeetingSegment? in
+            guard let text = texts[segment.id] else { return segment }
+            if text.isEmpty {
+                return deleteEmpty ? nil : segment
+            }
+            return segment.withText(text)
+        }
+        do {
+            try await store.replaceSegments(segments, of: id)
+        } catch {
+            AppLogger.shared.log(.error, "meeting transcript edit not saved id=\(id.uuidString) error=\(error.localizedDescription)")
+            return
+        }
+        if record(id)?.transcriptEditedAt == nil {
+            let now = environment.now()
+            await update(id) { $0.transcriptEditedAt = now }
+        }
+        dropListText(id)
+    }
+
     /// The cached list text goes after the write, so no read that ran
     /// during it keeps the old notes.
     func saveNotes(_ notes: String, for id: UUID) async {
@@ -700,6 +726,7 @@ final class MeetingCoordinator {
 
     func regenerate(_ id: UUID, templateID: String? = nil) async {
         guard record(id)?.status.canRegenerate == true else { return }
+        await textSaves.finish(id)
         if let templateID {
             updateSettings { $0.templateID = templateID }
         }
@@ -875,6 +902,7 @@ final class MeetingCoordinator {
             let transcript = try await runPass(id, model: chosenModel, lines: .draft)
             guard !transcript.isEmpty else { throw TranscribeAgainError.noLines }
             try await store.keepDraft(of: id)
+            await update(id) { $0.transcriptEditedAt = nil }
             dropListText(id)
             onNotice?(.transcribedAgain(id))
         } catch {

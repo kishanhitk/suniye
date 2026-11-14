@@ -121,7 +121,7 @@ struct MeetingTitleField: NSViewRepresentable {
 
 /// Shows the whole title on one line while it is edited, scrolled to the
 /// caret, and cuts it with "…" at the end otherwise.
-final class TitleTextView: NSTextView {
+final class TitleTextView: MeetingTextView {
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
         if became {
@@ -136,15 +136,6 @@ final class TitleTextView: NSTextView {
             showsWholeTitle(false)
         }
         return resigned
-    }
-
-    /// A text view that leaves its window during an edit does not end the
-    /// edit, so the page would drop the typed title.
-    override func viewWillMove(toWindow newWindow: NSWindow?) {
-        if newWindow == nil, window?.firstResponder === self {
-            window?.makeFirstResponder(nil)
-        }
-        super.viewWillMove(toWindow: newWindow)
     }
 
     func showsWholeTitle(_ whole: Bool) {

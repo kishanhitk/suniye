@@ -80,7 +80,10 @@ struct MeetingPage: View {
             .padding(.top, AppMetrics.detailPaddingTop)
             .padding(.bottom, AppMetrics.detailPaddingBottom)
             .meetingActionDialogs(actions, meetings: meetings)
-            .task(id: record) {
+            // A new status brings new text: a finished transcript or summary.
+            // The user's own edits change the record too, and must not read
+            // back older text over what they type.
+            .task(id: record.status) {
                 segments = await meetings.transcript(of: id)
                 summary = await meetings.summary(of: id)
             }
@@ -257,9 +260,34 @@ struct MeetingPage: View {
                     if let pass = meetings.transcriptPasses[id], pass.kind == .again {
                         MeetingTranscriptProgressView(progress: pass.progress, isWaiting: pass.waiting, title: "Transcribing again…")
                     }
-                    MeetingTranscriptView(lines: transcriptLines(record))
+                    MeetingTranscriptView(lines: transcriptLines(record), isEditable: canEditText(record)) { texts, ended in
+                        editTranscript(texts, ended: ended)
+                    }
                 }
             }
+        }
+    }
+
+    /// No edit while a transcript or a summary is written: either would
+    /// replace the text under the user.
+    private func canEditText(_ record: MeetingRecord) -> Bool {
+        live == nil && record.status.hasFinalTranscript && record.status != .summarizing && meetings.transcriptPasses[id] == nil
+    }
+
+    /// The page shows the edit at once; the save waits for a pause in the
+    /// typing, and an emptied line goes only when the edit ends.
+    private func editTranscript(_ texts: [UUID: String], ended: Bool) {
+        segments = segments.compactMap { segment in
+            guard let text = texts[segment.id] else { return segment }
+            return text.isEmpty && ended ? nil : segment.withText(text)
+        }
+        let save: () async -> Void = { [meetings, id] in
+            await meetings.editTranscript(id, texts: texts, deleteEmpty: ended)
+        }
+        if ended {
+            meetings.textSaves.save(.transcript, of: id, save: save)
+        } else {
+            meetings.textSaves.stage(.transcript, of: id, save: save)
         }
     }
 

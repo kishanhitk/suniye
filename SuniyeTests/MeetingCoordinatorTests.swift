@@ -843,6 +843,98 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.record(meeting.id)?.status, .done)
     }
 
+    func testAnEditKeepsTheTimesAndReachesTheListAndItsSearch() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let line = MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 40_000, text: "Ship on Fryday.")
+        try await store.appendSegment(line, to: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        await coordinator.editTranscript(meeting.id, texts: [line.id: "Ship on Friday."], deleteEmpty: false)
+        let transcript = await coordinator.transcript(of: meeting.id)
+        let listed = await coordinator.listText(for: meeting.id)
+
+        XCTAssertEqual(transcript, [line.withText("Ship on Friday.")])
+        XCTAssertEqual(listed.transcript, ["Ship on Friday."])
+        XCTAssertEqual(coordinator.record(meeting.id)?.transcriptEditedAt, clock)
+    }
+
+    func testAnEmptiedLineStaysOnDiskUntilTheEditEnds() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let kept = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 16_000, text: "Hello.")
+        let emptied = MeetingSegment(id: UUID(), track: .you, audioStart: 16_000, audioEnd: 32_000, text: "Thanks for watching.")
+        try await store.appendSegment(kept, to: meeting.id)
+        try await store.appendSegment(emptied, to: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        await coordinator.editTranscript(meeting.id, texts: [emptied.id: ""], deleteEmpty: false)
+        let whileTyping = await coordinator.transcript(of: meeting.id)
+        await coordinator.editTranscript(meeting.id, texts: [emptied.id: ""], deleteEmpty: true)
+        let afterTheEdit = await coordinator.transcript(of: meeting.id)
+
+        XCTAssertEqual(whileTyping, [kept, emptied])
+        XCTAssertEqual(afterTheEdit, [kept])
+    }
+
+    func testAnEditedLineThatRepeatsTheCallStays() async throws {
+        var meeting = MeetingRecord(title: "Call", startedAt: clock.addingTimeInterval(-600), tracks: [.you, .them], status: .done, templateID: "general")
+        meeting.endedAt = clock.addingTimeInterval(-60)
+        meeting.callPlayedOnSpeakers = true
+        try await store.create(meeting)
+        let call = MeetingSegment(id: UUID(), track: .them, audioStart: 0, audioEnd: 48_000, text: "We ship on Friday.")
+        let mine = MeetingSegment(id: UUID(), track: .you, audioStart: 8_000, audioEnd: 40_000, text: "Sounds good.")
+        try await store.appendSegment(call, to: meeting.id)
+        try await store.appendSegment(mine, to: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        await coordinator.editTranscript(meeting.id, texts: [mine.id: "We ship on Friday."], deleteEmpty: false)
+        let transcript = await coordinator.transcript(of: meeting.id)
+
+        XCTAssertEqual(transcript.map(\.text), ["We ship on Friday.", "We ship on Friday."], "the echo rule does not hide a line that the user wrote")
+    }
+
+    func testTranscribeAgainClearsTheEditMark() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let line = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words.")
+        try await store.appendSegment(line, to: meeting.id)
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        await coordinator.start()
+        await coordinator.editTranscript(meeting.id, texts: [line.id: "Edited words."], deleteEmpty: false)
+        let marked = coordinator.record(meeting.id)?.transcriptEditedAt != nil
+
+        coordinator.transcribeAgain(meeting.id)
+        let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
+
+        XCTAssertTrue(marked)
+        XCTAssertTrue(finished)
+        XCTAssertNil(coordinator.record(meeting.id)?.transcriptEditedAt)
+        let transcript = await coordinator.transcript(of: meeting.id)
+        XCTAssertEqual(transcript.map(\.text), [longSentence])
+    }
+
+    func testRegenerateWaitsForTheTranscriptThatTheUserTyped() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let line = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: longSentence)
+        try await store.appendSegment(line, to: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        let typed = longSentence.replacingOccurrences(of: "word1 ", with: "typedword ")
+        coordinator.textSaves.stage(.transcript, of: meeting.id) {
+            await coordinator.editTranscript(meeting.id, texts: [line.id: typed], deleteEmpty: false)
+        }
+
+        await coordinator.regenerate(meeting.id)
+        let written = await waitUntil { coordinator.record(meeting.id)?.status == .done }
+        let inputs = await summaryModel.inputs
+
+        XCTAssertTrue(written)
+        XCTAssertTrue(inputs.contains { $0.contains("typedword") }, "the summary reads the typed text, not the text on disk before it")
+    }
+
     func testAFailedTranscribeAgainKeepsTheTranscript() async throws {
         let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
         try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words."), to: meeting.id)
@@ -1200,6 +1292,7 @@ private actor WordEngine: TranscriptionServiceProtocol {
 /// until it opens or its task is canceled.
 private actor GatedSummaryModel: MeetingSummaryModel {
     private(set) var kinds: [MeetingSummaryRequest.Kind] = []
+    private(set) var inputs: [String] = []
     private(set) var waiting = false
     private var isOpen = true
 
@@ -1221,6 +1314,7 @@ private actor GatedSummaryModel: MeetingSummaryModel {
 
     func generate(_ request: MeetingSummaryRequest) async throws -> String {
         kinds.append(request.kind)
+        inputs.append(request.input)
         waiting = true
         defer { waiting = false }
         while !isOpen {

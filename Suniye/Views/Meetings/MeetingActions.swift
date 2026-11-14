@@ -32,8 +32,13 @@ final class MeetingActions {
         deleting = record
     }
 
-    func askTranscribeAgain(_ record: MeetingRecord) {
-        askingTranscribeAgain = record
+    /// Asks once the typed text is saved, so the question knows about the
+    /// edits that a new transcript would replace.
+    func askTranscribeAgain(_ record: MeetingRecord, meetings: MeetingCoordinator) {
+        Task {
+            await meetings.textSaves.finish(record.id)
+            askingTranscribeAgain = meetings.record(record.id) ?? record
+        }
     }
 
     func export(_ record: MeetingRecord, meetings: MeetingCoordinator) {
@@ -49,6 +54,12 @@ final class MeetingActions {
                 failure = MeetingActionFailure(title: "Couldn’t export the meeting", message: error.localizedDescription)
             }
         }
+    }
+
+    static func transcribeAgainMessage(model: String?, edited: Bool) -> String {
+        let transcript = model.map { "A new transcript from \($0)" } ?? "A new transcript"
+        let replaced = edited ? "replaces the current one and your edits to it." : "replaces the current one."
+        return "\(transcript) \(replaced) Notes and the summary stay."
     }
 
     func revealInFinder(_ record: MeetingRecord, meetings: MeetingCoordinator) {
@@ -97,9 +108,8 @@ private struct MeetingActionDialogs: ViewModifier {
             ) { record in
                 Button("Transcribe Again") { meetings.transcribeAgain(record.id) }
                 Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text(meetings.transcriptModelName.map { "A new transcript from \($0) replaces the current one. Notes and the summary stay." }
-                    ?? "A new transcript replaces the current one. Notes and the summary stay.")
+            } message: { record in
+                Text(MeetingActions.transcribeAgainMessage(model: meetings.transcriptModelName, edited: record.transcriptEditedAt != nil))
             }
             .alert(
                 actions.failure?.title ?? "",
@@ -132,7 +142,7 @@ struct MeetingMenuItems: View {
         if !isLive {
             Button("Export as Markdown…") { actions.export(record, meetings: meetings) }
             if meetings.audioOnMac.contains(record.id), record.status.hasFinalTranscript {
-                Button("Transcribe Again…") { actions.askTranscribeAgain(record) }
+                Button("Transcribe Again…") { actions.askTranscribeAgain(record, meetings: meetings) }
                     .disabled(!meetings.canTranscribeAgain(record))
             }
         }

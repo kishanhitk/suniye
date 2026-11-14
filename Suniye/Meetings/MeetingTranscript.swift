@@ -18,8 +18,11 @@ enum MeetingTranscript {
     }
 
     /// The transcript that a reader sees: no echo of the call, and no line
-    /// after the end of the call that the meeting followed.
+    /// after the end of the call that the meeting followed. A transcript
+    /// that the user edited is as the user left it: the pass wrote it
+    /// without those lines, and an edit must not hide a line or bring one back.
     static func final(_ segments: [MeetingSegment], of record: MeetingRecord) -> [MeetingSegment] {
+        guard record.transcriptEditedAt == nil else { return ordered(segments) }
         let kept = record.transcriptEnd.map { end in segments.filter { $0.audioStart < end } } ?? segments
         return final(kept, callPlayedOnSpeakers: record.callPlayedOnSpeakers)
     }
