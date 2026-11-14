@@ -94,7 +94,7 @@ struct MeetingsPage: View {
             list
         }
         .meetingActionDialogs(actions, meetings: meetings)
-        .task(id: searchText) {
+        .task(id: ListTextLoad(value: searchText, revision: meetings.listTextRevision)) {
             guard !query.isEmpty else { return }
             for record in listed {
                 texts[record.id] = await meetings.listText(for: record.id)
@@ -120,7 +120,7 @@ struct MeetingsPage: View {
                             MeetingRow(record: record, snippet: snippet(for: record), query: query) {
                                 meetings.openMeetingID = record.id
                             }
-                            .task(id: record) {
+                            .task(id: ListTextLoad(value: record, revision: meetings.listTextRevision)) {
                                 texts[record.id] = await meetings.listText(for: record.id)
                             }
                             .contextMenu {
@@ -281,4 +281,11 @@ private struct MeetingRow: View {
         }
         .buttonStyle(PressableButtonStyle(pressedScale: 0.995))
     }
+}
+
+/// A task id that also changes when the text of any meeting changes, so the
+/// list reads it again.
+private struct ListTextLoad<Value: Equatable>: Equatable {
+    let value: Value
+    let revision: Int
 }

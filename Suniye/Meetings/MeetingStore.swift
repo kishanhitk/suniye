@@ -4,6 +4,14 @@ import Foundation
 /// files. Appends and small atomic writes keep a crash from losing more than
 /// the segment in flight.
 actor MeetingStore {
+    /// The lines of a meeting: its transcript, or the draft that Transcribe
+    /// Again writes. The draft replaces the transcript only when it is
+    /// complete.
+    enum SegmentFile: Sendable {
+        case transcript
+        case draft
+    }
+
     enum StoreError: LocalizedError, Equatable {
         case unknownMeeting(UUID)
 
@@ -107,13 +115,13 @@ actor MeetingStore {
         return records.sorted { $0.startedAt > $1.startedAt }
     }
 
-    func appendSegment(_ segment: MeetingSegment, to id: UUID) throws {
+    func appendSegment(_ segment: MeetingSegment, to id: UUID, in file: SegmentFile = .transcript) throws {
         guard fileManager.fileExists(atPath: folder(for: id).path) else {
             throw StoreError.unknownMeeting(id)
         }
         var line = try encoder.encode(segment)
         line.append(0x0A)
-        let url = segmentsURL(id)
+        let url = segmentsURL(id, file)
         if !fileManager.fileExists(atPath: url.path) {
             fileManager.createFile(atPath: url.path, contents: nil)
         }
@@ -126,7 +134,7 @@ actor MeetingStore {
 
     /// Replaces every segment, for example after the echo filter ran over the
     /// whole meeting.
-    func replaceSegments(_ segments: [MeetingSegment], of id: UUID) throws {
+    func replaceSegments(_ segments: [MeetingSegment], of id: UUID, in file: SegmentFile = .transcript) throws {
         guard fileManager.fileExists(atPath: folder(for: id).path) else {
             throw StoreError.unknownMeeting(id)
         }
@@ -135,12 +143,27 @@ actor MeetingStore {
             data.append(try encoder.encode(segment))
             data.append(0x0A)
         }
-        try data.write(to: segmentsURL(id), options: .atomic)
+        try data.write(to: segmentsURL(id, file), options: .atomic)
+    }
+
+    /// The draft becomes the transcript.
+    func keepDraft(of id: UUID) throws {
+        let draft = segmentsURL(id, .draft)
+        let transcript = segmentsURL(id, .transcript)
+        if fileManager.fileExists(atPath: transcript.path) {
+            _ = try fileManager.replaceItemAt(transcript, withItemAt: draft)
+        } else {
+            try fileManager.moveItem(at: draft, to: transcript)
+        }
+    }
+
+    func deleteDraft(of id: UUID) {
+        try? fileManager.removeItem(at: segmentsURL(id, .draft))
     }
 
     /// In time order. A line cut by a crash is skipped.
-    func segments(of id: UUID) -> [MeetingSegment] {
-        guard let data = try? Data(contentsOf: segmentsURL(id)) else { return [] }
+    func segments(of id: UUID, in file: SegmentFile = .transcript) -> [MeetingSegment] {
+        guard let data = try? Data(contentsOf: segmentsURL(id, file)) else { return [] }
         var segments: [MeetingSegment] = []
         var skipped = 0
         for line in data.split(separator: 0x0A) where !line.isEmpty {
@@ -195,10 +218,22 @@ actor MeetingStore {
         MeetingTrack.allCases.filter { FileManager.default.fileExists(atPath: audioURL($0, for: id).path) }
     }
 
-    func deleteAudio(of id: UUID) {
-        for track in MeetingTrack.allCases {
-            try? fileManager.removeItem(at: audioURL(track, for: id))
+    /// True when no audio of the meeting is left.
+    @discardableResult
+    func deleteAudio(of id: UUID) -> Bool {
+        for track in audioTracks(of: id) {
+            do {
+                try fileManager.removeItem(at: audioURL(track, for: id))
+            } catch {
+                AppLogger.shared.log(.error, "meeting audio not deleted id=\(id.uuidString) track=\(track.rawValue) error=\(error.localizedDescription)")
+            }
         }
+        return audioTracks(of: id).isEmpty
+    }
+
+    /// The meetings of `ids` that have an audio file on disk.
+    func meetingsWithAudio(_ ids: [UUID]) -> Set<UUID> {
+        Set(ids.filter { !audioTracks(of: $0).isEmpty })
     }
 
     func delete(_ id: UUID) throws {
@@ -210,10 +245,13 @@ actor MeetingStore {
     /// Repairs the audio headers of every meeting that a quit or crash left
     /// mid-session, and returns them. A meeting that was recording or paused
     /// moves to `.notTranscribed`; one that was finishing moves to
-    /// `.interrupted`. Both wait for Finish Transcript.
+    /// `.interrupted`. Both wait for Finish Transcript. A draft that a quit
+    /// or a crash cut short goes, and the transcript stays.
     func recoverInterruptedMeetings() -> [MeetingRecord] {
         var recovered: [MeetingRecord] = []
-        for var record in loadAll() where record.status.needsRecovery {
+        for var record in loadAll() {
+            deleteDraft(of: record.id)
+            guard record.status.needsRecovery else { continue }
             var audioSamples = 0
             for track in MeetingTrack.allCases where fileManager.fileExists(atPath: audioURL(track, for: record.id).path) {
                 do {
@@ -248,7 +286,7 @@ actor MeetingStore {
     /// A crash during a write can leave a line with no end. A line appended
     /// after it would join it and be lost on read, so the torn part goes.
     private func cutTornSegment(of id: UUID) {
-        let url = segmentsURL(id)
+        let url = segmentsURL(id, .transcript)
         guard let data = fileManager.contents(atPath: url.path), let last = data.last, last != 0x0A else { return }
         let keep = (data.lastIndex(of: 0x0A).map { $0 + 1 }) ?? 0
         do {
@@ -264,8 +302,13 @@ actor MeetingStore {
         folder(for: id).appendingPathComponent("meeting.json")
     }
 
-    private func segmentsURL(_ id: UUID) -> URL {
-        folder(for: id).appendingPathComponent("segments.jsonl")
+    private func segmentsURL(_ id: UUID, _ file: SegmentFile) -> URL {
+        switch file {
+        case .transcript:
+            return folder(for: id).appendingPathComponent("segments.jsonl")
+        case .draft:
+            return folder(for: id).appendingPathComponent("segments-draft.jsonl")
+        }
     }
 
     private func notesURL(_ id: UUID) -> URL {

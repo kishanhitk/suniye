@@ -60,6 +60,26 @@ enum MeetingNotice: Equatable {
     case stoppedByDiskFull(UUID)
     case stoppedByWriteError(UUID)
     case summaryReady(UUID)
+    case transcribedAgain(UUID)
+    /// Transcribe Again failed, and the transcript did not change.
+    case notTranscribedAgain(UUID)
+}
+
+/// A transcript pass of one meeting, from the moment it is asked for until it
+/// ends.
+struct MeetingTranscriptPass: Equatable {
+    enum Kind: Equatable {
+        /// The transcript after the recording, or after Finish Transcript.
+        case first
+        /// Transcribe Again: a draft that replaces a final transcript.
+        case again
+    }
+
+    let kind: Kind
+    /// The pass waits until the passes asked before it end.
+    var waiting: Bool
+    /// Nil until the pass reports its first step.
+    var progress: MeetingTranscriptProgress?
 }
 
 /// The meeting that records now, as the meeting page and the pill show it.
@@ -148,10 +168,15 @@ final class MeetingCoordinator {
     }
     /// A meeting that a disk write error stopped, for its banner.
     private(set) var writeFailure: MeetingWriteFailure?
-    /// The transcripts that are being written, by meeting.
-    private(set) var transcriptProgress: [UUID: MeetingTranscriptProgress] = [:]
-    /// The meetings whose transcript waits for the transcript of another one.
-    private(set) var waitingTranscripts: Set<UUID> = []
+    /// The transcript passes that wait or run, by meeting. One runs at a
+    /// time, in the order they were asked for.
+    private(set) var transcriptPasses: [UUID: MeetingTranscriptPass] = [:]
+    /// The meetings whose audio is on the Mac.
+    private(set) var audioOnMac: Set<UUID> = []
+    /// Goes up each time a meeting, its notes or its transcript change, so a
+    /// list-text read that began before does not cache, and the list reads
+    /// its text again.
+    private(set) var listTextRevision = 0
     /// The meeting that the Meetings section shows; nil shows the list.
     var openMeetingID: UUID?
     /// The meeting whose page is on screen, so a notice does not repeat it.
@@ -185,8 +210,6 @@ final class MeetingCoordinator {
     @ObservationIgnored private var launched = false
     @ObservationIgnored private var isStarting = false
     @ObservationIgnored private var cardTimer: Task<Void, Never>?
-    /// The meetings whose transcript waits or is being written.
-    @ObservationIgnored private var passes: Set<UUID> = []
     /// The pass asked for last: each pass starts when the one before it ends.
     @ObservationIgnored private var lastPass: Task<Void, Never>?
     /// The passes that decode now. Each one waits while a dictation runs.
@@ -198,9 +221,6 @@ final class MeetingCoordinator {
     }
     @ObservationIgnored private var loadedModel: ASRModelID?
     @ObservationIgnored private var listTexts: [UUID: MeetingListText] = [:]
-    /// Counts `dropListText` calls, so a read that began before a drop does
-    /// not cache its text again.
-    @ObservationIgnored private var listTextDrops = 0
     @ObservationIgnored private var liveCheck: Task<Void, Never>?
     @ObservationIgnored private var changedInputReset: Task<Void, Never>?
 
@@ -245,17 +265,19 @@ final class MeetingCoordinator {
         environment.canRecordCallAudio
     }
 
-    /// At launch: repair what a quit or a crash left, and queue the summaries
-    /// that are not written yet. A transcript that a quit or a crash left
-    /// waits for Finish Transcript.
+    /// At launch: repair what a quit or a crash left, queue the summaries
+    /// that are not written yet, and delete the audio whose time is over. A
+    /// transcript that a quit or a crash left waits for Finish Transcript.
     func start() async {
         _ = await store.recoverInterruptedMeetings()
         meetings = await store.loadAll()
+        audioOnMac = await store.meetingsWithAudio(meetings.map(\.id))
         for record in meetings where record.status == .summarizing {
             summaries.enqueue(record.id)
         }
         launched = true
         updateCallDetection()
+        await deleteExpiredAudio()
     }
 
     /// The summary, notes and transcript of a meeting, read from disk once.
@@ -263,13 +285,13 @@ final class MeetingCoordinator {
         if let cached = listTexts[id] {
             return cached
         }
-        let drops = listTextDrops
+        let revision = listTextRevision
         let text = MeetingListText(
             summary: await store.summary(of: id),
             notes: await store.notes(of: id) ?? "",
             transcript: await transcript(of: id).map(\.text)
         )
-        if drops == listTextDrops {
+        if revision == listTextRevision {
             listTexts[id] = text
         }
         return text
@@ -277,7 +299,7 @@ final class MeetingCoordinator {
 
     private func dropListText(_ id: UUID) {
         listTexts[id] = nil
-        listTextDrops += 1
+        listTextRevision += 1
     }
 
     /// The transcript as a reader sees it, also while the app still finishes
@@ -384,6 +406,7 @@ final class MeetingCoordinator {
         // a session that is not live, and the recorder sends some at once.
         live = session
         meetings.insert(record, at: 0)
+        audioOnMac.insert(record.id)
         closeCallCard()
         detector.recordingStarted(call: callApp)
         checkLive(session)
@@ -447,7 +470,7 @@ final class MeetingCoordinator {
         case .user, .callEnded, .sleep, .quit:
             break
         }
-        await queuePass(session.id)?.value
+        await queuePass(session.id, kind: .first)?.value
     }
 
     /// A call track that cannot start again shows as a failed track.
@@ -469,7 +492,26 @@ final class MeetingCoordinator {
     /// Finishes the transcript of a meeting from its audio files: after a
     /// quit or a crash, or when the user asks again after a failed finish.
     func finishTranscript(_ id: UUID) {
-        queuePass(id)
+        queuePass(id, kind: .first)
+    }
+
+    /// The audio is on the Mac, the transcript is final, and no new
+    /// transcript is being written for the meeting.
+    func canTranscribeAgain(_ record: MeetingRecord) -> Bool {
+        audioOnMac.contains(record.id) && record.status.hasFinalTranscript && transcriptPasses[record.id] == nil
+    }
+
+    /// Writes the transcript again from the kept audio, with the transcript
+    /// model set now. The transcript stays until the new one is complete, and
+    /// the summary is not written again.
+    func transcribeAgain(_ id: UUID) {
+        guard let record = record(id), canTranscribeAgain(record) else { return }
+        queuePass(id, kind: .again)
+    }
+
+    /// The model that a transcript pass started now uses, by name.
+    var transcriptModelName: String? {
+        (settings.transcriptModel ?? loadedModel).map { ASRModelCatalog.entry(for: $0).displayName }
     }
 
     // MARK: - Calls
@@ -502,6 +544,7 @@ final class MeetingCoordinator {
         guard let session = beginStop() else { return }
         live = nil
         meetings.removeAll { $0.id == session.id }
+        audioOnMac.remove(session.id)
         do {
             try await store.delete(session.id)
         } catch {
@@ -667,10 +710,11 @@ final class MeetingCoordinator {
     }
 
     func delete(_ id: UUID) async throws {
-        guard live?.id != id, record(id)?.status != .finishing else { return }
+        guard live?.id != id, transcriptPasses[id] == nil else { return }
         summaries.remove(id)
         try await store.delete(id)
         meetings.removeAll { $0.id == id }
+        audioOnMac.remove(id)
     }
 
     func record(_ id: UUID) -> MeetingRecord? {
@@ -745,38 +789,44 @@ final class MeetingCoordinator {
     /// chosen model would each load an engine of their own beside the
     /// dictation model.
     @discardableResult
-    private func queuePass(_ id: UUID) -> Task<Void, Never>? {
-        guard passes.insert(id).inserted else { return nil }
-        if passes.count > 1 {
-            waitingTranscripts.insert(id)
-        }
+    private func queuePass(_ id: UUID, kind: MeetingTranscriptPass.Kind) -> Task<Void, Never>? {
+        guard transcriptPasses[id] == nil else { return nil }
+        transcriptPasses[id] = MeetingTranscriptPass(kind: kind, waiting: !transcriptPasses.isEmpty)
         let model = settings.transcriptModel
         let previous = lastPass
         let pass = Task { [weak self] in
-            await self?.update(id) { $0.status = .finishing }
+            if kind == .first {
+                await self?.update(id) { $0.status = .finishing }
+            }
             await previous?.value
-            self?.waitingTranscripts.remove(id)
-            await self?.transcribe(id, model: model)
+            self?.transcriptPasses[id]?.waiting = false
+            switch kind {
+            case .first:
+                await self?.transcribe(id, model: model)
+            case .again:
+                await self?.writeTranscriptAgain(id, model: model)
+            }
+            await self?.endPass(id)
         }
         lastPass = pass
         return pass
     }
 
-    /// Writes the transcript, then queues the summary. `passes` holds `id`
-    /// already.
+    /// Every pass ends here, and then the audio whose time is over goes.
+    private func endPass(_ id: UUID) async {
+        transcriptPasses[id] = nil
+        await deleteExpiredAudio()
+    }
+
+    /// Writes the transcript, then queues the summary.
     private func transcribe(_ id: UUID, model chosenModel: ASRModelID?) async {
         let started = ContinuousClock.now
-        defer {
-            passes.remove(id)
-            transcriptProgress[id] = nil
-        }
         let outcome: MeetingOutcome
         var segments = 0
         do {
-            let transcript = try await runPass(id, model: chosenModel)
+            let transcript = try await runPass(id, model: chosenModel, lines: .transcript)
             segments = transcript.count
             outcome = segments == 0 ? .noSpeech : .done
-            await store.deleteAudio(of: id)
             let enough = await hasEnoughSpeech(id, segments: transcript)
             await update(id) {
                 $0.status = enough ? .summarizing : .noSpeech
@@ -802,17 +852,63 @@ final class MeetingCoordinator {
         ))
     }
 
+    /// Writes a draft from the kept audio, and the draft replaces the
+    /// transcript only when it is complete and has a line: a model that hears
+    /// nothing keeps the transcript. The notes, the summary and the meeting's
+    /// state stay.
+    private func writeTranscriptAgain(_ id: UUID, model chosenModel: ASRModelID?) async {
+        await store.deleteDraft(of: id)
+        do {
+            let transcript = try await runPass(id, model: chosenModel, lines: .draft)
+            guard !transcript.isEmpty else { throw TranscribeAgainError.noLines }
+            try await store.keepDraft(of: id)
+            dropListText(id)
+            onNotice?(.transcribedAgain(id))
+        } catch {
+            AppLogger.shared.log(.error, "meeting transcript not written again id=\(id.uuidString) error=\(error.localizedDescription)")
+            await store.deleteDraft(of: id)
+            onNotice?(.notTranscribedAgain(id))
+        }
+    }
+
+    private enum TranscribeAgainError: LocalizedError {
+        case noLines
+
+        var errorDescription: String? {
+            "the new transcript has no line"
+        }
+    }
+
+    /// Deletes the audio whose time is over: at launch and after each
+    /// transcript, never on a timer. A meeting with no final transcript keeps
+    /// its audio for Finish Transcript, and a meeting in a pass keeps it until
+    /// the pass ends.
+    private func deleteExpiredAudio() async {
+        let now = environment.now()
+        for record in meetings where audioOnMac.contains(record.id) && record.status.hasFinalTranscript && transcriptPasses[record.id] == nil {
+            if let days = settings.audioRetention.days,
+               now < (record.endedAt ?? record.startedAt).addingTimeInterval(TimeInterval(days) * 24 * 60 * 60) {
+                continue
+            }
+            // Off the list before the await, so no pass starts on audio that goes.
+            audioOnMac.remove(record.id)
+            if await !store.deleteAudio(of: record.id) {
+                audioOnMac.insert(record.id)
+            }
+        }
+    }
+
     /// With no model ("Same as dictation"), the pass runs on the dictation
     /// engine with the model that engine has. A chosen model, the dictation
     /// model too, gets an engine of its own that is unloaded after the pass,
     /// so a switch of the dictation model does not change the pass. On either
     /// engine, no piece of audio starts decoding while a dictation runs.
-    private func runPass(_ id: UUID, model: ASRModelID?) async throws -> [MeetingSegment] {
+    private func runPass(_ id: UUID, model: ASRModelID?, lines: MeetingStore.SegmentFile) async throws -> [MeetingSegment] {
         guard let model else {
-            return try await run(makeTranscriber(for: id, engine: engine) { [weak self] in await self?.speechEngineFree ?? false }, for: id)
+            return try await run(makeTranscriber(for: id, lines: lines, engine: engine) { [weak self] in await self?.speechEngineFree ?? false }, for: id)
         }
         let ownEngine = try await makeTranscriptEngine(model)
-        let transcriber = makeTranscriber(for: id, engine: ownEngine) { [weak self] in await self?.dictating == false }
+        let transcriber = makeTranscriber(for: id, lines: lines, engine: ownEngine) { [weak self] in await self?.dictating == false }
         do {
             let transcript = try await run(transcriber, for: id)
             await ownEngine.unloadModel()
@@ -831,6 +927,7 @@ final class MeetingCoordinator {
 
     private func makeTranscriber(
         for id: UUID,
+        lines: MeetingStore.SegmentFile,
         engine: TranscriptionServiceProtocol,
         mayDecode: @escaping @Sendable () async -> Bool
     ) -> MeetingTranscriber {
@@ -838,6 +935,7 @@ final class MeetingCoordinator {
             meetingID: id,
             tracks: store.audioTracks(of: id),
             store: store,
+            lines: lines,
             engine: engine,
             mayDecode: mayDecode,
             onProgress: { [weak self] progress in
@@ -847,8 +945,7 @@ final class MeetingCoordinator {
     }
 
     private func show(_ progress: MeetingTranscriptProgress, of id: UUID) {
-        guard passes.contains(id) else { return }
-        transcriptProgress[id] = progress
+        transcriptPasses[id]?.progress = progress
     }
 
     private func handle(_ event: MeetingRecorderEvent, from session: MeetingSession) {

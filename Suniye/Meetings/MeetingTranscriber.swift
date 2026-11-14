@@ -61,6 +61,7 @@ actor MeetingTranscriber {
     nonisolated let meetingID: UUID
     nonisolated let tracks: [MeetingTrack]
     private let store: MeetingStore
+    private let lines: MeetingStore.SegmentFile
     private let engine: TranscriptionServiceProtocol
     private let mayDecode: @Sendable () async -> Bool
     private let retryDelay: Duration
@@ -82,6 +83,7 @@ actor MeetingTranscriber {
         meetingID: UUID,
         tracks: [MeetingTrack],
         store: MeetingStore,
+        lines: MeetingStore.SegmentFile = .transcript,
         engine: TranscriptionServiceProtocol,
         mayDecode: @escaping @Sendable () async -> Bool,
         retryDelay: Duration = .seconds(1),
@@ -90,6 +92,7 @@ actor MeetingTranscriber {
         self.meetingID = meetingID
         self.tracks = tracks
         self.store = store
+        self.lines = lines
         self.engine = engine
         self.mayDecode = mayDecode
         self.retryDelay = retryDelay
@@ -106,7 +109,7 @@ actor MeetingTranscriber {
     /// Decodes the audio after the last stored segment of each track and
     /// returns the final transcript, which is also stored.
     func transcribe() async throws -> [MeetingSegment] {
-        let stored = await store.segments(of: meetingID)
+        let stored = await store.segments(of: meetingID, in: lines)
         // The files hold no pause; a pause ends the chunk in progress there.
         let pauses = await store.record(meetingID)?.pauses ?? []
         let timeline = MeetingTimeline(pauses: pauses)
@@ -243,7 +246,7 @@ actor MeetingTranscriber {
             text: trimmed
         )
         do {
-            try await store.appendSegment(segment, to: meetingID)
+            try await store.appendSegment(segment, to: meetingID, in: lines)
             stats.segments += 1
         } catch {
             AppLogger.shared.log(.error, "meeting transcript could not save a segment id=\(meetingID.uuidString) error=\(error.localizedDescription)")
@@ -276,10 +279,10 @@ actor MeetingTranscriber {
         guard let record = await store.record(meetingID) else {
             throw MeetingStore.StoreError.unknownMeeting(meetingID)
         }
-        let stored = await store.segments(of: meetingID)
+        let stored = await store.segments(of: meetingID, in: lines)
         let transcript = MeetingTranscript.final(stored, of: record)
         if transcript.count != stored.count {
-            try await store.replaceSegments(transcript, of: meetingID)
+            try await store.replaceSegments(transcript, of: meetingID, in: lines)
         }
         AppLogger.shared.log(
             .info,

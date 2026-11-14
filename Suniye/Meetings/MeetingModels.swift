@@ -67,6 +67,16 @@ enum MeetingStatus: String, Codable, Sendable {
         }
     }
 
+    /// A transcript pass ran to its end.
+    var hasFinalTranscript: Bool {
+        switch self {
+        case .summarizing, .done, .summaryFailed, .noSpeech:
+            return true
+        case .recording, .paused, .finishing, .interrupted, .notTranscribed:
+            return false
+        }
+    }
+
     /// States that only a running session can be in. A record found in one of
     /// them at launch belongs to a session that ended without saving.
     var needsRecovery: Bool {

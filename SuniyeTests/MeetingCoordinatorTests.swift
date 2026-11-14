@@ -163,7 +163,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         coordinator.dictationCaptureEnded()
         you.push(tone(2.5, level: 0.3) + silence(0.5))
         let stopping = Task { await coordinator.stop() }
-        let progressShown = await waitUntil { coordinator.transcriptProgress[id] != nil }
+        let progressShown = await waitUntil { coordinator.transcriptPasses[id]?.progress != nil }
         try await Task.sleep(for: .milliseconds(200))
         let decodesDuringDictation = await engine.calls
         coordinator.dictationChanged(active: false)
@@ -173,7 +173,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(progressShown, "the page shows the progress while the transcript waits")
         XCTAssertEqual(decodesDuringDictation, 0)
         XCTAssertEqual(segments.map(\.track), [.them, .you], "the dictated words are not meeting talk; talk after the capture ends is")
-        XCTAssertNil(coordinator.transcriptProgress[id])
+        XCTAssertNil(coordinator.transcriptPasses[id])
     }
 
     func testAnotherTranscriptModelGetsAnEngineOfItsOwnThatAlsoWaitsForADictation() async throws {
@@ -186,7 +186,7 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         coordinator.dictationChanged(active: true)
         let stopping = Task { await coordinator.stop() }
-        let started = await waitUntil { coordinator.transcriptProgress[id] != nil }
+        let started = await waitUntil { coordinator.transcriptPasses[id]?.progress != nil }
         try await Task.sleep(for: .milliseconds(200))
         let decodesDuringTheDictation = await transcriptEngine.calls
         coordinator.dictationChanged(active: false)
@@ -308,7 +308,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         let firstLoads = await waitUntil { await gate.waiting }
         try await Task.sleep(for: .milliseconds(100))
         let loadsWhileTheFirstWaits = requestedTranscriptModels.count
-        let waitingWhileTheFirstLoads = coordinator.waitingTranscripts
+        let waitingWhileTheFirstLoads = Set(coordinator.transcriptPasses.filter(\.value.waiting).keys)
         coordinator.updateSettings { $0.transcriptModel = nil }
         await gate.open()
         let finished = await waitUntil {
@@ -320,7 +320,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(loadsWhileTheFirstWaits, 1, "the second pass waits for the first")
         XCTAssertEqual(waitingWhileTheFirstLoads, [second], "the page of the second shows that it waits")
         XCTAssertTrue(finished)
-        XCTAssertTrue(coordinator.waitingTranscripts.isEmpty)
+        XCTAssertTrue(coordinator.transcriptPasses.isEmpty)
         XCTAssertEqual(requestedTranscriptModels, [.cohereTranscribe, .cohereTranscribe], "a waiting pass keeps the model of its request")
         XCTAssertEqual(dictationEngineDecodes, 0)
     }
@@ -772,6 +772,141 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(markdown.contains("We ship on Friday."))
     }
 
+    func testKeptAudioGoesAtTheFirstLaunchAfterItsTime() async throws {
+        let cases: [(status: MeetingStatus, keep: MeetingAudioRetention, endedDaysAgo: Double, kept: Bool)] = [
+            (.done, .untilTranscript, 0, false),
+            (.done, .sevenDays, 6, true),
+            (.done, .sevenDays, 8, false),
+            (.noSpeech, .thirtyDays, 29, true),
+            (.summaryFailed, .thirtyDays, 31, false),
+            (.notTranscribed, .untilTranscript, 31, true),
+        ]
+        for (status, keep, days, kept) in cases {
+            let meeting = try await finishedMeeting(status: status, endedDaysAgo: days)
+            let coordinator = makeCoordinator()
+            coordinator.updateSettings { $0.audioRetention = keep }
+
+            await coordinator.start()
+
+            let label = "\(status) with \(keep), \(days) days after the meeting"
+            XCTAssertEqual(!store.audioTracks(of: meeting.id).isEmpty, kept, label)
+            XCTAssertEqual(coordinator.audioOnMac.contains(meeting.id), kept, label)
+        }
+    }
+
+    func testAudioKeptForSevenDaysStaysAfterTheTranscript() async throws {
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        try await coordinator.startMeeting(source: .manual)
+        let id = try XCTUnwrap(coordinator.live?.id)
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+
+        await coordinator.stop()
+        let record = try XCTUnwrap(coordinator.record(id))
+
+        XCTAssertEqual(store.audioTracks(of: id), [.you, .them])
+        XCTAssertTrue(coordinator.canTranscribeAgain(record))
+    }
+
+    func testTranscribeAgainReplacesTheTranscriptAndKeepsTheNotesAndTheSummary() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words."), to: meeting.id)
+        try await store.saveNotes("Ask legal.", for: meeting.id)
+        try await store.saveSummary("## Overview\nShip Friday.", for: meeting.id)
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        await coordinator.start()
+        let listedBefore = await coordinator.listText(for: meeting.id)
+
+        coordinator.transcribeAgain(meeting.id)
+        let asked = coordinator.transcriptPasses[meeting.id]?.kind == .again
+        let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
+        let transcript = await coordinator.transcript(of: meeting.id)
+        let listedAfter = await coordinator.listText(for: meeting.id)
+        let notes = await coordinator.notes(of: meeting.id)
+        let summary = await coordinator.summary(of: meeting.id)
+        let summaryRequests = await summaryModel.kinds
+
+        XCTAssertTrue(asked)
+        XCTAssertTrue(finished)
+        XCTAssertEqual(transcript.map(\.text), [longSentence])
+        XCTAssertEqual(listedBefore.transcript, ["Old words."])
+        XCTAssertEqual(listedAfter.transcript, [longSentence], "the list and its search show the new transcript")
+        XCTAssertEqual(notes, "Ask legal.")
+        XCTAssertEqual(summary, "## Overview\nShip Friday.")
+        XCTAssertEqual(summaryRequests, [], "Regenerate writes the summary again, not Transcribe Again")
+        XCTAssertEqual(coordinator.record(meeting.id)?.status, .done)
+    }
+
+    func testAFailedTranscribeAgainKeepsTheTranscript() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words."), to: meeting.id)
+        transcriptEngineError = MeetingTranscriptModelError.notDownloaded("Cohere Transcribe")
+        let coordinator = makeCoordinator()
+        coordinator.updateSettings {
+            $0.audioRetention = .sevenDays
+            $0.transcriptModel = .cohereTranscribe
+        }
+        var notices: [MeetingNotice] = []
+        coordinator.onNotice = { notices.append($0) }
+        await coordinator.start()
+
+        coordinator.transcribeAgain(meeting.id)
+        let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
+        let transcript = await coordinator.transcript(of: meeting.id)
+
+        XCTAssertTrue(finished)
+        XCTAssertEqual(transcript.map(\.text), ["Old words."])
+        XCTAssertEqual(notices, [.notTranscribedAgain(meeting.id)])
+        XCTAssertTrue(coordinator.audioOnMac.contains(meeting.id), "the audio stays for another try")
+    }
+
+    func testANewTranscriptWithNoLineKeepsTheTranscript() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1, level: 0.9)
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words."), to: meeting.id)
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        var notices: [MeetingNotice] = []
+        coordinator.onNotice = { notices.append($0) }
+        await coordinator.start()
+
+        coordinator.transcribeAgain(meeting.id)
+        let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
+        let transcript = await coordinator.transcript(of: meeting.id)
+
+        XCTAssertTrue(finished)
+        XCTAssertEqual(transcript.map(\.text), ["Old words."], "a model that hears nothing does not empty the transcript")
+        XCTAssertEqual(notices, [.notTranscribedAgain(meeting.id)])
+    }
+
+    func testAudioThatCannotBeDeletedStaysOnTheList() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
+        let folder = store.folder(for: meeting.id).path
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder) }
+        let coordinator = makeCoordinator()
+
+        await coordinator.start()
+
+        XCTAssertEqual(store.audioTracks(of: meeting.id), [.you])
+        XCTAssertTrue(coordinator.audioOnMac.contains(meeting.id), "the next check tries again")
+    }
+
+    func testWithoutAudioOnTheMacTranscribeAgainDoesNothing() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        let record = try XCTUnwrap(coordinator.record(meeting.id))
+
+        coordinator.transcribeAgain(meeting.id)
+
+        XCTAssertFalse(coordinator.canTranscribeAgain(record))
+        XCTAssertNil(coordinator.transcriptPasses[meeting.id])
+    }
+
     func testATrackThatStartsAgainNoLongerShowsAsFailed() async throws {
         let coordinator = makeCoordinator()
         them.failsToStart = true
@@ -825,6 +960,20 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(saved?.endedAt, saved?.startedAt.addingTimeInterval(3))
         XCTAssertEqual(atLaunch, .notTranscribed, "the next launch shows it with Finish Transcript")
         XCTAssertTrue(finished)
+    }
+
+    /// A meeting that ended `days` days before the clock, with 3 s of audio:
+    /// one sentence at the default level, no words at a level the engine does
+    /// not know.
+    private func finishedMeeting(status: MeetingStatus, endedDaysAgo days: Double, level: Float = 0.3) async throws -> MeetingRecord {
+        let end = clock.addingTimeInterval(-days * 24 * 60 * 60)
+        var meeting = MeetingRecord(title: "Design sync", startedAt: end.addingTimeInterval(-1_800), tracks: [.you], status: status, templateID: "general")
+        meeting.endedAt = end
+        try await store.create(meeting)
+        let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: meeting.id))
+        try writer.append(tone(2.5, level: level) + silence(0.5))
+        try writer.close()
+        return meeting
     }
 
     /// A meeting that a quit left during the recording, with 3 s of audio:
@@ -900,21 +1049,25 @@ final class MeetingSettingsStoreTests: XCTestCase {
         let suite = "MeetingSettingsStoreTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(Data(#"{"noticeAccepted":true,"neverAskBundleIDs":["us.zoom.xos"],"transcriptModel":"retiredModel"}"#.utf8), forKey: "settings")
+        defaults.set(Data(#"{"noticeAccepted":true,"neverAskBundleIDs":["us.zoom.xos"],"transcriptModel":"retiredModel","audioRetention":"forever"}"#.utf8), forKey: "settings")
         let store = MeetingSettingsStore(userDefaults: defaults, key: "settings")
 
         var loaded = store.load()
         let unknownModel = loaded.transcriptModel
+        let unknownRetention = loaded.audioRetention
         loaded.callStartAction = .recordAutomatically
         loaded.transcriptModel = .cohereTranscribe
+        loaded.audioRetention = .thirtyDays
         store.save(loaded)
         let reloaded = store.load()
 
         XCTAssertEqual(reloaded.neverAskBundleIDs, ["us.zoom.xos"], "a key that a later build dropped does not stop the load")
         XCTAssertNil(unknownModel, "a transcript model that this build does not know is the dictation model")
+        XCTAssertEqual(unknownRetention, .untilTranscript, "an audio choice that this build does not know is the default")
         XCTAssertEqual(reloaded.templateID, MeetingTemplate.general.id)
         XCTAssertEqual(reloaded.callStartAction, .recordAutomatically)
         XCTAssertEqual(reloaded.transcriptModel, .cohereTranscribe)
+        XCTAssertEqual(reloaded.audioRetention, .thirtyDays)
     }
 }
 
