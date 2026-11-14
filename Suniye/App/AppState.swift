@@ -3322,10 +3322,10 @@ final class AppState {
         activeDictationSession?.timing.stopped = .now()
 
         let captured = await audioCaptureService.stopCapture(sessionID: sessionID)
-        meetings.dictationCaptureEnded()
         guard let context = activeDictationSession, context.id == sessionID else {
             return
         }
+        meetings.dictationCaptureEnded()
         let samples = captured.samples
         let sampleRate = captured.sampleRate
         let destination = context.destination
