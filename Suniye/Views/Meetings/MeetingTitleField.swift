@@ -72,6 +72,9 @@ struct MeetingTitleField: NSViewRepresentable {
         var title: String
         var rename: (String) -> Void
         private var dropping = false
+        /// The user typed in this edit. A summary can set a new title while
+        /// the field has focus; a click in and out keeps that title.
+        private var changed = false
 
         init(title: String, rename: @escaping (String) -> Void) {
             self.title = title
@@ -106,15 +109,20 @@ struct MeetingTitleField: NSViewRepresentable {
             return false
         }
 
+        func textDidChange(_ notification: Notification) {
+            changed = true
+        }
+
         func textDidEndEditing(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             let typed = textView.string.trimmingCharacters(in: .whitespacesAndNewlines)
-            if dropping || typed.isEmpty || typed == title {
+            if dropping || !changed || typed.isEmpty || typed == title {
                 textView.textStorage?.setAttributedString(NSAttributedString(string: title, attributes: MeetingTitleField.attributes))
             } else {
                 rename(typed)
             }
             dropping = false
+            changed = false
         }
     }
 }

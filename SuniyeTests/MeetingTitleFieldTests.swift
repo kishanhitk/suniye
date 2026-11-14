@@ -72,6 +72,16 @@ final class MeetingTitleFieldTests: XCTestCase {
         XCTAssertEqual(textView.string, "Q3 launch review")
     }
 
+    func testATitleThatASummarySetsDuringAClickInAndOutStays() {
+        XCTAssertTrue(window.makeFirstResponder(textView))
+        coordinator.title = "Release date and pricing copy"
+
+        window.makeFirstResponder(nil)
+
+        XCTAssertEqual(renamed, [], "the old title on screen is not the user's")
+        XCTAssertEqual(textView.string, "Release date and pricing copy")
+    }
+
     func testAnEditThatChangesNothingDoesNotRename() {
         type("Q3 launch review")
 
