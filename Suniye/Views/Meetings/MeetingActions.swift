@@ -39,19 +39,13 @@ final class MeetingActions {
     }
 
     func export(_ record: MeetingRecord, meetings: MeetingCoordinator) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(record.title).md"
+        panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
-            let markdown = MeetingExport.markdown(
-                record: record,
-                summary: await meetings.summary(of: record.id),
-                notes: await meetings.notes(of: record.id) ?? "",
-                segments: await meetings.transcript(of: record.id)
-            )
-            let panel = NSSavePanel()
-            panel.nameFieldStringValue = "\(record.title).md"
-            panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
-            guard panel.runModal() == .OK, let url = panel.url else { return }
             do {
-                try markdown.write(to: url, atomically: true, encoding: .utf8)
+                try await meetings.export(record, to: url)
             } catch {
                 AppLogger.shared.log(.error, "meeting export failed error=\(error.localizedDescription)")
                 failure = MeetingActionFailure(title: "Couldn’t export the meeting", message: error.localizedDescription)

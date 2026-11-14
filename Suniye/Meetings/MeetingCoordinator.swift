@@ -297,6 +297,17 @@ final class MeetingCoordinator {
         await store.notes(of: id)
     }
 
+    /// Writes the summary, notes and transcript to `url` as Markdown.
+    func export(_ record: MeetingRecord, to url: URL) async throws {
+        let markdown = MeetingExport.markdown(
+            record: record,
+            summary: await summary(of: record.id),
+            notes: await notes(of: record.id) ?? "",
+            segments: await transcript(of: record.id)
+        )
+        try markdown.write(to: url, atomically: true, encoding: .utf8)
+    }
+
     // MARK: - Settings
 
     func updateSettings(_ change: (inout MeetingSettings) -> Void) {
