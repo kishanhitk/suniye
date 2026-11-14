@@ -174,8 +174,8 @@ final class MeetingCoordinator {
     @ObservationIgnored private var cardTimer: Task<Void, Never>?
     /// The meetings whose transcript is being written.
     @ObservationIgnored private var passes: Set<UUID> = []
-    /// The passes on the dictation engine, which wait while it is busy.
-    @ObservationIgnored private var sharedEnginePasses: [UUID: MeetingTranscriber] = [:]
+    /// The passes that decode now. Each one waits while a dictation runs.
+    @ObservationIgnored private var transcribers: [UUID: MeetingTranscriber] = [:]
     @ObservationIgnored private var dictating = false
     /// The dictation's audio capture runs: the microphone track gets silence.
     @ObservationIgnored private var dictationCaptures = false {
@@ -659,9 +659,9 @@ final class MeetingCoordinator {
         loadedModel != nil && !dictating
     }
 
+    /// Each pass asks its own `mayDecode` again.
     private func wakeTranscribers() {
-        guard speechEngineFree else { return }
-        for transcriber in sharedEnginePasses.values {
+        for transcriber in transcribers.values {
             Task { await transcriber.wake() }
         }
     }
@@ -732,26 +732,30 @@ final class MeetingCoordinator {
         ))
     }
 
-    /// The dictation model writes the transcript on the dictation engine,
-    /// after any dictation. Another model gets an engine of its own, which is
-    /// unloaded after the pass.
+    /// The dictation model writes the transcript on the dictation engine.
+    /// Another model gets an engine of its own, which is unloaded after the
+    /// pass. On either engine, no piece of audio starts decoding while a
+    /// dictation runs, so a dictation never decodes beside a pass.
     private func runPass(_ id: UUID, model: ASRModelID?) async throws -> [MeetingSegment] {
         guard let model, model != loadedModel else {
-            let transcriber = makeTranscriber(for: id, engine: engine) { [weak self] in await self?.speechEngineFree ?? false }
-            sharedEnginePasses[id] = transcriber
-            defer { sharedEnginePasses[id] = nil }
-            return try await transcriber.transcribe()
+            return try await run(makeTranscriber(for: id, engine: engine) { [weak self] in await self?.speechEngineFree ?? false }, for: id)
         }
         let ownEngine = try await makeTranscriptEngine(model)
-        let transcriber = makeTranscriber(for: id, engine: ownEngine) { true }
+        let transcriber = makeTranscriber(for: id, engine: ownEngine) { [weak self] in await self?.dictating == false }
         do {
-            let transcript = try await transcriber.transcribe()
+            let transcript = try await run(transcriber, for: id)
             await ownEngine.unloadModel()
             return transcript
         } catch {
             await ownEngine.unloadModel()
             throw error
         }
+    }
+
+    private func run(_ transcriber: MeetingTranscriber, for id: UUID) async throws -> [MeetingSegment] {
+        transcribers[id] = transcriber
+        defer { transcribers[id] = nil }
+        return try await transcriber.transcribe()
     }
 
     private func makeTranscriber(

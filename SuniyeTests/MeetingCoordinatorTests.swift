@@ -167,7 +167,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.transcriptProgress[id])
     }
 
-    func testAnotherTranscriptModelGetsAnEngineOfItsOwnThatDoesNotWaitForADictation() async throws {
+    func testAnotherTranscriptModelGetsAnEngineOfItsOwnThatAlsoWaitsForADictation() async throws {
         let coordinator = makeCoordinator()
         coordinator.speechModelChanged(.parakeetV3)
         coordinator.updateSettings { $0.transcriptModel = .cohereTranscribe }
@@ -177,15 +177,18 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         coordinator.dictationChanged(active: true)
         let stopping = Task { await coordinator.stop() }
-        let transcribedDuringTheDictation = await waitUntil { coordinator.record(id)?.status == .summarizing }
+        let started = await waitUntil { coordinator.transcriptProgress[id] != nil }
+        try await Task.sleep(for: .milliseconds(200))
+        let decodesDuringTheDictation = await transcriptEngine.calls
         coordinator.dictationChanged(active: false)
         await stopping.value
         let segments = await store.segments(of: id)
         let dictationEngineDecodes = await engine.calls
         let unloads = await transcriptEngine.unloads
 
-        XCTAssertTrue(transcribedDuringTheDictation)
+        XCTAssertTrue(started)
         XCTAssertEqual(requestedTranscriptModels, [.cohereTranscribe])
+        XCTAssertEqual(decodesDuringTheDictation, 0, "no piece starts while a dictation runs")
         XCTAssertEqual(segments.map(\.text), [longSentence])
         XCTAssertEqual(dictationEngineDecodes, 0, "the dictation model stays with dictation")
         XCTAssertEqual(unloads, 1, "the transcript model is unloaded after the pass")
