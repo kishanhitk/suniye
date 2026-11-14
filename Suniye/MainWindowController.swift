@@ -119,9 +119,11 @@ final class AppLaunchDelegate: NSObject, NSApplicationDelegate {
                 AppLogger.shared.log(.warning, "stopped \(orphans) llama-server helper(s) left running by an earlier session")
             }
         }
-        statusItemController = StatusItemController(appState: sharedAppState)
         observeWorkspaceLifecycle()
-        MainWindowController.shared.show(appState: sharedAppState)
+        if !ProcessInfo.processInfo.isRunningUnderXCTest {
+            statusItemController = StatusItemController(appState: sharedAppState)
+            MainWindowController.shared.show(appState: sharedAppState)
+        }
         if ProcessInfo.processInfo.shouldStartUpdateController {
             sharedAppState.startUpdateController()
         }
