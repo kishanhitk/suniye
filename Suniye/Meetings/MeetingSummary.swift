@@ -481,9 +481,7 @@ enum MeetingSummaryPrompt {
             \(transcript)
             </transcript>
 
-            \(templateGuide(template))
-
-            Fill in these lines from this part of the meeting:
+            \(templateGuide(template))Fill in these lines from this part of the meeting:
             \(labels(sections))
 
             Rules:
@@ -500,9 +498,7 @@ enum MeetingSummaryPrompt {
             input: """
             \(notesBlock(notes))
 
-            \(templateGuide(template))
-
-            Fill in these lines from the notes:
+            \(templateGuide(template))Fill in these lines from the notes:
             \(labels(sections))
 
             Rules:
@@ -552,10 +548,12 @@ enum MeetingSummaryPrompt {
         "<template>\n\(template.sections)\n</template>"
     }
 
-    /// The template as a guide to what each section holds: as a task, it
-    /// makes a model write a whole summary for each part.
+    /// A template that the user wrote or edited, as a guide to its sections.
+    /// The built-in sections have rules here instead: with the template text,
+    /// models wrote a whole summary into each part answer.
     private static func templateGuide(_ template: MeetingTemplate) -> String {
-        "The user's template says what each section holds. Do not write the summary.\n" + templateBlock(template)
+        guard !MeetingTemplate.builtIn.contains(template) else { return "" }
+        return "The user's template says what each section holds. Do not write the summary.\n" + templateBlock(template) + "\n\n"
     }
 
     /// What goes under the sections of the built-in templates. A model put

@@ -48,6 +48,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
         XCTAssertTrue(requests[0].input.contains("<notes>\nAsk legal\n</notes>"))
         XCTAssertTrue(requests[1].input.contains("You: word0"))
         XCTAssertTrue(requests[1].input.contains("Decisions:\nAction items:\nDates and numbers:\nOpen questions:"))
+        XCTAssertFalse(requests[1].input.contains(MeetingTemplate.general.sections), "a built-in template's sections have rules in the prompt")
         XCTAssertEqual(summary.title, "Weekly sync")
         XCTAssertEqual(summary.body, """
         ## Overview
@@ -66,7 +67,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
     }
 
     func testALongMeetingJoinsTheItemsOfItsPartsInOrderAndOnce() async throws {
-        let model = FakeSummaryModel(context: 2_000) { request in
+        let model = FakeSummaryModel(context: 2_400) { request in
             switch request.kind {
             case let .part(number, _):
                 return "Decisions: Ship on Friday; Decision \(number)"
@@ -83,7 +84,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
         let parts = requests.filter(\.isPart)
 
         XCTAssertGreaterThanOrEqual(parts.count, 2)
-        let room = Int(Double(2_000 - MeetingSummaryWriter.partOutputTokens) * MeetingSummaryWriter.fillFactor)
+        let room = Int(Double(2_400 - MeetingSummaryWriter.partOutputTokens) * MeetingSummaryWriter.fillFactor)
         for part in parts {
             let tokens = await model.tokenCount(part.text) ?? 0
             XCTAssertLessThanOrEqual(tokens, room)
@@ -182,8 +183,8 @@ final class MeetingSummaryWriterTests: XCTestCase {
     }
 
     func testLongNotesAreReadInPiecesBeforeTheTranscript() async throws {
-        let notes = (0 ..< 60).map { "note\($0) " + String(repeating: "word ", count: 20) }.joined(separator: "\n")
-        let model = FakeSummaryModel(context: 2_000) { request in
+        let notes = (0 ..< 100).map { "note\($0) " + String(repeating: "word ", count: 20) }.joined(separator: "\n")
+        let model = FakeSummaryModel(context: 2_400) { request in
             switch request.kind {
             case .userNotes:
                 let first = request.input.components(separatedBy: "\n").first { $0.hasPrefix("note") } ?? ""
@@ -202,7 +203,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
         let pieces = requests.filter { $0.kind == .userNotes }
 
         XCTAssertGreaterThan(pieces.count, 1)
-        let room = Int(Double(2_000 - MeetingSummaryWriter.partOutputTokens) * MeetingSummaryWriter.fillFactor)
+        let room = Int(Double(2_400 - MeetingSummaryWriter.partOutputTokens) * MeetingSummaryWriter.fillFactor)
         for piece in pieces {
             let tokens = await model.tokenCount(piece.text) ?? 0
             XCTAssertLessThanOrEqual(tokens, room)
