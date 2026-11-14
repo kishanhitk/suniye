@@ -223,9 +223,9 @@ private struct LiveMeetingRow: View {
                 .buttonStyle(.bordered)
         }
         .padding(.vertical, 10)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: AppMetrics.cardCornerRadius, style: .continuous)
                 .fill(Color.red.opacity(0.07))
         )
     }
@@ -276,7 +276,6 @@ private struct MeetingRow: View {
                 }
             }
             .padding(.vertical, AppMetrics.listRowVerticalPadding)
-            .padding(.horizontal, 8)
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle(pressedScale: 0.995))

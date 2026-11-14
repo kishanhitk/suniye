@@ -1,8 +1,13 @@
+import AppKit
 import SwiftUI
 
 /// Edits the summary templates. Changes stay drafts until Done.
 struct MeetingTemplateEditor: View {
     let meetings: MeetingCoordinator
+    /// The text view of a TextEditor starts its text this far in. The side
+    /// padding takes it off, so the instructions line up with the Name text.
+    private static let textInset = NSTextContainer().lineFragmentPadding
+
     @Environment(\.dismiss) private var dismiss
     @State private var drafts: [MeetingTemplate] = []
     @State private var saved: [MeetingTemplate] = []
@@ -115,7 +120,8 @@ struct MeetingTemplateEditor: View {
                 TextEditor(text: $drafts[index].sections)
                     .font(.system(size: 12, design: .monospaced))
                     .scrollContentBackground(.hidden)
-                    .padding(6)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 6 - Self.textInset)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .fill(Color(nsColor: .textBackgroundColor))
