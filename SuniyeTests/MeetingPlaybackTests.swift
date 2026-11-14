@@ -12,7 +12,6 @@ final class MeetingPlaybackTests: XCTestCase {
     private var openedFiles: [Set<URL>] = []
     private var opens = true
     private let meeting = UUID()
-    private let analytics = SpyAnalytics()
 
     override func setUp() async throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("MeetingPlaybackTests-\(UUID().uuidString)", isDirectory: true)
@@ -23,7 +22,7 @@ final class MeetingPlaybackTests: XCTestCase {
             let player = FakeMeetingAudioPlayer(duration: 60)
             players.append(player)
             return player
-        }, analytics: analytics, tickInterval: .milliseconds(5))
+        }, tickInterval: .milliseconds(5))
     }
 
     override func tearDown() async throws {
@@ -178,20 +177,6 @@ final class MeetingPlaybackTests: XCTestCase {
         XCTAssertEqual(playback.meetingID, other)
         XCTAssertEqual(playback.position, 0)
         XCTAssertFalse(playback.isPlaying)
-    }
-
-    func testOneVisitOfThePageSendsOnePlayEvent() throws {
-        try writeAudio(.you)
-        playback.open(meeting)
-        playback.play()
-        playback.pause()
-        playback.play()
-
-        playback.close(meeting)
-        playback.open(meeting)
-        playback.play()
-
-        XCTAssertEqual(analytics.trackedEventNames, ["meeting_played", "meeting_played"])
     }
 
     func testTheTrackPlayersTakeThePositionFromTheLongestTrack() throws {

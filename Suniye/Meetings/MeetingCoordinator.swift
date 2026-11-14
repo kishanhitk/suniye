@@ -246,7 +246,7 @@ final class MeetingCoordinator {
         self.environment = environment
         self.analytics = analytics
         settings = settingsStore.load()
-        playback = MeetingPlayback(store: store, makePlayer: environment.makePlayer, analytics: analytics)
+        playback = MeetingPlayback(store: store, makePlayer: environment.makePlayer)
         detector = MeetingCallDetector(reader: environment.makeMicrophoneUsers(), uptime: environment.uptime)
         summaries = MeetingSummaries(
             store: store,
@@ -722,6 +722,12 @@ final class MeetingCoordinator {
     /// this visit of its page.
     func textEdited(_ part: MeetingEditedText) {
         analytics.track(.meetingEdited(part: part))
+    }
+
+    /// The audio of a meeting started to play, for the first time in this
+    /// visit of its page.
+    func playbackStarted() {
+        analytics.track(.meetingPlayed)
     }
 
     /// Writes the summary that the user changed, as Markdown.

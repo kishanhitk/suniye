@@ -31,6 +31,8 @@ struct MeetingPage: View {
     @State private var notesUnreadable = false
     /// The parts of the text that the user changed in this visit of the page.
     @State private var editedParts: Set<MeetingEditedText> = []
+    /// The audio played in this visit of the page.
+    @State private var played = false
 
     init(meetings: MeetingCoordinator, appState: AppState, id: UUID) {
         self.meetings = meetings
@@ -112,6 +114,12 @@ struct MeetingPage: View {
                 // without them in sight.
                 if tab != .transcript {
                     meetings.playback.pause()
+                }
+            }
+            .onChange(of: meetings.playback.isPlaying && meetings.playback.meetingID == id) { _, playing in
+                if playing, !played {
+                    played = true
+                    meetings.playbackStarted()
                 }
             }
             .onChange(of: live == nil) { _, finished in
