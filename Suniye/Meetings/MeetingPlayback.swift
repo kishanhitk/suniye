@@ -19,6 +19,9 @@ final class MeetingPlayback {
     /// Goes up at each start and each move of the position, so the
     /// transcript follows the line that plays again after the user scrolled.
     private(set) var moves = 0
+    /// A recording runs or a dictation captures: the microphone would hear
+    /// the audio, so it does not play.
+    private(set) var isBlocked = false
 
     @ObservationIgnored private let store: MeetingStore
     @ObservationIgnored private let makePlayer: @MainActor ([URL]) throws -> MeetingAudioPlayer
@@ -53,10 +56,19 @@ final class MeetingPlayback {
         }
     }
 
+    /// Pauses the audio while the microphone records, and keeps it from
+    /// playing until it does not.
+    func block(_ blocked: Bool) {
+        isBlocked = blocked
+        if blocked {
+            pause()
+        }
+    }
+
     /// Plays from `time`, or from where it stopped; after the end, from the
     /// start.
     func play(from time: TimeInterval? = nil) {
-        guard let player else { return }
+        guard !isBlocked, let player else { return }
         let start = time.map { min(max(0, $0), duration) } ?? (position < duration ? position : 0)
         guard start < duration else {
             // A move to the end stops the audio there.

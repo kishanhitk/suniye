@@ -163,6 +163,7 @@ final class MeetingCoordinator {
             if oldValue !== live {
                 onLiveChange?(live)
                 updateCallDetection()
+                blockPlayback()
             }
         }
     }
@@ -220,7 +221,10 @@ final class MeetingCoordinator {
     @ObservationIgnored private var dictating = false
     /// The dictation's audio capture runs: the microphone track gets silence.
     @ObservationIgnored private var dictationCaptures = false {
-        didSet { live?.recorder.setMicrophoneMuted(dictationCaptures) }
+        didSet {
+            live?.recorder.setMicrophoneMuted(dictationCaptures)
+            blockPlayback()
+        }
     }
     @ObservationIgnored private var loadedModel: ASRModelID?
     @ObservationIgnored private var listTexts: [UUID: MeetingListText] = [:]
@@ -794,11 +798,9 @@ final class MeetingCoordinator {
     /// From the start of a dictation to its end, no meeting chunk starts
     /// decoding and the summary waits. The microphone track gets silence from
     /// the start until `dictationCaptureEnded()`: the dictated words are not
-    /// meeting talk. A playback pauses, so the dictation does not hear it.
+    /// meeting talk. Playback stops for the capture, so the dictation does
+    /// not hear it, and it does not start again by itself.
     func dictationChanged(active: Bool) {
-        if active {
-            playback.pause()
-        }
         dictating = active
         dictationCaptures = active
         summaries.hold(active)
@@ -1106,6 +1108,10 @@ final class MeetingCoordinator {
         } catch {
             AppLogger.shared.log(.error, "meeting not saved id=\(id.uuidString) error=\(error.localizedDescription)")
         }
+    }
+
+    private func blockPlayback() {
+        playback.block(live != nil || dictationCaptures)
     }
 
     private func hasEnoughSpeech(_ id: UUID, segments: [MeetingSegment]) async -> Bool {

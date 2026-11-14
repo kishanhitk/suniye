@@ -296,7 +296,6 @@ struct MeetingPage: View {
                         lines: transcriptLines(record),
                         timeline: MeetingTimeline(pauses: record.pauses),
                         hasAudio: meetings.audioOnMac.contains(id) && record.status.hasFinalTranscript,
-                        canPlay: meetings.live == nil,
                         isEditable: canEditText(record)
                     ) { texts, ended in
                         editTranscript(texts, ended: ended)

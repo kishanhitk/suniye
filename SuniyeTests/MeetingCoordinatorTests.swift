@@ -985,7 +985,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertNil(coordinator.record(meeting.id)?.summaryEditedAt, "a new summary is not the user's edit")
     }
 
-    func testADictationPausesThePlaybackAndItStaysPaused() async throws {
+    func testPlayIsOffWhileADictationCaptures() async throws {
         let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
         let coordinator = makeCoordinator()
         coordinator.playback.open(meeting.id)
@@ -993,22 +993,32 @@ final class MeetingCoordinatorTests: XCTestCase {
 
         coordinator.dictationChanged(active: true)
         let paused = !coordinator.playback.isPlaying && !players[0].isPlaying
+        coordinator.playback.play()
+        let playedDuringTheCapture = coordinator.playback.isPlaying
+        coordinator.dictationCaptureEnded()
         coordinator.dictationChanged(active: false)
+        let startedByItself = coordinator.playback.isPlaying
+        coordinator.playback.play()
 
         XCTAssertTrue(paused)
-        XCTAssertFalse(coordinator.playback.isPlaying, "it does not start again by itself")
+        XCTAssertFalse(playedDuringTheCapture, "Play, a time link and Space all go through play()")
+        XCTAssertFalse(startedByItself)
+        XCTAssertTrue(coordinator.playback.isPlaying)
     }
 
-    func testARecordingClosesThePlayback() async throws {
+    func testARecordingClosesThePlaybackAndPlayIsOffWhileItRecords() async throws {
         let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
         let coordinator = makeCoordinator()
         coordinator.playback.open(meeting.id)
         coordinator.playback.play()
 
         try await coordinator.startMeeting(source: .manual)
+        let closed = coordinator.playback.meetingID == nil && !players[0].isPlaying
+        coordinator.playback.open(meeting.id)
+        coordinator.playback.play()
 
-        XCTAssertNil(coordinator.playback.meetingID)
-        XCTAssertFalse(players[0].isPlaying)
+        XCTAssertTrue(closed)
+        XCTAssertFalse(coordinator.playback.isPlaying)
     }
 
     func testDeletingAMeetingStopsItsPlaybackBeforeItsFilesGo() async throws {

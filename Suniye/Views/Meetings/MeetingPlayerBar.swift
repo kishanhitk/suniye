@@ -10,22 +10,20 @@ struct MeetingTranscriptPane: View {
     let lines: [MeetingTranscriptLine]
     let timeline: MeetingTimeline
     let hasAudio: Bool
-    /// False while a meeting records: the microphone would hear the audio.
-    let canPlay: Bool
     let isEditable: Bool
     let edited: (_ texts: [UUID: String], _ ended: Bool) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if hasAudio {
-                MeetingPlayerBar(playback: playback, id: id, timeline: timeline, canPlay: canPlay)
+                MeetingPlayerBar(playback: playback, id: id, timeline: timeline)
             }
             MeetingTranscriptView(
                 lines: lines,
                 isEditable: isEditable,
                 marked: marked,
                 follow: playback.moves,
-                seek: hasAudio && canPlay ? seek : nil,
+                seek: hasAudio && !playback.isBlocked ? seek : nil,
                 edited: edited
             )
             .padding(.horizontal, -MeetingTranscriptView.markOverhang)
@@ -50,7 +48,6 @@ struct MeetingPlayerBar: View {
     let playback: MeetingPlayback
     let id: UUID
     let timeline: MeetingTimeline
-    let canPlay: Bool
     /// A drag moves the audio when it ends; until then the bar shows this.
     @State private var dragged: TimeInterval?
     @State private var isDragging = false
@@ -61,7 +58,7 @@ struct MeetingPlayerBar: View {
                 MeetingIcon(systemName: isPlaying ? "pause.fill" : "play.fill")
             }
             .buttonStyle(.plain)
-            .disabled(!canPlay || isFailed)
+            .disabled(playback.isBlocked || isFailed)
             .help(isPlaying ? "Pause (Space)" : "Play (Space)")
             .accessibilityLabel(isPlaying ? "Pause" : "Play")
             if isFailed {
@@ -128,7 +125,7 @@ struct MeetingPlayerBar: View {
     }
 
     private func playOrPause() {
-        guard canPlay, !isFailed else { return }
+        guard !playback.isBlocked, !isFailed else { return }
         if isPlaying {
             playback.pause()
         } else {
