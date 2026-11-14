@@ -195,6 +195,20 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(event("meeting_transcribed")?["asr_model"], .label("coheretranscribe"))
     }
 
+    func testAChosenModelThatIsAlsoTheDictationModelStillGetsAnEngineOfItsOwn() async throws {
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.transcriptModel = .parakeetV3 }
+        try await coordinator.startMeeting(source: .manual)
+        you.push(tone(2.5, level: 0.3) + silence(0.5))
+
+        await coordinator.stop()
+        let dictationEngineDecodes = await engine.calls
+
+        XCTAssertEqual(requestedTranscriptModels, [.parakeetV3], "a switch of the dictation model cannot change a chosen model")
+        XCTAssertEqual(dictationEngineDecodes, 0)
+    }
+
     func testATranscriptModelThatIsNotDownloadedStopsTheTranscriptWithThatCauseAndKeepsTheAudio() async throws {
         transcriptEngineError = MeetingTranscriptModelError.notDownloaded("Cohere Transcribe")
         let coordinator = makeCoordinator()

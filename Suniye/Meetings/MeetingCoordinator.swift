@@ -732,12 +732,13 @@ final class MeetingCoordinator {
         ))
     }
 
-    /// The dictation model writes the transcript on the dictation engine.
-    /// Another model gets an engine of its own, which is unloaded after the
-    /// pass. On either engine, no piece of audio starts decoding while a
-    /// dictation runs, so a dictation never decodes beside a pass.
+    /// With no model ("Same as dictation"), the pass runs on the dictation
+    /// engine with the model that engine has. A chosen model, the dictation
+    /// model too, gets an engine of its own that is unloaded after the pass,
+    /// so a switch of the dictation model does not change the pass. On either
+    /// engine, no piece of audio starts decoding while a dictation runs.
     private func runPass(_ id: UUID, model: ASRModelID?) async throws -> [MeetingSegment] {
-        guard let model, model != loadedModel else {
+        guard let model else {
             return try await run(makeTranscriber(for: id, engine: engine) { [weak self] in await self?.speechEngineFree ?? false }, for: id)
         }
         let ownEngine = try await makeTranscriptEngine(model)
