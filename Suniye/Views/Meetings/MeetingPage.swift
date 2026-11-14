@@ -72,6 +72,9 @@ struct MeetingPage: View {
                 segments = await meetings.transcript(of: id)
                 summary = await meetings.summary(of: id)
             }
+            .task(id: meetings.transcribingAgain.contains(id)) {
+                segments = await meetings.transcript(of: id)
+            }
             .task(id: id) {
                 let saved = await meetings.notes(of: id)
                 notes = saved.map(MeetingNotesDraft.init(saved:))
@@ -222,7 +225,16 @@ struct MeetingPage: View {
             if record.status == .finishing {
                 MeetingTranscriptProgressView(progress: meetings.transcriptProgress[id], isWaiting: meetings.waitingTranscripts.contains(id))
             } else {
-                MeetingTranscriptView(lines: transcriptLines(record))
+                VStack(alignment: .leading, spacing: 16) {
+                    if meetings.transcribingAgain.contains(id) {
+                        MeetingTranscriptProgressView(
+                            progress: meetings.transcriptProgress[id],
+                            isWaiting: meetings.waitingTranscripts.contains(id),
+                            title: "Transcribing again…"
+                        )
+                    }
+                    MeetingTranscriptView(lines: transcriptLines(record))
+                }
             }
         }
     }

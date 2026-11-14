@@ -106,6 +106,8 @@ Limits of this measurement: one meeting, in English, with four speakers; each tr
 
 Suniye checks at launch and after each transcript, with no timer. A change of the setting applies at the next check, so a wrong click deletes nothing at once. A meeting with no finished transcript keeps its audio for **Finish Transcript**. **Delete Meeting** deletes the audio at once.
 
+While the audio is on the Mac, **Transcribe Again…** in the meeting's ··· menu writes the transcript again with the current **Transcript model**. Suniye asks first. The current transcript stays until the new one is complete: a failure or a quit keeps it. The notes and the summary stay; **Regenerate** writes the summary again.
+
 ## Summary
 
 | Model | Needs |
@@ -141,6 +143,7 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 |---|---|
 | `meeting.json` | Title, times, tracks, pauses, call app, status |
 | `segments.jsonl` | Transcript lines |
+| `segments-draft.jsonl` | The new lines while Transcribe Again runs; they replace `segments.jsonl` when they are complete |
 | `notes.txt` | Your notes |
 | `summary.md` | The summary |
 | `you.wav`, `them.wav` | 16 kHz audio while the meeting records, and after the transcript as long as **Keep meeting audio** says |

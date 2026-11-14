@@ -13,6 +13,7 @@ final class MeetingActions {
     var deleting: MeetingRecord?
     var renaming: MeetingRecord?
     var renameText = ""
+    var askingTranscribeAgain: MeetingRecord?
     var failure: MeetingActionFailure?
     var editingTemplates = false
 
@@ -36,6 +37,10 @@ final class MeetingActions {
     func rename(_ record: MeetingRecord) {
         renameText = record.title
         renaming = record
+    }
+
+    func askTranscribeAgain(_ record: MeetingRecord) {
+        askingTranscribeAgain = record
     }
 
     func export(_ record: MeetingRecord, meetings: MeetingCoordinator) {
@@ -105,6 +110,17 @@ private struct MeetingActionDialogs: ViewModifier {
                 Button("Cancel", role: .cancel) {}
             }
             .alert(
+                actions.askingTranscribeAgain.map { "Transcribe “\($0.title)” again?" } ?? "",
+                isPresented: Binding(get: { actions.askingTranscribeAgain != nil }, set: { if !$0 { actions.askingTranscribeAgain = nil } }),
+                presenting: actions.askingTranscribeAgain
+            ) { record in
+                Button("Transcribe Again") { meetings.transcribeAgain(record.id) }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text(meetings.transcriptModelName.map { "A new transcript from \($0) replaces the current one. Notes and the summary stay." }
+                    ?? "A new transcript replaces the current one. Notes and the summary stay.")
+            }
+            .alert(
                 actions.failure?.title ?? "",
                 isPresented: Binding(get: { actions.failure != nil }, set: { if !$0 { actions.failure = nil } }),
                 presenting: actions.failure
@@ -134,6 +150,10 @@ struct MeetingMenuItems: View {
         }
         if !isLive {
             Button("Export as Markdown…") { actions.export(record, meetings: meetings) }
+            if meetings.audioOnMac.contains(record.id), record.status.hasFinalTranscript {
+                Button("Transcribe Again…") { actions.askTranscribeAgain(record) }
+                    .disabled(!meetings.canTranscribeAgain(record))
+            }
         }
         Button("Rename…") { actions.rename(record) }
         Button("Show in Finder") { actions.revealInFinder(record, meetings: meetings) }
@@ -141,7 +161,7 @@ struct MeetingMenuItems: View {
             Divider()
             Button("Delete Meeting…") { actions.confirmDelete(record) }
                 .keyboardShortcut(.delete, modifiers: .command)
-                .disabled(record.status == .finishing)
+                .disabled(record.status == .finishing || meetings.transcribingAgain.contains(record.id))
         }
     }
 }

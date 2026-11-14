@@ -5978,6 +5978,19 @@ extension AppState: MeetingHost {
             learningToastPresenter.show(message: "Summary ready", detail: nil, actionTitle: "Open") { [weak self] in
                 self?.openMeeting(id)
             }
+        case let .transcribedAgain(id):
+            guard id != pageOnScreen else { return }
+            learningToastPresenter.show(message: "Transcript ready", detail: nil, actionTitle: "Open") { [weak self] in
+                self?.openMeeting(id)
+            }
+        case let .notTranscribedAgain(id):
+            learningToastPresenter.show(
+                message: "Couldn’t transcribe again",
+                detail: "The transcript did not change.",
+                actionTitle: id == pageOnScreen ? nil : "Open"
+            ) { [weak self] in
+                self?.openMeeting(id)
+            }
         }
     }
 

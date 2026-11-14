@@ -803,8 +803,72 @@ final class MeetingCoordinatorTests: XCTestCase {
         you.push(tone(2.5, level: 0.3) + silence(0.5))
 
         await coordinator.stop()
+        let record = try XCTUnwrap(coordinator.record(id))
 
         XCTAssertEqual(store.audioTracks(of: id), [.you, .them])
+        XCTAssertTrue(coordinator.canTranscribeAgain(record))
+    }
+
+    func testTranscribeAgainReplacesTheTranscriptAndKeepsTheNotesAndTheSummary() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words."), to: meeting.id)
+        try await store.saveNotes("Ask legal.", for: meeting.id)
+        try await store.saveSummary("## Overview\nShip Friday.", for: meeting.id)
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        await coordinator.start()
+
+        coordinator.transcribeAgain(meeting.id)
+        let asked = coordinator.transcribingAgain.contains(meeting.id)
+        let finished = await waitUntil { !coordinator.transcribingAgain.contains(meeting.id) }
+        let transcript = await coordinator.transcript(of: meeting.id)
+        let notes = await coordinator.notes(of: meeting.id)
+        let summary = await coordinator.summary(of: meeting.id)
+        let summaryRequests = await summaryModel.kinds
+
+        XCTAssertTrue(asked)
+        XCTAssertTrue(finished)
+        XCTAssertEqual(transcript.map(\.text), [longSentence])
+        XCTAssertEqual(notes, "Ask legal.")
+        XCTAssertEqual(summary, "## Overview\nShip Friday.")
+        XCTAssertEqual(summaryRequests, [], "Regenerate writes the summary again, not Transcribe Again")
+        XCTAssertEqual(coordinator.record(meeting.id)?.status, .done)
+    }
+
+    func testAFailedTranscribeAgainKeepsTheTranscript() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words."), to: meeting.id)
+        transcriptEngineError = MeetingTranscriptModelError.notDownloaded("Cohere Transcribe")
+        let coordinator = makeCoordinator()
+        coordinator.updateSettings {
+            $0.audioRetention = .sevenDays
+            $0.transcriptModel = .cohereTranscribe
+        }
+        var notices: [MeetingNotice] = []
+        coordinator.onNotice = { notices.append($0) }
+        await coordinator.start()
+
+        coordinator.transcribeAgain(meeting.id)
+        let finished = await waitUntil { !coordinator.transcribingAgain.contains(meeting.id) }
+        let transcript = await coordinator.transcript(of: meeting.id)
+
+        XCTAssertTrue(finished)
+        XCTAssertEqual(transcript.map(\.text), ["Old words."])
+        XCTAssertEqual(notices, [.notTranscribedAgain(meeting.id)])
+        XCTAssertTrue(coordinator.audioOnMac.contains(meeting.id), "the audio stays for another try")
+    }
+
+    func testWithoutAudioOnTheMacTranscribeAgainDoesNothing() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+        let record = try XCTUnwrap(coordinator.record(meeting.id))
+
+        coordinator.transcribeAgain(meeting.id)
+
+        XCTAssertFalse(coordinator.canTranscribeAgain(record))
+        XCTAssertFalse(coordinator.transcribingAgain.contains(meeting.id))
     }
 
     func testATrackThatStartsAgainNoLongerShowsAsFailed() async throws {

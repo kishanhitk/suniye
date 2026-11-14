@@ -100,6 +100,27 @@ final class MeetingStoreTests: XCTestCase {
         XCTAssertEqual(segments, [kept])
     }
 
+    func testAKeptDraftReplacesTheTranscriptAndALaunchDeletesADraftThatAQuitLeft() async throws {
+        let kept = makeRecord(status: .done)
+        let left = makeRecord(status: .done)
+        try await store.create(kept)
+        try await store.create(left)
+        for id in [kept.id, left.id] {
+            try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 16_000, text: "Old words."), to: id)
+            try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 16_000, text: "New words."), to: id, in: .draft)
+        }
+
+        try await store.keepDraft(of: kept.id)
+        _ = await store.recoverInterruptedMeetings()
+
+        let keptLines = await store.segments(of: kept.id).map(\.text)
+        let leftLines = await store.segments(of: left.id).map(\.text)
+        let leftDraft = await store.segments(of: left.id, in: .draft)
+        XCTAssertEqual(keptLines, ["New words."])
+        XCTAssertEqual(leftLines, ["Old words."], "the transcript stays when a quit cut the new one short")
+        XCTAssertEqual(leftDraft, [])
+    }
+
     func testNotesAndSummaryRoundTrip() async throws {
         let record = makeRecord()
         try await store.create(record)

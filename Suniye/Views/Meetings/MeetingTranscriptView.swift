@@ -57,13 +57,14 @@ struct MeetingTranscriptProgressView: View {
     let progress: MeetingTranscriptProgress?
     /// The transcript waits for the transcript of another meeting: no bar yet.
     var isWaiting = false
+    var title = "Finishing the transcript…"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
-                Text(isWaiting ? "Waiting for another transcript…" : "Finishing the transcript…")
+                Text(isWaiting ? "Waiting for another transcript…" : title)
                     .font(AppTypography.body)
                     .foregroundStyle(MainWindowPalette.secondaryText)
             }

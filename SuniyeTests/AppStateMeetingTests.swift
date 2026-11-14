@@ -13,6 +13,16 @@ final class AppStateMeetingTests: XCTestCase {
         XCTAssertEqual(toasts.shownMessages, ["Summary ready"])
     }
 
+    func testTranscribeAgainShowsWhenItEndsAndWhenItFails() {
+        let toasts = SpyLearningToastPresenter()
+        let appState = makeTestAppState(learningToastPresenter: toasts)
+
+        appState.showMeetingNotice(.transcribedAgain(UUID()))
+        appState.showMeetingNotice(.notTranscribedAgain(UUID()))
+
+        XCTAssertEqual(toasts.shownMessages, ["Transcript ready", "Couldn’t transcribe again"])
+    }
+
     func testATranscriptModelThatIsNotOnTheMacDownloadsWithoutBecomingTheDictationModel() async {
         let modelManager = StubModelManager()
         let appState = makeTestAppState(modelManager: modelManager)
