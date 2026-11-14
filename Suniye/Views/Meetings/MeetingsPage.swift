@@ -50,6 +50,19 @@ struct MeetingsPage: View {
                 )
             }
 
+            ForEach(notTranscribed) { record in
+                InlineStatusBanner(
+                    icon: "exclamationmark.triangle.fill",
+                    tint: .orange,
+                    title: MeetingStatus.notTranscribedTitle,
+                    detail: MeetingDurationText.savedAudio(of: record),
+                    actionTitle: "Finish Transcript",
+                    action: { meetings.finishTranscript(record.id) },
+                    secondaryActionTitle: "Delete",
+                    secondaryAction: { actions.confirmDelete(record) }
+                )
+            }
+
             ForEach(unfinished) { record in
                 InlineStatusBanner(
                     icon: "exclamationmark.triangle.fill",
@@ -140,6 +153,10 @@ struct MeetingsPage: View {
         meetings.meetings.filter { $0.status == .interrupted }
     }
 
+    private var notTranscribed: [MeetingRecord] {
+        meetings.meetings.filter { $0.status == .notTranscribed }
+    }
+
     private var visible: [MeetingRecord] {
         guard !query.isEmpty else { return listed }
         return listed.filter { record in
@@ -209,9 +226,19 @@ private struct MeetingRow: View {
                     .foregroundStyle(MainWindowPalette.secondaryText)
                     .frame(width: 72, alignment: .leading)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(record.title)
-                        .font(AppTypography.bodyMedium)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(record.title)
+                            .font(AppTypography.bodyMedium)
+                            .lineLimit(1)
+                        if record.status == .notTranscribed {
+                            Text("Not finished")
+                                .font(AppTypography.caption.weight(.medium))
+                                .foregroundStyle(MainWindowPalette.warningTagText)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Color.orange.opacity(0.16)))
+                        }
+                    }
                     if let snippet {
                         Text(snippet.highlightingMatches(of: query))
                             .font(AppTypography.body)

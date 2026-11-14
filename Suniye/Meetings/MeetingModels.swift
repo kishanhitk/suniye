@@ -44,12 +44,17 @@ enum MeetingStatus: String, Codable, Sendable {
     /// part of the audio got no text. The user starts the finish again,
     /// because the finish itself may have ended the app.
     case interrupted
+    /// The app quit or crashed during the recording. The audio is saved, and
+    /// the transcript waits for the user: a launch does not load a speech
+    /// model and run for minutes with no click.
+    case notTranscribed
 
     /// Titles of the states without a summary, for the meeting page and the
     /// meetings list.
     static let summaryFailedTitle = "Couldn’t write the summary"
     static let noSpeechTitle = "Too little speech to summarize"
     static let interruptedTitle = "A transcript did not finish"
+    static let notTranscribedTitle = "A meeting stopped when Suniye quit"
 
     /// A summary can be written again: the transcript is final and no
     /// summary runs.
@@ -57,7 +62,7 @@ enum MeetingStatus: String, Codable, Sendable {
         switch self {
         case .done, .summaryFailed, .noSpeech:
             return true
-        case .recording, .paused, .finishing, .summarizing, .interrupted:
+        case .recording, .paused, .finishing, .summarizing, .interrupted, .notTranscribed:
             return false
         }
     }
@@ -68,7 +73,7 @@ enum MeetingStatus: String, Codable, Sendable {
         switch self {
         case .recording, .paused, .finishing:
             return true
-        case .summarizing, .done, .summaryFailed, .noSpeech, .interrupted:
+        case .summarizing, .done, .summaryFailed, .noSpeech, .interrupted, .notTranscribed:
             return false
         }
     }

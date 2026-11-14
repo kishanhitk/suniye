@@ -43,7 +43,7 @@ enum MeetingQuitAlert {
     static func make() -> NSAlert {
         let alert = NSAlert()
         alert.messageText = "A meeting is recording"
-        alert.informativeText = "Quitting stops the recording. Suniye finishes the transcript when it opens again."
+        alert.informativeText = "Quitting stops the recording and saves its audio."
         alert.addButton(withTitle: "Keep Recording")
         alert.addButton(withTitle: "Stop and Quit")
         return alert

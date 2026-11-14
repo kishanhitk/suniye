@@ -63,6 +63,15 @@ struct MeetingSummaryTab: View {
                 Button("Finish Transcript") { meetings.finishTranscript(record.id) }
                     .buttonStyle(.borderedProminent)
             }
+        case .notTranscribed:
+            EmptyStateCard(
+                icon: "exclamationmark.triangle",
+                title: MeetingStatus.notTranscribedTitle,
+                detail: MeetingDurationText.savedAudio(of: record)
+            ) {
+                Button("Finish Transcript") { meetings.finishTranscript(record.id) }
+                    .buttonStyle(.borderedProminent)
+            }
         case .recording, .paused:
             EmptyView()
         }

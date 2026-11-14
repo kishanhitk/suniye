@@ -60,7 +60,7 @@ Call detection reads the Core Audio process list. It reads nothing while no inpu
 - A full disk.
 - **Quit Suniye** asks first. A logout, restart or shutdown stops and saves with no question.
 
-After a quit or a crash during a recording, the next launch writes the transcript with no click. After a quit or a crash while the transcript is written, the meeting shows **Finish Transcript**.
+After a quit or a crash, the next launch writes no transcript by itself: it does not load a speech model and run for minutes with no click. A recording that a quit or a crash stopped shows on the list with **Finish Transcript** and **Delete**, and its row has a "Not finished" tag. A transcript that a quit or a crash cut short shows **Finish Transcript**.
 
 ## Transcript
 

@@ -265,20 +265,22 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.stop()
     }
 
-    func testAtLaunchARecordingThatAQuitLeftIsFinishedWithNoClick() async throws {
-        let left = MeetingRecord(title: "Meeting", startedAt: clock, tracks: [.you], status: .recording, templateID: "general")
-        try await store.create(left)
-        let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: left.id))
-        try writer.append(tone(2.5, level: 0.3) + silence(0.5))
-        try writer.close()
+    func testAtLaunchARecordingThatAQuitLeftWaitsForFinishTranscript() async throws {
+        let left = try await leftRecording(startedAt: clock)
         let coordinator = makeCoordinator()
         coordinator.speechModelChanged(.parakeetV3)
 
         await coordinator.start()
-        let finished = await waitUntil { coordinator.record(left.id)?.status == .done }
+        try await Task.sleep(for: .milliseconds(100))
+        let atLaunch = coordinator.record(left)?.status
+        let decodesAtLaunch = await engine.calls
+        coordinator.finishTranscript(left)
+        let finished = await waitUntil { coordinator.record(left)?.status == .done }
 
+        XCTAssertEqual(atLaunch, .notTranscribed)
+        XCTAssertEqual(decodesAtLaunch, 0, "a launch loads no speech model and decodes nothing with no click")
         XCTAssertTrue(finished)
-        let segments = await store.segments(of: left.id)
+        let segments = await store.segments(of: left)
         XCTAssertEqual(segments.map(\.text), [longSentence])
     }
 
@@ -650,7 +652,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         await coordinator.stop()
     }
 
-    func testAQuitSavesTheRecordingAndTheNextLaunchFinishesIt() async throws {
+    func testAQuitSavesTheRecordingForFinishTranscriptAtTheNextLaunch() async throws {
         let first = makeCoordinator()
         first.speechModelChanged(.parakeetV3)
         try await first.startMeeting(source: .manual)
@@ -663,12 +665,25 @@ final class MeetingCoordinatorTests: XCTestCase {
         let next = makeCoordinator()
         next.speechModelChanged(.parakeetV3)
         await next.start()
+        let atLaunch = next.record(id)?.status
+        next.finishTranscript(id)
         let finished = await waitUntil { next.record(id)?.status == .done }
 
         XCTAssertNil(first.live)
-        XCTAssertEqual(saved?.status, .recording, "the next launch finishes it")
         XCTAssertEqual(saved?.endedAt, saved?.startedAt.addingTimeInterval(3))
+        XCTAssertEqual(atLaunch, .notTranscribed, "the next launch shows it with Finish Transcript")
         XCTAssertTrue(finished)
+    }
+
+    /// A meeting that a quit left during the recording, with 3 s of audio:
+    /// one sentence.
+    private func leftRecording(startedAt: Date) async throws -> UUID {
+        let left = MeetingRecord(title: "Meeting", startedAt: startedAt, tracks: [.you], status: .recording, templateID: "general")
+        try await store.create(left)
+        let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: left.id))
+        try writer.append(tone(2.5, level: 0.3) + silence(0.5))
+        try writer.close()
+        return left.id
     }
 
     /// The props of the last event with this name.

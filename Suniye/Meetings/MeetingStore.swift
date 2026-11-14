@@ -209,8 +209,8 @@ actor MeetingStore {
 
     /// Repairs the audio headers of every meeting that a quit or crash left
     /// mid-session, and returns them. A meeting that was recording or paused
-    /// moves to `.finishing`, and the app finishes its transcript; one that
-    /// was finishing moves to `.interrupted`.
+    /// moves to `.notTranscribed`; one that was finishing moves to
+    /// `.interrupted`. Both wait for Finish Transcript.
     func recoverInterruptedMeetings() -> [MeetingRecord] {
         var recovered: [MeetingRecord] = []
         for var record in loadAll() where record.status.needsRecovery {
@@ -224,7 +224,7 @@ actor MeetingStore {
                 }
             }
             cutTornSegment(of: record.id)
-            record.status = record.status == .finishing ? .interrupted : .finishing
+            record.status = record.status == .finishing ? .interrupted : .notTranscribed
             // A pause that never ended has no audio after it, so it moves no
             // audio position and only blurs the meeting length.
             if let lastPause = record.pauses.last, lastPause.end == nil {

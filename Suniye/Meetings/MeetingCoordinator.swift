@@ -227,14 +227,12 @@ final class MeetingCoordinator {
         environment.canRecordCallAudio
     }
 
-    /// At launch: finish the transcripts that a quit or a crash left, and
-    /// queue the summaries that are not written yet.
+    /// At launch: repair what a quit or a crash left, and queue the summaries
+    /// that are not written yet. A transcript that a quit or a crash left
+    /// waits for Finish Transcript.
     func start() async {
-        let recovered = await store.recoverInterruptedMeetings()
+        _ = await store.recoverInterruptedMeetings()
         meetings = await store.loadAll()
-        for record in recovered where record.status == .finishing {
-            finishTranscript(record.id)
-        }
         for record in meetings where record.status == .summarizing {
             summaries.enqueue(record.id)
         }
@@ -413,8 +411,8 @@ final class MeetingCoordinator {
         live?.recorder.restartCallAudio()
     }
 
-    /// Before the app quits: stops the recording and saves it, and leaves the
-    /// transcript to the next launch, which finishes it with no click.
+    /// Before the app quits: stops the recording and saves it. The next
+    /// launch shows it with Finish Transcript.
     func stopForQuit() async {
         guard let session = beginStop() else { return }
         let end = wallSeconds(of: session)
