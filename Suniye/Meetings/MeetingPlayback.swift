@@ -112,6 +112,9 @@ final class MeetingPlayback {
     func close(_ id: UUID? = nil) {
         guard meetingID != nil, id == nil || id == meetingID else { return }
         player?.pause()
+        // An end that the player reported just before is for this audio, not
+        // for the next meeting.
+        player?.onEnd = {}
         player = nil
         stopped()
         meetingID = nil

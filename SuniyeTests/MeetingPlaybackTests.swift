@@ -97,6 +97,21 @@ final class MeetingPlaybackTests: XCTestCase {
         XCTAssertEqual(playback.position, 45)
     }
 
+    func testTheEndOfAClosedPlayerDoesNotMoveTheNextMeeting() throws {
+        let other = UUID()
+        try writeAudio(.you)
+        try writeAudio(.you, of: other)
+        playback.open(meeting)
+        playback.play()
+        let first = players[0]
+
+        playback.open(other)
+        first.playToEnd()
+
+        XCTAssertEqual(playback.meetingID, other)
+        XCTAssertEqual(playback.position, 0)
+    }
+
     func testSeekPlaysFromThereWhilePlayingAndOnlyMovesWhilePaused() throws {
         try writeAudio(.you)
         playback.open(meeting)
