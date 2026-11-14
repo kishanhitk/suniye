@@ -136,6 +136,10 @@ Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets
 - A template with no list section is summarized by the model in one step, or from notes on the parts when the transcript is long. So is a template so long that a part would hold less than 1,000 tokens of transcript.
 - **Regenerate** (the arrow at the right of the tabs, on the Summary tab) opens the templates; the current one has a checkmark. The template that you pick writes the summary again. Another template also becomes the **Default template**.
 
+## Edit
+
+- A quit, a tab change or leaving the meeting page saves the text that you typed.
+
 ## Files
 
 `~/Library/Application Support/Suniye/meetings/<meeting id>/` (`meetings-preview` for Suniye Preview)

@@ -94,9 +94,13 @@ struct MeetingPage: View {
             }
             .onAppear { meetings.pageOnScreen = id }
             .onDisappear {
+                meetings.textSaves.saveNow(id)
                 if meetings.pageOnScreen == id {
                     meetings.pageOnScreen = nil
                 }
+            }
+            .onChange(of: tab) {
+                meetings.textSaves.saveNow(id)
             }
             .onChange(of: live == nil) { _, finished in
                 if finished, tab == .notes, notes?.text.isEmpty ?? true {

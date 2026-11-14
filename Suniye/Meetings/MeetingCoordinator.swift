@@ -196,6 +196,8 @@ final class MeetingCoordinator {
     @ObservationIgnored var onNotice: ((MeetingNotice) -> Void)?
     @ObservationIgnored let summaries: MeetingSummaries
     @ObservationIgnored let store: MeetingStore
+    /// The text that the meeting page saves; a quit waits for it.
+    @ObservationIgnored let textSaves = MeetingTextSaves()
     @ObservationIgnored let templates: MeetingTemplateStore
 
     @ObservationIgnored private let settingsStore: MeetingSettingsStore

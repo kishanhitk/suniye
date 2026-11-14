@@ -5884,14 +5884,22 @@ extension AppState: MeetingHost {
     /// A recording meeting stops and saves before the app quits, and the
     /// next launch shows it with Finish Transcript. A quit from the user asks
     /// first; a logout, restart or shutdown does not, so it never blocks one.
+    /// The text that a meeting page has not saved yet is saved first.
     func terminateReplyForMeeting() -> NSApplication.TerminateReply {
-        guard meetings.live != nil else { return .terminateNow }
-        if !Self.systemIsQuittingApps() {
+        for window in NSApp.windows {
+            window.makeFirstResponder(nil)
+        }
+        let isRecording = meetings.live != nil
+        guard isRecording || !meetings.textSaves.isIdle else { return .terminateNow }
+        if isRecording, !Self.systemIsQuittingApps() {
             NSApp.activate(ignoringOtherApps: true)
             guard MeetingQuitAlert.make().runModal() == .alertSecondButtonReturn else { return .terminateCancel }
         }
         Task {
-            await meetings.stopForQuit()
+            await meetings.textSaves.finish()
+            if isRecording {
+                await meetings.stopForQuit()
+            }
             NSApp.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
