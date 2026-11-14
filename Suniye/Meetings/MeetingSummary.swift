@@ -464,18 +464,15 @@ enum MeetingSummaryPrompt {
 
     /// The items of one part under the template's list sections.
     static func items(transcript: String, number: Int, of count: Int, template: MeetingTemplate, sections: [String], speakerLabels: Bool) -> MeetingSummaryRequest {
-        let rules = [
-            noteItemRule,
-            "- Write each item in your own short words. Do not copy lines of the transcript.",
-            "- Keep names, numbers and dates as the transcript says them.",
-            "- For a task, say who does it and by when.",
-            sections.contains(datesAndNumbers)
-                ? "- Put a date or a number with the item it belongs to. Under \"\(datesAndNumbers)\", put each one that fits no other line, with what it is about."
-                : nil,
-            "- Leave out opinions and talk that decides nothing.",
-            speakerRule(speakerLabels),
-            "- Write in the language of the transcript.",
-        ].compactMap { $0 }
+        let rules = [noteItemRule, labelRule, onlyLinesRule, itemLimitRule]
+            + sections.compactMap { sectionRules[$0] }
+            + [
+                "- Write each item in your own short words. Do not copy lines of the transcript.",
+                "- Keep names, numbers and dates as the transcript says them.",
+                "- Leave out talk with no result, such as an update with no change, \"we will see\" or \"no news yet\".",
+                speakerRule(speakerLabels),
+                "- Write in the language of the transcript.",
+            ]
         return MeetingSummaryRequest(
             kind: .part(number: number, count: count),
             instructions: "You take notes on one part of a meeting.",
@@ -484,9 +481,9 @@ enum MeetingSummaryPrompt {
             \(transcript)
             </transcript>
 
-            \(templateBlock(template))
+            \(templateGuide(template))
 
-            Fill in these lines from this part of the meeting, for the sections of the template:
+            Fill in these lines from this part of the meeting:
             \(labels(sections))
 
             Rules:
@@ -503,13 +500,15 @@ enum MeetingSummaryPrompt {
             input: """
             \(notesBlock(notes))
 
-            \(templateBlock(template))
+            \(templateGuide(template))
 
-            Fill in these lines from the notes, for the sections of the template:
+            Fill in these lines from the notes:
             \(labels(sections))
 
             Rules:
             \(noteItemRule)
+            \(labelRule)
+            \(onlyLinesRule)
             - Keep the user's words.
             - Write in the language of the notes.
             """
@@ -521,7 +520,7 @@ enum MeetingSummaryPrompt {
         let notes = sections.compactMap { section in
             items[section].flatMap { $0.isEmpty ? nil : "\(section): \($0.joined(separator: "; "))" }
         }
-        let task = paragraph.map { "- Then write the text of the \"\($0)\" section, as the template says." }
+        let task = paragraph.map { "- Then write the text of the \"\($0)\" section, as the template says, as one paragraph. Stop after it." }
             ?? "- Write only the title line."
         return MeetingSummaryRequest(
             kind: .overview,
@@ -537,7 +536,7 @@ enum MeetingSummaryPrompt {
             - Start with one line: "Title: " and a short title for the meeting, at most 8 words.
             \(task)
             - Use only facts from the notes. Do not guess.
-            - Write plain text: no lists and no headings.
+            - Write plain text: no lists, no headings, and no copy of the notes.
             - Write in the language of the notes.
             """
         )
@@ -552,6 +551,21 @@ enum MeetingSummaryPrompt {
     private static func templateBlock(_ template: MeetingTemplate) -> String {
         "<template>\n\(template.sections)\n</template>"
     }
+
+    /// The template as a guide to what each section holds: as a task, it
+    /// makes a model write a whole summary for each part.
+    private static func templateGuide(_ template: MeetingTemplate) -> String {
+        "The user's template says what each section holds. Do not write the summary.\n" + templateBlock(template)
+    }
+
+    /// What goes under the sections of the built-in templates. A model put
+    /// remarks such as "the menu is hard to find" under every label.
+    private static let sectionRules = [
+        "Decisions": "- Under \"Decisions\", put only what the people agreed to do or not to do.",
+        "Action items": "- Under \"Action items\", put only work that a person said they will do, with who does it and by when.",
+        "Open questions": "- Under \"Open questions\", put only a question that someone asked and nobody answered.",
+        datesAndNumbers: "- Put a date or a number with the item it belongs to. Under \"\(datesAndNumbers)\", put each one that fits no other line, with what it is about.",
+    ]
 
     private static func summaryRules(template: MeetingTemplate, speakerLabels: Bool) -> String {
         """
@@ -583,6 +597,9 @@ enum MeetingSummaryPrompt {
         Open questions:
         """
     private static let noteItemRule = "- After each label, write the items on the same line, separated by \"; \". Write \"none\" when there is none."
+    private static let labelRule = "- Copy each label exactly as it is written above, also when you write the items in another language."
+    private static let onlyLinesRule = "- Write only these lines: no other section, no heading and no text before or after them."
+    private static let itemLimitRule = "- Write at most 3 items after each label: the ones that matter most."
 
     private static func speakerRule(_ speakerLabels: Bool) -> String {
         speakerLabels
@@ -726,21 +743,31 @@ enum MeetingSummaryText {
         return (title, sections(lines.map(normalize)))
     }
 
-    /// The title line and the paragraph of an overview answer.
+    /// The title line and the first paragraph of an overview answer: a model
+    /// that goes on after the paragraph repeats the notes.
     static func overview(_ answer: String) -> (title: String?, paragraph: String) {
         var lines = answer.components(separatedBy: .newlines)
             .map { $0.replacingOccurrences(of: "**", with: "").trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
+            .drop { $0.isEmpty }
         var title: String?
         if let first = lines.first, first.lowercased().hasPrefix("title:") {
             title = cleanTitle(first)
-            lines.removeFirst()
+            lines = lines.dropFirst()
         }
         let paragraph = lines
-            .filter { !$0.hasPrefix("#") && !$0.lowercased().hasPrefix("title:") }
-            .map { $0.hasPrefix("- ") ? String($0.dropFirst(2)) : $0 }
+            .map(withoutParagraphLabel)
+            .drop { $0.isEmpty || $0.hasPrefix("#") }
+            .prefix { !$0.isEmpty && !$0.hasPrefix("#") && !$0.hasPrefix("- ") && !$0.hasPrefix("* ") }
             .joined(separator: " ")
         return (title, paragraph)
+    }
+
+    /// "Overview: The team…" without "Overview:".
+    private static func withoutParagraphLabel(_ line: String) -> String {
+        for label in MeetingSummaryLayout.paragraphNames where line.lowercased().hasPrefix(label + ":") {
+            return line.dropFirst(label.count + 1).trimmingCharacters(in: .whitespaces)
+        }
+        return line
     }
 
     private static func cleanTitle(_ line: String) -> String? {

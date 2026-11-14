@@ -34,7 +34,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
             case .userNotes:
                 return "Action items: Ask legal"
             case .overview:
-                return "Title: \"Weekly sync.\"\nWe agreed to ship on Friday."
+                return "Title: \"Weekly sync.\"\nOverview: We agreed to ship\non Friday.\n\nDecisions: Ship on Friday\n- Ask legal"
             case .summary, .join:
                 return ""
             }
@@ -62,7 +62,7 @@ final class MeetingSummaryWriterTests: XCTestCase {
 
         ## Dates and numbers
         - Review on 3 December
-        """, "the user's items come first")
+        """, "the user's items come first; what follows the paragraph is a repeat of the notes")
     }
 
     func testALongMeetingJoinsTheItemsOfItsPartsInOrderAndOnce() async throws {
