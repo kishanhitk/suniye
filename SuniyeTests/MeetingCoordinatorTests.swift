@@ -859,6 +859,25 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(coordinator.audioOnMac.contains(meeting.id), "the audio stays for another try")
     }
 
+    func testANewTranscriptWithNoLineKeepsTheTranscript() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1, level: 0.9)
+        try await store.appendSegment(MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: 40_000, text: "Old words."), to: meeting.id)
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.audioRetention = .sevenDays }
+        var notices: [MeetingNotice] = []
+        coordinator.onNotice = { notices.append($0) }
+        await coordinator.start()
+
+        coordinator.transcribeAgain(meeting.id)
+        let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
+        let transcript = await coordinator.transcript(of: meeting.id)
+
+        XCTAssertTrue(finished)
+        XCTAssertEqual(transcript.map(\.text), ["Old words."], "a model that hears nothing does not empty the transcript")
+        XCTAssertEqual(notices, [.notTranscribedAgain(meeting.id)])
+    }
+
     func testAudioThatCannotBeDeletedStaysOnTheList() async throws {
         let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
         let folder = store.folder(for: meeting.id).path
@@ -940,14 +959,15 @@ final class MeetingCoordinatorTests: XCTestCase {
     }
 
     /// A meeting that ended `days` days before the clock, with 3 s of audio:
-    /// one sentence.
-    private func finishedMeeting(status: MeetingStatus, endedDaysAgo days: Double) async throws -> MeetingRecord {
+    /// one sentence at the default level, no words at a level the engine does
+    /// not know.
+    private func finishedMeeting(status: MeetingStatus, endedDaysAgo days: Double, level: Float = 0.3) async throws -> MeetingRecord {
         let end = clock.addingTimeInterval(-days * 24 * 60 * 60)
         var meeting = MeetingRecord(title: "Design sync", startedAt: end.addingTimeInterval(-1_800), tracks: [.you], status: status, templateID: "general")
         meeting.endedAt = end
         try await store.create(meeting)
         let writer = try MeetingAudioFileWriter(url: store.audioURL(.you, for: meeting.id))
-        try writer.append(tone(2.5, level: 0.3) + silence(0.5))
+        try writer.append(tone(2.5, level: level) + silence(0.5))
         try writer.close()
         return meeting
     }

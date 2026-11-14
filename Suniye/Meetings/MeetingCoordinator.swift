@@ -852,12 +852,14 @@ final class MeetingCoordinator {
     }
 
     /// Writes a draft from the kept audio, and the draft replaces the
-    /// transcript only when it is complete. The notes, the summary and the
-    /// meeting's state stay.
+    /// transcript only when it is complete and has a line: a model that hears
+    /// nothing keeps the transcript. The notes, the summary and the meeting's
+    /// state stay.
     private func writeTranscriptAgain(_ id: UUID, model chosenModel: ASRModelID?) async {
         await store.deleteDraft(of: id)
         do {
-            _ = try await runPass(id, model: chosenModel, lines: .draft)
+            let transcript = try await runPass(id, model: chosenModel, lines: .draft)
+            guard !transcript.isEmpty else { throw TranscribeAgainError.noLines }
             try await store.keepDraft(of: id)
             dropListText(id)
             onNotice?(.transcribedAgain(id))
@@ -865,6 +867,14 @@ final class MeetingCoordinator {
             AppLogger.shared.log(.error, "meeting transcript not written again id=\(id.uuidString) error=\(error.localizedDescription)")
             await store.deleteDraft(of: id)
             onNotice?(.notTranscribedAgain(id))
+        }
+    }
+
+    private enum TranscribeAgainError: LocalizedError {
+        case noLines
+
+        var errorDescription: String? {
+            "the new transcript has no line"
         }
     }
 
