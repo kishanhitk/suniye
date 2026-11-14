@@ -214,8 +214,10 @@
 		BAF5BC6F6B3257C5769BEA3F /* AppLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF728CD11786278758132738 /* AppLoggerTests.swift */; };
 		BAFF7A7E5C6C3518B9E81247 /* OrtSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C453B86C811C114B5582E0C8 /* OrtSession.swift */; };
 		BE581C983B43DA295351FD6F /* MagicFormatParagraphBreaks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 315B4600A9A5DA396E53352C /* MagicFormatParagraphBreaks.swift */; };
+		BEBFE4B82D273C0A770D7A85 /* MagicFormatSetupState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AC4D5E428B67084450AD3ED /* MagicFormatSetupState.swift */; };
 		BF12ABF47EB01B399906E3F8 /* MeetingSummaryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47B82488822E1754AFA012B0 /* MeetingSummaryTab.swift */; };
 		C0FDDE86BF472EC3CF606585 /* MeetingTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61DE9A41A2E4D9609E23C2E /* MeetingTranscriber.swift */; };
+		C50DE35AC8182B62AB4B980F /* ASRModelBannerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77043ED812C1556CCCC09429 /* ASRModelBannerState.swift */; };
 		C5712C944BD1B40268D4DB18 /* TranscriptBrowsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F02A73ADB04B9EA2A05504E /* TranscriptBrowsing.swift */; };
 		C6785DC49CDC81B5DB8F7212 /* AudioChunker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9B3F7A8B4330D36BCD6D2DD /* AudioChunker.swift */; };
 		C785A46C2DC90C015E0E5602 /* MeetingListText.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF775EC5F6F2BD0812D0AC2F /* MeetingListText.swift */; };
@@ -438,9 +440,11 @@
 		73B49F1E40E87BF78702B0A5 /* SettingsWindowLocator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowLocator.swift; sourceTree = "<group>"; };
 		751D3D93EFB0A0AAB9A75140 /* HotkeyConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyConfiguration.swift; sourceTree = "<group>"; };
 		75E6194F3E61C3D677F93DA9 /* libsherpa-onnx-c-api.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = "libsherpa-onnx-c-api.dylib"; path = "Suniye/Frameworks/libsherpa-onnx-c-api.dylib"; sourceTree = "<group>"; };
+		77043ED812C1556CCCC09429 /* ASRModelBannerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASRModelBannerState.swift; sourceTree = "<group>"; };
 		778C3F4BA67F5BF8643B0057 /* PermisoPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermisoPanel.swift; sourceTree = "<group>"; };
 		779B40D45870210B5F6D3B1E /* MeetingPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingPage.swift; sourceTree = "<group>"; };
 		77C65B908FF26FBB90CCECBE /* AppStateLivePreviewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateLivePreviewTests.swift; sourceTree = "<group>"; };
+		7AC4D5E428B67084450AD3ED /* MagicFormatSetupState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagicFormatSetupState.swift; sourceTree = "<group>"; };
 		7B0834EEC4C323D57B45566A /* MeetingTranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTranscriptView.swift; sourceTree = "<group>"; };
 		7C7E3E8C3B5862812BB9CD0E /* LocalGemmaPrewarmBenchmarkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalGemmaPrewarmBenchmarkTests.swift; sourceTree = "<group>"; };
 		7CA10EB8C84897F696A908DF /* AppSupportDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSupportDirectory.swift; sourceTree = "<group>"; };
@@ -833,6 +837,7 @@
 				F4DBA9D496A76A822CB680DA /* MagicFormatOutputPolicy.swift */,
 				315B4600A9A5DA396E53352C /* MagicFormatParagraphBreaks.swift */,
 				22ED369C8A5FE779DD2EBF08 /* MagicFormatPromptFileStore.swift */,
+				7AC4D5E428B67084450AD3ED /* MagicFormatSetupState.swift */,
 				0539B4AC33A4C48B71EA8BEA /* Engines */,
 				496863AC6AA816D090C15961 /* Views */,
 			);
@@ -950,6 +955,7 @@
 		823FCB0C7CB7601850FA364A /* SpeechModels */ = {
 			isa = PBXGroup;
 			children = (
+				77043ED812C1556CCCC09429 /* ASRModelBannerState.swift */,
 				25BC4D69E3CDDCA118BF8A19 /* ASRModelCatalog.swift */,
 				046F926226E346D7CA0D318F /* ModelManager.swift */,
 				4FC45EE20DC21693891139C1 /* Engines */,
@@ -1302,6 +1308,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C50DE35AC8182B62AB4B980F /* ASRModelBannerState.swift in Sources */,
 				EF4B74AE2838E91AF42CED64 /* ASRModelCatalog.swift in Sources */,
 				6415322519C76DC11B5098D8 /* AccessibilityOnboarding.swift in Sources */,
 				6BE607478D4D36E0CD2257A4 /* AnalyticsSupport.swift in Sources */,
@@ -1376,6 +1383,7 @@
 				BE581C983B43DA295351FD6F /* MagicFormatParagraphBreaks.swift in Sources */,
 				B7C1DD010C98A8242ACFD483 /* MagicFormatPromptFileStore.swift in Sources */,
 				143EB012DF06F3D2D38CFE2A /* MagicFormatProviderPresentation.swift in Sources */,
+				BEBFE4B82D273C0A770D7A85 /* MagicFormatSetupState.swift in Sources */,
 				820273F503630AEE8C6E60AF /* MagicFormatSheets.swift in Sources */,
 				2247C70620E2527C3E9F8DB0 /* MainWindowComponents.swift in Sources */,
 				DD2DF879055EDA81608657AF /* MainWindowController.swift in Sources */,
