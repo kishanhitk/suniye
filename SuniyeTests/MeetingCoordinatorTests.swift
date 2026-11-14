@@ -131,7 +131,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(you.startCount, 0)
     }
 
-    func testADictationSilencesTheMicrophoneTrackAndHoldsDecoding() async throws {
+    func testADictationSilencesTheMicrophoneTrackAndTheTranscriptWaitsForIt() async throws {
         let coordinator = makeCoordinator()
         coordinator.speechModelChanged(.parakeetV3)
         try await coordinator.startMeeting(source: .manual)
@@ -140,16 +140,20 @@ final class MeetingCoordinatorTests: XCTestCase {
         coordinator.dictationChanged(active: true)
         you.push(tone(2.5, level: 0.3) + silence(0.5))
         them.push(tone(2.5, level: 0.5) + silence(0.5))
-        try await Task.sleep(for: .milliseconds(200))
-        let decodesDuringDictation = await engine.calls
         coordinator.dictationCaptureEnded()
         you.push(tone(2.5, level: 0.3) + silence(0.5))
+        let stopping = Task { await coordinator.stop() }
+        let progressShown = await waitUntil { coordinator.transcriptProgress[id] != nil }
+        try await Task.sleep(for: .milliseconds(200))
+        let decodesDuringDictation = await engine.calls
         coordinator.dictationChanged(active: false)
-        await coordinator.stop()
+        await stopping.value
         let segments = await store.segments(of: id)
 
+        XCTAssertTrue(progressShown, "the page shows the progress while the transcript waits")
         XCTAssertEqual(decodesDuringDictation, 0)
         XCTAssertEqual(segments.map(\.track), [.them, .you], "the dictated words are not meeting talk; talk after the capture ends is")
+        XCTAssertNil(coordinator.transcriptProgress[id])
     }
 
     func testPausesAreKeptInTheRecordAndLeftOutOfTheTimer() async throws {
@@ -429,13 +433,13 @@ final class MeetingCoordinatorTests: XCTestCase {
         hold([], after: 4.5)
         let card = coordinator.callCard
         you.push(silence(0.3) + tone(2.5, level: 0.5) + silence(0.5))
-        let heardAfterTheCall = await waitUntil { coordinator.live?.segments.count == 2 }
         clock += 5
         await coordinator.stopEndedCall()
         let segments = await store.segments(of: id)
+        let decoded = await engine.calls
 
         XCTAssertEqual(card, .callEnded(zoom, silent: false, endedAt: start + 4.5, stopsAt: start + 4.5 + 30))
-        XCTAssertTrue(heardAfterTheCall)
+        XCTAssertEqual(decoded, 2, "the words after the call were recorded and decoded")
         XCTAssertEqual(cardAnswers, ["offer record", "call_ended stop_now"])
         XCTAssertEqual(event("meeting_ended")?["reason"], .label("call_ended"))
         XCTAssertEqual(try XCTUnwrap(coordinator.record(id)?.endedAt).timeIntervalSince(start), 4.5, accuracy: 0.001)

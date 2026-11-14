@@ -1,25 +1,38 @@
 import Foundation
 
-/// Turns the audio of one meeting into stored transcript segments: while the
-/// meeting records, and later for a meeting that the app did not finish.
+/// How much of a meeting's audio the transcript has, in samples.
+struct MeetingTranscriptProgress: Equatable, Sendable {
+    let done: Int
+    let total: Int
+
+    var fraction: Double {
+        total > 0 ? min(1, Double(done) / Double(total)) : 0
+    }
+
+    /// "12 of 60 min": the whole minutes done, and the total rounded like the
+    /// meeting length.
+    var minutesText: String {
+        let samplesPerMinute = 60 * MeetingAudioFormat.sampleRate
+        let totalMinutes = max(1, Int((Double(total) / Double(samplesPerMinute)).rounded()))
+        let doneMinutes = done >= total ? totalMinutes : min(totalMinutes, done / samplesPerMinute)
+        return "\(doneMinutes) of \(totalMinutes) min"
+    }
+}
+
+/// Writes the transcript of one meeting from its audio files, after the
+/// recording stops or after a quit or a crash.
 ///
-/// - The recorder's output arrives in order through `enqueue`, after the
-///   recorder wrote it to the track's file. A chunk's audio is read from the
-///   file when it decodes, so chunks that wait hold no audio.
+/// - The audio after the last stored segment of each track is read in steps
+///   of `stepSamples`, so memory stays small. A step reports its end as
+///   progress.
 /// - One chunk decodes at a time, the earliest first across both tracks,
-///   through the speech engine that dictation uses.
+///   through the speech engine, and only while `mayDecode` says yes.
 /// - A chunk whose decode fails is tried again after `retryDelay`: a decode
 ///   that arrives while the router unloads the old engine of a model switch
 ///   fails once.
 /// - A chunk whose text is not stored (its decode kept failing, or the store
-///   could not save its line) makes the finish fail.
+///   could not save its line) makes the transcript fail.
 actor MeetingTranscriber {
-    enum Event: Equatable, Sendable {
-        case segment(MeetingSegment)
-        /// Every chunk of the track before this sample position is decoded.
-        case decodedThrough(MeetingTrack, Int)
-    }
-
     enum TranscriptError: LocalizedError, Equatable {
         case incomplete
 
@@ -29,8 +42,7 @@ actor MeetingTranscriber {
     }
 
     static let maximumAttempts = 5
-    /// Audio read per step when the app finishes a meeting from its files.
-    static let replayStepSamples = 60 * MeetingAudioFormat.sampleRate
+    static let stepSamples = 60 * MeetingAudioFormat.sampleRate
 
     private struct ChunkID: Hashable {
         let track: MeetingTrack
@@ -52,21 +64,17 @@ actor MeetingTranscriber {
     private let engine: TranscriptionServiceProtocol
     private let mayDecode: @Sendable () async -> Bool
     private let retryDelay: Duration
-    private let onEvent: @Sendable (Event) -> Void
-    private let input: AsyncStream<MeetingRecorderOutput>
-    private nonisolated let inputContinuation: AsyncStream<MeetingRecorderOutput>.Continuation
+    private let onProgress: @Sendable (MeetingTranscriptProgress) -> Void
 
-    private var segmenters: [MeetingTrack: MeetingSegmenter]
+    private var segmenters: [MeetingTrack: MeetingSegmenter] = [:]
     private var pending: [MeetingAudioChunk] = []
     private var attempts: [ChunkID: Int] = [:]
     /// For each track, the start of the earliest chunk whose text is not
     /// stored.
     private var holes: [MeetingTrack: Int] = [:]
-    private var consumer: Task<Void, Never>?
     private var decoder: Task<Void, Never>?
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     private var stats = Stats()
-    private var isCanceled = false
 
     init(
         meetingID: UUID,
@@ -75,7 +83,7 @@ actor MeetingTranscriber {
         engine: TranscriptionServiceProtocol,
         mayDecode: @escaping @Sendable () async -> Bool,
         retryDelay: Duration = .seconds(1),
-        onEvent: @escaping @Sendable (Event) -> Void
+        onProgress: @escaping @Sendable (MeetingTranscriptProgress) -> Void
     ) {
         self.meetingID = meetingID
         self.tracks = tracks
@@ -83,58 +91,20 @@ actor MeetingTranscriber {
         self.engine = engine
         self.mayDecode = mayDecode
         self.retryDelay = retryDelay
-        self.onEvent = onEvent
-        (input, inputContinuation) = AsyncStream.makeStream(of: MeetingRecorderOutput.self)
-        segmenters = Dictionary(uniqueKeysWithValues: tracks.map { ($0, MeetingSegmenter(track: $0)) })
-    }
-
-    /// Starts reading the audio of a meeting that records now.
-    func start() {
-        guard consumer == nil else { return }
-        consumer = Task { [input] in
-            for await output in input {
-                process(output)
-            }
-        }
-    }
-
-    nonisolated func enqueue(_ output: MeetingRecorderOutput) {
-        inputContinuation.yield(output)
-    }
-
-    /// For a recording that is thrown away: stops reading and decoding, and
-    /// returns when nothing writes to the store any more.
-    func cancel() async {
-        isCanceled = true
-        pending = []
-        inputContinuation.finish()
-        await consumer?.value
-        await decoder?.value
+        self.onProgress = onProgress
     }
 
     /// Asks `mayDecode` again. Call it when its answer can have changed to
-    /// yes. Audio that arrived while the answer was no waits until then.
+    /// yes. Audio waits while the answer is no.
     func wake() {
         decodeIfIdle()
     }
 
-    /// Decodes the rest after the meeting stopped and returns the final
-    /// transcript, which is also stored.
-    func finish() async throws -> [MeetingSegment] {
-        inputContinuation.finish()
-        await consumer?.value
-        flushSegmenters()
-        await waitUntilDecoded()
-        try await requireComplete()
-        return try await finalize()
-    }
-
-    /// For a meeting that the app did not finish: decodes the audio after the
-    /// last stored segment of each track, in steps so that memory stays small,
-    /// and returns the final transcript.
-    func recover() async throws -> [MeetingSegment] {
+    /// Decodes the audio after the last stored segment of each track and
+    /// returns the final transcript, which is also stored.
+    func transcribe() async throws -> [MeetingSegment] {
         let stored = await store.segments(of: meetingID)
-        // The files hold no pause; a pause ended the chunk in progress there.
+        // The files hold no pause; a pause ends the chunk in progress there.
         let pauses = await store.record(meetingID)?.pauses ?? []
         let timeline = MeetingTimeline(pauses: pauses)
         let pauseCuts = pauses.map { timeline.audioPosition(forWallSeconds: $0.start) }
@@ -148,25 +118,29 @@ actor MeetingTranscriber {
             segmenters[track] = MeetingSegmenter(track: track, startPosition: from)
             end = max(end, try MeetingAudioFileReader.sampleCount(at: url))
         }
-        var position = resumeAt.values.min() ?? end
+        var position = min(resumeAt.values.min() ?? end, end)
+        onProgress(MeetingTranscriptProgress(done: position, total: end))
         while position < end {
             let nextCut = pauseCuts.filter { $0 > position }.min()
-            let stepEnd = min(position + Self.replayStepSamples, nextCut ?? .max)
+            let stepEnd = min(position + Self.stepSamples, nextCut ?? .max, end)
             for (track, from) in resumeAt {
                 let lower = max(position, from)
                 guard lower < stepEnd else { continue }
                 let samples = try MeetingAudioFileReader.samples(at: store.audioURL(track, for: meetingID), range: lower ..< stepEnd)
-                if !samples.isEmpty {
-                    process(.samples(track, samples, position: lower))
+                if !samples.isEmpty, let chunks = segmenters[track]?.append(samples, at: lower) {
+                    pending += chunks
                 }
             }
             if stepEnd == nextCut {
                 flushSegmenters()
             }
+            decodeIfIdle()
             await waitUntilDecoded()
             position = stepEnd
+            onProgress(MeetingTranscriptProgress(done: position, total: end))
         }
         flushSegmenters()
+        decodeIfIdle()
         await waitUntilDecoded()
         try await requireComplete()
         return try await finalize()
@@ -174,26 +148,12 @@ actor MeetingTranscriber {
 
     // MARK: - Chunks
 
-    private func process(_ output: MeetingRecorderOutput) {
-        guard !isCanceled else { return }
-        switch output {
-        case let .samples(track, samples, position):
-            if let chunks = segmenters[track]?.append(samples, at: position) {
-                pending += chunks
-            }
-            decodeIfIdle()
-        case .paused:
-            flushSegmenters()
-        }
-    }
-
     private func flushSegmenters() {
         for track in tracks {
             if let chunk = segmenters[track]?.flush() {
                 pending.append(chunk)
             }
         }
-        decodeIfIdle()
     }
 
     private func decodeIfIdle() {
@@ -205,10 +165,10 @@ actor MeetingTranscriber {
         decoder = Task { await decodePending() }
     }
 
-    /// Stops when nothing is pending or `mayDecode` says no; `wake()` or the
-    /// next chunk starts it again.
+    /// Stops when nothing is pending or `mayDecode` says no; `wake()` starts
+    /// it again.
     private func decodePending() async {
-        while !isCanceled, earliestPendingIndex() != nil, await mayDecode(), let index = earliestPendingIndex() {
+        while earliestPendingIndex() != nil, await mayDecode(), let index = earliestPendingIndex() {
             let chunk = pending.remove(at: index)
             if await !decode(chunk) {
                 pending.append(chunk)
@@ -229,7 +189,7 @@ actor MeetingTranscriber {
     private func decode(_ chunk: MeetingAudioChunk) async -> Bool {
         guard chunk.hasSound else {
             stats.silent += 1
-            finished(chunk)
+            stats.chunks += 1
             return true
         }
         let id = ChunkID(track: chunk.track, start: chunk.start)
@@ -240,16 +200,16 @@ actor MeetingTranscriber {
             stats.decodeSeconds += (ContinuousClock.now - started) / .seconds(1)
             attempts[id] = nil
             await save(text, of: chunk)
-            finished(chunk)
+            stats.chunks += 1
             return true
         } catch {
             let attempt = (attempts[id] ?? 0) + 1
             guard attempt < Self.maximumAttempts else {
                 attempts[id] = nil
                 stats.failed += 1
+                stats.chunks += 1
                 AppLogger.shared.log(.error, "meeting transcript gave up on a chunk id=\(meetingID.uuidString) track=\(chunk.track.rawValue) start=\(chunk.start) error=\(error.localizedDescription)")
                 markHole(at: chunk)
-                finished(chunk)
                 return true
             }
             attempts[id] = attempt
@@ -271,7 +231,6 @@ actor MeetingTranscriber {
         do {
             try await store.appendSegment(segment, to: meetingID)
             stats.segments += 1
-            onEvent(.segment(segment))
         } catch {
             AppLogger.shared.log(.error, "meeting transcript could not save a segment id=\(meetingID.uuidString) error=\(error.localizedDescription)")
             markHole(at: chunk)
@@ -282,8 +241,8 @@ actor MeetingTranscriber {
         holes[chunk.track] = min(holes[chunk.track] ?? chunk.start, chunk.start)
     }
 
-    /// A track with a hole keeps no line from the hole on, so `recover()`
-    /// decodes it again from there.
+    /// A track with a hole keeps no line from the hole on, so the next
+    /// `transcribe()` decodes it again from there.
     private func requireComplete() async throws {
         guard !holes.isEmpty else { return }
         let stored = await store.segments(of: meetingID)
@@ -294,11 +253,6 @@ actor MeetingTranscriber {
             try await store.replaceSegments(kept, of: meetingID)
         }
         throw TranscriptError.incomplete
-    }
-
-    private func finished(_ chunk: MeetingAudioChunk) {
-        stats.chunks += 1
-        onEvent(.decodedThrough(chunk.track, chunk.end))
     }
 
     private func waitUntilDecoded() async {

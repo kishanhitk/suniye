@@ -56,8 +56,10 @@ struct MeetingPage: View {
                         detail: "Everything up to \(MeetingTranscript.clock(duration)) is saved." + (failure.outOfSpace ? " Free up space to record again." : "")
                     )
                 }
-                MeetingTabs(selection: $tab, tabs: live == nil ? MeetingTab.allCases : [.notes, .transcript])
-                    .fixedSize()
+                if live == nil {
+                    MeetingTabs(selection: $tab)
+                        .fixedSize()
+                }
                 content(record)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
@@ -186,9 +188,10 @@ struct MeetingPage: View {
 
     // MARK: - Content
 
+    /// While the meeting records, the page shows only the notes.
     @ViewBuilder
     private func content(_ record: MeetingRecord) -> some View {
-        switch tab {
+        switch live == nil ? tab : .notes {
         case .summary:
             MeetingSummaryTab(meetings: meetings, appState: appState, actions: actions, record: record, summary: summary)
         case .notes:
@@ -207,14 +210,17 @@ struct MeetingPage: View {
                 }
             }
         case .transcript:
-            MeetingTranscriptView(lines: transcriptLines(record), followsLatest: live != nil)
+            if record.status == .finishing {
+                MeetingTranscriptProgressView(progress: meetings.transcriptProgress[id])
+            } else {
+                MeetingTranscriptView(lines: transcriptLines(record))
+            }
         }
     }
 
     private func transcriptLines(_ record: MeetingRecord) -> [MeetingTranscriptLine] {
-        let shown = live?.visibleSegments ?? segments
         let timeline = MeetingTimeline(pauses: record.pauses)
-        return shown.map { segment in
+        return segments.map { segment in
             MeetingTranscriptLine(
                 id: segment.id,
                 time: MeetingTranscript.clock(timeline.wallSeconds(forSample: segment.audioStart)),
@@ -225,17 +231,13 @@ struct MeetingPage: View {
     }
 }
 
-/// Summary, Notes, Transcript in one native segmented control, whose Summary
-/// segment is off while the meeting records.
-/// While the meeting records there is no summary yet, so the control has
-/// only Notes and Transcript.
+/// Summary, Notes and Transcript in one native segmented control.
 private struct MeetingTabs: NSViewRepresentable {
     @Binding var selection: MeetingTab
-    let tabs: [MeetingTab]
 
     func makeNSView(context: Context) -> NSSegmentedControl {
         let control = NSSegmentedControl(
-            labels: tabs.map(\.title),
+            labels: MeetingTab.allCases.map(\.title),
             trackingMode: .selectOne,
             target: context.coordinator,
             action: #selector(Coordinator.changed(_:))
@@ -246,34 +248,23 @@ private struct MeetingTabs: NSViewRepresentable {
 
     func updateNSView(_ control: NSSegmentedControl, context: Context) {
         context.coordinator.selection = $selection
-        context.coordinator.tabs = tabs
-        if control.segmentCount != tabs.count {
-            control.segmentCount = tabs.count
-            for (index, tab) in tabs.enumerated() {
-                control.setLabel(tab.title, forSegment: index)
-                control.setWidth(0, forSegment: index)
-            }
-            control.invalidateIntrinsicContentSize()
-        }
-        control.selectedSegment = tabs.firstIndex(of: selection) ?? -1
+        control.selectedSegment = selection.rawValue
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(selection: $selection, tabs: tabs)
+        Coordinator(selection: $selection)
     }
 
     final class Coordinator: NSObject {
         var selection: Binding<MeetingTab>
-        var tabs: [MeetingTab]
 
-        init(selection: Binding<MeetingTab>, tabs: [MeetingTab]) {
+        init(selection: Binding<MeetingTab>) {
             self.selection = selection
-            self.tabs = tabs
         }
 
         @objc func changed(_ sender: NSSegmentedControl) {
-            guard tabs.indices.contains(sender.selectedSegment) else { return }
-            selection.wrappedValue = tabs[sender.selectedSegment]
+            guard let tab = MeetingTab(rawValue: sender.selectedSegment) else { return }
+            selection.wrappedValue = tab
         }
     }
 }

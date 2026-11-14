@@ -122,24 +122,11 @@ final class MeetingTranscriptRulesTests: XCTestCase {
         XCTAssertEqual(MeetingTranscript.turns(segments, timeline: nil, speakerLabels: false), ["Morning. Ready?", "Yes."])
     }
 
-    func testTheLiveViewHoldsAMicrophoneLineUntilTheCallIsDecodedPastIt() {
-        let mine = segment(.you, 0, 2, "Morning, everyone.")
-        let theirs = segment(.them, 2, 4, "Hi.")
-
-        let early = MeetingTranscript.live([mine, theirs], callDecodedThrough: samples(3), callPlayedOnSpeakers: true)
-        let later = MeetingTranscript.live([mine, theirs], callDecodedThrough: samples(3.5), callPlayedOnSpeakers: true)
-        let noCall = MeetingTranscript.live([mine], callDecodedThrough: nil, callPlayedOnSpeakers: false)
-
-        XCTAssertEqual(early, [theirs])
-        XCTAssertEqual(later, [mine, theirs])
-        XCTAssertEqual(noCall, [mine])
-    }
-
-    func testTheLiveViewDropsTheEchoAlsoAfterTheCallTrackFailed() {
-        let call = segment(.them, 0, 3, "We ship the release on Friday.")
-        let echo = segment(.you, 0.5, 2.5, "ship the release on friday")
-
-        XCTAssertEqual(MeetingTranscript.live([echo, call], callDecodedThrough: nil, callPlayedOnSpeakers: true), [call])
+    func testProgressCountsWholeMinutesAndEndsAtTheRoundedLength() {
+        XCTAssertEqual(MeetingTranscriptProgress(done: samples(12.5 * 60), total: samples(60 * 60)).minutesText, "12 of 60 min")
+        XCTAssertEqual(MeetingTranscriptProgress(done: 0, total: samples(45)).minutesText, "0 of 1 min")
+        XCTAssertEqual(MeetingTranscriptProgress(done: samples(45), total: samples(45)).minutesText, "1 of 1 min")
+        XCTAssertEqual(MeetingTranscriptProgress(done: samples(90.5 * 60), total: samples(90.6 * 60)).minutesText, "90 of 91 min")
     }
 }
 
@@ -165,7 +152,7 @@ final class MeetingTranscriberTests: XCTestCase {
         engine: FakeMeetingEngine,
         tracks: [MeetingTrack] = [.you, .them],
         gate: DecodeGate = DecodeGate(),
-        events: Collected<MeetingTranscriber.Event> = Collected()
+        progress: Collected<MeetingTranscriptProgress> = Collected()
     ) -> MeetingTranscriber {
         MeetingTranscriber(
             meetingID: record.id,
@@ -174,7 +161,7 @@ final class MeetingTranscriberTests: XCTestCase {
             engine: engine,
             mayDecode: { await gate.isOpen },
             retryDelay: .milliseconds(5),
-            onEvent: { events.append($0) }
+            onProgress: { progress.append($0) }
         )
     }
 
@@ -184,14 +171,14 @@ final class MeetingTranscriberTests: XCTestCase {
         try writer.close()
     }
 
-    func testRecoveryDecodesBothTracksInTimeOrderAndDropsTheEcho() async throws {
+    func testBothTracksDecodeInTimeOrderAndTheEchoIsDropped() async throws {
         _ = try await store.update(record.id) { $0.callPlayedOnSpeakers = true }
         // Them speaks first; the microphone hears it, then the user answers.
         try writeAudio(silence(0.5) + tone(2.5, level: 0.05) + silence(0.5) + tone(2.5, level: 0.4) + silence(0.5), track: .you)
         try writeAudio(tone(2.5, level: 0.2) + silence(4), track: .them)
         let engine = FakeMeetingEngine(words: [0.2: "We ship on Friday.", 0.05: "we ship on friday", 0.4: "I will write the notes."])
 
-        let transcript = try await makeTranscriber(engine: engine).recover()
+        let transcript = try await makeTranscriber(engine: engine).transcribe()
         let stored = await store.segments(of: record.id)
         let decoded = await engine.decodedPeaks
         let purposes = await engine.purposes
@@ -202,76 +189,47 @@ final class MeetingTranscriberTests: XCTestCase {
         XCTAssertEqual(Set(purposes), [.meeting])
     }
 
-    func testRecoveryDecodesOnlyTheAudioAfterTheLastStoredSegment() async throws {
-        try writeAudio(tone(2.5, level: 0.2) + silence(0.5) + tone(2.5, level: 0.4) + silence(0.5), track: .you)
+    func testAFinishDecodesOnlyTheAudioAfterTheLastStoredSegmentAndReportsMinutesFromThere() async throws {
+        try writeAudio(tone(2.5, level: 0.2) + silence(0.5) + tone(2.5, level: 0.4) + silence(144.5), track: .you)
         let first = MeetingSegment(id: UUID(), track: .you, audioStart: 0, audioEnd: samples(2.8), text: "Alpha.")
         try await store.appendSegment(first, to: record.id)
         let engine = FakeMeetingEngine(words: [0.2: "Alpha.", 0.4: "Bravo."])
+        let progress = Collected<MeetingTranscriptProgress>()
 
-        let transcript = try await makeTranscriber(engine: engine, tracks: [.you]).recover()
+        let transcript = try await makeTranscriber(engine: engine, tracks: [.you], progress: progress).transcribe()
         let decoded = await engine.decodedPeaks
 
+        let resumeAt = first.audioEnd
         XCTAssertEqual(transcript.map(\.text), ["Alpha.", "Bravo."])
         XCTAssertEqual(decoded.count, 1)
-    }
-
-    func testLiveAudioIsStoredAndReportedAsItDecodes() async throws {
-        let events = Collected<MeetingTranscriber.Event>()
-        let engine = FakeMeetingEngine(words: [0.3: "Morning, everyone."])
-        let transcriber = makeTranscriber(engine: engine, tracks: [.you], events: events)
-        await transcriber.start()
-
-        let audio = tone(2.5) + silence(0.5)
-        try writeAudio(audio, track: .you)
-        transcriber.enqueue(.samples(.you, Array(audio[..<samples(1)]), position: 0))
-        transcriber.enqueue(.samples(.you, Array(audio[samples(1)...]), position: samples(1)))
-        let transcript = try await transcriber.finish()
-
-        let segment = try XCTUnwrap(transcript.first)
-        XCTAssertEqual(segment.text, "Morning, everyone.")
-        XCTAssertEqual(segment.audioStart, 0)
-        XCTAssertEqual(events.items, [.segment(segment), .decodedThrough(.you, samples(2.8)), .decodedThrough(.you, samples(3))])
+        XCTAssertEqual(progress.items.map(\.done), [resumeAt, resumeAt + 60 * rate, resumeAt + 120 * rate, samples(150)], "one step per minute of audio")
+        XCTAssertEqual(Set(progress.items.map(\.total)), [samples(150)])
     }
 
     func testNoChunkDecodesUntilDecodingIsAllowedAgain() async throws {
+        try writeAudio(tone(2.5) + silence(0.5), track: .you)
         let engine = FakeMeetingEngine(words: [0.3: "Hello."])
         let gate = DecodeGate()
         await gate.set(open: false)
         let transcriber = makeTranscriber(engine: engine, tracks: [.you], gate: gate)
-        await transcriber.start()
 
-        try writeAudio(tone(2.5) + silence(0.5), track: .you)
-        transcriber.enqueue(.samples(.you, tone(2.5) + silence(0.5), position: 0))
+        let finishing = Task { try await transcriber.transcribe() }
         try await Task.sleep(for: .milliseconds(200))
         let callsWhileHeld = await engine.decodedPeaks.count
         await gate.set(open: true)
         await transcriber.wake()
-        let transcript = try await transcriber.finish()
+        let transcript = try await finishing.value
 
         XCTAssertEqual(callsWhileHeld, 0)
         XCTAssertEqual(transcript.map(\.text), ["Hello."])
     }
 
-    func testAPauseEndsTheChunkInProgress() async throws {
-        let engine = FakeMeetingEngine(words: [0.2: "Before the break.", 0.4: "After the break."])
-        let transcriber = makeTranscriber(engine: engine, tracks: [.you])
-        await transcriber.start()
-
-        try writeAudio(tone(1, level: 0.2) + tone(1, level: 0.4), track: .you)
-        transcriber.enqueue(.samples(.you, tone(1, level: 0.2), position: 0))
-        transcriber.enqueue(.paused)
-        transcriber.enqueue(.samples(.you, tone(1, level: 0.4), position: samples(1)))
-        let transcript = try await transcriber.finish()
-
-        XCTAssertEqual(transcript.map(\.text), ["Before the break.", "After the break."])
-    }
-
-    func testRecoveryEndsAChunkWhereTheMeetingPaused() async throws {
+    func testAChunkEndsWhereTheMeetingPaused() async throws {
         _ = try await store.update(record.id) { $0.pauses = [MeetingPause(start: 1, end: 61)] }
         try writeAudio(tone(1, level: 0.2) + tone(1, level: 0.4), track: .you)
         let engine = FakeMeetingEngine(words: [0.2: "Before the break.", 0.4: "After the break."])
 
-        let transcript = try await makeTranscriber(engine: engine, tracks: [.you]).recover()
+        let transcript = try await makeTranscriber(engine: engine, tracks: [.you]).transcribe()
 
         XCTAssertEqual(transcript.map(\.text), ["Before the break.", "After the break."])
     }
@@ -286,13 +244,13 @@ final class MeetingTranscriberTests: XCTestCase {
         await engine.fail(level: 0.4, times: MeetingTranscriber.maximumAttempts)
 
         do {
-            _ = try await makeTranscriber(engine: engine, tracks: [.you]).recover()
+            _ = try await makeTranscriber(engine: engine, tracks: [.you]).transcribe()
             XCTFail("audio with no text fails the finish")
         } catch {
             XCTAssertEqual(error as? MeetingTranscriber.TranscriptError, .incomplete)
         }
         let kept = await store.segments(of: record.id)
-        let transcript = try await makeTranscriber(engine: engine, tracks: [.you]).recover()
+        let transcript = try await makeTranscriber(engine: engine, tracks: [.you]).transcribe()
         let decoded = await engine.decodedPeaks.map { ($0 * 10).rounded() / 10 }
 
         XCTAssertEqual(kept.map(\.text), ["Alpha."], "no line after the failed chunk stays, so the next finish starts there")

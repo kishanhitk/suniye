@@ -31,21 +31,6 @@ enum MeetingTranscript {
         return ordered(segments.filter { $0.track == .them || !isEcho($0, call: call) })
     }
 
-    /// What the live view shows. A "You" segment waits until the call track
-    /// is decoded past its end plus the echo window. Then the echo check sees
-    /// every call segment that can be its source, and no earlier call line
-    /// arrives after it. `callDecodedThrough` is nil when no call track
-    /// records.
-    static func live(
-        _ segments: [MeetingSegment],
-        callDecodedThrough: Int?,
-        callPlayedOnSpeakers: Bool
-    ) -> [MeetingSegment] {
-        guard let callDecodedThrough else { return final(segments, callPlayedOnSpeakers: callPlayedOnSpeakers) }
-        let ready = segments.filter { $0.track == .them || $0.audioEnd + echoWindowSamples <= callDecodedThrough }
-        return final(ready, callPlayedOnSpeakers: callPlayedOnSpeakers)
-    }
-
     /// One line per turn: segments of one track in a row join into one turn.
     /// `timeline` adds the wall-clock time of each turn; `speakerLabels`
     /// adds "You" or "Them", and is false when the meeting had no call track.

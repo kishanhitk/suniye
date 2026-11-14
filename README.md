@@ -81,7 +81,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for checksum verification and detailed st
 | | |
 |---|---|
 | **Transcripts** | Sessions, words dictated, time saved and where you dictate most, above a searchable log of every past transcription — copy or delete any entry |
-| **Meetings** | Record a call or a meeting in the room: a live transcript of your microphone and the call audio, then a summary from a template and your notes ([how it works](docs/MEETINGS.md)) |
+| **Meetings** | Record a call or a meeting in the room: after the stop, a transcript of your microphone and the call audio, then a summary from a template and your notes ([how it works](docs/MEETINGS.md)) |
 | **Magic Format** | Optional AI cleanup for punctuation, capitalization, and formatting |
 | **Per-app prompts** | Give each app its own Magic Format style — terse in chat, prose in notes |
 | **Edit Mode** | Select text anywhere, hold a second shortcut, and speak an instruction (“make this formal”) to rewrite it in place |

@@ -71,9 +71,9 @@ actor MeetingSpeechWatch {
     }
 
     private func process(_ output: MeetingRecorderOutput) {
-        guard case let .samples(track, samples, position) = output else { return }
-        var window = windows[track] ?? Window(start: position)
-        var rest = samples[...]
+        let track = output.track
+        var window = windows[track] ?? Window(start: output.position)
+        var rest = output.samples[...]
         while !rest.isEmpty {
             let taken = rest.prefix(Self.windowSamples - window.samples.count)
             window.samples += taken

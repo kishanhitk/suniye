@@ -1,11 +1,11 @@
 import Foundation
 
-/// What the recorder hands on, in order, on its queue.
-enum MeetingRecorderOutput: Equatable, Sendable {
-    /// 16 kHz samples of a track and the position of the first one in its file.
-    case samples(MeetingTrack, [Float], position: Int)
-    /// The meeting paused: the next samples come later on the wall clock.
-    case paused
+/// What the recorder hands on, in order, on its queue: 16 kHz samples of a
+/// track that are in its file, and the position of the first one there.
+struct MeetingRecorderOutput: Equatable, Sendable {
+    let track: MeetingTrack
+    let samples: [Float]
+    let position: Int
 }
 
 enum MeetingRecorderEvent: Equatable, Sendable {
@@ -127,10 +127,7 @@ final class MeetingRecorder: @unchecked Sendable {
         let isRecording: Bool = queue.sync { running && pausedSince == nil }
         guard isRecording else { return }
         stopSources()
-        queue.sync {
-            pausedSince = uptime()
-            onOutput?(.paused)
-        }
+        queue.sync { pausedSince = uptime() }
     }
 
     /// Stays paused and throws when no track starts again.
@@ -232,11 +229,9 @@ final class MeetingRecorder: @unchecked Sendable {
             if Double(missing) > Self.gapThreshold * Double(MeetingAudioFormat.sampleRate) {
                 let silence = [Float](repeating: 0, count: missing)
                 try writer.append(silence)
-                onOutput?(.samples(track, silence, position: position))
+                onOutput?(MeetingRecorderOutput(track: track, samples: silence, position: position))
                 position += missing
             }
-            // Written before it is handed on: the transcriber reads chunks
-            // back from the file.
             try writer.append(samples)
         } catch {
             AppLogger.shared.log(.error, "meeting recorder could not write track=\(track.rawValue) error=\(error.localizedDescription)")
@@ -244,7 +239,7 @@ final class MeetingRecorder: @unchecked Sendable {
             running = false
             return
         }
-        onOutput?(.samples(track, samples, position: position))
+        onOutput?(MeetingRecorderOutput(track: track, samples: samples, position: position))
         samplesWritten[track] = position + samples.count
 
         let level = MeetingAudioFormat.rms(samples)

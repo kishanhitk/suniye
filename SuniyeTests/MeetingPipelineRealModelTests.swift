@@ -102,8 +102,8 @@ final class MeetingPipelineRealModelTests: XCTestCase {
         }
     }
 
-    /// Feeds the call to a transcriber in 100 ms blocks per track, the way the
-    /// recorder does, and returns the final transcript.
+    /// Writes the call to the track files and returns the transcript of the
+    /// pass after the stop.
     private func transcribeCall(echo: Bool) async throws -> [MeetingSegment] {
         let manager = ModelManager()
         try XCTSkipUnless(manager.isInstalled(.parakeetV3), "Parakeet v3 is not installed")
@@ -125,18 +125,10 @@ final class MeetingPipelineRealModelTests: XCTestCase {
             store: store,
             engine: engine,
             mayDecode: { true },
-            onEvent: { _ in }
+            onProgress: { _ in }
         )
-        await transcriber.start()
-        let block = Self.rate / 10
-        for start in stride(from: 0, to: tracks[.you]!.count, by: block) {
-            for track in MeetingTrack.allCases {
-                let samples = tracks[track]!
-                transcriber.enqueue(.samples(track, Array(samples[start ..< min(start + block, samples.count)]), position: start))
-            }
-        }
         let started = ContinuousClock.now
-        let transcript = try await transcriber.finish()
+        let transcript = try await transcriber.transcribe()
         let seconds = (ContinuousClock.now - started) / .seconds(1)
         print("meeting call echo=\(echo): \(String(format: "%.1f", Double(tracks[.you]!.count) / Double(Self.rate)))s per track, finish \(String(format: "%.1f", seconds))s")
         for line in transcript {

@@ -50,46 +50,39 @@ struct MeetingNotesEditor: View {
     }
 }
 
-/// The transcript as one read-only text view, so a selection can cross lines
-/// and ⌘F opens the native find bar. While the meeting records, new lines
-/// follow at the end; a "Latest" button shows when they arrive below the
-/// visible part.
-struct MeetingTranscriptView: View {
-    let lines: [MeetingTranscriptLine]
-    let followsLatest: Bool
-    @State private var hasNewLinesBelow = false
-    @State private var scrollToEnd = 0
+/// "Finishing the transcript…" and the minutes of audio done, while the
+/// transcript is written after the recording.
+struct MeetingTranscriptProgressView: View {
+    /// Nil until the transcript reports its first step.
+    let progress: MeetingTranscriptProgress?
 
     var body: some View {
-        TranscriptTextView(
-            lines: lines,
-            followsLatest: followsLatest,
-            scrollToEnd: scrollToEnd,
-            hasNewLinesBelow: $hasNewLinesBelow
-        )
-        .overlay(alignment: .bottom) {
-            if hasNewLinesBelow {
-                Button {
-                    scrollToEnd += 1
-                } label: {
-                    Label("Latest", systemImage: "arrow.down")
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .clipShape(Capsule())
-                .padding(.bottom, 8)
-                .transition(.opacity)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Finishing the transcript…")
+                    .font(AppTypography.body)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+            }
+            ProgressView(value: progress?.fraction ?? 0)
+                .progressViewStyle(.linear)
+                .frame(width: 280)
+            if let progress {
+                Text(progress.minutesText)
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                    .monospacedDigit()
             }
         }
-        .animation(.smooth(duration: 0.3), value: hasNewLinesBelow)
+        .accessibilityElement(children: .combine)
     }
 }
 
-private struct TranscriptTextView: NSViewRepresentable {
+/// The transcript as one read-only text view, so a selection can cross lines
+/// and ⌘F opens the native find bar.
+struct MeetingTranscriptView: NSViewRepresentable {
     let lines: [MeetingTranscriptLine]
-    let followsLatest: Bool
-    let scrollToEnd: Int
-    @Binding var hasNewLinesBelow: Bool
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
@@ -104,87 +97,31 @@ private struct TranscriptTextView: NSViewRepresentable {
             textView.textContainerInset = NSSize(width: 0, height: 4)
             textView.textContainer?.lineFragmentPadding = 0
         }
-        context.coordinator.observe(scrollView)
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
-        let coordinator = context.coordinator
-        coordinator.hasNewLinesBelow = $hasNewLinesBelow
-        let wasAtBottom = coordinator.isAtBottom(scrollView)
-        let added = coordinator.render(lines, into: textView)
-        if scrollToEnd != coordinator.scrollToEnd {
-            coordinator.scrollToEnd = scrollToEnd
-            textView.scrollToEndOfDocument(nil)
-            hasNewLinesBelowLater(false)
-        } else if added, followsLatest {
-            if wasAtBottom {
-                textView.scrollToEndOfDocument(nil)
-            } else {
-                hasNewLinesBelowLater(true)
-            }
-        }
-    }
-
-    /// SwiftUI state cannot change while it updates this view.
-    private func hasNewLinesBelowLater(_ value: Bool) {
-        DispatchQueue.main.async { hasNewLinesBelow = value }
+        context.coordinator.render(lines, into: textView)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(hasNewLinesBelow: $hasNewLinesBelow)
+        Coordinator()
     }
 
     @MainActor
-    final class Coordinator: NSObject {
-        var hasNewLinesBelow: Binding<Bool>
-        var scrollToEnd = 0
+    final class Coordinator {
         private var rendered: [UUID] = []
 
-        init(hasNewLinesBelow: Binding<Bool>) {
-            self.hasNewLinesBelow = hasNewLinesBelow
-        }
-
-        func observe(_ scrollView: NSScrollView) {
-            scrollView.contentView.postsBoundsChangedNotifications = true
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(boundsChanged(_:)),
-                name: NSView.boundsDidChangeNotification,
-                object: scrollView.contentView
-            )
-        }
-
-        @objc private func boundsChanged(_ notification: Notification) {
-            guard let clip = notification.object as? NSClipView, let scrollView = clip.enclosingScrollView else { return }
-            if isAtBottom(scrollView), hasNewLinesBelow.wrappedValue {
-                hasNewLinesBelow.wrappedValue = false
-            }
-        }
-
-        func isAtBottom(_ scrollView: NSScrollView) -> Bool {
-            guard let document = scrollView.documentView else { return true }
-            return scrollView.contentView.bounds.maxY >= document.bounds.maxY - 24
-        }
-
-        /// Appends the lines after the ones on screen when the old lines are
-        /// unchanged; otherwise draws all of them again. True when lines were
-        /// added.
-        func render(_ lines: [MeetingTranscriptLine], into textView: NSTextView) -> Bool {
+        /// Draws the lines again when they changed.
+        func render(_ lines: [MeetingTranscriptLine], into textView: NSTextView) {
             let ids = lines.map(\.id)
-            guard ids != rendered, let storage = textView.textStorage else { return false }
-            if ids.starts(with: rendered) {
-                storage.append(Self.text(for: lines.dropFirst(rendered.count)))
-            } else {
-                storage.setAttributedString(Self.text(for: lines[...]))
-            }
-            let added = ids.count > rendered.count
+            guard ids != rendered, let storage = textView.textStorage else { return }
+            storage.setAttributedString(Self.text(for: lines))
             rendered = ids
-            return added
         }
 
-        private static func text(for lines: ArraySlice<MeetingTranscriptLine>) -> NSAttributedString {
+        private static func text(for lines: [MeetingTranscriptLine]) -> NSAttributedString {
             let paragraph = NSMutableParagraphStyle()
             paragraph.tabStops = [NSTextTab(textAlignment: .left, location: 64), NSTextTab(textAlignment: .left, location: 116)]
             paragraph.headIndent = 116

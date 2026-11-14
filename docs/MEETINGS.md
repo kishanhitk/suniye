@@ -1,6 +1,6 @@
 # Meetings
 
-Suniye records a call or a meeting in the room, writes a transcript while it records, and writes a summary after it stops. Capture, transcription and summary run on the Mac.
+Suniye records a call or a meeting in the room. After the recording stops, it writes the transcript and then the summary. Capture, transcription and summary run on the Mac.
 
 ## Privacy
 
@@ -60,11 +60,13 @@ Call detection reads the Core Audio process list. It reads nothing while no inpu
 - A full disk.
 - **Quit Suniye** asks first. A logout, restart or shutdown stops and saves with no question.
 
-After a quit or a crash during a recording, the next launch finishes the transcript with no click.
+After a quit or a crash during a recording, the next launch writes the transcript with no click. After a quit or a crash while the transcript is written, the meeting shows **Finish Transcript**.
 
 ## Transcript
 
-- The speech model of dictation writes the transcript, while no dictation runs.
+- No speech recognition runs while the meeting records. The meeting page shows the notes, the meters and the warnings.
+- After the stop, the speech model of dictation writes the transcript from the audio files. The meeting page shows "Finishing the transcript…" with the minutes done.
+- A dictation goes first: the transcript waits while you dictate.
 - The audio goes to the model in pieces of 2 to 12 s, cut at pauses.
 - The audio files go when the transcript is final.
 
