@@ -115,14 +115,13 @@ struct MeetingTranscriptView: NSViewRepresentable {
 
     @MainActor
     final class Coordinator {
-        private var rendered: [UUID] = []
+        private var rendered: [MeetingTranscriptLine] = []
 
         /// Draws the lines again when they changed.
         func render(_ lines: [MeetingTranscriptLine], into textView: NSTextView) {
-            let ids = lines.map(\.id)
-            guard ids != rendered, let storage = textView.textStorage else { return }
+            guard lines != rendered, let storage = textView.textStorage else { return }
             storage.setAttributedString(Self.text(for: lines))
-            rendered = ids
+            rendered = lines
         }
 
         private static func text(for lines: [MeetingTranscriptLine]) -> NSAttributedString {
