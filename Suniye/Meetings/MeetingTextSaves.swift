@@ -71,21 +71,24 @@ final class MeetingTextSaves {
         }
     }
 
-    /// Starts the waiting saves of one meeting and returns when none of them
-    /// runs: Regenerate and Transcribe Again read what the user typed.
+    /// Returns when no save of one meeting waits or runs, also one that the
+    /// user typed while a save ran: Regenerate and Transcribe Again read what
+    /// the user typed.
     func finish(_ meetingID: UUID) async {
-        saveNow(meetingID)
-        while let next = running.first(where: { $0.key.meetingID == meetingID })?.value {
+        while true {
+            saveNow(meetingID)
+            guard let next = running.first(where: { $0.key.meetingID == meetingID })?.value else { return }
             await next.task.value
         }
     }
 
-    /// Starts every waiting save and returns when no save runs: a quit.
+    /// Returns when no save waits or runs: a quit.
     func finish() async {
-        for key in waiting.keys {
-            start(key)
-        }
-        while let next = running.values.first {
+        while true {
+            for key in waiting.keys {
+                start(key)
+            }
+            guard let next = running.values.first else { return }
             await next.task.value
         }
     }

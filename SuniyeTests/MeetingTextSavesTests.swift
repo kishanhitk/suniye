@@ -48,6 +48,28 @@ final class MeetingTextSavesTests: XCTestCase {
         XCTAssertTrue(saves.isIdle)
     }
 
+    func testFinishAlsoSavesTextTypedWhileASaveRuns() async {
+        for finishesAll in [false, true] {
+            saved = []
+            let saves = MeetingTextSaves(pause: .seconds(60))
+            saves.save(.summary, of: meeting) { [weak self] in
+                guard let self else { return }
+                saves.stage(.summary, of: meeting, save: save("typed during the save"))
+                try? await Task.sleep(for: .milliseconds(100))
+                saved.append("first")
+            }
+
+            if finishesAll {
+                await saves.finish()
+            } else {
+                await saves.finish(meeting)
+            }
+
+            XCTAssertEqual(saved, ["first", "typed during the save"], finishesAll ? "a quit" : "Regenerate or Transcribe Again")
+            XCTAssertTrue(saves.isIdle)
+        }
+    }
+
     func testTheSavesOfOnePartLandInTheOrderTheyWereAskedFor() async {
         let saves = MeetingTextSaves(pause: .seconds(60))
         saves.save(.notes, of: meeting, save: save("older", after: .milliseconds(200)))
