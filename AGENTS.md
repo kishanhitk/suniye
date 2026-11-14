@@ -11,18 +11,19 @@ Core flow: hold hotkey -> capture audio -> transcribe with sherpa-onnx -> paste 
 - sherpa-onnx C API via bundled dylibs in `Suniye/Frameworks`
 
 ## Architecture map
-- `Suniye/AppState.swift`
+- One folder per feature under `Suniye/`. Non-view code is flat in the feature folder; views are in `<Feature>/Views/`. Code that several features use and no feature owns is in `Shared/`, `Audio/` or `LLM/`.
+- `Suniye/App/AppState.swift`
   - Main state machine and orchestration (`@MainActor`).
   - Coordinates permissions, recording lifecycle, transcription, insertion, LLM post-processing.
-- `Suniye/Services/AudioCaptureService.swift`
+- `Suniye/Audio/AudioCaptureService.swift`
   - AVAudioEngine capture and sample buffering.
-- `Suniye/Services/TranscriptionService.swift`
+- `Suniye/SpeechModels/Engines/TranscriptionService.swift`
   - `actor` wrapping sherpa recognizer lifecycle and decode path.
-- `Suniye/Services/TextInsertionService.swift`
+- `Suniye/Dictation/TextInsertionService.swift`
   - Clipboard-preserving paste + submit-key event posting.
-- `Suniye/Services/ModelManager.swift`
+- `Suniye/SpeechModels/ModelManager.swift`
   - Model download/extract/validation and recognizer config paths.
-- `Suniye/Views/*`
+- `Suniye/<Feature>/Views/*`
   - SwiftUI UI only; keep business logic in state/services.
 
 ## Hard constraints
