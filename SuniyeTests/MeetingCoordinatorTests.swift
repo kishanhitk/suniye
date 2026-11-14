@@ -791,7 +791,7 @@ private actor GatedSummaryModel: MeetingSummaryModel {
         }
         switch request.kind {
         case .part, .userNotes:
-            return "Decisions: Ship on Friday\nDone: Shipped the beta"
+            return request.input.contains("\nDone:") ? "Done: Shipped the beta" : "Decisions: Ship on Friday"
         case .overview:
             return "Title: Release plan\nThe team agreed to ship on Friday."
         case .summary, .join:
