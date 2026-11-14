@@ -123,6 +123,7 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
             self.stream = nil
             throw error
         }
+        stream.watchForFirstFrame()
     }
 
     private func closeInput() {

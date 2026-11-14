@@ -160,6 +160,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                     self.deviceMonitor.watch(
                         deviceID: self.hardwareCatalog.deviceID(forUID: active.route.effectiveInputDeviceID)
                     )
+                    stream.watchForFirstFrame()
                     AppLogger.shared.log(.info, "audio capture start session=\(sessionID.uuidString) \(active.route.privacySafeLogValue)")
                     continuation.resume(returning: AudioCaptureSession(id: sessionID, route: active.route))
                 } catch {

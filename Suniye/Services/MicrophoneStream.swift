@@ -70,6 +70,9 @@ final class MicrophoneStream {
         ringDrain.droppedSampleCount
     }
 
+    /// Starts the primary backend, or the standard engine when the primary
+    /// cannot start. The owner calls `watchForFirstFrame()` when its own start
+    /// work is done.
     func start() throws {
         ringDrain.startTimer { [weak self] in self?.drain() }
         let primary = plan
@@ -78,10 +81,13 @@ final class MicrophoneStream {
             started = try startDriver(primary)
         } catch {
             try fallBackToStandardEngine(because: .startFailed(error))
-            armFirstFrameDeadline()
             return
         }
         try adopt(started, plan: primary, fallback: nil)
+    }
+
+    /// Starts the first-frame deadline of the backend that `start()` opened.
+    func watchForFirstFrame() {
         armFirstFrameDeadline()
     }
 
