@@ -17,7 +17,7 @@ Suniye/Vendor/Permiso/SettingsWindowLocator.swift     # vendored; inspects live 
 Suniye/Services/AudioCaptureDrivers.swift             # AVAudioEngine/HAL AudioUnit render callbacks; needs microphone
 Suniye/Services/CoreAudioDeviceMonitor.swift          # CoreAudio HAL property listeners; needs audio hardware
 Suniye/Meetings/SystemAudioTap.swift                  # Core Audio process tap + private aggregate device; needs the system audio permission and real output (recorder logic is tested with fake sources in MeetingCaptureTests)
-Suniye/Meetings/MeetingEnvironment+Live.swift          # wires the live microphone, the call audio tap, the NSAlert notice and Core Audio reads; the coordinator is tested with a fake environment
+Suniye/Meetings/MeetingEnvironment+Live.swift          # wires the live microphone, the call audio tap, the quit alert and Core Audio reads; the coordinator is tested with a fake environment
 Suniye/Meetings/CoreAudioMicrophoneUsers.swift         # Core Audio process list, device listeners and browser window titles through Accessibility; call detection is tested with a fake reader in MeetingCallTests
 Suniye/Services/HotkeyService.swift                   # Carbon hotkey registration + global NSEvent taps; needs input-monitoring
 Suniye/Services/AccessibilityOnboarding.swift         # drives live AXIsProcessTrusted permission flow
