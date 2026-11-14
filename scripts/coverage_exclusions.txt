@@ -55,6 +55,7 @@ Suniye/Library/Views/TranscriptsPage.swift             # SwiftUI render only
 Suniye/SpeechModels/Views/SpeechModelPage.swift        # SwiftUI render only
 Suniye/Library/Views/TranscriptRows.swift              # SwiftUI render only (highlighting moved to TranscriptBrowsing.swift, covered)
 Suniye/Settings/Views/GeneralPage.swift               # SwiftUI render only
+Suniye/MagicFormat/Views/MagicFormatNudgeCard.swift   # SwiftUI render only
 Suniye/App/Views/MainWindowView.swift                 # SwiftUI render only
 Suniye/Views/Meetings/MeetingsPage.swift              # SwiftUI render only (list text in MeetingListText.swift, covered)
 Suniye/Views/Meetings/MeetingPage.swift               # SwiftUI render only (copy and export text in MeetingExport.swift, covered)
