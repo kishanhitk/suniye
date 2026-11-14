@@ -61,7 +61,7 @@ Call detection reads the Core Audio process list. It reads nothing while no inpu
 - 4 hours of recorded time.
 - Sleep, or a closed lid with no external display.
 - A full disk.
-- **Quit Suniye** asks first. A logout, restart or shutdown stops and saves with no question.
+- **Quit Suniye** asks first: "Quitting stops the recording. Finish the transcript when you open Suniye again." A logout, restart or shutdown stops and saves with no question.
 
 After a quit or a crash, the next launch writes no transcript by itself: it does not load a speech model and run for minutes with no click. A recording that a quit or a crash stopped shows on the list with **Finish Transcript** and **Delete**, and its row has a "Not finished" tag. A transcript that a quit or a crash cut short shows **Finish Transcript**.
 
