@@ -1,0 +1,147 @@
+import Foundation
+
+/// How to write a meeting's summary: its sections and what goes in them, as
+/// text that the user can edit. Its "## " headings are the sections of the
+/// summary (`MeetingSummaryLayout`); the title line is a fixed rule in
+/// `MeetingSummaryPrompt`.
+struct MeetingTemplate: Codable, Equatable, Identifiable, Sendable {
+    let id: String
+    var name: String
+    var sections: String
+
+    var isBuiltIn: Bool {
+        Self.builtIn.contains { $0.id == id }
+    }
+
+    /// The shipped version of a built-in template; nil for one the user added.
+    var shipped: MeetingTemplate? {
+        Self.builtIn.first { $0.id == id }
+    }
+
+    static let general = MeetingTemplate(id: "general", name: "General", sections: """
+    Write a summary of the meeting.
+    Use these sections, in this order:
+    ## Overview
+    ## Decisions
+    ## Action items
+    ## Dates and numbers
+    ## Open questions
+    Under Overview, write two or three sentences: what the meeting was about and what it decided.
+    Write one line for each decision, task and open question. For a task, say who does it, and by when if the transcript says.
+    Under Dates and numbers, write each date or number that fits no other section, with what it is about.
+    Leave out a section with nothing in it.
+    Use only what the transcript and my notes say.
+    """)
+
+    static let oneOnOne = MeetingTemplate(id: "one-on-one", name: "1:1", sections: """
+    Write a summary of a one-on-one meeting.
+    Use these sections, in this order:
+    ## Overview
+    ## Updates
+    ## Feedback
+    ## Action items
+    ## Dates and numbers
+    Under Overview, write two or three sentences on what the two people talked about.
+    Write one line for each update, piece of feedback and task. Say who gave the feedback and who does each task.
+    Under Dates and numbers, write each date or number that fits no other section, with what it is about.
+    Leave out a section with nothing in it.
+    Use only what the transcript and my notes say.
+    """)
+
+    static let standUp = MeetingTemplate(id: "stand-up", name: "Stand-up", sections: """
+    Write a short stand-up summary.
+    Use these sections, in this order:
+    ## Done
+    ## Next
+    ## Blockers
+    ## Dates and numbers
+    Write one line for each update.
+    Under Dates and numbers, write each date or number that fits no other section, with what it is about.
+    Add a name only when the transcript says it.
+    Leave out a section with nothing in it.
+    Use only what the transcript and my notes say.
+    Keep each line under 15 words.
+    """)
+
+    static let interview = MeetingTemplate(id: "interview", name: "Interview", sections: """
+    Write a summary of an interview.
+    Use these sections, in this order:
+    ## Overview
+    ## Questions and answers
+    ## Strengths
+    ## Concerns
+    ## Next steps
+    ## Dates and numbers
+    Under Overview, write two or three sentences: the role, and how the interview went.
+    Write one line for each question with its short answer, and one line for each strength, concern and next step.
+    Under Dates and numbers, write each date or number that fits no other section, with what it is about.
+    Leave out a section with nothing in it.
+    Use only what the transcript and my notes say.
+    """)
+
+    static let builtIn = [general, oneOnOne, standUp, interview]
+}
+
+/// The user's templates: the built-in ones with the user's edits, then the
+/// ones the user added. Only edits and additions are on disk, so a changed
+/// shipped template reaches every user who did not edit it.
+actor MeetingTemplateStore {
+    enum StoreError: LocalizedError {
+        case unreadable
+
+        var errorDescription: String? {
+            "The saved templates could not be read, so Suniye did not write over them."
+        }
+    }
+
+    nonisolated let fileURL: URL
+
+    init(fileURL: URL = MeetingTemplateStore.defaultFileURL()) {
+        self.fileURL = fileURL
+    }
+
+    static func defaultFileURL(identity: AppIdentity = .current) -> URL {
+        MeetingStore.supportDirectory.appendingPathComponent(identity.isPreview ? "meeting-templates-preview.json" : "meeting-templates.json")
+    }
+
+    func templates() -> [MeetingTemplate] {
+        let saved = load() ?? []
+        let builtIn = MeetingTemplate.builtIn.map { template in
+            saved.first { $0.id == template.id } ?? template
+        }
+        return builtIn + saved.filter { !$0.isBuiltIn }
+    }
+
+    /// The template with `id`, or General when it was deleted.
+    func template(id: String) -> MeetingTemplate {
+        let all = templates()
+        return all.first { $0.id == id } ?? all.first { $0.id == MeetingTemplate.general.id } ?? .general
+    }
+
+    /// Saves the list that the template editor shows, in one write. A
+    /// built-in template is stored only while its name or text differs from
+    /// the shipped one; one that is not in the list goes back to the shipped
+    /// one.
+    func replace(with templates: [MeetingTemplate]) throws {
+        guard load() != nil else { throw StoreError.unreadable }
+        try write(templates.filter { $0 != $0.shipped })
+    }
+
+    /// The stored templates; nil when the file is there but cannot be read.
+    private func load() -> [MeetingTemplate]? {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+        do {
+            return try JSONDecoder().decode([MeetingTemplate].self, from: Data(contentsOf: fileURL))
+        } catch {
+            AppLogger.shared.log(.error, "meeting templates unreadable error=\(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func write(_ templates: [MeetingTemplate]) throws {
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(templates).write(to: fileURL, options: .atomic)
+    }
+}

@@ -10,17 +10,38 @@ import SwiftUI
 @Observable
 final class FloatingIndicatorModel {
     var state: FloatingIndicatorState = .idle
+    var meeting: MeetingSession?
+    var showsMeetingTime = true
+}
+
+enum MeetingPillAction {
+    case open
+    case pause
+    case resume
+    case stop
 }
 
 struct FloatingIndicatorView: View {
     let model: FloatingIndicatorModel
     let onHoverChanged: (Bool) -> Void
     let onAction: () -> Void
+    let onMeetingAction: (MeetingPillAction) -> Void
     let onDragChanged: () -> Void
     let onDragEnded: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var state: FloatingIndicatorState { model.state }
+
+    /// A meeting records and no dictation runs, so the pill is the meeting's.
+    private var showsMeetingPill: Bool {
+        guard model.meeting != nil else { return false }
+        switch state {
+        case .idle, .hover:
+            return true
+        case .listening, .processing, .error:
+            return false
+        }
+    }
 
     var body: some View {
         glassGrouped {
@@ -57,6 +78,7 @@ struct FloatingIndicatorView: View {
         // Non-overshooting so the growing pill/bubble never pokes past the
         // (instantly-sized) window bounds mid-animation.
         .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: state.layoutAnimationKey)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: model.meeting != nil)
         // Animate the live-preview bubble's appearance/disappearance. Keyed on
         // presence only (not the text), so it fires once when the bubble shows
         // or hides — per-tick text changes crossfade inside LivePreviewText.
@@ -153,6 +175,10 @@ struct FloatingIndicatorView: View {
         )
         .contentShape(Capsule())
         .onTapGesture {
+            if showsMeetingPill {
+                onMeetingAction(.open)
+                return
+            }
             guard isInteractive else { return }
             onAction()
         }
@@ -171,12 +197,24 @@ struct FloatingIndicatorView: View {
 
     @ViewBuilder
     private var capsuleContent: some View {
+        if let meeting = model.meeting, showsMeetingPill {
+            MeetingPillContent(session: meeting, showsTime: model.showsMeetingTime, expanded: state == .hover, onAction: onMeetingAction)
+        } else {
+            dictationContent
+        }
+    }
+
+    @ViewBuilder
+    private var dictationContent: some View {
         switch state {
         case .idle:
             EmptyView()
         case .hover:
             hoverContent
         case let .listening(levels, source, _):
+            if let meeting = model.meeting {
+                MeetingPillTimer(session: meeting, showsTime: model.showsMeetingTime)
+            }
             if source == .editHotkey {
                 Image(systemName: "pencil.line")
                     .font(.system(size: 12, weight: .semibold))
@@ -222,13 +260,16 @@ struct FloatingIndicatorView: View {
     }
 
     private var helperText: String? {
-        if case .hover = state {
+        if case .hover = state, model.meeting == nil {
             return "Click or hold fn to start dictating"
         }
         return nil
     }
 
     private var isInteractive: Bool {
+        if showsMeetingPill {
+            return true
+        }
         switch state {
         case .hover:
             return true
@@ -249,6 +290,9 @@ struct FloatingIndicatorView: View {
     }
 
     private var capsuleFill: Color {
+        if showsMeetingPill {
+            return Color.black.opacity(0.96)
+        }
         switch state {
         case .idle:
             return Color.black.opacity(0.58)
@@ -261,6 +305,9 @@ struct FloatingIndicatorView: View {
     /// glass material shows through instead of being smothered. Legibility of
     /// the white content leans on the forced dark color scheme.
     private var capsuleGlassTint: Color {
+        if showsMeetingPill {
+            return Color.black.opacity(0.55)
+        }
         switch state {
         case .idle:
             return Color.black.opacity(0.35)
@@ -270,6 +317,9 @@ struct FloatingIndicatorView: View {
     }
 
     private var capsuleStroke: Color {
+        if showsMeetingPill {
+            return Color.white.opacity(0.14)
+        }
         switch state {
         case .idle:
             return Color.white.opacity(0.34)
@@ -283,6 +333,9 @@ struct FloatingIndicatorView: View {
     static let editModeTint = Color.purple
 
     private var capsuleBorderWidth: CGFloat {
+        if showsMeetingPill {
+            return 1
+        }
         switch state {
         case .idle:
             return 0.8
@@ -292,6 +345,9 @@ struct FloatingIndicatorView: View {
     }
 
     private var pillWidth: CGFloat {
+        if showsMeetingPill, let meeting = model.meeting {
+            return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: state == .hover, showsTime: model.showsMeetingTime).width
+        }
         switch state {
         case .idle:
             return 74
@@ -299,6 +355,7 @@ struct FloatingIndicatorView: View {
             return 152
         case let .listening(_, source, _):
             return FloatingIndicatorMetrics.pillSize(source: source).width
+                + (model.meeting == nil ? 0 : FloatingIndicatorMetrics.meetingLeadWidth(showsTime: model.showsMeetingTime))
         case let .processing(message):
             guard let message else {
                 return 128
@@ -310,6 +367,9 @@ struct FloatingIndicatorView: View {
     }
 
     private var pillHeight: CGFloat {
+        if showsMeetingPill, let meeting = model.meeting {
+            return FloatingIndicatorMetrics.meetingPillSize(for: meeting, expanded: state == .hover, showsTime: model.showsMeetingTime).height
+        }
         switch state {
         case .idle:
             return 7
@@ -325,6 +385,10 @@ struct FloatingIndicatorView: View {
     }
 
     private var horizontalPadding: CGFloat {
+        // The meeting pill's width is its content and its side gaps.
+        if showsMeetingPill {
+            return 0
+        }
         switch state {
         case .idle:
             return 0
@@ -481,5 +545,113 @@ private struct ListeningMeterView: View {
         let centerDistance = abs(CGFloat(index) - CGFloat(max(levels.count - 1, 0)) / 2)
         let envelope = max(0.35, 1 - centerDistance / max(CGFloat(levels.count) / 2, 1))
         return 4 + (normalized * 25 * envelope) + (normalized * 8)
+    }
+}
+
+/// The pill while a meeting records. At rest: the dot, the time when it
+/// shows, and one level meter for the louder track, or a pause glyph while
+/// paused, or a warning glyph while a track has a problem. On hover: Pause
+/// (or Resume), Stop and Open Notes. A click on the pill opens the meeting.
+private struct MeetingPillContent: View {
+    let session: MeetingSession
+    let showsTime: Bool
+    let expanded: Bool
+    let onAction: (MeetingPillAction) -> Void
+
+    var body: some View {
+        HStack(spacing: FloatingIndicatorMetrics.meetingPillGap) {
+            MeetingPillTimer(session: session, showsTime: showsTime, spacing: FloatingIndicatorMetrics.meetingPillGap)
+            if expanded {
+                MeetingPillButton(title: session.isPaused ? "Resume" : "Pause", icon: session.isPaused ? "record.circle" : "pause.fill") {
+                    onAction(session.isPaused ? .resume : .pause)
+                }
+                MeetingPillButton(title: "Stop", icon: "stop.fill", iconTint: Color(red: 1, green: 0.353, blue: 0.322)) {
+                    onAction(.stop)
+                }
+                MeetingPillButton(title: "Open Notes") {
+                    onAction(.open)
+                }
+            } else if session.isPaused {
+                Image(systemName: "pause.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(width: FloatingIndicatorMetrics.meetingPillGlyphWidth)
+            } else if session.hasTrackProblem {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Color(red: 0.95, green: 0.57, blue: 0))
+                    .frame(width: FloatingIndicatorMetrics.meetingPillGlyphWidth)
+            } else {
+                // The bars at rest show that capture works: there is no live
+                // transcript to show it.
+                MeetingLevelMeter(
+                    level: max(session.youLevel, session.themLevel),
+                    tint: .white.opacity(0.95),
+                    restTint: .white.opacity(0.3),
+                    barWidth: 2,
+                    height: 16
+                )
+            }
+        }
+        .foregroundStyle(.white)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(session.isPaused ? "Meeting paused" : "Meeting recording")
+        .accessibilityAction(named: session.isPaused ? "Resume" : "Pause") {
+            onAction(session.isPaused ? .resume : .pause)
+        }
+        .accessibilityAction(named: "Stop") { onAction(.stop) }
+        .accessibilityAction(named: "Open Notes") { onAction(.open) }
+    }
+}
+
+/// A button of the hovered pill: white text on a light wash.
+private struct MeetingPillButton: View {
+    let title: String
+    var icon: String?
+    var iconTint: Color = .white
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(iconTint)
+                        .frame(width: FloatingIndicatorMetrics.meetingPillIconWidth)
+                }
+                Text(title)
+                    .font(Font(FloatingIndicatorMetrics.meetingPillButtonFont))
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 24)
+            .background(Capsule().fill(Color.white.opacity(0.14)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressableButtonStyle(pressedScale: 0.95))
+    }
+}
+
+/// The meeting's dot and recorded time. The dot is gray and the time dimmed
+/// while paused.
+private struct MeetingPillTimer: View {
+    let session: MeetingSession
+    let showsTime: Bool
+    var spacing: CGFloat = 7
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            Circle()
+                .fill(session.isPaused ? Color.gray : Color.red)
+                .frame(width: FloatingIndicatorMetrics.meetingPillDotWidth, height: FloatingIndicatorMetrics.meetingPillDotWidth)
+            if showsTime {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text(MeetingTranscript.clock(session.elapsed(at: context.date)))
+                        .font(Font(FloatingIndicatorMetrics.meetingPillTimeFont))
+                        .foregroundStyle(.white.opacity(session.isPaused ? 0.6 : 1))
+                }
+            }
+        }
     }
 }

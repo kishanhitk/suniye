@@ -153,6 +153,7 @@ public enum PermissionAskSurface: String, Sendable, CaseIterable {
     case onboarding, settings, dashboard
     case dictationAttempt = "dictation_attempt"
     case insertion
+    case meetingStart = "meeting_start"
 }
 
 /// How an explicit permission ask ended. Overlay cases are Permiso-specific:
@@ -209,4 +210,67 @@ public enum AnalyticsErrorCode: String, Sendable, CaseIterable {
     case timeout, network, unauthorized, notFound = "not_found", cancelled
     case decoding, permissionDenied = "permission_denied", diskFull = "disk_full"
     case invalidState = "invalid_state", unknown
+}
+
+/// How a meeting recording started.
+public enum MeetingSource: String, Sendable, CaseIterable {
+    case manual, offer, automatic
+}
+
+/// Why a meeting recording stopped.
+public enum MeetingStopReason: String, Sendable, CaseIterable {
+    case user
+    case callEnded = "call_ended"
+    case sleep
+    case timeLimit = "time_limit"
+    case noSpeech = "no_speech"
+    case diskFull = "disk_full"
+    case writeFailed = "write_failed"
+    case quit
+}
+
+/// The tracks that recorded until a meeting stopped: the microphone ("you")
+/// and the audio of other apps ("them").
+public enum MeetingTracks: String, Sendable, CaseIterable {
+    case you, them
+    case youThem = "you_them"
+    case noTrack = "none"
+}
+
+/// How a meeting's transcript or summary ended.
+public enum MeetingOutcome: String, Sendable, CaseIterable {
+    case done
+    case noSpeech = "no_speech"
+    case failed
+}
+
+public enum MeetingSummaryEngine: String, Sendable, CaseIterable {
+    case appleIntelligence = "apple_intelligence"
+    case localModel = "local_model"
+}
+
+/// The text of a meeting that the user can change on its page.
+public enum MeetingEditedText: String, Sendable, CaseIterable {
+    case title, transcript, summary
+}
+
+/// The card about a call at the top right of the screen.
+public enum MeetingCallCardKind: String, Sendable, CaseIterable {
+    case offer
+    case started
+    case callEnded = "call_ended"
+}
+
+/// How a call card closed. `timeout`: it closed by itself; on the call-ended
+/// card that stops the recording. `callEnded`: the call ended before an
+/// answer to the offer.
+public enum MeetingCallCardAction: String, Sendable, CaseIterable {
+    case record
+    case notNow = "not_now"
+    case never
+    case timeout
+    case callEnded = "call_ended"
+    case cancel
+    case stopNow = "stop_now"
+    case keepRecording = "keep_recording"
 }

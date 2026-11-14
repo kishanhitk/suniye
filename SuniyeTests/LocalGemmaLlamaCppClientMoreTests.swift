@@ -56,6 +56,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
                 instructions: "Reply with OK.",
                 prompt: "Connection test.",
                 maxTokens: 8,
+                sampling: .greedy,
                 startupTimeoutSeconds: 8,
                 idleTimeoutSeconds: 600,
                 timeoutSeconds: 5
@@ -70,6 +71,26 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         let isWarm = await client.isRuntimeWarm()
         XCTAssertTrue(isWarm)
         await server.stop()
+    }
+
+    func testTokenCountAsksTheServerTokenizer() async throws {
+        let tempDir = try makeTemporaryDirectory()
+        let logURL = tempDir.appendingPathComponent("starts.log")
+        overrideHelperPath(try FakeLlamaServer.make(in: tempDir, logURL: logURL))
+        let server = LlamaServer()
+        let client = makeClient(rootDirectory: tempDir, server: server)
+
+        let count: Int
+        do {
+            count = try await client.tokenCount("one two three four", startupTimeoutSeconds: 8, idleTimeoutSeconds: 600)
+        } catch {
+            await server.stop()
+            XCTFail("Expected the fake llama-server to count, got \(error). Helper log: \(FakeLlamaServer.logContents(at: logURL))")
+            return
+        }
+        await server.stop()
+
+        XCTAssertEqual(count, 4, "the fake server gives one token per word")
     }
 
     func testGenerateReportsHelperFailuresAsPostProcessorErrors() async throws {
@@ -93,6 +114,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
                     instructions: "Reply with OK.",
                     prompt: "Connection test.",
                     maxTokens: 8,
+                    sampling: .greedy,
                     startupTimeoutSeconds: 0.8,
                     idleTimeoutSeconds: 600,
                     timeoutSeconds: 5

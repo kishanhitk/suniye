@@ -3,6 +3,7 @@ import Foundation
 final class LocalGemmaLlamaCppClient: LocalGemmaClient {
     private let locator: LocalGemmaRuntimeLocator
     private let server: LlamaServer
+    private let session: URLSession
     private let completionClient: ChatCompletionClient
 
     init(
@@ -18,6 +19,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
             onModelLoad: onModelLoad,
             onKeepAliveEvicted: onKeepAliveEvicted
         )
+        self.session = session
         self.completionClient = ChatCompletionClient(session: session)
     }
 
@@ -41,32 +43,15 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         instructions: String,
         prompt: String,
         maxTokens: Int?,
+        sampling: LocalGemmaSampling,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> ChatCompletionResult {
-        let runtime: LocalGemmaRuntime
-        switch locator.resolve() {
-        case let .success(resolved):
-            runtime = resolved
-        case let .failure(availability):
-            throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
-        }
-
-        // The cold-start `model_load` event is emitted inside the server actor's
-        // `start()` success path — the actor serializes startup, so a real load
-        // fires exactly one event with the true spawn+health latency, even when a
-        // prewarm probe and a real request race for the same (shared) startup.
-        let endpoint: LlamaServerEndpoint
-        do {
-            endpoint = try await server.endpoint(
-                for: runtime.launch,
-                startupTimeoutSeconds: startupTimeoutSeconds,
-                idleTimeoutSeconds: idleTimeoutSeconds
-            )
-        } catch let error as LlamaServerError {
-            throw Self.postProcessorError(for: error)
-        }
+        let (runtime, endpoint) = try await startServer(
+            startupTimeoutSeconds: startupTimeoutSeconds,
+            idleTimeoutSeconds: idleTimeoutSeconds
+        )
         defer {
             Task {
                 await server.scheduleIdleShutdown(after: idleTimeoutSeconds)
@@ -85,6 +70,7 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
                 instructions: instructions,
                 prompt: prompt,
                 maxTokens: maxTokens,
+                sampling: sampling,
                 modelName: runtime.model.displayName
             ),
             timeoutSeconds: timeoutSeconds
@@ -101,8 +87,64 @@ final class LocalGemmaLlamaCppClient: LocalGemmaClient {
         return result
     }
 
+    /// Counts with llama-server's `/tokenize`, which runs beside a generation
+    /// and does not take the generation slot.
+    func tokenCount(_ text: String, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> Int {
+        let (_, endpoint) = try await startServer(
+            startupTimeoutSeconds: startupTimeoutSeconds,
+            idleTimeoutSeconds: idleTimeoutSeconds
+        )
+        defer {
+            Task {
+                await server.scheduleIdleShutdown(after: idleTimeoutSeconds)
+            }
+        }
+        var request = URLRequest(url: endpoint.baseURL.appendingPathComponent("tokenize"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(endpoint.apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(["content": text])
+        let (data, response) = try await session.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw LLMPostProcessorError.provider("tokenize_failed")
+        }
+        return try JSONDecoder().decode(TokenizeReply.self, from: data).tokens.count
+    }
+
     func stopRuntime() async {
         await server.stop()
+    }
+
+    private struct TokenizeReply: Decodable {
+        let tokens: [Int]
+    }
+
+    /// The cold-start `model_load` event is emitted inside the server actor's
+    /// `start()` success path — the actor serializes startup, so a real load
+    /// fires exactly one event with the true spawn+health latency, even when a
+    /// prewarm probe and a real request race for the same (shared) startup.
+    private func startServer(
+        startupTimeoutSeconds: Double,
+        idleTimeoutSeconds: Double
+    ) async throws -> (LocalGemmaRuntime, LlamaServerEndpoint) {
+        let runtime: LocalGemmaRuntime
+        switch locator.resolve() {
+        case let .success(resolved):
+            runtime = resolved
+        case let .failure(availability):
+            throw LLMPostProcessorError.invalidConfiguration(availability.logValue)
+        }
+        do {
+            let endpoint = try await server.endpoint(
+                for: runtime.launch,
+                startupTimeoutSeconds: startupTimeoutSeconds,
+                idleTimeoutSeconds: idleTimeoutSeconds
+            )
+            return (runtime, endpoint)
+        } catch let error as LlamaServerError {
+            throw Self.postProcessorError(for: error)
+        }
     }
 
     private static func postProcessorError(for error: LlamaServerError) -> LLMPostProcessorError {
@@ -125,6 +167,7 @@ enum LocalGemmaCompletionRequestFactory {
         instructions: String,
         prompt: String,
         maxTokens: Int?,
+        sampling: LocalGemmaSampling,
         modelName: String,
         timeoutSeconds: Double
     ) throws -> URLRequest {
@@ -135,13 +178,14 @@ enum LocalGemmaCompletionRequestFactory {
                 instructions: instructions,
                 prompt: prompt,
                 maxTokens: maxTokens,
+                sampling: sampling,
                 modelName: modelName
             ),
             timeoutSeconds: timeoutSeconds
         )
     }
 
-    static func makePayload(instructions: String, prompt: String, maxTokens: Int?, modelName: String) -> ChatCompletionPayload {
+    static func makePayload(instructions: String, prompt: String, maxTokens: Int?, sampling: LocalGemmaSampling, modelName: String) -> ChatCompletionPayload {
         let userContent = """
         \(instructions)
 
@@ -155,7 +199,9 @@ enum LocalGemmaCompletionRequestFactory {
             topK: 1,
             topP: 1,
             maxTokens: maxTokens,
-            stream: false
+            stream: false,
+            dryMultiplier: sampling == .greedyWithoutRepeats ? 0.8 : nil,
+            dryPenaltyLastN: sampling == .greedyWithoutRepeats ? 256 : nil
         )
     }
 }

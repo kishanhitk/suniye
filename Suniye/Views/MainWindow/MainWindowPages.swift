@@ -68,6 +68,7 @@ struct GeneralPage: View {
             indicator
             dictation
             startup
+            MeetingSettingsGroup(appState: appState)
             privacy
             about
         }
@@ -338,6 +339,12 @@ struct GeneralPage: View {
                 title: "Hide while idle",
                 info: "Hide the floating indicator when \(AppIdentity.current.displayName) is ready but not actively dictating. When hidden, floating click-to-start is unavailable until the indicator appears again for recording, processing, or errors.",
                 isOn: $appState.hideFloatingIndicatorWhenIdle
+            )
+
+            RowSeparator()
+            ToggleSettingRow(
+                title: "Show meeting time",
+                isOn: $appState.showsMeetingTime
             )
 
             RowSeparator()

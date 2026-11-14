@@ -15,39 +15,57 @@ enum LocalGemmaDefaults {
     static let idleTimeoutSeconds = 600.0
     static let probeMaxTokens = 8
     static let probeText = "warm up"
+    /// ~80 minutes of dictation. Gemma 4 E2B keeps full attention on 3 of its
+    /// layers, so their KV cache is 96 MiB here (24 MiB at 4096) on top of a
+    /// fixed 12 MiB sliding-window cache.
+    static let contextSize = 16_384
 
     static func serverArguments(modelPath: String) -> [String] {
         return [
             "--model", modelPath,
-            // ~80 minutes of dictation. Gemma 4 E2B keeps full attention on 3 of
-            // its layers, so their KV cache is 96 MiB here (24 MiB at 4096) on
-            // top of a fixed 12 MiB sliding-window cache.
-            "--ctx-size", "16384",
+            "--ctx-size", "\(contextSize)",
             "--parallel", "1",
             "--reasoning", "off",
         ]
     }
 }
 
+/// How the local model picks each token.
+enum LocalGemmaSampling {
+    /// The most likely token. Magic Format keeps the user's words, repeats
+    /// included.
+    case greedy
+    /// The most likely token, with a penalty on a token that extends a repeat
+    /// of the last 256 tokens: greedy decoding alone can write one note line
+    /// again and again until the output limit.
+    case greedyWithoutRepeats
+}
+
 protocol LocalGemmaClient {
     var availability: LocalGemmaAvailability { get }
     func isRuntimeWarm() async -> Bool
     /// `maxTokens` nil lets the model run to its end-of-turn or the context
-    /// window; only the warm-up probe caps its output.
+    /// window.
     func generate(
         instructions: String,
         prompt: String,
         maxTokens: Int?,
+        sampling: LocalGemmaSampling,
         startupTimeoutSeconds: Double,
         idleTimeoutSeconds: Double,
         timeoutSeconds: Double
     ) async throws -> ChatCompletionResult
+    func tokenCount(_ text: String, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> Int
     func stopRuntime() async
 }
 
 extension LocalGemmaClient {
     func isRuntimeWarm() async -> Bool { false }
     func stopRuntime() async {}
+
+    func tokenCount(_ text: String, startupTimeoutSeconds: Double, idleTimeoutSeconds: Double) async throws -> Int {
+        throw LLMPostProcessorError.invalidConfiguration("token_count_unsupported")
+    }
 }
 
 final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
@@ -120,6 +138,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             instructions: request.instructions,
             prompt: request.prompt,
             maxTokens: LocalGemmaDefaults.probeMaxTokens,
+            sampling: .greedy,
             startupTimeoutSeconds: config.startupTimeoutSeconds,
             idleTimeoutSeconds: config.idleTimeoutSeconds,
             timeoutSeconds: config.generationTimeoutSeconds
@@ -138,6 +157,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             instructions: instructions,
             prompt: prompt,
             maxTokens: nil,
+            sampling: .greedy,
             startupTimeoutSeconds: config.startupTimeoutSeconds,
             idleTimeoutSeconds: config.idleTimeoutSeconds,
             timeoutSeconds: MagicFormatGenerationBudget.timeoutSeconds(
@@ -160,7 +180,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
             text: text,
             systemPrompt: config.systemPrompt,
             keywords: config.keywords,
-            sanitize: sanitizeGemmaOutput
+            sanitize: Self.sanitize
         ) { request in
             do {
                 return try await generateAndReport(
@@ -189,7 +209,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
                 inputCharacterCount: userText.count,
                 config: config
             )
-            let sanitized = sanitizeGemmaOutput(raw)
+            let sanitized = Self.sanitize(raw)
             guard !sanitized.isEmpty else {
                 throw LLMPostProcessorError.emptyOutput
             }
@@ -207,7 +227,7 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
         }
 
         let output = try await runProbe(config: config)
-        guard !sanitizeGemmaOutput(output).isEmpty else {
+        guard !Self.sanitize(output).isEmpty else {
             throw LLMPostProcessorError.emptyOutput
         }
     }
@@ -216,7 +236,8 @@ final class LocalGemmaPostProcessor: LocalGemmaMagicFormatPostProcessor {
         await client.stopRuntime()
     }
 
-    private func sanitizeGemmaOutput(_ raw: String) -> String {
+    /// Removes Gemma's thought and turn markers.
+    static func sanitize(_ raw: String) -> String {
         var sanitized = MagicFormatOutputSanitizer.sanitize(raw)
 
         if let thoughtEnd = sanitized.range(of: "<channel|>", options: .backwards) {

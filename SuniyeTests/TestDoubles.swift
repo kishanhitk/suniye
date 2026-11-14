@@ -769,6 +769,12 @@ final class SpyLearningToastPresenter: LearningToastPresenting {
         shownTermBatches.append(terms)
         lastUndo = onUndo
     }
+
+    private(set) var shownMessages: [String] = []
+
+    func show(message: String, detail: String?, actionTitle: String?, action: (() -> Void)?) {
+        shownMessages.append(message)
+    }
 }
 
 @MainActor
@@ -913,8 +919,34 @@ func makeTestAppState(
         issueReportDiagnosticsDestinationPicker: issueReportDiagnosticsDestinationPicker,
         temporaryFileCleanupScheduler: temporaryFileCleanupScheduler,
         magicFormatSlowWarningDelaySeconds: magicFormatSlowWarningDelaySeconds,
+        meetingCoordinator: makeTestMeetingCoordinator(engine: transcriptionService, analytics: analytics),
         startServices: startServices,
         llmE2EMode: llmE2EMode
+    )
+}
+
+/// Meetings on a temporary folder, with no audio source and no call app, so
+/// a test app never reads, recovers or records the real meetings.
+@MainActor
+func makeTestMeetingCoordinator(engine: TranscriptionServiceProtocol, analytics: Analytics) -> MeetingCoordinator {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("suniye-meeting-tests-\(UUID().uuidString)", isDirectory: true)
+    return MeetingCoordinator(
+        store: MeetingStore(rootDirectory: root.appendingPathComponent("meetings", isDirectory: true)),
+        templates: MeetingTemplateStore(fileURL: root.appendingPathComponent("templates.json")),
+        settingsStore: MeetingSettingsStore(userDefaults: UserDefaults(suiteName: "suniye-meeting-tests-\(UUID().uuidString)")!),
+        engine: engine,
+        makeTranscriptEngine: { _ in engine },
+        environment: MeetingEnvironment(
+            canRecordCallAudio: false,
+            makeSources: { _ in [:] },
+            freeDiskBytes: { nil },
+            callPlaysOnSpeakers: { false },
+            makeMicrophoneUsers: { FakeMicrophoneUsers() },
+            now: Date.init
+        ),
+        summaryAvailability: { .unavailable },
+        makeSummaryModel: { _ in nil },
+        analytics: analytics
     )
 }
 
@@ -1034,5 +1066,42 @@ final class StubSpeechDetector: SpeechDetecting {
     func containsSpeech(_ samples: [Float]) -> Bool {
         clipLengths.append(samples.count)
         return answers.count > 1 ? answers.removeFirst() : answers[0]
+    }
+}
+
+/// A meeting audio player whose time moves only when a test moves it.
+@MainActor
+final class FakeMeetingAudioPlayer: MeetingAudioPlayer {
+    let duration: TimeInterval
+    var currentTime: TimeInterval = 0
+    var isPlaying = false
+    var onEnd: () -> Void = {}
+    /// The time of each start.
+    private(set) var starts: [TimeInterval] = []
+    /// Runs at each pause, before the player pauses.
+    var pausing: () -> Void = {}
+
+    init(duration: TimeInterval) {
+        self.duration = duration
+    }
+
+    func play(from time: TimeInterval) -> Bool {
+        starts.append(time)
+        currentTime = time
+        isPlaying = true
+        return true
+    }
+
+    func pause() {
+        pausing()
+        isPlaying = false
+    }
+
+    /// The audio plays to its end, and the player goes back to the start, as
+    /// AVAudioPlayer does.
+    func playToEnd() {
+        isPlaying = false
+        currentTime = 0
+        onEnd()
     }
 }

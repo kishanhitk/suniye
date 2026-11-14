@@ -262,6 +262,13 @@ final class AppState {
             }
         }
     }
+    /// The model that downloads to become the meeting transcript model.
+    private(set) var meetingTranscriptModelDownload: ASRModelID?
+    /// Counts the transcript model choices, so an older one never wins.
+    @ObservationIgnored private var meetingTranscriptModelChoice = 0
+    /// Whether macOS has the asset of each system-managed speech model, as
+    /// `refreshSystemManagedASRAssets()` last asked.
+    private(set) var systemManagedASRAssetInstalled: [ASRModelID: Bool] = [:]
     var modelDownloadStartedAt: Date?
     /// One model operation at a time. Downloads and loads were split into
     /// separate slots so an installed model could be selected mid-download; the
@@ -281,6 +288,7 @@ final class AppState {
         didSet {
             if oldValue != loadedASRModelID {
                 onStateChange?()
+                meetings.speechModelChanged(loadedASRModelID)
             }
         }
     }
@@ -359,6 +367,12 @@ final class AppState {
             onStateChange?()
         }
     }
+    /// Echo cancellation (voice processing) lowers the volume of other audio
+    /// while it runs; during a meeting that would lower the call.
+    private var dictationEchoCancellationEnabled: Bool {
+        echoCancellationEnabled && meetings.live == nil
+    }
+
     var echoCancellationEnabled = false {
         didSet {
             guard !isHydratingGeneralSettings else {
@@ -400,6 +414,19 @@ final class AppState {
                 return
             }
             guard oldValue != hideFloatingIndicatorWhenIdle else {
+                return
+            }
+            persistGeneralSettings()
+            syncFloatingIndicatorPreferences()
+            onStateChange?()
+        }
+    }
+    var showsMeetingTime = true {
+        didSet {
+            guard !isHydratingGeneralSettings else {
+                return
+            }
+            guard oldValue != showsMeetingTime else {
                 return
             }
             persistGeneralSettings()
@@ -815,6 +842,7 @@ final class AppState {
         didSet {
             if oldValue != localGemmaInstallState {
                 onStateChange?()
+                meetings.summaries.availabilityChanged()
             }
         }
     }
@@ -1390,6 +1418,22 @@ final class AppState {
         await modelManager.isSystemManagedAssetInstalled(modelID)
     }
 
+    /// The model runs with no download: its files are on disk, or macOS has
+    /// its asset. A system-managed model counts as missing until
+    /// `refreshSystemManagedASRAssets()` has an answer.
+    func isASRModelOnMac(_ modelID: ASRModelID) -> Bool {
+        ASRModelCatalog.entry(for: modelID).isSystemManaged
+            ? systemManagedASRAssetInstalled[modelID] ?? false
+            : isASRModelDownloaded(modelID)
+    }
+
+    /// Asks macOS again which system-managed speech assets it has.
+    func refreshSystemManagedASRAssets() async {
+        for entry in asrModelCatalog where entry.isSystemManaged {
+            systemManagedASRAssetInstalled[entry.id] = await isSystemManagedASRAssetInstalled(entry.id)
+        }
+    }
+
     func asrModelSecondaryActionsEnabled(for modelID: ASRModelID) -> Bool {
         // System-managed models (Apple Speech) have no on-disk folder to open and can't
         // be deleted by us, so hide the folder/trash actions for them.
@@ -1714,6 +1758,11 @@ final class AppState {
     private let appleMagicFormatPostProcessor: AppleMagicFormatPostProcessor
     private let localGemmaMagicFormatPostProcessor: LocalGemmaMagicFormatPostProcessor
     private let magicFormatCoordinator: MagicFormatCoordinator
+    let meetings: MeetingCoordinator
+    /// A section that code outside the main window asked to show. The window
+    /// shows it and clears the request.
+    var requestedSection: MainWindowSection?
+    @ObservationIgnored private var callCardPresenter: MeetingCallCardPresenter?
     private let localLLMModelManager: LocalLLMModelManagerProtocol
     private let llmSettingsStore: LLMSettingsStoreProtocol
     private let magicFormatPromptFileStore: MagicFormatPromptFileStoreProtocol
@@ -1777,7 +1826,13 @@ final class AppState {
         }
     }
 
-    private var activeDictationSession: ActiveDictationSession?
+    private var activeDictationSession: ActiveDictationSession? {
+        didSet {
+            if (oldValue == nil) != (activeDictationSession == nil) {
+                meetings.dictationChanged(active: activeDictationSession != nil)
+            }
+        }
+    }
     private var activeAudioCaptureSessionID: UUID? { activeDictationSession?.context.id }
     private var activeRecordingSource: RecordingSource? { activeDictationSession?.context.source }
     private var recordingStart: Date? { activeDictationSession?.context.startedAt }
@@ -1882,6 +1937,7 @@ final class AppState {
             }
         },
         magicFormatSlowWarningDelaySeconds: TimeInterval = 5,
+        meetingCoordinator: MeetingCoordinator? = nil,
         startServices: Bool = true,
         llmE2EMode: LLME2EMode? = nil
     ) {
@@ -1896,16 +1952,18 @@ final class AppState {
         self.llmPostProcessor = llmPostProcessor
         self.appleMagicFormatPostProcessor = appleMagicFormatPostProcessor
         self.localLLMModelManager = localLLMModelManager
+        // One client, so Magic Format and meeting summaries share one llama-server.
+        let localGemmaClient = LocalGemmaLlamaCppClient(
+            locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager),
+            onModelLoad: { model, loadMs in
+                analytics.track(.modelLoad(model: SafeLabel(model), loadMs: loadMs, evictedByKeepAlive: false))
+            },
+            onKeepAliveEvicted: { model in
+                analytics.track(.modelLoad(model: SafeLabel(model), loadMs: 0, evictedByKeepAlive: true))
+            }
+        )
         let resolvedLocalGemmaPostProcessor = localGemmaMagicFormatPostProcessor ?? LocalGemmaPostProcessor(
-            client: LocalGemmaLlamaCppClient(
-                locator: LocalGemmaRuntimeLocator(modelManager: localLLMModelManager),
-                onModelLoad: { model, loadMs in
-                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: loadMs, evictedByKeepAlive: false))
-                },
-                onKeepAliveEvicted: { model in
-                    analytics.track(.modelLoad(model: SafeLabel(model), loadMs: 0, evictedByKeepAlive: true))
-                }
-            ),
+            client: localGemmaClient,
             onGeneration: { timings in
                 analytics.track(.llmGeneration(
                     model: SafeLabel(LocalGemmaDefaults.modelDisplayName),
@@ -1922,6 +1980,14 @@ final class AppState {
             apiPostProcessor: llmPostProcessor,
             applePostProcessor: appleMagicFormatPostProcessor,
             localGemmaPostProcessor: resolvedLocalGemmaPostProcessor
+        )
+        self.meetings = meetingCoordinator ?? AppState.makeMeetingCoordinator(
+            transcriptionService: transcriptionService,
+            modelManager: modelManager,
+            appleSummaryAvailability: { appleMagicFormatPostProcessor.availability },
+            localSummaryAvailability: { resolvedLocalGemmaPostProcessor.availability },
+            localGemmaClient: localGemmaClient,
+            analytics: analytics
         )
         self.llmSettingsStore = llmSettingsStore
         self.magicFormatPromptFileStore = magicFormatPromptFileStore
@@ -1965,6 +2031,10 @@ final class AppState {
         self.llmE2EMode = llmE2EMode ?? AppState.detectLLME2EMode(arguments: CommandLine.arguments)
         self.appUpdateController.onStateChange = { [weak self] in
             self?.refreshUpdateControllerState()
+        }
+        self.meetings.host = self
+        self.meetings.onNotice = { [weak self] notice in
+            self?.showMeetingNotice(notice)
         }
         self.editLearningService.onLearnedTerms = { [weak self] terms in
             self?.handleLearnedVocabularyTerms(terms)
@@ -2011,6 +2081,19 @@ final class AppState {
             floatingIndicatorController.onAction = { [weak self] in
                 self?.toggleFloatingIndicatorRecording()
             }
+            floatingIndicatorController.onMeetingAction = { [weak self] action in
+                self?.handleMeetingPillAction(action)
+            }
+            meetings.onLiveChange = { [weak self] session in
+                self?.floatingIndicatorController.updateMeeting(session)
+            }
+            let callCardPresenter = MeetingCallCardPresenter(meetings: meetings) { [weak self] in
+                self?.openMainWindow(at: .general)
+            }
+            self.callCardPresenter = callCardPresenter
+            meetings.onCallCardChange = { card in
+                callCardPresenter.show(card)
+            }
             floatingIndicatorController.onPlacementChanged = { [weak self] placement in
                 self?.handleFloatingIndicatorPlacementChanged(placement)
             }
@@ -2019,6 +2102,7 @@ final class AppState {
 
         if startServices {
             analytics.start()
+            stopMeetingAtSleep()
             emitAppLaunchEvent()
             presentOnboardingIfNeeded()
             wireHotkey()
@@ -2078,6 +2162,7 @@ final class AppState {
         if floatingIndicatorEnabled {
             floatingIndicatorController.start()
         }
+        await meetings.start()
         statusText = "Checking permissions..."
         await refreshPermissions()
 
@@ -2616,7 +2701,7 @@ final class AppState {
         do {
             audioRouteSnapshot = try audioCaptureService.routeSnapshot(
                 preferredInputDeviceID: selectedInputDeviceID,
-                echoCancellationEnabled: echoCancellationEnabled
+                echoCancellationEnabled: dictationEchoCancellationEnabled
             )
         } catch {
             audioRouteSnapshot = nil
@@ -3377,7 +3462,7 @@ final class AppState {
 
                 setPhaseUnlessCapturing(.loading, statusText: "Validating model...")
 
-                guard modelManager.isInstalled(modelID) else {
+                guard await modelManager.isSystemManagedAssetInstalled(modelID) else {
                     throw AppStateError.modelValidationFailed
                 }
 
@@ -3606,7 +3691,10 @@ final class AppState {
         }
     }
 
-    func openMainWindow() {
+    func openMainWindow(at section: MainWindowSection? = nil) {
+        if let section {
+            requestedSection = section
+        }
         MainWindowController.shared.show(appState: self)
     }
 
@@ -4429,7 +4517,7 @@ final class AppState {
             let session = try await audioCaptureService.startCapture(
                 sessionID: sessionID,
                 preferredInputDeviceID: selectedInputDeviceID,
-                echoCancellationEnabled: echoCancellationEnabled
+                echoCancellationEnabled: dictationEchoCancellationEnabled
             )
             guard activeAudioCaptureSessionID == sessionID else {
                 await audioCaptureService.cancelCapture(sessionID: sessionID, reason: nil)
@@ -4481,6 +4569,7 @@ final class AppState {
         guard let context = activeDictationSession?.context, context.id == sessionID else {
             return
         }
+        meetings.dictationCaptureEnded()
         let samples = captured.samples
         let sampleRate = captured.sampleRate
         let destination = context.destination
@@ -5090,6 +5179,7 @@ final class AppState {
         soundFeedbackEnabled = settings.soundFeedbackEnabled
         hideFloatingIndicatorWhenIdle = settings.hideFloatingIndicatorWhenIdle
         liveTranscriptionPreviewEnabled = settings.liveTranscriptionPreviewEnabled
+        showsMeetingTime = settings.showsMeetingTime
         floatingIndicatorPlacement = settings.floatingIndicatorPlacement
         selectedASRModelID = settings.selectedASRModelID
         updateChannel = settings.updateChannel
@@ -5146,6 +5236,7 @@ final class AppState {
             soundFeedbackEnabled: soundFeedbackEnabled,
             hideFloatingIndicatorWhenIdle: hideFloatingIndicatorWhenIdle,
             liveTranscriptionPreviewEnabled: liveTranscriptionPreviewEnabled,
+            showsMeetingTime: showsMeetingTime,
             floatingIndicatorPlacement: floatingIndicatorPlacement,
             // Legacy Bools still written (derived) so a downgraded build keeps
             // working; `onboardingProgress` wins on load in this build.
@@ -5423,6 +5514,7 @@ final class AppState {
         guard floatingIndicatorEnabled else { return }
         floatingIndicatorController.configure(
             hideWhenIdle: hideFloatingIndicatorWhenIdle,
+            showsMeetingTime: showsMeetingTime,
             placement: floatingIndicatorPlacement
         )
     }
@@ -5737,5 +5829,258 @@ enum AppStateError: LocalizedError {
         case let .insufficientDiskSpace(message):
             return message
         }
+    }
+}
+
+extension AppState {
+    /// Makes `model` the meeting transcript model; nil is the dictation
+    /// model. A model that is not on the Mac downloads first, without
+    /// becoming the dictation model, and becomes the transcript model when
+    /// the download succeeds.
+    func useForMeetingTranscripts(_ model: ASRModelID?) {
+        meetingTranscriptModelChoice += 1
+        let choice = meetingTranscriptModelChoice
+        guard let model else {
+            meetings.updateSettings { $0.transcriptModel = nil }
+            return
+        }
+        Task {
+            if await !modelManager.isSystemManagedAssetInstalled(model) {
+                guard choice == meetingTranscriptModelChoice, asrModelCanPerformPrimaryAction(for: model) else { return }
+                meetingTranscriptModelDownload = model
+                downloadASRModel(model, autoSelect: false)
+                await asrDownloadTask?.value
+                // A later choice may show its own download by now.
+                if meetingTranscriptModelDownload == model {
+                    meetingTranscriptModelDownload = nil
+                }
+                guard await modelManager.isSystemManagedAssetInstalled(model) else { return }
+            }
+            guard choice == meetingTranscriptModelChoice else { return }
+            meetings.updateSettings { $0.transcriptModel = model }
+        }
+    }
+}
+
+extension AppState: MeetingHost {
+    /// Opens the main window at a meeting's page, or at the list for nil.
+    func openMeeting(_ id: UUID?) {
+        meetings.openMeetingID = id
+        openMainWindow(at: .meetings)
+    }
+
+    var meetingInputDeviceID: String? {
+        selectedInputDeviceID
+    }
+
+    func requestMeetingMicrophoneAccess() async -> Bool {
+        if !hasMicPermission {
+            await refreshPermissions(requestMicrophone: true, askSurface: .meetingStart)
+        }
+        return hasMicPermission
+    }
+
+    func meetingSummaryModelIsIdle() {
+        prewarmLocalLLMIfEligible()
+    }
+
+    /// A recording meeting stops and saves before the app quits, and the
+    /// next launch shows it with Finish Transcript. A quit from the user asks
+    /// first; a logout, restart or shutdown does not, so it never blocks one.
+    /// The text that a meeting page has not saved yet is saved first.
+    func terminateReplyForMeeting() -> NSApplication.TerminateReply {
+        for window in NSApp.windows {
+            window.makeFirstResponder(nil)
+        }
+        let isRecording = meetings.live != nil
+        guard isRecording || !meetings.textSaves.isIdle else { return .terminateNow }
+        if isRecording, !Self.systemIsQuittingApps() {
+            NSApp.activate(ignoringOtherApps: true)
+            guard MeetingQuitAlert.make().runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+        }
+        Task {
+            await meetings.textSaves.finish()
+            if isRecording {
+                await meetings.stopForQuit()
+            }
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
+    private static func systemIsQuittingApps() -> Bool {
+        guard let reason = NSAppleEventManager.shared().currentAppleEvent?
+            .attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason))?
+            .typeCodeValue
+        else { return false }
+        let systemReasons = [kAELogOut, kAEReallyLogOut, kAEShowRestartDialog, kAERestart, kAEShowShutdownDialog, kAEShutDown]
+        return systemReasons.map { OSType($0) }.contains(reason)
+    }
+
+    func startMeetingFromMenu() {
+        Task {
+            do {
+                try await meetings.startMeeting(source: .manual)
+            } catch {
+                meetingCouldNotStart(error)
+            }
+        }
+    }
+
+    func meetingCouldNotStart(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "Couldn’t start the recording"
+        alert.informativeText = error.localizedDescription
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
+    }
+
+    func pauseOrResumeMeeting() {
+        guard let live = meetings.live else { return }
+        handleMeetingPillAction(live.isPaused ? .resume : .pause)
+    }
+
+    func handleMeetingPillAction(_ action: MeetingPillAction) {
+        guard let live = meetings.live else { return }
+        switch action {
+        case .open:
+            openMeeting(live.id)
+        case .pause:
+            Task { await meetings.pause() }
+        case .resume:
+            Task {
+                do {
+                    try await meetings.resume()
+                } catch {
+                    learningToastPresenter.show(message: "Couldn’t resume the recording", detail: nil, actionTitle: nil, action: nil)
+                }
+            }
+        case .stop:
+            Task { await meetings.stop() }
+        }
+    }
+
+    /// A meeting notice becomes a toast. A notice that the meeting's page
+    /// shows itself is skipped while that page is on screen in the active app.
+    func showMeetingNotice(_ notice: MeetingNotice) {
+        let pageOnScreen = NSApp.isActive ? meetings.pageOnScreen : nil
+        let live = meetings.live.flatMap { $0.id == pageOnScreen ? nil : $0 }
+        let time = live.map { MeetingTranscript.clock($0.elapsed(at: Date())) }
+        switch notice {
+        case .callAudioStopped:
+            guard live != nil else { return }
+            learningToastPresenter.show(message: "Call audio stopped", detail: time, actionTitle: "Restart Call Audio") { [weak self] in
+                self?.meetings.restartCallAudio()
+            }
+        case .callAudioNeverHeard:
+            guard let live else { return }
+            learningToastPresenter.show(message: "No sound from the call", detail: time, actionTitle: "Open Meeting") { [weak self] in
+                self?.openMeeting(live.id)
+            }
+        case let .microphoneChanged(name):
+            guard live != nil else { return }
+            learningToastPresenter.show(message: "Recording with \(name)", detail: time, actionTitle: nil, action: nil)
+        case let .trackFailed(track):
+            guard let live else { return }
+            learningToastPresenter.show(
+                message: track == .you ? "The microphone stopped" : "Call audio stopped",
+                detail: time,
+                actionTitle: "Open Meeting"
+            ) { [weak self] in
+                self?.openMeeting(live.id)
+            }
+        case let .stoppedAtTimeLimit(id, limit):
+            showMeetingStopped(id, message: "Recording stopped after \(MeetingDurationText.spelledOut(limit))")
+        case let .stoppedWithoutSpeech(id, limit):
+            showMeetingStopped(id, message: "Recording stopped after \(MeetingDurationText.spelledOut(limit)) without speech")
+        case let .stoppedByDiskFull(id):
+            // The meeting page shows its own banner for it.
+            guard id != pageOnScreen else { return }
+            showMeetingStopped(id, message: "Recording stopped because the disk is full")
+        case let .stoppedByWriteError(id):
+            guard id != pageOnScreen else { return }
+            showMeetingStopped(id, message: "Recording stopped because the audio could not be saved")
+        case let .summaryReady(id):
+            guard id != pageOnScreen else { return }
+            learningToastPresenter.show(message: "Summary ready", detail: nil, actionTitle: "Open") { [weak self] in
+                self?.openMeeting(id)
+            }
+        case let .transcribedAgain(id):
+            guard id != pageOnScreen else { return }
+            learningToastPresenter.show(message: "Transcript ready", detail: nil, actionTitle: "Open") { [weak self] in
+                self?.openMeeting(id)
+            }
+        case let .notTranscribedAgain(id):
+            learningToastPresenter.show(
+                message: "Couldn’t transcribe again",
+                detail: "The transcript did not change.",
+                actionTitle: id == pageOnScreen ? nil : "Open"
+            ) { [weak self] in
+                self?.openMeeting(id)
+            }
+        }
+    }
+
+    private func showMeetingStopped(_ id: UUID, message: String) {
+        learningToastPresenter.show(message: message, detail: nil, actionTitle: "Open Meeting") { [weak self] in
+            self?.openMeeting(id)
+        }
+    }
+
+    /// Capture stops while the Mac sleeps, so sleep, and a closed lid that
+    /// puts the Mac to sleep, stop the recording and save it.
+    fileprivate func stopMeetingAtSleep() {
+        _ = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                Task { await self.meetings.stop(.sleep) }
+            }
+        }
+    }
+
+    fileprivate static func makeMeetingCoordinator(
+        transcriptionService: TranscriptionServiceProtocol,
+        modelManager: ModelManagerProtocol,
+        appleSummaryAvailability: @escaping () -> AppleFoundationModelsAvailability,
+        localSummaryAvailability: @escaping () -> LocalGemmaAvailability,
+        localGemmaClient: LocalGemmaClient,
+        analytics: Analytics
+    ) -> MeetingCoordinator {
+        MeetingCoordinator(
+            store: MeetingStore(),
+            templates: MeetingTemplateStore(),
+            settingsStore: MeetingSettingsStore(),
+            engine: transcriptionService,
+            makeTranscriptEngine: { model in
+                guard await modelManager.isSystemManagedAssetInstalled(model) else {
+                    throw MeetingTranscriptModelError.notDownloaded(ASRModelCatalog.entry(for: model).displayName)
+                }
+                let engine = RoutingTranscriptionService()
+                try await engine.loadModel(config: modelManager.makeRecognizerConfig(for: model))
+                return engine
+            },
+            environment: .live(),
+            summaryAvailability: {
+                MeetingSummaryAvailability(apple: appleSummaryAvailability(), localModel: localSummaryAvailability())
+            },
+            makeSummaryModel: { engine in
+                switch engine {
+                case .localModel:
+                    return LocalGemmaMeetingSummaryModel(client: localGemmaClient)
+                case .appleIntelligence:
+                    #if canImport(FoundationModels)
+                    if #available(macOS 26.0, *) {
+                        return AppleMeetingSummaryModel()
+                    }
+                    #endif
+                    return nil
+                }
+            },
+            analytics: analytics
+        )
     }
 }
