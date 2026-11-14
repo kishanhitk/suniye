@@ -9,8 +9,8 @@ struct MeetingTranscriptLine: Equatable {
     let text: String
 }
 
-/// The notes that the user types, saved a moment after each edit and when
-/// the editor goes away.
+/// The notes that the user types. Each edit hands its text to `save`, which
+/// stages it with the meeting's text saves.
 struct MeetingNotesEditor: View {
     @Binding var draft: MeetingNotesDraft
     let save: (String) -> Void
@@ -33,20 +33,11 @@ struct MeetingNotesEditor: View {
                         .allowsHitTesting(false)
                 }
             }
-            .task(id: draft.text) {
-                try? await Task.sleep(for: .milliseconds(750))
-                guard !Task.isCancelled else { return }
-                saveUnsaved()
+            .onChange(of: draft.text) {
+                if let text = draft.takeUnsaved() {
+                    save(text)
+                }
             }
-            .onDisappear {
-                saveUnsaved()
-            }
-    }
-
-    private func saveUnsaved() {
-        if let text = draft.takeUnsaved() {
-            save(text)
-        }
     }
 }
 

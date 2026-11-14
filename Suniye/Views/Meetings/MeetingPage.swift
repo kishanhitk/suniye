@@ -246,7 +246,9 @@ struct MeetingPage: View {
         case .notes:
             if let draft = Binding($notes) {
                 MeetingNotesEditor(draft: draft) { text in
-                    Task { await meetings.saveNotes(text, for: id) }
+                    meetings.textSaves.stage(.notes, of: id) {
+                        await meetings.saveNotes(text, for: id)
+                    }
                 }
             } else if notesUnreadable {
                 Text("Couldn’t read the notes.")
