@@ -8,6 +8,12 @@ import QuartzCore
 enum AudioLevelMeter {
     /// Number of frequency bands the level meter renders.
     static let bandCount = 22
+    private static let gain: Float = 14
+
+    /// Maps a block's RMS to the 0...1 level that the meters draw.
+    static func level(rms: Float) -> Float {
+        min(max(rms * gain, 0), 1)
+    }
 }
 
 enum AudioCaptureServiceError: LocalizedError, Equatable {
@@ -118,8 +124,6 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
     private var activeCapture: ActiveCapture?
 
     static let releaseTail: DispatchTimeInterval = .milliseconds(200)
-    /// Maps a block's RMS to the 0...1 level that the meters draw.
-    static let levelMeterGain: Float = 14
 
     init(
         deviceMonitor: AudioDeviceMonitorProtocol = CoreAudioDeviceMonitor(),
@@ -437,7 +441,7 @@ final class AudioCaptureService: AudioCaptureServiceProtocol, @unchecked Sendabl
                 sum += value * value
             }
             let rms = Float((sum / Double(end - start)).squareRoot())
-            next[index] = min(max(rms * Self.levelMeterGain, 0), 1)
+            next[index] = AudioLevelMeter.level(rms: rms)
         }
         for index in next.indices {
             // Weight the freshly measured level more heavily so the meter tracks
