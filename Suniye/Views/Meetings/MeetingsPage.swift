@@ -29,14 +29,15 @@ struct MeetingsPage: View {
             HStack(alignment: .firstTextBaseline) {
                 DetailPageTitle(title: "Meetings")
                 Spacer()
-                Button {
-                    actions.startMeeting(meetings)
-                } label: {
-                    Label("Record Meeting", systemImage: "record.circle")
+                if meetings.live == nil {
+                    Button {
+                        actions.startMeeting(meetings)
+                    } label: {
+                        Label("Record Meeting", systemImage: "record.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut("n", modifiers: .command)
                 }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut("n", modifiers: .command)
-                .disabled(meetings.live != nil)
             }
 
             if !meetings.canRecordCallAudio {
@@ -194,21 +195,27 @@ private struct LiveMeetingRow: View {
     let open: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Circle()
                 .fill(session.isPaused ? Color.secondary : Color.red)
                 .frame(width: 8, height: 8)
             Text(session.isPaused ? "Paused" : "Recording")
-                .font(AppTypography.bodyMedium)
-            MeetingTimer(session: session)
-                .foregroundStyle(MainWindowPalette.secondaryText)
-            Text(session.record.title)
                 .font(AppTypography.body)
+            MeetingTimer(session: session)
+                .font(AppTypography.body.monospaced())
+            Text(session.record.title)
+                .font(AppTypography.bodyMedium)
                 .lineLimit(1)
             Spacer()
             Button("Open Notes", action: open)
+                .buttonStyle(.bordered)
         }
-        .padding(.vertical, AppMetrics.listRowVerticalPadding)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.red.opacity(0.07))
+        )
     }
 }
 
