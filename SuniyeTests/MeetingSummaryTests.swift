@@ -164,6 +164,12 @@ final class MeetingSummaryWriterTests: XCTestCase {
         XCTAssertEqual(joined["Decisions"], ["Do not ship on Friday", "Alice interviews Bob", "Ship on Friday", "Bob interviews Alice"], "only the same words in the same order are a repeat")
     }
 
+    func testAnOverviewCutAtTheOutputLimitEndsAtItsLastSentence() {
+        XCTAssertEqual(MeetingSummaryText.overview("Title: Sync\nWe ship 2.4 on Friday. Priya writes the notes. Then the te").paragraph, "We ship 2.4 on Friday. Priya writes the notes.")
+        XCTAssertEqual(MeetingSummaryText.overview("Title: Sync\nWe ship 2.4 on Friday").paragraph, "We ship 2.4 on Friday", "a paragraph with no sentence end stays")
+        XCTAssertEqual(MeetingSummaryText.overview("Title: 同期\n金曜日にリリースします。次は").paragraph, "金曜日にリリースします。")
+    }
+
     func testTheTemplateHeadingsAreTheSections() throws {
         let general = try XCTUnwrap(MeetingSummaryLayout(template: .general))
 

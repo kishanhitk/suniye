@@ -759,7 +759,26 @@ enum MeetingSummaryText {
             .drop { $0.isEmpty || $0.hasPrefix("#") }
             .prefix { !$0.isEmpty && !$0.hasPrefix("#") && !$0.hasPrefix("- ") && !$0.hasPrefix("* ") }
             .joined(separator: " ")
-        return (title, paragraph)
+        return (title, completeSentences(paragraph))
+    }
+
+    /// Apple's model cuts an answer at its output limit with no error, so the
+    /// paragraph can end in the middle of a sentence.
+    private static func completeSentences(_ text: String) -> String {
+        var end: String.Index?
+        var index = text.startIndex
+        while index < text.endIndex {
+            let next = text.index(after: index)
+            let mark = text[index]
+            // "2.4" has a point inside a sentence; a full-width mark needs no space.
+            if ".!?…।".contains(mark), next == text.endIndex || text[next].isWhitespace {
+                end = next
+            } else if "。！？".contains(mark) {
+                end = next
+            }
+            index = next
+        }
+        return end.map { String(text[..<$0]) } ?? text
     }
 
     /// "Overview: The team…" without "Overview:".
