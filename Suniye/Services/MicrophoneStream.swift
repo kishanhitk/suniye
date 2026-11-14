@@ -31,8 +31,8 @@ final class MicrophoneStream {
     }
 
     weak var delegate: MicrophoneStreamDelegate?
-    let inputDeviceID: AudioObjectID
-    let deviceRoute: AudioDeviceRoute
+    private(set) var inputDeviceID: AudioObjectID
+    private(set) var deviceRoute: AudioDeviceRoute
     private(set) var plan: AudioCapturePlan
     private(set) var hasReceivedFrame = false
 
@@ -40,6 +40,10 @@ final class MicrophoneStream {
     private let driverFactory: AudioCaptureDriverFactoryProtocol
     private let echoCancellationEnabled: Bool
     private let firstFrameDeadline: DispatchTimeInterval
+    /// When set, the standard engine opens the device this returns, not the
+    /// device of the first attempt: the meeting microphone resolves its choice
+    /// again, as a microphone may have gone away during the first attempt.
+    private let resolveFallbackDevice: (() throws -> CoreAudioRouteResolution)?
     private let ringDrain: AudioRingDrain
     private var driver: AudioCaptureDriver?
     private var watchesFirstFrame = true
@@ -50,13 +54,15 @@ final class MicrophoneStream {
         driverFactory: AudioCaptureDriverFactoryProtocol,
         resolution: CoreAudioRouteResolution,
         echoCancellationEnabled: Bool,
-        firstFrameDeadline: DispatchTimeInterval
+        firstFrameDeadline: DispatchTimeInterval,
+        resolveFallbackDevice: (() throws -> CoreAudioRouteResolution)? = nil
     ) throws {
         ringDrain = try AudioRingDrain(queue: queue)
         self.queue = queue
         self.driverFactory = driverFactory
         self.echoCancellationEnabled = echoCancellationEnabled
         self.firstFrameDeadline = firstFrameDeadline
+        self.resolveFallbackDevice = resolveFallbackDevice
         inputDeviceID = resolution.inputDeviceID
         deviceRoute = resolution.route
         plan = AudioCapturePolicy.primaryPlan(for: resolution.route, echoCancellationEnabled: echoCancellationEnabled)
@@ -127,6 +133,11 @@ final class MicrophoneStream {
         delegate?.microphoneStream(self, willFallBack: cause)
         stopDriver()
         ringDrain.reset()
+        if let resolveFallbackDevice {
+            let resolution = try resolveFallbackDevice()
+            inputDeviceID = resolution.inputDeviceID
+            deviceRoute = resolution.route
+        }
         let fallback = AudioCapturePolicy.fallbackPlan(
             for: deviceRoute,
             echoCancellationEnabled: echoCancellationEnabled,

@@ -113,7 +113,10 @@ final class MeetingMicCapture: MeetingAudioSource, @unchecked Sendable {
             driverFactory: driverFactory,
             resolution: resolution,
             echoCancellationEnabled: false,
-            firstFrameDeadline: firstFrameDeadline
+            firstFrameDeadline: firstFrameDeadline,
+            resolveFallbackDevice: { [hardwareCatalog, preferredInputDeviceID] in
+                try hardwareCatalog.resolveDeviceRoute(preferredInputDeviceID: preferredInputDeviceID)
+            }
         )
         stream.delegate = self
         self.stream = stream
