@@ -18,7 +18,6 @@ struct MeetingEnvironment {
     /// The Mac can record the sound of the other apps.
     var canRecordCallAudio: Bool
     var makeSources: @MainActor (_ preferredInputDeviceID: String?) -> [MeetingTrack: MeetingAudioSource]
-    var confirmNotice: @MainActor () async -> Bool
     var freeDiskBytes: () -> Int64?
     var callPlaysOnSpeakers: () -> Bool
     var makeMicrophoneUsers: @MainActor () -> MicrophoneUserReading

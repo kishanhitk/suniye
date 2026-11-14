@@ -162,11 +162,16 @@ enum AppMetrics {
     static let iconButtonSize: CGFloat = 24
 }
 
+enum SidebarRecordingDot {
+    case recording
+    case paused
+}
+
 struct SidebarNavigationRow: View {
     let section: MainWindowSection
     let isSelected: Bool
-    /// A red dot that shows a recording from any page.
-    var showsRecordingDot = false
+    /// A dot that shows a meeting recording from any page.
+    var recording: SidebarRecordingDot?
     let action: () -> Void
     @State private var isHovered = false
 
@@ -181,11 +186,11 @@ struct SidebarNavigationRow: View {
                     .font(isSelected ? AppTypography.sidebarLabelSelected : AppTypography.sidebarLabel)
                     .foregroundStyle(Color.primary)
                 Spacer(minLength: 0)
-                if showsRecordingDot {
+                if let recording {
                     Circle()
-                        .fill(Color.red)
+                        .fill(recording == .paused ? Color.secondary : Color.red)
                         .frame(width: 7, height: 7)
-                        .accessibilityLabel("Recording")
+                        .accessibilityLabel(recording == .paused ? "Recording paused" : "Recording")
                 }
             }
             .padding(.horizontal, AppMetrics.sidebarRowHorizontalPadding)

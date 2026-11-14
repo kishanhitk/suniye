@@ -55,7 +55,7 @@ struct MainWindowView: View {
                     SidebarNavigationRow(
                         section: section,
                         isSelected: selection == section,
-                        showsRecordingDot: section == .meetings && appState.meetings.live != nil
+                        recording: section == .meetings ? appState.meetings.live.map { $0.isPaused ? .paused : .recording } : nil
                     ) {
                         selection = section
                     }

@@ -288,13 +288,7 @@ final class MeetingCoordinator {
         updateCallDetection()
     }
 
-    /// Record Automatically shows the recording notice first, because no
-    /// later recording asks; Cancel keeps the earlier choice.
-    func chooseCallStartAction(_ action: MeetingCallStartAction) async {
-        if action == .recordAutomatically, settings.callStartAction != .recordAutomatically {
-            guard await environment.confirmNotice() else { return }
-            updateSettings { $0.noticeAccepted = true }
-        }
+    func chooseCallStartAction(_ action: MeetingCallStartAction) {
         updateSettings { $0.callStartAction = action }
     }
 
@@ -304,10 +298,6 @@ final class MeetingCoordinator {
         guard live == nil, !isStarting else { throw MeetingStartError.alreadyRecording }
         isStarting = true
         defer { isStarting = false }
-        if !settings.noticeAccepted {
-            guard await environment.confirmNotice() else { return }
-            updateSettings { $0.noticeAccepted = true }
-        }
         if let free = environment.freeDiskBytes(), free < Self.minimumFreeBytes {
             throw MeetingStartError.notEnoughSpace
         }

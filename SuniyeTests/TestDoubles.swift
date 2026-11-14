@@ -688,7 +688,6 @@ func makeTestMeetingCoordinator(engine: TranscriptionServiceProtocol, analytics:
         environment: MeetingEnvironment(
             canRecordCallAudio: false,
             makeSources: { _ in [:] },
-            confirmNotice: { false },
             freeDiskBytes: { nil },
             callPlaysOnSpeakers: { false },
             makeMicrophoneUsers: { FakeMicrophoneUsers() },

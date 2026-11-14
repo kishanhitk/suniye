@@ -77,7 +77,7 @@ private struct MeetingActionDialogs: ViewModifier {
     func body(content: Content) -> some View {
         content
             .confirmationDialog(
-                "Delete this meeting?",
+                actions.deleting.map { "Delete “\($0.title)”?" } ?? "",
                 isPresented: Binding(get: { actions.deleting != nil }, set: { if !$0 { actions.deleting = nil } }),
                 presenting: actions.deleting
             ) { record in
@@ -96,7 +96,7 @@ private struct MeetingActionDialogs: ViewModifier {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in
-                Text("This deletes the summary, notes and transcript. You can’t undo it.")
+                Text("This deletes the summary, notes, transcript and audio. You can’t undo it.")
             }
             .alert(
                 "Rename Meeting",
@@ -127,6 +127,10 @@ private struct MeetingActionDialogs: ViewModifier {
 
 /// The More menu of a meeting, and the context menu of its row.
 struct MeetingMenuItems: View {
+    /// What Copy Notice puts on the clipboard, for the user to tell the
+    /// other people in the call.
+    static let noticeSentence = "I’m recording this call to take notes. The recording stays on my computer."
+
     let record: MeetingRecord
     let meetings: MeetingCoordinator
     let actions: MeetingActions
@@ -141,13 +145,13 @@ struct MeetingMenuItems: View {
         if isLive {
             Button("Copy Notice") {
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(MeetingNoticeAlert.sentence, forType: .string)
+                NSPasteboard.general.setString(Self.noticeSentence, forType: .string)
             }
         } else {
             Button("Export as Markdown…") { actions.export(record, meetings: meetings) }
         }
         Button("Rename…") { actions.rename(record) }
-        Button("Reveal in Finder") { actions.revealInFinder(record, meetings: meetings) }
+        Button("Show in Finder") { actions.revealInFinder(record, meetings: meetings) }
         if !isLive {
             Divider()
             Button("Delete Meeting…") { actions.confirmDelete(record) }

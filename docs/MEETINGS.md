@@ -26,7 +26,7 @@ Suniye records a call or a meeting in the room, writes a transcript while it rec
 - Meetings page: **Record Meeting**.
 - A call (see [Calls](#calls)).
 
-The first recording shows **Before you record**, with a sentence to copy and send to the other people in the call: "I’m recording this call to take notes. The recording stays on my computer." Some places need the consent of every person in a call before you record it.
+Suniye does not tell the other people in a call that you record it. Some places need the consent of every person in a call: you are responsible for telling them. While a meeting records, **Copy Notice** in the ··· menu copies a sentence for the chat: "I’m recording this call to take notes. The recording stays on my computer."
 
 ## Calls
 
@@ -72,8 +72,18 @@ After a quit or a crash during a recording, the next launch finishes the transcr
 
 | Model | Needs |
 |---|---|
-| Apple Intelligence | macOS 26 with Apple Intelligence on |
 | The local model (Gemma) | The Magic Format local model download, Apple Silicon |
+| Apple Intelligence | macOS 26 with Apple Intelligence on |
+
+- Suniye uses the local model when it is installed, and Apple Intelligence only when it is not.
+- The summary can miss facts. The transcript has all the words.
+
+Measured limits, 14 Nov 2026: synthetic meetings of 45 and 120 minutes, two sets, each with 6 planted facts in talk that is mostly filler, General template.
+
+| Model | Facts in the summary, of 6 | Filler items | Filler items under Decisions |
+|---|---|---|---|
+| The local model | Set A: 4 to 5. Set B: 1 to 2. | 0 to 1 | 0 |
+| Apple Intelligence | 4 to 5 | 14 to 79 | 0 to 38 |
 
 - Templates: General, 1:1, Stand-up, Interview, and your own (**Settings → General → Meetings → Summary templates**).
 - A template's "## " headings are the sections of the summary. A section named Overview or Summary is a short paragraph; every other section is a list.

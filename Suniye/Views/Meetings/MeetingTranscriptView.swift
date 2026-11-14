@@ -15,10 +15,24 @@ struct MeetingNotesEditor: View {
     @Binding var draft: MeetingNotesDraft
     let save: (String) -> Void
 
+    /// TextEditor's text view starts its text this far in, so the notes
+    /// would sit right of the tabs above them.
+    private static let textInset = NSTextContainer().lineFragmentPadding
+
     var body: some View {
         TextEditor(text: $draft.text)
             .font(AppTypography.body)
+            .foregroundStyle(.primary)
             .scrollContentBackground(.hidden)
+            .padding(.horizontal, -Self.textInset)
+            .overlay(alignment: .topLeading) {
+                if draft.text.isEmpty {
+                    Text("Notes")
+                        .font(AppTypography.body)
+                        .foregroundStyle(MainWindowPalette.tertiaryText)
+                        .allowsHitTesting(false)
+                }
+            }
             .task(id: draft.text) {
                 try? await Task.sleep(for: .milliseconds(750))
                 guard !Task.isCancelled else { return }
@@ -88,6 +102,7 @@ private struct TranscriptTextView: NSViewRepresentable {
             textView.usesFindBar = true
             textView.isIncrementalSearchingEnabled = true
             textView.textContainerInset = NSSize(width: 0, height: 4)
+            textView.textContainer?.lineFragmentPadding = 0
         }
         context.coordinator.observe(scrollView)
         return scrollView

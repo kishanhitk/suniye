@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Edits the summary templates. Changes stay drafts until Save.
+/// Edits the summary templates. Changes stay drafts until Done.
 struct MeetingTemplateEditor: View {
     let templates: MeetingTemplateStore
     @Environment(\.dismiss) private var dismiss
@@ -22,21 +22,20 @@ struct MeetingTemplateEditor: View {
                 }
             }
             HStack {
-                if let index = selectedIndex, let defaultSections = drafts[index].defaultSections, drafts[index].sections != defaultSections {
-                    Button("Restore default") {
+                if let index = selectedIndex, let defaultSections = drafts[index].defaultSections {
+                    Button("Reset to Default") {
                         drafts[index].sections = defaultSections
                     }
+                    .disabled(drafts[index].sections == defaultSections)
                 }
                 Spacer()
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Save") { save() }
+                Button("Done") { save() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(drafts == saved)
+                    .controlSize(.large)
             }
         }
         .padding(20)
-        .frame(width: 620, height: 460)
+        .frame(width: 560, height: 460)
         .task {
             saved = await templates.templates()
             drafts = saved
@@ -54,59 +53,85 @@ struct MeetingTemplateEditor: View {
     }
 
     private var templateList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            List(selection: $selectedID) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
                 ForEach(drafts) { template in
-                    Text(template.name).tag(template.id)
+                    row(template)
                 }
-            }
-            .listStyle(.bordered)
-            HStack(spacing: 0) {
-                Button {
+                Button("New Template") {
                     let template = MeetingTemplate(id: UUID().uuidString, name: "New template", sections: MeetingTemplate.general.sections)
                     drafts.append(template)
                     selectedID = template.id
-                } label: {
-                    Image(systemName: "plus").frame(width: 20, height: 20)
                 }
-                .help("Add a template")
-                Button {
-                    drafts.removeAll { $0.id == selectedID }
-                    selectedID = drafts.first?.id
-                } label: {
-                    Image(systemName: "minus").frame(width: 20, height: 20)
-                }
-                .help("Delete the template")
-                .disabled(selectedIndex.map { drafts[$0].isBuiltIn } ?? true)
-                Spacer()
+                .padding(.top, 8)
             }
-            .buttonStyle(.borderless)
-            .padding(.top, 4)
         }
-        .frame(width: 170)
+        .frame(width: 150, alignment: .topLeading)
+    }
+
+    private func row(_ template: MeetingTemplate) -> some View {
+        let isSelected = template.id == selectedID
+        return Text(template.name)
+            .lineLimit(1)
+            .padding(.vertical, 5)
+            .padding(.horizontal, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isSelected ? Color.accentColor : Color.clear)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture { selectedID = template.id }
+            .contextMenu {
+                if !template.isBuiltIn {
+                    Button("Delete Template") {
+                        drafts.removeAll { $0.id == template.id }
+                        if selectedID == template.id {
+                            selectedID = drafts.first?.id
+                        }
+                    }
+                }
+            }
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     private func editor(for index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Name")
-                .font(AppTypography.bodyMedium)
-            TextField("Name", text: $drafts[index].name)
-                .disabled(drafts[index].isBuiltIn)
-            Text("Instructions")
-                .font(AppTypography.bodyMedium)
-                .padding(.top, 4)
-            TextEditor(text: $drafts[index].sections)
-                .font(AppTypography.body)
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(MainWindowPalette.editorBackground)
-                )
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Name")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                TextField("Name", text: $drafts[index].name)
+                    .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Instructions for the summary")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(MainWindowPalette.secondaryText)
+                TextEditor(text: $drafts[index].sections)
+                    .font(.system(size: 12, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .padding(6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color(nsColor: .textBackgroundColor))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color(nsColor: .separatorColor))
+                    )
+            }
         }
     }
 
+    /// Done keeps the drafts; with no change it only closes.
     private func save() {
+        guard drafts != saved else {
+            dismiss()
+            return
+        }
         Task {
             do {
                 try await templates.replace(with: drafts)

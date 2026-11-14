@@ -19,8 +19,9 @@ private func input(_ segments: [MeetingSegment], notes: String = "", labels: Boo
 private let freeTemplate = MeetingTemplate(id: "free", name: "Free", sections: "Write a short summary of the meeting.")
 
 final class MeetingSummaryWriterTests: XCTestCase {
-    func testAppleIntelligenceComesFirstThenTheInstalledLocalModel() {
-        XCTAssertEqual(MeetingSummaryAvailability(apple: .available, localModel: .available), .ready(.appleIntelligence))
+    func testTheInstalledLocalModelComesFirstThenAppleIntelligence() {
+        XCTAssertEqual(MeetingSummaryAvailability(apple: .available, localModel: .available), .ready(.localModel))
+        XCTAssertEqual(MeetingSummaryAvailability(apple: .available, localModel: .modelNotInstalled), .ready(.appleIntelligence))
         XCTAssertEqual(MeetingSummaryAvailability(apple: .appleIntelligenceNotEnabled, localModel: .available), .ready(.localModel))
         XCTAssertEqual(MeetingSummaryAvailability(apple: .deviceNotEligible, localModel: .modelNotInstalled), .needsDownload)
         XCTAssertEqual(MeetingSummaryAvailability(apple: .deviceNotEligible, localModel: .unsupportedHardware), .unavailable)

@@ -7,6 +7,7 @@ struct MeetingSettingsGroup: View {
     @State private var editingTemplates = false
     @State private var editingNeverAsk = false
     @State private var diskBytes: Int64?
+    @State private var templates: [MeetingTemplate] = []
 
     var body: some View {
         SettingsGroup(heading: "Meetings") {
@@ -18,7 +19,7 @@ struct MeetingSettingsGroup: View {
                     "When a call starts",
                     selection: Binding(
                         get: { meetings.settings.callStartAction },
-                        set: { action in Task { await meetings.chooseCallStartAction(action) } }
+                        set: { meetings.chooseCallStartAction($0) }
                     )
                 ) {
                     Text("Ask").tag(MeetingCallStartAction.ask)
@@ -36,24 +37,45 @@ struct MeetingSettingsGroup: View {
             }
 
             RowSeparator()
+            ControlSettingRow(title: "Default template") {
+                Picker(
+                    "Default template",
+                    selection: Binding(
+                        get: { meetings.settings.templateID },
+                        set: { id in meetings.updateSettings { $0.templateID = id } }
+                    )
+                ) {
+                    ForEach(templates) { template in
+                        Text(template.name).tag(template.id)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+
+            RowSeparator()
             DisclosureSettingRow(title: "Summary templates", value: "") {
                 editingTemplates = true
             }
 
             RowSeparator()
-            ValueSettingRow(
-                title: "On disk",
-                value: diskBytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? ""
-            )
-
-            RowSeparator()
-            DisclosureSettingRow(title: "Reveal in Finder", value: "") {
-                try? FileManager.default.createDirectory(at: meetings.store.rootDirectory, withIntermediateDirectories: true)
-                NSWorkspace.shared.activateFileViewerSelecting([meetings.store.rootDirectory])
+            ControlSettingRow(title: "Meeting files", info: "Audio is deleted when the transcript is ready.") {
+                HStack(spacing: 10) {
+                    Text(diskBytes.map(Self.size) ?? "")
+                        .foregroundStyle(MainWindowPalette.secondaryText)
+                    Button("Show in Finder") {
+                        try? FileManager.default.createDirectory(at: meetings.store.rootDirectory, withIntermediateDirectories: true)
+                        NSWorkspace.shared.activateFileViewerSelecting([meetings.store.rootDirectory])
+                    }
+                }
             }
         }
         .sheet(isPresented: $editingTemplates) {
             MeetingTemplateEditor(templates: meetings.templates)
+        }
+        .task(id: editingTemplates) {
+            templates = await meetings.templates.templates()
         }
         .sheet(isPresented: $editingNeverAsk) {
             NeverAskSheet(meetings: meetings)
@@ -61,6 +83,14 @@ struct MeetingSettingsGroup: View {
         .task(id: meetings.meetings.count) {
             diskBytes = await meetings.store.diskUsage()
         }
+    }
+
+    /// "0 bytes", not ByteCountFormatter's "Zero KB".
+    private static func size(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        formatter.allowsNonnumericFormatting = false
+        return formatter.string(fromByteCount: bytes)
     }
 
     private var neverAskValue: String {
