@@ -470,6 +470,9 @@ final class MeetingCoordinator {
         case .user, .callEnded, .sleep, .quit:
             break
         }
+        if let callEnd = record(session.id)?.transcriptEnd {
+            await store.cutAudio(of: session.id, afterSample: callEnd)
+        }
         await queuePass(session.id, kind: .first)?.value
     }
 
@@ -682,13 +685,15 @@ final class MeetingCoordinator {
         }
     }
 
+    /// The cached list text goes after the write, so no read that ran
+    /// during it keeps the old notes.
     func saveNotes(_ notes: String, for id: UUID) async {
-        dropListText(id)
         do {
             try await store.saveNotes(notes, for: id)
         } catch {
             AppLogger.shared.log(.error, "meeting notes not saved id=\(id.uuidString) error=\(error.localizedDescription)")
         }
+        dropListText(id)
     }
 
     func regenerate(_ id: UUID, templateID: String? = nil) async {
@@ -857,6 +862,12 @@ final class MeetingCoordinator {
     /// nothing keeps the transcript. The notes, the summary and the meeting's
     /// state stay.
     private func writeTranscriptAgain(_ id: UUID, model chosenModel: ASRModelID?) async {
+        // A track whose audio is gone would lose its lines in the new transcript.
+        guard await Set(store.segments(of: id).map(\.track)).isSubset(of: store.audioTracks(of: id)) else {
+            AppLogger.shared.log(.error, "meeting transcript not written again id=\(id.uuidString) error=the audio of a track is gone")
+            onNotice?(.notTranscribedAgain(id))
+            return
+        }
         await store.deleteDraft(of: id)
         do {
             let transcript = try await runPass(id, model: chosenModel, lines: .draft)

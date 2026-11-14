@@ -113,6 +113,18 @@ final class MeetingAudioFileWriter {
         return data
     }
 
+    /// Cuts the file after `count` samples; a shorter file stays as it is.
+    static func truncate(at url: URL, toSamples count: Int) throws {
+        let handle = try FileHandle(forUpdating: url)
+        defer { try? handle.close() }
+        let length = Int(try handle.seekToEnd())
+        let kept = MeetingAudioFormat.headerSize + count * MeetingAudioFormat.bytesPerSample
+        guard length > kept else { return }
+        try handle.truncate(atOffset: UInt64(kept))
+        try handle.seek(toOffset: 0)
+        try handle.write(contentsOf: header(dataBytes: count * MeetingAudioFormat.bytesPerSample))
+    }
+
     /// Rewrites the size fields from the real file length. Run on a file that
     /// a crash left behind before it is read.
     static func repairHeader(at url: URL) throws {
