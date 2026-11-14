@@ -173,6 +173,10 @@ final class MeetingCoordinator {
     private(set) var transcriptPasses: [UUID: MeetingTranscriptPass] = [:]
     /// The meetings whose audio is on the Mac.
     private(set) var audioOnMac: Set<UUID> = []
+    /// Goes up each time a meeting, its notes or its transcript change, so a
+    /// list-text read that began before does not cache, and the list reads
+    /// its text again.
+    private(set) var listTextRevision = 0
     /// The meeting that the Meetings section shows; nil shows the list.
     var openMeetingID: UUID?
     /// The meeting whose page is on screen, so a notice does not repeat it.
@@ -217,9 +221,6 @@ final class MeetingCoordinator {
     }
     @ObservationIgnored private var loadedModel: ASRModelID?
     @ObservationIgnored private var listTexts: [UUID: MeetingListText] = [:]
-    /// Counts `dropListText` calls, so a read that began before a drop does
-    /// not cache its text again.
-    @ObservationIgnored private var listTextDrops = 0
     @ObservationIgnored private var liveCheck: Task<Void, Never>?
     @ObservationIgnored private var changedInputReset: Task<Void, Never>?
 
@@ -284,13 +285,13 @@ final class MeetingCoordinator {
         if let cached = listTexts[id] {
             return cached
         }
-        let drops = listTextDrops
+        let revision = listTextRevision
         let text = MeetingListText(
             summary: await store.summary(of: id),
             notes: await store.notes(of: id) ?? "",
             transcript: await transcript(of: id).map(\.text)
         )
-        if drops == listTextDrops {
+        if revision == listTextRevision {
             listTexts[id] = text
         }
         return text
@@ -298,7 +299,7 @@ final class MeetingCoordinator {
 
     private func dropListText(_ id: UUID) {
         listTexts[id] = nil
-        listTextDrops += 1
+        listTextRevision += 1
     }
 
     /// The transcript as a reader sees it, also while the app still finishes

@@ -818,11 +818,13 @@ final class MeetingCoordinatorTests: XCTestCase {
         coordinator.speechModelChanged(.parakeetV3)
         coordinator.updateSettings { $0.audioRetention = .sevenDays }
         await coordinator.start()
+        let listedBefore = await coordinator.listText(for: meeting.id)
 
         coordinator.transcribeAgain(meeting.id)
         let asked = coordinator.transcriptPasses[meeting.id]?.kind == .again
         let finished = await waitUntil { coordinator.transcriptPasses[meeting.id] == nil }
         let transcript = await coordinator.transcript(of: meeting.id)
+        let listedAfter = await coordinator.listText(for: meeting.id)
         let notes = await coordinator.notes(of: meeting.id)
         let summary = await coordinator.summary(of: meeting.id)
         let summaryRequests = await summaryModel.kinds
@@ -830,6 +832,8 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(asked)
         XCTAssertTrue(finished)
         XCTAssertEqual(transcript.map(\.text), [longSentence])
+        XCTAssertEqual(listedBefore.transcript, ["Old words."])
+        XCTAssertEqual(listedAfter.transcript, [longSentence], "the list and its search show the new transcript")
         XCTAssertEqual(notes, "Ask legal.")
         XCTAssertEqual(summary, "## Overview\nShip Friday.")
         XCTAssertEqual(summaryRequests, [], "Regenerate writes the summary again, not Transcribe Again")
