@@ -22,11 +22,11 @@ struct MeetingTemplateEditor: View {
                 }
             }
             HStack {
-                if let index = selectedIndex, let defaultSections = drafts[index].defaultSections {
+                if let index = selectedIndex, let shipped = drafts[index].shipped {
                     Button("Reset to Default") {
-                        drafts[index].sections = defaultSections
+                        drafts[index] = shipped
                     }
-                    .disabled(drafts[index].sections == defaultSections)
+                    .disabled(drafts[index] == shipped)
                 }
                 Spacer()
                 Button("Done") { save() }
@@ -107,7 +107,6 @@ struct MeetingTemplateEditor: View {
                 TextField("Name", text: $drafts[index].name)
                     .textFieldStyle(.roundedBorder)
                     .labelsHidden()
-                    .disabled(drafts[index].isBuiltIn)
             }
             VStack(alignment: .leading, spacing: 5) {
                 Text("Instructions for the summary")
