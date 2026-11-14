@@ -157,29 +157,16 @@ private struct MeetingTranscriptModelRow: View {
 
     var body: some View {
         ControlSettingRow(title: "Transcript model", info: "Writes the transcript after the recording stops. Dictation keeps its own model.") {
-            HStack(spacing: 10) {
-                if let downloading = appState.meetingTranscriptModelDownload {
-                    download(downloading)
-                } else if let selection, !isOnMac(selection) {
-                    Button("Download") { appState.useForMeetingTranscripts(selection) }
-                        .disabled(!appState.asrModelCanPerformPrimaryAction(for: selection))
-                }
-                Picker(
-                    "Transcript model",
-                    selection: Binding(get: { selection }, set: { appState.useForMeetingTranscripts($0) })
-                ) {
-                    Text("Same as dictation").tag(ASRModelID?.none)
-                    Divider()
-                    ForEach(appState.asrModelCatalog) { entry in
-                        Text(label(entry))
-                            .tag(ASRModelID?.some(entry.id))
-                            .disabled(!isOnMac(entry.id) && !appState.asrModelCanPerformPrimaryAction(for: entry.id))
+            if let downloading = appState.meetingTranscriptModelDownload {
+                download(downloading)
+            } else {
+                HStack(spacing: 10) {
+                    if let selection, !isOnMac(selection) {
+                        Button("Download") { appState.useForMeetingTranscripts(selection) }
+                            .disabled(!appState.asrModelCanPerformPrimaryAction(for: selection))
                     }
+                    picker
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .fixedSize()
-                .disabled(appState.meetingTranscriptModelDownload != nil)
             }
         }
         .task(id: appState.meetingTranscriptModelDownload) {
@@ -189,12 +176,32 @@ private struct MeetingTranscriptModelRow: View {
         }
     }
 
+    /// A fixed width: a pop-up sizes itself to its widest item, and the
+    /// items of models that are not on the Mac carry their download size.
+    private var picker: some View {
+        Picker(
+            "Transcript model",
+            selection: Binding(get: { selection }, set: { appState.useForMeetingTranscripts($0) })
+        ) {
+            Text("Same as dictation").tag(ASRModelID?.none)
+            Divider()
+            ForEach(appState.asrModelCatalog) { entry in
+                Text(label(entry))
+                    .tag(ASRModelID?.some(entry.id))
+                    .disabled(!isOnMac(entry.id) && !appState.asrModelCanPerformPrimaryAction(for: entry.id))
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(width: 210)
+    }
+
     private func download(_ model: ASRModelID) -> some View {
         HStack(spacing: 8) {
             ProgressView(value: appState.downloadProgress)
                 .progressViewStyle(.linear)
-                .frame(width: 100)
-            Text("\(Int(appState.downloadProgress * 100))%")
+                .frame(width: 80)
+            Text("\(ASRModelCatalog.entry(for: model).displayName) · \(Int(appState.downloadProgress * 100))%")
                 .font(AppTypography.caption)
                 .foregroundStyle(MainWindowPalette.secondaryText)
                 .monospacedDigit()
@@ -202,8 +209,6 @@ private struct MeetingTranscriptModelRow: View {
                 Button("Cancel") { appState.cancelASRModelDownload() }
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Downloading \(ASRModelCatalog.entry(for: model).displayName)")
     }
 
     private func isOnMac(_ model: ASRModelID) -> Bool {
