@@ -879,8 +879,11 @@ final class MeetingCoordinator {
                now < (record.endedAt ?? record.startedAt).addingTimeInterval(TimeInterval(days) * 24 * 60 * 60) {
                 continue
             }
-            await store.deleteAudio(of: record.id)
+            // Off the list before the await, so no pass starts on audio that goes.
             audioOnMac.remove(record.id)
+            if await !store.deleteAudio(of: record.id) {
+                audioOnMac.insert(record.id)
+            }
         }
     }
 

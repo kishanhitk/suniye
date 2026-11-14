@@ -859,6 +859,19 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertTrue(coordinator.audioOnMac.contains(meeting.id), "the audio stays for another try")
     }
 
+    func testAudioThatCannotBeDeletedStaysOnTheList() async throws {
+        let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 0)
+        let folder = store.folder(for: meeting.id).path
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder) }
+        let coordinator = makeCoordinator()
+
+        await coordinator.start()
+
+        XCTAssertEqual(store.audioTracks(of: meeting.id), [.you])
+        XCTAssertTrue(coordinator.audioOnMac.contains(meeting.id), "the next check tries again")
+    }
+
     func testWithoutAudioOnTheMacTranscribeAgainDoesNothing() async throws {
         let meeting = try await finishedMeeting(status: .done, endedDaysAgo: 1)
         let coordinator = makeCoordinator()

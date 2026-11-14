@@ -218,10 +218,17 @@ actor MeetingStore {
         MeetingTrack.allCases.filter { FileManager.default.fileExists(atPath: audioURL($0, for: id).path) }
     }
 
-    func deleteAudio(of id: UUID) {
-        for track in MeetingTrack.allCases {
-            try? fileManager.removeItem(at: audioURL(track, for: id))
+    /// True when no audio of the meeting is left.
+    @discardableResult
+    func deleteAudio(of id: UUID) -> Bool {
+        for track in audioTracks(of: id) {
+            do {
+                try fileManager.removeItem(at: audioURL(track, for: id))
+            } catch {
+                AppLogger.shared.log(.error, "meeting audio not deleted id=\(id.uuidString) track=\(track.rawValue) error=\(error.localizedDescription)")
+            }
         }
+        return audioTracks(of: id).isEmpty
     }
 
     func delete(_ id: UUID) throws {
