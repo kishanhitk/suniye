@@ -682,13 +682,15 @@ final class MeetingCoordinator {
         }
     }
 
+    /// The cached list text goes after the write, so no read that ran
+    /// during it keeps the old notes.
     func saveNotes(_ notes: String, for id: UUID) async {
-        dropListText(id)
         do {
             try await store.saveNotes(notes, for: id)
         } catch {
             AppLogger.shared.log(.error, "meeting notes not saved id=\(id.uuidString) error=\(error.localizedDescription)")
         }
+        dropListText(id)
     }
 
     func regenerate(_ id: UUID, templateID: String? = nil) async {
