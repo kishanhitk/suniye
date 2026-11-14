@@ -96,13 +96,15 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
         let notAProgram = tempDir.appendingPathComponent("not-a-program")
         try Data("not a program".utf8).write(to: notAProgram)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: notAProgram.path)
-        let cases: [(URL, LLMPostProcessorError)] = [
-            (notAProgram, .provider("server_start_failed")),
-            (try makeExecutableScript(in: tempDir, named: "exiting-helper", body: "exit 7"), .provider("server_exited_7")),
-            (try makeExecutableScript(in: tempDir, named: "silent-helper", body: "while :; do sleep 0.1; done"), .timeout),
+        // A helper that fails or exits ends the start at once, so its window
+        // only needs to be long enough for a slow process start.
+        let cases: [(URL, Double, LLMPostProcessorError)] = [
+            (notAProgram, 10, .provider("server_start_failed")),
+            (try makeExecutableScript(in: tempDir, named: "exiting-helper", body: "exit 7"), 10, .provider("server_exited_7")),
+            (try makeExecutableScript(in: tempDir, named: "silent-helper", body: "while :; do sleep 0.1; done"), 0.8, .timeout),
         ]
 
-        for (helperURL, expected) in cases {
+        for (helperURL, startupTimeoutSeconds, expected) in cases {
             overrideHelperPath(helperURL)
             let server = LlamaServer()
             let client = makeClient(rootDirectory: tempDir, server: server)
@@ -113,7 +115,7 @@ final class LocalGemmaLlamaCppClientMoreTests: XCTestCase {
                     prompt: "Connection test.",
                     maxTokens: 8,
                     sampling: .greedy,
-                    startupTimeoutSeconds: 0.8,
+                    startupTimeoutSeconds: startupTimeoutSeconds,
                     idleTimeoutSeconds: 600,
                     timeoutSeconds: 5
                 )
