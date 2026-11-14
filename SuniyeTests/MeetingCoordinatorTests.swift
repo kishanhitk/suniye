@@ -739,6 +739,21 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.record(left.id)?.status, .interrupted)
     }
 
+    func testTheListTextShowsNotesSavedAfterItWasRead() async throws {
+        let meeting = MeetingRecord(title: "Design sync", startedAt: clock, tracks: [.you], status: .done, templateID: "general")
+        try await store.create(meeting)
+        try await store.saveNotes("Ship Friday", for: meeting.id)
+        let coordinator = makeCoordinator()
+        await coordinator.start()
+
+        let before = await coordinator.listText(for: meeting.id)
+        await coordinator.saveNotes("Ship Monday", for: meeting.id)
+        let after = await coordinator.listText(for: meeting.id)
+
+        XCTAssertEqual(before.notes, "Ship Friday")
+        XCTAssertEqual(after.notes, "Ship Monday")
+    }
+
     func testATrackThatStartsAgainNoLongerShowsAsFailed() async throws {
         let coordinator = makeCoordinator()
         them.failsToStart = true
