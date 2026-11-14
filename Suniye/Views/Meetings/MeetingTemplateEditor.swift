@@ -71,29 +71,31 @@ struct MeetingTemplateEditor: View {
 
     private func row(_ template: MeetingTemplate) -> some View {
         let isSelected = template.id == selectedID
-        return Text(template.name)
-            .lineLimit(1)
-            .padding(.vertical, 5)
-            .padding(.horizontal, 9)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isSelected ? Color.accentColor : Color.clear)
-            )
-            .contentShape(Rectangle())
-            .onTapGesture { selectedID = template.id }
-            .contextMenu {
-                if !template.isBuiltIn {
-                    Button("Delete Template") {
-                        drafts.removeAll { $0.id == template.id }
-                        if selectedID == template.id {
-                            selectedID = drafts.first?.id
-                        }
+        return Button { selectedID = template.id } label: {
+            Text(template.name)
+                .lineLimit(1)
+                .padding(.vertical, 5)
+                .padding(.horizontal, 9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isSelected ? Color.accentColor : Color.clear)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            if !template.isBuiltIn {
+                Button("Delete Template") {
+                    drafts.removeAll { $0.id == template.id }
+                    if selectedID == template.id {
+                        selectedID = drafts.first?.id
                     }
                 }
             }
-            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func editor(for index: Int) -> some View {
