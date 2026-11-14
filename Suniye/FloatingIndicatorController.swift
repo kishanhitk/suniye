@@ -133,12 +133,12 @@ final class FloatingIndicatorController {
 
     func update(_ state: FloatingIndicatorState) {
         baseState = state
-        if state.tracksPointerScreen {
+        if state.isAtRest {
             anchoredScreenID = currentMouseScreen()?.displayID
         } else if anchoredScreenID == nil {
             anchoredScreenID = currentMouseScreen()?.displayID
         }
-        if !state.tracksPointerScreen {
+        if !state.isAtRest {
             hoverExitTask?.cancel()
             hoverExitTask = nil
             isHovered = false
@@ -165,14 +165,7 @@ final class FloatingIndicatorController {
     }
 
     private var panelShouldCaptureMouseEvents: Bool {
-        switch effectiveState {
-        case .idle, .hover:
-            return true
-        case .listening(_, let source, _):
-            return source == .manual
-        case .processing, .error:
-            return false
-        }
+        effectiveState.isAtRest || effectiveState.acceptsClicks
     }
 
     private func ensurePanel() {
@@ -225,7 +218,7 @@ final class FloatingIndicatorController {
     }
 
     private func setHovered(_ hovered: Bool) {
-        guard baseState.tracksPointerScreen else { return }
+        guard baseState.isAtRest else { return }
         guard shouldShowPanel else { return }
         if hovered {
             hoverExitTask?.cancel()
@@ -299,7 +292,7 @@ final class FloatingIndicatorController {
 
     private func tickPointerTracking() {
         guard !isDragging else { return }
-        guard effectiveState.tracksPointerScreen else { return }
+        guard effectiveState.isAtRest else { return }
         guard let screen = currentMouseScreen() else { return }
 
         if anchoredScreenID != screen.displayID {
@@ -392,7 +385,7 @@ final class FloatingIndicatorController {
     }
 
     private func handleDragChanged() {
-        guard canDragCurrentState else { return }
+        guard effectiveState.isAtRest else { return }
         guard let panel else { return }
         let screen = resolvedScreen() ?? currentMouseScreen() ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
@@ -428,7 +421,7 @@ final class FloatingIndicatorController {
             render()
         }
 
-        guard canDragCurrentState else { return }
+        guard effectiveState.isAtRest else { return }
         guard let panel else { return }
         let screen = resolvedScreen() ?? currentMouseScreen() ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
@@ -436,15 +429,6 @@ final class FloatingIndicatorController {
         let placement = FloatingIndicatorLayout.placement(for: panel.frame, in: screen.visibleFrame)
         customPlacement = placement
         onPlacementChanged?(placement)
-    }
-
-    private var canDragCurrentState: Bool {
-        switch effectiveState {
-        case .idle, .hover:
-            return true
-        case .listening, .processing, .error:
-            return false
-        }
     }
 
     private func resolvedScreen() -> NSScreen? {

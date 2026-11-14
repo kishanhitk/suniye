@@ -148,12 +148,34 @@ enum FloatingIndicatorState: Equatable {
         }
     }
 
-    var tracksPointerScreen: Bool {
+    /// No dictation runs: the pill follows the pointer's screen, can be
+    /// dragged, and takes the mouse so that hover can show.
+    var isAtRest: Bool {
         switch self {
         case .idle, .hover:
             return true
         case .listening, .processing, .error:
             return false
         }
+    }
+
+    /// A click starts a dictation (hover) or finishes one the pill started.
+    var acceptsClicks: Bool {
+        switch self {
+        case .hover:
+            return true
+        case let .listening(_, source, _):
+            return source == .manual
+        case .idle, .processing, .error:
+            return false
+        }
+    }
+
+    func showsMeetingPill(hasMeeting: Bool) -> Bool {
+        hasMeeting && isAtRest
+    }
+
+    func showsHoverHint(hasMeeting: Bool) -> Bool {
+        self == .hover && !hasMeeting
     }
 }

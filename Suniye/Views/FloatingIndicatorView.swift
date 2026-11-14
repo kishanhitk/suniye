@@ -33,13 +33,7 @@ struct FloatingIndicatorView: View {
 
     /// A meeting records and no dictation runs, so the pill is the meeting's.
     private var showsMeetingPill: Bool {
-        guard model.meeting != nil else { return false }
-        switch state {
-        case .idle, .hover:
-            return true
-        case .listening, .processing, .error:
-            return false
-        }
+        state.showsMeetingPill(hasMeeting: model.meeting != nil)
     }
 
     var body: some View {
@@ -184,11 +178,11 @@ struct FloatingIndicatorView: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 4)
                 .onChanged { _ in
-                    guard isDraggable else { return }
+                    guard state.isAtRest else { return }
                     onDragChanged()
                 }
                 .onEnded { _ in
-                    guard isDraggable else { return }
+                    guard state.isAtRest else { return }
                     onDragEnded()
                 }
         )
@@ -259,33 +253,11 @@ struct FloatingIndicatorView: View {
     }
 
     private var helperText: String? {
-        if case .hover = state, model.meeting == nil {
-            return "Click or hold fn to start dictating"
-        }
-        return nil
+        state.showsHoverHint(hasMeeting: model.meeting != nil) ? "Click or hold fn to start dictating" : nil
     }
 
     private var isInteractive: Bool {
-        if showsMeetingPill {
-            return true
-        }
-        switch state {
-        case .hover:
-            return true
-        case let .listening(_, source, _):
-            return source == .manual
-        default:
-            return false
-        }
-    }
-
-    private var isDraggable: Bool {
-        switch state {
-        case .idle, .hover:
-            return true
-        case .listening, .processing, .error:
-            return false
-        }
+        showsMeetingPill || state.acceptsClicks
     }
 
     private var capsuleFill: Color {
