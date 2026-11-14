@@ -366,7 +366,7 @@ final class MeetingRecorderTests: XCTestCase {
         XCTAssertEqual(mic.count, 400, "paused audio and paused time are not written")
         XCTAssertEqual(mic[200], 0.7, accuracy: 0.001)
         XCTAssertEqual(mic[300], 0.2, accuracy: 0.001)
-        XCTAssertEqual(outputs.samples.map(\.positionOrPause), [0, 160, nil, 240], "the pause follows the tail")
+        XCTAssertEqual(outputs.samples.map(\.position), [0, 160, 240], "the tail, then the audio after the resume")
         XCTAssertEqual(you.startCount, 2)
         XCTAssertFalse(FileManager.default.fileExists(atPath: url(.them).path))
     }
@@ -433,7 +433,7 @@ final class MeetingRecorderTests: XCTestCase {
         let recorder = makeRecorder(you: you, them: them)
         let positions = Collected<Int>()
         recorder.onOutput = { output in
-            if case let .samples(.you, _, position) = output { positions.append([position]) }
+            if output.track == .you { positions.append([output.position]) }
         }
         try recorder.start()
 
@@ -541,13 +541,6 @@ final class MeetingRecorderTests: XCTestCase {
 }
 
 // MARK: - Fakes
-
-private extension MeetingRecorderOutput {
-    var positionOrPause: Int? {
-        if case let .samples(_, _, position) = self { return position }
-        return nil
-    }
-}
 
 private final class Collected<Element>: @unchecked Sendable {
     private let lock = NSLock()

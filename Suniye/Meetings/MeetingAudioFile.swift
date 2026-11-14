@@ -15,6 +15,8 @@ enum MeetingAudioFormat {
 
     /// RMS below this (about -60 dBFS) is silence.
     static let silenceLevel: Float = 0.001
+    /// 100 ms.
+    static let soundWindowSamples = sampleRate / 10
 
     static func rms<Samples: Collection>(_ samples: Samples) -> Float where Samples.Element == Float {
         guard !samples.isEmpty else { return 0 }
@@ -23,6 +25,13 @@ enum MeetingAudioFormat {
             sum += sample * sample
         }
         return (sum / Float(samples.count)).squareRoot()
+    }
+
+    /// True when a 100 ms window of `samples` reaches `silenceLevel`.
+    static func hasSound(_ samples: ArraySlice<Float>) -> Bool {
+        stride(from: samples.startIndex, to: samples.endIndex, by: soundWindowSamples).contains { start in
+            rms(samples[start ..< min(start + soundWindowSamples, samples.endIndex)]) >= silenceLevel
+        }
     }
 }
 

@@ -67,6 +67,7 @@ final class MeetingCoordinatorTests: XCTestCase {
             uptime: { [unowned self] in uptime },
             liveCheckInterval: .milliseconds(20),
             speechlessLimit: speechlessLimit,
+            makeSpeechDetector: { LoudSpeechDetector() },
             callCardDurations: cardDurations
         )
         let coordinator = MeetingCoordinator(
@@ -130,7 +131,7 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(you.startCount, 0)
     }
 
-    func testADictationSilencesTheMicrophoneTrackAndHoldsDecoding() async throws {
+    func testADictationSilencesTheMicrophoneTrackAndTheTranscriptWaitsForIt() async throws {
         let coordinator = makeCoordinator()
         coordinator.speechModelChanged(.parakeetV3)
         try await coordinator.startMeeting(source: .manual)
@@ -139,16 +140,20 @@ final class MeetingCoordinatorTests: XCTestCase {
         coordinator.dictationChanged(active: true)
         you.push(tone(2.5, level: 0.3) + silence(0.5))
         them.push(tone(2.5, level: 0.5) + silence(0.5))
-        try await Task.sleep(for: .milliseconds(200))
-        let decodesDuringDictation = await engine.calls
         coordinator.dictationCaptureEnded()
         you.push(tone(2.5, level: 0.3) + silence(0.5))
+        let stopping = Task { await coordinator.stop() }
+        let progressShown = await waitUntil { coordinator.transcriptProgress[id] != nil }
+        try await Task.sleep(for: .milliseconds(200))
+        let decodesDuringDictation = await engine.calls
         coordinator.dictationChanged(active: false)
-        await coordinator.stop()
+        await stopping.value
         let segments = await store.segments(of: id)
 
+        XCTAssertTrue(progressShown, "the page shows the progress while the transcript waits")
         XCTAssertEqual(decodesDuringDictation, 0)
         XCTAssertEqual(segments.map(\.track), [.them, .you], "the dictated words are not meeting talk; talk after the capture ends is")
+        XCTAssertNil(coordinator.transcriptProgress[id])
     }
 
     func testPausesAreKeptInTheRecordAndLeftOutOfTheTimer() async throws {
@@ -305,28 +310,26 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(event("meeting_ended")?["duration_ms"], .int(240 * 60_000))
     }
 
-    func testARecordingStopsWhenNobodySpeaksForTheLimit() async throws {
-        let coordinator = makeCoordinator(speechlessLimit: 6)
+    func testARecordingStopsWhenNobodySpeaksForTheLimitOnEveryTrack() async throws {
+        let coordinator = makeCoordinator(speechlessLimit: 20)
         coordinator.speechModelChanged(.parakeetV3)
         var notices: [MeetingNotice] = []
         coordinator.onNotice = { notices.append($0) }
         try await coordinator.startMeeting(source: .manual)
         let session = try XCTUnwrap(coordinator.live)
 
-        // Words end at 2.8 s; both tracks are transcribed to 6 s.
-        you.push(tone(2.5, level: 0.3) + silence(4.5))
-        them.push(silence(7))
-        let decoded = await waitUntil { session.decodedThrough.count == 2 && session.decodedThrough.values.allSatisfy { $0 >= 6 * rate } }
-        let recordingAfterThreeQuietSeconds = coordinator.live != nil
-        you.push(silence(4))
-        them.push(silence(4))
+        // Speech ends at 10 s. The microphone track is checked to 40 s, the
+        // call track to 20 s only.
+        you.push(tone(10, level: 0.3) + silence(30))
+        them.push(silence(20))
+        try await Task.sleep(for: .milliseconds(300))
+        let recordingWhileTheCallTrackIsBehind = coordinator.live != nil
+        them.push(silence(20))
         let stopped = await waitUntil { coordinator.live == nil }
 
-        XCTAssertTrue(decoded)
-        XCTAssertTrue(recordingAfterThreeQuietSeconds)
+        XCTAssertTrue(recordingWhileTheCallTrackIsBehind)
         XCTAssertTrue(stopped)
-        XCTAssertEqual(notices.first, .stoppedWithoutSpeech(session.id, after: 6))
-        XCTAssertEqual(session.segments.map(\.text), [longSentence])
+        XCTAssertEqual(notices.first, .stoppedWithoutSpeech(session.id, after: 20))
     }
 
     func testAskOffersACallAndRecordStartsAMeetingForIt() async throws {
@@ -430,13 +433,13 @@ final class MeetingCoordinatorTests: XCTestCase {
         hold([], after: 4.5)
         let card = coordinator.callCard
         you.push(silence(0.3) + tone(2.5, level: 0.5) + silence(0.5))
-        let heardAfterTheCall = await waitUntil { coordinator.live?.segments.count == 2 }
         clock += 5
         await coordinator.stopEndedCall()
         let segments = await store.segments(of: id)
+        let decoded = await engine.calls
 
         XCTAssertEqual(card, .callEnded(zoom, silent: false, endedAt: start + 4.5, stopsAt: start + 4.5 + 30))
-        XCTAssertTrue(heardAfterTheCall)
+        XCTAssertEqual(decoded, 2, "the words after the call were recorded and decoded")
         XCTAssertEqual(cardAnswers, ["offer record", "call_ended stop_now"])
         XCTAssertEqual(event("meeting_ended")?["reason"], .label("call_ended"))
         XCTAssertEqual(try XCTUnwrap(coordinator.record(id)?.endedAt).timeIntervalSince(start), 4.5, accuracy: 0.001)
@@ -705,6 +708,13 @@ private final class FakeHost: MeetingHost {
     }
 
     func meetingCouldNotStart(_ error: Error) {}
+}
+
+/// Hears speech in audio that peaks at 0.25 or more.
+private final class LoudSpeechDetector: SpeechDetecting {
+    func containsSpeech(_ samples: [Float]) -> Bool {
+        samples.contains { abs($0) >= 0.25 }
+    }
 }
 
 /// Answers by the audio's peak level.

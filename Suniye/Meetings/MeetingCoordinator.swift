@@ -75,23 +75,20 @@ final class MeetingSession {
     fileprivate(set) var record: MeetingRecord
     fileprivate(set) var youLevel: Float = 0
     fileprivate(set) var themLevel: Float = 0
-    fileprivate(set) var segments: [MeetingSegment] = []
-    /// For each track: every chunk before this sample position is decoded.
-    fileprivate(set) var decodedThrough: [MeetingTrack: Int] = [:]
     fileprivate(set) var callAudioProblem: CallAudioProblem?
     fileprivate(set) var failedTracks: [MeetingTrack: String] = [:]
     /// The new microphone, for a few seconds after the device changed.
     fileprivate(set) var changedInput: String?
 
     @ObservationIgnored fileprivate let recorder: MeetingRecorder
-    @ObservationIgnored fileprivate let transcriber: MeetingTranscriber
+    @ObservationIgnored fileprivate let speech: MeetingSpeechWatch
     /// Set by the first stop, so that a second one does nothing.
     @ObservationIgnored fileprivate var isStopping = false
 
-    fileprivate init(record: MeetingRecord, recorder: MeetingRecorder, transcriber: MeetingTranscriber) {
+    fileprivate init(record: MeetingRecord, recorder: MeetingRecorder, speech: MeetingSpeechWatch) {
         self.record = record
         self.recorder = recorder
-        self.transcriber = transcriber
+        self.speech = speech
     }
 
     var id: UUID {
@@ -106,23 +103,8 @@ final class MeetingSession {
         record.status == .paused
     }
 
-    var visibleSegments: [MeetingSegment] {
-        MeetingTranscript.live(
-            segments,
-            callDecodedThrough: workingTracks.contains(.them) ? decodedThrough[.them] ?? 0 : nil,
-            callPlayedOnSpeakers: record.callPlayedOnSpeakers
-        )
-    }
-
     fileprivate var workingTracks: [MeetingTrack] {
         recorder.tracks.filter { failedTracks[$0] == nil }
-    }
-
-    /// Transcribed audio after the last words, on every track that records.
-    fileprivate var secondsWithoutSpeech: Double {
-        let decoded = workingTracks.map { decodedThrough[$0] ?? 0 }.min() ?? 0
-        let lastWords = segments.map(\.audioEnd).max() ?? 0
-        return Double(max(0, decoded - lastWords)) / Double(MeetingAudioFormat.sampleRate)
     }
 
     /// Recorded time: the wall clock since the start, without the pauses.
@@ -132,7 +114,7 @@ final class MeetingSession {
 }
 
 /// Meetings for the whole app: the list, the meeting that records now, the
-/// transcripts that are being finished, and the summaries.
+/// transcripts that are written after a recording, and the summaries.
 @MainActor
 @Observable
 final class MeetingCoordinator {
@@ -155,6 +137,8 @@ final class MeetingCoordinator {
     }
     /// A meeting that a disk write error stopped, for its banner.
     private(set) var writeFailure: MeetingWriteFailure?
+    /// The transcripts that are being written, by meeting.
+    private(set) var transcriptProgress: [UUID: MeetingTranscriptProgress] = [:]
     /// The meeting that the Meetings section shows; nil shows the list.
     var openMeetingID: UUID?
     /// The meeting whose page is on screen, so a notice does not repeat it.
@@ -321,10 +305,11 @@ final class MeetingCoordinator {
             callPlayedOnSpeakers: environment.callPlaysOnSpeakers()
         )
         try await store.create(record)
-        let transcriber = makeTranscriber(for: record.id, tracks: recorder.tracks)
-        let session = MeetingSession(record: record, recorder: recorder, transcriber: transcriber)
-        // The recorder's queue keeps its events in order, and so does the main queue.
-        recorder.onOutput = { transcriber.enqueue($0) }
+        let speech = MeetingSpeechWatch(makeDetector: environment.makeSpeechDetector)
+        let session = MeetingSession(record: record, recorder: recorder, speech: speech)
+        // The recorder's queue keeps its output and events in order, and so
+        // do the speech watch's stream and the main queue.
+        recorder.onOutput = { speech.enqueue($0) }
         recorder.onEvent = { [weak self, weak session] event in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -333,13 +318,12 @@ final class MeetingCoordinator {
                 }
             }
         }
-        await transcriber.start()
+        await speech.start()
         recorder.setMicrophoneMuted(dictationCaptures)
         do {
             try recorder.start()
         } catch {
-            transcribers[record.id] = nil
-            await transcriber.cancel()
+            speech.stop()
             try? await store.delete(record.id)
             throw MeetingStartError.couldNotStart(error.localizedDescription)
         }
@@ -377,7 +361,7 @@ final class MeetingCoordinator {
         }
     }
 
-    /// Stops the recording, then finishes the transcript and queues the summary.
+    /// Stops the recording, then writes the transcript and queues the summary.
     func stop(_ reason: MeetingStopReason = .user) async {
         await stop(reason, endingAt: nil)
     }
@@ -410,7 +394,9 @@ final class MeetingCoordinator {
         case .user, .callEnded, .sleep, .quit:
             break
         }
-        await finish(session.id, transcriber: session.transcriber) { try await $0.finish() }
+        if let transcriber = makeTranscriber(for: session.id) {
+            await transcribe(session.id, with: transcriber)
+        }
     }
 
     /// A call track that cannot start again shows as a failed track.
@@ -432,11 +418,10 @@ final class MeetingCoordinator {
     /// Finishes the transcript of a meeting from its audio files: after a
     /// quit or a crash, or when the user asks again after a failed finish.
     func finishTranscript(_ id: UUID) {
-        guard transcribers[id] == nil else { return }
-        let transcriber = makeTranscriber(for: id, tracks: store.audioTracks(of: id))
+        guard let transcriber = makeTranscriber(for: id) else { return }
         Task {
             await update(id) { $0.status = .finishing }
-            await finish(id, transcriber: transcriber) { try await $0.recover() }
+            await transcribe(id, with: transcriber)
         }
     }
 
@@ -470,8 +455,6 @@ final class MeetingCoordinator {
         guard let session = beginStop() else { return }
         live = nil
         meetings.removeAll { $0.id == session.id }
-        transcribers[session.id] = nil
-        await session.transcriber.cancel()
         do {
             try await store.delete(session.id)
         } catch {
@@ -682,6 +665,7 @@ final class MeetingCoordinator {
         guard let session = live, !session.isStopping else { return nil }
         session.isStopping = true
         session.recorder.stop()
+        session.speech.stop()
         liveCheck?.cancel()
         liveCheck = nil
         closeCallCard()
@@ -698,34 +682,38 @@ final class MeetingCoordinator {
         ))
     }
 
-    private func makeTranscriber(for id: UUID, tracks: [MeetingTrack]) -> MeetingTranscriber {
+    /// Nil when the transcript of the meeting is being written already.
+    private func makeTranscriber(for id: UUID) -> MeetingTranscriber? {
+        guard transcribers[id] == nil else { return nil }
         let transcriber = MeetingTranscriber(
             meetingID: id,
-            tracks: tracks,
+            tracks: store.audioTracks(of: id),
             store: store,
             engine: engine,
             mayDecode: { [weak self] in await self?.speechEngineFree ?? false },
-            onEvent: { [weak self] event in
-                DispatchQueue.main.async { MainActor.assumeIsolated { self?.handle(event, of: id) } }
+            onProgress: { [weak self] progress in
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.show(progress, of: id) } }
             }
         )
         transcribers[id] = transcriber
         return transcriber
     }
 
-    private func finish(
-        _ id: UUID,
-        transcriber: MeetingTranscriber,
-        run: (MeetingTranscriber) async throws -> [MeetingSegment]
-    ) async {
+    private func show(_ progress: MeetingTranscriptProgress, of id: UUID) {
+        guard transcribers[id] != nil else { return }
+        transcriptProgress[id] = progress
+    }
+
+    private func transcribe(_ id: UUID, with transcriber: MeetingTranscriber) async {
         let started = ContinuousClock.now
         defer {
             transcribers[id] = nil
+            transcriptProgress[id] = nil
         }
         let outcome: MeetingOutcome
         var segments = 0
         do {
-            let transcript = try await run(transcriber)
+            let transcript = try await transcriber.transcribe()
             segments = transcript.count
             outcome = segments == 0 ? .noSpeech : .done
             await store.deleteAudio(of: id)
@@ -792,21 +780,9 @@ final class MeetingCoordinator {
         }
     }
 
-    private func handle(_ event: MeetingTranscriber.Event, of id: UUID) {
-        guard let session = live, session.id == id else { return }
-        switch event {
-        case let .segment(segment):
-            session.segments.append(segment)
-        case let .decodedThrough(track, position):
-            session.decodedThrough[track] = position
-            if session.secondsWithoutSpeech >= environment.speechlessLimit {
-                Task { await stop(.noSpeech) }
-            }
-        }
-    }
-
     /// Every few seconds while the meeting records: stops it at the time
-    /// limit, and notes when the call plays on speakers, for the echo filter.
+    /// limit and after a long time with no speech, and notes when the call
+    /// plays on speakers, for the echo filter.
     private func checkLive(_ session: MeetingSession) {
         liveCheck?.cancel()
         liveCheck = Task { [weak self, weak session] in
@@ -814,6 +790,10 @@ final class MeetingCoordinator {
                 guard let self, let session else { return }
                 if session.elapsed(at: self.environment.now()) >= Self.recordingLimit {
                     Task { await self.stop(.timeLimit) }
+                    return
+                }
+                if await session.speech.secondsWithoutSpeech(on: session.workingTracks) >= self.environment.speechlessLimit {
+                    Task { await self.stop(.noSpeech) }
                     return
                 }
                 if !session.record.callPlayedOnSpeakers, self.environment.callPlaysOnSpeakers() {

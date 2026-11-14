@@ -5,8 +5,7 @@ enum MeetingTrack: String, Codable, CaseIterable, Comparable, Sendable {
     case you
     case them
 
-    /// The call track sorts first: a "You" line that starts with a call line
-    /// waits for the call track anyway, so lines and chunks with one start
+    /// The call track sorts first, so that lines and chunks with one start
     /// come in the same order everywhere.
     static func < (lhs: MeetingTrack, rhs: MeetingTrack) -> Bool {
         lhs == .them && rhs == .you

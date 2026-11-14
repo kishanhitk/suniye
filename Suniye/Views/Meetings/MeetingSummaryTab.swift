@@ -26,47 +26,45 @@ struct MeetingSummaryTab: View {
 
     @ViewBuilder
     private var state: some View {
-        if record.status == .finishing {
-            progress("Finishing the transcript…")
-        } else {
-            switch record.status {
-            case .done:
-                if let summary {
-                    MeetingSummaryBody(markdown: summary)
-                }
-            case .summarizing:
-                summarizing
-            case .summaryFailed:
-                EmptyStateCard(
-                    icon: "exclamationmark.triangle",
-                    title: MeetingStatus.summaryFailedTitle,
-                    detail: [record.summaryFailure, "Your transcript and notes are saved."].compactMap { $0 }.joined(separator: " ")
-                ) {
-                    Button("Try Again") {
-                        Task { await meetings.regenerate(record.id) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            case .noSpeech:
-                EmptyStateCard(
-                    icon: "mic.slash",
-                    title: MeetingStatus.noSpeechTitle,
-                    detail: "The transcript has fewer than \(MeetingSummaryWriter.minimumWords) words."
-                ) {
-                    Button("Delete Meeting…") { actions.confirmDelete(record) }
-                }
-            case .interrupted:
-                EmptyStateCard(
-                    icon: "exclamationmark.triangle",
-                    title: MeetingStatus.interruptedTitle,
-                    detail: [record.transcriptFailure, "The audio is saved."].compactMap { $0 }.joined(separator: " ")
-                ) {
-                    Button("Finish Transcript") { meetings.finishTranscript(record.id) }
-                        .buttonStyle(.borderedProminent)
-                }
-            case .recording, .paused, .finishing:
-                EmptyView()
+        switch record.status {
+        case .finishing:
+            MeetingTranscriptProgressView(progress: meetings.transcriptProgress[record.id])
+        case .done:
+            if let summary {
+                MeetingSummaryBody(markdown: summary)
             }
+        case .summarizing:
+            summarizing
+        case .summaryFailed:
+            EmptyStateCard(
+                icon: "exclamationmark.triangle",
+                title: MeetingStatus.summaryFailedTitle,
+                detail: [record.summaryFailure, "Your transcript and notes are saved."].compactMap { $0 }.joined(separator: " ")
+            ) {
+                Button("Try Again") {
+                    Task { await meetings.regenerate(record.id) }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        case .noSpeech:
+            EmptyStateCard(
+                icon: "mic.slash",
+                title: MeetingStatus.noSpeechTitle,
+                detail: "The transcript has fewer than \(MeetingSummaryWriter.minimumWords) words."
+            ) {
+                Button("Delete Meeting…") { actions.confirmDelete(record) }
+            }
+        case .interrupted:
+            EmptyStateCard(
+                icon: "exclamationmark.triangle",
+                title: MeetingStatus.interruptedTitle,
+                detail: [record.transcriptFailure, "The audio is saved."].compactMap { $0 }.joined(separator: " ")
+            ) {
+                Button("Finish Transcript") { meetings.finishTranscript(record.id) }
+                    .buttonStyle(.borderedProminent)
+            }
+        case .recording, .paused:
+            EmptyView()
         }
     }
 

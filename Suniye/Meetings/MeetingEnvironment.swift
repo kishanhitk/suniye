@@ -25,8 +25,9 @@ struct MeetingEnvironment {
     /// A clock that does not jump, for call detection.
     var uptime: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     var liveCheckInterval: Duration = .seconds(5)
-    /// A recording stops after this much transcribed audio with no speech.
+    /// A recording stops after this much recorded time with no speech.
     var speechlessLimit: TimeInterval = 15 * 60
+    var makeSpeechDetector: @Sendable () throws -> SpeechDetecting = { try SpeechDetector.bundled() }
     var callCardDurations = MeetingCallCard.Durations()
 }
 

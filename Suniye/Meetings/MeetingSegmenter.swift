@@ -97,9 +97,7 @@ struct MeetingSegmenter {
     /// Returns `pending[..<position]` as a chunk and analyzes the rest again
     /// as the start of the next chunk.
     private mutating func cut(at position: Int) -> MeetingAudioChunk {
-        let hasSound = stride(from: 0, to: position, by: Self.windowSamples).contains { start in
-            MeetingAudioFormat.rms(pending[start ..< min(start + Self.windowSamples, position)]) >= MeetingAudioFormat.silenceLevel
-        }
+        let hasSound = MeetingAudioFormat.hasSound(pending[..<position])
         let chunk = MeetingAudioChunk(track: track, start: pendingStart, end: pendingStart + position, hasSound: hasSound)
         pending.removeFirst(position)
         pendingStart += position
