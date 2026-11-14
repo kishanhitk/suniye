@@ -42,10 +42,6 @@ final class OpenRouterPostProcessor: LLMPostProcessor {
         _ = try generator.requireOutput(output)
     }
 
-    func sanitizeOutput(_ raw: String) -> String {
-        MagicFormatOutputSanitizer.sanitize(raw)
-    }
-
     /// Lets a cancel through as `CancellationError`.
     private struct Generator: MagicFormatGenerator {
         let client: ChatCompletionClient

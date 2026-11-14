@@ -104,23 +104,6 @@ struct ChatCompletionPayload: Encodable {
     }
 }
 
-enum ChatCompletionRequestFactory {
-    static func makeRequest(
-        endpointURL: URL,
-        apiKey: String,
-        payload: ChatCompletionPayload,
-        timeoutSeconds: Double
-    ) throws -> URLRequest {
-        var request = URLRequest(url: endpointURL)
-        request.httpMethod = "POST"
-        request.timeoutInterval = timeoutSeconds
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONEncoder().encode(payload)
-        return request
-    }
-}
-
 /// Per-generation counters llama-server attaches to its OpenAI-compatible response
 /// (`timings`). Absent from other providers, so always optional on the result.
 /// `cachedTokens` is the prompt-prefix reused from the slot's KV cache — the direct
@@ -215,12 +198,12 @@ final class ChatCompletionClient {
         payload: ChatCompletionPayload,
         timeoutSeconds: Double
     ) async throws -> ChatCompletionResult {
-        let request = try ChatCompletionRequestFactory.makeRequest(
-            endpointURL: endpointURL,
-            apiKey: apiKey,
-            payload: payload,
-            timeoutSeconds: timeoutSeconds
-        )
+        var request = URLRequest(url: endpointURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeoutSeconds
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(payload)
 
         do {
             let (data, response) = try await withTimeout(seconds: timeoutSeconds) {
