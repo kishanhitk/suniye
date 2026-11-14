@@ -96,7 +96,7 @@ struct MeetingsPage: View {
         .meetingActionDialogs(actions, meetings: meetings)
         .task(id: searchText) {
             guard !query.isEmpty else { return }
-            for record in listed where texts[record.id] == nil {
+            for record in listed {
                 texts[record.id] = await meetings.listText(for: record.id)
             }
         }
