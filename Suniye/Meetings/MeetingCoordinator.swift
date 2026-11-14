@@ -423,7 +423,7 @@ final class MeetingCoordinator {
         case .user, .callEnded, .sleep, .quit:
             break
         }
-        await transcribeInTurn(session.id)
+        await queuePass(session.id)?.value
     }
 
     /// A call track that cannot start again shows as a failed track.
@@ -445,11 +445,7 @@ final class MeetingCoordinator {
     /// Finishes the transcript of a meeting from its audio files: after a
     /// quit or a crash, or when the user asks again after a failed finish.
     func finishTranscript(_ id: UUID) {
-        guard !passes.contains(id) else { return }
-        Task {
-            await update(id) { $0.status = .finishing }
-            await transcribeInTurn(id)
-        }
+        queuePass(id)
     }
 
     // MARK: - Calls
@@ -719,26 +715,29 @@ final class MeetingCoordinator {
         ))
     }
 
-    /// Writes the transcript of `id` after the passes asked before it, and
-    /// returns when it is done. One pass at a time: two passes with a chosen
-    /// model would each load an engine of their own beside the dictation
-    /// model.
-    private func transcribeInTurn(_ id: UUID) async {
-        guard passes.insert(id).inserted else { return }
+    /// Queues the transcript pass of `id` behind the passes asked before it,
+    /// with the transcript model set now, and returns it; nil when a pass of
+    /// `id` already waits or runs. One pass at a time: two passes with a
+    /// chosen model would each load an engine of their own beside the
+    /// dictation model.
+    @discardableResult
+    private func queuePass(_ id: UUID) -> Task<Void, Never>? {
+        guard passes.insert(id).inserted else { return nil }
+        let model = settings.transcriptModel
         let previous = lastPass
         let pass = Task { [weak self] in
+            await self?.update(id) { $0.status = .finishing }
             await previous?.value
-            await self?.transcribe(id)
+            await self?.transcribe(id, model: model)
         }
         lastPass = pass
-        await pass.value
+        return pass
     }
 
     /// Writes the transcript, then queues the summary. `passes` holds `id`
     /// already.
-    private func transcribe(_ id: UUID) async {
+    private func transcribe(_ id: UUID, model chosenModel: ASRModelID?) async {
         let started = ContinuousClock.now
-        let chosenModel = settings.transcriptModel
         defer {
             passes.remove(id)
             transcriptProgress[id] = nil

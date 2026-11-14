@@ -27,8 +27,10 @@ final class MeetingCoordinatorTests: XCTestCase {
     private var engine: WordEngine!
     private var transcriptEngine: WordEngine!
     private var requestedTranscriptModels: [ASRModelID] = []
-    /// The transcript engine's unload count at each load.
-    private var unloadsAtEachLoad: [Int] = []
+    /// While set, a transcript engine load waits until it opens.
+    private var loadGate: LoadGate?
+    /// This many transcript engine loads fail before one succeeds.
+    private var failingLoads = 0
     private var transcriptEngineError: Error?
     private var summaryModel: GatedSummaryModel!
     private var clock: Date!
@@ -83,7 +85,11 @@ final class MeetingCoordinatorTests: XCTestCase {
             engine: engine,
             makeTranscriptEngine: { [unowned self] model in
                 requestedTranscriptModels.append(model)
-                unloadsAtEachLoad.append(await transcriptEngine.unloads)
+                await loadGate?.wait()
+                if failingLoads > 0 {
+                    failingLoads -= 1
+                    throw MeetingTranscriptModelError.notDownloaded("Cohere Transcribe")
+                }
                 if let transcriptEngineError {
                     throw transcriptEngineError
                 }
@@ -287,22 +293,50 @@ final class MeetingCoordinatorTests: XCTestCase {
         XCTAssertEqual(segments.map(\.text), [longSentence])
     }
 
-    func testTranscriptsRunOneAtATime() async throws {
+    func testTranscriptsRunOneAtATimeWithTheModelSetWhenTheyWereAskedFor() async throws {
         let first = try await leftRecording(startedAt: clock - 600)
         let second = try await leftRecording(startedAt: clock - 300)
+        let gate = LoadGate()
+        loadGate = gate
+        let coordinator = makeCoordinator()
+        coordinator.speechModelChanged(.parakeetV3)
+        coordinator.updateSettings { $0.transcriptModel = .cohereTranscribe }
+        await coordinator.start()
+
+        coordinator.finishTranscript(first)
+        coordinator.finishTranscript(second)
+        let firstLoads = await waitUntil { await gate.waiting }
+        try await Task.sleep(for: .milliseconds(100))
+        let loadsWhileTheFirstWaits = requestedTranscriptModels.count
+        coordinator.updateSettings { $0.transcriptModel = nil }
+        await gate.open()
+        let finished = await waitUntil {
+            coordinator.record(first)?.status == .done && coordinator.record(second)?.status == .done
+        }
+        let dictationEngineDecodes = await engine.calls
+
+        XCTAssertTrue(firstLoads)
+        XCTAssertEqual(loadsWhileTheFirstWaits, 1, "the second pass waits for the first")
+        XCTAssertTrue(finished)
+        XCTAssertEqual(requestedTranscriptModels, [.cohereTranscribe, .cohereTranscribe], "a waiting pass keeps the model of its request")
+        XCTAssertEqual(dictationEngineDecodes, 0)
+    }
+
+    func testAPassThatFailsLetsTheNextOneRun() async throws {
+        let first = try await leftRecording(startedAt: clock - 600)
+        let second = try await leftRecording(startedAt: clock - 300)
+        failingLoads = 1
         let coordinator = makeCoordinator()
         coordinator.updateSettings { $0.transcriptModel = .cohereTranscribe }
         await coordinator.start()
 
         coordinator.finishTranscript(first)
         coordinator.finishTranscript(second)
-        let finished = await waitUntil {
-            coordinator.record(first)?.status == .done && coordinator.record(second)?.status == .done
+        let settled = await waitUntil {
+            coordinator.record(first)?.status == .interrupted && coordinator.record(second)?.status == .done
         }
 
-        XCTAssertTrue(finished)
-        XCTAssertEqual(requestedTranscriptModels, [.cohereTranscribe, .cohereTranscribe])
-        XCTAssertEqual(unloadsAtEachLoad, [0, 1], "the second engine loads after the first one is unloaded")
+        XCTAssertTrue(settled)
     }
 
     func testDeletingTheDefaultTemplateMakesGeneralTheDefault() async throws {
@@ -896,6 +930,23 @@ private final class FakeHost: MeetingHost {
 private final class LoudSpeechDetector: SpeechDetecting {
     func containsSpeech(_ samples: [Float]) -> Bool {
         samples.contains { abs($0) >= 0.25 }
+    }
+}
+
+/// Holds every caller of `wait()` until `open()`.
+private actor LoadGate {
+    private(set) var waiting = false
+    private var isOpen = false
+
+    func wait() async {
+        waiting = true
+        while !isOpen {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    func open() {
+        isOpen = true
     }
 }
 
